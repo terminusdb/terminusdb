@@ -1,10 +1,17 @@
-:- module(api_woql, [woql_query_json/11]).
+:- module(api_woql, [woql_query_json/8]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 
-woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Witnesses, Requested_Data_Version, New_Data_Version, Context, JSON) :-
+:- use_module(library(option)).
+
+woql_query_json(System_DB, Auth, Path_Option, Query, Context, New_Data_Version, JSON, Options) :-
+
+    option(commit_info(Commit_Info), Options),
+    option(all_witnesses(All_Witnesses), Options),
+    option(files(Files), Options),
+    option(data_version(Requested_Data_Version), Options),
 
     % No descriptor to work with until the query sets one up
     (   some(Path) = Path_Option
@@ -31,7 +38,7 @@ woql_query_json(System_DB, Auth, Path_Option, Query, Commit_Info, Files, All_Wit
     ->  atom_woql(Atom_Query, AST)
     ;   throw(error(unexpected_query_type(Query), _))
     ),
-    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, JSON).
+    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, JSON, Options).
 
 bind_vars([],_).
 bind_vars([Name=Var|Tail],AST) :-

@@ -9,6 +9,7 @@ use crate::terminus_store::*;
 
 use serde_json::map;
 use serde_json::{Map, Value};
+use thiserror::Error;
 use urlencoding;
 
 use super::consts::*;
@@ -16,6 +17,7 @@ use super::prefix::PrefixContracter;
 use super::schema::*;
 use super::value::*;
 
+use lazy_static::lazy_static;
 use rayon::prelude::*;
 use swipl::prelude::*;
 
@@ -38,6 +40,7 @@ pub struct GetDocumentContext<L: Layer> {
     sys_value_id: Option<u64>,
     sys_json_type_id: Option<u64>,
     sys_json_document_type_id: Option<u64>,
+    sys_foreign_type_predicate_id: Option<u64>,
     unfold: bool,
     minimized: bool,
 }
@@ -64,6 +67,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut rdf_list_id = None;
         let mut sys_json_type_id = None;
         let mut sys_json_document_type_id = None;
+        let mut sys_foreign_type_predicate_id = None;
         let types: HashSet<u64>;
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
@@ -140,6 +144,7 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_list_id = instance.object_node_id(RDF_LIST);
             sys_json_type_id = instance.object_node_id(SYS_JSON);
             sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+            sys_foreign_type_predicate_id = instance.predicate_id(SYS_FOREIGN_TYPE_PREDICATE_ID);
 
             if let Some(sys_json_document_type_id) = sys_json_document_type_id {
                 document_types.insert(sys_json_document_type_id);
@@ -177,9 +182,11 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_index_ids,
             sys_array_id,
             sys_value_id,
+            sys_foreign_type_predicate_id,
 
             sys_json_type_id,
             sys_json_document_type_id,
+
             unfold,
             minimized,
         }
@@ -225,6 +232,8 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_rest_id,
             rdf_nil_id,
             rdf_list_id,
+            sys_foreign_type_predicate_id: None,
+
             sys_json_type_id,
             sys_json_document_type_id,
             sys_index_ids: Vec::with_capacity(0),
@@ -239,10 +248,16 @@ impl<L: Layer> GetDocumentContext<L> {
         self.layer.as_ref().unwrap()
     }
 
-    pub fn get_document(&self, iri: &str) -> Option<Map<String, Value>> {
-        self.layer
+    pub fn get_document(&self, iri: &str) -> Result<Option<Map<String, Value>>, DocRetrievalError> {
+        match self
+            .layer
             .as_ref()
             .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
+        {
+            Some(Ok(x)) => Ok(Some(x)),
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
+        }
     }
 
     fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
@@ -254,6 +269,7 @@ impl<L: Layer> GetDocumentContext<L> {
             match self.get_doc_stub(object, true) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
                 Ok((doc, type_id, fields, json)) => Err(StackEntry::Document {
+                    id: object,
                     doc,
                     type_id,
                     fields: Some(fields),
@@ -387,7 +403,10 @@ impl<L: Layer> GetDocumentContext<L> {
             }
         }
 
-        if type_id.is_none() && fields.peek().is_none() {
+        if type_id.is_none()
+            && (fields.peek().is_none()
+                || fields.peek().map(|x| x.predicate) == self.sys_foreign_type_predicate_id)
+        {
             // we're actually dealing with a raw id here
             Err(Value::String(id_name_contracted))
         } else {
@@ -406,7 +425,7 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    pub fn get_id_document(&self, id: u64) -> Map<String, Value> {
+    pub fn get_id_document(&self, id: u64) -> Result<Map<String, Value>, DocRetrievalError> {
         if self.layer.is_none() {
             panic!("expected id to point at document: {}", id);
         }
@@ -415,13 +434,30 @@ impl<L: Layer> GetDocumentContext<L> {
 
         let (doc, type_id, fields, json) = self.get_doc_stub(id, false).unwrap();
         stack.push(StackEntry::Document {
+            id,
             doc,
             type_id,
             fields: Some(fields),
             json,
         });
 
+        let mut visited: Vec<u64> = Vec::new();
+        visited.push(id);
+
+        lazy_static! {
+            static ref LIMIT: usize = {
+                std::env::var("TERMINUSDB_DOC_WORK_LIMIT")
+                    .ok()
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(500_000)
+            };
+        }
+        let mut work = 0;
         loop {
+            work += 1;
+            if work >= *LIMIT {
+                break;
+            }
             let cur = stack.last_mut().unwrap();
             let is_json = cur.is_json();
             if let Some(next_obj) = cur.peek() {
@@ -455,24 +491,48 @@ impl<L: Layer> GetDocumentContext<L> {
                         cur.integrate_value(self, val);
                     }
                     Err(entry) => {
-                        // We need to iterate deeper, so add it to the stack without iterating past the field.
-                        stack.push(entry);
+                        // this is a bit of a silly setup.
+                        // we pretty much know for sure that get_field will have returned the stub of a subdocument by now. We could either use the documnet id contained in that stub, or we could use the next_obj id that we already had.
+                        // I chose to use document_id() here just in case a future refactor suddenly changes what kind of things come back as field entries here.
+                        if entry
+                            .document_id()
+                            .map(|id| visited.contains(&id))
+                            .unwrap_or(false)
+                        {
+                            // This entry is already visited. We only have to provide a name.
+                            cur.integrate_value(self, entry.document_iri().unwrap().clone());
+                        } else {
+                            // We need to iterate deeper, so add it to the stack without iterating past the field.
+                            visited.push(next_obj);
+                            stack.push(entry);
+                        }
                     }
                 }
             } else {
                 // done!
+                visited.pop();
                 let cur = stack.pop().unwrap();
                 if let Some(parent) = stack.last_mut() {
                     parent.integrate(self, cur);
                 } else {
                     // we're done, this was the root, time to return!
                     match cur {
-                        StackEntry::Document { doc, .. } => return doc,
+                        StackEntry::Document { doc, .. } => return Ok(doc),
                         _ => panic!("unexpected element at stack top"),
                     }
                 }
             }
         }
+
+        // if we are here, it is because doc retrieval got too expensive
+        let iri = if let Some(StackEntry::Document { doc, .. }) = stack.first() {
+            doc.get("@id")
+                .map(|j| j.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        } else {
+            "unknown".to_string()
+        };
+        Err(DocRetrievalError::LimitExceeded(iri))
     }
 
     fn get_subtypes_for(&self, type_name: &str) -> Vec<u64> {
@@ -505,6 +565,25 @@ impl<L: Layer> GetDocumentContext<L> {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum DocRetrievalError {
+    #[error("Limit exceeded while trying to retrieve document with IRI {0}")]
+    LimitExceeded(String),
+}
+
+impl IntoPrologException for DocRetrievalError {
+    fn into_prolog_exception<'a, T: QueryableContextType>(
+        self,
+        context: &'a Context<'_, T>,
+    ) -> PrologResult<Term<'a>> {
+        match self {
+            DocRetrievalError::LimitExceeded(iri) => {
+                term! {context: error(doc_retrieval_limit_exceeded(#iri), _)}
+            }
+        }
+    }
+}
+
 pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
     let mut sys_index_ids = Vec::new();
     let mut index_str = SYS_INDEX.to_string();
@@ -527,6 +606,7 @@ pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
 
 enum StackEntry<'a, L: Layer> {
     Document {
+        id: u64,
         doc: Map<String, Value>,
         type_id: Option<u64>,
         fields: Option<Peekable<Box<dyn Iterator<Item = IdTriple> + Send>>>,
@@ -550,6 +630,19 @@ impl<'a, L: Layer> StackEntry<'a, L> {
             Self::Document { json, .. } => *json,
             Self::List { json, .. } => *json,
             _ => false,
+        }
+    }
+
+    fn document_id(&self) -> Option<u64> {
+        match self {
+            Self::Document { id, .. } => Some(*id),
+            _ => None,
+        }
+    }
+    fn document_iri(&self) -> Option<&Value> {
+        match self {
+            Self::Document { doc, .. } => doc.get("@id"),
+            _ => None,
         }
     }
 }
@@ -812,7 +905,7 @@ fn print_documents_of_types<
                 continue;
             }
 
-            let map = doc_context.get_id_document(t.subject);
+            let map = context.try_or_die(doc_context.get_id_document(t.subject))?;
             print_document(
                 context,
                 &mut stream,
@@ -878,6 +971,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
+        let map = context.try_or_die(map)?;
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
 
@@ -935,7 +1029,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut started = false;
     for iri_term in context.term_list_iter(iris_term) {
         let iri: PrologText = iri_term.get_ex()?;
-        if let Some(doc) = doc_context.get_document(&iri) {
+        if let Some(doc) = context.try_or_die(doc_context.get_document(&iri))? {
             if skip > 0 {
                 skip -= 1;
                 continue;
@@ -992,9 +1086,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
             iter.enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, iri)| {
-                    let map = doc_context2
-                        .get_document(&iri)
-                        .expect("expected document to exist");
+                    let map = doc_context2.get_document(&iri);
                     sender.send((ix, map)) // failure will kill the task
                 });
     });
@@ -1003,6 +1095,9 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
+        let map = context
+            .try_or_die(map)?
+            .expect("expected document to exist");
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
 
@@ -1067,7 +1162,7 @@ predicates! {
         let as_list: bool = as_list_term.get()?;
         let started: bool = started_term.get()?;
 
-        if let Some(result) = doc_context.get_document(&s) {
+        if let Some(result) = context.try_or_die(doc_context.get_document(&s))? {
             if as_list && started {
                 context.try_or_die_generic(stream.write_all(b",\n"))?;
             }

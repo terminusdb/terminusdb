@@ -491,6 +491,25 @@ describe('document', function () {
       await document.insert(agent, { instance }).fails(api.error.schemaCheckFailure([witness]))
     })
 
+    it('passes duplication of deep document', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      const schema = [{ '@id': class1, '@type': 'Class', deep: class2 },
+        { '@id': class2, '@type': 'Class', value: 'xsd:string' }]
+      const id = util.randomString()
+      await document.insert(agent, { schema }).unverified()
+      const instance = [{
+        '@type': class1,
+        deep: { '@id': `${class2}/${id}`, value: 'foo' },
+      },
+      {
+        '@type': class1,
+        deep: { '@id': `${class2}/${id}`, value: 'foo' },
+      }]
+      const docs = await document.insert(agent, { instance, merge_repeats: true }).unverified()
+      expect(docs.body).to.have.length(2)
+    })
+
     describe('tests cardinality in schema', function () {
       let card
       let min

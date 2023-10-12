@@ -84,7 +84,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
-
+% assorted libs
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
@@ -1643,8 +1643,7 @@ json_triple_(JSON,Context,Triple) :-
     ;   Key = '@linked-by'
     ->  fail
     ;   Key = '@foreign'
-    ->  global_prefix_expand(sys:foreign_type, Foreign_Type),
-        Triple = t(ID,Foreign_Type,Value)
+    ->  fail
     ;   Key = '@type'
     ->  global_prefix_expand(rdf:type, RDF_Type),
         Triple = t(ID,RDF_Type,Value)
@@ -1970,7 +1969,7 @@ type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
-type_id_predicate_iri_value(cardinality(C,_),Id,P,_,DB,Prefixes,Options,L) :-
+type_id_predicate_iri_value(cardinality(C,_,_),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
@@ -6333,7 +6332,7 @@ test(bad_documentation,
         _
     ).
 
-test(bad_unfoldable,
+test(loop_unfoldable,
      [
          setup(
              (   setup_temp_store(State),
@@ -6342,12 +6341,7 @@ test(bad_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure([witness{'@type':property_path_cycle_detected,
-                                           class:_,
-                                           path:_}]),
-             _)
+         )
      ]) :-
      DocumentA =
      _{ '@id' : "A",
@@ -6410,12 +6404,7 @@ test(sub_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure([witness{'@type':property_path_cycle_detected,
-                                           class:'http://s/A1',
-                                           path:['http://s/q','http://s/A']}]),
-             _)
+         )
      ]) :-
      DocumentA =
      _{ '@id' : "A",
@@ -6447,12 +6436,7 @@ test(trans_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(schema_check_failure(
-                   [witness{'@type':property_path_cycle_detected,
-                            class:_,
-                            path:_}]),
-               _)
+         )
      ]) :-
      DocumentA =
      _{ '@id' : "A",
@@ -6492,13 +6476,7 @@ test(oneof_unfoldable,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(
-             schema_check_failure(
-                 [witness{'@type':property_path_cycle_detected,
-                          class:'http://s/A',
-                          path:['http://s/q','http://s/A']}]),
-             _)
+         )
      ]) :-
 
      DocumentA =
@@ -11147,12 +11125,58 @@ test(elaborate_foreign_type,
         t('http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
           'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
           'http://somewhere.for.now/schema#From'),
-        t('http://somewhere.for.now/document/To/george',
-          'http://terminusdb.com/schema/sys#foreign_type',
-          'http://somewhere.for.now/schema#To'),
         t('http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
           'http://somewhere.for.now/schema#to',
           'http://somewhere.for.now/document/To/george')].
+
+test(legacy_foreign_type,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foreign"),
+             resolve_absolute_string_descriptor("admin/foreign", Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    ID = 'http://somewhere.for.now/document/From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge',
+    % Legacy database style:
+    Triples =[
+        t(ID,
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+          'http://somewhere.for.now/schema#From'),
+        t('http://somewhere.for.now/document/To/george',
+          'http://terminusdb.com/schema/sys#foreign_type',
+          'http://somewhere.for.now/schema#To'),
+        t(ID,
+          'http://somewhere.for.now/schema#to',
+          'http://somewhere.for.now/document/To/george')],
+    with_test_transaction(Desc, C,
+                          forall(
+                              member(t(X,P,Y), Triples),
+                              ask(C,
+                                  insert(X, P, Y))
+                          )),
+
+    open_descriptor(Desc, Transaction),
+
+    Config = config{
+                 skip: 0,
+                 count: -1,
+                 as_list: true,
+                 compress: true,
+                 unfold: true,
+                 minimized: true
+             },
+
+    with_output_to(
+        string(S),
+        api_document:api_print_documents_by_id(instance, Transaction, Config, [ID], true)
+    ),
+
+    atom_json_dict(S, Dict, [default_tag(json)]),
+    Dict = json{ '@id':"From/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FTo%2Fgeorge",
+				 '@type':"From",
+				 to:"To/george"
+			   }.
 
 test(foreign_type,
      [setup((setup_temp_store(State),
@@ -11258,12 +11282,12 @@ test(foreign_type,
                        '@type':'PayRecord',
                        employee:'Employee/jane+1995-05-03',
                        pay:32.85,
-                              pay_period:"P1M"},
+                       pay_period:"P1M"},
                   json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe%2B2012-05-03',
                        '@type':'PayRecord',
                        employee:'Employee/joe+2012-05-03',
                        pay:12.3,
-                              pay_period:"P1M"}]}.
+                       pay_period:"P1M"}]}.
 
 :- end_tests(foreign_types).
 
@@ -14791,3 +14815,178 @@ test(load_extensive_jsonld_context,
 
 
 :- end_tests(jsonld_contexts).
+
+:- begin_tests(foreign_families).
+
+:- use_module(core(util/test_utils)).
+
+foreign_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+{ "@type": "Class",
+  "@id": "ForeignOption",
+  "foreign_option": {
+      "@class": "TestForeign",
+      "@type": "Optional" }}
+{ "@type": "Class",
+  "@id": "ForeignSet",
+  "foreign_set": {
+      "@class": "TestForeign",
+      "@type": "Set"
+  }}
+{ "@type": "Class",
+  "@id": "ForeignArray",
+  "foreign_array": {
+      "@class": "TestForeign",
+      "@type": "Array"
+  }}
+{ "@type": "Class",
+  "@id": "ForeignList",
+  "foreign_list": {
+      "@class": "TestForeign",
+      "@type": "List"
+  }}
+{ "@type": "Class",
+  "@id": "ForeignCard",
+  "foreign_card": {
+      "@class": "TestForeign",
+      "@type": "Cardinality",
+      "@max_cardinality" : 1,
+      "@min_cardinality" : 1
+  }}
+{ "@type": "Foreign",
+  "@id": "TestForeign"
+}
+').
+
+test(foreign_option,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Option = _{ foreign_option : "id" },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id,Document)
+    ),
+
+    Document = json{ '@id':_,
+				     '@type':'ForeignOption',
+				     foreign_option:id
+				   }.
+
+test(foreign_set,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Option = _{ foreign_set : "id" },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id,Document)
+    ),
+
+    Document = json{ '@id':_,
+				     '@type':'ForeignSet',
+				     foreign_set:[id]
+				   }.
+
+test(foreign_array,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Option = _{ foreign_array : ["id"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id,Document)
+    ),
+
+    Document = json{ '@id':_,
+				     '@type':'ForeignArray',
+				     foreign_array:[id]
+				   }.
+
+test(foreign_list,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Option = _{ foreign_list : ["id"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id,Document)
+    ),
+
+    Document = json{ '@id':_,
+				     '@type':'ForeignList',
+				     foreign_list:[id]
+				   }.
+
+test(foreign_card,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Option = _{ foreign_card : ["id"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, Id)
+    ),
+
+    with_test_transaction(
+        Desc,
+        C2,
+        get_document(C2,Id,Document)
+    ),
+    Document = json{ '@id':_,
+				     '@type':'ForeignCard',
+				     foreign_card:[id]
+				   }.
+
+:- end_tests(foreign_families).

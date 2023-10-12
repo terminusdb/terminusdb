@@ -1,3 +1,29 @@
+# TerminusDB Server v11.1.3 Release Notes
+## Bug fixes
+* Foreign types interact properly with collections now
+* Document retrieval now always cycle detects
+
+## Enhancements
+* Unfoldable can now be used with cyclical types
+
+## New
+* Flag `merge_repeats` on document insert merges all inserts for the same id into a single document.
+
+# TerminusDB Server v11.1.2 Release Notes
+
+## Bug fixes
+* GraphQL enum names were not mapped to their proper IRI format in some cases
+* Server URI in container dashboard is no longer hardcoded
+
+## Enhancement
+* WOQL Query order of execution has been improved
+* Sped up path traversal
+* Schema migrations now support making classes abstract and/or unfoldable
+
+## New
+* New flag `merge_repeats` in document interface insert that merges documents with the same id
+
+
 # TerminusDB Server v11.1.1-1 Release Notes
 
 Very minor hotpatch release to include the new local dashboard.

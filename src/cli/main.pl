@@ -159,6 +159,12 @@ opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
            shortflags([a]),
            default('admin'),
            help('author to place on the commit')],
+          [opt(optimize),
+           type(boolean),
+           shortflags([o]),
+           longflags([optimize]),
+           default(true),
+           help('allow query reordering')],
           [opt(json),
            type(boolean),
            longflags([json]),
@@ -1595,12 +1601,18 @@ run_command(query,[Path,Query],Opts) :-
 
     option(author(Author), Opts),
     option(message(Message), Opts),
+    option(optimize(Optimize), Opts),
 
     Commit_Info = commit_info{author : Author, message : Message},
 
     api_report_errors(
         woql,
-        (   woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Commit_Info, [], _All_Witnesses, no_data_version, _New_Data_Version, Context, Response),
+        (   Options = _{ commit_info: Commit_Info,
+                         files: [],
+                         optimize: Optimize,
+                         data_version: no_data_version,
+                         all_witnesses: false },
+            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, Response, Options),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Response, [])
             ;   get_dict(prefixes, Context, Context_Prefixes),

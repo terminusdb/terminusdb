@@ -107,6 +107,7 @@ function insert (agent, params) {
   const instance = params.object('instance')
   const rawJSON = params.boolean('raw_json')
   const requireMigration = params.boolean('require_migration')
+  const mergeRepeats = params.boolean('merge_repeats')
   const allowDestructiveMigration = params.boolean('allow_destructive_migration')
   params.assertEmpty()
 
@@ -121,6 +122,7 @@ function insert (agent, params) {
       message,
       raw_json: rawJSON,
       require_migration: requireMigration,
+      merge_repeats: util.isDefined(mergeRepeats) ? mergeRepeats : false,
       allow_destructive_migration: allowDestructiveMigration,
     })
   }

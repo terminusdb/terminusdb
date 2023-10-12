@@ -22,5 +22,5 @@ pub const SYS_VALUE: &str = "http://terminusdb.com/schema/sys#value";
 pub const SYS_ARRAY: &str = "http://terminusdb.com/schema/sys#Array";
 pub const SYS_JSON: &str = "http://terminusdb.com/schema/sys#JSON";
 pub const SYS_JSON_DOCUMENT: &str = "http://terminusdb.com/schema/sys#JSONDocument";
-
+pub const SYS_FOREIGN_TYPE_PREDICATE_ID: &str = "http://terminusdb.com/schema/sys#foreign_type";
 pub const SYS_JSON_PREFIX: &str = "http://terminusdb.com/schema/json#";
