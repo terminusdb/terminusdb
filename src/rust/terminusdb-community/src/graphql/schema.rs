@@ -74,7 +74,7 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
         let instance = transaction_instance_layer(context, transaction_term)?;
 
         let new_transaction_term = context.new_term_ref();
-        new_transaction_term.unify(&transaction_term)?;
+        new_transaction_term.unify(transaction_term)?;
 
         Ok(TerminusContext {
             system_info: SystemInfo {
@@ -288,8 +288,8 @@ fn ids_from_restriction<C: QueryableContextType>(
     result_to_execution_result(context.context, result)
 }
 
-fn pl_id_matches_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+fn pl_id_matches_restriction<C: QueryableContextType>(
+    context: &TerminusContext<C>,
     restriction: &str,
     id: u64,
 ) -> PrologResult<Option<String>> {
@@ -315,13 +315,13 @@ fn pl_id_matches_restriction<'a, C: QueryableContextType>(
     }
 }
 
-pub fn id_matches_restriction<'a, C: QueryableContextType>(
-    context: &TerminusContext<'a, C>,
+pub fn id_matches_restriction<C: QueryableContextType>(
+    context: &TerminusContext<C>,
     restriction: &str,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
     let result = pl_id_matches_restriction(context, restriction, id);
-    result_to_execution_result(&context.context, result)
+    result_to_execution_result(context.context, result)
 }
 
 impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
@@ -619,7 +619,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
         let allframes = &info.allframes;
         let frame = &allframes.frames[class];
         match frame {
-            TypeDefinition::Class(d) => Self::generate_class_type(&class, d, info, registry),
+            TypeDefinition::Class(d) => Self::generate_class_type(class, d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
         }
     }
@@ -703,6 +703,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
                 let property = &reverse_link.property;
                 let domain = &reverse_link.class;
+                let graphql_domain = allframes.class_to_graphql_name(domain);
                 let kind = &reverse_link.kind;
                 // TODO: We need to check that the domain uri is correct
                 let property_expanded = allframes.context.expand_schema(property);
@@ -734,7 +735,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -767,7 +768,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -787,7 +788,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
