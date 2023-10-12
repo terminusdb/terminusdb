@@ -330,7 +330,7 @@ trust_migrations :-
 semantic_indexer_endpoint(Endpoint) :-
     getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).
 
-:- table doc_size_limit/1.
-doc_size_limit(Limit) :-
+:- table doc_work_limit/1.
+doc_work_limit(Limit) :-
     % This env var is actually read from rust so this default is ignored
-    getenv_default('TERMINUSDB_DOC_SIZE_LIMIT', Limit, 500_000).
+    getenv_default('TERMINUSDB_DOC_WORK_LIMIT', Limit, 500_000).

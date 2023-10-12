@@ -446,7 +446,7 @@ impl<L: Layer> GetDocumentContext<L> {
 
         lazy_static! {
             static ref LIMIT: usize = {
-                std::env::var("TERMINUSDB_DOC_SIZE_LIMIT")
+                std::env::var("TERMINUSDB_DOC_WORK_LIMIT")
                     .ok()
                     .and_then(|s| s.parse::<usize>().ok())
                     .unwrap_or(500_000)
