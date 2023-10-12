@@ -1,3 +1,10 @@
+# TerminusDB Server v11.1.4 Release Notes
+## Bug fixes
+* Fix query reordering for not and get document
+* Document retrieval will now retrieve foreigns as bare IRIs
+* GraphQL didn't work with backlinks when prefixes were involved
+* The amount of work document retrieval is allowed to do per document is now limited, mitigating resource exhaustion
+
 # TerminusDB Server v11.1.3 Release Notes
 ## Bug fixes
 * Foreign types interact properly with collections now
