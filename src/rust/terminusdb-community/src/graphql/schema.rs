@@ -1211,9 +1211,9 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
         Some(Ok(Value::List(vals)))
     } else {
         let vals: Vec<_> = object_ids
-            .map(|o| {
-                let val = instance.id_object_value(o).unwrap();
-                value_to_graphql(&val)
+            .map(|o| match instance.id_object(o).unwrap() {
+                ObjectType::Node(n) => graphql_value!(n),
+                ObjectType::Value(v) => value_to_graphql(&v),
             })
             .collect();
         Some(Ok(Value::List(vals)))
