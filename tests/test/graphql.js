@@ -196,16 +196,24 @@ describe('GraphQL', function () {
     name: 'xsd:string',
     'prefix:link': { '@type': 'Optional', '@class': 'prefix:MyClass' },
   },
-  { "@type":"Foreign",
-    "@id": "http://external#Thing" },
-  { "@type": "Class",
-    "@id": "RequiredForeignField",
-    "required_foreign_field": "http://external#Thing" },
+  {
+    '@type': 'Foreign',
+    '@id': 'http://external#Thing',
+  },
+  {
+    '@type': 'Class',
+    '@id': 'RequiredForeignField',
+    required_foreign_field: 'http://external#Thing',
+  },
 
-  { "@type": "Class",
-    "@id": "SetForeignField",
-    "set_foreign_field": {"@type": "Set",
-          "@class": "http://external#Thing"}}
+  {
+    '@type': 'Class',
+    '@id': 'SetForeignField',
+    set_foreign_field: {
+      '@type': 'Set',
+      '@class': 'http://external#Thing',
+    },
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -1081,7 +1089,7 @@ query EverythingQuery {
 
     it('has required foreign field', async function () {
       const instance = {
-        required_foreign_field: 'http://example.com/entity'
+        required_foreign_field: 'http://example.com/entity',
       }
       await document.insert(agent, { instance })
 
@@ -1093,14 +1101,14 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.RequiredForeignField).to.have.deep.members([
         {
-          required_foreign_field: "http://example.com/entity"
-        }
+          required_foreign_field: 'http://example.com/entity',
+        },
       ])
     })
 
     it('has set foreign field', async function () {
       const instance = {
-        set_foreign_field: 'http://example.com/entity'
+        set_foreign_field: 'http://example.com/entity',
       }
       await document.insert(agent, { instance })
 
@@ -1112,8 +1120,8 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.SetForeignField).to.have.deep.members([
         {
-          set_foreign_field: ["http://example.com/entity"]
-        }
+          set_foreign_field: ['http://example.com/entity'],
+        },
       ])
     })
 
