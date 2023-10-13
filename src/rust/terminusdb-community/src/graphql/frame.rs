@@ -270,6 +270,10 @@ enum ComplexFieldDefinition {
         min: Option<usize>,
         max: Option<usize>,
     },
+    Foreign {
+        #[serde(rename = "@class")]
+        class: String,
+    },
 }
 
 impl From<StructuralFieldDefinition> for FieldDefinition {
@@ -286,6 +290,7 @@ impl From<StructuralFieldDefinition> for FieldDefinition {
                 ComplexFieldDefinition::Cardinality { class, min, max } => {
                     FieldDefinition::Cardinality { class, min, max }
                 }
+                ComplexFieldDefinition::Foreign { class } => FieldDefinition::Required(class),
             },
         }
     }
@@ -917,6 +922,11 @@ impl AllFrames {
             .get(class)
             .cloned()
             .unwrap_or_else(|| vec![class.to_string()])
+    }
+
+    pub fn is_foreign(&self, class: &str) -> bool {
+        // This will seem a bit strange in isolation, but what we're trying to say here is that any class that is not appearing in the frames must be a foreign.
+        !self.frames.contains_key(class)
     }
 }
 

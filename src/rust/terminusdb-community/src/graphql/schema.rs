@@ -7,7 +7,7 @@ use juniper::{
 };
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
-use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
+use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator, GetDocumentContext};
@@ -426,100 +426,98 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         let mut fields: Vec<_> = d
             .fields()
             .iter()
-            .filter_map(|(field_name, field_definition)| {
-                Some(
-                    if let Some(document_type) = field_definition.document_type(frames) {
-                        let field = Self::register_field::<TerminusType<'a, C>>(
-                            registry,
-                            field_name,
-                            &TerminusTypeInfo {
-                                class: document_type.to_owned(),
-                                allframes: frames.clone(),
-                            },
-                            field_definition.kind(),
-                        );
+            .map(|(field_name, field_definition)| {
+                if let Some(document_type) = field_definition.document_type(frames) {
+                    let field = Self::register_field::<TerminusType<'a, C>>(
+                        registry,
+                        field_name,
+                        &TerminusTypeInfo {
+                            class: document_type.to_owned(),
+                            allframes: frames.clone(),
+                        },
+                        field_definition.kind(),
+                    );
 
-                        if field_definition.kind().is_collection() {
-                            let class_definition =
-                                info.allframes.frames[document_type].as_class_definition();
-                            let new_info = TerminusTypeInfo {
-                                class: document_type.to_owned(),
-                                allframes: info.allframes.clone(),
-                            };
-                            add_arguments(&new_info, registry, field, class_definition)
-                        } else {
-                            field
-                        }
-                    } else if let Some(base_type) = field_definition.base_type() {
-                        if type_is_bool(base_type) {
-                            Self::register_field::<bool>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_small_integer(base_type) {
-                            Self::register_field::<i32>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_big_integer(base_type) {
-                            Self::register_field::<BigInt>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_float(base_type) {
-                            Self::register_field::<f64>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_datetime(base_type) {
-                            Self::register_field::<DateTime>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_decimal(base_type) {
-                            Self::register_field::<BigFloat>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_json(base_type) {
-                            Self::register_field::<GraphQLJSON>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else {
-                            // assume stringy
-                            Self::register_field::<String>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        }
-                    } else if let Some(enum_type) = field_definition.enum_type(frames) {
-                        Self::register_field::<TerminusEnum>(
+                    if field_definition.kind().is_collection() {
+                        let class_definition =
+                            info.allframes.frames[document_type].as_class_definition();
+                        let new_info = TerminusTypeInfo {
+                            class: document_type.to_owned(),
+                            allframes: info.allframes.clone(),
+                        };
+                        add_arguments(&new_info, registry, field, class_definition)
+                    } else {
+                        field
+                    }
+                } else if let Some(base_type) = field_definition.base_type() {
+                    if type_is_bool(base_type) {
+                        Self::register_field::<bool>(
                             registry,
                             field_name,
-                            &(enum_type.to_owned(), frames.clone()),
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_small_integer(base_type) {
+                        Self::register_field::<i32>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_big_integer(base_type) {
+                        Self::register_field::<BigInt>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_float(base_type) {
+                        Self::register_field::<f64>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_datetime(base_type) {
+                        Self::register_field::<DateTime>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_decimal(base_type) {
+                        Self::register_field::<BigFloat>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_json(base_type) {
+                        Self::register_field::<GraphQLJSON>(
+                            registry,
+                            field_name,
+                            &(),
                             field_definition.kind(),
                         )
                     } else {
-                        panic!("No known range for field {:?}", field_definition)
-                    },
-                )
+                        // assume stringy
+                        Self::register_field::<String>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    }
+                } else if let Some(enum_type) = field_definition.enum_type(frames) {
+                    Self::register_field::<TerminusEnum>(
+                        registry,
+                        field_name,
+                        &(enum_type.to_owned(), frames.clone()),
+                        field_definition.kind(),
+                    )
+                } else {
+                    Self::register_field::<ID>(registry, field_name, &(), field_definition.kind())
+                }
             })
             .collect();
 
@@ -984,8 +982,10 @@ fn extract_fragment<'a, C: QueryableContextType + 'a>(
         Some(val)
     } else {
         let obj = instance.id_object(object_id)?;
-        let val = obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
-        Some(Ok(value_to_graphql(val)))
+        match obj {
+            ObjectType::Node(n) => Some(Ok(n.into())),
+            ObjectType::Value(v) => Some(Ok(value_to_graphql(&v))),
+        }
     }
 }
 

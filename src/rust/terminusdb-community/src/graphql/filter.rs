@@ -126,10 +126,14 @@ impl GraphQLType for FilterInputObject {
                         )
                     } else {
                         let c = field_definition.range();
-                        registry.arg::<Option<FilterInputObject>>(
-                            name,
-                            &FilterInputObjectTypeInfo::new(c, &info.frames),
-                        )
+                        if info.frames.is_foreign(c) {
+                            registry.arg::<Option<IdFilterInputObject>>(name, &())
+                        } else {
+                            registry.arg::<Option<FilterInputObject>>(
+                                name,
+                                &FilterInputObjectTypeInfo::new(c, &info.frames),
+                            )
+                        }
                     }
                 })
                 .collect();
@@ -488,4 +492,13 @@ pub struct DateTimeFilterInputObject {
     pub le: Option<DateTime>,
     pub gt: Option<DateTime>,
     pub ge: Option<DateTime>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "IdFilter")]
+pub struct IdFilterInputObject {
+    #[graphql(name = "_id")]
+    pub id: Option<ID>,
+    #[graphql(name = "_ids")]
+    pub ids: Option<Vec<ID>>,
 }
