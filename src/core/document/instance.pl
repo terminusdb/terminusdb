@@ -578,7 +578,7 @@ refute_object_type_(enum(C,List),_Validation_Object,Object,Witness) :-
                        instance: Object }.
 refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
     refute_basetype_elt(Object,C,Witness).
-refute_object_type_(foreign(C),_,_,_) :-
+refute_object_type_(foreign(_),_,_,_) :-
     fail.
 refute_object_type_(class(C),Validation_Object,Object,Witness) :-
     \+ is_instance(Validation_Object,Object,C),
