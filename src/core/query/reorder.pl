@@ -188,6 +188,11 @@ memberchk(X, Vars) =>
     XO = mv(X).
 metasub(select(Vars,_Query), Vars, _Result) =>
     throw(error(unimplemented)).
+metasub(Dict, Vars, Result),
+is_dict(Dict) =>
+    dict_pairs(Dict, Functor, Pairs),
+    maplist({Vars}/[P-V,P-V2]>>metasub(V,Vars,V2), Pairs, New_Pairs),
+    dict_create(Result, Functor, New_Pairs).
 metasub(Term, Vars, Result) =>
     Term =.. [F|Args],
     maplist({Vars}/[Arg,New]>>metasub(Arg, Vars, New),
@@ -543,5 +548,9 @@ test(disconnected_partitions) :-
         [[t(v(x), y, z), t(mv(x), w, y)],
          [t(v(y), z, w)]]
     ).
+
+test(reorder_dictionary) :-
+    % Issue #1992
+    metasub(resource(post('note.csv'),csv,_{}),[docid,label],_).
 
 :- end_tests(reorder_query).
