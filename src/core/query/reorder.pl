@@ -550,6 +550,7 @@ test(disconnected_partitions) :-
     ).
 
 test(reorder_dictionary) :-
+    % Issue #1992
     metasub(resource(post('note.csv'),csv,_{}),[docid,label],_).
 
 :- end_tests(reorder_query).
