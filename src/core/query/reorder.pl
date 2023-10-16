@@ -295,6 +295,8 @@ optimize_read_order(Read, Ordered) :-
     optimize_conjuncts(Read, Ordered_Bound),
     undummy_bind(Ordered_Bound, Ordered).
 
+non_commutative(re(_,_,_)) =>
+    true.
 non_commutative(start(_,_)) =>
     true.
 non_commutative(limit(_,_)) =>
@@ -541,6 +543,58 @@ test(select_not, []) :-
 				 not(eq(v(type),rdf:'List')),
 				 get_document(v(doc_id),v(document))
 			   )).
+
+test(select_regexp_1, []) :-
+
+    Term = select(
+               [v(person_name), v(vehicle_name)],
+               (   t(v(vehicle), pilot, v(person)),
+                   t(v(vehicle), label, v(vehicle_name)),
+                   t(v(person), label, v(person_name)),
+                   re("M(.*)", v(vehicle_name), [v(all)])
+               )
+           ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    Prog = select([v(person_name),v(vehicle_name)],
+						( t(v(vehicle),pilot,v(person)),
+						  t(v(vehicle),
+						    label,
+						    v(vehicle_name)),
+						  t(v(person),label,v(person_name)),
+						  re("M(.*)",
+						     v(vehicle_name),
+						     [v(all)])
+						)).
+
+test(select_regexp_2, []) :-
+
+    Term = select(
+               [v(person_name), v(vehicle_name)],
+               (   t(v(vehicle), pilot, v(person)),
+                   t(v(vehicle), label, v(vehicle_name)),
+                   t(v(person), label, v(person_name)),
+                   re("M(.*)", v(vehicle_name), [v(all), v(match)])
+               )
+           ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    Prog = select([v(person_name),v(vehicle_name)],
+						( t(v(vehicle),pilot,v(person)),
+						  t(v(vehicle),
+						    label,
+						    v(vehicle_name)),
+						  t(v(person),label,v(person_name)),
+						  re("M(.*)",
+						     v(vehicle_name),
+						     [v(all),v(match)])
+						)).
 
 test(disconnected_partitions) :-
     disconnected_partitions(
