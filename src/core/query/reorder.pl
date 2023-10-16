@@ -549,4 +549,7 @@ test(disconnected_partitions) :-
          [t(v(y), z, w)]]
     ).
 
+test(reorder_dictionary) :-
+    metasub(resource(post('note.csv'),csv,_{}),[docid,label],_).
+
 :- end_tests(reorder_query).
