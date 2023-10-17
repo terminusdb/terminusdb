@@ -1087,6 +1087,7 @@ query EverythingQuery {
       })
 
       await db.create(agent)
+      await document.insert(agent, { schema, fullReplace: true })
     })
 
     afterEach(async function () {

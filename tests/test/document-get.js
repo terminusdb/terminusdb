@@ -23,8 +23,6 @@ describe('document-get', function () {
   const kant = { '@type': 'Person', name: 'Immanuel Kant', age: '79', order: '3' }
   const popper = { '@type': 'Person', name: 'Karl Popper', age: '92', order: '5' }
   const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: '71', order: '5' }
-  const epicurus = { '@type': 'Person', name: 'Epicurus', age: '27', order: '6' }
-  const democritus = { '@type': 'Person', name: 'Democritus', age: '12', order: '9' }
 
   const instances = [aristotle, plato, socrates]
 
@@ -108,7 +106,6 @@ describe('document-get', function () {
   })
 
   function expectInstances (objects, instances, params) {
-    console.log(instances)
     params = new Params(params)
     const skip = params.integer('skip', 0)
     let count = params.integer('count', instances.length)
@@ -125,7 +122,6 @@ describe('document-get', function () {
       count = 0
     }
 
-    console.log(objects)
     expect(objects).to.be.an('array').that.has.lengthOf(count)
     for (let i = 0; i < count; i++) {
       const object = objects[i]
@@ -385,8 +381,8 @@ describe('document-get', function () {
     }
 
     const localInstances = [
-      { '@id': 'Friendship/0', '@type': 'Friendship', friend: epicurus },
-      { '@id': 'Friendship/1', '@type': 'Friendship', friend: democritus },
+      { '@id': 'Friendship/0', '@type': 'Friendship', friend: kant },
+      { '@id': 'Friendship/1', '@type': 'Friendship', friend: gödel },
       { '@id': 'Friendship/2', '@type': 'Friendship' },
     ]
 
