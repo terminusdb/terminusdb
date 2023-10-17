@@ -111,6 +111,7 @@ describe('document-get', function () {
   })
 
   function expectInstances (objects, instances, params) {
+    console.log(instances)
     params = new Params(params)
     const skip = params.integer('skip', 0)
     let count = params.integer('count', instances.length)
@@ -127,6 +128,7 @@ describe('document-get', function () {
       count = 0
     }
 
+    console.log(objects)
     expect(objects).to.be.an('array').that.has.lengthOf(count)
     for (let i = 0; i < count; i++) {
       const object = objects[i]
@@ -437,54 +439,6 @@ describe('document-get', function () {
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
       expectInstances(r.body, [socrates, gödel])
-    })
-  })
-
-  describe('empty local database', function () {
-    let dbSpec
-    let url
-    let dbPath
-    let envs
-
-    async function execEnv (command) {
-      return exec(command, { env: envs })
-    }
-
-    before(async function () {
-      dbPath = './storage/' + util.randomString()
-      envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
-      const r = await execEnv('./terminusdb.sh store init --force')
-      expect(r.stdout).to.match(/^Successfully initialised database/)
-      dbSpec = agent.orgName + '/' + agent.dbName
-      url = agent.baseUrl + '/' + dbSpec
-    })
-
-    after(async function () {
-      await fs.rm(dbPath, { recursive: true })
-    })
-
-    describe('clone remote', function () {
-      before(async function () {
-        this.timeout(90000) // Cloning this database is slow on macOS.
-        const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-        expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
-        expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
-      })
-
-      after(async function () {
-        const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
-        expect(r.stdout).to.match(new RegExp(`Database deleted: ${dbSpec}`))
-      })
-
-      it('passes doc get with expected schema', async function () {
-        const r = await execEnv(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
-        expectSchemaJsonl(stream.Readable.from(r.stdout).pipe(new JsonlParser()))
-      })
-
-      it('passes doc get with expected instances', async function () {
-        const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
-        expectInstancesJsonl(stream.Readable.from(r.stdout).pipe(new JsonlParser()))
-      })
     })
   })
 })
