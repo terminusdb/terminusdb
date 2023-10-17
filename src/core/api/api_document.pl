@@ -412,9 +412,12 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         json_read_list_stream(Stream, ID_Unchecked),
-                         param_check_json(non_empty_string, id, ID_Unchecked, Id),
-                         api_delete_document_(Graph_Type, Transaction, Id)
+                         forall(
+                             json_read_list_stream(Stream, ID_Unchecked),
+                             (   param_check_json(non_empty_string, id, ID_Unchecked, Id),
+                                 api_delete_document_(Graph_Type, Transaction, Id)
+                             )
+                         )
                      ),
                      Meta_Data,
                      Options),
