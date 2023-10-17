@@ -262,28 +262,55 @@ fn default_dimensionality() -> usize {
 enum ComplexFieldDefinition {
     Optional {
         #[serde(rename = "@class")]
-        class: String,
+        class: StructuralFieldInnerDefinition,
     },
     Set {
         #[serde(rename = "@class")]
-        class: String,
+        class: StructuralFieldInnerDefinition,
     },
     Array {
         #[serde(rename = "@class")]
-        class: String,
+        class: StructuralFieldInnerDefinition,
         #[serde(default = "default_dimensionality")]
         dimensions: usize,
     },
     List {
         #[serde(rename = "@class")]
-        class: String,
+        class: StructuralFieldInnerDefinition,
     },
     Cardinality {
         #[serde(rename = "@class")]
-        class: String,
+        class: StructuralFieldInnerDefinition,
         min: Option<usize>,
         max: Option<usize>,
     },
+    Foreign {
+        #[serde(rename = "@class")]
+        class: StructuralFieldInnerDefinition,
+    },
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+#[serde(untagged)]
+enum StructuralFieldInnerDefinition {
+    Class(String),
+    Foreign(StructuralForeignDefinition),
+}
+
+impl StructuralFieldInnerDefinition {
+    fn name(self) -> String {
+        match self {
+            Self::Class(s) => s,
+            Self::Foreign(d) => d.class,
+        }
+    }
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+#[serde(tag = "@type")]
+struct StructuralForeignDefinition {
+    #[serde(rename = "@class")]
+    class: String,
 }
 
 impl From<StructuralFieldDefinition> for FieldDefinition {
@@ -291,14 +318,24 @@ impl From<StructuralFieldDefinition> for FieldDefinition {
         match f {
             StructuralFieldDefinition::SimpleField(s) => FieldDefinition::Required(s),
             StructuralFieldDefinition::ContainerField(c) => match c {
-                ComplexFieldDefinition::Optional { class } => FieldDefinition::Optional(class),
-                ComplexFieldDefinition::Set { class } => FieldDefinition::Set(class),
-                ComplexFieldDefinition::List { class } => FieldDefinition::List(class),
-                ComplexFieldDefinition::Array { class, dimensions } => {
-                    FieldDefinition::Array { class, dimensions }
+                ComplexFieldDefinition::Optional { class } => {
+                    FieldDefinition::Optional(class.name())
                 }
+                ComplexFieldDefinition::Set { class } => FieldDefinition::Set(class.name()),
+                ComplexFieldDefinition::List { class } => FieldDefinition::List(class.name()),
+                ComplexFieldDefinition::Array { class, dimensions } => FieldDefinition::Array {
+                    class: class.name(),
+                    dimensions,
+                },
                 ComplexFieldDefinition::Cardinality { class, min, max } => {
-                    FieldDefinition::Cardinality { class, min, max }
+                    FieldDefinition::Cardinality {
+                        class: class.name(),
+                        min,
+                        max,
+                    }
+                }
+                ComplexFieldDefinition::Foreign { class } => {
+                    FieldDefinition::Required(class.name())
                 }
             },
         }
@@ -931,6 +968,11 @@ impl AllFrames {
             .get(class)
             .cloned()
             .unwrap_or_else(|| vec![class.to_string()])
+    }
+
+    pub fn is_foreign(&self, class: &str) -> bool {
+        // This will seem a bit strange in isolation, but what we're trying to say here is that any class that is not appearing in the frames must be a foreign.
+        !self.frames.contains_key(class)
     }
 }
 
