@@ -10,13 +10,14 @@ use crate::terminus_store::*;
 use lazy_init::Lazy;
 use serde_json::map;
 use serde_json::{Map, Value};
-use urlencoding;
+use thiserror::Error;
 
 use super::consts::*;
 use super::prefix::PrefixContracter;
 use super::schema::*;
 use super::value::*;
 
+use lazy_static::lazy_static;
 use rayon::prelude::*;
 use swipl::prelude::*;
 
@@ -41,6 +42,7 @@ pub struct GetDocumentContext<L: Layer> {
     sys_value_id: Option<u64>,
     sys_json_type_id: Option<u64>,
     sys_json_document_type_id: Option<u64>,
+    sys_foreign_type_predicate_id: Option<u64>,
 }
 
 impl<L: Layer> GetDocumentContext<L> {
@@ -54,6 +56,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut rdf_list_id = None;
         let mut sys_json_type_id = None;
         let mut sys_json_document_type_id = None;
+        let mut sys_foreign_type_predicate_id = None;
         let types: HashSet<u64>;
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
@@ -130,6 +133,7 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_list_id = instance.object_node_id(RDF_LIST);
             sys_json_type_id = instance.object_node_id(SYS_JSON);
             sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
+            sys_foreign_type_predicate_id = instance.predicate_id(SYS_FOREIGN_TYPE_PREDICATE_ID);
 
             if let Some(sys_json_document_type_id) = sys_json_document_type_id {
                 document_types.insert(sys_json_document_type_id);
@@ -169,6 +173,7 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_index_ids,
             sys_array_id,
             sys_value_id,
+            sys_foreign_type_predicate_id,
 
             sys_json_type_id,
             sys_json_document_type_id,
@@ -217,6 +222,8 @@ impl<L: Layer> GetDocumentContext<L> {
             rdf_rest_id,
             rdf_nil_id,
             rdf_list_id,
+            sys_foreign_type_predicate_id: None,
+
             sys_json_type_id,
             sys_json_document_type_id,
             sys_index_ids: Vec::with_capacity(0),
@@ -246,12 +253,16 @@ impl<L: Layer> GetDocumentContext<L> {
         iri: &str,
         compress: bool,
         unfold: bool,
-    ) -> Option<Map<String, Value>> {
-        self.layer.as_ref().and_then(|layer| {
+    ) -> Result<Option<Map<String, Value>>, DocRetrievalError> {
+        match self.layer.as_ref().and_then(|layer| {
             layer
                 .subject_id(iri)
                 .map(|id| self.get_id_document(id, compress, unfold))
-        })
+        }) {
+            Some(Ok(x)) => Ok(Some(x)),
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
+        }
     }
 
     fn get_field<'a, 'b>(
@@ -410,7 +421,10 @@ impl<L: Layer> GetDocumentContext<L> {
             }
         }
 
-        if type_id.is_none() && fields.peek().is_none() {
+        if type_id.is_none()
+            && (fields.peek().is_none()
+                || fields.peek().map(|x| x.predicate) == self.sys_foreign_type_predicate_id)
+        {
             // we're actually dealing with a raw id here
             Err(Value::String(id_name_contracted))
         } else {
@@ -429,7 +443,12 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    pub fn get_id_document(&self, id: u64, compress: bool, unfold: bool) -> Map<String, Value> {
+    pub fn get_id_document(
+        &self,
+        id: u64,
+        compress: bool,
+        unfold: bool,
+    ) -> Result<Map<String, Value>, DocRetrievalError> {
         if self.layer.is_none() {
             panic!("expected id to point at document: {}", id);
         }
@@ -448,7 +467,20 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut visited: Vec<u64> = Vec::new();
         visited.push(id);
 
+        lazy_static! {
+            static ref LIMIT: usize = {
+                std::env::var("TERMINUSDB_DOC_WORK_LIMIT")
+                    .ok()
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(500_000)
+            };
+        }
+        let mut work = 0;
         loop {
+            work += 1;
+            if work >= *LIMIT {
+                break;
+            }
             let cur = stack.last_mut().unwrap();
             let is_json = cur.is_json();
             if let Some(next_obj) = cur.peek() {
@@ -512,12 +544,22 @@ impl<L: Layer> GetDocumentContext<L> {
                 } else {
                     // we're done, this was the root, time to return!
                     match cur {
-                        StackEntry::Document { doc, .. } => return doc,
+                        StackEntry::Document { doc, .. } => return Ok(doc),
                         _ => panic!("unexpected element at stack top"),
                     }
                 }
             }
         }
+
+        // if we are here, it is because doc retrieval got too expensive
+        let iri = if let Some(StackEntry::Document { doc, .. }) = stack.first() {
+            doc.get("@id")
+                .map(|j| j.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        } else {
+            "unknown".to_string()
+        };
+        Err(DocRetrievalError::LimitExceeded(iri))
     }
 
     fn get_subtypes_for(&self, type_name: &str) -> Vec<u64> {
@@ -546,6 +588,25 @@ impl<L: Layer> GetDocumentContext<L> {
                 Some(id) => self.id_document_exists(id),
                 None => false,
             },
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum DocRetrievalError {
+    #[error("Limit exceeded while trying to retrieve document with IRI {0}")]
+    LimitExceeded(String),
+}
+
+impl IntoPrologException for DocRetrievalError {
+    fn into_prolog_exception<'a, T: QueryableContextType>(
+        self,
+        context: &'a Context<'_, T>,
+    ) -> PrologResult<Term<'a>> {
+        match self {
+            DocRetrievalError::LimitExceeded(iri) => {
+                term! {context: error(doc_retrieval_limit_exceeded(#iri), _)}
+            }
         }
     }
 }
@@ -890,7 +951,8 @@ fn print_documents_of_types<
                 continue;
             }
 
-            let map = doc_context.get_id_document(t.subject, compress, unfold);
+            let map =
+                context.try_or_die(doc_context.get_id_document(t.subject, compress, unfold))?;
             print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
         }
     }
@@ -951,6 +1013,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
+        let map = context.try_or_die(map)?;
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
 
@@ -1003,7 +1066,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut started = false;
     for iri_term in context.term_list_iter(iris_term) {
         let iri: PrologText = iri_term.get_ex()?;
-        if let Some(doc) = doc_context.get_document(&iri, compress, unfold) {
+        if let Some(doc) = context.try_or_die(doc_context.get_document(&iri, compress, unfold))? {
             if skip > 0 {
                 skip -= 1;
                 continue;
@@ -1062,9 +1125,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
             iter.enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, iri)| {
-                    let map = doc_context2
-                        .get_document(&iri, compress, unfold)
-                        .expect("expected document to exist");
+                    let map = doc_context2.get_document(&iri, compress, unfold);
                     sender.send((ix, map)) // failure will kill the task
                 });
     });
@@ -1073,6 +1134,9 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
+        let map = context
+            .try_or_die(map)?
+            .expect("expected document to exist");
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
 
@@ -1130,7 +1194,7 @@ predicates! {
         let minimize: bool = minimize_term.get()?;
         let started: bool = started_term.get()?;
 
-        if let Some(result) = doc_context.get_document(&s, compress, unfold) {
+        if let Some(result) = context.try_or_die(doc_context.get_document(&s, compress, unfold))? {
             if as_list && started {
                 context.try_or_die_generic(stream.write_all(b",\n"))?;
             }

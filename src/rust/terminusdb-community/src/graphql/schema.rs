@@ -375,13 +375,16 @@ impl GraphQLValue for TerminusTypeCollection {
                     .allframes
                     .context
                     .expand_instance(&id);
-                let doc = document_context
-                    .get_document(&expanded_id, true, true)
-                    .expect("no such document");
-                let json_string =
-                    serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
+                let doc = document_context.get_document(&expanded_id, true, true)?;
+                match doc {
+                    Some(doc) => {
+                        let json_string =
+                            serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
 
-                Ok(Value::Scalar(DefaultScalarValue::String(json_string)))
+                        Ok(Value::Scalar(DefaultScalarValue::String(json_string)))
+                    }
+                    None => Err("No such document".into()),
+                }
             }
             _ => {
                 let zero_iter;
@@ -562,9 +565,10 @@ impl TerminusType {
             .collect();
 
         let mut inverted_fields: Vec<_> = Vec::new();
-        if let Some(inverted_type) = &frames.inverted.classes.get(&info.class) {
+        let database_class_name = frames.graphql_to_class_name(&info.class);
+        if let Some(inverted_type) = &frames.inverted.classes.get(database_class_name) {
             for (field_name, ifd) in inverted_type.domain.iter() {
-                let class = &frames.graphql_class_name(&ifd.class);
+                let class = &frames.class_to_graphql_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
                     continue;
                 }
@@ -655,7 +659,7 @@ impl GraphQLType for TerminusType {
         let allframes = &info.allframes;
         let frame = &allframes.frames[class];
         match frame {
-            TypeDefinition::Class(d) => Self::generate_class_type(&class, d, info, registry),
+            TypeDefinition::Class(d) => Self::generate_class_type(class, d, info, registry),
             TypeDefinition::Enum(_) => panic!("no enum expected here"),
         }
     }
@@ -723,10 +727,15 @@ impl GraphQLValue for TerminusType {
             if field_name == "_json" {
                 let document_context = executor.context().document_context();
                 let doc = document_context.get_id_document(self.id, true, true);
-                let json_string =
-                    serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
+                match doc {
+                    Ok(doc) => {
+                        let json_string =
+                            serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
 
-                return Some(Ok(Value::Scalar(DefaultScalarValue::String(json_string))));
+                        return Some(Ok(Value::Scalar(DefaultScalarValue::String(json_string))));
+                    }
+                    Err(e) => return Some(Err(e.into())),
+                }
             }
 
             let allframes = &info.allframes;
@@ -738,7 +747,7 @@ impl GraphQLValue for TerminusType {
                     .and_then(|pid| instance.single_triple_sp(self.id, pid))
                     .and_then(|t| instance.id_object_node(t.object))
                     .map(|ty| {
-                        let small_ty = allframes.graphql_class_name(&ty);
+                        let small_ty = allframes.class_to_graphql_name(&ty);
                         Ok(Value::Scalar(DefaultScalarValue::String(small_ty)))
                     });
                 return ty;
@@ -747,9 +756,11 @@ impl GraphQLValue for TerminusType {
             if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
                 let property = &reverse_link.property;
                 let domain = &reverse_link.class;
+                let graphql_domain = allframes.class_to_graphql_name(domain);
                 let kind = &reverse_link.kind;
+                // TODO: We need to check that the domain uri is correct
                 let property_expanded = allframes.context.expand_schema(property);
-                let domain_uri = allframes.fully_qualified_class_name(domain);
+                let domain_uri = allframes.context.expand_schema(domain);
                 let field_id = instance.predicate_id(&property_expanded)?;
                 // List and array are special since they are *deep* objects
                 match kind {
@@ -777,7 +788,7 @@ impl GraphQLValue for TerminusType {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -810,7 +821,7 @@ impl GraphQLValue for TerminusType {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -830,7 +841,7 @@ impl GraphQLValue for TerminusType {
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            Some(domain),
+                            Some(&graphql_domain),
                             None,
                             false,
                             executor,
@@ -869,7 +880,7 @@ impl GraphQLValue for TerminusType {
                 match result {
                     Ok(Some(reason)) => Some(Ok(graphql_value!(reason))),
                     Ok(None) => Some(Ok(graphql_value!(None))),
-                    Err(e) => Some(Err(e)),
+                    Err(e) => Some(Err(e.into())),
                 }
             } else {
                 let frame = &allframes.frames[&info.class];
@@ -993,7 +1004,7 @@ impl GraphQLValue for TerminusType {
             }
         };
 
-        let x = get_info();
+        let x: Option<Result<_, juniper::FieldError<_>>> = get_info();
         match x {
             Some(r) => r,
             None => Ok(Value::Null),
@@ -1023,7 +1034,7 @@ fn extract_fragment(
         Some(Ok(value))
     } else if is_json {
         let val = extract_json_fragment(instance, object_id);
-        Some(Ok(val))
+        Some(val)
     } else {
         let obj = instance.id_object(object_id)?;
         let val = obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
@@ -1046,11 +1057,17 @@ fn extract_enum_fragment(
     ))
 }
 
-fn extract_json_fragment(instance: &SyncStoreLayer, object_id: u64) -> juniper::Value {
+fn extract_json_fragment(
+    instance: &SyncStoreLayer,
+    object_id: u64,
+) -> Result<juniper::Value, juniper::FieldError> {
     // TODO this should really not just recreate a context, but it's cheap enough since it is schema independent.
     let context = GetDocumentContext::new_json(Some(instance.clone()));
-    let json = serde_json::Value::Object(context.get_id_document(object_id, true, true));
-    juniper::Value::Scalar(DefaultScalarValue::String(json.to_string()))
+    let doc = context.get_id_document(object_id, true, true)?;
+    let json = serde_json::Value::Object(doc);
+    Ok(juniper::Value::Scalar(DefaultScalarValue::String(
+        json.to_string(),
+    )))
 }
 
 fn is_path_field_name(field_name: &str) -> bool {
@@ -1237,9 +1254,15 @@ fn collect_into_graphql_list<'a>(
             .collect();
         Some(Ok(Value::List(vals)))
     } else if is_json {
-        let vals: Vec<_> = object_ids
-            .map(|o| extract_json_fragment(instance, o))
-            .collect();
+        let mut vals: Vec<_> = Vec::new();
+        for o in object_ids {
+            let fragment = extract_json_fragment(instance, o);
+            if fragment.is_err() {
+                return Some(fragment);
+            }
+            let fragment = fragment.unwrap();
+            vals.push(fragment);
+        }
         Some(Ok(Value::List(vals)))
     } else {
         let vals: Vec<_> = object_ids
