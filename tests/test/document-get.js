@@ -26,6 +26,8 @@ describe('document-get', function () {
   const kant = { '@type': 'Person', name: 'Immanuel Kant', age: '79', order: '3' }
   const popper = { '@type': 'Person', name: 'Karl Popper', age: '92', order: '5' }
   const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: '71', order: '5' }
+  const epicurus = { '@type': 'Person', name: 'Epicurus', age: '27', order: '6' }
+  const democritus = { '@type': 'Person', name: 'Democritus', age: '12', order: '9' }
 
   const instances = [aristotle, plato, socrates]
 
@@ -397,8 +399,8 @@ describe('document-get', function () {
     }
 
     const localInstances = [
-      { '@id': 'Friendship/0', '@type': 'Friendship', friend: kant },
-      { '@id': 'Friendship/1', '@type': 'Friendship', friend: gödel },
+      { '@id': 'Friendship/0', '@type': 'Friendship', friend: epicurus },
+      { '@id': 'Friendship/1', '@type': 'Friendship', friend: democritus },
       { '@id': 'Friendship/2', '@type': 'Friendship' },
     ]
 
