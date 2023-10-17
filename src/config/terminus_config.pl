@@ -49,7 +49,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.1.4').
+terminusdb_version('11.1.5').
 /* [[[end]]] */
 
 bootstrap_config_files :-
