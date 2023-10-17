@@ -218,7 +218,7 @@ describe('GraphQL', function () {
 
   before(async function () {
     /* GraphQL Boilerplate */
-  /* Termius Boilerplate */
+    /* Termius Boilerplate */
     agent = new Agent().auth()
     const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
     const base = agent.baseUrl
@@ -1024,6 +1024,49 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
+    })
+  })
+
+  describe('GraphQL Crashing', function () {
+    let agent
+    let client
+
+    beforeEach(async function () {
+    /* GraphQL Boilerplate */
+    /* Termius Boilerplate */
+      agent = new Agent().auth()
+      const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const base = agent.baseUrl
+      const uri = `${base}${path}`
+
+      const httpLink = new HttpLink({ uri, fetch })
+      const authMiddleware = new ApolloLink((operation, forward) => {
+        // add the authorization to the headers
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: 'Basic YWRtaW46cm9vdA==',
+          },
+        }))
+        return forward(operation)
+      })
+
+      const ComposedLink = concat(authMiddleware, httpLink)
+
+      const cache = new InMemoryCache({
+        addTypename: false,
+      })
+
+      client = new ApolloClient({
+        cache,
+        link: ComposedLink,
+      })
+
+      await db.create(agent)
+    })
+
+    afterEach(async function () {
+      await db.delete(agent)
     })
 
     it('shadows a graphql type and fails', async function () {
