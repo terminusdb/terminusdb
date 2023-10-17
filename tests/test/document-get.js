@@ -1,6 +1,3 @@
-const fs = require('fs/promises')
-const exec = require('util').promisify(require('child_process').exec)
-const stream = require('stream')
 const JsonlParser = require('stream-json/jsonl/Parser')
 const { expect } = require('chai')
 const { Agent, api, db, document, Params, util } = require('../lib')
@@ -148,19 +145,6 @@ describe('document-get', function () {
       delete object['@id']
       expect(Object.keys(object).length).to.equal(0)
     }
-  }
-
-  function expectInstancesJsonl (r) {
-    const objects = []
-    r.on('error', (err) => {
-      expect.fail(err)
-    })
-    r.on('data', (data) => {
-      objects.push(data.value)
-    })
-    r.on('end', () => {
-      expectInstances(objects, instances)
-    })
   }
 
   describe('returns expected instance stream', function () {
