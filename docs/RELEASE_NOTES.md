@@ -1,3 +1,12 @@
+# TerminusDB Server v11.1.5 Release Notes
+## Bug fixes
+* Schema changes no longer trigger errors on bare IRIs such as foreigns
+* WOQL words that take a dictionary were broken due to query reordering
+* Query reordering now respects regex operator modality
+
+## Experimental
+* GraphQL now has queries and mutations for the document API
+
 # TerminusDB Server v11.1.4 Release Notes
 ## Bug fixes
 * Fix query reordering for not and get document
