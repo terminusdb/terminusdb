@@ -6,5 +6,6 @@ resolver = "1"
 debug = 1
 
 [patch.crates-io]
-#terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}
+#terminus-store = {path="../../../terminusdb-store"}
+terminus-store = {git="https://github.com/terminusdb/terminusdb-store", branch="i32_cast"}
 #swipl = {git="https://github.com/terminusdb-labs/swipl-rs", branch="type_erased_contexts"}

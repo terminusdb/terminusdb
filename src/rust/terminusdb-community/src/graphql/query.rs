@@ -620,7 +620,7 @@ fn object_type_filter<'a>(
             let h = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = h.id_object_value(*object).expect("Object value must exist");
-                let object_int = object_value.as_val::<i32, i32>();
+                let object_int = object_value.as_i32().expect("not a numerical value");
                 let cmp = object_int.cmp(&i);
                 ordering_matches_op(cmp, op)
             }))
@@ -890,21 +890,19 @@ fn generate_iterator_from_filter<'a>(
     let mut iter = None;
     let mut visit_next: VecDeque<(Vec<&str>, &FilterObject)> = VecDeque::new();
     visit_next.push_back((vec![], filter));
-    while let Some(mut next) = visit_next.pop_front() {
+    while let Some(next) = visit_next.pop_front() {
         if !next.1.ids.is_empty() {
             // amazing we found something.
             let ids: Vec<_> = next.1.ids.iter().flat_map(|id| g.subject_id(id)).collect();
-            let id_iter = ClonableIterator::new(ids.into_iter());
-            next.0.reverse();
-            let components: Vec<_> = next
-                .0
-                .into_iter()
-                .map(|component| Path::Negative(Pred::Named(component.to_string())))
-                .collect();
-            let path = Some(Path::Seq(components));
-            iter = Some(ClonableIterator::new(
-                compile_path(g, all_frames.context.clone(), path.unwrap(), id_iter).unique(),
+            iter = Some(iterator_from_path_and_ids(
+                g,
+                &all_frames.context,
+                next.0,
+                ids.into_iter(),
             ));
+            break;
+        } else if let Some(it) = generate_iterator_from_edges(g, &all_frames.context, &next) {
+            iter = Some(it);
             break;
         } else {
             // nothing here :( push children.
@@ -964,6 +962,80 @@ fn generate_iterator_from_filter<'a>(
         // no path was found. we default to None
         None
     }
+}
+
+fn iterator_from_path_and_ids<'a>(
+    g: &'a SyncStoreLayer,
+    prefixes: &Prefixes,
+    components: Vec<&str>,
+    ids: impl Iterator<Item = u64> + 'a + Clone,
+) -> ClonableIterator<'a, u64> {
+    let components: Vec<_> = components
+        .into_iter()
+        .rev()
+        .map(|component| Path::Negative(Pred::Named(component.to_string())))
+        .collect();
+    let path = Some(Path::Seq(components));
+    eprintln!("path: {path:?}");
+    ClonableIterator::new(
+        compile_path(
+            g,
+            prefixes.clone(),
+            path.unwrap(),
+            ClonableIterator::new(ids),
+        )
+        .unique(),
+    )
+}
+
+fn filter_value_to_entry(value: &FilterValue) -> Option<TypedDictEntry> {
+    match value {
+        FilterValue::String(GenericOperation::Eq, val, _) => Some(String::make_entry(val)),
+        FilterValue::SmallInt(GenericOperation::Eq, val, _) => Some(i32::make_entry(val)),
+        FilterValue::Float(GenericOperation::Eq, val, _) => Some(f64::make_entry(val)),
+        FilterValue::Boolean(GenericOperation::Eq, val, _) => Some(bool::make_entry(val)),
+        FilterValue::BigInt(GenericOperation::Eq, val, _) => val
+            .0
+            .parse::<Integer>()
+            .ok()
+            .map(|parsed| Integer::make_entry(&parsed)),
+        FilterValue::BigFloat(GenericOperation::Eq, val, _) => Decimal::new(val.0.clone())
+            .ok()
+            .map(|parsed| Decimal::make_entry(&parsed)),
+        _ => None,
+    }
+}
+
+fn generate_iterator_from_edges<'a>(
+    g: &'a SyncStoreLayer,
+    prefixes: &Prefixes,
+    cur: &(Vec<&str>, &FilterObject),
+) -> Option<ClonableIterator<'a, u64>> {
+    for (name, e) in cur.1.edges.iter() {
+        match e {
+            FilterScope::Required(FilterObjectType::Value(value)) => {
+                if let Some(entry) = filter_value_to_entry(value) {
+                    let id_opt = g.object_value_id(&entry);
+                    if id_opt.is_none() {
+                        continue;
+                    }
+                    let id = id_opt.unwrap();
+                    let mut components = cur.0.clone();
+                    components.push(&name);
+
+                    return Some(iterator_from_path_and_ids(
+                        g,
+                        prefixes,
+                        components,
+                        [id].into_iter(),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
 }
 
 fn generate_initial_iterator<'a>(
