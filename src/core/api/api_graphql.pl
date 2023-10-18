@@ -28,7 +28,8 @@ maybe_show_database(System_DB, Auth, Desc, Action, DB, Maybe_DB) :-
 
 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length) :-
     atom_string(Path_Atom, Path),
-    (   Path == ""
+    (   Path == "",
+        fail % This fail here is because I don't really want to enable the system graphql endpoint in production just yet
     ->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
     ;   (   resolve_absolute_string_descriptor(Path, Desc)
         ->  open_descriptor(Desc, Transaction)
