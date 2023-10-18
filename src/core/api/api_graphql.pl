@@ -32,9 +32,9 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
     %->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
     ->  throw(error(no_graphql_path_given, _))
     ;   (   resolve_absolute_string_descriptor(Path, Desc)
-        ->  open_descriptor(Desc, Transaction)
-        ;   Desc = system_descriptor{},
-            Transaction = System_DB
+        ->  do_or_die(open_descriptor(Desc, Transaction),
+                      error(unresolvable_absolute_descriptor(Desc), _))
+        ;   throw(error(invalid_absolute_path(Path), _))
         ),
         (   branch_descriptor{} :< Desc
         ->  maybe_show_database(System_DB, Auth, Desc,

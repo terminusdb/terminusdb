@@ -3143,9 +3143,29 @@ handle_graphql_error(error(authentication_incorrect(_Auth), _), Request) :-
     cors_reply_json(Request,
                     json{'errors': [json{message: "Authentication incorrect"}]},
                     [status(401)]).
+handle_graphql_error(error(read_access_malformed_collection(Desc)), Request) :-
+    resolve_absolute_string_descriptor(Path, Desc),
+    format(string(Msg), "Access to ~q is not authorized",
+           [Path]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
 handle_graphql_error(error(access_not_authorised(Auth, Action, Scope), _), Request) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Scope,Action,Auth]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
+handle_graphql_error(error(invalid_absolute_path(Path), _), Request) :-
+    format(string(Msg), "Bad descriptor path: ~q",
+           [Path]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
+handle_graphql_error(error(unresolvable_absolute_descriptor(Desc), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Desc),
+    format(string(Msg), "Unable to resolve an invalid absolute path for descriptor ~q",
+           [Path]),
     cors_reply_json(Request,
                     json{'errors': [json{message: Msg}]},
                     [status(403)]).
