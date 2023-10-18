@@ -62,13 +62,11 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
         ;   Commit_DB = none,
             Meta_DB = none
         ),
-        % TODO if there's a mutation, we also need to assert write access
         assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
         (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
         ->  true
         ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
             '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
-        % make context
 
         create_context(Transaction, commit_info{author: Author, message: Message}, C),
         catch(

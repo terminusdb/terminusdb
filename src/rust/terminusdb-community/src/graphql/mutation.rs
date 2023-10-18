@@ -216,7 +216,6 @@ impl TerminusMutationRoot {
             ],
         )?;
         let ids: Vec<String> = ids_term.get_ex()?;
-        eprintln!("{:?}", ids);
         frame.close();
         Ok(juniper::Value::List(
             ids.into_iter().map(|id| id.to_string().into()).collect(),
