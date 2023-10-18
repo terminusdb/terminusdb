@@ -967,6 +967,7 @@ fn iterator_from_path_and_ids<'a>(
         .map(|component| Path::Negative(Pred::Named(component.to_string())))
         .collect();
     let path = Path::Seq(components);
+    eprintln!("path: {path:?}");
     ClonableIterator::new(
         compile_path(g, prefixes.clone(), path, ClonableIterator::new(ids)).unique(),
     )
@@ -997,7 +998,8 @@ fn generate_iterator_from_edges<'a>(
 ) -> Option<ClonableIterator<'a, u64>> {
     for (name, e) in cur.1.edges.iter() {
         match e {
-            FilterScope::Required(FilterObjectType::Value(value)) => {
+            FilterScope::Required(FilterObjectType::Value(value))
+            | FilterScope::Collection(_, FilterObjectType::Value(value)) => {
                 if let Some(entry) = filter_value_to_entry(value) {
                     let id_opt = g.object_value_id(&entry);
                     if id_opt.is_none() {
