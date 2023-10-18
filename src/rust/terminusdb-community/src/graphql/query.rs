@@ -882,11 +882,7 @@ fn generate_iterator_from_filter<'a>(
     filter_opt: Option<&FilterObject>,
     includes_children: bool,
 ) -> Option<ClonableIterator<'a, u64>> {
-    if filter_opt.is_none() {
-        return None;
-    }
-
-    let filter = filter_opt.unwrap();
+    let filter = filter_opt?;
     let mut iter = None;
     let mut visit_next: VecDeque<(Vec<&str>, &FilterObject)> = VecDeque::new();
     visit_next.push_back((vec![], filter));
@@ -938,12 +934,7 @@ fn generate_iterator_from_filter<'a>(
                 .map(|c| all_frames.fully_qualified_class_name(&c))
                 .flat_map(|id| g.subject_id(&id))
                 .collect();
-            let rdf_type_id = g.predicate_id(RDF_TYPE);
-            if rdf_type_id.is_none() {
-                // no types means nothing can be retrieved
-                return None;
-            }
-            let rdf_type_id = rdf_type_id.unwrap();
+            let rdf_type_id = g.predicate_id(RDF_TYPE)?;
             Some(ClonableIterator::new(iter.filter(move |id| {
                 match g.single_triple_sp(*id, rdf_type_id) {
                     Some(t) => correct_types.contains(&t.object),
@@ -975,16 +966,9 @@ fn iterator_from_path_and_ids<'a>(
         .rev()
         .map(|component| Path::Negative(Pred::Named(component.to_string())))
         .collect();
-    let path = Some(Path::Seq(components));
-    eprintln!("path: {path:?}");
+    let path = Path::Seq(components);
     ClonableIterator::new(
-        compile_path(
-            g,
-            prefixes.clone(),
-            path.unwrap(),
-            ClonableIterator::new(ids),
-        )
-        .unique(),
+        compile_path(g, prefixes.clone(), path, ClonableIterator::new(ids)).unique(),
     )
 }
 
@@ -1021,7 +1005,7 @@ fn generate_iterator_from_edges<'a>(
                     }
                     let id = id_opt.unwrap();
                     let mut components = cur.0.clone();
-                    components.push(&name);
+                    components.push(name);
 
                     return Some(iterator_from_path_and_ids(
                         g,
