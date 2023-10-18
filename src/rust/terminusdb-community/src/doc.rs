@@ -7,10 +7,10 @@ use std::sync::{mpsc, Arc};
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::*;
 
+use lazy_init::Lazy;
 use serde_json::map;
 use serde_json::{Map, Value};
 use thiserror::Error;
-use urlencoding;
 
 use super::consts::*;
 use super::prefix::PrefixContracter;
@@ -22,8 +22,10 @@ use rayon::prelude::*;
 use swipl::prelude::*;
 
 pub struct GetDocumentContext<L: Layer> {
+    schema: Option<L>,
     layer: Option<L>,
-    prefixes: PrefixContracter,
+    prefixes: Lazy<PrefixContracter>,
+    default_prefixes: Lazy<PrefixContracter>,
     types: HashSet<u64>,
     subtypes: HashMap<String, HashSet<u64>>,
     document_types: HashSet<u64>,
@@ -41,24 +43,11 @@ pub struct GetDocumentContext<L: Layer> {
     sys_json_type_id: Option<u64>,
     sys_json_document_type_id: Option<u64>,
     sys_foreign_type_predicate_id: Option<u64>,
-    unfold: bool,
-    minimized: bool,
 }
 
 impl<L: Layer> GetDocumentContext<L> {
-    pub fn new<SL: Layer>(
-        schema: &SL,
-        instance: Option<L>,
-        compress: bool,
-        unfold: bool,
-        minimized: bool,
-    ) -> GetDocumentContext<L> {
-        let schema_query_context = SchemaQueryContext::new(schema);
-        let prefixes = if compress {
-            prefix_contracter_from_schema_layer(schema)
-        } else {
-            PrefixContracter::new(std::iter::empty())
-        };
+    pub fn new(schema: L, instance: Option<L>) -> GetDocumentContext<L> {
+        let schema_query_context = SchemaQueryContext::new(&schema);
 
         let mut rdf_type_id = None;
         let mut rdf_first_id = None;
@@ -166,8 +155,10 @@ impl<L: Layer> GetDocumentContext<L> {
 
         GetDocumentContext {
             layer: instance,
+            schema: Some(schema),
 
-            prefixes,
+            prefixes: Lazy::new(),
+            default_prefixes: Lazy::new(),
             types,
             subtypes,
             document_types,
@@ -186,13 +177,10 @@ impl<L: Layer> GetDocumentContext<L> {
 
             sys_json_type_id,
             sys_json_document_type_id,
-
-            unfold,
-            minimized,
         }
     }
 
-    pub fn new_json(instance: Option<L>, unfold: bool, minimized: bool) -> GetDocumentContext<L> {
+    pub fn new_json(instance: Option<L>) -> GetDocumentContext<L> {
         let rdf_type_id;
         let rdf_first_id;
         let rdf_rest_id;
@@ -219,8 +207,10 @@ impl<L: Layer> GetDocumentContext<L> {
         }
         Self {
             layer: instance,
+            schema: None,
 
-            prefixes: PrefixContracter::new([]),
+            default_prefixes: Lazy::new(),
+            prefixes: Lazy::new(),
             types: HashSet::with_capacity(0),
             subtypes: HashMap::with_capacity(0),
             document_types: HashSet::with_capacity(0),
@@ -239,8 +229,6 @@ impl<L: Layer> GetDocumentContext<L> {
             sys_index_ids: Vec::with_capacity(0),
             sys_array_id: None,
             sys_value_id: None,
-            unfold,
-            minimized,
         }
     }
 
@@ -248,25 +236,47 @@ impl<L: Layer> GetDocumentContext<L> {
         self.layer.as_ref().unwrap()
     }
 
-    pub fn get_document(&self, iri: &str) -> Result<Option<Map<String, Value>>, DocRetrievalError> {
-        match self
-            .layer
-            .as_ref()
-            .and_then(|layer| layer.subject_id(iri).map(|id| self.get_id_document(id)))
-        {
+    fn prefixes(&self, compress: bool) -> &PrefixContracter {
+        if compress {
+            self.prefixes.get_or_create(|| match self.schema.as_ref() {
+                Some(schema) => prefix_contracter_from_schema_layer(schema),
+                None => PrefixContracter::default(),
+            })
+        } else {
+            self.default_prefixes
+                .get_or_create(|| PrefixContracter::default())
+        }
+    }
+
+    pub fn get_document(
+        &self,
+        iri: &str,
+        compress: bool,
+        unfold: bool,
+    ) -> Result<Option<Map<String, Value>>, DocRetrievalError> {
+        match self.layer.as_ref().and_then(|layer| {
+            layer
+                .subject_id(iri)
+                .map(|id| self.get_id_document(id, compress, unfold))
+        }) {
             Some(Ok(x)) => Ok(Some(x)),
             Some(Err(e)) => Err(e),
             None => Ok(None),
         }
     }
 
-    fn get_field(&self, object: u64) -> Result<Value, StackEntry<L>> {
+    fn get_field<'a, 'b>(
+        &'a self,
+        object: u64,
+        compress: bool,
+        unfold: bool,
+    ) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         } else if Some(object) == self.rdf_nil_id {
             Ok(Value::Array(vec![]))
         } else {
-            match self.get_doc_stub(object, true) {
+            match self.get_doc_stub(object, true, compress, unfold) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
                 Ok((doc, type_id, fields, json)) => Err(StackEntry::Document {
                     id: object,
@@ -346,6 +356,8 @@ impl<L: Layer> GetDocumentContext<L> {
         &self,
         id: u64,
         terminate: bool,
+        compress: bool,
+        unfold: bool,
     ) -> Result<
         (
             Map<String, Value>,
@@ -363,7 +375,10 @@ impl<L: Layer> GetDocumentContext<L> {
 
         // we know id_name is properly a node
         let id_name = id_name.node().unwrap();
-        let id_name_contracted = self.prefixes.instance_contract(&id_name).to_string();
+        let id_name_contracted = self
+            .prefixes(compress)
+            .instance_contract(&id_name)
+            .to_string();
 
         let rdf_type_id = self.rdf_type_id;
         let mut fields = (Box::new(
@@ -379,7 +394,7 @@ impl<L: Layer> GetDocumentContext<L> {
         if let Some(rdf_type_id) = self.rdf_type_id {
             if let Some(t) = self.layer().single_triple_sp(id, rdf_type_id) {
                 if terminate
-                    && (!self.unfold
+                    && (!unfold
                         || (self.document_types.contains(&t.object)
                             && !self.unfoldables.contains(&t.object)))
                 {
@@ -397,8 +412,11 @@ impl<L: Layer> GetDocumentContext<L> {
                     // json objects are special. We don't care about their type names.
                     // for other types, we do care, so convert to string format.
                     let type_name = self.layer().id_object_node(t.object).unwrap();
-                    type_name_contracted =
-                        Some(self.prefixes.schema_contract(&type_name).to_string());
+                    type_name_contracted = Some(
+                        self.prefixes(compress)
+                            .schema_contract(&type_name)
+                            .to_string(),
+                    );
                 }
             }
         }
@@ -425,14 +443,19 @@ impl<L: Layer> GetDocumentContext<L> {
         }
     }
 
-    pub fn get_id_document(&self, id: u64) -> Result<Map<String, Value>, DocRetrievalError> {
+    pub fn get_id_document(
+        &self,
+        id: u64,
+        compress: bool,
+        unfold: bool,
+    ) -> Result<Map<String, Value>, DocRetrievalError> {
         if self.layer.is_none() {
             panic!("expected id to point at document: {}", id);
         }
 
         let mut stack = Vec::new();
 
-        let (doc, type_id, fields, json) = self.get_doc_stub(id, false).unwrap();
+        let (doc, type_id, fields, json) = self.get_doc_stub(id, false, compress, unfold).unwrap();
         stack.push(StackEntry::Document {
             id,
             doc,
@@ -486,9 +509,9 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
 
                 // it's not one of the special types, treat it as an ordinary field.
-                match self.get_field(next_obj) {
+                match self.get_field(next_obj, compress, unfold) {
                     Ok(val) => {
-                        cur.integrate_value(self, val);
+                        cur.integrate_value(self, val, compress);
                     }
                     Err(entry) => {
                         // this is a bit of a silly setup.
@@ -500,7 +523,11 @@ impl<L: Layer> GetDocumentContext<L> {
                             .unwrap_or(false)
                         {
                             // This entry is already visited. We only have to provide a name.
-                            cur.integrate_value(self, entry.document_iri().unwrap().clone());
+                            cur.integrate_value(
+                                self,
+                                entry.document_iri().unwrap().clone(),
+                                compress,
+                            );
                         } else {
                             // We need to iterate deeper, so add it to the stack without iterating past the field.
                             visited.push(next_obj);
@@ -513,7 +540,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 visited.pop();
                 let cur = stack.pop().unwrap();
                 if let Some(parent) = stack.last_mut() {
-                    parent.integrate(self, cur);
+                    parent.integrate(self, cur, compress);
                 } else {
                     // we're done, this was the root, time to return!
                     match cur {
@@ -715,14 +742,24 @@ impl<'a, L: Layer> StackEntry<'a, L> {
         }
     }
 
-    fn integrate(&mut self, context: &GetDocumentContext<L>, child: StackEntry<'a, L>) {
+    fn integrate(
+        &mut self,
+        context: &GetDocumentContext<L>,
+        child: StackEntry<'a, L>,
+        compress: bool,
+    ) {
         match child {
-            StackEntry::Array(a) => self.integrate_array(context, a),
-            _ => self.integrate_value(context, child.into_value()),
+            StackEntry::Array(a) => self.integrate_array(context, a, compress),
+            _ => self.integrate_value(context, child.into_value(), compress),
         }
     }
 
-    fn integrate_array(&mut self, context: &GetDocumentContext<L>, array: ArrayStackEntry<'a, L>) {
+    fn integrate_array(
+        &mut self,
+        context: &GetDocumentContext<L>,
+        array: ArrayStackEntry<'a, L>,
+        compress: bool,
+    ) {
         // self has to be an object, let's make sure of that.
         match self {
             Self::Document { doc, fields, .. } => {
@@ -734,14 +771,17 @@ impl<'a, L: Layer> StackEntry<'a, L> {
                     .layer()
                     .id_predicate(array.entries.predicate)
                     .unwrap();
-                let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
+                let p_name_contracted = context
+                    .prefixes(compress)
+                    .schema_contract(&p_name)
+                    .to_string();
                 context.add_field(doc, &p_name_contracted, value, false);
             }
             _ => panic!("unexpected parent type of array"),
         }
     }
 
-    fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value) {
+    fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value, compress: bool) {
         match self {
             Self::Document {
                 doc,
@@ -756,7 +796,10 @@ impl<'a, L: Layer> StackEntry<'a, L> {
                     .map(|type_id| context.set_pairs.contains(&(type_id, t.predicate)))
                     .unwrap_or(false);
                 let p_name = context.layer().id_predicate(t.predicate).unwrap();
-                let p_name_contracted = context.prefixes.schema_contract(&p_name).to_string();
+                let p_name_contracted = context
+                    .prefixes(compress)
+                    .schema_contract(&p_name)
+                    .to_string();
                 context.add_field(doc, &p_name_contracted, value, is_set);
             }
             Self::List {
@@ -880,6 +923,9 @@ fn print_documents_of_types<
     count_term: &Term,
     as_list_term: &Term,
     types: I,
+    compress: bool,
+    unfold: bool,
+    minimize: bool,
 ) -> PrologResult<()> {
     let mut stream: WritablePrologStream = stream_term.get_ex()?;
     let mut skip: u64 = skip_term.get_ex()?;
@@ -905,15 +951,9 @@ fn print_documents_of_types<
                 continue;
             }
 
-            let map = context.try_or_die(doc_context.get_id_document(t.subject))?;
-            print_document(
-                context,
-                &mut stream,
-                map,
-                as_list,
-                doc_context.minimized,
-                &mut started,
-            )?;
+            let map =
+                context.try_or_die(doc_context.get_id_document(t.subject, compress, unfold))?;
+            print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
         }
     }
 
@@ -928,10 +968,12 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     count_term: &Term,
     as_list_term: &Term,
     types: Vec<u64>,
+    compress: bool,
+    unfold: bool,
+    minimize: bool,
 ) -> PrologResult<()> {
     let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
-    let minimized = doc_context.minimized;
     let skip: u64 = skip_term.get_ex()?;
     let count: Option<u64> = attempt_opt(count_term.get())?;
     let as_list: bool = as_list_term.get_ex()?;
@@ -961,7 +1003,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
             .enumerate()
             .par_bridge()
             .try_for_each_with(sender, |sender, (ix, t)| {
-                let map = doc_context2.get_id_document(t.subject);
+                let map = doc_context2.get_id_document(t.subject, compress, unfold);
                 sender.send((ix, map)) // failure will kill the task
             });
     });
@@ -973,7 +1015,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     while let Ok((ix, map)) = receiver.recv() {
         let map = context.try_or_die(map)?;
         if ix == cur {
-            print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
+            print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
 
             cur += 1;
             while result
@@ -986,14 +1028,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
                     value,
                 } = result.pop().unwrap();
 
-                print_document(
-                    context,
-                    &mut stream,
-                    value,
-                    as_list,
-                    minimized,
-                    &mut started,
-                )?;
+                print_document(context, &mut stream, value, as_list, minimize, &mut started)?;
 
                 cur += 1;
             }
@@ -1018,10 +1053,12 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     count_term: &Term,
     as_list_term: &Term,
     iris_term: &Term,
+    compress: bool,
+    unfold: bool,
+    minimize: bool,
 ) -> PrologResult<()> {
     let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
-    let minimized = doc_context.minimized;
     let mut skip: u64 = skip_term.get_ex()?;
     let mut count: Option<u64> = attempt_opt(count_term.get())?;
     let as_list: bool = as_list_term.get_ex()?;
@@ -1029,7 +1066,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     let mut started = false;
     for iri_term in context.term_list_iter(iris_term) {
         let iri: PrologText = iri_term.get_ex()?;
-        if let Some(doc) = context.try_or_die(doc_context.get_document(&iri))? {
+        if let Some(doc) = context.try_or_die(doc_context.get_document(&iri, compress, unfold))? {
             if skip > 0 {
                 skip -= 1;
                 continue;
@@ -1040,7 +1077,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
                 }
                 *count -= 1;
             }
-            print_document(context, &mut stream, doc, as_list, minimized, &mut started)?;
+            print_document(context, &mut stream, doc, as_list, minimize, &mut started)?;
         }
     }
 
@@ -1055,10 +1092,12 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     count_term: &Term,
     as_list_term: &Term,
     iris_term: &Term,
+    compress: bool,
+    unfold: bool,
+    minimize: bool,
 ) -> PrologResult<()> {
     let mut stream: WritablePrologStream = stream_term.get_ex()?;
 
-    let minimized = doc_context.minimized;
     let skip: u64 = skip_term.get_ex()?;
     let count: Option<u64> = attempt_opt(count_term.get())?;
     let as_list: bool = as_list_term.get_ex()?;
@@ -1086,7 +1125,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
             iter.enumerate()
                 .par_bridge()
                 .try_for_each_with(sender, |sender, (ix, iri)| {
-                    let map = doc_context2.get_document(&iri);
+                    let map = doc_context2.get_document(&iri, compress, unfold);
                     sender.send((ix, map)) // failure will kill the task
                 });
     });
@@ -1099,7 +1138,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
             .try_or_die(map)?
             .expect("expected document to exist");
         if ix == cur {
-            print_document(context, &mut stream, map, as_list, minimized, &mut started)?;
+            print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
 
             cur += 1;
             while result
@@ -1112,14 +1151,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
                     value,
                 } = result.pop().unwrap();
 
-                print_document(
-                    context,
-                    &mut stream,
-                    value,
-                    as_list,
-                    minimized,
-                    &mut started,
-                )?;
+                print_document(context, &mut stream, value, as_list, minimize, &mut started)?;
 
                 cur += 1;
             }
@@ -1138,20 +1170,17 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
 use super::types::*;
 predicates! {
     #[module("$doc")]
-    semidet fn get_document_context(context, transaction_term, compress_term, unfold_term, minimized_term, context_term) {
+    semidet fn get_document_context(context, transaction_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?;
-        let compress: bool = compress_term.get()?;
-        let unfold: bool = unfold_term.get()?;
-        let minimized: bool = minimized_term.get()?;
 
-        let get_context = GetDocumentContext::new(&schema_layer, instance_layer, compress, unfold, minimized);
+        let get_context = GetDocumentContext::new(schema_layer, instance_layer);
 
         context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
     }
 
     #[module("$doc")]
-    semidet fn print_document_json(context, stream_term, get_context_term, doc_name_term, as_list_term, started_term) {
+    semidet fn print_document_json(context, stream_term, get_context_term, doc_name_term, as_list_term, compress_term, unfold_term, minimize_term, started_term) {
         let mut stream: WritablePrologStream = stream_term.get_ex()?;
         if !doc_name_term.is_string() && !doc_name_term.is_atom() {
             return fail();
@@ -1160,13 +1189,16 @@ predicates! {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
         let as_list: bool = as_list_term.get()?;
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
         let started: bool = started_term.get()?;
 
-        if let Some(result) = context.try_or_die(doc_context.get_document(&s))? {
+        if let Some(result) = context.try_or_die(doc_context.get_document(&s, compress, unfold))? {
             if as_list && started {
                 context.try_or_die_generic(stream.write_all(b",\n"))?;
             }
-            context.try_or_die_generic(map_to_writer(&mut stream, result, !doc_context.minimized))?;
+            context.try_or_die_generic(map_to_writer(&mut stream, result, !minimize))?;
             if !as_list {
                 context.try_or_die(stream.write_all(b"\n"))?;
             }
@@ -1179,7 +1211,7 @@ predicates! {
     }
 
     #[module("$doc")]
-    semidet fn print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term) {
+    semidet fn print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
@@ -1187,17 +1219,20 @@ predicates! {
 
         let type_name: PrologText = type_term.get()?;
         let types = doc_context.get_subtypes_for(&type_name);
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
 
         if types.is_empty() {
             // no type found that is subsumed by the given type, so we're done
             return Ok(())
         }
 
-        print_documents_of_types(context, &doc_context, stream_term, skip_term, count_term, as_list_term, types.as_slice())
+        print_documents_of_types(context, &doc_context, stream_term, skip_term, count_term, as_list_term, types.as_slice(), compress, unfold, minimize)
     }
 
     #[module("$doc")]
-    semidet fn par_print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term) {
+    semidet fn par_print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
@@ -1205,66 +1240,81 @@ predicates! {
 
         let type_name: PrologText = type_term.get()?;
         let types = doc_context.get_subtypes_for(&type_name);
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
 
         if types.is_empty() {
             // no type found that is subsumed by the given type, so we're done
             return Ok(())
         }
 
-        par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types)
+        par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types, compress, unfold, minimize)
     }
 
     #[module("$doc")]
-    semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term) {
+    semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
 
-        let mut types: Vec<u64> = match doc_context.unfold {
+        let mut types: Vec<u64> = match unfold {
             true => doc_context.document_types.iter().cloned().collect(),
             false => doc_context.types.iter().cloned().collect()
         };
         types.sort();
 
-        print_documents_of_types(context, &doc_context, stream_term, skip_term, count_term, as_list_term, types.iter())
+        print_documents_of_types(context, &doc_context, stream_term, skip_term, count_term, as_list_term, types.iter(), compress, unfold, minimize)
     }
 
     #[module("$doc")]
-    semidet fn par_print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term) {
+    semidet fn par_print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
 
         // We either iterate over the document types, or if unfold is false, we iterate over all types
-        let mut types: Vec<u64> = match doc_context.unfold {
+        let mut types: Vec<u64> = match unfold {
             true => doc_context.document_types.iter().cloned().collect(),
             false => doc_context.types.iter().cloned().collect()
         };
         types.sort();
 
-        par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types)
+        par_print_documents_of_types(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, types, compress, unfold, minimize)
     }
 
     #[module("$doc")]
-    semidet fn print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term) {
+    semidet fn print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
 
-        print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term)
+        print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term, compress, unfold, minimize)
     }
 
     #[module("$doc")]
-    semidet fn par_print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term) {
+    semidet fn par_print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
         let doc_context: GetDocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
 
-        par_print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term)
+        par_print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term, compress, unfold, minimize)
     }
 }
 

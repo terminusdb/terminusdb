@@ -13,7 +13,11 @@
               api_get_document/5,
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
-              nonground_captures/2
+              nonground_captures/2,
+
+              api_insert_documents_core_string/7,
+              api_replace_documents_core_string/6,
+              api_delete_documents_by_ids/3
           ]).
 
 :- use_module(core(util)).
@@ -94,10 +98,10 @@ api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config,
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    '$doc':get_document_context(Transaction, Context),
     forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
            (   Stream_Started = started(Started),
-               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, Started),
+               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
                          error(document_not_found(Id), _)),
                nb_setarg(1, Stream_Started, true)
            )).
@@ -114,11 +118,11 @@ api_document_exists(instance, Transaction, Id) :-
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    '$doc':get_document_context(Transaction, Context),
     Stream_Started = started(Started),
     database_prefixes(Transaction, Prefixes),
     prefix_expand(Id, Prefixes, Id_Ex),
-    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, Started),
+    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
               error(document_not_found(Id), _)),
    nb_setarg(1, Stream_Started, true).
 api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
@@ -130,37 +134,37 @@ api_print_documents(schema, Transaction, Config, Stream_Started) :-
     forall(api_get_documents(Transaction, schema, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents(instance, Transaction, Config, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    '$doc':get_document_context(Transaction, Context),
     (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list))
-    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list))).
+    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
 
 api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :-
     forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    '$doc':get_document_context(Transaction, Context),
     database_and_default_prefixes(Transaction,Prefixes),
     % TODO errors on unknown prefix
     prefix_expand_schema(Type, Prefixes, Type_Ex),
 
     (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))
-    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list))).
+    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
 
 api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
     forall((member(Id, Ids),
             api_get_document(schema, Transaction, Id, Config, Document)),
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, (Config.compress), (Config.unfold), (Config.minimized), Context),
+    '$doc':get_document_context(Transaction, Context),
     database_and_default_prefixes(Transaction, Prefixes),
     maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
             Ids,
             Ids_Ex),
     (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list))
-    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list))).
+    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
     do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
@@ -331,23 +335,31 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         empty_assoc(Captures_In),
-                         ensure_transaction_has_builder(Graph_Type, Transaction),
-                         insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
-                         die_if(nonground_captures(Captures_Out, Nonground),
-                                error(not_all_captures_found(Nonground), _)),
-                         database_instance(Transaction, [Instance]),
-                         insert_backlinks(BackLinks, Instance),
-                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-                         (   Doc_Merge = true
-                         ->  true
-                         ;   die_if(Duplicates \= [],
-                                    error(same_ids_in_one_transaction(Duplicates), _))
-                         )
+                         api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+    empty_assoc(Captures_In),
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    database_instance(Transaction, [Instance]),
+    insert_backlinks(BackLinks, Instance),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+
+api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+    open_string(String, Stream),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids).
+
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
     append(Ids,All_Ids),
@@ -400,18 +412,24 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         findall(
-                             Id,
-                             (   json_read_list_stream(Stream, ID_Unchecked),
-                                 param_check_json(non_empty_string, id, ID_Unchecked, Id),
+                         forall(
+                             json_read_list_stream(Stream, ID_Unchecked),
+                             (   param_check_json(non_empty_string, id, ID_Unchecked, Id),
                                  api_delete_document_(Graph_Type, Transaction, Id)
-                             ),
-                             Ids
+                             )
                          )
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_delete_documents_by_ids(Transaction, Graph_Type, Ids) :-
+    forall(
+        member(Id, Ids),
+        (   atom_string(Id_Atom, Id),
+            api_delete_document_(Graph_Type, Transaction, Id_Atom)
+        )
+    ).
 
 api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Options) :-
     option(graph_type(Graph_Type), Options),
@@ -476,25 +494,32 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         empty_assoc(Captures),
-                         ensure_transaction_has_builder(Graph_Type, Transaction),
-                         stream_to_lazy_docs(Stream, Lazy_List),
-                         api_replace_document_from_lazy_list(Lazy_List,
-                                                             Graph_Type,
-                                                             Raw_JSON,
-                                                             Transaction,
-                                                             Create,
-                                                             Captures,
-                                                             Captures_Out,
-                                                             Ids_List),
-                         die_if(nonground_captures(Captures_Out, Nonground),
-                                error(not_all_captures_found(Nonground), _)),
-                         idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-                         die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
+                         api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids) :-
+    empty_assoc(Captures),
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    stream_to_lazy_docs(Stream, Lazy_List),
+    api_replace_document_from_lazy_list(Lazy_List,
+                                        Graph_Type,
+                                        Raw_JSON,
+                                        Transaction,
+                                        Create,
+                                        Captures,
+                                        Captures_Out,
+                                        Ids_List),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _)).
+
+api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Ids) :-
+    open_string(String, Stream),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),

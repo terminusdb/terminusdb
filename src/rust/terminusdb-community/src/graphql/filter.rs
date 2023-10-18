@@ -89,10 +89,15 @@ impl GraphQLType for FilterInputObject {
                             }
                         } else {
                             let c = field_definition.range();
-                            registry.arg::<Option<CollectionFilterInputObject>>(
-                                name,
-                                &CollectionFilterInputObjectTypeInfo::new(c, &info.frames),
-                            )
+                            // is this foreign?
+                            if info.frames.is_foreign(c) {
+                                registry.arg::<Option<CollectionIdFilterInputObject>>(name, &())
+                            } else {
+                                registry.arg::<Option<CollectionFilterInputObject>>(
+                                    name,
+                                    &CollectionFilterInputObjectTypeInfo::new(c, &info.frames),
+                                )
+                            }
                         }
                     } else if let Some(base_type) = field_definition.base_type() {
                         let kind = base_type_kind(base_type);
@@ -126,10 +131,14 @@ impl GraphQLType for FilterInputObject {
                         )
                     } else {
                         let c = field_definition.range();
-                        registry.arg::<Option<FilterInputObject>>(
-                            name,
-                            &FilterInputObjectTypeInfo::new(c, &info.frames),
-                        )
+                        if info.frames.is_foreign(c) {
+                            registry.arg::<Option<IdFilterInputObject>>(name, &())
+                        } else {
+                            registry.arg::<Option<FilterInputObject>>(
+                                name,
+                                &FilterInputObjectTypeInfo::new(c, &info.frames),
+                            )
+                        }
                     }
                 })
                 .collect();
@@ -488,4 +497,21 @@ pub struct DateTimeFilterInputObject {
     pub le: Option<DateTime>,
     pub gt: Option<DateTime>,
     pub ge: Option<DateTime>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "IdFilter")]
+pub struct IdFilterInputObject {
+    #[graphql(name = "_id")]
+    pub id: Option<ID>,
+    #[graphql(name = "_ids")]
+    pub ids: Option<Vec<ID>>,
+}
+
+#[derive(GraphQLInputObject)]
+#[graphql(name = "CollectionIdFilterInputObject")]
+#[allow(non_snake_case)]
+pub struct CollectionIdFilterInputObject {
+    pub someHave: Option<IdFilterInputObject>,
+    pub allHave: Option<IdFilterInputObject>,
 }

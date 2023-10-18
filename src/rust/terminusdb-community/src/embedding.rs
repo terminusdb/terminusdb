@@ -131,15 +131,19 @@ impl EmbeddingContext {
         let mut queries = HashMap::new();
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
-        let execution_context = GraphQLExecutionContext::new_from_context_terms(
-            types.clone(),
-            context,
-            &none_term,
-            &system_term,
-            &none_term,
-            &none_term,
-            &transaction_term,
-        )?;
+        let execution_context = unsafe {
+            GraphQLExecutionContext::new_from_context_terms(
+                types.clone(),
+                context,
+                &none_term,
+                &system_term,
+                &none_term,
+                &none_term,
+                &transaction_term,
+                &none_term,
+                &none_term,
+            )?
+        };
 
         for type_tuple_term in context.term_list_iter(queries_term) {
             let [type_name_term, query_term] = context.compound_terms(&type_tuple_term)?;
@@ -199,15 +203,19 @@ impl EmbeddingContext {
     ) -> Result<Value<DefaultScalarValue>, EmbeddingError> {
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
-        let execution_context = GraphQLExecutionContext::new_from_context_terms(
-            self.types.clone(),
-            context,
-            &none_term,
-            system_term,
-            &none_term,
-            &none_term,
-            transaction_term,
-        )?;
+        let execution_context = unsafe {
+            GraphQLExecutionContext::new_from_context_terms(
+                self.types.clone(),
+                context,
+                &none_term,
+                system_term,
+                &none_term,
+                &none_term,
+                transaction_term,
+                &none_term,
+                &none_term,
+            )?
+        };
         let document = self.get_query_document(&type_name);
         if document.is_none() {
             return Err(LimitedEmbeddingError::NoQueryForType {

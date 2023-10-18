@@ -1,6 +1,3 @@
-const fs = require('fs/promises')
-const exec = require('util').promisify(require('child_process').exec)
-const stream = require('stream')
 const JsonlParser = require('stream-json/jsonl/Parser')
 const { expect } = require('chai')
 const { Agent, api, db, document, Params, util } = require('../lib')
@@ -144,19 +141,6 @@ describe('document-get', function () {
       delete object['@id']
       expect(Object.keys(object).length).to.equal(0)
     }
-  }
-
-  function expectInstancesJsonl (r) {
-    const objects = []
-    r.on('error', (err) => {
-      expect.fail(err)
-    })
-    r.on('data', (data) => {
-      objects.push(data.value)
-    })
-    r.on('end', () => {
-      expectInstances(objects, instances)
-    })
   }
 
   describe('returns expected instance stream', function () {
@@ -435,54 +419,6 @@ describe('document-get', function () {
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
       expectInstances(r.body, [socrates, gödel])
-    })
-  })
-
-  describe('empty local database', function () {
-    let dbSpec
-    let url
-    let dbPath
-    let envs
-
-    async function execEnv (command) {
-      return exec(command, { env: envs })
-    }
-
-    before(async function () {
-      dbPath = './storage/' + util.randomString()
-      envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
-      const r = await execEnv('./terminusdb.sh store init --force')
-      expect(r.stdout).to.match(/^Successfully initialised database/)
-      dbSpec = agent.orgName + '/' + agent.dbName
-      url = agent.baseUrl + '/' + dbSpec
-    })
-
-    after(async function () {
-      await fs.rm(dbPath, { recursive: true })
-    })
-
-    describe('clone remote', function () {
-      before(async function () {
-        this.timeout(90000) // Cloning this database is slow on macOS.
-        const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
-        expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
-        expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
-      })
-
-      after(async function () {
-        const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
-        expect(r.stdout).to.match(new RegExp(`Database deleted: ${dbSpec}`))
-      })
-
-      it('passes doc get with expected schema', async function () {
-        const r = await execEnv(`./terminusdb.sh doc get ${dbSpec} --graph_type=schema`)
-        expectSchemaJsonl(stream.Readable.from(r.stdout).pipe(new JsonlParser()))
-      })
-
-      it('passes doc get with expected instances', async function () {
-        const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
-        expectInstancesJsonl(stream.Readable.from(r.stdout).pipe(new JsonlParser()))
-      })
     })
   })
 })

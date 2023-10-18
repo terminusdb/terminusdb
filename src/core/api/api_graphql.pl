@@ -28,41 +28,63 @@ maybe_show_database(System_DB, Auth, Desc, Action, DB, Maybe_DB) :-
 
 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length) :-
     atom_string(Path_Atom, Path),
-    (   resolve_absolute_string_descriptor(Path, Desc)
-    ->  open_descriptor(Desc, Transaction)
-    ;   Desc = system_descriptor{},
-        Transaction = System_DB
-    ),
-    (   branch_descriptor{} :< Desc
-    ->  maybe_show_database(System_DB, Auth, Desc,
-                            '@schema':'Action/commit_read_access',
-                            (Transaction.parent),
-                            Commit_DB),
-        maybe_show_database(System_DB, Auth, Desc,
-                            '@schema':'Action/meta_read_access',
-                            (Transaction.parent.parent),
-                            Meta_DB)
-    ;   repository_descriptor{} :< Desc
-    ->  maybe_show_database(System_DB, Auth, Desc,
-                            '@schema':'Action/commit_read_access',
-                            Transaction,
-                            Commit_DB),
-        maybe_show_database(System_DB, Auth, Desc,
-                            '@schema':'Action/meta_read_access',
-                            (Transaction.parent),
-                            Meta_DB)
-    ;   database_descriptor{} :< Desc
-    ->  Commit_DB = none,
-        maybe_show_database(System_DB, Auth, Desc,
-                            '@schema':'Action/meta_read_access',
-                            (Transaction),
-                            Meta_DB)
-    ;   Commit_DB = none,
-        Meta_DB = none
-    ),
-    assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
-    (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
-    ->  true
-    ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-        '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
-    '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response).
+    (   Path == ""
+    %->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
+    ->  throw(error(no_graphql_path_given, _))
+    ;   (   resolve_absolute_string_descriptor(Path, Desc)
+        ->  do_or_die(open_descriptor(Desc, Transaction),
+                      error(unresolvable_absolute_descriptor(Desc), _))
+        ;   throw(error(invalid_absolute_path(Path), _))
+        ),
+        (   branch_descriptor{} :< Desc
+        ->  maybe_show_database(System_DB, Auth, Desc,
+                                '@schema':'Action/commit_read_access',
+                                (Transaction.parent),
+                                Commit_DB),
+            maybe_show_database(System_DB, Auth, Desc,
+                                '@schema':'Action/meta_read_access',
+                                (Transaction.parent.parent),
+                                Meta_DB)
+        ;   repository_descriptor{} :< Desc
+        ->  maybe_show_database(System_DB, Auth, Desc,
+                                '@schema':'Action/commit_read_access',
+                                Transaction,
+                                Commit_DB),
+            maybe_show_database(System_DB, Auth, Desc,
+                                '@schema':'Action/meta_read_access',
+                                (Transaction.parent),
+                                Meta_DB)
+        ;   database_descriptor{} :< Desc
+        ->  Commit_DB = none,
+            maybe_show_database(System_DB, Auth, Desc,
+                                '@schema':'Action/meta_read_access',
+                                (Transaction),
+                                Meta_DB)
+        ;   Commit_DB = none,
+            Meta_DB = none
+        ),
+        assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
+        (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
+        ->  true
+        ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
+            '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
+
+        create_context(Transaction, commit_info{author: Author, message: Message}, C),
+        catch(
+            with_transaction(C,
+                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response, Is_Error, Author, Message),
+                                 die_if(Is_Error = true,
+                                        response(Response)),
+                                 (   var(Author)
+                                 ->  user_name_uri(System_DB, Author, Auth)
+                                 ;   true),
+                                 (   var(Message)
+                                 ->  Message = "Mutation through GraphQL"
+                                 ;   true)
+                             ),
+
+                             _),
+            response(Response),
+            json_log_info_formatted("intercepted a failing graphql, not committing", []))
+    ).
+

@@ -3115,7 +3115,7 @@ index_handler(get,Path,Request,System_DB,Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
-:- http_handler(graphql(.), cors_handler(Method, graphql_handler("_system"), [add_payload(false),skip_authentication(true)]),
+:- http_handler(graphql(.), cors_handler(Method, graphql_handler(""), [add_payload(false),skip_authentication(true)]),
                 [method(Method),
                  methods([options,get,post])]).
 :- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
@@ -3143,9 +3143,29 @@ handle_graphql_error(error(authentication_incorrect(_Auth), _), Request) :-
     cors_reply_json(Request,
                     json{'errors': [json{message: "Authentication incorrect"}]},
                     [status(401)]).
+handle_graphql_error(error(read_access_malformed_collection(Desc)), Request) :-
+    resolve_absolute_string_descriptor(Path, Desc),
+    format(string(Msg), "Access to ~q is not authorized",
+           [Path]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
 handle_graphql_error(error(access_not_authorised(Auth, Action, Scope), _), Request) :-
     format(string(Msg), "Access to ~q is not authorised with action ~q and auth ~q",
            [Scope,Action,Auth]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
+handle_graphql_error(error(invalid_absolute_path(Path), _), Request) :-
+    format(string(Msg), "Bad descriptor path: ~q",
+           [Path]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(403)]).
+handle_graphql_error(error(unresolvable_absolute_descriptor(Desc), _), Request) :-
+    resolve_absolute_string_descriptor(Path, Desc),
+    format(string(Msg), "Unable to resolve an invalid absolute path for descriptor ~q",
+           [Path]),
     cors_reply_json(Request,
                     json{'errors': [json{message: Msg}]},
                     [status(403)]).
@@ -3158,7 +3178,7 @@ handle_graphql_error(E, Request) :-
 
 %%%%%%%%%%%%%%%%%%%% GraphiQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphiql,root(graphiql),[]).
-:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler("_system"), [add_payload(false)]),
+:- http_handler(graphiql(.), cors_handler(Method, graphiql_handler(""), [add_payload(false)]),
                 [method(Method),
                  methods([options,get,post])]).
 :- http_handler(graphiql(Path), cors_handler(Method, graphiql_handler(Path), [add_payload(false)]),

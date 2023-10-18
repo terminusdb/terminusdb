@@ -196,6 +196,24 @@ describe('GraphQL', function () {
     name: 'xsd:string',
     'prefix:link': { '@type': 'Optional', '@class': 'prefix:MyClass' },
   },
+  {
+    '@type': 'Foreign',
+    '@id': 'http://external#Thing',
+  },
+  {
+    '@type': 'Class',
+    '@id': 'RequiredForeignField',
+    required_foreign_field: 'http://external#Thing',
+  },
+
+  {
+    '@type': 'Class',
+    '@id': 'SetForeignField',
+    set_foreign_field: {
+      '@type': 'Set',
+      '@class': 'http://external#Thing',
+    },
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -224,7 +242,7 @@ describe('GraphQL', function () {
 
   before(async function () {
     /* GraphQL Boilerplate */
-  /* Termius Boilerplate */
+    /* Termius Boilerplate */
     agent = new Agent().auth()
     const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
     const base = agent.baseUrl
@@ -1031,6 +1049,50 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
     })
+  })
+
+  describe('GraphQL Crashing', function () {
+    let agent
+    let client
+
+    beforeEach(async function () {
+    /* GraphQL Boilerplate */
+    /* Termius Boilerplate */
+      agent = new Agent().auth()
+      const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const base = agent.baseUrl
+      const uri = `${base}${path}`
+
+      const httpLink = new HttpLink({ uri, fetch })
+      const authMiddleware = new ApolloLink((operation, forward) => {
+        // add the authorization to the headers
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: 'Basic YWRtaW46cm9vdA==',
+          },
+        }))
+        return forward(operation)
+      })
+
+      const ComposedLink = concat(authMiddleware, httpLink)
+
+      const cache = new InMemoryCache({
+        addTypename: false,
+      })
+
+      client = new ApolloClient({
+        cache,
+        link: ComposedLink,
+      })
+
+      await db.create(agent)
+      await document.insert(agent, { schema, fullReplace: true })
+    })
+
+    afterEach(async function () {
+      await db.delete(agent)
+    })
 
     it('has a renamed back link', async function () {
       const instance = {
@@ -1067,6 +1129,44 @@ query EverythingQuery {
         },
       ],
       )
+    })
+
+    it('has required foreign field', async function () {
+      const instance = {
+        required_foreign_field: 'http://example.com/entity',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    RequiredForeignField(filter:{required_foreign_field: {_id: "http://example.com/entity"}}) { required_foreign_field }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.RequiredForeignField).to.have.deep.members([
+        {
+          required_foreign_field: 'http://example.com/entity',
+        },
+      ])
+    })
+
+    it('has set foreign field', async function () {
+      const instance = {
+        set_foreign_field: 'http://example.com/entity',
+      }
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    SetForeignField(filter:{set_foreign_field: {someHave: {_id: "http://example.com/entity"}}}) { set_foreign_field }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.SetForeignField).to.have.deep.members([
+        {
+          set_foreign_field: ['http://example.com/entity'],
+        },
+      ])
     })
 
     it('shadows a graphql type and fails', async function () {

@@ -279,6 +279,12 @@ impl PrefixContracter {
     }
 }
 
+impl Default for PrefixContracter {
+    fn default() -> Self {
+        Self::new(std::iter::empty())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

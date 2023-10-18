@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use juniper::meta::{DeprecationStatus, EnumValue, Field};
@@ -5,9 +6,10 @@ use juniper::{
     graphql_value, DefaultScalarValue, FromInputValue, GraphQLEnum, GraphQLType, GraphQLValue,
     InputValue, Registry, Value, ID,
 };
+use lazy_init::Lazy;
 use swipl::prelude::*;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
-use terminusdb_store_prolog::terminus_store::{IdTriple, Layer};
+use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator, GetDocumentContext};
@@ -22,7 +24,6 @@ use crate::value::{
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::query::run_filter_query;
-use super::top::System;
 
 #[derive(Clone)]
 pub struct SystemInfo {
@@ -33,48 +34,50 @@ pub struct SystemInfo {
 }
 
 #[derive(Clone)]
-pub struct TerminusContext<'a, C: QueryableContextType> {
-    pub context: &'a Context<'a, C>,
+pub struct TerminusContext<'a> {
+    pub context: Rc<GenericQueryableContext<'a>>,
+    pub system_transaction_term: Term<'a>,
     pub transaction_term: Term<'a>,
+    pub author_term: Term<'a>,
+    pub message_term: Term<'a>,
     pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
+    pub type_collection: TerminusTypeCollectionInfo,
+    pub document_context: Arc<Lazy<GetDocumentContext<SyncStoreLayer>>>,
 }
 
-impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
+impl<'a> TerminusContext<'a> {
     pub fn new(
-        context: &'a Context<'a, C>,
-        _auth_term: &Term,
-        system_term: &Term,
+        context: GenericQueryableContext<'a>,
+        auth_term: &Term,
+        system_term: &'a Term,
         meta_term: &Term,
         commit_term: &Term,
-        transaction_term: &Term,
-    ) -> PrologResult<TerminusContext<'a, C>> {
-        let user_: Atom = Atom::new("terminusdb://system/data/User/admin"); //auth_term.get_ex()?;
-        let user = if user_ == atom!("anonymous") {
-            atom!("terminusdb://system/data/User/anonymous")
-        } else {
-            user_
-        };
+        transaction_term: &'a Term,
+        author_term: &'a Term,
+        message_term: &'a Term,
+        type_collection: TerminusTypeCollectionInfo,
+    ) -> PrologResult<TerminusContext<'a>> {
+        let user: Atom = auth_term.get_ex()?;
         let system =
-            transaction_instance_layer(context, system_term)?.expect("system layer not found");
+            transaction_instance_layer(&context, system_term)?.expect("system layer not found");
         let meta = if meta_term.unify(atomable("none")).is_ok() {
             None
         } else {
-            transaction_instance_layer(context, meta_term).expect("Missing meta layer")
+            transaction_instance_layer(&context, meta_term).expect("Missing meta layer")
         };
         let commit = if commit_term.unify(atomable("none")).is_ok() {
             None
         } else {
-            transaction_instance_layer(context, commit_term).expect("Missing commit layer")
+            transaction_instance_layer(&context, commit_term).expect("Missing commit layer")
         };
 
         let schema =
-            transaction_schema_layer(context, transaction_term)?.expect("missing schema layer");
-        let instance = transaction_instance_layer(context, transaction_term)?;
+            transaction_schema_layer(&context, transaction_term)?.expect("missing schema layer");
+        let instance = transaction_instance_layer(&context, transaction_term)?;
 
-        let new_transaction_term = context.new_term_ref();
-        new_transaction_term.unify(transaction_term)?;
+        let context = Rc::new(context);
 
         Ok(TerminusContext {
             system_info: SystemInfo {
@@ -83,25 +86,25 @@ impl<'a, C: QueryableContextType> TerminusContext<'a, C> {
                 meta,
                 commit,
             },
-            transaction_term: new_transaction_term,
+            system_transaction_term: system_term.clone(),
+            transaction_term: transaction_term.clone(),
+            author_term: author_term.clone(),
+            message_term: message_term.clone(),
             context,
             schema,
             instance,
+            type_collection,
+            document_context: Arc::new(Lazy::new()),
         })
     }
-}
 
-pub struct TerminusTypeCollection<'a, C: QueryableContextType> {
-    _c: std::marker::PhantomData<&'a Context<'a, C>>,
-}
-
-impl<'a, C: QueryableContextType> TerminusTypeCollection<'a, C> {
-    pub fn new() -> Self {
-        Self {
-            _c: Default::default(),
-        }
+    pub fn document_context(&self) -> &GetDocumentContext<SyncStoreLayer> {
+        self.document_context
+            .get_or_create(|| GetDocumentContext::new(self.schema.clone(), self.instance.clone()))
     }
 }
+
+pub struct TerminusTypeCollection;
 
 pub struct TerminusOrderingInfo {
     ordering_name: String,
@@ -166,7 +169,7 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
     false
 }
 
-impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a, C> {
+impl GraphQLType for TerminusTypeCollection {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
     }
@@ -188,7 +191,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                         class: name.to_owned(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                    let field = registry.field::<Vec<TerminusType>>(name, &newinfo);
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -205,7 +208,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType<'a, C>>>(name, &newinfo);
+                let field = registry.field::<Vec<TerminusType>>(name, &newinfo);
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -224,13 +227,35 @@ impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusTypeCollection<'a
 
         fields.extend(restriction_fields);
 
+        fields.extend(standard_collection_operators(registry));
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
         registry
-            .build_object_type::<TerminusTypeCollection<'a, C>>(info, &fields)
+            .build_object_type::<TerminusTypeCollection>(info, &fields)
             .into_meta()
     }
+}
+
+fn standard_collection_operators<'r>(
+    registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+) -> impl Iterator<Item = Field<'r, DefaultScalarValue>> {
+    vec![registry
+        .field::<GraphQLJSON>("_getDocument", &())
+        .argument(registry.arg::<String>("id", &()))]
+    .into_iter()
+}
+
+fn standard_type_operators<'r>(
+    registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+) -> impl Iterator<Item = Field<'r, DefaultScalarValue>> {
+    vec![
+        registry.field::<ID>("_id", &()),
+        registry.field::<ID>("_type", &()),
+        registry.field::<GraphQLJSON>("_json", &()),
+    ]
+    .into_iter()
 }
 
 #[derive(Clone)]
@@ -239,7 +264,7 @@ pub struct TerminusTypeCollectionInfo {
     pub allframes: Arc<AllFrames>,
 }
 
-fn result_to_execution_result<C: QueryableContextType, T>(
+pub fn result_to_execution_result<C: QueryableContextType, T>(
     context: &Context<C>,
     result: PrologResult<T>,
 ) -> Result<T, juniper::FieldError> {
@@ -249,8 +274,8 @@ fn result_to_execution_result<C: QueryableContextType, T>(
     })
 }
 
-fn pl_ids_from_restriction<C: QueryableContextType>(
-    context: &TerminusContext<C>,
+fn pl_ids_from_restriction(
+    context: &TerminusContext,
     restriction: &RestrictionDefinition,
 ) -> PrologResult<Vec<u64>> {
     let mut result = Vec::new();
@@ -275,21 +300,21 @@ fn pl_ids_from_restriction<C: QueryableContextType>(
     Ok(result)
 }
 
-fn ids_from_restriction<C: QueryableContextType>(
-    context: &TerminusContext<C>,
+fn ids_from_restriction(
+    context: &TerminusContext,
     restriction: &RestrictionDefinition,
 ) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
+    let result = pl_ids_from_restriction(&context, restriction).map(|mut r| {
         r.sort();
         r.dedup();
 
         r
     });
-    result_to_execution_result(context.context, result)
+    result_to_execution_result(&context.context, result)
 }
 
-fn pl_id_matches_restriction<C: QueryableContextType>(
-    context: &TerminusContext<C>,
+fn pl_id_matches_restriction(
+    context: &TerminusContext,
     restriction: &str,
     id: u64,
 ) -> PrologResult<Option<String>> {
@@ -315,17 +340,17 @@ fn pl_id_matches_restriction<C: QueryableContextType>(
     }
 }
 
-pub fn id_matches_restriction<C: QueryableContextType>(
-    context: &TerminusContext<C>,
+pub fn id_matches_restriction(
+    context: &TerminusContext,
     restriction: &str,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
     let result = pl_id_matches_restriction(context, restriction, id);
-    result_to_execution_result(context.context, result)
+    result_to_execution_result(&context.context, result)
 }
 
-impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C> {
-    type Context = TerminusContext<'a, C>;
+impl GraphQLValue for TerminusTypeCollection {
+    type Context = TerminusContext<'static>;
 
     type TypeInfo = TerminusTypeCollectionInfo;
 
@@ -340,43 +365,63 @@ impl<'a, C: QueryableContextType> GraphQLValue for TerminusTypeCollection<'a, C>
         arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult<DefaultScalarValue> {
-        if field_name == "_system" {
-            executor.resolve_with_ctx(&(), &System {})
-        } else {
-            let zero_iter;
-            let type_name;
-            if let Some(restriction) = info.allframes.restrictions.get(field_name) {
-                // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
-                type_name = restriction.on.as_str();
-                let id_list = ids_from_restriction(executor.context(), restriction)?;
-                zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
-            } else {
-                type_name = field_name;
-                zero_iter = None;
-            }
-            let objects = match executor.context().instance.as_ref() {
-                Some(instance) => run_filter_query(
-                    executor.context(),
-                    instance,
-                    &info.allframes.context,
-                    arguments,
-                    type_name,
-                    &info.allframes,
-                    zero_iter,
-                )
-                .into_iter()
-                .map(|id| TerminusType::new(id))
-                .collect(),
-                None => vec![],
-            };
+        match field_name {
+            "_getDocument" => {
+                let context = executor.context();
+                let document_context = context.document_context();
+                let id: String = arguments.get("id").unwrap();
+                let expanded_id = context
+                    .type_collection
+                    .allframes
+                    .context
+                    .expand_instance(&id);
+                let doc = document_context.get_document(&expanded_id, true, true)?;
+                match doc {
+                    Some(doc) => {
+                        let json_string =
+                            serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
 
-            executor.resolve(
-                &TerminusTypeInfo {
-                    class: type_name.to_owned(),
-                    allframes: info.allframes.clone(),
-                },
-                &objects,
-            )
+                        Ok(Value::Scalar(DefaultScalarValue::String(json_string)))
+                    }
+                    None => Err("No such document".into()),
+                }
+            }
+            _ => {
+                let zero_iter;
+                let type_name;
+                if let Some(restriction) = info.allframes.restrictions.get(field_name) {
+                    // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
+                    type_name = restriction.on.as_str();
+                    let id_list = ids_from_restriction(executor.context(), restriction)?;
+                    zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
+                } else {
+                    type_name = field_name;
+                    zero_iter = None;
+                }
+                let objects = match executor.context().instance.as_ref() {
+                    Some(instance) => run_filter_query(
+                        executor.context(),
+                        instance,
+                        &info.allframes.context,
+                        arguments,
+                        type_name,
+                        &info.allframes,
+                        zero_iter,
+                    )
+                    .into_iter()
+                    .map(|id| TerminusType::new(id))
+                    .collect(),
+                    None => vec![],
+                };
+
+                executor.resolve(
+                    &TerminusTypeInfo {
+                        class: type_name.to_owned(),
+                        allframes: info.allframes.clone(),
+                    },
+                    &objects,
+                )
+            }
         }
     }
 }
@@ -386,17 +431,13 @@ pub struct TerminusTypeInfo {
     allframes: Arc<AllFrames>,
 }
 
-pub struct TerminusType<'a, C: QueryableContextType> {
+pub struct TerminusType {
     id: u64,
-    _x: std::marker::PhantomData<Context<'a, C>>,
 }
 
-impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
+impl TerminusType {
     fn new(id: u64) -> Self {
-        Self {
-            id,
-            _x: Default::default(),
-        }
+        Self { id }
     }
 
     fn register_field<'r, T: GraphQLType>(
@@ -426,100 +467,98 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
         let mut fields: Vec<_> = d
             .fields()
             .iter()
-            .filter_map(|(field_name, field_definition)| {
-                Some(
-                    if let Some(document_type) = field_definition.document_type(frames) {
-                        let field = Self::register_field::<TerminusType<'a, C>>(
-                            registry,
-                            field_name,
-                            &TerminusTypeInfo {
-                                class: document_type.to_owned(),
-                                allframes: frames.clone(),
-                            },
-                            field_definition.kind(),
-                        );
+            .map(|(field_name, field_definition)| {
+                if let Some(document_type) = field_definition.document_type(frames) {
+                    let field = Self::register_field::<TerminusType>(
+                        registry,
+                        field_name,
+                        &TerminusTypeInfo {
+                            class: document_type.to_owned(),
+                            allframes: frames.clone(),
+                        },
+                        field_definition.kind(),
+                    );
 
-                        if field_definition.kind().is_collection() {
-                            let class_definition =
-                                info.allframes.frames[document_type].as_class_definition();
-                            let new_info = TerminusTypeInfo {
-                                class: document_type.to_owned(),
-                                allframes: info.allframes.clone(),
-                            };
-                            add_arguments(&new_info, registry, field, class_definition)
-                        } else {
-                            field
-                        }
-                    } else if let Some(base_type) = field_definition.base_type() {
-                        if type_is_bool(base_type) {
-                            Self::register_field::<bool>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_small_integer(base_type) {
-                            Self::register_field::<i32>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_big_integer(base_type) {
-                            Self::register_field::<BigInt>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_float(base_type) {
-                            Self::register_field::<f64>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_datetime(base_type) {
-                            Self::register_field::<DateTime>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_decimal(base_type) {
-                            Self::register_field::<BigFloat>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else if type_is_json(base_type) {
-                            Self::register_field::<GraphQLJSON>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        } else {
-                            // assume stringy
-                            Self::register_field::<String>(
-                                registry,
-                                field_name,
-                                &(),
-                                field_definition.kind(),
-                            )
-                        }
-                    } else if let Some(enum_type) = field_definition.enum_type(frames) {
-                        Self::register_field::<TerminusEnum>(
+                    if field_definition.kind().is_collection() {
+                        let class_definition =
+                            info.allframes.frames[document_type].as_class_definition();
+                        let new_info = TerminusTypeInfo {
+                            class: document_type.to_owned(),
+                            allframes: info.allframes.clone(),
+                        };
+                        add_arguments(&new_info, registry, field, class_definition)
+                    } else {
+                        field
+                    }
+                } else if let Some(base_type) = field_definition.base_type() {
+                    if type_is_bool(base_type) {
+                        Self::register_field::<bool>(
                             registry,
                             field_name,
-                            &(enum_type.to_owned(), frames.clone()),
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_small_integer(base_type) {
+                        Self::register_field::<i32>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_big_integer(base_type) {
+                        Self::register_field::<BigInt>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_float(base_type) {
+                        Self::register_field::<f64>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_datetime(base_type) {
+                        Self::register_field::<DateTime>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_decimal(base_type) {
+                        Self::register_field::<BigFloat>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    } else if type_is_json(base_type) {
+                        Self::register_field::<GraphQLJSON>(
+                            registry,
+                            field_name,
+                            &(),
                             field_definition.kind(),
                         )
                     } else {
-                        panic!("No known range for field {:?}", field_definition)
-                    },
-                )
+                        // assume stringy
+                        Self::register_field::<String>(
+                            registry,
+                            field_name,
+                            &(),
+                            field_definition.kind(),
+                        )
+                    }
+                } else if let Some(enum_type) = field_definition.enum_type(frames) {
+                    Self::register_field::<TerminusEnum>(
+                        registry,
+                        field_name,
+                        &(enum_type.to_owned(), frames.clone()),
+                        field_definition.kind(),
+                    )
+                } else {
+                    Self::register_field::<ID>(registry, field_name, &(), field_definition.kind())
+                }
             })
             .collect();
 
@@ -536,7 +575,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                     class: class.to_string(),
                     allframes: frames.clone(),
                 };
-                let field = Self::register_field::<TerminusType<'a, C>>(
+                let field = Self::register_field::<TerminusType>(
                     registry,
                     field_name,
                     &new_info,
@@ -560,7 +599,7 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
                 class: class.to_string(),
                 allframes: frames.clone(),
             };
-            let field = Self::register_field::<TerminusType<'a, C>>(
+            let field = Self::register_field::<TerminusType>(
                 registry,
                 &field_name,
                 &new_info,
@@ -594,16 +633,15 @@ impl<'a, C: QueryableContextType + 'a> TerminusType<'a, C> {
             fields.push(restriction_field);
         }
 
-        fields.push(registry.field::<ID>("_id", &()));
-        fields.push(registry.field::<ID>("_type", &()));
+        fields.extend(standard_type_operators(registry));
 
         registry
-            .build_object_type::<TerminusType<'a, C>>(info, &fields)
+            .build_object_type::<TerminusType>(info, &fields)
             .into_meta()
     }
 }
 
-impl<'a, C: QueryableContextType + 'a> GraphQLType for TerminusType<'a, C> {
+impl GraphQLType for TerminusType {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some(&info.class)
     }
@@ -658,8 +696,8 @@ fn subject_has_type(instance: &dyn Layer, subject_id: u64, class: &str) -> bool 
     }
 }
 
-impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
-    type Context = TerminusContext<'a, C>;
+impl GraphQLValue for TerminusType {
+    type Context = TerminusContext<'static>;
 
     type TypeInfo = TerminusTypeInfo;
 
@@ -683,6 +721,19 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
                 ))));
+            }
+            if field_name == "_json" {
+                let document_context = executor.context().document_context();
+                let doc = document_context.get_id_document(self.id, true, true);
+                match doc {
+                    Ok(doc) => {
+                        let json_string =
+                            serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
+
+                        return Some(Ok(Value::Scalar(DefaultScalarValue::String(json_string))));
+                    }
+                    Err(e) => return Some(Err(e.into())),
+                }
             }
 
             let allframes = &info.allframes;
@@ -827,7 +878,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
                 match result {
                     Ok(Some(reason)) => Some(Ok(graphql_value!(reason))),
                     Ok(None) => Some(Ok(graphql_value!(None))),
-                    Err(e) => Some(Err(e)),
+                    Err(e) => Some(Err(e.into())),
                 }
             } else {
                 let frame = &allframes.frames[&info.class];
@@ -951,7 +1002,7 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
             }
         };
 
-        let x = get_info();
+        let x: Option<Result<_, juniper::FieldError<_>>> = get_info();
         match x {
             Some(r) => r,
             None => Ok(Value::Null),
@@ -959,8 +1010,8 @@ impl<'a, C: QueryableContextType + 'a> GraphQLValue for TerminusType<'a, C> {
     }
 }
 
-fn extract_fragment<'a, C: QueryableContextType + 'a>(
-    executor: &juniper::Executor<TerminusContext<'a, C>, DefaultScalarValue>,
+fn extract_fragment(
+    executor: &juniper::Executor<TerminusContext<'static>, DefaultScalarValue>,
     info: &TerminusTypeInfo,
     instance: &SyncStoreLayer,
     object_id: u64,
@@ -984,8 +1035,10 @@ fn extract_fragment<'a, C: QueryableContextType + 'a>(
         Some(val)
     } else {
         let obj = instance.id_object(object_id)?;
-        let val = obj.value_ref().unwrap_or_else(|| panic!("{:?}", &obj));
-        Some(Ok(value_to_graphql(val)))
+        match obj {
+            ObjectType::Node(n) => Some(Ok(n.into())),
+            ObjectType::Value(v) => Some(Ok(value_to_graphql(&v))),
+        }
     }
 }
 
@@ -1008,8 +1061,10 @@ fn extract_json_fragment(
     instance: &SyncStoreLayer,
     object_id: u64,
 ) -> Result<juniper::Value, juniper::FieldError> {
-    let context = GetDocumentContext::new_json(Some(instance.clone()), true, false);
-    let json = serde_json::Value::Object(context.get_id_document(object_id)?);
+    // TODO this should really not just recreate a context, but it's cheap enough since it is schema independent.
+    let context = GetDocumentContext::new_json(Some(instance.clone()));
+    let doc = context.get_id_document(object_id, true, true)?;
+    let json = serde_json::Value::Object(doc);
     Ok(juniper::Value::Scalar(DefaultScalarValue::String(
         json.to_string(),
     )))
@@ -1162,11 +1217,11 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-fn collect_into_graphql_list<'a, C: QueryableContextType>(
+fn collect_into_graphql_list<'a>(
     doc_type: Option<&'a str>,
     enum_type: Option<&'a str>,
     is_json: bool,
-    executor: &'a juniper::Executor<TerminusContext<C>>,
+    executor: &'a juniper::Executor<TerminusContext<'static>>,
     info: &'a TerminusTypeInfo,
     arguments: &'a juniper::Arguments,
     object_ids: ClonableIterator<'a, u64>,
@@ -1211,9 +1266,9 @@ fn collect_into_graphql_list<'a, C: QueryableContextType>(
         Some(Ok(Value::List(vals)))
     } else {
         let vals: Vec<_> = object_ids
-            .map(|o| {
-                let val = instance.id_object_value(o).unwrap();
-                value_to_graphql(&val)
+            .map(|o| match instance.id_object(o).unwrap() {
+                ObjectType::Node(n) => graphql_value!(n),
+                ObjectType::Value(v) => value_to_graphql(&v),
             })
             .collect();
         Some(Ok(Value::List(vals)))
@@ -1396,4 +1451,10 @@ where
     fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
         <String as juniper::ParseScalarValue<S>>::from_str(value)
     }
+}
+
+#[derive(GraphQLEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GraphType {
+    InstanceGraph,
+    SchemaGraph,
 }
