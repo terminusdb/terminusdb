@@ -1333,7 +1333,7 @@ impl Eq for HeapEntry {}
 
 impl PartialOrd for HeapEntry {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.index.cmp(&other.index).reverse())
+        Some(self.cmp(other))
     }
 }
 
