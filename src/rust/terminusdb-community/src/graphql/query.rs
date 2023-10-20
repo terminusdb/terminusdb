@@ -5,6 +5,7 @@ use regex::{Regex, RegexSet};
 use rug::Integer;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
+use crate::consts::{RDF_FIRST, RDF_REST, SYS_ARRAY, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::path::{Path, Pred};
 use crate::terminus_store::store::sync::SyncStoreLayer;
@@ -985,6 +986,27 @@ fn generate_iterator_from_filter<'a>(
     }
 }
 
+fn path_from_components(pet: PathEdgeType) -> Path {
+    match pet {
+        PathEdgeType::Property(p) => Path::Negative(Pred::Named(p.to_string())),
+        PathEdgeType::List(p) => {
+            let path = Path::Seq(vec![
+                Path::Positive(Pred::Named(p.to_string())),
+                Path::Star(Rc::new(Path::Positive(Pred::Named(RDF_REST.to_string())))),
+                Path::Positive(Pred::Named(RDF_FIRST.to_string())),
+            ]);
+            path.reverse()
+        }
+        PathEdgeType::Array(p) => {
+            let path = Path::Seq(vec![
+                Path::Positive(Pred::Named(p.to_string())),
+                Path::Positive(Pred::Named(SYS_VALUE.to_string())),
+            ]);
+            path.reverse()
+        }
+    }
+}
+
 fn iterator_from_path_and_ids<'a>(
     g: &'a SyncStoreLayer,
     prefixes: &Prefixes,
@@ -994,7 +1016,7 @@ fn iterator_from_path_and_ids<'a>(
     let components: Vec<_> = components
         .into_iter()
         .rev()
-        .map(|component| Path::Negative(Pred::Named(component.to_string())))
+        .map(path_from_components)
         .collect();
     let path = Path::Seq(components);
     eprintln!("path: {path:?}");
