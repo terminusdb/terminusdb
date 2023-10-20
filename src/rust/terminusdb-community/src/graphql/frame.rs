@@ -377,6 +377,39 @@ pub enum FieldKind {
     Cardinality,
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum CollectionKind {
+    Set,
+    List,
+    Array,
+    Cardinality,
+}
+
+impl TryFrom<FieldKind> for CollectionKind {
+    type Error = ();
+
+    fn try_from(value: FieldKind) -> Result<Self, Self::Error> {
+        match value {
+            FieldKind::Required | FieldKind::Optional => Err(()),
+            FieldKind::Set => Ok(CollectionKind::Set),
+            FieldKind::List => Ok(CollectionKind::List),
+            FieldKind::Array => Ok(CollectionKind::Array),
+            FieldKind::Cardinality => Ok(CollectionKind::Cardinality),
+        }
+    }
+}
+
+impl From<CollectionKind> for FieldKind {
+    fn from(value: CollectionKind) -> Self {
+        match value {
+            CollectionKind::Set => FieldKind::Set,
+            CollectionKind::List => FieldKind::List,
+            CollectionKind::Array => FieldKind::Array,
+            CollectionKind::Cardinality => FieldKind::Cardinality,
+        }
+    }
+}
+
 pub fn is_base_type(s: &str) -> bool {
     // TODO this is not good enough
     s.starts_with("xsd:") || s.starts_with("sys:")

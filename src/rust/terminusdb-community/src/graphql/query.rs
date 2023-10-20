@@ -18,7 +18,9 @@ use super::filter::{
     FilterInputObject, FloatFilterInputObject, IdFilterInputObject, IntFilterInputObject,
     StringFilterInputObject,
 };
-use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
+use super::frame::{
+    is_base_type, AllFrames, ClassDefinition, CollectionKind, FieldKind, Prefixes, TypeDefinition,
+};
 use super::schema::{
     id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
     TerminusOrderBy, TerminusOrdering,
@@ -77,7 +79,7 @@ struct FilterObject {
 enum FilterScope {
     Required(FilterObjectType),
     // Optional(OptionalOperation),
-    Collection(CollectionOperation, FilterObjectType),
+    Collection(CollectionKind, CollectionOperation, FilterObjectType),
     And(Vec<Rc<FilterObject>>),
     Or(Vec<Rc<FilterObject>>),
     Not(Rc<FilterObject>),
@@ -341,6 +343,7 @@ fn compile_collection_filter(
     collection_filter: CollectionFilterInputObject,
     all_frames: &AllFrames,
     range: &str,
+    kind: CollectionKind,
 ) -> FilterScope {
     let mut edges = collection_filter.edges;
     if let Some((op, next)) = edges.pop() {
@@ -350,7 +353,7 @@ fn compile_collection_filter(
             _ => panic!("Unknown collection filter"),
         };
         let object_type = compile_typed_filter(range, all_frames, &next);
-        FilterScope::Collection(operation, object_type)
+        FilterScope::Collection(kind, operation, object_type)
     } else {
         panic!("No operation for compiling collection filter")
     }
@@ -472,7 +475,9 @@ fn compile_edges_to_filter(
                 FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
                     let value =
                         CollectionFilterInputObject::from_input_value(&spanning_input_value.item);
-                    let filter_value = compile_collection_filter(value.unwrap(), all_frames, range);
+                    let kind = CollectionKind::try_from(kind).unwrap();
+                    let filter_value =
+                        compile_collection_filter(value.unwrap(), all_frames, range, kind);
                     result.push((property.to_string(), filter_value))
                 }
             }
@@ -812,7 +817,8 @@ fn compile_query<'a>(
                     return ClonableIterator::new(std::iter::empty());
                 }
             }
-            FilterScope::Collection(op, o) => {
+            FilterScope::Collection(_, op, o) => {
+                // TODO: Filtering broken on lists and arrays
                 let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
@@ -909,7 +915,9 @@ fn generate_iterator_from_filter<'a>(
                     FilterScope::Required(FilterObjectType::Node(next_f, _)) => {
                         visit_next.push_back((path, &next_f))
                     }
+                    // We need to do something clever with collection type here.
                     FilterScope::Collection(
+                        _,
                         CollectionOperation::SomeHave,
                         FilterObjectType::Node(next_f, _),
                     ) => visit_next.push_back((path, &next_f)),
@@ -999,7 +1007,7 @@ fn generate_iterator_from_edges<'a>(
     for (name, e) in cur.1.edges.iter() {
         match e {
             FilterScope::Required(FilterObjectType::Value(value))
-            | FilterScope::Collection(_, FilterObjectType::Value(value)) => {
+            | FilterScope::Collection(_, _, FilterObjectType::Value(value)) => {
                 if let Some(entry) = filter_value_to_entry(value) {
                     let id_opt = g.object_value_id(&entry);
                     if id_opt.is_none() {
