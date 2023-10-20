@@ -500,17 +500,20 @@ fn compile_filter_object(
     compile_edges_to_filter(class_name, all_frames, class_definition, edges)
 }
 
-pub fn predicate_value_filter<'a>(
+pub fn predicate_value_filter<'a, 'b>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object: &ObjectType,
+    object: ObjectType,
     iter: ClonableIterator<'a, u64>,
-) -> ClonableIterator<'a, u64> {
+) -> ClonableIterator<'a, u64>
+where
+    'b: 'a,
+{
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
-            ObjectType::Value(entry) => g.object_value_id(entry),
-            ObjectType::Node(node) => g.object_node_id(node),
+            ObjectType::Value(entry) => g.object_value_id(&entry),
+            ObjectType::Node(node) => g.object_node_id(&node),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -881,6 +884,25 @@ fn compile_query<'a>(
     iter
 }
 
+#[derive(Clone, Debug, Copy)]
+enum PathEdgeType<'a> {
+    Property(&'a str),
+    List(&'a str),
+    Array(&'a str),
+}
+
+impl<'a> std::ops::Deref for PathEdgeType<'a> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            PathEdgeType::Property(s) => s,
+            PathEdgeType::List(s) => s,
+            PathEdgeType::Array(s) => s,
+        }
+    }
+}
+
 fn generate_iterator_from_filter<'a>(
     g: &'a SyncStoreLayer,
     class_name: &'a str,
@@ -890,7 +912,7 @@ fn generate_iterator_from_filter<'a>(
 ) -> Option<ClonableIterator<'a, u64>> {
     let filter = filter_opt?;
     let mut iter = None;
-    let mut visit_next: VecDeque<(Vec<&str>, &FilterObject)> = VecDeque::new();
+    let mut visit_next: VecDeque<(Vec<PathEdgeType>, &FilterObject)> = VecDeque::new();
     visit_next.push_back((vec![], filter));
     while let Some(next) = visit_next.pop_front() {
         if !next.1.ids.is_empty() {
@@ -910,19 +932,19 @@ fn generate_iterator_from_filter<'a>(
             // nothing here :( push children.
             for e in next.1.edges.iter() {
                 let mut path = next.0.clone();
-                path.push(&e.0);
                 match &e.1 {
-                    FilterScope::Required(FilterObjectType::Node(next_f, _)) => {
-                        visit_next.push_back((path, &next_f))
-                    }
+                    FilterScope::Required(FilterObjectType::Node(next_f, _)) |
                     // We need to do something clever with collection type here.
                     FilterScope::Collection(
                         _,
                         CollectionOperation::SomeHave,
                         FilterObjectType::Node(next_f, _),
-                    ) => visit_next.push_back((path, &next_f)),
+                    ) => {
+                        let kind = e.1.kind().unwrap();
+                        path.push(PathEdgeType::new(&e.0, kind));
+                        visit_next.push_back((path, &next_f))
+                    },
                     FilterScope::And(next_fs) => {
-                        path.pop().unwrap();
                         for next_f in next_fs.iter() {
                             visit_next.push_back((path.clone(), next_f));
                         }
@@ -953,7 +975,7 @@ fn generate_iterator_from_filter<'a>(
             Some(predicate_value_filter(
                 g,
                 RDF_TYPE,
-                &ObjectType::Node(expanded_type_name),
+                ObjectType::Node(expanded_type_name),
                 iter,
             ))
         }
@@ -966,7 +988,7 @@ fn generate_iterator_from_filter<'a>(
 fn iterator_from_path_and_ids<'a>(
     g: &'a SyncStoreLayer,
     prefixes: &Prefixes,
-    components: Vec<&str>,
+    components: Vec<PathEdgeType>,
     ids: impl Iterator<Item = u64> + 'a + Clone,
 ) -> ClonableIterator<'a, u64> {
     let components: Vec<_> = components
@@ -999,15 +1021,38 @@ fn filter_value_to_entry(value: &FilterValue) -> Option<TypedDictEntry> {
     }
 }
 
-fn generate_iterator_from_edges<'a>(
+impl FilterScope {
+    fn kind(&self) -> Option<CollectionKind> {
+        match &self {
+            FilterScope::Required(_) => Some(CollectionKind::Property),
+            FilterScope::Collection(kind, _, _) => Some(*kind),
+            FilterScope::And(_) => None,
+            FilterScope::Or(_) => None,
+            FilterScope::Not(_) => None,
+        }
+    }
+}
+
+impl<'a> PathEdgeType<'a> {
+    fn new(name: &'a str, ck: CollectionKind) -> Self {
+        match ck {
+            CollectionKind::Property => Self::Property(name),
+            CollectionKind::List => Self::List(name),
+            CollectionKind::Array => Self::Array(name),
+        }
+    }
+}
+
+fn generate_iterator_from_edges<'a, 'b>(
     g: &'a SyncStoreLayer,
     prefixes: &Prefixes,
-    cur: &(Vec<&str>, &FilterObject),
+    cur: &(Vec<PathEdgeType<'b>>, &FilterObject),
 ) -> Option<ClonableIterator<'a, u64>> {
     for (name, e) in cur.1.edges.iter() {
         match e {
             FilterScope::Required(FilterObjectType::Value(value))
             | FilterScope::Collection(_, _, FilterObjectType::Value(value)) => {
+                let kind = e.kind().unwrap();
                 if let Some(entry) = filter_value_to_entry(value) {
                     let id_opt = g.object_value_id(&entry);
                     if id_opt.is_none() {
@@ -1015,7 +1060,7 @@ fn generate_iterator_from_edges<'a>(
                     }
                     let id = id_opt.unwrap();
                     let mut components = cur.0.clone();
-                    components.push(name);
+                    components.push(PathEdgeType::new(name, kind));
 
                     return Some(iterator_from_path_and_ids(
                         g,
@@ -1117,7 +1162,7 @@ pub fn run_filter_query<'a>(
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
-                        &ObjectType::Node(expanded_type_name),
+                        ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(g.subject_id(&id_string).into_iter()),
                     ))
                 }
@@ -1131,7 +1176,7 @@ pub fn run_filter_query<'a>(
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
-                        &ObjectType::Node(expanded_type_name),
+                        ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&id))),
                     ))
                 }
