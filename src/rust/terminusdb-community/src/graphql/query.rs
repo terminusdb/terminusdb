@@ -1239,35 +1239,6 @@ struct QueryOrderKey {
     vec: Vec<(Option<TypedDictEntry>, TerminusOrdering)>,
 }
 
-impl PartialOrd for QueryOrderKey {
-    fn partial_cmp(&self, other: &QueryOrderKey) -> Option<Ordering> {
-        for i in 0..self.vec.len() {
-            let (option_value, order) = &self.vec[i];
-            let (other_value, _) = &other.vec[i];
-            let res = match option_value {
-                Some(tde) => match other_value {
-                    None => Ordering::Greater,
-                    Some(value) => tde.cmp(value),
-                },
-                None => match other_value {
-                    Some(_) => Ordering::Less,
-                    None => Ordering::Equal,
-                },
-            };
-
-            let final_order = match order {
-                TerminusOrdering::Desc => res.reverse(),
-                TerminusOrdering::Asc => res,
-            };
-
-            if !final_order.is_eq() {
-                return Some(final_order);
-            }
-        }
-        Some(Ordering::Equal)
-    }
-}
-
 impl PartialEq for QueryOrderKey {
     fn eq(&self, other: &QueryOrderKey) -> bool {
         for i in 0..self.vec.len() {
@@ -1295,7 +1266,35 @@ impl Eq for QueryOrderKey {}
 
 impl Ord for QueryOrderKey {
     fn cmp(&self, other: &QueryOrderKey) -> Ordering {
-        self.partial_cmp(other)
-            .expect("OrderKey should never return None")
+        for i in 0..self.vec.len() {
+            let (option_value, order) = &self.vec[i];
+            let (other_value, _) = &other.vec[i];
+            let res = match option_value {
+                Some(tde) => match other_value {
+                    None => Ordering::Greater,
+                    Some(value) => tde.cmp(value),
+                },
+                None => match other_value {
+                    Some(_) => Ordering::Less,
+                    None => Ordering::Equal,
+                },
+            };
+
+            let final_order = match order {
+                TerminusOrdering::Desc => res.reverse(),
+                TerminusOrdering::Asc => res,
+            };
+
+            if !final_order.is_eq() {
+                return final_order;
+            }
+        }
+        Ordering::Equal
+    }
+}
+
+impl PartialOrd for QueryOrderKey {
+    fn partial_cmp(&self, other: &QueryOrderKey) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
