@@ -5,7 +5,7 @@ use regex::{Regex, RegexSet};
 use rug::Integer;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
-use crate::consts::{RDF_FIRST, RDF_REST, SYS_ARRAY, SYS_VALUE};
+use crate::consts::{RDF_FIRST, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::path::{Path, Pred};
 use crate::terminus_store::store::sync::SyncStoreLayer;
@@ -997,13 +997,10 @@ fn path_from_components(pet: PathEdgeType) -> Path {
             ]);
             path.reverse()
         }
-        PathEdgeType::Array(p) => {
-            let path = Path::Seq(vec![
-                Path::Positive(Pred::Named(p.to_string())),
-                Path::Positive(Pred::Named(SYS_VALUE.to_string())),
-            ]);
-            path.reverse()
-        }
+        PathEdgeType::Array(p) => Path::Seq(vec![
+            Path::Negative(Pred::Named(SYS_VALUE.to_string())),
+            Path::Negative(Pred::Named(p.to_string())),
+        ]),
     }
 }
 
