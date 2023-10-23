@@ -297,9 +297,9 @@ delete_json_object(Transaction, Prefixes, Unlink, Id) :-
     global_prefix_expand(rdf:type, RDF_Type),
     do_or_die(xrdf(Instance, Id_Ex, RDF_Type, Type),
               error(document_not_found(Id), _)),
+    global_prefix_expand(sys:'JSON', Subdocument_Type),
     global_prefix_expand(sys:'JSONDocument', Document_Type),
-    do_or_die(Type = Document_Type,
-              error(stored_document_is_not_a_json(Id), _)),
+    do_or_die(memberchk(Type, [Subdocument_Type,Document_Type]), error(stored_document_is_not_a_json(Id), _)),
     forall(
         xquad(Instance, G, Id_Ex, P, V),
         (   delete(G, Id_Ex, P, V, _),
