@@ -5,8 +5,10 @@ use regex::{Regex, RegexSet};
 use rug::Integer;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
+use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::path::{Path, Pred};
+use crate::schema::RdfListIterator;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::value::{base_type_kind, value_to_bigint, value_to_string, BaseTypeKind};
@@ -18,7 +20,9 @@ use super::filter::{
     FilterInputObject, FloatFilterInputObject, IdFilterInputObject, IntFilterInputObject,
     StringFilterInputObject,
 };
-use super::frame::{is_base_type, AllFrames, ClassDefinition, FieldKind, Prefixes, TypeDefinition};
+use super::frame::{
+    is_base_type, AllFrames, ClassDefinition, CollectionKind, FieldKind, Prefixes, TypeDefinition,
+};
 use super::schema::{
     id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
     TerminusOrderBy, TerminusOrdering,
@@ -77,7 +81,7 @@ struct FilterObject {
 enum FilterScope {
     Required(FilterObjectType),
     // Optional(OptionalOperation),
-    Collection(CollectionOperation, FilterObjectType),
+    Collection(CollectionKind, CollectionOperation, FilterObjectType),
     And(Vec<Rc<FilterObject>>),
     Or(Vec<Rc<FilterObject>>),
     Not(Rc<FilterObject>),
@@ -341,6 +345,7 @@ fn compile_collection_filter(
     collection_filter: CollectionFilterInputObject,
     all_frames: &AllFrames,
     range: &str,
+    kind: CollectionKind,
 ) -> FilterScope {
     let mut edges = collection_filter.edges;
     if let Some((op, next)) = edges.pop() {
@@ -350,7 +355,7 @@ fn compile_collection_filter(
             _ => panic!("Unknown collection filter"),
         };
         let object_type = compile_typed_filter(range, all_frames, &next);
-        FilterScope::Collection(operation, object_type)
+        FilterScope::Collection(kind, operation, object_type)
     } else {
         panic!("No operation for compiling collection filter")
     }
@@ -472,7 +477,9 @@ fn compile_edges_to_filter(
                 FieldKind::Set | FieldKind::List | FieldKind::Array | FieldKind::Cardinality => {
                     let value =
                         CollectionFilterInputObject::from_input_value(&spanning_input_value.item);
-                    let filter_value = compile_collection_filter(value.unwrap(), all_frames, range);
+                    let kind = CollectionKind::try_from(kind).unwrap();
+                    let filter_value =
+                        compile_collection_filter(value.unwrap(), all_frames, range, kind);
                     result.push((property.to_string(), filter_value))
                 }
             }
@@ -495,17 +502,20 @@ fn compile_filter_object(
     compile_edges_to_filter(class_name, all_frames, class_definition, edges)
 }
 
-pub fn predicate_value_filter<'a>(
+pub fn predicate_value_filter<'a, 'b>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object: &ObjectType,
+    object: ObjectType,
     iter: ClonableIterator<'a, u64>,
-) -> ClonableIterator<'a, u64> {
+) -> ClonableIterator<'a, u64>
+where
+    'b: 'a,
+{
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
-            ObjectType::Value(entry) => g.object_value_id(entry),
-            ObjectType::Node(node) => g.object_node_id(node),
+            ObjectType::Value(entry) => g.object_value_id(&entry),
+            ObjectType::Node(node) => g.object_node_id(&node),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -812,7 +822,8 @@ fn compile_query<'a>(
                     return ClonableIterator::new(std::iter::empty());
                 }
             }
-            FilterScope::Collection(op, o) => {
+            FilterScope::Collection(kind, op, o) => {
+                let kind = kind.clone();
                 let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
@@ -821,9 +832,7 @@ fn compile_query<'a>(
                                 let sub_filter = sub_filter.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
+                                        collection_kind_iterator(g, kind, *subject, property_id);
                                     compile_query(context, g, sub_filter.clone(), objects)
                                         .next()
                                         .is_some()
@@ -833,9 +842,7 @@ fn compile_query<'a>(
                                 let filter_type = filter_type.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
+                                        collection_kind_iterator(g, kind, *subject, property_id);
                                     object_type_filter(g, &filter_type, objects)
                                         .next()
                                         .is_some()
@@ -847,21 +854,25 @@ fn compile_query<'a>(
                                 let sub_filter = sub_filter.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
-                                    compile_query(context, g, sub_filter.clone(), objects)
-                                        .all(|_| true)
+                                        collection_kind_iterator(g, kind, *subject, property_id);
+                                    let expected = objects.clone().count();
+                                    let actual =
+                                        compile_query(context, g, sub_filter.clone(), objects)
+                                            .count();
+
+                                    expected == actual
                                 }));
                             }
                             FilterObjectType::Value(filter_type) => {
                                 let filter_type = filter_type.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
-                                    object_type_filter(g, &filter_type, objects).all(|_| true)
+                                        collection_kind_iterator(g, kind, *subject, property_id);
+                                    let expected = objects.clone().count();
+                                    let actual =
+                                        object_type_filter(g, &filter_type, objects).count();
+
+                                    expected == actual
                                 }));
                             }
                         },
@@ -875,6 +886,64 @@ fn compile_query<'a>(
     iter
 }
 
+fn collection_kind_iterator(
+    g: &SyncStoreLayer,
+    kind: CollectionKind,
+    subject: u64,
+    property_id: u64,
+) -> ClonableIterator<u64> {
+    match kind {
+        CollectionKind::Property => ClonableIterator::new(CachedClonableIterator::new(
+            g.triples_sp(subject, property_id).map(|t| t.object),
+        )),
+        CollectionKind::List => {
+            let opt_o = g.single_triple_sp(subject, property_id).map(|t| t.object);
+            match opt_o {
+                Some(list_id) => {
+                    ClonableIterator::new(CachedClonableIterator::new(RdfListIterator {
+                        layer: g,
+                        cur: list_id,
+                        rdf_first_id: g.predicate_id(RDF_FIRST),
+                        rdf_rest_id: g.predicate_id(RDF_REST),
+                        rdf_nil_id: g.subject_id(RDF_NIL),
+                    }))
+                }
+                None => ClonableIterator::new(std::iter::empty()),
+            }
+        }
+        CollectionKind::Array => match g.predicate_id(SYS_VALUE) {
+            None => ClonableIterator::new(std::iter::empty()),
+            Some(sys_value) => {
+                let g = g.clone();
+                ClonableIterator::new(CachedClonableIterator::new(
+                    g.triples_sp(subject, property_id)
+                        .filter_map(move |t| g.single_triple_sp(t.object, sys_value))
+                        .map(|t| t.object),
+                ))
+            }
+        },
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+enum PathEdgeType<'a> {
+    Property(&'a str),
+    List(&'a str),
+    Array(&'a str),
+}
+
+impl<'a> std::ops::Deref for PathEdgeType<'a> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            PathEdgeType::Property(s) => s,
+            PathEdgeType::List(s) => s,
+            PathEdgeType::Array(s) => s,
+        }
+    }
+}
+
 fn generate_iterator_from_filter<'a>(
     g: &'a SyncStoreLayer,
     class_name: &'a str,
@@ -884,7 +953,7 @@ fn generate_iterator_from_filter<'a>(
 ) -> Option<ClonableIterator<'a, u64>> {
     let filter = filter_opt?;
     let mut iter = None;
-    let mut visit_next: VecDeque<(Vec<&str>, &FilterObject)> = VecDeque::new();
+    let mut visit_next: VecDeque<(Vec<PathEdgeType>, &FilterObject)> = VecDeque::new();
     visit_next.push_back((vec![], filter));
     while let Some(next) = visit_next.pop_front() {
         if !next.1.ids.is_empty() {
@@ -904,17 +973,18 @@ fn generate_iterator_from_filter<'a>(
             // nothing here :( push children.
             for e in next.1.edges.iter() {
                 let mut path = next.0.clone();
-                path.push(&e.0);
                 match &e.1 {
-                    FilterScope::Required(FilterObjectType::Node(next_f, _)) => {
-                        visit_next.push_back((path, &next_f))
-                    }
-                    FilterScope::Collection(
+                    FilterScope::Required(FilterObjectType::Node(next_f, _))
+                    | FilterScope::Collection(
+                        _,
                         CollectionOperation::SomeHave,
                         FilterObjectType::Node(next_f, _),
-                    ) => visit_next.push_back((path, &next_f)),
+                    ) => {
+                        let kind = e.1.kind().unwrap();
+                        path.push(PathEdgeType::new(&e.0, kind));
+                        visit_next.push_back((path, &next_f))
+                    }
                     FilterScope::And(next_fs) => {
-                        path.pop().unwrap();
                         for next_f in next_fs.iter() {
                             visit_next.push_back((path.clone(), next_f));
                         }
@@ -945,7 +1015,7 @@ fn generate_iterator_from_filter<'a>(
             Some(predicate_value_filter(
                 g,
                 RDF_TYPE,
-                &ObjectType::Node(expanded_type_name),
+                ObjectType::Node(expanded_type_name),
                 iter,
             ))
         }
@@ -955,19 +1025,36 @@ fn generate_iterator_from_filter<'a>(
     }
 }
 
+fn path_from_components(pet: PathEdgeType) -> Path {
+    match pet {
+        PathEdgeType::Property(p) => Path::Negative(Pred::Named(p.to_string())),
+        PathEdgeType::List(p) => {
+            let path = Path::Seq(vec![
+                Path::Positive(Pred::Named(p.to_string())),
+                Path::Star(Rc::new(Path::Positive(Pred::Named(RDF_REST.to_string())))),
+                Path::Positive(Pred::Named(RDF_FIRST.to_string())),
+            ]);
+            path.reverse()
+        }
+        PathEdgeType::Array(p) => Path::Seq(vec![
+            Path::Negative(Pred::Named(SYS_VALUE.to_string())),
+            Path::Negative(Pred::Named(p.to_string())),
+        ]),
+    }
+}
+
 fn iterator_from_path_and_ids<'a>(
     g: &'a SyncStoreLayer,
     prefixes: &Prefixes,
-    components: Vec<&str>,
+    components: Vec<PathEdgeType>,
     ids: impl Iterator<Item = u64> + 'a + Clone,
 ) -> ClonableIterator<'a, u64> {
     let components: Vec<_> = components
         .into_iter()
         .rev()
-        .map(|component| Path::Negative(Pred::Named(component.to_string())))
+        .map(path_from_components)
         .collect();
     let path = Path::Seq(components);
-    eprintln!("path: {path:?}");
     ClonableIterator::new(
         compile_path(g, prefixes.clone(), path, ClonableIterator::new(ids)).unique(),
     )
@@ -991,15 +1078,38 @@ fn filter_value_to_entry(value: &FilterValue) -> Option<TypedDictEntry> {
     }
 }
 
-fn generate_iterator_from_edges<'a>(
+impl FilterScope {
+    fn kind(&self) -> Option<CollectionKind> {
+        match &self {
+            FilterScope::Required(_) => Some(CollectionKind::Property),
+            FilterScope::Collection(kind, _, _) => Some(*kind),
+            FilterScope::And(_) => None,
+            FilterScope::Or(_) => None,
+            FilterScope::Not(_) => None,
+        }
+    }
+}
+
+impl<'a> PathEdgeType<'a> {
+    fn new(name: &'a str, ck: CollectionKind) -> Self {
+        match ck {
+            CollectionKind::Property => Self::Property(name),
+            CollectionKind::List => Self::List(name),
+            CollectionKind::Array => Self::Array(name),
+        }
+    }
+}
+
+fn generate_iterator_from_edges<'a, 'b>(
     g: &'a SyncStoreLayer,
     prefixes: &Prefixes,
-    cur: &(Vec<&str>, &FilterObject),
+    cur: &(Vec<PathEdgeType<'b>>, &FilterObject),
 ) -> Option<ClonableIterator<'a, u64>> {
     for (name, e) in cur.1.edges.iter() {
         match e {
             FilterScope::Required(FilterObjectType::Value(value))
-            | FilterScope::Collection(_, FilterObjectType::Value(value)) => {
+            | FilterScope::Collection(_, _, FilterObjectType::Value(value)) => {
+                let kind = e.kind().unwrap();
                 if let Some(entry) = filter_value_to_entry(value) {
                     let id_opt = g.object_value_id(&entry);
                     if id_opt.is_none() {
@@ -1007,7 +1117,7 @@ fn generate_iterator_from_edges<'a>(
                     }
                     let id = id_opt.unwrap();
                     let mut components = cur.0.clone();
-                    components.push(name);
+                    components.push(PathEdgeType::new(name, kind));
 
                     return Some(iterator_from_path_and_ids(
                         g,
@@ -1109,7 +1219,7 @@ pub fn run_filter_query<'a>(
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
-                        &ObjectType::Node(expanded_type_name),
+                        ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(g.subject_id(&id_string).into_iter()),
                     ))
                 }
@@ -1123,7 +1233,7 @@ pub fn run_filter_query<'a>(
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
-                        &ObjectType::Node(expanded_type_name),
+                        ObjectType::Node(expanded_type_name),
                         ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&id))),
                     ))
                 }

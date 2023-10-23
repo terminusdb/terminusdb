@@ -367,7 +367,7 @@ pub enum FieldDefinition {
     },
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub enum FieldKind {
     Required,
     Optional,
@@ -375,6 +375,27 @@ pub enum FieldKind {
     List,
     Array,
     Cardinality,
+}
+
+#[derive(PartialEq, Debug, Copy, Clone)]
+pub enum CollectionKind {
+    Property,
+    List,
+    Array,
+}
+
+impl TryFrom<FieldKind> for CollectionKind {
+    type Error = ();
+
+    fn try_from(value: FieldKind) -> Result<Self, Self::Error> {
+        match value {
+            FieldKind::Required | FieldKind::Optional => Err(()),
+            FieldKind::Set => Ok(CollectionKind::Property),
+            FieldKind::List => Ok(CollectionKind::List),
+            FieldKind::Array => Ok(CollectionKind::Array),
+            FieldKind::Cardinality => Ok(CollectionKind::Property),
+        }
+    }
 }
 
 pub fn is_base_type(s: &str) -> bool {

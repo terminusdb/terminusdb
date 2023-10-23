@@ -110,6 +110,25 @@ describe('GraphQL', function () {
     name: 'xsd:string',
   },
   {
+    '@id': 'SourceArray',
+    '@type': 'Class',
+    '@key': {
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    },
+    name: 'xsd:string',
+    target_array: { '@type': 'List', '@class': 'TargetArray' },
+  },
+  {
+    '@id': 'TargetArray',
+    '@type': 'Class',
+    '@key': {
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    },
+    name: 'xsd:string',
+  },
+  {
     '@id': 'MaybeRocks',
     '@type': 'Class',
     rocks_opt: { '@type': 'Optional', '@class': 'Rocks' },
@@ -1048,6 +1067,96 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
+    })
+
+    it('filters from initial iterator with array', async function () {
+      const instance = [{
+        '@id': 'SourceArray/1',
+        name: '1',
+        target_array: [{
+          '@id': 'TargetArray/11',
+          name: '11',
+        },
+        {
+          '@id': 'TargetArray/12',
+          name: '12',
+        }],
+      },
+      {
+        '@id': 'SourceArray/2',
+        name: '2',
+        target_array: [{
+          '@id': 'TargetArray/21',
+          name: '21',
+        },
+        {
+          '@id': 'TargetArray/22',
+          name: '22',
+        },
+        ],
+      }]
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    SourceArray(filter:{target_array: {someHave: {name: {eq: "22"}}}}) {
+      _id
+      name
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.SourceArray).to.have.deep.members([
+        {
+          _id: 'terminusdb:///data/SourceArray/2',
+          name: '2',
+        },
+      ])
+    })
+
+    it('filters with an allHave', async function () {
+      const instance = [{
+        '@id': 'SourceArray/all1',
+        name: 'all1',
+        target_array: [{
+          '@id': 'TargetArray/all23',
+          name: 'all23',
+        },
+        {
+          '@id': 'TargetArray/all12',
+          name: 'all12',
+        }],
+      },
+      {
+        '@id': 'SourceArray/all2',
+        name: 'all2',
+        target_array: [{
+          '@id': 'TargetArray/all21',
+          name: 'all21',
+        },
+        {
+          '@id': 'TargetArray/all22',
+          name: 'all22',
+        },
+        ],
+      }]
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    SourceArray(filter:{target_array: {allHave: {name: {startsWith: "all2"}}}}) {
+      _id
+      name
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.SourceArray).to.have.deep.members([
+        {
+          _id: 'terminusdb:///data/SourceArray/all2',
+          name: 'all2',
+        },
+      ])
     })
   })
 
