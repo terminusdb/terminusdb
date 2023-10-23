@@ -103,12 +103,10 @@ struct CachedClonableIteratorState<'a, T: Clone> {
 
 impl<'a, T: Clone> CachedClonableIteratorState<'a, T> {
     fn next(&mut self, current_pos: usize) -> Option<T> {
-        if self.done {
-            return None;
-        }
-
         if current_pos < self.cache.len() {
             Some(self.cache[current_pos].clone())
+        } else if self.done {
+            None
         } else if let Some(next) = self.i.next() {
             self.cache.push(next.clone());
             Some(next)

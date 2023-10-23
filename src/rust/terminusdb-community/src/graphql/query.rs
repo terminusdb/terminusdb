@@ -856,8 +856,12 @@ fn compile_query<'a>(
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
                                         collection_kind_iterator(g, kind, *subject, property_id);
-                                    compile_query(context, g, sub_filter.clone(), objects)
-                                        .all(|_| true)
+                                    let expected = objects.clone().count();
+                                    let actual =
+                                        compile_query(context, g, sub_filter.clone(), objects)
+                                            .count();
+
+                                    expected == actual
                                 }));
                             }
                             FilterObjectType::Value(filter_type) => {
@@ -865,7 +869,11 @@ fn compile_query<'a>(
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
                                         collection_kind_iterator(g, kind, *subject, property_id);
-                                    object_type_filter(g, &filter_type, objects).all(|_| true)
+                                    let expected = objects.clone().count();
+                                    let actual =
+                                        object_type_filter(g, &filter_type, objects).count();
+
+                                    expected == actual
                                 }));
                             }
                         },

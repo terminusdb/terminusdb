@@ -1071,21 +1071,29 @@ query EverythingQuery {
 
     it('filters from initial iterator with array', async function () {
       const instance = [{
-        '@id' : 'SourceArray/1',
-        name: "1",
-        target_array : [{ '@id' : 'TargetArray/11',
-                          name: "11" },
-                        { '@id' : 'TargetArray/12',
-                          name: "12" }]
+        '@id': 'SourceArray/1',
+        name: '1',
+        target_array: [{
+          '@id': 'TargetArray/11',
+          name: '11',
+        },
+        {
+          '@id': 'TargetArray/12',
+          name: '12',
+        }],
       },
       {
-        '@id' : 'SourceArray/2',
-        name: "2",
-        target_array : [{ '@id' : 'TargetArray/21',
-                          name: "21" },
-                        { '@id' : 'TargetArray/22',
-                          name: "22" }
-                       ]
+        '@id': 'SourceArray/2',
+        name: '2',
+        target_array: [{
+          '@id': 'TargetArray/21',
+          name: '21',
+        },
+        {
+          '@id': 'TargetArray/22',
+          name: '22',
+        },
+        ],
       }]
       await document.insert(agent, { instance })
 
@@ -1100,12 +1108,56 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.SourceArray).to.have.deep.members([
         {
-          "_id": "terminusdb:///data/SourceArray/2",
-          "name" : "2"
+          _id: 'terminusdb:///data/SourceArray/2',
+          name: '2',
         },
       ])
     })
 
+    it('filters with an allHave', async function () {
+      const instance = [{
+        '@id': 'SourceArray/1',
+        name: '1',
+        target_array: [{
+          '@id': 'TargetArray/23',
+          name: '23',
+        },
+        {
+          '@id': 'TargetArray/12',
+          name: '12',
+        }],
+      },
+      {
+        '@id': 'SourceArray/2',
+        name: '2',
+        target_array: [{
+          '@id': 'TargetArray/21',
+          name: '21',
+        },
+        {
+          '@id': 'TargetArray/22',
+          name: '22',
+        },
+        ],
+      }]
+      await document.insert(agent, { instance })
+
+      const TEST_QUERY = gql`
+ query TEST {
+    SourceArray(filter:{target_array: {allHave: {name: {startsWith: "2"}}}}) {
+      _id
+      name
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.SourceArray).to.have.deep.members([
+        {
+          _id: 'terminusdb:///data/SourceArray/2',
+          name: '2',
+        },
+      ])
+    })
   })
 
   describe('GraphQL Crashing', function () {
