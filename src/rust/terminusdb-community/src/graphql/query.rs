@@ -823,7 +823,6 @@ fn compile_query<'a>(
                 }
             }
             FilterScope::Collection(kind, op, o) => {
-                // TODO: Filtering broken on lists and arrays
                 let kind = kind.clone();
                 let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
