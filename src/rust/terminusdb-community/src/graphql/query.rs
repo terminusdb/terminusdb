@@ -5,9 +5,10 @@ use regex::{Regex, RegexSet};
 use rug::Integer;
 use terminusdb_store_prolog::terminus_store::structure::{Decimal, TdbDataType, TypedDictEntry};
 
-use crate::consts::{RDF_FIRST, RDF_REST, SYS_VALUE};
+use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::path::{Path, Pred};
+use crate::schema::RdfListIterator;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::value::{base_type_kind, value_to_bigint, value_to_string, BaseTypeKind};
@@ -821,8 +822,9 @@ fn compile_query<'a>(
                     return ClonableIterator::new(std::iter::empty());
                 }
             }
-            FilterScope::Collection(_, op, o) => {
+            FilterScope::Collection(kind, op, o) => {
                 // TODO: Filtering broken on lists and arrays
+                let kind = kind.clone();
                 let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
@@ -831,9 +833,7 @@ fn compile_query<'a>(
                                 let sub_filter = sub_filter.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
+                                        collection_kind_iterator(g, kind, *subject, property_id);
                                     compile_query(context, g, sub_filter.clone(), objects)
                                         .next()
                                         .is_some()
@@ -843,9 +843,7 @@ fn compile_query<'a>(
                                 let filter_type = filter_type.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
+                                        collection_kind_iterator(g, kind, *subject, property_id);
                                     object_type_filter(g, &filter_type, objects)
                                         .next()
                                         .is_some()
@@ -857,9 +855,7 @@ fn compile_query<'a>(
                                 let sub_filter = sub_filter.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
+                                        collection_kind_iterator(g, kind, *subject, property_id);
                                     compile_query(context, g, sub_filter.clone(), objects)
                                         .all(|_| true)
                                 }));
@@ -868,9 +864,7 @@ fn compile_query<'a>(
                                 let filter_type = filter_type.clone();
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
-                                        ClonableIterator::new(CachedClonableIterator::new(
-                                            g.triples_sp(*subject, property_id).map(|t| t.object),
-                                        ));
+                                        collection_kind_iterator(g, kind, *subject, property_id);
                                     object_type_filter(g, &filter_type, objects).all(|_| true)
                                 }));
                             }
@@ -883,6 +877,45 @@ fn compile_query<'a>(
         }
     }
     iter
+}
+
+fn collection_kind_iterator(
+    g: &SyncStoreLayer,
+    kind: CollectionKind,
+    subject: u64,
+    property_id: u64,
+) -> ClonableIterator<u64> {
+    match kind {
+        CollectionKind::Property => ClonableIterator::new(CachedClonableIterator::new(
+            g.triples_sp(subject, property_id).map(|t| t.object),
+        )),
+        CollectionKind::List => {
+            let opt_o = g.single_triple_sp(subject, property_id).map(|t| t.object);
+            match opt_o {
+                Some(list_id) => {
+                    ClonableIterator::new(CachedClonableIterator::new(RdfListIterator {
+                        layer: g,
+                        cur: list_id,
+                        rdf_first_id: g.predicate_id(RDF_FIRST),
+                        rdf_rest_id: g.predicate_id(RDF_REST),
+                        rdf_nil_id: g.subject_id(RDF_NIL),
+                    }))
+                }
+                None => ClonableIterator::new(std::iter::empty()),
+            }
+        }
+        CollectionKind::Array => match g.predicate_id(SYS_VALUE) {
+            None => ClonableIterator::new(std::iter::empty()),
+            Some(sys_value) => {
+                let g = g.clone();
+                ClonableIterator::new(CachedClonableIterator::new(
+                    g.triples_sp(subject, property_id)
+                        .filter_map(move |t| g.single_triple_sp(t.object, sys_value))
+                        .map(|t| t.object),
+                ))
+            }
+        },
+    }
 }
 
 #[derive(Clone, Debug, Copy)]
