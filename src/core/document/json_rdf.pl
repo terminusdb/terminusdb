@@ -294,10 +294,12 @@ delete_json_object(Query_Context, Unlink, Id) :-
 delete_json_object(Transaction, Prefixes, Unlink, Id) :-
     database_instance(Transaction, Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
-    (   xrdf(Instance, Id_Ex, rdf:type, _)
-    ->  true
-    ;   throw(error(document_not_found(Id), _))
-    ),
+    global_prefix_expand(rdf:type, RDF_Type),
+    do_or_die(xrdf(Instance, Id_Ex, RDF_Type, Type),
+              error(document_not_found(Id), _)),
+    global_prefix_expand(sys:'JSONDocument', Document_Type),
+    do_or_die(Type = Document_Type,
+              error(stored_document_is_not_a_json(Id), _)),
     forall(
         xquad(Instance, G, Id_Ex, P, V),
         (   delete(G, Id_Ex, P, V, _),

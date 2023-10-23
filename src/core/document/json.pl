@@ -2846,6 +2846,10 @@ run_insert_document(Desc, Commit, Document, Id) :-
         insert_document(Context, Document, Id),
         _).
 
+is_json_hash(Id) :-
+    re_match('^terminusdb:///json/JSON/.*', Id).
+
+
 %% Arity 2/3/5 return a single ID as they are internal
 replace_document(DB, Document) :-
     replace_document(DB, Document, false, false, _).
@@ -2858,19 +2862,17 @@ replace_document(Transaction, Document, Create, Raw_JSON, Id) :-
     Ids = [Id|_], % We need to be able to compare against input if supplied.
     replace_document(Transaction, Document, Create, Raw_JSON, Captures, Ids, _Dependencies, _Captures_Out).
 
-is_json_hash(Id) :-
-    re_match('^terminusdb:///json/JSON/.*', Id).
-
 replace_document(Transaction, Document, Create, true, Captures, [Id], [], Captures) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Prefixes),
-    do_or_die(
-        (   del_dict('@id', Document, Id, JSON)
-        ->  prefix_expand(Id, Prefixes, Id_Ex),
-            \+ is_json_hash(Id_Ex)
-        ),
-        error(can_not_replace_at_hashed_id(Document), _)),
+    (   del_dict('@id', Document, Id, JSON)
+    ->  prefix_expand(Id, Prefixes, Id_Ex),
+        die_if(is_json_hash(Id_Ex),
+               error(can_not_replace_at_hashed_id(Document), _))
+    ;   do_or_die(Create = true,
+                  error(json_id_not_provided(Document), _))
+    ),
     catch(delete_json_object(Transaction, false, Id_Ex),
           error(document_not_found(_), _),
           do_or_die(
