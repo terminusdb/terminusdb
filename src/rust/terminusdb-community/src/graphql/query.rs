@@ -975,9 +975,8 @@ fn generate_iterator_from_filter<'a>(
             for e in next.1.edges.iter() {
                 let mut path = next.0.clone();
                 match &e.1 {
-                    FilterScope::Required(FilterObjectType::Node(next_f, _)) |
-                    // We need to do something clever with collection type here.
-                    FilterScope::Collection(
+                    FilterScope::Required(FilterObjectType::Node(next_f, _))
+                    | FilterScope::Collection(
                         _,
                         CollectionOperation::SomeHave,
                         FilterObjectType::Node(next_f, _),
@@ -985,7 +984,7 @@ fn generate_iterator_from_filter<'a>(
                         let kind = e.1.kind().unwrap();
                         path.push(PathEdgeType::new(&e.0, kind));
                         visit_next.push_back((path, &next_f))
-                    },
+                    }
                     FilterScope::And(next_fs) => {
                         for next_f in next_fs.iter() {
                             visit_next.push_back((path.clone(), next_f));
