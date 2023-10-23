@@ -1056,7 +1056,6 @@ fn iterator_from_path_and_ids<'a>(
         .map(path_from_components)
         .collect();
     let path = Path::Seq(components);
-    eprintln!("path: {path:?}");
     ClonableIterator::new(
         compile_path(g, prefixes.clone(), path, ClonableIterator::new(ids)).unique(),
     )

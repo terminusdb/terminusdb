@@ -1116,27 +1116,27 @@ query EverythingQuery {
 
     it('filters with an allHave', async function () {
       const instance = [{
-        '@id': 'SourceArray/1',
-        name: '1',
+        '@id': 'SourceArray/all1',
+        name: 'all1',
         target_array: [{
-          '@id': 'TargetArray/23',
-          name: '23',
+          '@id': 'TargetArray/all23',
+          name: 'all23',
         },
         {
-          '@id': 'TargetArray/12',
-          name: '12',
+          '@id': 'TargetArray/all12',
+          name: 'all12',
         }],
       },
       {
-        '@id': 'SourceArray/2',
-        name: '2',
+        '@id': 'SourceArray/all2',
+        name: 'all2',
         target_array: [{
-          '@id': 'TargetArray/21',
-          name: '21',
+          '@id': 'TargetArray/all21',
+          name: 'all21',
         },
         {
-          '@id': 'TargetArray/22',
-          name: '22',
+          '@id': 'TargetArray/all22',
+          name: 'all22',
         },
         ],
       }]
@@ -1144,7 +1144,7 @@ query EverythingQuery {
 
       const TEST_QUERY = gql`
  query TEST {
-    SourceArray(filter:{target_array: {allHave: {name: {startsWith: "2"}}}}) {
+    SourceArray(filter:{target_array: {allHave: {name: {startsWith: "all2"}}}}) {
       _id
       name
     }
@@ -1153,8 +1153,8 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.SourceArray).to.have.deep.members([
         {
-          _id: 'terminusdb:///data/SourceArray/2',
-          name: '2',
+          _id: 'terminusdb:///data/SourceArray/all2',
+          name: 'all2',
         },
       ])
     })
