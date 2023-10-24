@@ -22,7 +22,7 @@ pub fn path_to_class<'a, 'b>(
     let path = parse_path(path_string)
         .expect("Did not give a valid path")
         .1;
-    let expanded_type_name = all_frames.fully_qualified_class_name(to_class);
+    let expanded_type_name = all_frames.iri_class_name(to_class);
     let iter = compile_path(g, all_frames.context.clone(), path, zero_iter);
     ClonableIterator::new(
         predicate_value_filter(g, RDF_TYPE, ObjectType::Node(expanded_type_name), iter).dedup(),

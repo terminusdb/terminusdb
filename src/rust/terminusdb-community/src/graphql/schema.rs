@@ -745,7 +745,7 @@ impl GraphQLValue for TerminusType {
                     .and_then(|pid| instance.single_triple_sp(self.id, pid))
                     .and_then(|t| instance.id_object_node(t.object))
                     .map(|ty| {
-                        let small_ty = allframes.class_to_graphql_name(&ty);
+                        let small_ty = allframes.iri_to_graphql_name(&ty);
                         Ok(Value::Scalar(DefaultScalarValue::String(small_ty)))
                     });
                 return ty;
@@ -890,10 +890,8 @@ impl GraphQLValue for TerminusType {
                 match frame {
                     TypeDefinition::Class(c) => {
                         let field = &c.resolve_field(&field_name.to_string());
-                        field_name_expanded = c.fully_qualified_property_name(
-                            &allframes.context,
-                            &field_name.to_string(),
-                        );
+                        field_name_expanded =
+                            c.iri_property_name(&allframes.context, &field_name.to_string());
 
                         doc_type = field.document_type(allframes);
                         enum_type = field.enum_type(allframes);
@@ -1049,7 +1047,7 @@ fn extract_enum_fragment(
     enum_type: &str,
 ) -> juniper::Value {
     let enum_uri = instance.id_object_node(object_id).unwrap();
-    let qualified_enum_type = info.allframes.fully_qualified_class_name(enum_type);
+    let qualified_enum_type = info.allframes.iri_class_name(enum_type);
     let enum_value = enum_node_to_value(&qualified_enum_type, &enum_uri);
     let enum_definition = info.allframes.frames[enum_type].as_enum_definition();
     juniper::Value::Scalar(DefaultScalarValue::String(
