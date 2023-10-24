@@ -21,7 +21,8 @@ use super::filter::{
     StringFilterInputObject,
 };
 use super::frame::{
-    is_base_type, AllFrames, ClassDefinition, CollectionKind, FieldKind, Prefixes, TypeDefinition,
+    is_base_type, AllFrames, CollectionKind, FieldKind, Prefixes, UncleanClassDefinition,
+    UncleanTypeDefinition,
 };
 use super::schema::{
     id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
@@ -304,7 +305,7 @@ fn compile_typed_filter(
         }
     } else {
         match &all_frames.frames.get(range) {
-            Some(TypeDefinition::Class(class_definition)) => {
+            Some(UncleanTypeDefinition::Class(class_definition)) => {
                 if let InputValue::Object(edges) = &spanning_input_value.item {
                     let inner = compile_edges_to_filter(range, all_frames, class_definition, edges);
                     FilterObjectType::Node(Rc::new(inner), range.to_string())
@@ -312,10 +313,11 @@ fn compile_typed_filter(
                     panic!("object filter was not an object")
                 }
             }
-            Some(TypeDefinition::Enum(_)) => {
+            Some(UncleanTypeDefinition::Enum(_)) => {
                 let value =
                     EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
-                let encoded = all_frames.iri_enum_value(range, &value.enum_value.value);
+                let encoded =
+                    all_frames.graphql_enum_value_to_iri_name(range, &value.enum_value.value);
                 FilterObjectType::Value(FilterValue::Enum {
                     op: value.op,
                     value: encoded,
@@ -364,7 +366,7 @@ fn compile_collection_filter(
 fn compile_edges_to_filter(
     class_name: &str,
     all_frames: &AllFrames,
-    class_definition: &ClassDefinition,
+    class_definition: &UncleanClassDefinition,
     edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 ) -> FilterObject {
     let mut result: Vec<(String, FilterScope)> = Vec::with_capacity(edges.len());
@@ -497,7 +499,8 @@ fn compile_filter_object(
     all_frames: &AllFrames,
     filter_input: &FilterInputObject,
 ) -> FilterObject {
-    let class_definition: &ClassDefinition = all_frames.frames[class_name].as_class_definition();
+    let class_definition: &UncleanClassDefinition =
+        all_frames.frames[class_name].as_class_definition();
     let edges = &filter_input.edges;
     compile_edges_to_filter(class_name, all_frames, class_definition, edges)
 }
@@ -996,12 +999,12 @@ fn generate_iterator_from_filter<'a>(
     }
     if let Some(iter) = iter {
         // we have collected a path leading up to this point. Let's filter it down to the expected type.
-        let expanded_type_name = all_frames.iri_class_name(class_name);
+        let expanded_type_name = all_frames.graphql_to_iri_name(class_name);
         if includes_children {
             let correct_types: Vec<_> = all_frames
                 .subsumed(class_name)
                 .into_iter()
-                .map(|c| all_frames.iri_class_name(&c))
+                .map(|c| all_frames.graphql_to_iri_name(&c))
                 .flat_map(|id| g.subject_id(&id))
                 .collect();
             let rdf_type_id = g.predicate_id(RDF_TYPE)?;
@@ -1161,7 +1164,7 @@ fn generate_initial_iterator<'a>(
                     };
                     let mut iter = ClonableIterator::new(std::iter::empty());
                     for sub_class in subsuming {
-                        let sub_class_expanded = all_frames.iri_class_name(&sub_class);
+                        let sub_class_expanded = all_frames.graphql_to_iri_name(&sub_class);
                         let next = predicate_value_iter(
                             g,
                             RDF_TYPE,
@@ -1215,7 +1218,7 @@ pub fn run_filter_query<'a>(
         match (arguments.get::<ID>("id"), arguments.get::<Vec<ID>>("ids")) {
             (Some(id_string), None) => match zero_iter {
                 None => {
-                    let expanded_type_name = all_frames.iri_class_name(class_name);
+                    let expanded_type_name = all_frames.graphql_to_iri_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
@@ -1229,7 +1232,7 @@ pub fn run_filter_query<'a>(
             },
             (None, Some(id_vec)) => match zero_iter {
                 None => {
-                    let expanded_type_name = all_frames.iri_class_name(class_name);
+                    let expanded_type_name = all_frames.graphql_to_iri_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,

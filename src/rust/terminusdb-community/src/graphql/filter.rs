@@ -8,7 +8,7 @@ use juniper::{
 use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
-    frame::{AllFrames, TypeDefinition},
+    frame::{AllFrames, GraphQLName, SanitizedTypeDefinition, UncleanTypeDefinition},
     query::EnumOperation,
     schema::{BigFloat, BigInt, DateTime, GeneratedEnum, GeneratedEnumTypeInfo, TerminusEnum},
 };
@@ -18,16 +18,16 @@ pub struct FilterInputObject {
 }
 
 pub struct FilterInputObjectTypeInfo {
-    filter_type_name: String,
-    type_name: String,
+    filter_type_name: GraphQLName,
+    type_name: GraphQLName,
     frames: Arc<AllFrames>,
 }
 
 impl FilterInputObjectTypeInfo {
-    pub fn new(type_name: &str, all_frames: &Arc<AllFrames>) -> Self {
+    pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: format!("{type_name}_Filter"),
-            type_name: type_name.to_string(),
+            filter_type_name: GraphQLName(format!("{type_name}_Filter")),
+            type_name: type_name.clone(),
             frames: all_frames.clone(),
         }
     }
@@ -45,7 +45,7 @@ impl GraphQLType for FilterInputObject {
     where
         DefaultScalarValue: 'r,
     {
-        if let Some(TypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
+        if let Some(SanitizedTypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
             let mut args: Vec<_> = d
                 .fields()
                 .iter()
@@ -241,7 +241,7 @@ impl GraphQLType for CollectionFilterInputObject {
         let mut args: Vec<_> = Vec::with_capacity(2);
         let type_definition = &info.frames.frames[&info.type_name];
         match type_definition {
-            TypeDefinition::Class(_) => {
+            UncleanTypeDefinition::Class(_) => {
                 args.push(registry.arg::<Option<FilterInputObject>>(
                     "someHave",
                     &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
@@ -254,7 +254,7 @@ impl GraphQLType for CollectionFilterInputObject {
                     .build_input_object_type::<CollectionFilterInputObject>(info, &args)
                     .into_meta()
             }
-            TypeDefinition::Enum(_) => {
+            UncleanTypeDefinition::Enum(_) => {
                 args.push(registry.arg::<Option<EnumFilterInputObject>>(
                     "someHave",
                     &EnumFilterInputObjectTypeInfo::new(&info.type_name, &info.frames),

@@ -28,7 +28,7 @@ mod top;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 
 use self::{
-    frame::{AllFrames, PreAllFrames},
+    frame::{AllFrames, UncleanAllFrames},
     mutation::TerminusMutationRoot,
     schema::{TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
     system::{SystemData, SystemRoot},
@@ -39,7 +39,7 @@ pub fn type_collection_from_term<'a, C: QueryableContextType>(
     frame_term: &Term,
 ) -> PrologResult<TerminusTypeCollectionInfo> {
     // TODO this should probably do more proper erroring
-    let pre_frames: PreAllFrames = context
+    let pre_frames: UncleanAllFrames = context
         .deserialize_from_term(frame_term)
         .expect("Unable to parse frames into rust struct");
     let frames: AllFrames = pre_frames.finalize();

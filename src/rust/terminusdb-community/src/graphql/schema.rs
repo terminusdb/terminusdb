@@ -282,7 +282,7 @@ fn pl_ids_from_restriction(
     let prolog_context = &context.context;
     let frame = prolog_context.open_frame();
     let [restriction_term, id_term, reason_term] = frame.new_term_refs();
-    restriction_term.unify(restriction.original_id.as_ref().unwrap())?;
+    restriction_term.unify(restriction.original_id.as_str())?;
     let open_call = frame.open(
         pred!("query:ids_for_restriction/4"),
         [
@@ -427,7 +427,7 @@ impl GraphQLValue for TerminusTypeCollection {
 }
 
 pub struct TerminusTypeInfo {
-    class: String,
+    class: GraphQLName,
     allframes: Arc<AllFrames>,
 }
 
@@ -563,7 +563,7 @@ impl TerminusType {
             .collect();
 
         let mut inverted_fields: Vec<_> = Vec::new();
-        let database_class_name = frames.graphql_to_class_name(&info.class);
+        let database_class_name = frames.graphql_to_short_name(&info.class);
         if let Some(inverted_type) = &frames.inverted.classes.get(database_class_name) {
             for (field_name, ifd) in inverted_type.domain.iter() {
                 let class = &frames.short_name_to_graphql_name(&ifd.class);
@@ -1020,7 +1020,7 @@ fn extract_fragment(
     if let Some(doc_type) = doc_type {
         Some(executor.resolve(
             &TerminusTypeInfo {
-                class: doc_type.to_string(),
+                class: doc_type.clone(),
                 allframes: info.allframes.clone(),
             },
             &TerminusType::new(object_id),
@@ -1047,7 +1047,7 @@ fn extract_enum_fragment(
     enum_type: &str,
 ) -> juniper::Value {
     let enum_uri = instance.id_object_node(object_id).unwrap();
-    let qualified_enum_type = info.allframes.iri_class_name(enum_type);
+    let qualified_enum_type = info.allframes.graphql_to_iri_name(enum_type);
     let enum_value = enum_node_to_value(&qualified_enum_type, &enum_uri);
     let enum_definition = info.allframes.frames[enum_type].as_enum_definition();
     juniper::Value::Scalar(DefaultScalarValue::String(
