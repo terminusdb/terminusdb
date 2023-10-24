@@ -174,6 +174,7 @@ function replace (agent, params) {
   const create = params.boolean('create')
   const requireMigration = params.boolean('require_migration')
   const allowDestructiveMigration = params.boolean('allow_destructive_migration')
+  const rawJson = params.boolean('raw_json')
   params.assertEmpty()
 
   const request = agent.put(path)
@@ -187,6 +188,7 @@ function replace (agent, params) {
       message,
       require_migration: requireMigration,
       allow_destructive_migration: allowDestructiveMigration,
+      raw_json: rawJson,
     })
     if (util.isDefined(create)) {
       request.query({ create })

@@ -734,5 +734,25 @@ describe('document', function () {
       expect(r.status).to.equal(404)
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
     })
+
+    it('fails when trying to replace a json document without providing an id', async function () {
+      const instance = { foo: 'bar' }
+      const r = await document.replace(agent, { raw_json: true, instance }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:JSONIdNotProvided')
+    })
+
+    it('fails when replacing a typed document with a json document', async function () {
+      const classId = util.randomString()
+      const schema = { '@id': classId, '@type': 'Class' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': classId }
+      const insertResult = await document.insert(agent, { instance })
+
+      const instance2 = { '@id': insertResult.body[0], foo: 'bar' }
+      const r = await document.replace(agent, { raw_json: true, instance: instance2 }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:StoredDocumentNotAJSON')
+    })
   })
 })

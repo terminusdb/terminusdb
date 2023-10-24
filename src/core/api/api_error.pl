@@ -2102,7 +2102,7 @@ api_document_error_jsonld(Type, error(raw_json_and_schema_disallowed,_), JSON) :
             }.
 api_document_error_jsonld(Type, error(not_a_valid_json_object_id(Id),_), JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Document insertion of raw JSON documents is not possible for the schema graph", []),
+    format(string(Msg), "'~s' is not a valid json document id", [Id]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:DocumentInsertionInvalidJSONDocumentId',
@@ -2455,6 +2455,25 @@ api_document_error_jsonld(Type, error(prefix_does_not_resolve(Prefix,Document), 
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:PrefixDoesNotResolveError',
                               'api:prefix' : Prefix,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(stored_document_is_not_a_json(Id,Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Stored document with IRI '~s' was not a JSON.", [Id]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StoredDocumentNotAJSON',
+                              'api:id': Id,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(json_id_not_provided(Document), _),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "An explicit IRI was required for this operation but not provided for this document", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:JSONIdNotProvided',
                               'api:document' : Document },
              'api:message' : Msg
             }.

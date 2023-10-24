@@ -210,6 +210,7 @@ known_document_error(not_one_parent_of_subdocument(_)).
 known_document_error(embedded_subdocument_has_linked_by).
 known_document_error(back_links_not_supported_in_replace).
 known_document_error(prefix_does_not_resolve(_)).
+known_document_error(stored_document_is_not_a_json(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
