@@ -245,13 +245,13 @@ describe('GraphQL', function () {
   {
     '@type': 'Class',
     '@id': 'UnprefixedParent',
-    parent_name : "xsd:string"
+    parent_name: 'xsd:string',
   },
   {
     '@type': 'Class',
     '@id': 'prefix:Child',
-    '@inherits' : 'UnprefixedParent',
-    child_name : "xsd:string"
+    '@inherits': 'UnprefixedParent',
+    child_name: 'xsd:string',
   },
   ]
 
@@ -312,7 +312,7 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    const res = await document.insert(agent, { schema, fullReplace: true })
+    await document.insert(agent, { schema, fullReplace: true })
 
     await document.insert(agent, { instance: instances })
   })
@@ -1091,7 +1091,7 @@ query EverythingQuery {
 
     it('can rename in subsumption', async function () {
       const instance = {
-        parent_name : "far", child_name: "further"
+        parent_name: 'far', child_name: 'further',
       }
       await document.insert(agent, { instance }).unverified()
 
