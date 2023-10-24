@@ -566,7 +566,7 @@ impl TerminusType {
         let database_class_name = frames.graphql_to_class_name(&info.class);
         if let Some(inverted_type) = &frames.inverted.classes.get(database_class_name) {
             for (field_name, ifd) in inverted_type.domain.iter() {
-                let class = &frames.class_to_graphql_name(&ifd.class);
+                let class = &frames.short_name_to_graphql_name(&ifd.class);
                 if !info.allframes.frames[class].is_document_type() {
                     continue;
                 }
@@ -754,7 +754,7 @@ impl GraphQLValue for TerminusType {
             if let Some(reverse_link) = allframes.reverse_link(class, field_name) {
                 let property = &reverse_link.property;
                 let domain = &reverse_link.class;
-                let graphql_domain = allframes.class_to_graphql_name(domain);
+                let graphql_domain = allframes.short_name_to_graphql_name(domain);
                 let kind = &reverse_link.kind;
                 // TODO: We need to check that the domain uri is correct
                 let property_expanded = allframes.context.expand_schema(property);
