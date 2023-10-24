@@ -224,7 +224,6 @@ describe('GraphQL', function () {
     '@id': 'RequiredForeignField',
     required_foreign_field: 'http://external#Thing',
   },
-
   {
     '@type': 'Class',
     '@id': 'SetForeignField',
@@ -242,6 +241,17 @@ describe('GraphQL', function () {
     '@type': 'Class',
     '@id': 'prefix:Inner',
     inner_name: 'xsd:string',
+  },
+  {
+    '@type': 'Class',
+    '@id': 'UnprefixedParent',
+    parent_name : "xsd:string"
+  },
+  {
+    '@type': 'Class',
+    '@id': 'prefix:Child',
+    '@inherits' : 'UnprefixedParent',
+    child_name : "xsd:string"
   },
   ]
 
@@ -302,7 +312,7 @@ describe('GraphQL', function () {
 
     await db.create(agent)
 
-    await document.insert(agent, { schema, fullReplace: true })
+    const res = await document.insert(agent, { schema, fullReplace: true })
 
     await document.insert(agent, { instance: instances })
   })
@@ -1077,6 +1087,23 @@ query EverythingQuery {
 
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.EnumPointer).to.deep.equal([{ pointer: 'enum_one' }])
+    })
+
+    it('can rename in subsumption', async function () {
+      const instance = {
+        parent_name : "far", child_name: "further"
+      }
+      await document.insert(agent, { instance }).unverified()
+
+      const TEST_QUERY = gql`
+ query TEST {
+    UnprefixedParent{
+        parent_name
+    }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.UnprefixedParent).to.deep.equal([{ parent_name: 'far' }])
     })
 
     it('filters from initial iterator with array', async function () {
