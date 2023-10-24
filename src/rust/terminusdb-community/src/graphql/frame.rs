@@ -291,17 +291,23 @@ impl From<StructuralPropertyDocumentationRecord> for PropertyDocumentationRecord
 #[derive(Deserialize, PartialEq, Debug)]
 pub struct PropertyDocumentation {
     #[serde(flatten)]
-    pub records: BTreeMap<GraphQLName, PropertyDocumentationRecord>,
+    pub records: BTreeMap<ShortName, PropertyDocumentationRecord>,
 }
 
 impl PropertyDocumentation {
-    pub fn sanitize(self) -> PropertyDocumentation {
+    pub fn sanitize(self) -> SanitizedPropertyDocumentation {
         let mut records = BTreeMap::new();
         for (s, pdr) in self.records.iter() {
             records.insert(graphql_sanitize(s), pdr.clone());
         }
-        PropertyDocumentation { records }
+        SanitizedPropertyDocumentation { records }
     }
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+pub struct SanitizedPropertyDocumentation {
+    #[serde(flatten)]
+    pub records: BTreeMap<GraphQLName, PropertyDocumentationRecord>,
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -314,9 +320,19 @@ pub struct ClassDocumentationDefinition {
     pub properties: Option<PropertyDocumentation>,
 }
 
+#[derive(Deserialize, PartialEq, Debug)]
+pub struct SanitizedClassDocumentationDefinition {
+    #[serde(rename = "@label")]
+    pub label: Option<String>,
+    #[serde(rename = "@comment")]
+    pub comment: Option<String>,
+    #[serde(rename = "@properties")]
+    pub properties: Option<SanitizedPropertyDocumentation>,
+}
+
 impl ClassDocumentationDefinition {
-    pub fn sanitize(self) -> ClassDocumentationDefinition {
-        ClassDocumentationDefinition {
+    pub fn sanitize(self) -> SanitizedClassDocumentationDefinition {
+        SanitizedClassDocumentationDefinition {
             label: self.label,
             comment: self.comment,
             properties: self.properties.map(move |pd| pd.sanitize()),
@@ -545,6 +561,37 @@ impl FieldDefinition {
         self.base_type().map(type_is_json).unwrap_or(false)
     }
 
+    pub fn sanitize(self) -> SanitizedFieldDefinition {
+        match self {
+            Self::Required(c) => SanitizedFieldDefinition::Required(sanitize_class(&c)),
+            Self::Optional(c) => SanitizedFieldDefinition::Optional(sanitize_class(&c)),
+            Self::Set(c) => SanitizedFieldDefinition::Set(sanitize_class(&c)),
+            Self::List(c) => SanitizedFieldDefinition::List(sanitize_class(&c)),
+            Self::Array { class, dimensions } => SanitizedFieldDefinition::Array {
+                class: sanitize_class(&class),
+                dimensions,
+            },
+            Self::Cardinality { class, min, max } => SanitizedFieldDefinition::Cardinality {
+                class: sanitize_class(&class),
+                min,
+                max,
+            },
+        }
+    }
+}
+
+impl SanitizedFieldDefinition {
+    pub fn range(&self) -> &BaseOrDerived<GraphQLName> {
+        match self {
+            Self::Required(c) => c,
+            Self::Optional(c) => c,
+            Self::Set(c) => c,
+            Self::List(c) => c,
+            Self::Array { class, .. } => class,
+            Self::Cardinality { class, .. } => class,
+        }
+    }
+
     pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName> {
         let range = self.range();
         match range {
@@ -569,24 +616,6 @@ impl FieldDefinition {
             Self::List(_) => FieldKind::List,
             Self::Array { .. } => FieldKind::Array,
             Self::Cardinality { .. } => FieldKind::Cardinality,
-        }
-    }
-
-    pub fn sanitize(self) -> SanitizedFieldDefinition {
-        match self {
-            Self::Required(c) => SanitizedFieldDefinition::Required(sanitize_class(&c)),
-            Self::Optional(c) => SanitizedFieldDefinition::Optional(sanitize_class(&c)),
-            Self::Set(c) => SanitizedFieldDefinition::Set(sanitize_class(&c)),
-            Self::List(c) => SanitizedFieldDefinition::List(sanitize_class(&c)),
-            Self::Array { class, dimensions } => SanitizedFieldDefinition::Array {
-                class: sanitize_class(&class),
-                dimensions,
-            },
-            Self::Cardinality { class, min, max } => SanitizedFieldDefinition::Cardinality {
-                class: sanitize_class(&class),
-                min,
-                max,
-            },
         }
     }
 }
@@ -653,9 +682,8 @@ pub struct OneOf {
     pub choices: BTreeMap<ShortName, FieldDefinition>,
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct SanitizedOneOf {
-    #[serde(flatten)]
     pub choices: BTreeMap<GraphQLName, SanitizedFieldDefinition>,
 }
 
@@ -682,30 +710,18 @@ pub struct ClassDefinition {
     pub fields: BTreeMap<ShortName, FieldDefinition>,
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct SanitizedClassDefinition {
-    #[serde(rename = "@documentation")]
-    #[serde(default = "empty")]
-    pub documentation: OneOrMore<ClassDocumentationDefinition>,
-    #[serde(rename = "@metadata")]
+    pub documentation: OneOrMore<SanitizedClassDocumentationDefinition>,
     pub metadata: Option<serde_json::Value>,
-    #[serde(rename = "@key")]
-    pub key: Option<KeyDefinition>,
-    #[serde(rename = "@subdocument")]
+    pub key: Option<SanitizedKeyDefinition>,
     pub is_subdocument: Option<Vec<()>>,
-    #[serde(rename = "@unfoldable")]
     pub is_unfoldable: Option<Vec<()>>,
-    #[serde(rename = "@abstract")]
     pub is_abstract: Option<Vec<()>>,
-    #[serde(rename = "@oneOf")]
-    pub one_of: Option<Vec<OneOf>>,
-    #[serde(rename = "@inherits")]
+    pub one_of: Option<Vec<SanitizedOneOf>>,
     pub inherits: Option<Vec<GraphQLName>>,
-    #[serde(flatten)]
-    pub fields: BTreeMap<GraphQLName, FieldDefinition>,
-    #[serde(skip)]
+    pub fields: BTreeMap<GraphQLName, SanitizedFieldDefinition>,
     pub graphql_to_iri: Option<BiMap<GraphQLName, IriName>>,
-    #[serde(skip)]
     pub graphql_to_short_name: Option<BiMap<GraphQLName, GraphQLName>>,
 }
 
@@ -739,7 +755,7 @@ impl ClassDefinition {
                         }
                         choices.insert(sanitized_field.clone(), fd.sanitize().optionalize());
                     }
-                    OneOf { choices }
+                    SanitizedOneOf { choices }
                 })
                 .collect()
         });
@@ -750,10 +766,10 @@ impl ClassDefinition {
             .map(move |d| d.sanitize())
             .collect();
         let key = self.key.map(|k| k.sanitize());
-        let mut field_renaming: BiMap<String, String> = BiMap::new();
+        let mut field_renaming: BiMap<GraphQLName, IriName> = BiMap::new();
         for (s, t) in field_map.iter() {
             let expanded = prefixes.expand_schema(t);
-            field_renaming.insert(s.to_string(), expanded.to_string());
+            field_renaming.insert(s.clone(), expanded);
         }
         let inherits = if let Some(inherits_val) = &self.inherits {
             let mut result = vec![];
@@ -860,14 +876,27 @@ pub struct EnumDefinition {
     #[serde(rename = "@metadata")]
     pub metadata: Option<serde_json::Value>,
     #[serde(rename = "@values")]
+    pub values: Vec<ShortName>,
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+pub struct SanitizedEnumDefinition {
+    //#[serde(rename = "@type")]
+    //pub kind: String,
+    #[serde(rename = "@documentation")]
+    #[serde(default = "empty")]
+    pub documentation: OneOrMore<EnumDocumentationDefinition>,
+    #[serde(rename = "@metadata")]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(rename = "@values")]
     pub values: Vec<String>,
     #[serde(skip_serializing, skip_deserializing)]
-    pub values_renaming: Option<BiMap<String, String>>,
+    pub values_renaming: BiMap<GraphQLName, ShortName>,
 }
 
 impl EnumDefinition {
-    pub fn sanitize(self) -> EnumDefinition {
-        let mut values_renaming: BiMap<String, String> = BiMap::new();
+    pub fn sanitize(self) -> SanitizedEnumDefinition {
+        let mut values_renaming: BiMap<GraphQLName, ShortName> = BiMap::new();
         let values = self.values.iter().map(|v| {
             let sanitized = graphql_sanitize(v);
             let res = values_renaming.insert_no_overwrite(sanitized.to_string(), v.to_string());
@@ -884,11 +913,11 @@ impl EnumDefinition {
             .into_iter()
             .map(|ed| ed.sanitize())
             .collect();
-        EnumDefinition {
+        SanitizedEnumDefinition {
             documentation: OneOrMore::More(documentation),
             metadata: self.metadata,
             values,
-            values_renaming: Some(values_renaming),
+            values_renaming,
         }
     }
 
@@ -926,6 +955,13 @@ impl EnumDefinition {
 pub enum TypeDefinition {
     Class(ClassDefinition),
     Enum(EnumDefinition),
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+#[serde(tag = "@type")]
+pub enum SanitizedTypeDefinition {
+    Class(SanitizedClassDefinition),
+    Enum(SanitizedEnumDefinition),
 }
 
 impl TypeDefinition {
@@ -1052,18 +1088,18 @@ impl PreAllFrames {
         )
     }
 
-    pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
+    fn calculate_subsumption(
+        frames: &BTreeMap<GraphQLName, SanitizedTypeDefinition>,
+    ) -> HashMap<GraphQLName, Vec<GraphQLName>> {
         let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
-        for (class, typedef) in &self.frames {
+        for (class, typedef) in frames {
             if typedef.is_document_type() {
                 let mut supers = typedef
                     .as_class_definition()
                     .inherits
                     .clone()
                     .unwrap_or(Vec::new());
-
                 supers.push(class.to_owned());
-
                 for superclass in supers {
                     if let Some(v) = subsumption_rel.get_mut(&superclass) {
                         v.push(class.to_string());
@@ -1166,7 +1202,7 @@ impl AllFrames {
             .and_then(|inverted| inverted.domain.get(field))
     }
 
-    pub fn subsumed(&self, class: &str) -> Vec<String> {
+    pub fn subsumed(&self, class: &str) -> Vec<GraphQLName> {
         self.subsumption
             .get(class)
             .cloned()
@@ -1202,9 +1238,9 @@ pub fn inverse_field_name(property: &str, class: &str) -> String {
     format!("_{property}_of_{class}")
 }
 
-pub fn allframes_to_allinvertedframes(allframes: &PreAllFrames) -> AllInvertedFrames {
+pub fn allframes_to_allinvertedframes(allframes: &AllFrames) -> AllInvertedFrames {
     let frames = &allframes.frames;
-    let mut classes: BTreeMap<String, InvertedTypeDefinition> = BTreeMap::new();
+    let mut classes: BTreeMap<GraphQLName, InvertedTypeDefinition> = BTreeMap::new();
     for (class, record) in frames.iter() {
         match record {
             TypeDefinition::Class(classdefinition) => {
@@ -1213,34 +1249,37 @@ pub fn allframes_to_allinvertedframes(allframes: &PreAllFrames) -> AllInvertedFr
                     let kind = fieldrecord.kind();
                     let range = fieldrecord.range();
                     let field_name = inverse_field_name(property, class);
-                    if !is_base_type(range) & allframes.document_type(range).is_some() {
-                        if let Some(inverted_type_definition) = classes.get_mut(range) {
-                            let inverted_type = &mut inverted_type_definition.domain;
-                            inverted_type.insert(
-                                field_name.to_string(),
-                                InvertedFieldDefinition {
-                                    property: property.to_string(),
-                                    kind,
-                                    class: class.to_string(),
-                                },
-                            );
-                        } else {
-                            let mut range_properties = BTreeMap::new();
-                            range_properties.insert(
-                                field_name.to_string(),
-                                InvertedFieldDefinition {
-                                    property: property.to_string(),
-                                    kind,
-                                    class: class.to_string(),
-                                },
-                            );
-                            classes.insert(
-                                range.to_string(),
-                                InvertedTypeDefinition {
-                                    domain: range_properties,
-                                },
-                            );
+                    match range {
+                        BaseOrDerived::Derived(range) => {
+                            if let Some(inverted_type_definition) = classes.get_mut(range) {
+                                let inverted_type = &mut inverted_type_definition.domain;
+                                inverted_type.insert(
+                                    field_name.to_string(),
+                                    InvertedFieldDefinition {
+                                        property: property.to_string(),
+                                        kind,
+                                        class: class.to_string(),
+                                    },
+                                );
+                            } else {
+                                let mut range_properties = BTreeMap::new();
+                                range_properties.insert(
+                                    field_name.to_string(),
+                                    InvertedFieldDefinition {
+                                        property: property.to_string(),
+                                        kind,
+                                        class: class.to_string(),
+                                    },
+                                );
+                                classes.insert(
+                                    range,
+                                    InvertedTypeDefinition {
+                                        domain: range_properties,
+                                    },
+                                );
+                            }
                         }
+                        BaseOrDerived::Base(_) => (),
                     }
                 }
             }
