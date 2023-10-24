@@ -2,7 +2,9 @@
 use std::mem::MaybeUninit;
 
 use lazy_init::Lazy;
-use terminusdb_store_prolog::terminus_store::Layer;
+use terminusdb_store_prolog::terminus_store::{store::sync::SyncStoreLayer, Layer};
+
+use crate::consts::{SYS_ARRAY, SYS_VALUE};
 
 pub enum WhichDict {
     Node,
@@ -93,4 +95,44 @@ pub fn lookup_predicates<'a, L: Layer + Clone, const N: usize>(
     std::mem::forget(result);
 
     unsafe { magic.read() }
+}
+
+macro_rules! generate_lookup_elem {
+    (node, $layer:ident, $str:expr) => {
+        SingleDictLookup::new_node($layer.clone(), $str)
+    };
+    (pred, $layer:ident, $str:expr) => {
+        SingleDictLookup::new_predicate($layer.clone(), $str)
+    };
+}
+
+macro_rules! generate_lookup_type {
+    ($struct_name:ident {$($node_name:ident : $node_type:ident $node_str:expr),* $(,)?}) => {
+        struct $struct_name<L: Layer+Clone> {
+            $($node_name : SingleDictLookup<'static, L>),*,
+        }
+
+        impl<L: Layer+Clone> $struct_name<L> {
+            fn new(layer: L) -> Self {
+                Self {
+                    $($node_name: generate_lookup_elem!($node_type, layer, $node_str)),*
+                }
+            }
+            $(fn $node_name(&self) -> Option<u64> {
+                self.$node_name.get()
+            })*
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // this is not really a test, but the build will fail if the macro is wrong
+    generate_lookup_type! {
+        Foo {
+            array_type: node SYS_ARRAY,
+            value_pred: pred SYS_VALUE,
+        }
+    }
 }
