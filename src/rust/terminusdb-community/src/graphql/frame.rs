@@ -551,12 +551,12 @@ pub struct ClassDefinition {
     #[serde(flatten)]
     pub fields: BTreeMap<String, FieldDefinition>,
     #[serde(skip)]
-    pub graphql_to_fully_qualified: Option<BiMap<String, String>>,
+    pub graphql_to_iri: Option<BiMap<String, String>>,
     #[serde(skip)]
     pub graphql_to_db_name: Option<BiMap<String, String>>,
 }
 
-static RESERVED_CLASSES: [&str; 5] = ["BigFloat", "BigFloat", "DateTime", "BigInt", "JSON"];
+static RESERVED_CLASSES: [&str; 4] = ["BigFloat", "DateTime", "BigInt", "JSON"];
 
 impl ClassDefinition {
     pub fn sanitize(self, prefixes: &Prefixes) -> ClassDefinition {
@@ -622,7 +622,7 @@ impl ClassDefinition {
             inherits,
             one_of,
             fields,
-            graphql_to_fully_qualified: Some(field_renaming),
+            graphql_to_iri: Some(field_renaming),
             graphql_to_db_name: Some(field_map),
         }
     }
@@ -662,9 +662,9 @@ impl ClassDefinition {
         fields
     }
 
-    pub fn fully_qualified_property_name(&self, _prefixes: &Prefixes, property: &String) -> String {
+    pub fn iri_property_name(&self, _prefixes: &Prefixes, property: &String) -> String {
         // is this really fully qualified, I don't see how????
-        self.graphql_to_fully_qualified
+        self.graphql_to_iri
             .as_ref()
             .map(|map| {
                 map.get_by_left(property)
@@ -821,6 +821,7 @@ pub struct AllFrames {
     pub context: Prefixes,
     pub frames: BTreeMap<String, TypeDefinition>,
     pub class_renaming: BiMap<String, String>,
+    pub graphql_to_iri_renaming: BiMap<String, String>,
     pub inverted: AllInvertedFrames,
     pub subsumption: HashMap<String, Vec<String>>,
     pub restrictions: BTreeMap<String, RestrictionDefinition>,
@@ -841,6 +842,7 @@ impl PreAllFrames {
         BTreeMap<String, TypeDefinition>,
         BTreeMap<String, RestrictionDefinition>,
         BiMap<String, String>,
+        BiMap<String, String>,
         Prefixes,
     ) {
         let mut class_renaming: BiMap<String, String> = BiMap::from_iter(
@@ -849,8 +851,17 @@ impl PreAllFrames {
                 .map(|x| (x.to_string(), x.to_string())),
         );
         let mut frames: BTreeMap<String, TypeDefinition> = BTreeMap::new();
+        let mut graphql_to_iri_renaming: BiMap<String, String> = BiMap::new();
         for (class_name, typedef) in self.frames.into_iter() {
+            let iri_name = self.context.expand_schema(&class_name);
             let sanitized_class = graphql_sanitize(&class_name);
+            // GraphQL <> IRI
+            let res =
+                graphql_to_iri_renaming.insert_no_overwrite(sanitized_class.clone(), iri_name);
+            if let Err((left, right)) = res {
+                panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]' and which do not overlap with reserved type names. Please rename your classes to remove the following duplicate pair: ({left},{right}) == ({sanitized_class},{class_name})")
+            }
+            // GraphQL <> ShortName
             let res =
                 class_renaming.insert_no_overwrite(sanitized_class.clone(), class_name.clone());
             if let Err((left, right)) = res {
@@ -879,7 +890,13 @@ impl PreAllFrames {
                     .insert(sanitized_restriction_name, restriction.clone().sanitize());
             }
         }
-        (frames, sanitized_restrictions, class_renaming, self.context)
+        (
+            frames,
+            sanitized_restrictions,
+            graphql_to_iri_renaming,
+            class_renaming,
+            self.context,
+        )
     }
 
     pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
@@ -909,12 +926,14 @@ impl PreAllFrames {
     pub fn finalize(mut self) -> AllFrames {
         let inverted = allframes_to_allinvertedframes(&self);
         let subsumption = self.calculate_subsumption();
-        let (frames, restrictions, class_renaming, context) = self.sanitize();
+        let (frames, restrictions, graphql_to_iri_renaming, class_renaming, context) =
+            self.sanitize();
 
         AllFrames {
             context,
             frames,
             restrictions,
+            graphql_to_iri_renaming,
             class_renaming,
             inverted,
             subsumption,
@@ -948,7 +967,18 @@ impl AllFrames {
 
     pub fn class_to_graphql_name(&self, db_name: &str) -> String {
         self.class_to_graphql_name_opt(db_name)
-            .expect("This class name {db_short_name} *should* exist")
+            .unwrap_or_else(|| panic!("This class name {db_name} *should* exist"))
+    }
+
+    pub fn iri_to_graphql_name_opt(&self, iri: &str) -> Option<String> {
+        self.graphql_to_iri_renaming
+            .get_by_right(iri)
+            .map(|s| s.to_string())
+    }
+
+    pub fn iri_to_graphql_name(&self, iri: &str) -> String {
+        self.iri_to_graphql_name_opt(iri)
+            .unwrap_or_else(|| panic!("This class name {iri} *should* exist"))
     }
 
     pub fn graphql_to_class_name_opt(&self, class_name: &str) -> Option<&str> {
@@ -959,16 +989,16 @@ impl AllFrames {
 
     pub fn graphql_to_class_name(&self, class_name: &str) -> &str {
         self.graphql_to_class_name_opt(class_name)
-            .expect("This frame class name *should* exist")
+            .unwrap_or_else(|| panic!("This class name {class_name} *should* exist"))
     }
 
-    pub fn fully_qualified_class_name(&self, class_name: &str) -> String {
+    pub fn iri_class_name(&self, class_name: &str) -> String {
         let db_name = self.graphql_to_class_name(class_name);
         self.context.expand_schema(db_name)
     }
 
-    pub fn fully_qualified_enum_value(&self, enum_type: &str, value: &str) -> String {
-        let enum_type_expanded = self.fully_qualified_class_name(enum_type);
+    pub fn iri_enum_value(&self, enum_type: &str, value: &str) -> String {
+        let enum_type_expanded = self.iri_class_name(enum_type);
         let enum_type_definition = self.frames[enum_type].as_enum_definition();
         let value = enum_type_definition.value_name(value);
         let expanded_object_node = format!("{enum_type_expanded}/{value}");
@@ -1161,7 +1191,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
         let typedef: TypeDefinition = context.deserialize_from_term(&term).unwrap();
         assert_eq!(
             TypeDefinition::Class(ClassDefinition {
-                graphql_to_fully_qualified: None,
+                graphql_to_iri: None,
                 graphql_to_db_name: None,
                 documentation: OneOrMore::More(vec![]),
                 metadata: None,
