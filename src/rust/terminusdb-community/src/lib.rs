@@ -3,6 +3,7 @@ mod log;
 
 mod changes;
 mod consts;
+mod dict_lookup;
 mod doc;
 mod embedding;
 mod graphql;
