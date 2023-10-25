@@ -378,7 +378,7 @@ fn compile_edges_to_filter(
     let mut restriction = None;
     let mut ids = Vec::new();
     for (spanning_string, spanning_input_value) in edges.iter() {
-        let field_name = GraphQLName(spanning_string.item.into());
+        let field_name = GraphQLName(spanning_string.item.to_string().into());
         if &*field_name == "_and" {
             let input_value = &spanning_input_value.item;
             match input_value {

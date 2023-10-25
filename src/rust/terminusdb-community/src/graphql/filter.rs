@@ -25,10 +25,10 @@ pub struct FilterInputObjectTypeInfo {
 }
 
 impl FilterInputObjectTypeInfo {
-    pub fn new(type_name: GraphQLName<'static>, all_frames: &Arc<AllFrames>) -> Self {
+    pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
             filter_type_name: filter_name(&type_name),
-            type_name: type_name.clone(),
+            type_name: type_name.as_static(),
             frames: all_frames.clone(),
         }
     }
@@ -104,7 +104,7 @@ impl GraphQLType for FilterInputObject {
                                         registry.arg::<Option<CollectionFilterInputObject>>(
                                             name,
                                             &CollectionFilterInputObjectTypeInfo::new(
-                                                c.to_owned(),
+                                                &c,
                                                 &info.frames,
                                             ),
                                         )
@@ -152,10 +152,7 @@ impl GraphQLType for FilterInputObject {
                                     } else {
                                         registry.arg::<Option<FilterInputObject>>(
                                             name,
-                                            &FilterInputObjectTypeInfo::new(
-                                                c.to_owned(),
-                                                &info.frames,
-                                            ),
+                                            &FilterInputObjectTypeInfo::new(&c, &info.frames),
                                         )
                                     }
                                 }
@@ -187,21 +184,21 @@ impl GraphQLType for FilterInputObject {
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",
-                &FilterInputObjectTypeInfo::new(info.type_name.clone(), &info.frames),
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
             ));
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_or",
-                &FilterInputObjectTypeInfo::new(info.type_name.clone(), &info.frames),
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
             ));
 
             args.push(registry.arg::<Option<FilterInputObject>>(
                 "_not",
-                &FilterInputObjectTypeInfo::new(info.type_name.clone(), &info.frames),
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
             ));
 
             registry
-                .build_input_object_type::<FilterInputObject>(info, &args)
+                .build_input_object_type::<FilterInputObject>(&info, &args)
                 .into_meta()
         } else {
             panic!("expected type of kind class but found something else");
@@ -239,10 +236,10 @@ pub struct CollectionFilterInputObjectTypeInfo {
 }
 
 impl CollectionFilterInputObjectTypeInfo {
-    pub fn new(type_name: GraphQLName<'static>, all_frames: &Arc<AllFrames>) -> Self {
+    pub fn new<'a>(type_name: &GraphQLName<'a>, all_frames: &Arc<AllFrames>) -> Self {
         Self {
             filter_type_name: collection_filter_name(&type_name),
-            type_name,
+            type_name: type_name.as_static(),
             frames: all_frames.clone(),
         }
     }
@@ -266,11 +263,11 @@ impl GraphQLType for CollectionFilterInputObject {
             TypeDefinition::Class(_) => {
                 args.push(registry.arg::<Option<FilterInputObject>>(
                     "someHave",
-                    &FilterInputObjectTypeInfo::new(info.type_name, &info.frames),
+                    &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
                 ));
                 args.push(registry.arg::<Option<FilterInputObject>>(
                     "allHave",
-                    &FilterInputObjectTypeInfo::new(info.type_name, &info.frames),
+                    &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
                 ));
                 registry
                     .build_input_object_type::<CollectionFilterInputObject>(info, &args)
@@ -327,7 +324,7 @@ impl EnumFilterInputObjectTypeInfo {
     pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
             filter_type_name: enum_filter_name(type_name),
-            type_name: type_name.clone(),
+            type_name: type_name.as_static(),
             frames: all_frames.clone(),
         }
     }
