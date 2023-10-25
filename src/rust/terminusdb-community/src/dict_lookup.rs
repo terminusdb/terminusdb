@@ -12,14 +12,14 @@ pub enum WhichDict {
 }
 
 pub struct SingleDictLookup<'a, L: Layer> {
-    layer: L,
+    layer: Option<L>,
     s: &'a str,
     which: WhichDict,
     result: Lazy<Option<u64>>,
 }
 
 impl<'a, L: Layer> SingleDictLookup<'a, L> {
-    pub fn new(layer: L, s: &'a str, which: WhichDict) -> Self {
+    pub fn new(layer: Option<L>, s: &'a str, which: WhichDict) -> Self {
         Self {
             layer,
             s,
@@ -28,26 +28,39 @@ impl<'a, L: Layer> SingleDictLookup<'a, L> {
         }
     }
 
-    pub fn new_node(layer: L, s: &'a str) -> Self {
+    pub fn new_node_opt(layer: Option<L>, s: &'a str) -> Self {
         Self::new(layer, s, WhichDict::Node)
     }
 
-    pub fn new_predicate(layer: L, s: &'a str) -> Self {
+    pub fn new_node(layer: L, s: &'a str) -> Self {
+        Self::new_node_opt(Some(layer), s)
+    }
+
+    pub fn new_predicate_opt(layer: Option<L>, s: &'a str) -> Self {
         Self::new(layer, s, WhichDict::Predicate)
     }
 
+    pub fn new_predicate(layer: L, s: &'a str) -> Self {
+        Self::new_predicate_opt(Some(layer), s)
+    }
+
     fn lookup(&self) -> Option<u64> {
+        let layer = self.layer.as_ref().unwrap();
         match self.which {
-            WhichDict::Node => self.layer.subject_id(self.s),
-            WhichDict::Predicate => self.layer.predicate_id(self.s),
+            WhichDict::Node => layer.subject_id(self.s),
+            WhichDict::Predicate => layer.predicate_id(self.s),
         }
     }
 
     pub fn get(&self) -> Option<u64> {
-        self.result
-            .get_or_create(|| self.lookup())
-            .as_ref()
-            .copied()
+        if self.layer.is_some() {
+            self.result
+                .get_or_create(|| self.lookup())
+                .as_ref()
+                .copied()
+        } else {
+            None
+        }
     }
 }
 
@@ -99,26 +112,27 @@ pub fn lookup_predicates<'a, L: Layer + Clone, const N: usize>(
 
 macro_rules! generate_lookup_elem {
     (node, $layer:ident, $str:expr) => {
-        SingleDictLookup::new_node($layer.clone(), $str)
+        $crate::dict_lookup::SingleDictLookup::new_node_opt($layer.clone(), $str)
     };
     (pred, $layer:ident, $str:expr) => {
-        SingleDictLookup::new_predicate($layer.clone(), $str)
+        $crate::dict_lookup::SingleDictLookup::new_predicate_opt($layer.clone(), $str)
     };
 }
 
 macro_rules! generate_lookup_type {
     ($struct_name:ident {$($node_name:ident : $node_type:ident $node_str:expr),* $(,)?}) => {
-        struct $struct_name<L: Layer+Clone> {
-            $($node_name : SingleDictLookup<'static, L>),*,
+        pub struct $struct_name<L: $crate::terminus_store::Layer+Clone> {
+            $($node_name : $crate::dict_lookup::SingleDictLookup<'static, L>),*,
         }
 
-        impl<L: Layer+Clone> $struct_name<L> {
-            fn new(layer: L) -> Self {
+        #[allow(unused)]
+        impl<L: $crate::terminus_store::layer::Layer+Clone> $struct_name<L> {
+            pub fn new(layer: Option<L>) -> Self {
                 Self {
                     $($node_name: generate_lookup_elem!($node_type, layer, $node_str)),*
                 }
             }
-            $(fn $node_name(&self) -> Option<u64> {
+            $(pub fn $node_name(&self) -> Option<u64> {
                 self.$node_name.get()
             })*
         }

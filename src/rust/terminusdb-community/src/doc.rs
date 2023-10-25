@@ -21,7 +21,7 @@ use lazy_static::lazy_static;
 use rayon::prelude::*;
 use swipl::prelude::*;
 
-pub struct GetDocumentContext<L: Layer> {
+pub struct GetDocumentContext<L: Layer + Clone> {
     schema: Option<L>,
     layer: Option<L>,
     prefixes: Lazy<PrefixContracter>,
@@ -32,31 +32,16 @@ pub struct GetDocumentContext<L: Layer> {
     unfoldables: HashSet<u64>,
     enums: HashMap<u64, String>,
     set_pairs: HashSet<(u64, u64)>,
-    rdf_type_id: Option<u64>,
-    rdf_first_id: Option<u64>,
-    rdf_rest_id: Option<u64>,
-    rdf_nil_id: Option<u64>,
-    rdf_list_id: Option<u64>,
     sys_index_ids: Vec<u64>,
-    sys_array_id: Option<u64>,
-    sys_value_id: Option<u64>,
-    sys_json_type_id: Option<u64>,
-    sys_json_document_type_id: Option<u64>,
-    sys_foreign_type_predicate_id: Option<u64>,
+
+    rdf: Arc<RdfIds<L>>,
+    sys: Arc<SysIds<L>>,
 }
 
-impl<L: Layer> GetDocumentContext<L> {
+impl<L: Layer + Clone> GetDocumentContext<L> {
     pub fn new(schema: L, instance: Option<L>) -> GetDocumentContext<L> {
         let schema_query_context = SchemaQueryContext::new(&schema);
 
-        let mut rdf_type_id = None;
-        let mut rdf_first_id = None;
-        let mut rdf_rest_id = None;
-        let mut rdf_nil_id = None;
-        let mut rdf_list_id = None;
-        let mut sys_json_type_id = None;
-        let mut sys_json_document_type_id = None;
-        let mut sys_foreign_type_predicate_id = None;
         let types: HashSet<u64>;
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
@@ -64,8 +49,9 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
         let sys_index_ids: Vec<u64>;
-        let mut sys_array_id = None;
-        let mut sys_value_id = None;
+
+        let sys = Arc::new(SysIds::new(instance.clone()));
+        let rdf = Arc::new(RdfIds::new(instance.clone()));
 
         if let Some(ref instance) = instance {
             let schema_document_type_ids = schema_query_context.get_document_type_ids_from_schema();
@@ -126,23 +112,11 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
             }
 
-            rdf_type_id = instance.predicate_id(RDF_TYPE);
-            rdf_first_id = instance.predicate_id(RDF_FIRST);
-            rdf_rest_id = instance.predicate_id(RDF_REST);
-            rdf_nil_id = instance.object_node_id(RDF_NIL);
-            rdf_list_id = instance.object_node_id(RDF_LIST);
-            sys_json_type_id = instance.object_node_id(SYS_JSON);
-            sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
-            sys_foreign_type_predicate_id = instance.predicate_id(SYS_FOREIGN_TYPE_PREDICATE_ID);
-
-            if let Some(sys_json_document_type_id) = sys_json_document_type_id {
+            if let Some(sys_json_document_type_id) = sys.json_document() {
                 document_types.insert(sys_json_document_type_id);
             }
 
             sys_index_ids = retrieve_all_index_ids(instance);
-
-            sys_array_id = instance.object_node_id(SYS_ARRAY);
-            sys_value_id = instance.predicate_id(SYS_VALUE);
         } else {
             types = HashSet::with_capacity(0);
             subtypes = HashMap::with_capacity(0);
@@ -165,48 +139,16 @@ impl<L: Layer> GetDocumentContext<L> {
             unfoldables,
             enums,
             set_pairs,
-            rdf_type_id,
-            rdf_first_id,
-            rdf_rest_id,
-            rdf_nil_id,
-            rdf_list_id,
             sys_index_ids,
-            sys_array_id,
-            sys_value_id,
-            sys_foreign_type_predicate_id,
 
-            sys_json_type_id,
-            sys_json_document_type_id,
+            rdf,
+            sys,
         }
     }
 
     pub fn new_json(instance: Option<L>) -> GetDocumentContext<L> {
-        let rdf_type_id;
-        let rdf_first_id;
-        let rdf_rest_id;
-        let rdf_nil_id;
-        let rdf_list_id;
-        let sys_json_type_id;
-        let sys_json_document_type_id;
-        if let Some(instance) = instance.as_ref() {
-            rdf_type_id = instance.predicate_id(RDF_TYPE);
-            rdf_first_id = instance.predicate_id(RDF_FIRST);
-            rdf_rest_id = instance.predicate_id(RDF_REST);
-            rdf_nil_id = instance.object_node_id(RDF_NIL);
-            rdf_list_id = instance.object_node_id(RDF_LIST);
-            sys_json_type_id = instance.object_node_id(SYS_JSON);
-            sys_json_document_type_id = instance.object_node_id(SYS_JSON_DOCUMENT);
-        } else {
-            rdf_type_id = None;
-            rdf_first_id = None;
-            rdf_rest_id = None;
-            rdf_nil_id = None;
-            rdf_list_id = None;
-            sys_json_type_id = None;
-            sys_json_document_type_id = None;
-        }
         Self {
-            layer: instance,
+            layer: instance.clone(),
             schema: None,
 
             default_prefixes: Lazy::new(),
@@ -217,18 +159,10 @@ impl<L: Layer> GetDocumentContext<L> {
             unfoldables: HashSet::with_capacity(0),
             enums: HashMap::with_capacity(0),
             set_pairs: HashSet::with_capacity(0),
-            rdf_type_id,
-            rdf_first_id,
-            rdf_rest_id,
-            rdf_nil_id,
-            rdf_list_id,
-            sys_foreign_type_predicate_id: None,
-
-            sys_json_type_id,
-            sys_json_document_type_id,
             sys_index_ids: Vec::with_capacity(0),
-            sys_array_id: None,
-            sys_value_id: None,
+
+            rdf: Arc::new(RdfIds::new(instance.clone())),
+            sys: Arc::new(SysIds::new(instance)),
         }
     }
 
@@ -244,7 +178,7 @@ impl<L: Layer> GetDocumentContext<L> {
             })
         } else {
             self.default_prefixes
-                .get_or_create(|| PrefixContracter::default())
+                .get_or_create(PrefixContracter::default)
         }
     }
 
@@ -273,7 +207,7 @@ impl<L: Layer> GetDocumentContext<L> {
     ) -> Result<Value, StackEntry<L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
-        } else if Some(object) == self.rdf_nil_id {
+        } else if Some(object) == self.rdf.nil() {
             Ok(Value::Array(vec![]))
         } else {
             match self.get_doc_stub(object, true, compress, unfold) {
@@ -323,9 +257,9 @@ impl<L: Layer> GetDocumentContext<L> {
         RdfListIterator {
             layer: self.layer(),
             cur: id,
-            rdf_first_id: self.rdf_first_id,
-            rdf_rest_id: self.rdf_rest_id,
-            rdf_nil_id: self.rdf_nil_id,
+            rdf_first_id: self.rdf.first(),
+            rdf_rest_id: self.rdf.rest(),
+            rdf_nil_id: self.rdf.nil(),
         }
         .peekable()
     }
@@ -345,7 +279,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 predicate,
                 last_index: None,
                 sys_index_ids: &self.sys_index_ids,
-                sys_value_id: self.sys_value_id,
+                sys_value_id: self.sys.value(),
             };
         } else {
             panic!("array is not a field of a document");
@@ -380,7 +314,7 @@ impl<L: Layer> GetDocumentContext<L> {
             .instance_contract(&id_name)
             .to_string();
 
-        let rdf_type_id = self.rdf_type_id;
+        let rdf_type_id = self.rdf.type_();
         let mut fields = (Box::new(
             self.layer()
                 .triples_s(id)
@@ -391,7 +325,7 @@ impl<L: Layer> GetDocumentContext<L> {
         let mut type_id = None;
         let mut type_name_contracted: Option<String> = None;
         let mut json = false;
-        if let Some(rdf_type_id) = self.rdf_type_id {
+        if let Some(rdf_type_id) = rdf_type_id {
             if let Some(t) = self.layer().single_triple_sp(id, rdf_type_id) {
                 if terminate
                     && (!unfold
@@ -402,9 +336,7 @@ impl<L: Layer> GetDocumentContext<L> {
                 }
 
                 type_id = Some(t.object);
-                if Some(t.object) == self.sys_json_document_type_id
-                    || Some(t.object) == self.sys_json_type_id
-                {
+                if Some(t.object) == self.sys.json_document() || Some(t.object) == self.sys.json() {
                     json = true;
                 }
 
@@ -423,14 +355,14 @@ impl<L: Layer> GetDocumentContext<L> {
 
         if type_id.is_none()
             && (fields.peek().is_none()
-                || fields.peek().map(|x| x.predicate) == self.sys_foreign_type_predicate_id)
+                || fields.peek().map(|x| x.predicate) == self.sys.foreign_type_predicate())
         {
             // we're actually dealing with a raw id here
             Err(Value::String(id_name_contracted))
         } else {
             let mut result = Map::new();
 
-            if type_id.is_none() || type_id != self.sys_json_type_id {
+            if type_id.is_none() || type_id != self.sys.json() {
                 // we only care about the id for non-json types, and for the top level json documents. Json (sub)documents should not include an id.
                 result.insert("@id".to_string(), Value::String(id_name_contracted));
             }
@@ -486,16 +418,16 @@ impl<L: Layer> GetDocumentContext<L> {
             if let Some(next_obj) = cur.peek() {
                 // let's first see if this object is one of the expected types
                 if is_json || cur.is_document() {
-                    if let Some(rdf_type_id) = self.rdf_type_id {
+                    if let Some(rdf_type_id) = self.rdf.type_() {
                         if let Some(t) = self.layer().single_triple_sp(next_obj, rdf_type_id) {
-                            if Some(t.object) == self.sys_array_id {
+                            if Some(t.object) == self.sys.array() {
                                 let array_iter = self.get_array_iter(cur);
                                 stack.push(StackEntry::Array(ArrayStackEntry {
                                     collect: Vec::new(),
                                     entries: array_iter,
                                 }));
                                 continue;
-                            } else if Some(t.object) == self.rdf_list_id {
+                            } else if Some(t.object) == self.rdf.list() {
                                 let list_iter = self.get_list_iter(next_obj);
                                 stack.push(StackEntry::List {
                                     collect: Vec::new(),
@@ -576,7 +508,8 @@ impl<L: Layer> GetDocumentContext<L> {
     }
 
     fn id_document_exists(&self, id: u64) -> bool {
-        self.rdf_type_id
+        self.rdf
+            .type_()
             .map(|rdf_type_id| self.layer().single_triple_sp(id, rdf_type_id).is_some())
             .unwrap_or(false)
     }
@@ -725,7 +658,7 @@ impl<'a, L: Layer> Iterator for ArrayIterator<'a, L> {
     }
 }
 
-impl<'a, L: Layer> StackEntry<'a, L> {
+impl<'a, L: Layer + Clone> StackEntry<'a, L> {
     fn peek(&mut self) -> Option<u64> {
         match self {
             Self::Document { fields, .. } => fields.as_mut().unwrap().peek().map(|t| t.object),
@@ -913,7 +846,7 @@ fn print_document<C: QueryableContextType>(
 fn print_documents_of_types<
     'a,
     C: QueryableContextType,
-    L: Layer,
+    L: Layer + Clone,
     I: IntoIterator<Item = &'a u64>,
 >(
     context: &Context<C>,
@@ -947,7 +880,7 @@ fn print_documents_of_types<
                 *count -= 1;
             }
 
-            if Some(t.predicate) != doc_context.rdf_type_id {
+            if Some(t.predicate) != doc_context.rdf.type_() {
                 continue;
             }
 
@@ -960,7 +893,7 @@ fn print_documents_of_types<
     Ok(())
 }
 
-fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
+fn par_print_documents_of_types<C: QueryableContextType, L: Layer + Clone + 'static>(
     context: &Context<C>,
     doc_context: &Arc<GetDocumentContext<L>>,
     stream_term: &Term,
@@ -986,7 +919,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     let doc_context: Arc<_> = doc_context.clone();
     let doc_context2: Arc<_> = doc_context.clone();
 
-    let rdf_type_id = doc_context.rdf_type_id;
+    let rdf_type_id = doc_context.rdf.type_();
     let iter = types
         .into_iter()
         .flat_map(move |typ| doc_context.layer().triples_o(typ))
@@ -1045,7 +978,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + 'static>(
     Ok(())
 }
 
-fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
+fn print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static>(
     context: &Context<C>,
     doc_context: &Arc<GetDocumentContext<L>>,
     stream_term: &Term,
@@ -1084,7 +1017,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
     Ok(())
 }
 
-fn par_print_documents_by_id<C: QueryableContextType, L: Layer + 'static>(
+fn par_print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static>(
     context: &Context<C>,
     doc_context: &Arc<GetDocumentContext<L>>,
     stream_term: &Term,

@@ -1,9 +1,11 @@
 #[macro_use]
 mod log;
 
+#[macro_use]
+mod dict_lookup;
+
 mod changes;
 mod consts;
-mod dict_lookup;
 mod doc;
 mod embedding;
 mod graphql;
