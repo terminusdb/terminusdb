@@ -7,6 +7,7 @@ use super::iterator::*;
 use super::parse::*;
 
 use crate::consts::RDF_TYPE;
+use crate::graphql::frame::node_variety;
 use crate::graphql::frame::GraphQLName;
 use crate::graphql::frame::{AllFrames, Prefixes};
 use crate::graphql::query::predicate_value_filter;
@@ -108,8 +109,8 @@ pub fn compile_path<'a>(
                 CachedClonableIterator::new(g.triples_s(object).map(|t| t.object))
             })),
             Pred::Named(pred) => {
-                let pred = prefixes.expand_schema(&pred);
-                if let Some(p_id) = g.predicate_id(&pred) {
+                let pred = prefixes.expand_schema(&node_variety(&pred));
+                if let Some(p_id) = g.predicate_id(&pred.as_str()) {
                     ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(g.triples_sp(object, p_id).map(|t| t.object))
                     }))
@@ -123,8 +124,8 @@ pub fn compile_path<'a>(
                 CachedClonableIterator::new(g.triples_o(object).map(|t| t.subject))
             })),
             Pred::Named(pred) => {
-                let pred = prefixes.expand_schema(&pred);
-                if let Some(p_id) = g.predicate_id(&pred) {
+                let pred = prefixes.expand_schema(&node_variety(&pred));
+                if let Some(p_id) = g.predicate_id(&pred.as_str()) {
                     ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(
                             g.triples_o(object)

@@ -25,7 +25,7 @@ use crate::value::{
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
-use super::naming::{ordering_name, path_field_to_class};
+use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
 use super::query::run_filter_query;
 
 pub enum NodeOrValue {
@@ -124,7 +124,7 @@ pub struct TerminusOrderingInfo {
 impl TerminusOrderingInfo {
     fn new(type_name: &GraphQLName, allframes: &Arc<AllFrames>) -> Self {
         Self {
-            ordering_name: ordering_name(&type_name),
+            ordering_name: ordering_name(type_name),
             type_name: type_name.as_static(),
             allframes: allframes.clone(),
         }
@@ -313,7 +313,7 @@ fn ids_from_restriction(
     context: &TerminusContext,
     restriction: &RestrictionDefinition,
 ) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(&context, restriction).map(|mut r| {
+    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
         r.sort();
         r.dedup();
 
@@ -379,13 +379,14 @@ impl GraphQLValue for TerminusTypeCollection {
             "_getDocument" => {
                 let context = executor.context();
                 let document_context = context.document_context();
-                let id: NodeVariety = node_variety(arguments.get("id").unwrap());
+                let id: String = arguments.get("id").unwrap();
+                let id: NodeVariety = node_variety(&id);
                 let expanded_id = context
                     .type_collection
                     .allframes
                     .context
                     .expand_instance(&id);
-                let doc = document_context.get_document(&expanded_id, true, true)?;
+                let doc = document_context.get_document(expanded_id.as_str(), true, true)?;
                 match doc {
                     Some(doc) => {
                         let json_string =
@@ -412,14 +413,13 @@ impl GraphQLValue for TerminusTypeCollection {
                     Some(instance) => run_filter_query(
                         executor.context(),
                         instance,
-                        &info.allframes.context,
                         arguments,
-                        &type_name,
+                        type_name,
                         &info.allframes,
                         zero_iter,
                     )
                     .into_iter()
-                    .map(|id| TerminusType::new(id))
+                    .map(TerminusType::new)
                     .collect(),
                     None => vec![],
                 };
@@ -465,7 +465,7 @@ impl TerminusType {
     }
 
     fn generate_class_type<'r>(
-        class_name: &str,
+        class_name: &GraphQLName,
         d: &ClassDefinition,
         info: &<Self as GraphQLValue>::TypeInfo,
         registry: &mut juniper::Registry<'r, DefaultScalarValue>,
@@ -474,7 +474,6 @@ impl TerminusType {
         DefaultScalarValue: 'r,
     {
         let frames = &info.allframes;
-        let class_name = GraphQLName(class_name.into());
         let mut fields: Vec<_> = d
             .fields()
             .iter()
@@ -482,7 +481,7 @@ impl TerminusType {
                 if let Some(document_type) = field_definition.document_type(frames) {
                     let field = Self::register_field::<TerminusType>(
                         registry,
-                        field_name,
+                        field_name.as_str(),
                         &TerminusTypeInfo {
                             class: document_type.as_static(),
                             allframes: frames.clone(),
@@ -563,12 +562,17 @@ impl TerminusType {
                 } else if let Some(enum_type) = field_definition.enum_type(frames) {
                     Self::register_field::<TerminusEnum>(
                         registry,
-                        field_name,
+                        field_name.as_str(),
                         &(enum_type.as_static(), frames.clone()),
                         field_definition.kind(),
                     )
                 } else {
-                    Self::register_field::<ID>(registry, field_name, &(), field_definition.kind())
+                    Self::register_field::<ID>(
+                        registry,
+                        field_name.as_str(),
+                        &(),
+                        field_definition.kind(),
+                    )
                 }
             })
             .collect();
@@ -588,7 +592,7 @@ impl TerminusType {
                 };
                 let field = Self::register_field::<TerminusType>(
                     registry,
-                    field_name,
+                    field_name.as_str(),
                     &new_info,
                     FieldKind::Set,
                 );
@@ -604,7 +608,7 @@ impl TerminusType {
             if !info.allframes.frames[class].is_document_type() {
                 continue;
             }
-            let field_name = format!("_path_to_{class}");
+            let field_name = path_to_class_name(class);
             let class_definition = info.allframes.frames[class].as_class_definition();
             let new_info = TerminusTypeInfo {
                 class: class.as_static(),
@@ -612,7 +616,7 @@ impl TerminusType {
             };
             let field = Self::register_field::<TerminusType>(
                 registry,
-                &field_name,
+                field_name.as_str(),
                 &new_info,
                 FieldKind::Set,
             );
@@ -625,7 +629,7 @@ impl TerminusType {
 
         let mut applicable_restrictions = Vec::new();
         for restriction in frames.restrictions.values() {
-            if restriction.on == class_name {
+            if restriction.on == *class_name {
                 applicable_restrictions.push(restriction.id.to_owned());
             }
         }
@@ -654,7 +658,7 @@ impl TerminusType {
 
 impl GraphQLType for TerminusType {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.class)
+        Some(&info.class.as_str())
     }
 
     fn meta<'r>(
@@ -713,7 +717,7 @@ impl GraphQLValue for TerminusType {
     type TypeInfo = TerminusTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.class)
+        Some(&info.class.as_str())
     }
 
     fn resolve_field(
@@ -729,12 +733,12 @@ impl GraphQLValue for TerminusType {
             // we should always have had this instance layer at some
             // point. not having it here would be a weird bug.
             let instance = executor.context().instance.as_ref()?;
-            if &*field_name == "_id" {
+            if field_name.as_str() == "_id" {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
                 ))));
             }
-            if &*field_name == "_json" {
+            if field_name.as_str() == "_json" {
                 let document_context = executor.context().document_context();
                 let doc = document_context.get_id_document(self.id, true, true);
                 match doc {
@@ -751,7 +755,7 @@ impl GraphQLValue for TerminusType {
             let allframes = &info.allframes;
             let class = &info.class;
 
-            if &*field_name == "_type" {
+            if field_name.as_str() == "_type" {
                 let ty = instance
                     .predicate_id(RDF_TYPE)
                     .and_then(|pid| instance.single_triple_sp(self.id, pid))
@@ -769,12 +773,15 @@ impl GraphQLValue for TerminusType {
             if let Some(reverse_link) = allframes.reverse_link(class, &field_name) {
                 eprintln!("{:?}", reverse_link);
                 let property = &reverse_link.property;
-                let graphql_domain = &reverse_link.class;
+                let domain = &reverse_link.class;
                 let kind = &reverse_link.kind;
                 // TODO: We need to check that the domain uri is correct
-                let property_expanded = allframes.context.expand_schema(property);
-                let domain_uri = allframes.context.expand_schema(graphql_domain);
-                let field_id = instance.predicate_id(&property_expanded)?;
+                let property_iri: IriName = allframes
+                    .graphql_property_to_iri(class, property)
+                    .unwrap()
+                    .clone();
+                let domain_iri: IriName = allframes.graphql_to_iri_name(domain);
+                let field_id = instance.predicate_id(property_iri.as_str())?;
                 // List and array are special since they are *deep* objects
                 match kind {
                     FieldKind::List => {
@@ -795,13 +802,17 @@ impl GraphQLValue for TerminusType {
                                     .triples_o(o)
                                     .filter(|t| {
                                         t.predicate == field_id
-                                            && subject_has_type(&instance3, t.subject, &domain_uri)
+                                            && subject_has_type(
+                                                &instance3,
+                                                t.subject,
+                                                domain_iri.as_str(),
+                                            )
                                     })
                                     .map(|t| t.subject)
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(&graphql_domain),
+                            Some(domain),
                             None,
                             false,
                             executor,
@@ -828,13 +839,17 @@ impl GraphQLValue for TerminusType {
                                     .triples_o(o)
                                     .filter(|t| {
                                         t.predicate == field_id
-                                            && subject_has_type(&instance3, t.subject, &domain_uri)
+                                            && subject_has_type(
+                                                &instance3,
+                                                t.subject,
+                                                domain_iri.as_str(),
+                                            )
                                     })
                                     .map(|t| t.subject)
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(&graphql_domain),
+                            Some(domain),
                             None,
                             false,
                             executor,
@@ -850,11 +865,11 @@ impl GraphQLValue for TerminusType {
                             .triples_o(self.id)
                             .filter(move |t| {
                                 t.predicate == field_id
-                                    && subject_has_type(&instance1, t.subject, &domain_uri)
+                                    && subject_has_type(&instance1, t.subject, domain_iri.as_str())
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            Some(&graphql_domain),
+                            Some(domain),
                             None,
                             false,
                             executor,
@@ -877,7 +892,7 @@ impl GraphQLValue for TerminusType {
                     ClonableIterator::new(CachedClonableIterator::new(ids)),
                     instance,
                 )
-            } else if &*field_name == "_restriction" {
+            } else if field_name.as_str() == "_restriction" {
                 // fetch argument
                 let restriction_enum_value: GeneratedEnum = arguments.get("name")?;
                 let original_restriction = &allframes
@@ -891,7 +906,7 @@ impl GraphQLValue for TerminusType {
                 match result {
                     Ok(Some(reason)) => Some(Ok(graphql_value!(reason))),
                     Ok(None) => Some(Ok(graphql_value!(None))),
-                    Err(e) => Some(Err(e.into())),
+                    Err(e) => Some(Err(e)),
                 }
             } else {
                 let frame = &allframes.frames[&info.class];
@@ -913,7 +928,7 @@ impl GraphQLValue for TerminusType {
                     }
                     _ => panic!("expected only a class at this level"),
                 }
-                let field_id_opt = instance.predicate_id(&*field_name_expanded);
+                let field_id_opt = instance.predicate_id(field_name_expanded.as_str());
                 if field_id_opt.is_none() {
                     match kind {
                         FieldKind::Array
@@ -1054,7 +1069,7 @@ fn extract_fragment(
 }
 
 pub fn enum_type_and_node_to_iri_name(enum_type: &IriName, enum_uri: &IriName) -> IriName {
-    IriName(enum_node_to_value(enum_type, enum_uri))
+    IriName(enum_node_to_value(enum_type.as_str(), enum_uri.as_str()))
 }
 
 fn extract_enum_fragment(
@@ -1102,13 +1117,13 @@ impl GraphQLValue for GeneratedEnum {
     type TypeInfo = GeneratedEnumTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.name)
+        Some(info.name.as_str())
     }
 }
 
 impl GraphQLType for GeneratedEnum {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.name)
+        Some(info.name.as_str())
     }
 
     fn meta<'r>(
@@ -1153,7 +1168,7 @@ pub struct TerminusEnum {
 
 impl<'a> GraphQLType for TerminusEnum {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.0)
+        Some(&info.0.as_str())
     }
 
     fn meta<'r>(
@@ -1243,7 +1258,6 @@ fn collect_into_graphql_list<'a>(
             Some(instance) => run_filter_query(
                 executor.context(),
                 instance,
-                &info.allframes.context,
                 arguments,
                 doc_type,
                 &info.allframes,
@@ -1318,7 +1332,7 @@ impl FromInputValue for TerminusOrderBy {
 
 impl GraphQLType for TerminusOrderBy {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.ordering_name)
+        Some(&info.ordering_name.as_str())
     }
 
     fn meta<'r>(
@@ -1335,7 +1349,7 @@ impl GraphQLType for TerminusOrderBy {
                 .iter()
                 .filter_map(|(field_name, field_definition)| {
                     if field_definition.base_type().is_some() {
-                        Some(registry.arg::<Option<TerminusOrdering>>(field_name, &()))
+                        Some(registry.arg::<Option<TerminusOrdering>>(field_name.as_str(), &()))
                     } else {
                         None
                     }
@@ -1357,7 +1371,7 @@ impl GraphQLValue for TerminusOrderBy {
     type TypeInfo = TerminusOrderingInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.ordering_name)
+        Some(&info.ordering_name.as_str())
     }
 
     fn resolve_field(

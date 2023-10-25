@@ -1171,6 +1171,16 @@ impl AllFrames {
         self.context.expand_schema(&db_name.into())
     }
 
+    pub fn graphql_property_to_iri<'a>(
+        &'a self,
+        class_name: &GraphQLName<'a>,
+        property_name: &GraphQLName<'a>,
+    ) -> Option<&IriName> {
+        let class_record = self.frames.get(class_name)?;
+        let class_definition = class_record.as_class_definition();
+        Some(class_definition.graphql_to_iri_name(&self.context, property_name))
+    }
+
     pub fn graphql_enum_value_to_iri_name<'a>(
         &self,
         enum_type: &GraphQLName<'a>,

@@ -746,7 +746,7 @@ fn object_type_filter<'a>(
 fn compile_query<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
-    all_frames: &AllFrames,
+    all_frames: &'a AllFrames,
     filter: Rc<FilterObject>,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
@@ -1201,7 +1201,7 @@ fn lookup_by_filter<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
     class_name: &'a GraphQLName<'a>,
-    all_frames: &AllFrames,
+    all_frames: &'a AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<ClonableIterator<'a, u64>>,
     includes_children: bool,
@@ -1225,7 +1225,6 @@ fn lookup_by_filter<'a>(
 pub fn run_filter_query<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
-    prefixes: &'a Prefixes,
     arguments: &'a juniper::Arguments,
     class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
