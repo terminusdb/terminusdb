@@ -20,6 +20,24 @@ pub struct IriName(pub String);
 #[repr(transparent)]
 pub struct ShortName(pub String);
 
+impl<'a> PartialOrd<str> for GraphQLName<'a> {
+    fn partial_cmp(&self, other: &str) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.into())
+    }
+}
+
+impl<'a> PartialEq<str> for GraphQLName<'a> {
+    fn eq(&self, other: &str) -> bool {
+        self.0.eq(other)
+    }
+}
+
+impl<'a> std::borrow::Borrow<str> for GraphQLName<'a> {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl ShortName {
     pub fn as_str(&self) -> &str {
         &self.0
@@ -1012,14 +1030,14 @@ pub struct UncleanAllFrames {
 }
 
 #[derive(Debug)]
-pub struct AllFrames<'a> {
+pub struct AllFrames {
     pub context: Prefixes,
-    pub frames: BTreeMap<GraphQLName<'a>, TypeDefinition<'a>>,
-    pub class_renaming: BiMap<GraphQLName<'a>, ShortName>,
-    pub graphql_to_iri_renaming: BiMap<GraphQLName<'a>, IriName>,
-    pub inverted: AllInvertedFrames<'a>,
-    pub subsumption: HashMap<GraphQLName<'a>, Vec<GraphQLName<'a>>>,
-    pub restrictions: BTreeMap<GraphQLName<'a>, RestrictionDefinition<'a>>,
+    pub frames: BTreeMap<GraphQLName<'static>, TypeDefinition<'static>>,
+    pub class_renaming: BiMap<GraphQLName<'static>, ShortName>,
+    pub graphql_to_iri_renaming: BiMap<GraphQLName<'static>, IriName>,
+    pub inverted: AllInvertedFrames<'static>,
+    pub subsumption: HashMap<GraphQLName<'static>, Vec<GraphQLName<'static>>>,
+    pub restrictions: BTreeMap<GraphQLName<'static>, RestrictionDefinition<'static>>,
 }
 
 impl UncleanAllFrames {
@@ -1090,7 +1108,7 @@ impl UncleanAllFrames {
         )
     }
 
-    pub fn finalize(mut self) -> AllFrames<'static> {
+    pub fn finalize(mut self) -> AllFrames {
         let (frames, restrictions, graphql_to_iri_renaming, class_renaming, context) =
             self.sanitize();
         let inverted = allframes_to_allinvertedframes(&frames);
@@ -1108,7 +1126,7 @@ impl UncleanAllFrames {
     }
 }
 
-impl AllFrames<'_> {
+impl AllFrames {
     pub fn document_type<'a>(&self, s: &'a GraphQLName<'a>) -> Option<&'a GraphQLName<'a>> {
         if self.frames.contains_key(s) && self.frames[s].is_document_type() {
             Some(s)

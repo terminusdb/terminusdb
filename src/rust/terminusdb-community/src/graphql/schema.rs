@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -24,6 +25,7 @@ use crate::value::{
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
+use super::naming::{ordering_name, path_field_to_class};
 use super::query::run_filter_query;
 
 pub enum NodeOrValue {
@@ -58,7 +60,7 @@ pub struct TerminusContext<'a> {
     pub system_info: SystemInfo,
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
-    pub type_collection: TerminusTypeCollectionInfo<'a>,
+    pub type_collection: TerminusTypeCollectionInfo,
     pub document_context: Arc<Lazy<GetDocumentContext<SyncStoreLayer>>>,
 }
 
@@ -121,17 +123,17 @@ impl<'a> TerminusContext<'a> {
 
 pub struct TerminusTypeCollection;
 
-pub struct TerminusOrderingInfo<'a> {
-    ordering_name: String,
-    type_name: String,
-    allframes: Arc<AllFrames<'a>>,
+pub struct TerminusOrderingInfo {
+    ordering_name: GraphQLName<'static>,
+    type_name: GraphQLName<'static>,
+    allframes: Arc<AllFrames>,
 }
 
-impl<'a> TerminusOrderingInfo<'a> {
-    fn new(type_name: &str, allframes: &Arc<AllFrames>) -> Self {
+impl TerminusOrderingInfo {
+    fn new(type_name: GraphQLName<'static>, allframes: &Arc<AllFrames>) -> Self {
         Self {
-            ordering_name: format!("{}_Ordering", type_name),
-            type_name: type_name.to_string(),
+            ordering_name: ordering_name(&type_name),
+            type_name,
             allframes: allframes.clone(),
         }
     }
@@ -158,14 +160,14 @@ fn add_arguments<'r>(
     );
     field = field.argument(registry.arg::<Option<FilterInputObject>>(
         "filter",
-        &FilterInputObjectTypeInfo::new(&info.class, &info.allframes),
+        &FilterInputObjectTypeInfo::new(info.class.to_owned(), &info.allframes),
     ));
     if must_generate_ordering(class_definition) {
         field = field.argument(
             registry
                 .arg::<Option<TerminusOrderBy>>(
                     "orderBy",
-                    &TerminusOrderingInfo::new(&info.class, &info.allframes),
+                    &TerminusOrderingInfo::new(info.class, &info.allframes),
                 )
                 .description("order by the given fields"),
         );
@@ -275,8 +277,8 @@ fn standard_type_operators<'r>(
 
 #[derive(Clone)]
 #[clone_blob("terminus_type_collection_info", defaults)]
-pub struct TerminusTypeCollectionInfo<'a> {
-    pub allframes: Arc<AllFrames<'a>>,
+pub struct TerminusTypeCollectionInfo {
+    pub allframes: Arc<AllFrames>,
 }
 
 pub fn result_to_execution_result<C: QueryableContextType, T>(
@@ -367,7 +369,7 @@ pub fn id_matches_restriction(
 impl GraphQLValue for TerminusTypeCollection {
     type Context = TerminusContext<'static>;
 
-    type TypeInfo = TerminusTypeCollectionInfo<'static>;
+    type TypeInfo = TerminusTypeCollectionInfo;
 
     fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some("TerminusTypeCollection")
@@ -442,9 +444,9 @@ impl GraphQLValue for TerminusTypeCollection {
     }
 }
 
-pub struct TerminusTypeInfo<'a> {
-    class: GraphQLName<'a>,
-    allframes: Arc<AllFrames<'a>>,
+pub struct TerminusTypeInfo {
+    class: GraphQLName<'static>,
+    allframes: Arc<AllFrames>,
 }
 
 pub struct TerminusType {
@@ -716,7 +718,7 @@ fn subject_has_type(instance: &dyn Layer, subject_id: u64, class: &str) -> bool 
 impl GraphQLValue for TerminusType {
     type Context = TerminusContext<'static>;
 
-    type TypeInfo = TerminusTypeInfo<'static>;
+    type TypeInfo = TerminusTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some(&info.class)
@@ -869,12 +871,10 @@ impl GraphQLValue for TerminusType {
                         )
                     }
                 }
-            } else if is_path_field_name(&field_name) {
-                const PREFIX_LEN: usize = "_path_to_".len();
-                let class = &field_name[PREFIX_LEN..];
+            } else if let Some(class) = path_field_to_class(&field_name) {
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
-                    Some(class),
+                    Some(&class),
                     None,
                     false,
                     executor,
@@ -1096,27 +1096,27 @@ fn is_path_field_name(field_name: &str) -> bool {
 }
 
 /// An enum type that is generated dynamically
-pub struct GeneratedEnumTypeInfo<'a> {
-    pub name: GraphQLName<'a>,
-    pub values: Vec<GraphQLName<'a>>,
+pub struct GeneratedEnumTypeInfo {
+    pub name: GraphQLName<'static>,
+    pub values: Vec<GraphQLName<'static>>,
 }
 
 /// An enum value that is generated dynamically
-pub struct GeneratedEnum<'a> {
-    pub value: GraphQLName<'a>,
+pub struct GeneratedEnum {
+    pub value: GraphQLName<'static>,
 }
 
-impl<'a> GraphQLValue for GeneratedEnum<'a> {
+impl GraphQLValue for GeneratedEnum {
     type Context = ();
 
-    type TypeInfo = GeneratedEnumTypeInfo<'a>;
+    type TypeInfo = GeneratedEnumTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some(&info.name)
     }
 }
 
-impl<'a> GraphQLType for GeneratedEnum<'a> {
+impl GraphQLType for GeneratedEnum {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some(&info.name)
     }
@@ -1143,25 +1143,25 @@ impl<'a> GraphQLType for GeneratedEnum<'a> {
     }
 }
 
-impl FromInputValue for GeneratedEnum<'_> {
+impl FromInputValue for GeneratedEnum {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         match v {
             InputValue::Enum(value) => Some(Self {
-                value: GraphQLName(value.into()),
+                value: GraphQLName(Cow::Owned(value.into())),
             }),
             InputValue::Scalar(DefaultScalarValue::String(value)) => Some(Self {
-                value: GraphQLName(value.into()),
+                value: GraphQLName(Cow::Owned(value.into())),
             }),
             _ => None,
         }
     }
 }
 
-pub struct TerminusEnum<'a> {
-    pub value: GraphQLName<'a>,
+pub struct TerminusEnum {
+    pub value: GraphQLName<'static>,
 }
 
-impl<'a> GraphQLType for TerminusEnum<'a> {
+impl<'a> GraphQLType for TerminusEnum {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some(&info.0)
     }
@@ -1195,7 +1195,7 @@ impl<'a> GraphQLType for TerminusEnum<'a> {
     }
 }
 
-impl FromInputValue for TerminusEnum<'_> {
+impl FromInputValue for TerminusEnum {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         match v {
             InputValue::Enum(value) => Some(Self {
@@ -1209,10 +1209,10 @@ impl FromInputValue for TerminusEnum<'_> {
     }
 }
 
-impl<'a> GraphQLValue for TerminusEnum<'a> {
+impl GraphQLValue for TerminusEnum {
     type Context = ();
 
-    type TypeInfo = (GraphQLName<'a>, Arc<AllFrames<'a>>);
+    type TypeInfo = (GraphQLName<'static>, Arc<AllFrames>);
 
     fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some("TerminusEnum")

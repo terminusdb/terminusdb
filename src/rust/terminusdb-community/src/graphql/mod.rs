@@ -19,6 +19,7 @@ mod filter;
 pub mod frame;
 mod main_graph;
 mod mutation;
+mod naming;
 pub mod query;
 mod sanitize;
 pub mod schema;

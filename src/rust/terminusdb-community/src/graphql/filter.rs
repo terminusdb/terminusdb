@@ -9,6 +9,7 @@ use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
     frame::{AllFrames, BaseOrDerived, GraphQLName, TypeDefinition},
+    naming::{collection_filter_name, enum_filter_name, filter_name, restriction_name},
     query::EnumOperation,
     schema::{BigFloat, BigInt, DateTime, GeneratedEnum, GeneratedEnumTypeInfo, TerminusEnum},
 };
@@ -17,16 +18,16 @@ pub struct FilterInputObject {
     pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 }
 
-pub struct FilterInputObjectTypeInfo<'a> {
-    filter_type_name: GraphQLName<'a>,
-    type_name: GraphQLName<'a>,
-    frames: Arc<AllFrames<'a>>,
+pub struct FilterInputObjectTypeInfo {
+    filter_type_name: GraphQLName<'static>,
+    type_name: GraphQLName<'static>,
+    frames: Arc<AllFrames>,
 }
 
-impl<'a> FilterInputObjectTypeInfo<'a> {
-    pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
+impl FilterInputObjectTypeInfo {
+    pub fn new(type_name: GraphQLName<'static>, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: GraphQLName(format!("{type_name}_Filter").into()),
+            filter_type_name: filter_name(&type_name),
             type_name: type_name.clone(),
             frames: all_frames.clone(),
         }
@@ -103,7 +104,7 @@ impl GraphQLType for FilterInputObject {
                                         registry.arg::<Option<CollectionFilterInputObject>>(
                                             name,
                                             &CollectionFilterInputObjectTypeInfo::new(
-                                                c,
+                                                c.to_owned(),
                                                 &info.frames,
                                             ),
                                         )
@@ -151,7 +152,10 @@ impl GraphQLType for FilterInputObject {
                                     } else {
                                         registry.arg::<Option<FilterInputObject>>(
                                             name,
-                                            &FilterInputObjectTypeInfo::new(c, &info.frames),
+                                            &FilterInputObjectTypeInfo::new(
+                                                c.to_owned(),
+                                                &info.frames,
+                                            ),
                                         )
                                     }
                                 }
@@ -169,7 +173,7 @@ impl GraphQLType for FilterInputObject {
             }
 
             if !applicable_restrictions.is_empty() {
-                let enum_name = format!("{}_Restriction", info.type_name);
+                let enum_name = restriction_name(&info.type_name);
                 let type_info = GeneratedEnumTypeInfo {
                     name: enum_name,
                     values: applicable_restrictions,
@@ -183,17 +187,17 @@ impl GraphQLType for FilterInputObject {
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",
-                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                &FilterInputObjectTypeInfo::new(info.type_name.clone(), &info.frames),
             ));
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_or",
-                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                &FilterInputObjectTypeInfo::new(info.type_name.clone(), &info.frames),
             ));
 
             args.push(registry.arg::<Option<FilterInputObject>>(
                 "_not",
-                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                &FilterInputObjectTypeInfo::new(info.type_name.clone(), &info.frames),
             ));
 
             registry
@@ -217,7 +221,7 @@ impl FromInputValue for FilterInputObject {
 impl GraphQLValue for FilterInputObject {
     type Context = ();
 
-    type TypeInfo = FilterInputObjectTypeInfo<'static>;
+    type TypeInfo = FilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some(&info.filter_type_name)
@@ -228,17 +232,17 @@ pub struct CollectionFilterInputObject {
     pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 }
 
-pub struct CollectionFilterInputObjectTypeInfo<'a> {
-    filter_type_name: GraphQLName<'a>,
-    type_name: GraphQLName<'a>,
-    frames: Arc<AllFrames<'a>>,
+pub struct CollectionFilterInputObjectTypeInfo {
+    filter_type_name: GraphQLName<'static>,
+    type_name: GraphQLName<'static>,
+    frames: Arc<AllFrames>,
 }
 
-impl CollectionFilterInputObjectTypeInfo<'_> {
-    pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
+impl CollectionFilterInputObjectTypeInfo {
+    pub fn new(type_name: GraphQLName<'static>, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: GraphQLName(format!("{type_name}_Collection_Filter").into()),
-            type_name: type_name.clone(),
+            filter_type_name: collection_filter_name(&type_name),
+            type_name,
             frames: all_frames.clone(),
         }
     }
@@ -262,11 +266,11 @@ impl GraphQLType for CollectionFilterInputObject {
             TypeDefinition::Class(_) => {
                 args.push(registry.arg::<Option<FilterInputObject>>(
                     "someHave",
-                    &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                    &FilterInputObjectTypeInfo::new(info.type_name, &info.frames),
                 ));
                 args.push(registry.arg::<Option<FilterInputObject>>(
                     "allHave",
-                    &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                    &FilterInputObjectTypeInfo::new(info.type_name, &info.frames),
                 ));
                 registry
                     .build_input_object_type::<CollectionFilterInputObject>(info, &args)
@@ -314,16 +318,16 @@ pub struct EnumFilterInputObject {
 }
 
 pub struct EnumFilterInputObjectTypeInfo {
-    filter_type_name: String,
-    type_name: String,
+    filter_type_name: GraphQLName<'static>,
+    type_name: GraphQLName<'static>,
     frames: Arc<AllFrames>,
 }
 
 impl EnumFilterInputObjectTypeInfo {
-    pub fn new(type_name: &str, all_frames: &Arc<AllFrames>) -> Self {
+    pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: format!("{type_name}_Enum_Filter"),
-            type_name: type_name.to_string(),
+            filter_type_name: enum_filter_name(type_name),
+            type_name: type_name.clone(),
             frames: all_frames.clone(),
         }
     }

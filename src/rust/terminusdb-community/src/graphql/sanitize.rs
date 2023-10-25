@@ -20,7 +20,7 @@ pub fn graphql_sanitize(string: &str) -> GraphQLName {
     let re = Regex::new("^[^_a-zA-Z]|[^[_a-zA-Z0-9]]").unwrap();
     let nobadchars = re.replace_all(&new_string, "_");
     let re = Regex::new("^_+").unwrap();
-    GraphQLName(re.replace_all(&nobadchars, "_").to_string())
+    GraphQLName(re.replace_all(&nobadchars, "_").into())
 }
 
 #[cfg(test)]
@@ -28,9 +28,18 @@ mod tests {
     use super::*;
     #[test]
     fn graphql_sanitize_check() {
-        assert_eq!(graphql_sanitize("Document-TF-IDF"), "Document_TF_IDF");
-        assert_eq!(graphql_sanitize("doc:Document"), "doc_Document");
-        assert_eq!(graphql_sanitize("SørenLorenson"), "SorenLorenson");
-        assert_eq!(graphql_sanitize("ÖBB"), "OEBB");
+        assert_eq!(
+            graphql_sanitize("Document-TF-IDF"),
+            GraphQLName("Document_TF_IDF".into())
+        );
+        assert_eq!(
+            graphql_sanitize("doc:Document"),
+            GraphQLName("doc_Document".into())
+        );
+        assert_eq!(
+            graphql_sanitize("SørenLorenson"),
+            GraphQLName("SorenLorenson".into())
+        );
+        assert_eq!(graphql_sanitize("ÖBB"), GraphQLName("OEBB".into()));
     }
 }
