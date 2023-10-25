@@ -409,7 +409,7 @@ impl GraphQLValue for TerminusTypeCollection {
                         zero_iter,
                     )
                     .into_iter()
-                    .map(|id| TerminusType::new(id))
+                    .map(TerminusType::new)
                     .collect(),
                     None => vec![],
                 };
