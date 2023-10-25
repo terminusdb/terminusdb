@@ -1420,13 +1420,13 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                             (
                                 ShortName("a".to_string()),
                                 UncleanFieldDefinition::Required(BaseOrDerived::Base(
-                                    "xsd:string".to_string()
+                                    "string".to_string()
                                 ))
                             ),
                             (
                                 ShortName("b".to_string()),
                                 UncleanFieldDefinition::Required(BaseOrDerived::Base(
-                                    "xsd:integer".to_string()
+                                    "integer".to_string()
                                 ))
                             )
                         ])
@@ -1436,13 +1436,13 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                             (
                                 ShortName("c".to_string()),
                                 UncleanFieldDefinition::Required(BaseOrDerived::Base(
-                                    "xsd:string".to_string()
+                                    "string".to_string()
                                 ))
                             ),
                             (
                                 ShortName("d".to_string()),
                                 UncleanFieldDefinition::Required(BaseOrDerived::Base(
-                                    "xsd:integer".to_string()
+                                    "integer".to_string()
                                 ))
                             )
                         ])
