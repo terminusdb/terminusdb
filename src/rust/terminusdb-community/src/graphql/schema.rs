@@ -658,7 +658,7 @@ impl TerminusType {
 
 impl GraphQLType for TerminusType {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.class.as_str())
+        Some(info.class.as_str())
     }
 
     fn meta<'r>(
@@ -717,7 +717,7 @@ impl GraphQLValue for TerminusType {
     type TypeInfo = TerminusTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.class.as_str())
+        Some(info.class.as_str())
     }
 
     fn resolve_field(
@@ -1163,9 +1163,9 @@ pub struct TerminusEnum {
     pub value: GraphQLName<'static>,
 }
 
-impl<'a> GraphQLType for TerminusEnum {
+impl GraphQLType for TerminusEnum {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.0.as_str())
+        Some(info.0.as_str())
     }
 
     fn meta<'r>(
@@ -1329,7 +1329,7 @@ impl FromInputValue for TerminusOrderBy {
 
 impl GraphQLType for TerminusOrderBy {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.ordering_name.as_str())
+        Some(info.ordering_name.as_str())
     }
 
     fn meta<'r>(

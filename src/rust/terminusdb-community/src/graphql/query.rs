@@ -522,7 +522,7 @@ where
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
             NodeOrValue::Value(entry) => g.object_value_id(&entry),
-            NodeOrValue::Node(node) => g.object_node_id(&node.as_str()),
+            NodeOrValue::Node(node) => g.object_node_id(node.as_str()),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -758,7 +758,7 @@ fn compile_query<'a>(
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
-            id_matches_restriction(context, &restriction_name, *id)
+            id_matches_restriction(context, restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -832,7 +832,7 @@ fn compile_query<'a>(
                 }
             }
             FilterScope::Collection(kind, op, o) => {
-                let kind = kind.clone();
+                let kind = *kind;
                 let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
@@ -1022,7 +1022,7 @@ fn generate_iterator_from_filter<'a>(
                 .subsumed(class_name)
                 .into_iter()
                 .map(|c| all_frames.graphql_to_iri_name(&c))
-                .flat_map(|id| g.subject_id(&id.as_str()))
+                .flat_map(|id| g.subject_id(id.as_str()))
                 .collect();
             let rdf_type_id = g.predicate_id(RDF_TYPE)?;
             Some(ClonableIterator::new(iter.filter(move |id| {
