@@ -776,10 +776,12 @@ impl GraphQLValue for TerminusType {
                 let domain = &reverse_link.class;
                 let kind = &reverse_link.kind;
                 // TODO: We need to check that the domain uri is correct
+                eprintln!("class: {class}");
                 let property_iri: IriName = allframes
-                    .graphql_property_to_iri(class, property)
+                    .graphql_property_to_iri(domain, property)
                     .unwrap()
                     .clone();
+                eprintln!("property_iri: {property_iri}");
                 let domain_iri: IriName = allframes.graphql_to_iri_name(domain);
                 let field_id = instance.predicate_id(property_iri.as_str())?;
                 // List and array are special since they are *deep* objects

@@ -1306,7 +1306,9 @@ pub fn run_filter_query<'a>(
             )
             .unique()
             .collect();
-            results.sort_by_cached_key(|id| create_query_order_key(g, all_frames, *id, &fields));
+            results.sort_by_cached_key(|id| {
+                create_query_order_key(g, all_frames, class_name, *id, &fields)
+            });
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
             // better to borrow in the other branch?
             ClonableIterator::new(
@@ -1343,17 +1345,16 @@ fn include_children(arguments: &juniper::Arguments) -> bool {
 fn create_query_order_key(
     g: &SyncStoreLayer,
     all_frames: &AllFrames,
+    class: &GraphQLName,
     id: u64,
     order_desc: &[(GraphQLName, TerminusOrdering)],
 ) -> QueryOrderKey {
     let vec: Vec<_> = order_desc
         .iter()
         .filter_map(|(property, ordering)| {
-            let property_short_name = all_frames.graphql_to_short_name(property);
-            let predicate = all_frames
-                .context
-                .expand_schema(&property_short_name.into());
-            let predicate_id = g.predicate_id(&predicate.as_str())?;
+            let predicate = all_frames.graphql_property_to_iri(class, property)?;
+            eprintln!("predicate {predicate}");
+            let predicate_id = g.predicate_id(predicate.as_str())?;
             let res = g.single_triple_sp(id, predicate_id).map(move |t| {
                 g.id_object(t.object)
                     .expect("This object must exist")
