@@ -54,6 +54,7 @@ generate_lookup_type! {
         json: node SYS_JSON,
         json_document: node SYS_JSON_DOCUMENT,
         foreign_type_predicate: pred SYS_FOREIGN_TYPE_PREDICATE_ID,
+        tdb_context: node TDB_CONTEXT,
     }
 }
 

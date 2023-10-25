@@ -6,23 +6,27 @@ use std::collections::{HashMap, HashSet};
 use super::consts::*;
 use super::prefix::*;
 
-pub struct SchemaQueryContext<'a, L: Layer> {
+pub struct SchemaQueryContext<'a, L: Layer + Clone> {
     layer: &'a L,
+    rdf: &'a RdfIds<L>,
+    sys: &'a SysIds<L>,
     inheritance_graph: Lazy<InheritanceGraph>,
     reverse_inheritance_graph: Lazy<ReverseInheritanceGraph>,
 }
 
-impl<'a, L: Layer> SchemaQueryContext<'a, L> {
-    pub fn new(layer: &'a L) -> Self {
+impl<'a, L: Layer + Clone> SchemaQueryContext<'a, L> {
+    pub fn new(layer: &'a L, rdf: &'a RdfIds<L>, sys: &'a SysIds<L>) -> Self {
         Self {
             layer,
+            rdf,
+            sys,
             inheritance_graph: Lazy::new(),
             reverse_inheritance_graph: Lazy::new(),
         }
     }
 
     fn get_inheritance_graph_(&self) -> InheritanceGraph {
-        if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
+        if let Some(inherits_id) = self.sys.inherits() {
             let mut result = HashMap::new();
             for triple in self.layer.triples_p(inherits_id) {
                 let entry = result.entry(triple.subject).or_insert_with(HashSet::new);
@@ -41,7 +45,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
     }
 
     fn get_reverse_inheritance_graph_(&self) -> ReverseInheritanceGraph {
-        if let Some(inherits_id) = self.layer.predicate_id(SYS_INHERITS) {
+        if let Some(inherits_id) = self.sys.inherits() {
             let mut result = HashMap::new();
             for triple in self.layer.triples_p(inherits_id) {
                 let entry = result.entry(triple.object).or_insert_with(HashSet::new);
@@ -62,7 +66,8 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
     fn get_subdocument_ids_from_schema(&self) -> HashSet<u64> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
-        let mut work: Vec<_> = get_direct_subdocument_ids_from_schema(self.layer).collect();
+        let mut work: Vec<_> =
+            get_direct_subdocument_ids_from_schema(self.layer, self.sys).collect();
         while let Some(cur) = work.pop() {
             if !result.insert(cur) {
                 // we already found this type.
@@ -80,7 +85,8 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
     pub fn get_unfoldable_ids_from_schema(&self) -> HashSet<u64> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
-        let mut work: Vec<_> = get_direct_unfoldable_ids_from_schema(self.layer).collect();
+        let mut work: Vec<_> =
+            get_direct_unfoldable_ids_from_schema(self.layer, self.sys).collect();
         while let Some(cur) = work.pop() {
             if !result.insert(cur) {
                 // we already found this type.
@@ -96,13 +102,13 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
     }
 
     pub fn get_set_pairs_from_schema(&'_ self) -> impl Iterator<Item = (u64, u64)> + '_ {
-        let sys_set_id = self.layer.object_node_id(SYS_SET);
+        let sys_set_id = self.sys.set();
         if sys_set_id.is_none() {
             return itertools::Either::Left(std::iter::empty());
         }
         let sys_set_id = sys_set_id.unwrap();
 
-        let rdf_type_id = self.layer.predicate_id(RDF_TYPE);
+        let rdf_type_id = self.rdf.type_();
         if rdf_type_id.is_none() {
             return itertools::Either::Left(std::iter::empty());
         }
@@ -145,11 +151,11 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
 
     pub fn get_enum_ids_from_schema(&self) -> HashSet<u64> {
         let mut result = HashSet::new();
-        let sys_enum_id = self.layer.object_node_id(SYS_ENUM);
-        let rdf_type_id = self.layer.predicate_id(RDF_TYPE);
-        let rdf_first_id = self.layer.predicate_id(RDF_FIRST);
-        let rdf_rest_id = self.layer.predicate_id(RDF_REST);
-        let rdf_nil_id = self.layer.object_node_id(RDF_NIL);
+        let sys_enum_id = self.sys.enum_();
+        let rdf_type_id = self.rdf.type_();
+        let rdf_first_id = self.rdf.first();
+        let rdf_rest_id = self.rdf.rest();
+        let rdf_nil_id = self.rdf.nil();
 
         if sys_enum_id.is_none() || rdf_type_id.is_none() {
             return result;
@@ -161,7 +167,7 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
             if t.predicate == rdf_type_id {
                 // we found an enum type!
                 // it is going to have a value field pointing at a list of possible enum values
-                let sys_value_id = self.layer.predicate_id(SYS_VALUE).unwrap();
+                let sys_value_id = self.sys.value().unwrap();
                 let value_list_id = self
                     .layer
                     .single_triple_sp(t.subject, sys_value_id)
@@ -182,16 +188,16 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
     }
 
     pub fn get_type_ids_from_schema(&self) -> impl Iterator<Item = u64> {
-        let type_id_opt = self.layer.predicate_id(RDF_TYPE);
+        let type_id_opt = self.rdf.type_();
         if type_id_opt.is_none() {
             // no rdf:type? then there cannot be any type definitions.
             return itertools::Either::Left(std::iter::empty());
         }
 
         let type_id = type_id_opt.unwrap();
-        let class_id = self.layer.object_node_id(SYS_CLASS);
-        let tagged_union_id = self.layer.object_node_id(SYS_TAGGED_UNION);
-        let foreign_id = self.layer.object_node_id(SYS_FOREIGN);
+        let class_id = self.sys.class();
+        let tagged_union_id = self.sys.tagged_union();
+        let foreign_id = self.sys.foreign();
 
         itertools::Either::Right(
             self.layer
@@ -257,16 +263,22 @@ impl<'a, L: Layer> SchemaQueryContext<'a, L> {
     }
 }
 
-fn get_direct_subdocument_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64> {
-    if let Some(subdocument_id) = layer.predicate_id(SYS_SUBDOCUMENT) {
+fn get_direct_subdocument_ids_from_schema<L: Layer + Clone>(
+    layer: &L,
+    sys: &SysIds<L>,
+) -> impl Iterator<Item = u64> {
+    if let Some(subdocument_id) = sys.subdocument() {
         itertools::Either::Left(layer.triples_p(subdocument_id).map(|t| t.subject))
     } else {
         itertools::Either::Right(std::iter::empty())
     }
 }
 
-fn get_direct_unfoldable_ids_from_schema<L: Layer>(layer: &L) -> impl Iterator<Item = u64> {
-    if let Some(unfoldable_id) = layer.predicate_id(SYS_UNFOLDABLE) {
+fn get_direct_unfoldable_ids_from_schema<L: Layer + Clone>(
+    layer: &L,
+    sys: &SysIds<L>,
+) -> impl Iterator<Item = u64> {
+    if let Some(unfoldable_id) = sys.unfoldable() {
         itertools::Either::Left(layer.triples_p(unfoldable_id).map(|t| t.subject))
     } else {
         itertools::Either::Right(std::iter::empty())
@@ -329,13 +341,16 @@ impl std::ops::Deref for ReverseInheritanceGraph {
     }
 }
 
-pub fn prefix_contracter_from_schema_layer<L: Layer>(schema: &L) -> PrefixContracter {
-    let context_id = schema.subject_id(TDB_CONTEXT);
-    let base_id = schema.predicate_id(SYS_BASE);
-    let schema_id = schema.predicate_id(SYS_SCHEMA);
-    let prefix_pair_id = schema.predicate_id(SYS_PREFIX_PAIR);
-    let prefix_id = schema.predicate_id(SYS_PREFIX);
-    let url_id = schema.predicate_id(SYS_URL);
+pub fn prefix_contracter_from_schema_layer<L: Layer + Clone>(
+    schema: &L,
+    sys: &SysIds<L>,
+) -> PrefixContracter {
+    let context_id = sys.tdb_context();
+    let base_id = sys.base();
+    let schema_id = sys.schema();
+    let prefix_pair_id = sys.prefix_pair();
+    let prefix_id = sys.prefix();
+    let url_id = sys.url();
 
     let mut prefixes: Vec<Prefix> = Vec::new();
 

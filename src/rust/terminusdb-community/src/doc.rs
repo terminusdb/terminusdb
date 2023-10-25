@@ -36,11 +36,14 @@ pub struct GetDocumentContext<L: Layer + Clone> {
 
     rdf: Arc<RdfIds<L>>,
     sys: Arc<SysIds<L>>,
+    schema_sys: Arc<SysIds<L>>,
 }
 
 impl<L: Layer + Clone> GetDocumentContext<L> {
     pub fn new(schema: L, instance: Option<L>) -> GetDocumentContext<L> {
-        let schema_query_context = SchemaQueryContext::new(&schema);
+        let schema_rdf = RdfIds::new(Some(schema.clone()));
+        let schema_sys = Arc::new(SysIds::new(Some(schema.clone())));
+        let schema_query_context = SchemaQueryContext::new(&schema, &schema_rdf, &schema_sys);
 
         let types: HashSet<u64>;
         let mut subtypes: HashMap<String, HashSet<u64>>;
@@ -143,6 +146,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
 
             rdf,
             sys,
+            schema_sys,
         }
     }
 
@@ -163,6 +167,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
 
             rdf: Arc::new(RdfIds::new(instance.clone())),
             sys: Arc::new(SysIds::new(instance)),
+            schema_sys: Arc::new(SysIds::new(None)),
         }
     }
 
@@ -173,7 +178,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
     fn prefixes(&self, compress: bool) -> &PrefixContracter {
         if compress {
             self.prefixes.get_or_create(|| match self.schema.as_ref() {
-                Some(schema) => prefix_contracter_from_schema_layer(schema),
+                Some(schema) => prefix_contracter_from_schema_layer(schema, &self.schema_sys),
                 None => PrefixContracter::default(),
             })
         } else {
