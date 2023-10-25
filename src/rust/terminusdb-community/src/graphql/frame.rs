@@ -899,9 +899,11 @@ impl PreAllFrames {
         )
     }
 
-    pub fn calculate_subsumption(&mut self) -> HashMap<String, Vec<String>> {
+    fn calculate_subsumption(
+        frames: &BTreeMap<String, TypeDefinition>,
+    ) -> HashMap<String, Vec<String>> {
         let mut subsumption_rel: HashMap<String, Vec<String>> = HashMap::new();
-        for (class, typedef) in &self.frames {
+        for (class, typedef) in frames {
             if typedef.is_document_type() {
                 let mut supers = typedef
                     .as_class_definition()
@@ -923,11 +925,11 @@ impl PreAllFrames {
         subsumption_rel
     }
 
-    pub fn finalize(mut self) -> AllFrames {
+    pub fn finalize(self) -> AllFrames {
         let inverted = allframes_to_allinvertedframes(&self);
-        let subsumption = self.calculate_subsumption();
         let (frames, restrictions, graphql_to_iri_renaming, class_renaming, context) =
             self.sanitize();
+        let subsumption = PreAllFrames::calculate_subsumption(&frames);
 
         AllFrames {
             context,
