@@ -1353,7 +1353,6 @@ fn create_query_order_key(
         .iter()
         .filter_map(|(property, ordering)| {
             let predicate = all_frames.graphql_property_to_iri(class, property)?;
-            eprintln!("predicate {predicate}");
             let predicate_id = g.predicate_id(predicate.as_str())?;
             let res = g.single_triple_sp(id, predicate_id).map(move |t| {
                 g.id_object(t.object)

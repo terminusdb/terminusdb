@@ -36,7 +36,7 @@ impl FilterInputObjectTypeInfo {
 
 impl GraphQLType for FilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -56,7 +56,6 @@ impl GraphQLType for FilterInputObject {
                         if kind.is_collection() {
                             match field_definition.range() {
                                 BaseOrDerived::Base(base_type) => {
-                                    eprintln!("{base_type}");
                                     let kind = base_type_kind(base_type);
                                     match kind {
                                         BaseTypeKind::String => registry.arg::<Option<
