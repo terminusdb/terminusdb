@@ -2300,8 +2300,8 @@ type_descriptor_json(enum(C,_),Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(cardinality(C,Min,Max), Prefixes, json{ '@type' : Card,
                                                              '@class' : Class_Comp,
-                                                             '@min' : Min,
-                                                             '@max' : Max
+                                                             '@min_cardinality' : Min,
+                                                             '@max_cardinality' : Max
                                                            }, Options) :-
     expand_system_uri(sys:'Cardinality', Card, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
@@ -12486,6 +12486,31 @@ test(fail_card_max_over,
                                           _Id)
                          ).
 
+test(check_min_max_field,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema_cardinality,Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+
+    get_schema_document(Desc, 'Max', Max),
+    Max = json{ '@id':'Max',
+				'@type':'Class',
+				a:json{ '@class':'xsd:integer',
+						'@max_cardinality':1,
+						'@min_cardinality':0,
+						'@type':'Cardinality'
+					  }
+			  },
+    get_schema_document(Desc, 'Min', Min),
+    Min = json{ '@id':'Min',
+			    '@type':'Class',
+				a:json{ '@class':'xsd:integer',
+						'@max_cardinality':inf,
+						'@min_cardinality':1,
+						'@type':'Cardinality'
+					  }
+			  }.
 
 :- end_tests(json_cardinality).
 
