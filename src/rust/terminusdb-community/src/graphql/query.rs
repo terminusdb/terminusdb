@@ -379,7 +379,7 @@ fn compile_edges_to_filter(
     let mut ids = Vec::new();
     for (spanning_string, spanning_input_value) in edges.iter() {
         let field_name = GraphQLName(spanning_string.item.to_string().into());
-        if &*field_name == "_and" {
+        if field_name.as_str() == "_and" {
             let input_value = &spanning_input_value.item;
             match input_value {
                 InputValue::List(lst) => {
@@ -402,7 +402,7 @@ fn compile_edges_to_filter(
                 }
                 _ => panic!("Invalid operand to and "),
             }
-        } else if &*field_name == "_or" {
+        } else if field_name.as_str() == "_or" {
             let input_value = &spanning_input_value.item;
             match input_value {
                 InputValue::List(lst) => {
@@ -425,7 +425,7 @@ fn compile_edges_to_filter(
                 }
                 _ => panic!("Invalid operand to and "),
             }
-        } else if &*field_name == "_not" {
+        } else if field_name.as_str() == "_not" {
             let elt = &spanning_input_value.item;
             match elt {
                 InputValue::Object(o) => result.push((
@@ -439,12 +439,12 @@ fn compile_edges_to_filter(
                 )),
                 _ => panic!("We should not have a non object in And-clause"),
             }
-        } else if &*field_name == "_restriction" {
+        } else if field_name.as_str() == "_restriction" {
             let input_value = &spanning_input_value.item;
             let expected: GeneratedEnum = GeneratedEnum::from_input_value(input_value)
                 .expect("restriction value in filter was not a string");
             restriction = Some(expected.value);
-        } else if &*field_name == "_ids" {
+        } else if field_name.as_str() == "_ids" {
             if !ids.is_empty() {
                 panic!("You must not specify '_id' and '_ids' simultaneously");
             }
@@ -460,7 +460,7 @@ fn compile_edges_to_filter(
                     .to_owned();
                 ids.push(id);
             }
-        } else if &*field_name == "_id" {
+        } else if field_name.as_str() == "_id" {
             if !ids.is_empty() {
                 panic!("You must not specify '_id' and '_ids' simultaneously");
             }
@@ -522,7 +522,7 @@ where
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
             NodeOrValue::Value(entry) => g.object_value_id(&entry),
-            NodeOrValue::Node(node) => g.object_node_id(&node),
+            NodeOrValue::Node(node) => g.object_node_id(&node.as_str()),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -545,7 +545,7 @@ pub fn predicate_value_iter<'a>(
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
             NodeOrValue::Value(entry) => g.object_value_id(entry),
-            NodeOrValue::Node(node) => g.object_node_id(node),
+            NodeOrValue::Node(node) => g.object_node_id(node.as_str()),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(
@@ -710,7 +710,7 @@ fn object_type_filter<'a>(
         }
         FilterValue::Enum { op, value } => {
             let op = *op;
-            match g.object_node_id(value) {
+            match g.object_node_id(value.as_str()) {
                 Some(object_id) => ClonableIterator::new(iter.filter(move |object| match op {
                     EnumOperation::Eq => *object == object_id,
                     EnumOperation::Ne => *object != object_id,
@@ -722,7 +722,7 @@ fn object_type_filter<'a>(
             }
         }
         FilterValue::Foreign(op, _) => match op {
-            IdOperation::Equals(val) => match g.object_node_id(val) {
+            IdOperation::Equals(val) => match g.object_node_id(val.as_str()) {
                 Some(object_id) => {
                     ClonableIterator::new(iter.filter(move |object| *object == object_id))
                 }
@@ -731,7 +731,7 @@ fn object_type_filter<'a>(
             IdOperation::OneOf(vals) => {
                 let object_ids: Vec<_> = vals
                     .iter()
-                    .filter_map(|val| g.object_node_id(val))
+                    .filter_map(|val| g.object_node_id(val.as_str()))
                     .collect();
                 if object_ids.is_empty() {
                     ClonableIterator::new(std::iter::empty())
@@ -746,6 +746,7 @@ fn object_type_filter<'a>(
 fn compile_query<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
+    all_frames: &AllFrames,
     filter: Rc<FilterObject>,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
@@ -756,6 +757,7 @@ fn compile_query<'a>(
     }
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
+            let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
             id_matches_restriction(context, &restriction_name, *id)
                 .unwrap()
                 .is_some()
@@ -765,7 +767,7 @@ fn compile_query<'a>(
         match filter {
             FilterScope::And(vec) => {
                 for filter in vec.iter() {
-                    iter = compile_query(context, g, filter.clone(), iter)
+                    iter = compile_query(context, g, all_frames, filter.clone(), iter)
                 }
             }
             FilterScope::Or(vec) => {
@@ -777,7 +779,7 @@ fn compile_query<'a>(
                 //or_iter = ClonableIterator::new(std::iter::empty());
                 iter = ClonableIterator::new(vec.clone().into_iter().flat_map(move |filter| {
                     let iter_copy = ClonableIterator::new(initial_vector.clone().into_iter());
-                    compile_query(context, g, filter, iter_copy)
+                    compile_query(context, g, all_frames, filter, iter_copy)
                 }));
             }
             FilterScope::Not(filter) => {
@@ -789,7 +791,7 @@ fn compile_query<'a>(
                     initial_set.clone().into_iter(),
                 ));
                 let sub_iter: HashSet<u64> =
-                    compile_query(context, g, filter.clone(), initial_iter).collect();
+                    compile_query(context, g, all_frames, filter.clone(), initial_iter).collect();
 
                 let result = &initial_set - &sub_iter;
                 iter = ClonableIterator::new(CachedClonableIterator::new(result.into_iter()));
@@ -806,7 +808,7 @@ fn compile_query<'a>(
                                         .map(|t| t.object)
                                         .into_iter(),
                                 );
-                                compile_query(context, g, sub_filter.clone(), objects)
+                                compile_query(context, g, all_frames, sub_filter.clone(), objects)
                                     .next()
                                     .is_some()
                             }))
@@ -840,9 +842,15 @@ fn compile_query<'a>(
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
                                         collection_kind_iterator(g, kind, *subject, property_id);
-                                    compile_query(context, g, sub_filter.clone(), objects)
-                                        .next()
-                                        .is_some()
+                                    compile_query(
+                                        context,
+                                        g,
+                                        all_frames,
+                                        sub_filter.clone(),
+                                        objects,
+                                    )
+                                    .next()
+                                    .is_some()
                                 }));
                             }
                             FilterObjectType::Value(filter_type) => {
@@ -863,9 +871,14 @@ fn compile_query<'a>(
                                     let objects =
                                         collection_kind_iterator(g, kind, *subject, property_id);
                                     let expected = objects.clone().count();
-                                    let actual =
-                                        compile_query(context, g, sub_filter.clone(), objects)
-                                            .count();
+                                    let actual = compile_query(
+                                        context,
+                                        g,
+                                        all_frames,
+                                        sub_filter.clone(),
+                                        objects,
+                                    )
+                                    .count();
 
                                     expected == actual
                                 }));
@@ -1009,7 +1022,7 @@ fn generate_iterator_from_filter<'a>(
                 .subsumed(class_name)
                 .into_iter()
                 .map(|c| all_frames.graphql_to_iri_name(&c))
-                .flat_map(|id| g.subject_id(&id))
+                .flat_map(|id| g.subject_id(&id.as_str()))
                 .collect();
             let rdf_type_id = g.predicate_id(RDF_TYPE)?;
             Some(ClonableIterator::new(iter.filter(move |id| {
@@ -1203,7 +1216,7 @@ fn lookup_by_filter<'a>(
     );
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
-        compile_query(context, g, continuation_filter, iterator)
+        compile_query(context, g, all_frames, continuation_filter, iterator)
     } else {
         iterator
     }
@@ -1294,7 +1307,7 @@ pub fn run_filter_query<'a>(
             )
             .unique()
             .collect();
-            results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
+            results.sort_by_cached_key(|id| create_query_order_key(g, all_frames, *id, &fields));
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
             // better to borrow in the other branch?
             ClonableIterator::new(
@@ -1330,15 +1343,18 @@ fn include_children(arguments: &juniper::Arguments) -> bool {
 
 fn create_query_order_key(
     g: &SyncStoreLayer,
-    p: &Prefixes,
+    all_frames: &AllFrames,
     id: u64,
-    order_desc: &[(String, TerminusOrdering)],
+    order_desc: &[(GraphQLName, TerminusOrdering)],
 ) -> QueryOrderKey {
     let vec: Vec<_> = order_desc
         .iter()
         .filter_map(|(property, ordering)| {
-            let predicate = p.expand_schema(property);
-            let predicate_id = g.predicate_id(&predicate)?;
+            let property_short_name = all_frames.graphql_to_short_name(property);
+            let predicate = all_frames
+                .context
+                .expand_schema(&property_short_name.into());
+            let predicate_id = g.predicate_id(&predicate.as_str())?;
             let res = g.single_triple_sp(id, predicate_id).map(move |t| {
                 g.id_object(t.object)
                     .expect("This object must exist")

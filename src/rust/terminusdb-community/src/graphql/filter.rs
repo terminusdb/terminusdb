@@ -36,7 +36,7 @@ impl FilterInputObjectTypeInfo {
 
 impl GraphQLType for FilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name)
+        Some(&info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -56,55 +56,58 @@ impl GraphQLType for FilterInputObject {
                         if kind.is_collection() {
                             match field_definition.range() {
                                 BaseOrDerived::Base(base_type) => {
+                                    eprintln!("{base_type}");
                                     let kind = base_type_kind(base_type);
                                     match kind {
                                         BaseTypeKind::String => registry.arg::<Option<
                                             CollectionStringFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                         BaseTypeKind::SmallInteger => registry.arg::<Option<
                                             CollectionIntFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                         BaseTypeKind::BigIntger => registry.arg::<Option<
                                             CollectionBigIntFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                         BaseTypeKind::Boolean => registry.arg::<Option<
                                             CollectionBooleanFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                         BaseTypeKind::Float => registry.arg::<Option<
                                             CollectionFloatFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                         BaseTypeKind::Decimal => registry.arg::<Option<
                                             CollectionBigFloatFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                         BaseTypeKind::DateTime => registry.arg::<Option<
                                             CollectionDateTimeFilterInputObject,
                                         >>(
-                                            name, &()
+                                            name.as_str(), &()
                                         ),
                                     }
                                 }
                                 BaseOrDerived::Derived(c) => {
                                     // is this foreign?
                                     if info.frames.is_foreign(c) {
-                                        registry
-                                            .arg::<Option<CollectionIdFilterInputObject>>(name, &())
+                                        registry.arg::<Option<CollectionIdFilterInputObject>>(
+                                            name.as_str(),
+                                            &(),
+                                        )
                                     } else {
                                         registry.arg::<Option<CollectionFilterInputObject>>(
-                                            name,
+                                            name.as_str(),
                                             &CollectionFilterInputObjectTypeInfo::new(
-                                                &c,
+                                                c,
                                                 &info.frames,
                                             ),
                                         )
@@ -114,31 +117,25 @@ impl GraphQLType for FilterInputObject {
                         } else if let Some(base_type) = field_definition.base_type() {
                             let kind = base_type_kind(base_type);
                             match kind {
-                                BaseTypeKind::String => {
-                                    registry.arg::<Option<StringFilterInputObject>>(name, &())
-                                }
+                                BaseTypeKind::String => registry
+                                    .arg::<Option<StringFilterInputObject>>(name.as_str(), &()),
                                 BaseTypeKind::SmallInteger => {
-                                    registry.arg::<Option<IntFilterInputObject>>(name, &())
+                                    registry.arg::<Option<IntFilterInputObject>>(name.as_str(), &())
                                 }
-                                BaseTypeKind::BigIntger => {
-                                    registry.arg::<Option<BigIntFilterInputObject>>(name, &())
-                                }
-                                BaseTypeKind::Boolean => {
-                                    registry.arg::<Option<BooleanFilterInputObject>>(name, &())
-                                }
-                                BaseTypeKind::Float => {
-                                    registry.arg::<Option<FloatFilterInputObject>>(name, &())
-                                }
-                                BaseTypeKind::Decimal => {
-                                    registry.arg::<Option<BigFloatFilterInputObject>>(name, &())
-                                }
-                                BaseTypeKind::DateTime => {
-                                    registry.arg::<Option<DateTimeFilterInputObject>>(name, &())
-                                }
+                                BaseTypeKind::BigIntger => registry
+                                    .arg::<Option<BigIntFilterInputObject>>(name.as_str(), &()),
+                                BaseTypeKind::Boolean => registry
+                                    .arg::<Option<BooleanFilterInputObject>>(name.as_str(), &()),
+                                BaseTypeKind::Float => registry
+                                    .arg::<Option<FloatFilterInputObject>>(name.as_str(), &()),
+                                BaseTypeKind::Decimal => registry
+                                    .arg::<Option<BigFloatFilterInputObject>>(name.as_str(), &()),
+                                BaseTypeKind::DateTime => registry
+                                    .arg::<Option<DateTimeFilterInputObject>>(name.as_str(), &()),
                             }
                         } else if let Some(enum_type) = field_definition.enum_type(&info.frames) {
                             registry.arg::<Option<EnumFilterInputObject>>(
-                                name,
+                                name.as_str(),
                                 &EnumFilterInputObjectTypeInfo::new(enum_type, &info.frames),
                             )
                         } else {
@@ -148,11 +145,12 @@ impl GraphQLType for FilterInputObject {
                                 }
                                 BaseOrDerived::Derived(c) => {
                                     if info.frames.is_foreign(c) {
-                                        registry.arg::<Option<IdFilterInputObject>>(name, &())
+                                        registry
+                                            .arg::<Option<IdFilterInputObject>>(name.as_str(), &())
                                     } else {
                                         registry.arg::<Option<FilterInputObject>>(
-                                            name,
-                                            &FilterInputObjectTypeInfo::new(&c, &info.frames),
+                                            name.as_str(),
+                                            &FilterInputObjectTypeInfo::new(c, &info.frames),
                                         )
                                     }
                                 }
@@ -221,7 +219,7 @@ impl GraphQLValue for FilterInputObject {
     type TypeInfo = FilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name)
+        Some(&info.filter_type_name.as_str())
     }
 }
 
@@ -247,7 +245,7 @@ impl CollectionFilterInputObjectTypeInfo {
 
 impl GraphQLType for CollectionFilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name)
+        Some(&info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -305,7 +303,7 @@ impl GraphQLValue for CollectionFilterInputObject {
     type TypeInfo = CollectionFilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name)
+        Some(&info.filter_type_name.as_str())
     }
 }
 
@@ -332,7 +330,7 @@ impl EnumFilterInputObjectTypeInfo {
 
 impl GraphQLType for EnumFilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name)
+        Some(&info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -380,7 +378,7 @@ impl GraphQLValue for EnumFilterInputObject {
     type TypeInfo = EnumFilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name)
+        Some(&info.filter_type_name.as_str())
     }
 }
 

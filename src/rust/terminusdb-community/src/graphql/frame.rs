@@ -27,6 +27,10 @@ impl<'a> GraphQLName<'a> {
             Cow::Owned(s) => GraphQLName(Cow::Owned(s.clone())),
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl<'a> PartialOrd<str> for GraphQLName<'a> {
@@ -41,12 +45,6 @@ impl<'a> PartialEq<str> for GraphQLName<'a> {
     }
 }
 
-impl<'a> std::borrow::Borrow<str> for GraphQLName<'a> {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
 impl ShortName {
     pub fn as_str(&self) -> &str {
         &self.0
@@ -57,25 +55,9 @@ impl ShortName {
     }
 }
 
-impl std::ops::Deref for ShortName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl Display for ShortName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-impl<'a> std::ops::Deref for GraphQLName<'a> {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
@@ -85,17 +67,15 @@ impl<'a> Display for GraphQLName<'a> {
     }
 }
 
-impl std::ops::Deref for IriName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl Display for IriName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl IriName {
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -159,8 +139,8 @@ pub struct RestrictionDefinition<'a> {
 
 impl UncleanRestrictionDefinition {
     fn sanitize(self) -> RestrictionDefinition<'static> {
-        let id = graphql_sanitize(&self.id);
-        let on = graphql_sanitize(&self.on);
+        let id = self.id.sanitize().as_static();
+        let on = self.on.sanitize().as_static();
 
         RestrictionDefinition {
             id,
@@ -227,13 +207,25 @@ fn has_prefix_if_no_protocol(s: &str) -> Option<(String, String)> {
     })
 }
 
-enum NodeVariety {
+pub enum NodeVariety {
     Base(String),
     Prefixed(String, String),
     URL(String),
 }
 
-fn node_variety(s: &str) -> NodeVariety {
+impl From<&ShortName> for NodeVariety {
+    fn from(value: &ShortName) -> Self {
+        node_variety(value.as_str())
+    }
+}
+
+impl From<&IriName> for NodeVariety {
+    fn from(value: &IriName) -> Self {
+        NodeVariety::URL(value.0.to_string())
+    }
+}
+
+pub fn node_variety(s: &str) -> NodeVariety {
     if has_protocol(s) {
         NodeVariety::URL(s.to_string())
     } else if let Some((prefix, suffix)) = has_prefix_if_no_protocol(s) {
@@ -244,32 +236,32 @@ fn node_variety(s: &str) -> NodeVariety {
 }
 
 impl Prefixes {
-    pub fn expand_schema(&self, s: &str) -> IriName {
-        match node_variety(s) {
+    pub fn expand_schema(&self, nv: &NodeVariety) -> IriName {
+        match nv {
             // this is dumb but will work for now
             NodeVariety::Base(s) => IriName(format!("{}{}", self.schema, s)),
             NodeVariety::Prefixed(prefix, suffix) => {
-                if let Some(expanded) = self.extra_prefixes.get(&prefix) {
+                if let Some(expanded) = self.extra_prefixes.get(prefix) {
                     IriName(format!("{}{}", expanded, suffix))
                 } else {
                     panic!("Unable to find prefix {prefix}!")
                 }
             }
-            NodeVariety::URL(s) => IriName(s),
+            NodeVariety::URL(s) => IriName(s.to_string()),
         }
     }
-    pub fn expand_instance(&self, s: &str) -> IriName {
-        match node_variety(s) {
+    pub fn expand_instance(&self, nv: &NodeVariety) -> IriName {
+        match nv {
             // this is dumb but will work for now
             NodeVariety::Base(s) => IriName(format!("{}{}", self.base, s)),
             NodeVariety::Prefixed(prefix, suffix) => {
-                if let Some(expanded) = self.extra_prefixes.get(&prefix) {
+                if let Some(expanded) = self.extra_prefixes.get(prefix) {
                     IriName(format!("{}{}", expanded, suffix))
                 } else {
                     panic!("Unable to find prefix {prefix}!");
                 }
             }
-            NodeVariety::URL(s) => IriName(s),
+            NodeVariety::URL(s) => IriName(s.to_string()),
         }
     }
 
@@ -329,7 +321,7 @@ impl UncleanPropertyDocumentation {
     pub fn sanitize(self) -> PropertyDocumentation {
         let mut records = BTreeMap::new();
         for (s, pdr) in self.records.iter() {
-            records.insert(graphql_sanitize(s), pdr.clone());
+            records.insert(s.sanitize(), pdr.clone());
         }
         PropertyDocumentation { records }
     }
@@ -562,7 +554,7 @@ pub fn is_base_type(s: &str) -> bool {
 
 pub fn base_or_derived(c: String) -> BaseOrDerived<ShortName> {
     if is_base_type(&c) {
-        BaseOrDerived::Base(c)
+        BaseOrDerived::Base(c[4..].to_string())
     } else {
         BaseOrDerived::Derived(ShortName(c))
     }
@@ -596,7 +588,7 @@ impl FieldDefinition {
     pub fn base_type(&self) -> Option<&str> {
         let range = self.range();
         match range {
-            BaseOrDerived::Base(s) => Some(&s[4..]),
+            BaseOrDerived::Base(s) => Some(s),
             BaseOrDerived::Derived(_) => None,
         }
     }
@@ -688,11 +680,11 @@ impl UncleanKeyDefinition {
         match self {
             UncleanKeyDefinition::Random => KeyDefinition::Random,
             UncleanKeyDefinition::Lexical { fields } => {
-                let fields = fields.iter().map(|f| graphql_sanitize(f)).collect();
+                let fields = fields.iter().map(|f| f.sanitize()).collect();
                 KeyDefinition::Lexical { fields }
             }
             UncleanKeyDefinition::Hash { fields } => {
-                let fields = fields.iter().map(|f| graphql_sanitize(f)).collect();
+                let fields = fields.iter().map(|f| f.sanitize()).collect();
                 KeyDefinition::Hash { fields }
             }
             UncleanKeyDefinition::ValueHash => KeyDefinition::ValueHash,
@@ -756,7 +748,7 @@ impl UncleanClassDefinition {
         let mut field_map: BiMap<GraphQLName, ShortName> = BiMap::new();
         let mut fields: BTreeMap<GraphQLName, _> = BTreeMap::new();
         for (field, fd) in self.fields.into_iter() {
-            let sanitized_field = graphql_sanitize(&field);
+            let sanitized_field = field.sanitize();
             let res = field_map.insert_no_overwrite(sanitized_field.clone(), field.clone());
             if let Err((left, right)) = res {
                 if left != sanitized_field || right != field {
@@ -770,7 +762,7 @@ impl UncleanClassDefinition {
                 .map(|c| {
                     let mut choices = BTreeMap::new();
                     for (field,fd) in c.choices.into_iter() {
-                        let sanitized_field = graphql_sanitize(&field);
+                        let sanitized_field = field.sanitize();
                         let res = field_map.insert_no_overwrite(sanitized_field.clone(), field.clone());
                         if let Err((left, right)) = res {
                             if left != sanitized_field || right != field {
@@ -792,13 +784,13 @@ impl UncleanClassDefinition {
         let key = self.key.map(|k| k.sanitize());
         let mut field_renaming: BiMap<GraphQLName, IriName> = BiMap::new();
         for (s, t) in field_map.iter() {
-            let expanded = prefixes.expand_schema(t);
+            let expanded = prefixes.expand_schema(&t.into());
             field_renaming.insert(s.clone(), expanded);
         }
         let inherits = if let Some(inherits_val) = &self.inherits {
             let mut result = vec![];
             for class_name in inherits_val {
-                let sanitized = graphql_sanitize(class_name);
+                let sanitized = class_name.sanitize();
                 result.push(sanitized)
             }
             Some(result)
@@ -957,12 +949,12 @@ impl EnumDefinition {
             .values_renaming
             .get_by_left(value)
             .unwrap_or_else(|| panic!("The value name for {value:?} *should* exist"));
-        IriName(urlencoding::encode(res).into_owned())
+        IriName(urlencoding::encode(res.as_str()).into_owned())
     }
 
     pub fn name_value(&self, name: &IriName) -> &GraphQLName {
-        let decoded =
-            &*urlencoding::decode(name).expect("Somehow encoding went terribly wrong in saving");
+        let decoded = &*urlencoding::decode(name.as_str())
+            .expect("Somehow encoding went terribly wrong in saving");
         self.values_renaming
             .get_by_right(&ShortName(decoded.to_string()))
             .unwrap_or_else(|| {
@@ -1056,8 +1048,9 @@ impl UncleanAllFrames {
         let mut frames: BTreeMap<GraphQLName, TypeDefinition> = BTreeMap::new();
         let mut graphql_to_iri_renaming: BiMap<GraphQLName, IriName> = BiMap::new();
         for (class_name, typedef) in self.frames.into_iter() {
-            let iri_name = self.context.expand_schema(&class_name);
-            let sanitized_class = graphql_sanitize(&class_name);
+            let class_name_ref = &class_name;
+            let iri_name = self.context.expand_schema(&class_name_ref.into());
+            let sanitized_class = class_name.sanitize();
             // GraphQL <> IRI
             let res =
                 graphql_to_iri_renaming.insert_no_overwrite(sanitized_class.clone(), iri_name);
@@ -1082,7 +1075,7 @@ impl UncleanAllFrames {
         if let Some(restrictions) = self.context.metadata.as_ref().map(|m| &m.restrictions) {
             for restriction in restrictions.iter() {
                 let restriction_name = &restriction.id;
-                let sanitized_restriction_name = graphql_sanitize(restriction_name);
+                let sanitized_restriction_name = restriction_name.sanitize();
                 let res = class_renaming.insert_no_overwrite(
                     sanitized_restriction_name.clone(),
                     restriction_name.clone(),
@@ -1175,7 +1168,7 @@ impl AllFrames {
 
     pub fn graphql_to_iri_name<'a>(&'a self, class_name: &GraphQLName<'a>) -> IriName {
         let db_name = self.graphql_to_short_name(class_name);
-        self.context.expand_schema(db_name)
+        self.context.expand_schema(&db_name.into())
     }
 
     pub fn graphql_enum_value_to_iri_name<'a>(
@@ -1255,8 +1248,8 @@ pub struct InvertedTypeDefinition {
     pub domain: BTreeMap<GraphQLName<'static>, InvertedFieldDefinition>,
 }
 
-pub fn allframes_to_allinvertedframes<'a>(
-    frames: &'a BTreeMap<GraphQLName<'static>, TypeDefinition>,
+pub fn allframes_to_allinvertedframes(
+    frames: &BTreeMap<GraphQLName<'static>, TypeDefinition>,
 ) -> AllInvertedFrames {
     let mut classes: BTreeMap<GraphQLName<'static>, InvertedTypeDefinition> = BTreeMap::new();
     for (class, record) in frames.iter() {

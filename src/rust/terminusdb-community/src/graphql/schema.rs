@@ -197,10 +197,10 @@ impl GraphQLType for TerminusTypeCollection {
             .filter_map(|(name, typedef)| {
                 if let TypeDefinition::Class(c) = typedef {
                     let newinfo = TerminusTypeInfo {
-                        class: name.to_owned(),
+                        class: name.as_static(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType>>(name, &newinfo);
+                    let field = registry.field::<Vec<TerminusType>>(name.as_str(), &newinfo);
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -217,7 +217,7 @@ impl GraphQLType for TerminusTypeCollection {
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType>>(name, &newinfo);
+                let field = registry.field::<Vec<TerminusType>>(name.as_str(), &newinfo);
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -324,13 +324,13 @@ fn ids_from_restriction(
 
 fn pl_id_matches_restriction(
     context: &TerminusContext,
-    restriction: &str,
+    restriction: &ShortName,
     id: u64,
 ) -> PrologResult<Option<String>> {
     let prolog_context = &context.context;
     let frame = prolog_context.open_frame();
     let [restriction_term, id_term, reason_term] = frame.new_term_refs();
-    restriction_term.unify(restriction)?;
+    restriction_term.unify(restriction.as_str())?;
     id_term.unify(id)?;
     let open_call = frame.open(
         pred!("query:ids_for_restriction/4"),
@@ -351,7 +351,7 @@ fn pl_id_matches_restriction(
 
 pub fn id_matches_restriction(
     context: &TerminusContext,
-    restriction: &str,
+    restriction: &ShortName,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
     let result = pl_id_matches_restriction(context, restriction, id);
@@ -379,7 +379,7 @@ impl GraphQLValue for TerminusTypeCollection {
             "_getDocument" => {
                 let context = executor.context();
                 let document_context = context.document_context();
-                let id: String = arguments.get("id").unwrap();
+                let id: NodeVariety = node_variety(arguments.get("id").unwrap());
                 let expanded_id = context
                     .type_collection
                     .allframes
@@ -505,49 +505,49 @@ impl TerminusType {
                     if type_is_bool(base_type) {
                         Self::register_field::<bool>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
                     } else if type_is_small_integer(base_type) {
                         Self::register_field::<i32>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
                     } else if type_is_big_integer(base_type) {
                         Self::register_field::<BigInt>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
                     } else if type_is_float(base_type) {
                         Self::register_field::<f64>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
                     } else if type_is_datetime(base_type) {
                         Self::register_field::<DateTime>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
                     } else if type_is_decimal(base_type) {
                         Self::register_field::<BigFloat>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
                     } else if type_is_json(base_type) {
                         Self::register_field::<GraphQLJSON>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
@@ -555,7 +555,7 @@ impl TerminusType {
                         // assume stringy
                         Self::register_field::<String>(
                             registry,
-                            field_name,
+                            field_name.as_str(),
                             &(),
                             field_definition.kind(),
                         )
@@ -765,7 +765,9 @@ impl GraphQLValue for TerminusType {
                 return ty;
             }
 
+            eprintln!("{field_name}");
             if let Some(reverse_link) = allframes.reverse_link(class, &field_name) {
+                eprintln!("{:?}", reverse_link);
                 let property = &reverse_link.property;
                 let graphql_domain = &reverse_link.class;
                 let kind = &reverse_link.kind;
@@ -1291,7 +1293,7 @@ pub enum TerminusOrdering {
 }
 
 pub struct TerminusOrderBy {
-    pub fields: Vec<(String, TerminusOrdering)>,
+    pub fields: Vec<(GraphQLName<'static>, TerminusOrdering)>,
 }
 
 impl FromInputValue for TerminusOrderBy {
@@ -1301,7 +1303,7 @@ impl FromInputValue for TerminusOrderBy {
                 .iter()
                 .map(|(k, v)| {
                     (
-                        k.item.to_owned(),
+                        GraphQLName(Cow::Owned(k.item.to_owned())),
                         TerminusOrdering::from_input_value(&v.item).unwrap(),
                     )
                 })
