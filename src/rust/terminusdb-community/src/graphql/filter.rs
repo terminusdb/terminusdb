@@ -8,7 +8,7 @@ use juniper::{
 use crate::value::{base_type_kind, BaseTypeKind};
 
 use super::{
-    frame::{AllFrames, GraphQLName, SanitizedTypeDefinition, UncleanTypeDefinition},
+    frame::{AllFrames, BaseOrDerived, GraphQLName, TypeDefinition},
     query::EnumOperation,
     schema::{BigFloat, BigInt, DateTime, GeneratedEnum, GeneratedEnumTypeInfo, TerminusEnum},
 };
@@ -17,16 +17,16 @@ pub struct FilterInputObject {
     pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 }
 
-pub struct FilterInputObjectTypeInfo {
-    filter_type_name: GraphQLName,
-    type_name: GraphQLName,
-    frames: Arc<AllFrames>,
+pub struct FilterInputObjectTypeInfo<'a> {
+    filter_type_name: GraphQLName<'a>,
+    type_name: GraphQLName<'a>,
+    frames: Arc<AllFrames<'a>>,
 }
 
-impl FilterInputObjectTypeInfo {
+impl<'a> FilterInputObjectTypeInfo<'a> {
     pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: GraphQLName(format!("{type_name}_Filter")),
+            filter_type_name: GraphQLName(format!("{type_name}_Filter").into()),
             type_name: type_name.clone(),
             frames: all_frames.clone(),
         }
@@ -45,102 +45,120 @@ impl GraphQLType for FilterInputObject {
     where
         DefaultScalarValue: 'r,
     {
-        if let Some(SanitizedTypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
+        if let Some(TypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
             let mut args: Vec<_> = d
                 .fields()
                 .iter()
-                .map(|(name, field_definition)| {
-                    let kind = field_definition.kind();
-                    if kind.is_collection() {
-                        if let Some(base_type) = field_definition.base_type() {
+                .map(
+                    |(name, field_definition)| -> juniper::meta::Argument<DefaultScalarValue> {
+                        let kind = field_definition.kind();
+                        if kind.is_collection() {
+                            match field_definition.range() {
+                                BaseOrDerived::Base(base_type) => {
+                                    let kind = base_type_kind(base_type);
+                                    match kind {
+                                        BaseTypeKind::String => registry.arg::<Option<
+                                            CollectionStringFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                        BaseTypeKind::SmallInteger => registry.arg::<Option<
+                                            CollectionIntFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                        BaseTypeKind::BigIntger => registry.arg::<Option<
+                                            CollectionBigIntFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                        BaseTypeKind::Boolean => registry.arg::<Option<
+                                            CollectionBooleanFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                        BaseTypeKind::Float => registry.arg::<Option<
+                                            CollectionFloatFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                        BaseTypeKind::Decimal => registry.arg::<Option<
+                                            CollectionBigFloatFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                        BaseTypeKind::DateTime => registry.arg::<Option<
+                                            CollectionDateTimeFilterInputObject,
+                                        >>(
+                                            name, &()
+                                        ),
+                                    }
+                                }
+                                BaseOrDerived::Derived(c) => {
+                                    // is this foreign?
+                                    if info.frames.is_foreign(c) {
+                                        registry
+                                            .arg::<Option<CollectionIdFilterInputObject>>(name, &())
+                                    } else {
+                                        registry.arg::<Option<CollectionFilterInputObject>>(
+                                            name,
+                                            &CollectionFilterInputObjectTypeInfo::new(
+                                                c,
+                                                &info.frames,
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
+                        } else if let Some(base_type) = field_definition.base_type() {
                             let kind = base_type_kind(base_type);
                             match kind {
                                 BaseTypeKind::String => {
-                                    registry
-                                        .arg::<Option<CollectionStringFilterInputObject>>(name, &())
+                                    registry.arg::<Option<StringFilterInputObject>>(name, &())
                                 }
                                 BaseTypeKind::SmallInteger => {
-                                    registry
-                                        .arg::<Option<CollectionIntFilterInputObject>>(name, &())
+                                    registry.arg::<Option<IntFilterInputObject>>(name, &())
                                 }
                                 BaseTypeKind::BigIntger => {
-                                    registry
-                                        .arg::<Option<CollectionBigIntFilterInputObject>>(name, &())
+                                    registry.arg::<Option<BigIntFilterInputObject>>(name, &())
                                 }
-                                BaseTypeKind::Boolean => registry.arg::<Option<
-                                    CollectionBooleanFilterInputObject,
-                                >>(
-                                    name, &()
-                                ),
+                                BaseTypeKind::Boolean => {
+                                    registry.arg::<Option<BooleanFilterInputObject>>(name, &())
+                                }
                                 BaseTypeKind::Float => {
-                                    registry
-                                        .arg::<Option<CollectionFloatFilterInputObject>>(name, &())
+                                    registry.arg::<Option<FloatFilterInputObject>>(name, &())
                                 }
-                                BaseTypeKind::Decimal => registry.arg::<Option<
-                                    CollectionBigFloatFilterInputObject,
-                                >>(
-                                    name, &()
-                                ),
-                                BaseTypeKind::DateTime => registry.arg::<Option<
-                                    CollectionDateTimeFilterInputObject,
-                                >>(
-                                    name, &()
-                                ),
+                                BaseTypeKind::Decimal => {
+                                    registry.arg::<Option<BigFloatFilterInputObject>>(name, &())
+                                }
+                                BaseTypeKind::DateTime => {
+                                    registry.arg::<Option<DateTimeFilterInputObject>>(name, &())
+                                }
                             }
-                        } else {
-                            let c = field_definition.range();
-                            // is this foreign?
-                            if info.frames.is_foreign(c) {
-                                registry.arg::<Option<CollectionIdFilterInputObject>>(name, &())
-                            } else {
-                                registry.arg::<Option<CollectionFilterInputObject>>(
-                                    name,
-                                    &CollectionFilterInputObjectTypeInfo::new(c, &info.frames),
-                                )
-                            }
-                        }
-                    } else if let Some(base_type) = field_definition.base_type() {
-                        let kind = base_type_kind(base_type);
-                        match kind {
-                            BaseTypeKind::String => {
-                                registry.arg::<Option<StringFilterInputObject>>(name, &())
-                            }
-                            BaseTypeKind::SmallInteger => {
-                                registry.arg::<Option<IntFilterInputObject>>(name, &())
-                            }
-                            BaseTypeKind::BigIntger => {
-                                registry.arg::<Option<BigIntFilterInputObject>>(name, &())
-                            }
-                            BaseTypeKind::Boolean => {
-                                registry.arg::<Option<BooleanFilterInputObject>>(name, &())
-                            }
-                            BaseTypeKind::Float => {
-                                registry.arg::<Option<FloatFilterInputObject>>(name, &())
-                            }
-                            BaseTypeKind::Decimal => {
-                                registry.arg::<Option<BigFloatFilterInputObject>>(name, &())
-                            }
-                            BaseTypeKind::DateTime => {
-                                registry.arg::<Option<DateTimeFilterInputObject>>(name, &())
-                            }
-                        }
-                    } else if let Some(enum_type) = field_definition.enum_type(&info.frames) {
-                        registry.arg::<Option<EnumFilterInputObject>>(
-                            name,
-                            &EnumFilterInputObjectTypeInfo::new(enum_type, &info.frames),
-                        )
-                    } else {
-                        let c = field_definition.range();
-                        if info.frames.is_foreign(c) {
-                            registry.arg::<Option<IdFilterInputObject>>(name, &())
-                        } else {
-                            registry.arg::<Option<FilterInputObject>>(
+                        } else if let Some(enum_type) = field_definition.enum_type(&info.frames) {
+                            registry.arg::<Option<EnumFilterInputObject>>(
                                 name,
-                                &FilterInputObjectTypeInfo::new(c, &info.frames),
+                                &EnumFilterInputObjectTypeInfo::new(enum_type, &info.frames),
                             )
+                        } else {
+                            match field_definition.range() {
+                                BaseOrDerived::Base(_) => {
+                                    panic!("This branch should be unreachable - not a base type")
+                                }
+                                BaseOrDerived::Derived(c) => {
+                                    if info.frames.is_foreign(c) {
+                                        registry.arg::<Option<IdFilterInputObject>>(name, &())
+                                    } else {
+                                        registry.arg::<Option<FilterInputObject>>(
+                                            name,
+                                            &FilterInputObjectTypeInfo::new(c, &info.frames),
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    }
-                })
+                    },
+                )
                 .collect();
 
             let mut applicable_restrictions = Vec::new();
@@ -199,7 +217,7 @@ impl FromInputValue for FilterInputObject {
 impl GraphQLValue for FilterInputObject {
     type Context = ();
 
-    type TypeInfo = FilterInputObjectTypeInfo;
+    type TypeInfo = FilterInputObjectTypeInfo<'static>;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
         Some(&info.filter_type_name)
@@ -210,17 +228,17 @@ pub struct CollectionFilterInputObject {
     pub edges: Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
 }
 
-pub struct CollectionFilterInputObjectTypeInfo {
-    filter_type_name: String,
-    type_name: String,
-    frames: Arc<AllFrames>,
+pub struct CollectionFilterInputObjectTypeInfo<'a> {
+    filter_type_name: GraphQLName<'a>,
+    type_name: GraphQLName<'a>,
+    frames: Arc<AllFrames<'a>>,
 }
 
-impl CollectionFilterInputObjectTypeInfo {
-    pub fn new(type_name: &str, all_frames: &Arc<AllFrames>) -> Self {
+impl CollectionFilterInputObjectTypeInfo<'_> {
+    pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: format!("{type_name}_Collection_Filter"),
-            type_name: type_name.to_string(),
+            filter_type_name: GraphQLName(format!("{type_name}_Collection_Filter").into()),
+            type_name: type_name.clone(),
             frames: all_frames.clone(),
         }
     }
@@ -241,7 +259,7 @@ impl GraphQLType for CollectionFilterInputObject {
         let mut args: Vec<_> = Vec::with_capacity(2);
         let type_definition = &info.frames.frames[&info.type_name];
         match type_definition {
-            UncleanTypeDefinition::Class(_) => {
+            TypeDefinition::Class(_) => {
                 args.push(registry.arg::<Option<FilterInputObject>>(
                     "someHave",
                     &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
@@ -254,7 +272,7 @@ impl GraphQLType for CollectionFilterInputObject {
                     .build_input_object_type::<CollectionFilterInputObject>(info, &args)
                     .into_meta()
             }
-            UncleanTypeDefinition::Enum(_) => {
+            TypeDefinition::Enum(_) => {
                 args.push(registry.arg::<Option<EnumFilterInputObject>>(
                     "someHave",
                     &EnumFilterInputObjectTypeInfo::new(&info.type_name, &info.frames),

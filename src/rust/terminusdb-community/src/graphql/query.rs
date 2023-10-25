@@ -21,8 +21,8 @@ use super::filter::{
     StringFilterInputObject,
 };
 use super::frame::{
-    is_base_type, AllFrames, CollectionKind, FieldKind, Prefixes, UncleanClassDefinition,
-    UncleanTypeDefinition,
+    is_base_type, AllFrames, CollectionKind, FieldKind, GraphQLName, Prefixes,
+    UncleanClassDefinition, UncleanTypeDefinition,
 };
 use super::schema::{
     id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
@@ -1210,7 +1210,7 @@ pub fn run_filter_query<'a>(
     g: &'a SyncStoreLayer,
     prefixes: &'a Prefixes,
     arguments: &'a juniper::Arguments,
-    class_name: &'a str,
+    class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
     zero_iter: Option<ClonableIterator<'a, u64>>,
 ) -> Vec<u64> {
