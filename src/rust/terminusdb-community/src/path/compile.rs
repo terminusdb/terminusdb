@@ -7,25 +7,28 @@ use super::iterator::*;
 use super::parse::*;
 
 use crate::consts::RDF_TYPE;
+use crate::graphql::frame::node_variety;
+use crate::graphql::frame::GraphQLName;
 use crate::graphql::frame::{AllFrames, Prefixes};
 use crate::graphql::query::predicate_value_filter;
+use crate::graphql::schema::NodeOrValue;
 use crate::terminus_store::layer::*;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
 pub fn path_to_class<'a, 'b>(
     path_string: &'b str,
     g: &'a SyncStoreLayer,
-    to_class: &'a str,
+    to_class: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
     zero_iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
     let path = parse_path(path_string)
         .expect("Did not give a valid path")
         .1;
-    let expanded_type_name = all_frames.iri_class_name(to_class);
+    let expanded_type_name = all_frames.graphql_to_iri_name(to_class);
     let iter = compile_path(g, all_frames.context.clone(), path, zero_iter);
     ClonableIterator::new(
-        predicate_value_filter(g, RDF_TYPE, ObjectType::Node(expanded_type_name), iter).dedup(),
+        predicate_value_filter(g, RDF_TYPE, NodeOrValue::Node(expanded_type_name), iter).dedup(),
     )
 }
 
@@ -106,8 +109,8 @@ pub fn compile_path<'a>(
                 CachedClonableIterator::new(g.triples_s(object).map(|t| t.object))
             })),
             Pred::Named(pred) => {
-                let pred = prefixes.expand_schema(&pred);
-                if let Some(p_id) = g.predicate_id(&pred) {
+                let pred = prefixes.expand_schema(&node_variety(&pred));
+                if let Some(p_id) = g.predicate_id(&pred.as_str()) {
                     ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(g.triples_sp(object, p_id).map(|t| t.object))
                     }))
@@ -121,8 +124,8 @@ pub fn compile_path<'a>(
                 CachedClonableIterator::new(g.triples_o(object).map(|t| t.subject))
             })),
             Pred::Named(pred) => {
-                let pred = prefixes.expand_schema(&pred);
-                if let Some(p_id) = g.predicate_id(&pred) {
+                let pred = prefixes.expand_schema(&node_variety(&pred));
+                if let Some(p_id) = g.predicate_id(&pred.as_str()) {
                     ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(
                             g.triples_o(object)

@@ -1,5 +1,9 @@
+use std::borrow::Cow;
+
 use aho_corasick::AhoCorasickBuilder;
 use regex::Regex;
+
+use super::frame::GraphQLName;
 
 // This should probably use Aho-Corasick instead
 const DIACRITICS: &[&str] = &[
@@ -12,13 +16,13 @@ const DIGRAPHS: &[&str] = &[
     "ae", "ae", "d", "d", "f", "h", "i", "l", "o", "o", "oe", "oe", "ss", "t", "ue",
 ];
 
-pub fn graphql_sanitize(string: &str) -> String {
+pub fn graphql_sanitize(string: &str) -> GraphQLName<'static> {
     let ac = AhoCorasickBuilder::new().build(DIACRITICS);
     let new_string = ac.replace_all(string, DIGRAPHS);
     let re = Regex::new("^[^_a-zA-Z]|[^[_a-zA-Z0-9]]").unwrap();
     let nobadchars = re.replace_all(&new_string, "_");
     let re = Regex::new("^_+").unwrap();
-    re.replace_all(&nobadchars, "_").to_string()
+    GraphQLName(Cow::Owned(re.replace_all(&nobadchars, "_").into()))
 }
 
 #[cfg(test)]
@@ -26,9 +30,18 @@ mod tests {
     use super::*;
     #[test]
     fn graphql_sanitize_check() {
-        assert_eq!(graphql_sanitize("Document-TF-IDF"), "Document_TF_IDF");
-        assert_eq!(graphql_sanitize("doc:Document"), "doc_Document");
-        assert_eq!(graphql_sanitize("SørenLorenson"), "SorenLorenson");
-        assert_eq!(graphql_sanitize("ÖBB"), "OEBB");
+        assert_eq!(
+            graphql_sanitize("Document-TF-IDF"),
+            GraphQLName("Document_TF_IDF".into())
+        );
+        assert_eq!(
+            graphql_sanitize("doc:Document"),
+            GraphQLName("doc_Document".into())
+        );
+        assert_eq!(
+            graphql_sanitize("SørenLorenson"),
+            GraphQLName("SorenLorenson".into())
+        );
+        assert_eq!(graphql_sanitize("ÖBB"), GraphQLName("OEBB".into()));
     }
 }
