@@ -1,3 +1,17 @@
+# TerminusDB Server v11.1.6 Release Notes
+## Bug fixes
+* Fixed filtering over collections
+* Fixed a GraphQL renaming bug which affected prefixed classes
+* Fixed a GraphAL renaming bug in subsumption / class hierarchies
+* Schema document for cardinalities now reflects documentation
+  (returning `@min_cardinality` `@max_cardinality`)
+* Return a more understandable error when attempting to replace a
+  normal document with a JSON document.
+
+## Enhancement
+* GraphQL queries now anchor on values if they are presented in the
+  filter.
+
 # TerminusDB Server v11.1.5 Release Notes
 ## Bug fixes
 * Schema changes no longer trigger errors on bare IRIs such as foreigns
