@@ -21,11 +21,12 @@ use super::filter::{
     StringFilterInputObject,
 };
 use super::frame::{
-    is_base_type, AllFrames, ClassDefinition, CollectionKind, FieldKind, Prefixes, TypeDefinition,
+    AllFrames, BaseOrDerived, ClassDefinition, CollectionKind, FieldKind, GraphQLName, IriName,
+    Prefixes, TypeDefinition,
 };
 use super::schema::{
-    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, TerminusContext,
-    TerminusOrderBy, TerminusOrdering,
+    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
+    TerminusContext, TerminusOrderBy, TerminusOrdering,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
@@ -72,7 +73,7 @@ enum IdOperation {
 
 #[derive(Debug)]
 struct FilterObject {
-    restriction: Option<String>,
+    restriction: Option<GraphQLName<'static>>,
     edges: Vec<(String, FilterScope)>,
     ids: Vec<String>,
 }
@@ -105,7 +106,7 @@ enum FilterValue {
     BigFloat(GenericOperation, BigFloat, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
-    Enum { op: EnumOperation, value: String },
+    Enum { op: EnumOperation, value: IriName },
     Foreign(IdOperation, String),
 }
 
@@ -267,75 +268,81 @@ fn compile_boolean_input_value(string_type: &str, value: BooleanFilterInputObjec
 }
 
 fn compile_typed_filter(
-    range: &str,
+    range: &BaseOrDerived<GraphQLName>,
     all_frames: &AllFrames,
     spanning_input_value: &juniper::Spanning<InputValue>,
 ) -> FilterObjectType {
-    if is_base_type(range) {
-        match base_type_kind(&range[4..]) {
+    match range {
+        BaseOrDerived::Base(base_type) => match base_type_kind(base_type) {
             BaseTypeKind::String => {
                 let value = StringFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_string_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_string_input_value(base_type, value.unwrap()))
             }
             BaseTypeKind::SmallInteger => {
                 let value = IntFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_small_integer_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_small_integer_input_value(
+                    base_type,
+                    value.unwrap(),
+                ))
             }
             BaseTypeKind::BigIntger => {
                 let value = BigIntFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_big_int_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_big_int_input_value(base_type, value.unwrap()))
             }
             BaseTypeKind::Boolean => {
                 let value = BooleanFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_boolean_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_boolean_input_value(base_type, value.unwrap()))
             }
             BaseTypeKind::DateTime => {
                 let value = DateTimeFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_datetime_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_datetime_input_value(base_type, value.unwrap()))
             }
             BaseTypeKind::Float => {
                 let value = FloatFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_float_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_float_input_value(base_type, value.unwrap()))
             }
             BaseTypeKind::Decimal => {
                 let value = BigFloatFilterInputObject::from_input_value(&spanning_input_value.item);
-                FilterObjectType::Value(compile_decimal_input_value(range, value.unwrap()))
+                FilterObjectType::Value(compile_decimal_input_value(base_type, value.unwrap()))
             }
-        }
-    } else {
-        match &all_frames.frames.get(range) {
-            Some(TypeDefinition::Class(class_definition)) => {
-                if let InputValue::Object(edges) = &spanning_input_value.item {
-                    let inner = compile_edges_to_filter(range, all_frames, class_definition, edges);
-                    FilterObjectType::Node(Rc::new(inner), range.to_string())
-                } else {
-                    panic!("object filter was not an object")
+        },
+        BaseOrDerived::Derived(range) => {
+            match &all_frames.frames.get(range) {
+                Some(TypeDefinition::Class(class_definition)) => {
+                    if let InputValue::Object(edges) = &spanning_input_value.item {
+                        let inner =
+                            compile_edges_to_filter(range, all_frames, class_definition, edges);
+                        FilterObjectType::Node(Rc::new(inner), range.to_string())
+                    } else {
+                        panic!("object filter was not an object")
+                    }
                 }
-            }
-            Some(TypeDefinition::Enum(_)) => {
-                let value =
-                    EnumFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
-                let encoded = all_frames.fully_qualified_enum_value(range, &value.enum_value.value);
-                FilterObjectType::Value(FilterValue::Enum {
-                    op: value.op,
-                    value: encoded,
-                })
-            }
-            None => {
-                // it's a foreign
-                let IdFilterInputObject { id, ids } =
-                    IdFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
-                let op = match (id, ids) {
-                    (Some(id), _) => IdOperation::Equals(id.to_string()),
-                    (_, Some(ids)) => {
-                        IdOperation::OneOf(ids.into_iter().map(|id| id.to_string()).collect())
-                    }
-                    // TODO this should be a proper error
-                    (None, None) => {
-                        panic!("input document does not have either an id or a list of ids")
-                    }
-                };
-                FilterObjectType::Value(FilterValue::Foreign(op, range.to_string()))
+                Some(TypeDefinition::Enum(_)) => {
+                    let value = EnumFilterInputObject::from_input_value(&spanning_input_value.item)
+                        .unwrap();
+                    let encoded =
+                        all_frames.graphql_enum_value_to_iri_name(range, &value.enum_value.value);
+                    FilterObjectType::Value(FilterValue::Enum {
+                        op: value.op,
+                        value: encoded,
+                    })
+                }
+                None => {
+                    // it's a foreign
+                    let IdFilterInputObject { id, ids } =
+                        IdFilterInputObject::from_input_value(&spanning_input_value.item).unwrap();
+                    let op = match (id, ids) {
+                        (Some(id), _) => IdOperation::Equals(id.to_string()),
+                        (_, Some(ids)) => {
+                            IdOperation::OneOf(ids.into_iter().map(|id| id.to_string()).collect())
+                        }
+                        // TODO this should be a proper error
+                        (None, None) => {
+                            panic!("input document does not have either an id or a list of ids")
+                        }
+                    };
+                    FilterObjectType::Value(FilterValue::Foreign(op, range.to_string()))
+                }
             }
         }
     }
@@ -344,7 +351,7 @@ fn compile_typed_filter(
 fn compile_collection_filter(
     collection_filter: CollectionFilterInputObject,
     all_frames: &AllFrames,
-    range: &str,
+    range: &BaseOrDerived<GraphQLName>,
     kind: CollectionKind,
 ) -> FilterScope {
     let mut edges = collection_filter.edges;
@@ -362,7 +369,7 @@ fn compile_collection_filter(
 }
 
 fn compile_edges_to_filter(
-    class_name: &str,
+    class_name: &GraphQLName,
     all_frames: &AllFrames,
     class_definition: &ClassDefinition,
     edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
@@ -371,8 +378,8 @@ fn compile_edges_to_filter(
     let mut restriction = None;
     let mut ids = Vec::new();
     for (spanning_string, spanning_input_value) in edges.iter() {
-        let field_name = &spanning_string.item;
-        if field_name == "_and" {
+        let field_name = GraphQLName(spanning_string.item.to_string().into());
+        if field_name.as_str() == "_and" {
             let input_value = &spanning_input_value.item;
             match input_value {
                 InputValue::List(lst) => {
@@ -395,7 +402,7 @@ fn compile_edges_to_filter(
                 }
                 _ => panic!("Invalid operand to and "),
             }
-        } else if field_name == "_or" {
+        } else if field_name.as_str() == "_or" {
             let input_value = &spanning_input_value.item;
             match input_value {
                 InputValue::List(lst) => {
@@ -418,7 +425,7 @@ fn compile_edges_to_filter(
                 }
                 _ => panic!("Invalid operand to and "),
             }
-        } else if field_name == "_not" {
+        } else if field_name.as_str() == "_not" {
             let elt = &spanning_input_value.item;
             match elt {
                 InputValue::Object(o) => result.push((
@@ -432,12 +439,12 @@ fn compile_edges_to_filter(
                 )),
                 _ => panic!("We should not have a non object in And-clause"),
             }
-        } else if field_name == "_restriction" {
+        } else if field_name.as_str() == "_restriction" {
             let input_value = &spanning_input_value.item;
             let expected: GeneratedEnum = GeneratedEnum::from_input_value(input_value)
                 .expect("restriction value in filter was not a string");
             restriction = Some(expected.value);
-        } else if field_name == "_ids" {
+        } else if field_name.as_str() == "_ids" {
             if !ids.is_empty() {
                 panic!("You must not specify '_id' and '_ids' simultaneously");
             }
@@ -453,7 +460,7 @@ fn compile_edges_to_filter(
                     .to_owned();
                 ids.push(id);
             }
-        } else if field_name == "_id" {
+        } else if field_name.as_str() == "_id" {
             if !ids.is_empty() {
                 panic!("You must not specify '_id' and '_ids' simultaneously");
             }
@@ -464,9 +471,9 @@ fn compile_edges_to_filter(
                 .to_owned();
             ids.push(id);
         } else {
-            let field = class_definition.resolve_field(field_name);
+            let field = class_definition.resolve_field(&field_name);
             let prefixes = &all_frames.context;
-            let property = class_definition.fully_qualified_property_name(prefixes, field_name);
+            let property = class_definition.graphql_to_iri_name(prefixes, &field_name);
             let range = field.range();
             let kind = field.kind();
             match kind {
@@ -493,7 +500,7 @@ fn compile_edges_to_filter(
 }
 
 fn compile_filter_object(
-    class_name: &str,
+    class_name: &GraphQLName,
     all_frames: &AllFrames,
     filter_input: &FilterInputObject,
 ) -> FilterObject {
@@ -505,7 +512,7 @@ fn compile_filter_object(
 pub fn predicate_value_filter<'a, 'b>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object: ObjectType,
+    object: NodeOrValue,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64>
 where
@@ -514,8 +521,8 @@ where
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
-            ObjectType::Value(entry) => g.object_value_id(&entry),
-            ObjectType::Node(node) => g.object_node_id(&node),
+            NodeOrValue::Value(entry) => g.object_value_id(&entry),
+            NodeOrValue::Node(node) => g.object_node_id(node.as_str()),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(iter.filter(move |s| {
@@ -532,13 +539,13 @@ where
 pub fn predicate_value_iter<'a>(
     g: &'a SyncStoreLayer,
     property: &'a str,
-    object: &ObjectType,
+    object: &NodeOrValue,
 ) -> ClonableIterator<'a, u64> {
     let maybe_property_id = g.predicate_id(property);
     if let Some(property_id) = maybe_property_id {
         let maybe_object_id = match object {
-            ObjectType::Value(entry) => g.object_value_id(entry),
-            ObjectType::Node(node) => g.object_node_id(node),
+            NodeOrValue::Value(entry) => g.object_value_id(entry),
+            NodeOrValue::Node(node) => g.object_node_id(node.as_str()),
         };
         if let Some(object_id) = maybe_object_id {
             ClonableIterator::new(CachedClonableIterator::new(
@@ -703,7 +710,7 @@ fn object_type_filter<'a>(
         }
         FilterValue::Enum { op, value } => {
             let op = *op;
-            match g.object_node_id(value) {
+            match g.object_node_id(value.as_str()) {
                 Some(object_id) => ClonableIterator::new(iter.filter(move |object| match op {
                     EnumOperation::Eq => *object == object_id,
                     EnumOperation::Ne => *object != object_id,
@@ -715,7 +722,7 @@ fn object_type_filter<'a>(
             }
         }
         FilterValue::Foreign(op, _) => match op {
-            IdOperation::Equals(val) => match g.object_node_id(val) {
+            IdOperation::Equals(val) => match g.object_node_id(val.as_str()) {
                 Some(object_id) => {
                     ClonableIterator::new(iter.filter(move |object| *object == object_id))
                 }
@@ -724,7 +731,7 @@ fn object_type_filter<'a>(
             IdOperation::OneOf(vals) => {
                 let object_ids: Vec<_> = vals
                     .iter()
-                    .filter_map(|val| g.object_node_id(val))
+                    .filter_map(|val| g.object_node_id(val.as_str()))
                     .collect();
                 if object_ids.is_empty() {
                     ClonableIterator::new(std::iter::empty())
@@ -739,6 +746,7 @@ fn object_type_filter<'a>(
 fn compile_query<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
+    all_frames: &'a AllFrames,
     filter: Rc<FilterObject>,
     iter: ClonableIterator<'a, u64>,
 ) -> ClonableIterator<'a, u64> {
@@ -749,7 +757,8 @@ fn compile_query<'a>(
     }
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
-            id_matches_restriction(context, &restriction_name, *id)
+            let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
+            id_matches_restriction(context, restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -758,7 +767,7 @@ fn compile_query<'a>(
         match filter {
             FilterScope::And(vec) => {
                 for filter in vec.iter() {
-                    iter = compile_query(context, g, filter.clone(), iter)
+                    iter = compile_query(context, g, all_frames, filter.clone(), iter)
                 }
             }
             FilterScope::Or(vec) => {
@@ -770,7 +779,7 @@ fn compile_query<'a>(
                 //or_iter = ClonableIterator::new(std::iter::empty());
                 iter = ClonableIterator::new(vec.clone().into_iter().flat_map(move |filter| {
                     let iter_copy = ClonableIterator::new(initial_vector.clone().into_iter());
-                    compile_query(context, g, filter, iter_copy)
+                    compile_query(context, g, all_frames, filter, iter_copy)
                 }));
             }
             FilterScope::Not(filter) => {
@@ -782,7 +791,7 @@ fn compile_query<'a>(
                     initial_set.clone().into_iter(),
                 ));
                 let sub_iter: HashSet<u64> =
-                    compile_query(context, g, filter.clone(), initial_iter).collect();
+                    compile_query(context, g, all_frames, filter.clone(), initial_iter).collect();
 
                 let result = &initial_set - &sub_iter;
                 iter = ClonableIterator::new(CachedClonableIterator::new(result.into_iter()));
@@ -799,7 +808,7 @@ fn compile_query<'a>(
                                         .map(|t| t.object)
                                         .into_iter(),
                                 );
-                                compile_query(context, g, sub_filter.clone(), objects)
+                                compile_query(context, g, all_frames, sub_filter.clone(), objects)
                                     .next()
                                     .is_some()
                             }))
@@ -823,7 +832,7 @@ fn compile_query<'a>(
                 }
             }
             FilterScope::Collection(kind, op, o) => {
-                let kind = kind.clone();
+                let kind = *kind;
                 let maybe_property_id = g.predicate_id(predicate);
                 if let Some(property_id) = maybe_property_id {
                     match op {
@@ -833,9 +842,15 @@ fn compile_query<'a>(
                                 iter = ClonableIterator::new(iter.filter(move |subject| {
                                     let objects =
                                         collection_kind_iterator(g, kind, *subject, property_id);
-                                    compile_query(context, g, sub_filter.clone(), objects)
-                                        .next()
-                                        .is_some()
+                                    compile_query(
+                                        context,
+                                        g,
+                                        all_frames,
+                                        sub_filter.clone(),
+                                        objects,
+                                    )
+                                    .next()
+                                    .is_some()
                                 }));
                             }
                             FilterObjectType::Value(filter_type) => {
@@ -856,9 +871,14 @@ fn compile_query<'a>(
                                     let objects =
                                         collection_kind_iterator(g, kind, *subject, property_id);
                                     let expected = objects.clone().count();
-                                    let actual =
-                                        compile_query(context, g, sub_filter.clone(), objects)
-                                            .count();
+                                    let actual = compile_query(
+                                        context,
+                                        g,
+                                        all_frames,
+                                        sub_filter.clone(),
+                                        objects,
+                                    )
+                                    .count();
 
                                     expected == actual
                                 }));
@@ -946,7 +966,7 @@ impl<'a> std::ops::Deref for PathEdgeType<'a> {
 
 fn generate_iterator_from_filter<'a>(
     g: &'a SyncStoreLayer,
-    class_name: &'a str,
+    class_name: &'a GraphQLName<'a>,
     all_frames: &AllFrames,
     filter_opt: Option<&FilterObject>,
     includes_children: bool,
@@ -996,13 +1016,13 @@ fn generate_iterator_from_filter<'a>(
     }
     if let Some(iter) = iter {
         // we have collected a path leading up to this point. Let's filter it down to the expected type.
-        let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+        let expanded_type_name = all_frames.graphql_to_iri_name(class_name);
         if includes_children {
             let correct_types: Vec<_> = all_frames
                 .subsumed(class_name)
                 .into_iter()
-                .map(|c| all_frames.fully_qualified_class_name(&c))
-                .flat_map(|id| g.subject_id(&id))
+                .map(|c| all_frames.graphql_to_iri_name(&c))
+                .flat_map(|id| g.subject_id(id.as_str()))
                 .collect();
             let rdf_type_id = g.predicate_id(RDF_TYPE)?;
             Some(ClonableIterator::new(iter.filter(move |id| {
@@ -1015,7 +1035,7 @@ fn generate_iterator_from_filter<'a>(
             Some(predicate_value_filter(
                 g,
                 RDF_TYPE,
-                ObjectType::Node(expanded_type_name),
+                NodeOrValue::Node(expanded_type_name),
                 iter,
             ))
         }
@@ -1136,7 +1156,7 @@ fn generate_iterator_from_edges<'a, 'b>(
 
 fn generate_initial_iterator<'a>(
     g: &'a SyncStoreLayer,
-    class_name: &'a str,
+    class_name: &'a GraphQLName<'a>,
     all_frames: &AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<ClonableIterator<'a, u64>>,
@@ -1157,15 +1177,15 @@ fn generate_initial_iterator<'a>(
                     let subsuming = if includes_children {
                         all_frames.subsumed(class_name)
                     } else {
-                        vec![class_name.to_string()]
+                        vec![class_name.clone()]
                     };
                     let mut iter = ClonableIterator::new(std::iter::empty());
                     for sub_class in subsuming {
-                        let sub_class_expanded = all_frames.fully_qualified_class_name(&sub_class);
+                        let sub_class_expanded = all_frames.graphql_to_iri_name(&sub_class);
                         let next = predicate_value_iter(
                             g,
                             RDF_TYPE,
-                            &ObjectType::Node(sub_class_expanded),
+                            &NodeOrValue::Node(sub_class_expanded),
                         );
                         iter = ClonableIterator::new(iter.chain(next))
                     }
@@ -1180,8 +1200,8 @@ fn generate_initial_iterator<'a>(
 fn lookup_by_filter<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
-    class_name: &'a str,
-    all_frames: &AllFrames,
+    class_name: &'a GraphQLName<'a>,
+    all_frames: &'a AllFrames,
     filter_opt: Option<FilterObject>,
     zero_iter: Option<ClonableIterator<'a, u64>>,
     includes_children: bool,
@@ -1196,7 +1216,7 @@ fn lookup_by_filter<'a>(
     );
     if let Some(continuation_filter) = continuation_filter_opt {
         let continuation_filter = Rc::new(continuation_filter);
-        compile_query(context, g, continuation_filter, iterator)
+        compile_query(context, g, all_frames, continuation_filter, iterator)
     } else {
         iterator
     }
@@ -1205,9 +1225,8 @@ fn lookup_by_filter<'a>(
 pub fn run_filter_query<'a>(
     context: &'a TerminusContext<'static>,
     g: &'a SyncStoreLayer,
-    prefixes: &'a Prefixes,
     arguments: &'a juniper::Arguments,
-    class_name: &'a str,
+    class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
     zero_iter: Option<ClonableIterator<'a, u64>>,
 ) -> Vec<u64> {
@@ -1215,11 +1234,11 @@ pub fn run_filter_query<'a>(
         match (arguments.get::<ID>("id"), arguments.get::<Vec<ID>>("ids")) {
             (Some(id_string), None) => match zero_iter {
                 None => {
-                    let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+                    let expanded_type_name = all_frames.graphql_to_iri_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
-                        ObjectType::Node(expanded_type_name),
+                        NodeOrValue::Node(expanded_type_name),
                         ClonableIterator::new(g.subject_id(&id_string).into_iter()),
                     ))
                 }
@@ -1229,11 +1248,11 @@ pub fn run_filter_query<'a>(
             },
             (None, Some(id_vec)) => match zero_iter {
                 None => {
-                    let expanded_type_name = all_frames.fully_qualified_class_name(class_name);
+                    let expanded_type_name = all_frames.graphql_to_iri_name(class_name);
                     Some(predicate_value_filter(
                         g,
                         RDF_TYPE,
-                        ObjectType::Node(expanded_type_name),
+                        NodeOrValue::Node(expanded_type_name),
                         ClonableIterator::new(id_vec.into_iter().flat_map(|id| g.subject_id(&id))),
                     ))
                 }
@@ -1287,7 +1306,9 @@ pub fn run_filter_query<'a>(
             )
             .unique()
             .collect();
-            results.sort_by_cached_key(|id| create_query_order_key(g, prefixes, *id, &fields));
+            results.sort_by_cached_key(|id| {
+                create_query_order_key(g, all_frames, class_name, *id, &fields)
+            });
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
             // better to borrow in the other branch?
             ClonableIterator::new(
@@ -1323,15 +1344,16 @@ fn include_children(arguments: &juniper::Arguments) -> bool {
 
 fn create_query_order_key(
     g: &SyncStoreLayer,
-    p: &Prefixes,
+    all_frames: &AllFrames,
+    class: &GraphQLName,
     id: u64,
-    order_desc: &[(String, TerminusOrdering)],
+    order_desc: &[(GraphQLName, TerminusOrdering)],
 ) -> QueryOrderKey {
     let vec: Vec<_> = order_desc
         .iter()
         .filter_map(|(property, ordering)| {
-            let predicate = p.expand_schema(property);
-            let predicate_id = g.predicate_id(&predicate)?;
+            let predicate = all_frames.graphql_property_to_iri(class, property)?;
+            let predicate_id = g.predicate_id(predicate.as_str())?;
             let res = g.single_triple_sp(id, predicate_id).map(move |t| {
                 g.id_object(t.object)
                     .expect("This object must exist")
