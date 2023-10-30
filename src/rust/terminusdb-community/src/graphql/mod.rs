@@ -57,7 +57,7 @@ pub struct GraphQLExecutionContext {
         TerminusMutationRoot,
         EmptySubscription<TerminusContext<'static>>,
     >,
-    context: TerminusContext<'static>,
+    pub(crate) context: TerminusContext<'static>,
 }
 
 impl GraphQLExecutionContext {
@@ -103,6 +103,10 @@ impl GraphQLExecutionContext {
         let lifetime_erased_graphql_context: TerminusContext<'static> =
             unsafe { std::mem::transmute(graphql_context) };
         Ok(Self::new(type_collection, lifetime_erased_graphql_context))
+    }
+
+    pub fn prolog_context(&self) -> &GenericQueryableContext<'static> {
+        &self.context.context
     }
 
     pub fn execute_query<T, F: Fn(&GraphQLResponse) -> T>(
