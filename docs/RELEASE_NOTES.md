@@ -1,3 +1,8 @@
+# TerminusDB Server v11.1.7 Release Notes
+## Bug fixes
+* More robust string conversions in graphql (#2010)
+* Fix regression in index document endpoint (#2011)
+
 # TerminusDB Server v11.1.6 Release Notes
 ## Bug fixes
 * Fixed filtering over collections
