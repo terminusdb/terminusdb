@@ -144,9 +144,10 @@ impl EmbeddingContext {
                 &none_term,
             )?
         };
+        let inner_context = execution_context.prolog_context();
 
-        for type_tuple_term in context.term_list_iter(queries_term) {
-            let [type_name_term, query_term] = context.compound_terms(&type_tuple_term)?;
+        for type_tuple_term in inner_context.term_list_iter(queries_term) {
+            let [type_name_term, query_term] = inner_context.compound_terms(&type_tuple_term)?;
             let type_name: PrologText = type_name_term.get_ex()?;
             let source: Box<String> = Box::new(query_term.get_ex()?);
             let document = parse_document_source(&source, &execution_context.root_node.schema);
