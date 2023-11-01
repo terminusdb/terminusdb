@@ -168,14 +168,14 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(db), cors_handler(Method, db_handler, [add_payload(false)]),
+:- http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),
                 [method(Method),
                  methods([options,get])]).
 :- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
                 [method(Method),
                  methods([options,get,head,post,put,delete])]).
 
-db_handler(get, Request, System_DB, Auth) :-
+db_handler(get, Organization, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
     ->  true
     ;   Search = []),
@@ -186,11 +186,16 @@ db_handler(get, Request, System_DB, Auth) :-
         (   param_value_search_optional(Search, branches, boolean, false, Branches),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
             list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches,
-                                                                 verbose: Verbose}),
+                                                                 verbose: Verbose,
+                                                                 organization: Organization}),
             cors_reply_json(Request, Database_Objects)
         )
     ).
 
+db_handler(get, Organization, DB, Request, System_DB, Auth) :-
+    DB = '',
+    !,
+    db_handler(get, Organization, Request, System_DB, Auth).
 db_handler(get, Organization, DB, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
     ->  true

@@ -15,7 +15,9 @@
               assert_write_access/4,
               authorisation_object/3,
               user_accessible_database/3,
+              user_accessible_database_id/3,
               user_accessible_database/5,
+              user_accessible_database_id/5,
               check_descriptor_auth/4,
               is_super_user/1,
               is_super_user/2,
@@ -507,6 +509,18 @@ user_accessible_database(DB, User_ID, Database) :-
         )).
 
 /**
+ * user_accessible_database_id(DB,User_ID,Database_Uri) is det.
+ *
+ * Finds all database ids accessible to a user.
+ */
+user_accessible_database_id(DB, User_ID, Database_ID) :-
+    ask(DB,
+        (   t(User_ID, capability, Capability_ID),
+            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            isa(Database_ID, 'UserDatabase')
+        )).
+
+/**
  * user_accessible_database(DB,User_ID,Org,Name,Database) is det.
  *
  * Finds a database object accessible to a user.
@@ -526,6 +540,34 @@ user_accessible_database(DB, User_ID, Org, Name, Database) :-
             t(Org_Id, database, Database_ID),
             t(Org_Id, name, Org_S^^xsd:string),
             get_document(Database_ID, Database)
+        )),
+    (   var(Org)
+    ->  atom_string(Org, Org_S)
+    ;   true),
+    (   var(Name)
+    ->  atom_string(Name, Name_S)
+    ;   true
+    ).
+
+/**
+ * user_accessible_database_id(DB,User_ID,Org,Name,Database_ID) is det.
+ *
+ * Finds a database object accessible to a user.
+ */
+user_accessible_database_id(DB, User_ID, Org, Name, Database_ID) :-
+    (   ground(Org)
+    ->  atom_string(Org, Org_S)
+    ;   true),
+    (   ground(Name)
+    ->  atom_string(Name, Name_S)
+    ;   true),
+    ask(DB,
+        (   t(User_ID, capability, Capability_ID),
+            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            isa(Database_ID, 'UserDatabase'),
+            t(Database_ID, name, Name_S^^xsd:string),
+            t(Org_Id, database, Database_ID),
+            t(Org_Id, name, Org_S^^xsd:string)
         )),
     (   var(Org)
     ->  atom_string(Org, Org_S)

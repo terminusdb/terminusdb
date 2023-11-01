@@ -1579,9 +1579,10 @@ run_command(list,Databases,Opts) :-
     opt_authority(Opts, Auth),
     format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~nWarning: Use ('terminusdb db list') instead.~n", []),
     option(branches(Branches), Opts),
+    open_descriptor(system_descriptor{}, System_DB),
     (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
-    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
+    ->  list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches })
+    ;   list_existing_databases(System_DB, Databases, Database_Objects, _{ branches : Branches })
     ),
     (   option(json(true), Opts)
     ->  json_write_dict(current_output, Database_Objects)
