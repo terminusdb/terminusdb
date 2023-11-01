@@ -310,6 +310,10 @@ context_to_parent_transaction(Context,Parent_Transaction) :-
         ),
         error(context_has_multiple_parents(Context))).
 
+default_ask_options(
+    options{ compress_prefixes : true,
+             optimize : false}).
+
 /*
  * ask(+Transaction_Object, Pre_Term:Goal) is nondet.
  *
@@ -319,7 +323,8 @@ context_to_parent_transaction(Context,Parent_Transaction) :-
  * it can't give anything back?
  */
 ask(Askable, Pre_Term) :-
-    ask(Askable, Pre_Term, [compress_prefixes(true)]).
+    default_ask_options(Options),
+    ask(Askable, Pre_Term, Options).
 
 /*
  * ask(+Transaction_Object, ?Pre_Term:Goal, +Options) is nondet.
@@ -346,10 +351,7 @@ ask(Askable, Pre_Term, Options) :-
  * Ask a woql query and get back the resulting context.
  */
 ask_ast(Context, Ast, Output_Context) :-
-    compile_query(Ast,Prog, Context, Output_Context, _{optimize: true}),
-    debug(terminus(sdk),'Program: ~q~n', [Prog]),
-
-    woql_compile:Prog.
+    ask_ast(Context, Ast, Output_Context, _{}).
 
 /*
  * ask(+Transaction_Object, Pre_Term:Goal, Options) is nondet.
@@ -357,7 +359,8 @@ ask_ast(Context, Ast, Output_Context) :-
  * Ask a woql query and get back the resulting context with some options set
  */
 ask_ast(Context, Ast, Output_Context, Options) :-
-    merge_options(Options, _{optimize: true}, New_Options),
+    default_ask_options(Default_Options),
+    merge_options(Options, Default_Options, New_Options),
     compile_query(Ast,Prog, Context, Output_Context, New_Options),
     debug(terminus(sdk),'Program: ~q~n', [Prog]),
 
