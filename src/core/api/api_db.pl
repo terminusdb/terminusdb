@@ -1,7 +1,7 @@
 :- module(api_db, [
               list_databases/4,
               list_database/6,
-              list_existing_databases/3,
+              list_existing_databases/4,
               pretty_print_databases/1,
               db_exists_api/4
           ]).
@@ -24,72 +24,63 @@ db_exists_api(System_DB, Auth, Organization, Database) :-
     resolve_absolute_descriptor([Organization,Database], Descriptor),
     check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/instance_read_access', Auth).
 
-get_all_databases(System_DB, Databases) :-
-    create_context(System_DB, Context),
+get_all_databases(System_DB, Organization, Databases) :-
     findall(
-        Path,
+        Path-Db_Uri,
         (
-            ask(Context,
+            ask(System_DB,
                 (
                     isa(Organization_Uri, 'Organization'),
                     t(Organization_Uri, name, Organization^^xsd:string),
                     t(Organization_Uri, database, Db_Uri),
                     isa(Db_Uri, 'UserDatabase'),
                     t(Db_Uri, name, Name^^xsd:string)
-            )),
+                )
+            ),
             format(string(Path),"~s/~s",[Organization,Name])),
         Databases).
 
-get_user_databases(System_DB, Auth, User_Databases) :-
+get_user_databases(System_DB, Auth, Organization, User_Databases) :-
     findall(
         Path,
-        get_user_database(System_DB, Auth, _Org, _Name, Path),
+        get_user_database(System_DB, Auth, Organization, _Name, Path),
         User_Databases).
 
-get_user_database(System_DB, Auth, Org, Name, User_Database) :-
-    create_context(System_DB, Context),
-    user_accessible_database(Context, Auth, Org, Name, _),
-    format(string(User_Database),"~s/~s",[Org,Name]).
+get_user_database(System_DB, Auth, Organization, Name, User_Database-Db_Uri) :-
+    user_accessible_database_id(System_DB, Auth, Organization, Name, Db_Uri),
+    format(string(User_Database),"~s/~s",[Organization,Name]).
 
 list_databases(System_DB, Auth, Database_Objects, Options) :-
+    ignore(option(organization(Organization), Options)),
     (   is_super_user(Auth)
-    ->  get_all_databases(System_DB, User_Databases)
-    ;   get_user_databases(System_DB, Auth, User_Databases)),
-    list_existing_databases(User_Databases, Database_Objects, Options).
+    ->  get_all_databases(System_DB, Organization, User_Databases)
+    ;   get_user_databases(System_DB, Auth, Organization, User_Databases)),
+    list_existing_databases(System_DB, User_Databases, Database_Objects, Options).
 
 list_database(System_DB, Auth, Org, Name, Database_Object, Options) :-
     get_user_database(System_DB, Auth, Org, Name, User_Database),
-    list_existing_database(User_Database, Database_Object, Options).
+    list_existing_database(System_DB, User_Database, Database_Object, Options).
 
-list_existing_databases(Databases, Database_Objects, Options) :-
+list_existing_databases(System_DB, Databases, Database_Objects, Options) :-
     findall(Database_Object,
             (   member(DB, Databases),
-                list_existing_database(DB, Database_Object, Options)),
+                list_existing_database(System_DB, DB, Database_Object, Options)),
             Database_Objects).
 
-list_existing_database(Database, Database_Object, Options) :-
+list_existing_database(System_DB, Database-Db_Uri, Database_Object, Options) :-
     do_or_die(
         (   resolve_absolute_string_descriptor(Database,Desc),
             resolve_relative_string_descriptor(Desc,'_commits', Repo)),
         error(invalid_absolute_path(Database),_)),
 
-    Db = (Desc.repository_descriptor.database_descriptor),
-    % Check the database exists.
-    do_or_die(
-        organization_database_name_uri(system_descriptor{},
-                                       Db.organization_name,Db.database_name, Db_Uri),
-        error(invalid_database_name(Database), _)
-    ),
-
     (   option(verbose(true), Options)
-    ->  get_document(system_descriptor{}, Db_Uri, Database_Record)
+    ->  get_document(System_DB, Db_Uri, Database_Record)
     ;   Database_Record = _{}
     ),
-    (   (   option(branches(true), Options)
-        ;   option(verbose(true), Options))
+    (   option(branches(true), Options)
     ->  setof(Branch,has_branch(Repo, Branch),Branches),
         put_dict(_{ branches: Branches}, Database_Record, Database_Pre)
-    ;   Database_Pre = _{}
+    ;   Database_Pre = Database_Record
     ),
     put_dict(_{ path: Database }, Database_Pre, Database_Object).
 
@@ -176,7 +167,8 @@ test(list_existing,
              create_db_without_schema("admin","bar2"))),
       cleanup(teardown_temp_store(State))]) :-
 
-    list_existing_databases(["admin/foo2", "admin/bar2"], Database_Objects, _{branches : true}),
+    open_descriptor(system_descriptor{}, System_DB),
+    list_existing_databases(System_DB, ["admin/foo2", "admin/bar2"], Database_Objects, _{branches : true}),
     Expected_Objects = [_{branches:["main"],path:"admin/bar2"},
                         _{branches:["main"],path:"admin/foo2"}],
 
@@ -189,7 +181,8 @@ test(list_existing_no_branches,
              create_db_without_schema("admin","bar2"))),
       cleanup(teardown_temp_store(State))]) :-
 
-    list_existing_databases(["admin/foo2", "admin/bar2"], Database_Objects, _{branches : false}),
+    open_descriptor(system_descriptor{}, System_DB),
+    list_existing_databases(System_DB, ["admin/foo2", "admin/bar2"], Database_Objects, _{branches : false}),
     Expected_Objects = [_{path:"admin/bar2"},
                         _{path:"admin/foo2"}],
 
