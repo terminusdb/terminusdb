@@ -2032,7 +2032,8 @@ run_command(db,list,Databases,Opts) :-
         (   (   Databases = []
             ->  list_databases(system_descriptor{}, Auth, Database_Objects,
                                _{ branches : Branches, verbose: Verbose })
-            ;   list_existing_databases(Databases, Database_Objects,
+            ;   create_context(system_descriptor{}, System_DB),
+                list_existing_databases(System_DB, Databases, Database_Objects,
                                         _{ branches : Branches, verbose: Verbose })
             ),
             (   option(json(true), Opts)
