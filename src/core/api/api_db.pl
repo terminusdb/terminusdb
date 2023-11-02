@@ -167,7 +167,8 @@ test(list_existing,
              create_db_without_schema("admin","bar2"))),
       cleanup(teardown_temp_store(State))]) :-
 
-    list_existing_databases(["admin/foo2", "admin/bar2"], Database_Objects, _{branches : true}),
+    open_descriptor(system_descriptor{}, System_DB),
+    list_existing_databases(System_DB, ["admin/foo2", "admin/bar2"], Database_Objects, _{branches : true}),
     Expected_Objects = [_{branches:["main"],path:"admin/bar2"},
                         _{branches:["main"],path:"admin/foo2"}],
 
@@ -180,7 +181,8 @@ test(list_existing_no_branches,
              create_db_without_schema("admin","bar2"))),
       cleanup(teardown_temp_store(State))]) :-
 
-    list_existing_databases(["admin/foo2", "admin/bar2"], Database_Objects, _{branches : false}),
+    open_descriptor(system_descriptor{}, System_DB),
+    list_existing_databases(System_DB, ["admin/foo2", "admin/bar2"], Database_Objects, _{branches : false}),
     Expected_Objects = [_{path:"admin/bar2"},
                         _{path:"admin/foo2"}],
 
