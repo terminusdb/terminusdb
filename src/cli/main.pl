@@ -17,7 +17,7 @@
 :- use_module(server(main), [terminus_server/2]).
 :- use_module(library(http/json)).
 :- use_module(core(query)).
-:- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(transaction), [open_descriptor/2, organization_database_name_uri/4]).
 :- use_module(core(document), [get_document/3]).
 :- use_module(library(optparse)).
 :- use_module(core(util),
@@ -1579,9 +1579,10 @@ run_command(list,Databases,Opts) :-
     opt_authority(Opts, Auth),
     format(user_error, "Warning: This command (`terminusdb list`) is deprecated.~nWarning: Use ('terminusdb db list') instead.~n", []),
     option(branches(Branches), Opts),
+    open_descriptor(system_descriptor{}, System_DB),
     (   Databases = []
-    ->  list_databases(system_descriptor{}, Auth, Database_Objects, _{ branches : Branches })
-    ;   list_existing_databases(Databases, Database_Objects, _{ branches : Branches })
+    ->  list_databases(System_DB, Auth, Database_Objects, _{ branches : Branches })
+    ;   list_existing_databases(System_DB, Databases, Database_Objects, _{ branches : Branches })
     ),
     (   option(json(true), Opts)
     ->  json_write_dict(current_output, Database_Objects)
@@ -2028,10 +2029,21 @@ run_command(db,list,Databases,Opts) :-
     option(verbose(Verbose), Opts),
     api_report_errors(
         check_db,
-        (   (   Databases = []
-            ->  list_databases(system_descriptor{}, Auth, Database_Objects,
+        (   create_context(system_descriptor{}, System_DB),
+            (   Databases = []
+            ->  list_databases(System_DB, Auth, Database_Objects,
                                _{ branches : Branches, verbose: Verbose })
-            ;   list_existing_databases(Databases, Database_Objects,
+            ;   maplist({System_DB}/[Database, Database-Uri]>>(
+                            do_or_die(re_matchsub('([^/]+)/([^/]+)', Database, Sub),
+                                      error(invalid_absolute_path(Database),_)),
+                            get_dict(1, Sub, Org),
+                            get_dict(2, Sub, Db),
+                            do_or_die(organization_database_name_uri(System_DB, Org, Db, Uri),
+                                      error(invalid_database_name(Database),_))
+                        ),
+                        Databases,
+                        Mapped),
+                list_existing_databases(System_DB, Mapped, Database_Objects,
                                         _{ branches : Branches, verbose: Verbose })
             ),
             (   option(json(true), Opts)
