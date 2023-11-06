@@ -110,6 +110,14 @@ definition(
         types: [list(string),query]
     }).
 
+/* get / put */
+definition(
+    get{
+        name: 'Get',
+        fields: [columns, resource, optional(has_header)],
+        mode: [+,+,+],
+        types: [list(column), resource]
+    }).
 
 /* collection selection */
 definition(
@@ -523,6 +531,9 @@ cost(replace_document(_,_), Cost) =>
 
 cost(delete_document(_), Cost) =>
     Cost = 15.
+
+cost(get(_,_,_), Cost) =>
+    Cost = 0.
 
 cost(t(X, Y, Z), Cost),
 non_var(X),
