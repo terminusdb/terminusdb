@@ -519,7 +519,7 @@ test(greater, []) :-
     partition(Term,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, Reads),
     xfy_list(',', Prog, Reads),
-    print_term(Prog, []),
+
     Prog = (
         t(v(uri),predicate,v(value)),
         t(v(uri),rdf:type,'SubjectType'),
@@ -533,9 +533,7 @@ test(unmodable, [error(query_has_no_viable_mode, _)]) :-
         v(var) = v(unbound)
     ),
     partition(Term,Reads_Unordered,_Writes),
-    optimize_read_order(Reads_Unordered, Reads),
-    xfy_list(',', Prog, Reads),
-    print_term(Prog, []).
+    optimize_read_order(Reads_Unordered, _Reads).
 
 test(disconnected_partitions) :-
     disconnected_partitions(

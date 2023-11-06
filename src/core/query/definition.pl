@@ -6,6 +6,10 @@
               non_var/1
           ]).
 
+:- use_module(library(lists)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+
 is_var(v(_)).
 
 non_var(X) :- \+ is_var(X).
