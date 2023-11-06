@@ -303,6 +303,14 @@ non_commutative(limit(_,_)) =>
     true.
 non_commutative(once(_)) =>
     true.
+non_commutative(_ = _) =>
+    true.
+non_commutative(_ < _) =>
+    true.
+non_commutative(_ > _) =>
+    true.
+non_commutative(like(_,_,_)) =>
+    true.
 non_commutative(_) =>
     false.
 
@@ -595,6 +603,23 @@ test(select_regexp_2, []) :-
 						     v(vehicle_name),
 						     [v(all),v(match)])
 						)).
+
+test(greater, []) :-
+    Term = (t(v(uri), rdf:type, 'SubjectType'),
+            t(v(uri), predicate, t(value)),
+            v(value) < 1,
+            read_document(v(uri), v(doc))),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    Prog = (
+        t(v(uri),predicate,t(value)),
+        t(v(uri),rdf:type,'SubjectType'),
+        v(value)<1,
+        read_document(v(uri),v(doc))
+    ).
 
 test(disconnected_partitions) :-
     disconnected_partitions(
