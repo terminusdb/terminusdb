@@ -443,12 +443,18 @@ mode(Term, Mode),
 cost((X,Y), Cost) =>
     cost(X, Cost_X),
     cost(Y, Cost_Y),
-    Cost is Cost_X + Cost_Y.
+    (   memberchk(inf, [Cost_X,Cost_Y])
+    ->  Cost = inf
+    ;   Cost is Cost_X * Cost_Y
+    ).
 
 cost((X;Y), Cost) =>
     cost(X, Cost_X),
     cost(Y, Cost_Y),
-    Cost is Cost_X * Cost_Y.
+    (   memberchk(inf, [Cost_X,Cost_Y])
+    ->  Cost = inf
+    ;   Cost is Cost_X * Cost_Y
+    ).
 
 cost(immediately(Query), Cost) =>
     cost(Query, Cost).
@@ -464,7 +470,10 @@ cost(select(_Vars,Query), Cost) =>
 
 cost(start(N,Query), Cost) =>
     cost(Query, Cost_Query),
-    Cost is max(1.0, Cost_Query - N / Cost_Query).
+    (   Cost_Query = inf
+    ->  Cost = inf
+    ;   Cost is max(1.0, Cost_Query - N / Cost_Query)
+    ).
 
 cost(limit(N,Query), Cost) =>
     cost(Query, Cost_Query),

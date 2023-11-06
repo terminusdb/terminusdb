@@ -203,6 +203,10 @@ optimize_conjuncts(Read, Ordered) :-
 
 optimize_read_order(Read, Ordered) :-
     optimize_conjuncts(Read, Ordered_Bound),
+    die_if(
+        (   xfy_list(',', Prog, Ordered_Bound),
+            cost(Prog, inf)),
+        error(query_has_no_viable_mode, _)),
     undummy_bind(Ordered_Bound, Ordered).
 
 non_commutative(start(_,_)) =>
@@ -522,6 +526,16 @@ test(greater, []) :-
         v(value) < 1,
         get_document(v(uri),v(doc))
     ).
+
+test(unmodable, [error(query_has_no_viable_mode, _)]) :-
+    Term = (
+        t(a, b, v(var)),
+        v(var) = v(unbound)
+    ),
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    print_term(Prog, []).
 
 test(disconnected_partitions) :-
     disconnected_partitions(
