@@ -7,7 +7,7 @@ use swipl::{atom, predicates, prelude::Atom, result::PrologError};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::{
-    consts::{RDF_TYPE, SYS_JSON_DOCUMENT},
+    consts::{RdfIds, SysIds, RDF_TYPE, SYS_JSON_DOCUMENT},
     schema::SchemaQueryContext,
     terminus_store::Layer,
     types::{transaction_instance_layer, transaction_schema_layer},
@@ -41,7 +41,9 @@ pub fn changed_document_ids(
     schema: &SyncStoreLayer,
     instance: &SyncStoreLayer,
 ) -> io::Result<Vec<(u64, ChangeType)>> {
-    let schema_context = SchemaQueryContext::new(schema);
+    let schema_rdf = RdfIds::new(Some(schema.clone()));
+    let schema_sys = SysIds::new(Some(schema.clone()));
+    let schema_context = SchemaQueryContext::new(schema, &schema_rdf, &schema_sys);
     let schema_document_type_ids = schema_context.get_document_type_ids_from_schema();
     let document_type_ids: HashSet<u64> = schema_context
         .schema_to_instance_types(instance, schema_document_type_ids)

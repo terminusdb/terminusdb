@@ -1,6 +1,9 @@
 #[macro_use]
 mod log;
 
+#[macro_use]
+mod dict_lookup;
+
 mod changes;
 mod consts;
 mod doc;
