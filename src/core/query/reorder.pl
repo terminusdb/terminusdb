@@ -1,20 +1,19 @@
 :- module('query/reorder',[
-              optimize_read_order/2
+              optimize_read_order/2,
+              is_var/1,
+              non_var/1
           ]).
 
 :- use_module(core(util)).
 :- use_module(partition, [partition/3]).
 :- use_module(woql_compile, [mode_for_compound/2]).
+:- use_module(definition, [mode/2, definition/1, cost/2, is_var/1, non_var/1]).
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
-
-is_var(v(_)).
-
-non_var(X) :- \+ is_var(X).
 
 term_vars(v(X), Vars) =>
     Vars = [X].
@@ -74,99 +73,10 @@ term_mvars(Term, MVars) =>
     append(MVars_Lists, MVars_Unsorted),
     sort(MVars_Unsorted,MVars).
 
-po(t(X, P, Y), t(_A, _Q, _B)),
-non_var(X), non_var(P), non_var(Y) =>
-    true.
-po(t(X, P, _Y), t(_A, _Q, B)),
-non_var(X), non_var(P),
-is_var(B) =>
-    true.
-po(t(_X, P, Y), t(A, Q, B)),
-non_var(P), non_var(Y),
-is_var(A), non_var(Q), non_var(B) =>
-    (   P = rdf:type
-    ->  Q = rdf:type
-    ;   false
-    ).
-po(t(_X, P, Y), t(A, Q, _B)),
-non_var(P), non_var(Y),
-(   is_var(A)
-;   is_var(Q)) =>
-    true.
-po(t(X, _P, _Y), t(A, Q, B)),
-non_var(X),
-(   is_var(A),
-    is_var(Q)
-;   is_var(A),
-    is_var(B)
-;   is_var(B),
-    is_var(Q)) =>
-    true.
-po(t(_X, _P, Y), t(A, Q, B)),
-non_var(Y),
-(   is_var(A),
-    is_var(Q)
-;   is_var(A),
-    is_var(B)
-;   is_var(B),
-    is_var(Q)) =>
-    true.
-po(t(_X, P, _Y), t(A, _Q, B)),
-non_var(P),
-is_var(A),
-is_var(B) =>
-    true.
-po(t(_X, _P, _Y), t(A, Q, B)),
-is_var(A),
-is_var(B),
-is_var(Q) =>
-    true.
-po(t(_X, _P, _Y), t(_A, _B, _C)) =>
-    false.
-po(t(_X, _P, _Y), Term),
-term_vars(Term, Vars),
-Vars = [] =>
-    false.
-po(Term, t(_X, _P, _Y)),
-term_vars(Term, Vars) =>
-    Vars = [].
-po(TermA, _TermB),
-violates_static_mode(TermA) =>
-    false.
-po(_TermA, TermB),
-violates_static_mode(TermB) =>
-    true.
-po(not(Q), _),
-term_vars(Q, Vars) =>
-    Vars = [].
-po(_, not(Q)),
-term_vars(Q, Vars) =>
-    Vars \= [].
-po(Term1, Term2),
-Term1 = get_document(_, _),
-Term2 = get_document(_, _),
-term_vars(Term1, Vars1),
-term_vars(Term2, Vars2),
-length(Vars1, N1),
-length(Vars2, N2) =>
-    N1 < N2.
-po(get_document(_,_), _) =>
-    false.
-po(_, get_document(_,_)) =>
-    true.
-po(TermA, TermB),
-term_vars(TermA, VarsA),
-term_vars(TermB, VarsB),
-length(VarsA,NA),
-length(VarsB,NB),
-NA < NB =>
-    true.
-po(TermA, TermB) =>
-    compare((<), TermA, TermB).
-
-violates_static_mode(TermA) :-
-    mode_for_compound(TermA, Modes),
-    memberchk(v(_)-ground, Modes).
+po(Term1, Term2) :-
+    cost(Term1, Cost1),
+    cost(Term2, Cost2),
+    Cost1 =< Cost2.
 
 po_comp(Op, X, Y) :-
     (   po(X, Y)
@@ -293,23 +203,47 @@ optimize_conjuncts(Read, Ordered) :-
 
 optimize_read_order(Read, Ordered) :-
     optimize_conjuncts(Read, Ordered_Bound),
+    die_if(
+        (   xfy_list(',', Prog, Ordered_Bound),
+            cost(Prog, inf)),
+        error(query_has_no_viable_mode, _)),
     undummy_bind(Ordered_Bound, Ordered).
 
-non_commutative(re(_,_,_)) =>
-    true.
+non_commutative((X,Y)) =>
+    once(
+        (   non_commutative(X)
+        ;   non_commutative(Y))
+    ).
+non_commutative((X;Y)) =>
+    once(
+        (   non_commutative(X)
+        ;   non_commutative(Y))
+    ).
+non_commutative(immediately(Query)) =>
+    non_commutative(Query).
+non_commutative(opt(Query)) =>
+    non_commutative(Query).
+non_commutative(select(_,Query)) =>
+    non_commutative(Query).
+non_commutative(count(Query,_)) =>
+    non_commutative(Query).
+non_commutative(not(Query)) =>
+    non_commutative(Query).
+non_commutative(group_by(_,_,Query,_)) =>
+    non_commutative(Query).
+non_commutative(distinct(_,Query)) =>
+    non_commutative(Query).
+non_commutative(using(_,Query)) =>
+    non_commutative(Query).
+non_commutative(from(_,Query)) =>
+    non_commutative(Query).
+non_commutative(into(_,Query)) =>
+    non_commutative(Query).
 non_commutative(start(_,_)) =>
     true.
 non_commutative(limit(_,_)) =>
     true.
 non_commutative(once(_)) =>
-    true.
-non_commutative(_ = _) =>
-    true.
-non_commutative(_ < _) =>
-    true.
-non_commutative(_ > _) =>
-    true.
-non_commutative(like(_,_,_)) =>
     true.
 non_commutative(_) =>
     false.
@@ -488,6 +422,7 @@ test(internal_cuts, []) :-
     partition(Term,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, Reads),
     xfy_list(',', Prog, Reads),
+
     Prog = (
         t(x,p,v(a)),
         t(v(a),p,v(d)),
@@ -525,6 +460,7 @@ test(order_type) :-
         t(v(x), name, "main"^^xsd:string)
     ],
     optimize_read_order(Reads, Ordered),
+
     Ordered = [
         t(v(x),name,"main"^^xsd:string),
 		t(v(x),rdf:type,'@schema':'Branch')
@@ -536,7 +472,7 @@ test(select_not, []) :-
                [v(document)],
                (   member(v(doc_id),[doc1,doc2]),
                    t(v(doc_id), rdf:type, v(type)),
-                   not(eq(v(type), rdf:'List')),
+                   not(v(type) = rdf:'List'),
                    get_document(v(doc_id), v(document))
                )
            ),
@@ -548,7 +484,7 @@ test(select_not, []) :-
                [v(document)],
 			   ( member(v(doc_id),[doc1,doc2]),
 				 t(v(doc_id),rdf:type,v(type)),
-				 not(eq(v(type),rdf:'List')),
+				 not((v(type) = rdf:'List')),
 				 get_document(v(doc_id),v(document))
 			   )).
 
@@ -572,10 +508,10 @@ test(select_regexp_1, []) :-
 						  t(v(vehicle),
 						    label,
 						    v(vehicle_name)),
-						  t(v(person),label,v(person_name)),
 						  re("M(.*)",
 						     v(vehicle_name),
-						     [v(all)])
+						     [v(all)]),
+                          t(v(person),label,v(person_name))
 						)).
 
 test(select_regexp_2, []) :-
@@ -598,28 +534,50 @@ test(select_regexp_2, []) :-
 						  t(v(vehicle),
 						    label,
 						    v(vehicle_name)),
-						  t(v(person),label,v(person_name)),
 						  re("M(.*)",
 						     v(vehicle_name),
-						     [v(all),v(match)])
+						     [v(all),v(match)]),
+                          t(v(person),label,v(person_name))
 						)).
 
 test(greater, []) :-
     Term = (t(v(uri), rdf:type, 'SubjectType'),
-            t(v(uri), predicate, t(value)),
+            t(v(uri), predicate, v(value)),
             v(value) < 1,
-            read_document(v(uri), v(doc))),
+            get_document(v(uri), v(doc))),
 
     partition(Term,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, Reads),
     xfy_list(',', Prog, Reads),
 
     Prog = (
-        t(v(uri),predicate,t(value)),
+        t(v(uri),predicate,v(value)),
         t(v(uri),rdf:type,'SubjectType'),
-        v(value)<1,
-        read_document(v(uri),v(doc))
+        v(value) < 1,
+        get_document(v(uri),v(doc))
     ).
+
+test(reorder_once, []) :-
+    Term = (
+        t(v(x), v(y), v(z)),
+        select([v(x)],
+               once(
+                   t(v(x), p, v(z))))
+    ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    Term = Prog.
+
+test(unmodable, [error(query_has_no_viable_mode, _)]) :-
+    Term = (
+        t(a, b, v(var)),
+        v(var) = v(unbound)
+    ),
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, _Reads).
 
 test(disconnected_partitions) :-
     disconnected_partitions(

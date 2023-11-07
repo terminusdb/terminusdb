@@ -718,6 +718,13 @@ api_error_jsonld_(woql,error(existence_error(matching_rule,Term),_), JSON) :-
                               'api:value' : TermW},
              'api:message' : Msg
             }.
+api_error_jsonld_(woql,error(query_has_no_viable_mode,_), JSON) :-
+    format(string(Msg), "The query you have sent has no viable mode. Some variables can not be bound under any reordering.", []),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:NoViableMode' },
+             'api:message' : Msg
+            }.
 api_error_jsonld_(clone,error(no_remote_authorization,_),JSON) :-
     format(string(Msg), "No remote authorization supplied", []),
     JSON = _{'@type' : 'api:CloneErrorResponse',

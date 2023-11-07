@@ -322,6 +322,22 @@ describe('woql-auth', function () {
       expect(r.body['api:error']['@type']).to.equal('api:DocumentNotFound')
     })
 
+    it('fails when we try to use an unmodable query', async function () {
+      const query = {
+        '@type': 'Equals',
+        left: {
+          '@type': 'Value',
+          variable: 'x',
+        },
+        right: {
+          '@type': 'Value',
+          variable: 'x',
+        },
+      }
+      const r = await woql.post(agent, query).unverified()
+      expect(r.body['api:error']['@type']).to.equal('api:NoViableMode')
+    })
+
     it('passes UpdateDocument with node identifier', async function () {
       const query = queryTemplate()
       query.identifier = { '@type': 'NodeValue', node: id }
