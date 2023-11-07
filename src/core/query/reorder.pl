@@ -209,6 +209,36 @@ optimize_read_order(Read, Ordered) :-
         error(query_has_no_viable_mode, _)),
     undummy_bind(Ordered_Bound, Ordered).
 
+non_commutative((X,Y)) =>
+    once(
+        (   non_commutative(X)
+        ;   non_commutative(Y))
+    ).
+non_commutative((X;Y)) =>
+    once(
+        (   non_commutative(X)
+        ;   non_commutative(Y))
+    ).
+non_commutative(immediately(Query)) =>
+    non_commutative(Query).
+non_commutative(opt(Query)) =>
+    non_commutative(Query).
+non_commutative(select(_,Query)) =>
+    non_commutative(Query).
+non_commutative(count(Query,_)) =>
+    non_commutative(Query).
+non_commutative(not(Query)) =>
+    non_commutative(Query).
+non_commutative(group_by(_,_,Query,_)) =>
+    non_commutative(Query).
+non_commutative(distinct(_,Query)) =>
+    non_commutative(Query).
+non_commutative(using(_,Query)) =>
+    non_commutative(Query).
+non_commutative(from(_,Query)) =>
+    non_commutative(Query).
+non_commutative(into(_,Query)) =>
+    non_commutative(Query).
 non_commutative(start(_,_)) =>
     true.
 non_commutative(limit(_,_)) =>
@@ -526,6 +556,20 @@ test(greater, []) :-
         v(value) < 1,
         get_document(v(uri),v(doc))
     ).
+
+test(reorder_once, []) :-
+    Term = (
+        t(v(x), v(y), v(z)),
+        select([v(x)],
+               once(
+                   t(v(x), p, v(z))))
+    ),
+
+    partition(Term,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    Term = Prog.
 
 test(unmodable, [error(query_has_no_viable_mode, _)]) :-
     Term = (

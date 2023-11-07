@@ -503,10 +503,10 @@ cost(opt(Query), Cost) =>
 cost(not(Query), Cost) =>
     cost(Query, Cost).
 
-cost(group_by(Query), Cost) =>
+cost(group_by(_,_,Query,_), Cost) =>
     cost(Query, Cost).
 
-cost(distinct(Query), Cost) =>
+cost(distinct(_,Query), Cost) =>
     cost(Query, Cost).
 
 cost(using(_,Query), Cost) =>
