@@ -474,8 +474,8 @@ cost(immediately(Query), Cost) =>
 cost(opt(Query), Cost) =>
     cost(Query, Cost).
 
-cost(once(_Query), Cost) =>
-    Cost = 1.
+cost(once(Query), Cost) =>
+    cost(Query, Cost).
 
 cost(select(_Vars,Query), Cost) =>
     cost(Query, Cost).
