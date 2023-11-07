@@ -457,7 +457,7 @@ cost((X,Y), Cost) =>
     cost(Y, Cost_Y),
     (   memberchk(inf, [Cost_X,Cost_Y])
     ->  Cost = inf
-    ;   Cost is Cost_X * Cost_Y
+    ;   Cost is Cost_X + Cost_Y
     ).
 
 cost((X;Y), Cost) =>
