@@ -19,9 +19,9 @@ pub struct FilterInputObject {
 }
 
 pub struct FilterInputObjectTypeInfo {
-    filter_type_name: GraphQLName<'static>,
-    type_name: GraphQLName<'static>,
-    frames: Arc<AllFrames>,
+    pub filter_type_name: GraphQLName<'static>,
+    pub type_name: GraphQLName<'static>,
+    pub frames: Arc<AllFrames>,
 }
 
 impl FilterInputObjectTypeInfo {
