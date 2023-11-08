@@ -21,15 +21,15 @@ pub struct FilterInputObject {
 pub struct FilterInputObjectTypeInfo {
     pub filter_type_name: GraphQLName<'static>,
     pub type_name: GraphQLName<'static>,
-    pub frames: Arc<AllFrames>,
+    pub allframes: Arc<AllFrames>,
 }
 
 impl FilterInputObjectTypeInfo {
     pub fn new(type_name: &GraphQLName, all_frames: &Arc<AllFrames>) -> Self {
         Self {
-            filter_type_name: filter_name(&type_name),
+            filter_type_name: filter_name(type_name),
             type_name: type_name.as_static(),
-            frames: all_frames.clone(),
+            allframes: all_frames.clone(),
         }
     }
 }
@@ -46,7 +46,7 @@ impl GraphQLType for FilterInputObject {
     where
         DefaultScalarValue: 'r,
     {
-        if let Some(TypeDefinition::Class(d)) = &info.frames.frames.get(&info.type_name) {
+        if let Some(TypeDefinition::Class(d)) = &info.allframes.frames.get(&info.type_name) {
             let mut args: Vec<_> = d
                 .fields()
                 .iter()
@@ -97,7 +97,7 @@ impl GraphQLType for FilterInputObject {
                                 }
                                 BaseOrDerived::Derived(c) => {
                                     // is this foreign?
-                                    if info.frames.is_foreign(c) {
+                                    if info.allframes.is_foreign(c) {
                                         registry.arg::<Option<CollectionIdFilterInputObject>>(
                                             name.as_str(),
                                             &(),
@@ -107,7 +107,7 @@ impl GraphQLType for FilterInputObject {
                                             name.as_str(),
                                             &CollectionFilterInputObjectTypeInfo::new(
                                                 c,
-                                                &info.frames,
+                                                &info.allframes,
                                             ),
                                         )
                                     }
@@ -132,10 +132,11 @@ impl GraphQLType for FilterInputObject {
                                 BaseTypeKind::DateTime => registry
                                     .arg::<Option<DateTimeFilterInputObject>>(name.as_str(), &()),
                             }
-                        } else if let Some(enum_type) = field_definition.enum_type(&info.frames) {
+                        } else if let Some(enum_type) = field_definition.enum_type(&info.allframes)
+                        {
                             registry.arg::<Option<EnumFilterInputObject>>(
                                 name.as_str(),
-                                &EnumFilterInputObjectTypeInfo::new(enum_type, &info.frames),
+                                &EnumFilterInputObjectTypeInfo::new(enum_type, &info.allframes),
                             )
                         } else {
                             match field_definition.range() {
@@ -143,13 +144,13 @@ impl GraphQLType for FilterInputObject {
                                     panic!("This branch should be unreachable - not a base type")
                                 }
                                 BaseOrDerived::Derived(c) => {
-                                    if info.frames.is_foreign(c) {
+                                    if info.allframes.is_foreign(c) {
                                         registry
                                             .arg::<Option<IdFilterInputObject>>(name.as_str(), &())
                                     } else {
                                         registry.arg::<Option<FilterInputObject>>(
                                             name.as_str(),
-                                            &FilterInputObjectTypeInfo::new(c, &info.frames),
+                                            &FilterInputObjectTypeInfo::new(c, &info.allframes),
                                         )
                                     }
                                 }
@@ -160,7 +161,7 @@ impl GraphQLType for FilterInputObject {
                 .collect();
 
             let mut applicable_restrictions = Vec::new();
-            for restriction in info.frames.restrictions.values() {
+            for restriction in info.allframes.restrictions.values() {
                 if restriction.on == info.type_name {
                     applicable_restrictions.push(restriction.id.to_owned());
                 }
@@ -181,17 +182,17 @@ impl GraphQLType for FilterInputObject {
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_and",
-                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.allframes),
             ));
 
             args.push(registry.arg::<Option<Vec<FilterInputObject>>>(
                 "_or",
-                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.allframes),
             ));
 
             args.push(registry.arg::<Option<FilterInputObject>>(
                 "_not",
-                &FilterInputObjectTypeInfo::new(&info.type_name, &info.frames),
+                &FilterInputObjectTypeInfo::new(&info.type_name, &info.allframes),
             ));
 
             registry
