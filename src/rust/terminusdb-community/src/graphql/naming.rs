@@ -39,3 +39,15 @@ pub fn inverse_field_name(property: &GraphQLName, class: &GraphQLName) -> GraphQ
 pub fn path_to_class_name(class: &GraphQLName) -> GraphQLName<'static> {
     GraphQLName(format!("_path_to_{class}").into())
 }
+
+pub fn update_class_name(class: &GraphQLName) -> GraphQLName<'static> {
+    GraphQLName(format!("Update{class}").into())
+}
+
+pub fn insert_class_name(class: &GraphQLName) -> GraphQLName<'static> {
+    GraphQLName(format!("Insert{class}").into())
+}
+
+pub fn delete_class_name(class: &GraphQLName) -> GraphQLName<'static> {
+    GraphQLName(format!("Delete{class}").into())
+}

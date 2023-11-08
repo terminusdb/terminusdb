@@ -70,7 +70,7 @@ impl GraphQLExecutionContext {
             TerminusMutationRoot,
             EmptySubscription::<TerminusContext<'static>>::new(),
             type_collection,
-            (),
+            type_collection,
             (),
         );
 
