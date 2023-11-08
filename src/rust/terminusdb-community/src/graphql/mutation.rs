@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use juniper::{
-    meta::{Field, InputObjectMeta},
+    meta::{Argument, Field, InputObjectMeta},
     DefaultScalarValue, FromInputValue, GraphQLType, GraphQLValue, InputValue, Registry, ID,
 };
 use swipl::{
@@ -108,13 +108,13 @@ impl GraphQLType for InsertTypeInputObject {
         DefaultScalarValue: 'r,
     {
         if let Some(TypeDefinition::Class(d)) = &info.allframes.frames.get(&info.type_name) {
-            let id_field = registry.field::<Option<ID>>("_id", &());
-            let mut fields: Vec<_> = d
+            let id_arg = registry.arg::<Option<ID>>("_id", &());
+            let mut args: Vec<_> = d
                 .fields()
                 .iter()
                 .map(
-                    |(field_name, field_definition)| -> juniper::meta::Field<DefaultScalarValue> {
-                        create_insert_field_from_field_definition(
+                    |(field_name, field_definition)| -> juniper::meta::Argument<DefaultScalarValue> {
+                        create_insert_arg_from_field_definition(
                             registry,
                             info.allframes.clone(),
                             field_name,
@@ -124,9 +124,9 @@ impl GraphQLType for InsertTypeInputObject {
                 )
                 .collect();
 
-            fields.push(id_field);
+            args.push(id_arg);
             registry
-                .build_object_type::<InsertTypeInputObject>(info, &fields)
+                .build_input_object_type::<InsertTypeInputObject>(info, &args)
                 .into_meta()
         } else {
             panic!(
@@ -208,35 +208,33 @@ fn generate_insert_field<'r>(
     }
 }
 
-fn create_insert_field_from_field_definition<'a, 'r>(
+fn create_insert_arg_from_field_definition<'a, 'r>(
     registry: &mut Registry<'r>,
     allframes: Arc<AllFrames>,
     field_name: &'a GraphQLName,
     field_definition: &'a FieldDefinition,
-) -> Field<'r, DefaultScalarValue> {
+) -> Argument<'r, DefaultScalarValue> {
     match field_definition {
         FieldDefinition::Required(c) => match c {
             super::frame::BaseOrDerived::Base(base_type) => match base_type_kind(base_type) {
                 crate::value::BaseTypeKind::String => {
-                    registry.field::<String>(field_name.as_str(), &())
+                    registry.arg::<String>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::SmallInteger => {
-                    registry.field::<i32>(field_name.as_str(), &())
+                    registry.arg::<i32>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::BigIntger => {
-                    registry.field::<BigInt>(field_name.as_str(), &())
+                    registry.arg::<BigInt>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Boolean => {
-                    registry.field::<bool>(field_name.as_str(), &())
+                    registry.arg::<bool>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::DateTime => {
-                    registry.field::<DateTime>(field_name.as_str(), &())
+                    registry.arg::<DateTime>(field_name.as_str(), &())
                 }
-                crate::value::BaseTypeKind::Float => {
-                    registry.field::<f64>(field_name.as_str(), &())
-                }
+                crate::value::BaseTypeKind::Float => registry.arg::<f64>(field_name.as_str(), &()),
                 crate::value::BaseTypeKind::Decimal => {
-                    registry.field::<BigFloat>(field_name.as_str(), &())
+                    registry.arg::<BigFloat>(field_name.as_str(), &())
                 }
             },
             super::frame::BaseOrDerived::Derived(c) => {
@@ -245,9 +243,9 @@ fn create_insert_field_from_field_definition<'a, 'r>(
                         TypeDefinition::Class(_) => {
                             let new_info =
                                 InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
-                            registry.field::<InsertTypeInputObject>(field_name.as_str(), &new_info)
+                            registry.arg::<InsertTypeInputObject>(field_name.as_str(), &new_info)
                         }
-                        TypeDefinition::Enum(_) => registry.field::<TerminusEnum>(
+                        TypeDefinition::Enum(_) => registry.arg::<TerminusEnum>(
                             field_name.as_str(),
                             &(c.clone(), allframes.clone()),
                         ),
@@ -260,25 +258,25 @@ fn create_insert_field_from_field_definition<'a, 'r>(
         FieldDefinition::Optional(c) => match c {
             super::frame::BaseOrDerived::Base(base_type) => match base_type_kind(base_type) {
                 crate::value::BaseTypeKind::String => {
-                    registry.field::<Option<String>>(field_name.as_str(), &())
+                    registry.arg::<Option<String>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::SmallInteger => {
-                    registry.field::<Option<i32>>(field_name.as_str(), &())
+                    registry.arg::<Option<i32>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::BigIntger => {
-                    registry.field::<Option<BigInt>>(field_name.as_str(), &())
+                    registry.arg::<Option<BigInt>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Boolean => {
-                    registry.field::<Option<bool>>(field_name.as_str(), &())
+                    registry.arg::<Option<bool>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::DateTime => {
-                    registry.field::<Option<DateTime>>(field_name.as_str(), &())
+                    registry.arg::<Option<DateTime>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Float => {
-                    registry.field::<Option<f64>>(field_name.as_str(), &())
+                    registry.arg::<Option<f64>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Decimal => {
-                    registry.field::<Option<BigFloat>>(field_name.as_str(), &())
+                    registry.arg::<Option<BigFloat>>(field_name.as_str(), &())
                 }
             },
             super::frame::BaseOrDerived::Derived(c) => {
@@ -287,12 +285,12 @@ fn create_insert_field_from_field_definition<'a, 'r>(
                         TypeDefinition::Class(_) => {
                             let new_info =
                                 InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
-                            registry.field::<Option<InsertTypeInputObject>>(
+                            registry.arg::<Option<InsertTypeInputObject>>(
                                 field_name.as_str(),
                                 &new_info,
                             )
                         }
-                        TypeDefinition::Enum(_) => registry.field::<Option<TerminusEnum>>(
+                        TypeDefinition::Enum(_) => registry.arg::<Option<TerminusEnum>>(
                             field_name.as_str(),
                             &(c.clone(), allframes.clone()),
                         ),
@@ -308,25 +306,25 @@ fn create_insert_field_from_field_definition<'a, 'r>(
         | FieldDefinition::Cardinality { class, .. } => match class {
             super::frame::BaseOrDerived::Base(base_type) => match base_type_kind(base_type) {
                 crate::value::BaseTypeKind::String => {
-                    registry.field::<Vec<String>>(field_name.as_str(), &())
+                    registry.arg::<Vec<String>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::SmallInteger => {
-                    registry.field::<Vec<i32>>(field_name.as_str(), &())
+                    registry.arg::<Vec<i32>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::BigIntger => {
-                    registry.field::<Vec<BigInt>>(field_name.as_str(), &())
+                    registry.arg::<Vec<BigInt>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Boolean => {
-                    registry.field::<Vec<bool>>(field_name.as_str(), &())
+                    registry.arg::<Vec<bool>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::DateTime => {
-                    registry.field::<Vec<DateTime>>(field_name.as_str(), &())
+                    registry.arg::<Vec<DateTime>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Float => {
-                    registry.field::<Vec<f64>>(field_name.as_str(), &())
+                    registry.arg::<Vec<f64>>(field_name.as_str(), &())
                 }
                 crate::value::BaseTypeKind::Decimal => {
-                    registry.field::<Vec<BigFloat>>(field_name.as_str(), &())
+                    registry.arg::<Vec<BigFloat>>(field_name.as_str(), &())
                 }
             },
             super::frame::BaseOrDerived::Derived(c) => {
@@ -336,9 +334,9 @@ fn create_insert_field_from_field_definition<'a, 'r>(
                             let new_info =
                                 InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
                             registry
-                                .field::<Vec<InsertTypeInputObject>>(field_name.as_str(), &new_info)
+                                .arg::<Vec<InsertTypeInputObject>>(field_name.as_str(), &new_info)
                         }
-                        TypeDefinition::Enum(_) => registry.field::<Vec<TerminusEnum>>(
+                        TypeDefinition::Enum(_) => registry.arg::<Vec<TerminusEnum>>(
                             field_name.as_str(),
                             &(c.clone(), allframes.clone()),
                         ),

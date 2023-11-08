@@ -441,6 +441,15 @@ pub struct TerminusTypeInfo {
     pub allframes: Arc<AllFrames>,
 }
 
+impl TerminusTypeInfo {
+    pub fn new(class: &GraphQLName<'static>, allframes: &Arc<AllFrames>) -> Self {
+        Self {
+            class: class.clone(),
+            allframes: allframes.clone(),
+        }
+    }
+}
+
 pub enum CommitPhase {
     Original,
     Modified,
