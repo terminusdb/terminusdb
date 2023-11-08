@@ -104,7 +104,24 @@ fn add_insert_arguments<'r>(
     mut field: Field<'r, DefaultScalarValue>,
     class_definition: &ClassDefinition,
 ) -> Field<'r, DefaultScalarValue> {
-    todo!()
+    if let Some(TypeDefinition::Class(d)) = &info.allframes.frames.get(&info.class) {
+        let mut args: Vec<_> = d
+            .fields()
+            .iter()
+            .map(|(name, field_definition)| -> juniper::meta::Argument<DefaultScalarValue> {})
+            .collect();
+
+        args.push(registry.arg::<Option<ID>>("_id", &()));
+
+        registry
+            .build_input_object_type::<InsertTypeInputObject>(&info, &args)
+            .into_meta()
+    } else {
+        panic!(
+            "The class {} was not found and so no insertion arguments could be constructed.",
+            &info.class
+        )
+    }
 }
 
 fn add_update_arguments<'r>(
