@@ -20,9 +20,8 @@ use crate::{
 };
 
 use super::{
-    filter::FilterInputObjectTypeInfo,
     frame::{AllFrames, ClassDefinition, FieldDefinition, FieldKind, GraphQLName, TypeDefinition},
-    naming::insert_class_name,
+    naming::{input_type_name, insert_class_name},
     schema::{
         result_to_execution_result, BigFloat, BigInt, DateTime, GraphType, TerminusContext,
         TerminusEnum, TerminusType, TerminusTypeCollectionInfo, TerminusTypeInfo,
@@ -48,21 +47,9 @@ impl GraphQLType for TerminusMutationRoot {
             .frames
             .iter()
             .flat_map(|(name, typedef)| {
-                if let TypeDefinition::Class(c) = typedef {
+                if let TypeDefinition::Class(_) = typedef {
                     let insert_field =
-                        generate_insert_field(registry, info.allframes.clone(), name, c);
-
-                    /*
-                    let update_field_name = update_class_name(name);
-                    let update_field =
-                        registry.field::<Vec<TerminusType>>(update_field_name.as_str(), &newinfo);
-                    let update_field = add_update_arguments(&newinfo, registry, update_field, &c);
-
-                    let delete_field_name = delete_class_name(name);
-                    let delete_field =
-                        registry.field::<Vec<TerminusType>>(delete_field_name.as_str(), &newinfo);
-                    add_delete_arguments(&newinfo, registry, delete_field, &c);
-                    */
+                        generate_insert_field(registry, info.allframes.clone(), name);
 
                     // this vec will also get update and delete
                     vec![insert_field]
@@ -110,7 +97,7 @@ pub struct InsertTypeInputObject {
 
 impl GraphQLType for InsertTypeInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(info.filter_type_name.as_str())
+        Some(info.input_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -159,12 +146,38 @@ impl FromInputValue for InsertTypeInputObject {
     }
 }
 
+pub struct InputObjectTypeInfo {
+    pub input_type_name: GraphQLName<'static>,
+    pub type_name: GraphQLName<'static>,
+    pub allframes: Arc<AllFrames>,
+}
+
+pub enum MutationMode {
+    Insert,
+    Delete,
+    Update,
+}
+
+impl InputObjectTypeInfo {
+    pub fn new(
+        type_name: &GraphQLName,
+        all_frames: &Arc<AllFrames>,
+        mutation_mode: MutationMode,
+    ) -> Self {
+        Self {
+            input_type_name: input_type_name(type_name, mutation_mode),
+            type_name: type_name.as_static(),
+            allframes: all_frames.clone(),
+        }
+    }
+}
+
 impl GraphQLValue for InsertTypeInputObject {
     type Context = TerminusContext<'static>;
-    type TypeInfo = FilterInputObjectTypeInfo;
+    type TypeInfo = InputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(info.filter_type_name.as_str())
+        Some(info.input_type_name.as_str())
     }
 }
 
@@ -172,7 +185,6 @@ fn generate_insert_field<'r>(
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
     allframes: Arc<AllFrames>,
     name: &GraphQLName,
-    class_definition: &ClassDefinition,
 ) -> Field<'r, DefaultScalarValue> {
     let insert_field_name = insert_class_name(name);
     let info = TerminusTypeInfo {
@@ -182,7 +194,7 @@ fn generate_insert_field<'r>(
     let mut field = registry.field::<Vec<TerminusType>>(insert_field_name.as_str(), &info);
     if let Some(TypeDefinition::Class(d)) = &info.allframes.frames.get(&info.class) {
         let id_arg = registry.arg::<Option<ID>>("_id", &());
-        let new_info = FilterInputObjectTypeInfo::new(&info.class, &allframes);
+        let new_info = InputObjectTypeInfo::new(&info.class, &allframes, MutationMode::Insert);
         let doc_arg = registry.arg::<InsertTypeInputObject>("doc", &new_info);
         field = field.argument(id_arg);
         field = field.argument(doc_arg);
@@ -231,11 +243,8 @@ fn create_insert_field_from_field_definition<'a, 'r>(
                 if let Some(class_def) = allframes.frames.get(c) {
                     match class_def {
                         TypeDefinition::Class(_) => {
-                            let new_info = FilterInputObjectTypeInfo {
-                                filter_type_name: insert_class_name(c),
-                                type_name: c.clone(),
-                                allframes: allframes.clone(),
-                            };
+                            let new_info =
+                                InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
                             registry.field::<InsertTypeInputObject>(field_name.as_str(), &new_info)
                         }
                         TypeDefinition::Enum(_) => registry.field::<TerminusEnum>(
@@ -276,11 +285,8 @@ fn create_insert_field_from_field_definition<'a, 'r>(
                 if let Some(class_def) = allframes.frames.get(c) {
                     match class_def {
                         TypeDefinition::Class(_) => {
-                            let new_info = FilterInputObjectTypeInfo {
-                                filter_type_name: insert_class_name(c),
-                                type_name: c.clone(),
-                                allframes: allframes.clone(),
-                            };
+                            let new_info =
+                                InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
                             registry.field::<Option<InsertTypeInputObject>>(
                                 field_name.as_str(),
                                 &new_info,
@@ -327,11 +333,8 @@ fn create_insert_field_from_field_definition<'a, 'r>(
                 if let Some(class_def) = allframes.frames.get(c) {
                     match class_def {
                         TypeDefinition::Class(_) => {
-                            let new_info = FilterInputObjectTypeInfo {
-                                filter_type_name: insert_class_name(c),
-                                type_name: c.clone(),
-                                allframes: allframes.clone(),
-                            };
+                            let new_info =
+                                InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
                             registry
                                 .field::<Vec<InsertTypeInputObject>>(field_name.as_str(), &new_info)
                         }

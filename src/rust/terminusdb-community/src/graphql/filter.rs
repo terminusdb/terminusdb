@@ -245,7 +245,7 @@ impl CollectionFilterInputObjectTypeInfo {
 
 impl GraphQLType for CollectionFilterInputObject {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 
     fn meta<'r>(
@@ -303,7 +303,7 @@ impl GraphQLValue for CollectionFilterInputObject {
     type TypeInfo = CollectionFilterInputObjectTypeInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.filter_type_name.as_str())
+        Some(info.filter_type_name.as_str())
     }
 }
 

@@ -1,4 +1,4 @@
-use super::frame::GraphQLName;
+use super::{frame::GraphQLName, mutation::MutationMode};
 
 pub fn ordering_name(type_name: &GraphQLName) -> GraphQLName<'static> {
     GraphQLName(format!("{type_name}_Ordering").into())
@@ -50,4 +50,12 @@ pub fn insert_class_name(class: &GraphQLName) -> GraphQLName<'static> {
 
 pub fn delete_class_name(class: &GraphQLName) -> GraphQLName<'static> {
     GraphQLName(format!("Delete{class}").into())
+}
+
+pub fn input_type_name(class: &GraphQLName, mutation_mode: MutationMode) -> GraphQLName<'static> {
+    match mutation_mode {
+        MutationMode::Insert => GraphQLName(format!("{class}_Insert").into()),
+        MutationMode::Delete => GraphQLName(format!("{class}_Delete").into()),
+        MutationMode::Update => GraphQLName(format!("{class}_Update").into()),
+    }
 }
