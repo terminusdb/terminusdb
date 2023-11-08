@@ -47,14 +47,18 @@ impl GraphQLType for TerminusMutationRoot {
             .frames
             .iter()
             .flat_map(|(name, typedef)| {
-                if let TypeDefinition::Class(_) = typedef {
-                    let insert_field =
-                        generate_insert_field(registry, info.allframes.clone(), name);
+                if let TypeDefinition::Class(class_def) = typedef {
+                    if class_def.is_subdocument {
+                        Vec::new()
+                    } else {
+                        let insert_field =
+                            generate_insert_field(registry, info.allframes.clone(), name);
 
-                    // this vec will also get update and delete
-                    vec![insert_field]
+                        // this vec will also get update and delete
+                        vec![insert_field]
+                    }
                 } else {
-                    Vec::with_capacity(0)
+                    Vec::new()
                 }
             })
             .collect();
@@ -238,12 +242,17 @@ fn create_insert_arg_from_field_definition<'a, 'r>(
                 }
             },
             super::frame::BaseOrDerived::Derived(c) => {
-                if let Some(class_def) = allframes.frames.get(c) {
-                    match class_def {
-                        TypeDefinition::Class(_) => {
-                            let new_info =
-                                InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
-                            registry.arg::<InsertTypeInputObject>(field_name.as_str(), &new_info)
+                if let Some(type_def) = allframes.frames.get(c) {
+                    match type_def {
+                        TypeDefinition::Class(class_def) => {
+                            if class_def.is_subdocument {
+                                let new_info =
+                                    InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
+                                registry
+                                    .arg::<InsertTypeInputObject>(field_name.as_str(), &new_info)
+                            } else {
+                                registry.arg::<ID>(field_name.as_str(), &())
+                            }
                         }
                         TypeDefinition::Enum(_) => registry.arg::<TerminusEnum>(
                             field_name.as_str(),
@@ -280,15 +289,19 @@ fn create_insert_arg_from_field_definition<'a, 'r>(
                 }
             },
             super::frame::BaseOrDerived::Derived(c) => {
-                if let Some(class_def) = allframes.frames.get(c) {
-                    match class_def {
-                        TypeDefinition::Class(_) => {
-                            let new_info =
-                                InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
-                            registry.arg::<Option<InsertTypeInputObject>>(
-                                field_name.as_str(),
-                                &new_info,
-                            )
+                if let Some(type_def) = allframes.frames.get(c) {
+                    match type_def {
+                        TypeDefinition::Class(class_def) => {
+                            if class_def.is_subdocument {
+                                let new_info =
+                                    InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
+                                registry.arg::<Option<InsertTypeInputObject>>(
+                                    field_name.as_str(),
+                                    &new_info,
+                                )
+                            } else {
+                                registry.arg::<Option<ID>>(field_name.as_str(), &())
+                            }
                         }
                         TypeDefinition::Enum(_) => registry.arg::<Option<TerminusEnum>>(
                             field_name.as_str(),
@@ -328,13 +341,19 @@ fn create_insert_arg_from_field_definition<'a, 'r>(
                 }
             },
             super::frame::BaseOrDerived::Derived(c) => {
-                if let Some(class_def) = allframes.frames.get(c) {
-                    match class_def {
-                        TypeDefinition::Class(_) => {
-                            let new_info =
-                                InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
-                            registry
-                                .arg::<Vec<InsertTypeInputObject>>(field_name.as_str(), &new_info)
+                if let Some(type_def) = allframes.frames.get(c) {
+                    match type_def {
+                        TypeDefinition::Class(class_def) => {
+                            if class_def.is_subdocument {
+                                let new_info =
+                                    InputObjectTypeInfo::new(c, &allframes, MutationMode::Insert);
+                                registry.arg::<Vec<InsertTypeInputObject>>(
+                                    field_name.as_str(),
+                                    &new_info,
+                                )
+                            } else {
+                                registry.arg::<Vec<ID>>(field_name.as_str(), &())
+                            }
                         }
                         TypeDefinition::Enum(_) => registry.arg::<Vec<TerminusEnum>>(
                             field_name.as_str(),
