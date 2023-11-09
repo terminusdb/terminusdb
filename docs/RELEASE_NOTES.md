@@ -1,3 +1,15 @@
+# TerminusDB Server v11.1.8 Release Notes
+# Enhancement
+* Speed up db listing
+* Add db list by organization
+* Query cost estimations are more robust, and modalities are now used
+  in reordering and enforced by the query compiler.
+
+## Bug fixes
+* Added type tracking of GraphQL names so that renaming bugs are rare
+* Fix bug in indexing which caused GraphQL failure on embedding construction
+* Add optimization flag to ask: now by default optimization does not take place
+
 # TerminusDB Server v11.1.7 Release Notes
 ## Bug fixes
 * More robust string conversions in graphql (#2010)
