@@ -30,7 +30,8 @@ services:
       - ./vector_storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage"]
   change-request-api:
-    image: terminusdb/terminusdb-change-request-api:v0.0.8
+    image: terminusdb/terminusdb-change-request-api:v0.0.9
+    restart: always
     env_file: .env
     ports:
       - 6363:3035
