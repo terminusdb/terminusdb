@@ -7,42 +7,13 @@
 :- use_module(core(util)).
 :- use_module(partition, [partition/3]).
 :- use_module(woql_compile, [mode_for_compound/2]).
-:- use_module(definition, [mode/2, definition/1, cost/2, is_var/1, non_var/1]).
+:- use_module(definition, [mode/2, definition/1, cost/2, is_var/1, non_var/1, term_vars/2]).
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
-
-term_vars(v(X), Vars) =>
-    Vars = [X].
-term_vars(List, Vars),
-is_list(List) =>
-    maplist(term_vars, List, Var_List),
-    append(Var_List, Vars_Unsorted),
-    sort(Vars_Unsorted, Vars).
-term_vars(Dict, Vars),
-is_dict(Dict) =>
-    dict_pairs(Dict, _, Pairs),
-    maplist([_-V,Var]>>term_vars(V,Var), Pairs, Var_List),
-    append(Var_List, Vars_Unsorted),
-    sort(Vars_Unsorted, Vars).
-term_vars(select(VL, Query), Vars) =>
-    term_vars(VL, VLVars),
-    term_vars(Query, V),
-    intersection(V,VLVars,Vars).
-term_vars(group_by(Unique,_Template,Query,Result), Vars) =>
-    term_vars(Unique, UVars),
-    term_vars(Query, QVars),
-    intersection(UVars, QVars, Both_Vars),
-    term_vars(Result, RVars),
-    union(Both_Vars, RVars, Vars).
-term_vars(Term, Vars) =>
-    Term =.. [_|Rest],
-    maplist(term_vars, Rest, Vars_Lists),
-    append(Vars_Lists, Vars_Unsorted),
-    sort(Vars_Unsorted,Vars).
 
 term_mvars(mv(X), MVars) =>
     MVars = [X].
@@ -589,5 +560,21 @@ test(disconnected_partitions) :-
 test(reorder_dictionary) :-
     % Issue #1992
     metasub(resource(post('note.csv'),csv,_{}),[docid,label],_).
+
+test(sum) :-
+    AST = (
+        count(t(v('Doc_0'),
+			    rdf:type,
+			    '@schema':'Person'),
+		      v('Person')),
+        sum([v('Person')],v('Count'))
+    ),
+    partition(AST,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    % No reorder
+    Prog = AST.
+
 
 :- end_tests(reorder_query).

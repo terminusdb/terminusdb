@@ -3,7 +3,8 @@
               definition/1,
               cost/2,
               is_var/1,
-              non_var/1
+              non_var/1,
+              term_vars/2
           ]).
 
 :- use_module(library(lists)).
@@ -13,6 +14,35 @@
 is_var(v(_)).
 
 non_var(X) :- \+ is_var(X).
+
+term_vars(v(X), Vars) =>
+    Vars = [X].
+term_vars(List, Vars),
+is_list(List) =>
+    maplist(term_vars, List, Var_List),
+    append(Var_List, Vars_Unsorted),
+    sort(Vars_Unsorted, Vars).
+term_vars(Dict, Vars),
+is_dict(Dict) =>
+    dict_pairs(Dict, _, Pairs),
+    maplist([_-V,Var]>>term_vars(V,Var), Pairs, Var_List),
+    append(Var_List, Vars_Unsorted),
+    sort(Vars_Unsorted, Vars).
+term_vars(select(VL, Query), Vars) =>
+    term_vars(VL, VLVars),
+    term_vars(Query, V),
+    intersection(V,VLVars,Vars).
+term_vars(group_by(Unique,_Template,Query,Result), Vars) =>
+    term_vars(Unique, UVars),
+    term_vars(Query, QVars),
+    intersection(UVars, QVars, Both_Vars),
+    term_vars(Result, RVars),
+    union(Both_Vars, RVars, Vars).
+term_vars(Term, Vars) =>
+    Term =.. [_|Rest],
+    maplist(term_vars, Rest, Vars_Lists),
+    append(Vars_Lists, Vars_Unsorted),
+    sort(Vars_Unsorted,Vars).
 
 /* Query level, aggregation and metalogic */
 definition(
@@ -407,10 +437,26 @@ mode(Term, Mode) :-
     length(Mode, N),
     append(Mode, _, Mode_Candidate).
 
+is_skeleton(Arg),
+is_var(Arg) =>
+    true.
+is_skeleton(Args),
+is_list(Args) =>
+    \+ forall(member(Arg, Args),
+              \+ is_skeleton(Arg)).
+is_skeleton(Args),
+is_dict(Args) =>
+    \+ forall(get_dict(_Key, Args, Arg),
+              \+ is_skeleton(Arg)).
+is_skeleton(_) =>
+    false.
+
 term_mode(Term, Mode) :-
     Term =.. [_|Args],
     maplist([Arg, ArgMode]>>(
                 (   is_var(Arg)
+                ->  ArgMode = ?
+                ;   is_skeleton(Arg)
                 ->  ArgMode = ?
                 ;   ArgMode = +)
             ),
@@ -945,3 +991,16 @@ cost(true, Cost) =>
 
 cost(false, Cost) =>
     Cost = 0.
+
+:- begin_tests(mode).
+
+test(skeleton_term_mode) :-
+    term_mode(sum([v('Person')], v('Count')), Mode),
+    Mode = [?, ?].
+
+
+test(skeleton_term_mode) :-
+    term_mode((dict{ asdf : v('Foo') } = dict{ asdf : "bar" }), Mode),
+    Mode = [?, +].
+
+:- end_tests(mode).
