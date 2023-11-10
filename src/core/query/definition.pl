@@ -994,12 +994,12 @@ cost(false, Cost) =>
 
 :- begin_tests(mode).
 
-test(skeleton_term_mode) :-
+test(list_skeleton_term_mode) :-
     term_mode(sum([v('Person')], v('Count')), Mode),
     Mode = [?, ?].
 
 
-test(skeleton_term_mode) :-
+test(dict_skeleton_term_mode) :-
     term_mode((dict{ asdf : v('Foo') } = dict{ asdf : "bar" }), Mode),
     Mode = [?, +].
 
