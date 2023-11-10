@@ -151,7 +151,7 @@ definition(
     get{
         name: 'Get',
         fields: [columns, resource, optional(has_header)],
-        mode: [+,+,+],
+        mode: [[?],+,+],
         types: [list(column), resource]
     }).
 
@@ -1014,5 +1014,12 @@ test(list_skeleton_bound_term_mode) :-
 
 test(dict_skeleton_term_mode) :-
     \+ term_mode_correct(dict{ asdf : v('Foo') } = dict{ asdf : "bar" }).
+
+
+test(get_well_moded) :-
+    AST = (get([as('Start date', v('Start date'), 'http://www.w3.org/2001/XMLSchema#dateTime')],
+               resource(remote("https://terminusdb.com/t/data/bike_tutorial.csv"), csv, _{}),
+               true)),
+    term_mode_correct(AST).
 
 :- end_tests(mode).
