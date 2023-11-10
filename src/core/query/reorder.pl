@@ -576,5 +576,27 @@ test(sum) :-
     % No reorder
     Prog = AST.
 
+test(sum_swap) :-
+    AST = (
+        sum([v('Person')],v('Count')),
+        count(t(v('Doc_0'),
+			    rdf:type,
+			    '@schema':'Person'),
+		      v('Person'))
+
+    ),
+    partition(AST,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+
+    % Swap reorder
+    Prog = (
+        count(t(v('Doc_0'),
+			    rdf:type,
+			    '@schema':'Person'),
+		      v('Person')),
+        sum([v('Person')],v('Count'))
+    ).
+
 
 :- end_tests(reorder_query).

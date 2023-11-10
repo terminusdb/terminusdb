@@ -13,6 +13,8 @@
 
 is_var(v(_)).
 
+is_mvar(mv(_)).
+
 non_var(X) :- \+ is_var(X).
 
 term_vars(v(X), Vars) =>
@@ -49,98 +51,98 @@ definition(
     ';'{
         name: 'Or',
         fields: [or],
-        mode: [+],
+        mode: [[:]],
         types: [list(query)]
     }).
 definition(
     ','{
         name: 'And',
         fields: [and],
-        mode: [+],
+        mode: [[:]],
         types: [list(query)]
     }).
 definition(
     immediately{
         name: 'Immediately',
         fields: [query],
-        mode: [+],
+        mode: [:],
         types: [query]
     }).
 definition(
     opt{
         name: 'Optional',
         fields: [query],
-        mode: [+],
+        mode: [:],
         types: [query]
     }).
 definition(
     once{
         name: 'Once',
         fields: [query],
-        mode: [+],
+        mode: [:],
         types: [query]
     }).
 definition(
     select{
         name: 'Select',
         fields: [variables,query],
-        mode: [+,+],
+        mode: [[?],:],
         types: [list(string),query]
     }).
 definition(
     start{
         name: 'Start',
         fields: [start,query],
-        mode: [+,+],
+        mode: [+,:],
         types: [integer,query]
     }).
 definition(
     limit{
         name: 'Limit',
         fields: [limit,query],
-        mode: [+,+],
+        mode: [+,:],
         types: [integer,query]
     }).
 definition(
     count{
         name: 'Count',
         fields: [query,count],
-        mode: [+,?],
+        mode: [:,?],
         types: [query,count]
     }).
 definition(
     order_by{
         name: 'OrderBy',
         fields: [ordering,query],
-        mode: [+,+],
+        mode: [[?],:],
         types: [list(order),query]
     }).
 definition(
     opt{
         name: 'Optional',
         fields: [query],
-        mode: [+],
+        mode: [:],
         types: [query]
     }).
 definition(
     not{
         name: 'Not',
         fields: [query],
-        mode: [+],
+        mode: [:],
         types: [query]
     }).
 definition(
     group_by{
         name: 'GroupBy',
         fields: [template,group_by,value,query],
-        mode: [+,+,?,+],
+        mode: [?,?,?,:],
         types: [value,template,data_value,query]
     }).
 definition(
     distinct{
         name: 'Distinct',
         fields: [variables,query],
-        mode: [+,+],
+        mode: [+,:],
         types: [list(string),query]
     }).
 
@@ -429,8 +431,17 @@ definition(
         types: []
     }).
 
+% And, Or treated specially as they are n-ary in the AST external AST
+% but binary in the internal one
 mode(Term, Mode) :-
     Term =.. [Head|Args],
+    mode_lookup(Head,Args,Mode).
+
+mode_lookup(',', _, Mode) =>
+    Mode = [:,:].
+mode_lookup(';', _, Mode) =>
+    Mode = [:,:].
+mode_lookup(Head, Args, Mode) =>
     length(Args, N),
     Dict = Head{name:_,fields:_,mode:Mode_Candidate,types:_},
     definition(Dict),
@@ -451,28 +462,26 @@ is_dict(Args) =>
 is_skeleton(_) =>
     false.
 
-term_mode(Term, Mode) :-
+check_term_mode(:, _Term) =>
+    true.
+check_term_mode([Mode], Term),
+is_list(Term) =>
+    maplist(check_term_mode(Mode), Term).
+check_term_mode([_], Term) =>
+    is_mvar(Term).
+check_term_mode(-, Term) =>
+    \+ is_var(Term),
+    \+ is_mvar(Term),
+    term_vars(Term, []).
+check_term_mode(+, Term) =>
+    term_vars(Term, []).
+check_term_mode(?, _Term) =>
+    true.
+
+term_mode_correct(Term) :-
+    mode(Term, Mode),
     Term =.. [_|Args],
-    maplist([Arg, ArgMode]>>(
-                (   is_var(Arg)
-                ->  ArgMode = ?
-                ;   is_skeleton(Arg)
-                ->  ArgMode = ?
-                ;   ArgMode = +)
-            ),
-            Args,
-            Mode).
-
-mode_element_subsumes(+,+).
-mode_element_subsumes(+,?).
-mode_element_subsumes(?,?).
-mode_element_subsumes(-,?).
-mode_element_subsumes(-,-).
-
-mode_subsumes([],[]).
-mode_subsumes([Mode1|Modes1],[Mode2|Modes2]) :-
-    mode_element_subsumes(Mode1,Mode2),
-    mode_subsumes(Modes1,Modes2).
+    maplist(check_term_mode, Mode, Args).
 
 operator(_=_).
 operator(_>_).
@@ -493,9 +502,7 @@ operator(join(_,_,_)).
 operator(timestamp_now(_)).
 
 cost(Term, Cost),
-term_mode(Term, Term_Mode),
-mode(Term, Mode),
-\+ mode_subsumes(Term_Mode, Mode) =>
+\+ term_mode_correct(Term) =>
     Cost = inf.
 
 cost((X,Y), Cost) =>
@@ -994,13 +1001,18 @@ cost(false, Cost) =>
 
 :- begin_tests(mode).
 
-test(list_skeleton_term_mode) :-
-    term_mode(sum([v('Person')], v('Count')), Mode),
-    Mode = [?, ?].
+test(list_mvar_term_mode) :-
+    term_mode_correct(sum(mv('List'), v('Count'))).
 
+test(list_skeleton_term_mode) :-
+    % You can't sum what you don't have
+    \+ term_mode_correct(sum([v('Person')], v('Count'))).
+
+test(list_skeleton_bound_term_mode) :-
+    % You can't sum what you don't have
+    term_mode_correct(sum([mv('Person')], v('Count'))).
 
 test(dict_skeleton_term_mode) :-
-    term_mode((dict{ asdf : v('Foo') } = dict{ asdf : "bar" }), Mode),
-    Mode = [?, +].
+    \+ term_mode_correct(dict{ asdf : v('Foo') } = dict{ asdf : "bar" }).
 
 :- end_tests(mode).
