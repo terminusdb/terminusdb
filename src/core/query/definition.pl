@@ -1032,4 +1032,22 @@ test(get_well_moded) :-
                true)),
     term_mode_correct(AST).
 
+
+test(cost_overflow) :-
+
+    AST = limit(10,
+                (
+                    using("admin/halloween",
+                          select([v('Person'), v('Name')],
+                                 (   t(v('Person'), rdf:type, '@schema':'Person'),
+                                     path(v('Person'), "identified_by,content", v('Name')))))
+                ;   using("admin/star_wars",
+                          select([v('People'), v('Name')],
+                                 (   t(v('People'), rdf:type, '@schema':'People'),
+                                     t(v('People'), label, v('Name')))))
+                )
+               ),
+    cost(AST, Cost),
+    print_term(Cost, []).
+
 :- end_tests(mode).
