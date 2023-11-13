@@ -146,6 +146,29 @@ definition(
         types: [list(string),query]
     }).
 
+/* collection selection */
+definition(
+    using{
+        name: 'Using',
+        fields: [collection,query],
+        mode: [+,:],
+        types: [collection,query]
+    }).
+definition(
+    from{
+        name: 'From',
+        fields: [graph,query],
+        mode: [+,:],
+        types: [graph,query]
+    }).
+definition(
+    into{
+        name: 'Into',
+        fields: [graph,query],
+        mode: [+,:],
+        types: [graph,query]
+    }).
+
 /* get / put */
 definition(
     get{
@@ -153,29 +176,6 @@ definition(
         fields: [columns, resource, optional(has_header)],
         mode: [[?],+,+],
         types: [list(column), resource]
-    }).
-
-/* collection selection */
-definition(
-    using{
-        name: 'Using',
-        fields: [collection,query],
-        mode: [+,+],
-        types: [collection,query]
-    }).
-definition(
-    from{
-        name: 'From',
-        fields: [graph,query],
-        mode: [+,+],
-        types: [graph,query]
-    }).
-definition(
-    into{
-        name: 'Into',
-        fields: [graph,query],
-        mode: [+,+],
-        types: [graph,query]
     }).
 
 /* documents */
@@ -1035,18 +1035,35 @@ test(get_well_moded) :-
 
 test(cost_overflow) :-
 
+    AST0 = select([v('Person'), v('Name')],
+                        (   t(v('Person'), rdf:type, '@schema':'Person'),
+                            path(v('Person'), "identified_by,content", v('Name')))),
+    cost(AST0, Cost0),
+    \+ Cost0 = inf,
+
+    AST1 = using("admin/halloween",
+                 select([v('Person'), v('Name')],
+                        (   t(v('Person'), rdf:type, '@schema':'Person'),
+                            path(v('Person'), "identified_by,content", v('Name'))))),
+
+    AST1_1 = select([v('People'), v('Name')],
+                    (   t(v('People'), rdf:type, '@schema':'People'),
+                        t(v('People'), label, v('Name')))),
+    cost(AST1_1, Cost1_1),
+    \+ Cost1_1 = inf,
+
+    AST2 = using("admin/star_wars",
+                 select([v('People'), v('Name')],
+                        (   t(v('People'), rdf:type, '@schema':'People'),
+                            t(v('People'), label, v('Name'))))),
+
     AST = limit(10,
-                (
-                    using("admin/halloween",
-                          select([v('Person'), v('Name')],
-                                 (   t(v('Person'), rdf:type, '@schema':'Person'),
-                                     path(v('Person'), "identified_by,content", v('Name')))))
-                ;   using("admin/star_wars",
-                          select([v('People'), v('Name')],
-                                 (   t(v('People'), rdf:type, '@schema':'People'),
-                                     t(v('People'), label, v('Name')))))
-                )
+                (   AST1
+                ;   AST2)
                ),
-    cost(AST, inf).
+
+    cost(AST, Cost),
+
+    \+ Cost = inf.
 
 :- end_tests(mode).
