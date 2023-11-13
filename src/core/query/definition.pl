@@ -501,502 +501,512 @@ operator(length(_,_,_)).
 operator(join(_,_,_)).
 operator(timestamp_now(_)).
 
-cost(Term, Cost),
+cost(Term, Cost) :-
+    catch(
+        cost_(Term, Cost),
+        error(evaluation_error(float_overflow),_),
+        Cost = inf
+    ).
+
+cost_(Term, Cost),
 \+ term_mode_correct(Term) =>
     Cost = inf.
 
-cost((X,Y), Cost) =>
-    cost(X, Cost_X),
-    cost(Y, Cost_Y),
+cost_((X,Y), Cost) =>
+    cost_(X, Cost_X),
+    cost_(Y, Cost_Y),
     (   memberchk(inf, [Cost_X,Cost_Y])
     ->  Cost = inf
     ;   Cost is Cost_X + Cost_Y
     ).
 
-cost((X;Y), Cost) =>
-    cost(X, Cost_X),
-    cost(Y, Cost_Y),
+cost_((X;Y), Cost) =>
+    cost_(X, Cost_X),
+    cost_(Y, Cost_Y),
     (   memberchk(inf, [Cost_X,Cost_Y])
     ->  Cost = inf
     ;   Cost is Cost_X * Cost_Y
     ).
 
-cost(immediately(Query), Cost) =>
-    cost(Query, Cost).
+cost_(immediately(Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(opt(Query), Cost) =>
-    cost(Query, Cost).
+cost_(opt(Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(once(Query), Cost) =>
-    cost(Query, Cost).
+cost_(once(Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(select(_Vars,Query), Cost) =>
-    cost(Query, Cost).
+cost_(select(_Vars,Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(start(N,Query), Cost) =>
-    cost(Query, Cost_Query),
+cost_(start(N,Query), Cost) =>
+    cost_(Query, Cost_Query),
     (   Cost_Query = inf
     ->  Cost = inf
     ;   Cost is max(1.0, Cost_Query - N / Cost_Query)
     ).
 
-cost(limit(N,Query), Cost) =>
-    cost(Query, Cost_Query),
-    Cost is max(1.0, Cost_Query - N / Cost_Query).
+cost_(limit(N,Query), Cost) =>
+    cost_(Query, Cost_Query),
+    (   Cost_Query = inf
+    ->  Cost = inf
+    ;   Cost is max(1.0, Cost_Query - N / Cost_Query)
+    ).
 
-cost(count(Query,_), Cost) =>
-    cost(Query, Cost).
+cost_(count(Query,_), Cost) =>
+    cost_(Query, Cost).
 
-cost(order_by(_,Query), Cost) =>
-    cost(Query, Cost).
+cost_(order_by(_,Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(opt(Query), Cost) =>
-    cost(Query, Cost).
+cost_(opt(Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(not(Query), Cost) =>
-    cost(Query, Cost).
+cost_(not(Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(group_by(_,_,Query,_), Cost) =>
-    cost(Query, Cost).
+cost_(group_by(_,_,Query,_), Cost) =>
+    cost_(Query, Cost).
 
-cost(distinct(_,Query), Cost) =>
-    cost(Query, Cost).
+cost_(distinct(_,Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(using(_,Query), Cost) =>
-    cost(Query, Cost).
+cost_(using(_,Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(from(_,Query), Cost) =>
-    cost(Query, Cost).
+cost_(from(_,Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(into(_,Query), Cost) =>
-    cost(Query, Cost).
+cost_(into(_,Query), Cost) =>
+    cost_(Query, Cost).
 
-cost(get_document(_,_), Cost) =>
+cost_(get_document(_,_), Cost) =>
     Cost = 10.
 
-cost(insert_document(_), Cost) =>
+cost_(insert_document(_), Cost) =>
     Cost = 15.
 
-cost(insert_document(_,_), Cost) =>
+cost_(insert_document(_,_), Cost) =>
     Cost = 15.
 
-cost(replace_document(_), Cost) =>
+cost_(replace_document(_), Cost) =>
     Cost = 20.
 
-cost(replace_document(_,_), Cost) =>
+cost_(replace_document(_,_), Cost) =>
     Cost = 20.
 
-cost(delete_document(_), Cost) =>
+cost_(delete_document(_), Cost) =>
     Cost = 15.
 
-cost(get(_,_,_), Cost) =>
+cost_(get(_,_,_), Cost) =>
     Cost = 0.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
     Cost = 100.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
     Cost = 100.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 5.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 5.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 3.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 3.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 6.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 6.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 15.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 15.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 10.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 10.
 
-cost(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 30.
 
-cost(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 30.
 
 /* addition */
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost(delete(_,_,_), Cost) =>
+cost_(delete(_,_,_), Cost) =>
     Cost = 5.
 
-cost(delete(_,_,_,_), Cost) =>
+cost_(delete(_,_,_,_), Cost) =>
     Cost = 5.
 
-cost(insert(_,_,_), Cost) =>
+cost_(insert(_,_,_), Cost) =>
     Cost = 5.
 
-cost(insert(_,_,_,_), Cost) =>
+cost_(insert(_,_,_,_), Cost) =>
     Cost = 5.
 
-cost(path(X, _, Y), Cost),
+cost_(path(X, _, Y), Cost),
 is_var(X),
 non_var(Y) =>
     Cost = 15.
 
-cost(path(X, _, Y), Cost),
+cost_(path(X, _, Y), Cost),
 non_var(X),
 is_var(Y) =>
     Cost = 15.
 
-cost(path(X, _, Y, _), Cost),
+cost_(path(X, _, Y, _), Cost),
 non_var(X),
 is_var(Y) =>
     Cost = 25.
 
-cost(path(X, _, Y), Cost),
+cost_(path(X, _, Y), Cost),
 is_var(X),
 is_var(Y) =>
     Cost = 225.
 
-cost(path(X, _, Y, _), Cost),
+cost_(path(X, _, Y, _), Cost),
 non_var(X),
 is_var(Y) =>
     Cost = 625.
 
-cost(path(X, _, Y, _), Cost),
+cost_(path(X, _, Y, _), Cost),
 non_var(X),
 is_var(Y) =>
     Cost = 625.
 
-cost(sum(_,_), Cost) =>
+cost_(sum(_,_), Cost) =>
     Cost = 10.
 
-cost(member(_,_), Cost) =>
+cost_(member(_,_), Cost) =>
     Cost = 10.
 
-cost(Term, Cost),
+cost_(Term, Cost),
 operator(Term) =>
     Cost = 1.
 
-cost(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost),
 non_var(X),
 non_var(Y) =>
     Cost = 1.
 
-cost(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost),
 is_var(X),
 non_var(Y) =>
     Cost = 100.
 
-cost(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost),
 non_var(X),
 is_var(Y) =>
     Cost = 2.
 
-cost(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost),
 is_var(X),
 is_var(Y) =>
     Cost = 200.
 
-cost(X << Y, Cost),
+cost_(X << Y, Cost),
 non_var(X),
 non_var(Y) =>
     Cost = 1.
 
-cost(X << Y, Cost),
+cost_(X << Y, Cost),
 is_var(X),
 non_var(Y) =>
     Cost = 10.
 
-cost(X << Y, Cost),
+cost_(X << Y, Cost),
 non_var(X),
 is_var(Y) =>
     Cost = 10.
 
-cost(X << Y, Cost),
+cost_(X << Y, Cost),
 is_var(X),
 is_var(Y) =>
     Cost = 100.
 
-cost(typecast(_,_,_), Cost) =>
+cost_(typecast(_,_,_), Cost) =>
     Cost = 1.
 
-cost(typeof(_,_), Cost) =>
+cost_(typeof(_,_), Cost) =>
     Cost = 1.
 
-cost(true, Cost) =>
+cost_(true, Cost) =>
     Cost = 0.
 
-cost(false, Cost) =>
+cost_(false, Cost) =>
     Cost = 0.
 
 :- begin_tests(mode).
@@ -1021,5 +1031,22 @@ test(get_well_moded) :-
                resource(remote("https://terminusdb.com/t/data/bike_tutorial.csv"), csv, _{}),
                true)),
     term_mode_correct(AST).
+
+
+test(cost_overflow) :-
+
+    AST = limit(10,
+                (
+                    using("admin/halloween",
+                          select([v('Person'), v('Name')],
+                                 (   t(v('Person'), rdf:type, '@schema':'Person'),
+                                     path(v('Person'), "identified_by,content", v('Name')))))
+                ;   using("admin/star_wars",
+                          select([v('People'), v('Name')],
+                                 (   t(v('People'), rdf:type, '@schema':'People'),
+                                     t(v('People'), label, v('Name')))))
+                )
+               ),
+    cost(AST, inf).
 
 :- end_tests(mode).
