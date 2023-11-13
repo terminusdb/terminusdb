@@ -1047,7 +1047,6 @@ test(cost_overflow) :-
                                      t(v('People'), label, v('Name')))))
                 )
                ),
-    cost(AST, Cost),
-    print_term(Cost, []).
+    cost(AST, inf).
 
 :- end_tests(mode).
