@@ -288,4 +288,38 @@ mod tests {
             ))
         )
     }
+
+    #[test]
+    fn whitespace_leads() {
+        let source = "carried_out_by>, part>, created_by>";
+        let results = parse_path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Positive(Pred::Named("carried_out_by".to_string())),
+                    Path::Positive(Pred::Named("part".to_string())),
+                    Path::Positive(Pred::Named("created_by".to_string())),
+                ])
+            ))
+        )
+    }
+
+    #[test]
+    fn whitespace_both() {
+        let source = " carried_out_by , part , created_by ";
+        let results = parse_path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Positive(Pred::Named("carried_out_by".to_string())),
+                    Path::Positive(Pred::Named("part".to_string())),
+                    Path::Positive(Pred::Named("created_by".to_string())),
+                ])
+            ))
+        )
+    }
 }
