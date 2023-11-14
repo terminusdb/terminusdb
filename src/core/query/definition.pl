@@ -4,7 +4,8 @@
               cost/2,
               is_var/1,
               non_var/1,
-              term_vars/2
+              term_vars/2,
+              metasub/3
           ]).
 
 :- use_module(library(lists)).
@@ -45,6 +46,23 @@ term_vars(Term, Vars) =>
     maplist(term_vars, Rest, Vars_Lists),
     append(Vars_Lists, Vars_Unsorted),
     sort(Vars_Unsorted,Vars).
+
+metasub(v(X), Vars, XO),
+memberchk(X, Vars) =>
+    XO = mv(X).
+metasub(select(Vars,_Query), Vars, _Result) =>
+    throw(error(unimplemented)).
+metasub(Dict, Vars, Result),
+is_dict(Dict) =>
+    dict_pairs(Dict, Functor, Pairs),
+    maplist({Vars}/[P-V,P-V2]>>metasub(V,Vars,V2), Pairs, New_Pairs),
+    dict_create(Result, Functor, New_Pairs).
+metasub(Term, Vars, Result) =>
+    Term =.. [F|Args],
+    maplist({Vars}/[Arg,New]>>metasub(Arg, Vars, New),
+            Args,
+            New_Args),
+    Result =.. [F|New_Args].
 
 /* Query level, aggregation and metalogic */
 definition(
@@ -142,7 +160,7 @@ definition(
     distinct{
         name: 'Distinct',
         fields: [variables,query],
-        mode: [+,:],
+        mode: [?,:],
         types: [list(string),query]
     }).
 
@@ -255,7 +273,7 @@ definition(
     ={
         name: 'Equals',
         fields: [left,right],
-        mode: [+,+],
+        mode: [?,?],
         types: [any,any]
     }).
 definition(
@@ -514,7 +532,9 @@ cost_(Term, Cost),
 
 cost_((X,Y), Cost) =>
     cost_(X, Cost_X),
-    cost_(Y, Cost_Y),
+    term_vars(X, Vars),
+    metasub(Y, Vars, Yp),
+    cost_(Yp, Cost_Y),
     (   memberchk(inf, [Cost_X,Cost_Y])
     ->  Cost = inf
     ;   Cost is Cost_X + Cost_Y
@@ -1064,6 +1084,29 @@ test(cost_overflow) :-
 
     cost(AST, Cost),
 
+    \+ Cost = inf.
+
+test(limit_distinct_start_select, []) :-
+    AST = limit(100,
+		        start(0,
+				      distinct([v(docKey)],
+						       select([ v(docKey),
+								        v(label)
+								      ],
+								      ( t(v(docKey),
+									      rdf : type,
+									      '@schema' : 'Entity'),
+								        ( opt(t(v(docKey),
+										        '@schema' : label,
+										        v(label)))
+                                        ; opt(v(docKey) = v(label))
+								        ),
+								        concat([ v(label),
+										         v(docKey)
+										       ],
+										       v(regex))
+								      ))))),
+    cost(AST, Cost),
     \+ Cost = inf.
 
 :- end_tests(mode).

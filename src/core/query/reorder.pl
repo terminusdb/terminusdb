@@ -7,7 +7,8 @@
 :- use_module(core(util)).
 :- use_module(partition, [partition/3]).
 :- use_module(woql_compile, [mode_for_compound/2]).
-:- use_module(definition, [mode/2, definition/1, cost/2, is_var/1, non_var/1, term_vars/2]).
+:- use_module(definition, [mode/2, definition/1, cost/2, is_var/1, non_var/1,
+                           term_vars/2, metasub/3]).
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
@@ -63,23 +64,6 @@ sort_definedness(Terms, Sorted) :-
 order_conjuncts(Terms, Sorted) :-
     sort_definedness(Terms, Def_Sort),
     sort_bound(Def_Sort, Sorted).
-
-metasub(v(X), Vars, XO),
-memberchk(X, Vars) =>
-    XO = mv(X).
-metasub(select(Vars,_Query), Vars, _Result) =>
-    throw(error(unimplemented)).
-metasub(Dict, Vars, Result),
-is_dict(Dict) =>
-    dict_pairs(Dict, Functor, Pairs),
-    maplist({Vars}/[P-V,P-V2]>>metasub(V,Vars,V2), Pairs, New_Pairs),
-    dict_create(Result, Functor, New_Pairs).
-metasub(Term, Vars, Result) =>
-    Term =.. [F|Args],
-    maplist({Vars}/[Arg,New]>>metasub(Arg, Vars, New),
-            Args,
-            New_Args),
-    Result =.. [F|New_Args].
 
 metaunsub(mv(X), XO) =>
     XO = v(X).
