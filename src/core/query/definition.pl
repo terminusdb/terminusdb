@@ -1043,7 +1043,8 @@ test(list_skeleton_bound_term_mode) :-
     term_mode_correct(sum([mv('Person')], v('Count'))).
 
 test(dict_skeleton_term_mode) :-
-    \+ term_mode_correct(dict{ asdf : v('Foo') } = dict{ asdf : "bar" }).
+    % Now creates a binding - should be ok
+    term_mode_correct(dict{ asdf : v('Foo') } = dict{ asdf : "bar" }).
 
 
 test(get_well_moded) :-
