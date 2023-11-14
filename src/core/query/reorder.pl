@@ -8,7 +8,7 @@
 :- use_module(partition, [partition/3]).
 :- use_module(woql_compile, [mode_for_compound/2]).
 :- use_module(definition, [mode/2, definition/1, cost/2, is_var/1, non_var/1,
-                           term_vars/2, metasub/3]).
+                           term_vars/2, metasub/3, unmodable/1]).
 
 :- use_module(library(lists)).
 :- use_module(library(apply)).
@@ -160,7 +160,7 @@ optimize_read_order(Read, Ordered) :-
     optimize_conjuncts(Read, Ordered_Bound),
     die_if(
         (   xfy_list(',', Prog, Ordered_Bound),
-            cost(Prog, inf)),
+            unmodable(Prog)),
         error(query_has_no_viable_mode, _)),
     undummy_bind(Ordered_Bound, Ordered).
 
@@ -435,6 +435,7 @@ test(select_not, []) :-
     partition(Term,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, Reads),
     xfy_list(',', Prog, Reads),
+
     Prog = select(
                [v(document)],
 			   ( member(v(doc_id),[doc1,doc2]),
@@ -529,7 +530,7 @@ test(reorder_once, []) :-
 test(unmodable, [error(query_has_no_viable_mode, _)]) :-
     Term = (
         t(a, b, v(var)),
-        v(var) = v(unbound)
+        v(var) < v(unbound)
     ),
     partition(Term,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, _Reads).

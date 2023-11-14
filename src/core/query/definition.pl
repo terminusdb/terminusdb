@@ -5,7 +5,8 @@
               is_var/1,
               non_var/1,
               term_vars/2,
-              metasub/3
+              metasub/3,
+              unmodable/1
           ]).
 
 :- use_module(library(lists)).
@@ -521,513 +522,521 @@ operator(timestamp_now(_)).
 
 cost(Term, Cost) :-
     catch(
-        cost_(Term, Cost),
+        cost_(Term, Cost, pos),
         error(evaluation_error(float_overflow),_),
         Cost = inf
     ).
 
-cost_(Term, Cost),
+cost_(Term, Cost, _Polarity),
 \+ term_mode_correct(Term) =>
     Cost = inf.
 
-cost_((X,Y), Cost) =>
-    cost_(X, Cost_X),
+cost_((X,Y), Cost, Polarity) =>
+    cost_(X, Cost_X, Polarity),
     term_vars(X, Vars),
     metasub(Y, Vars, Yp),
-    cost_(Yp, Cost_Y),
+    cost_(Yp, Cost_Y, Polarity),
     (   memberchk(inf, [Cost_X,Cost_Y])
     ->  Cost = inf
     ;   Cost is Cost_X + Cost_Y
     ).
 
-cost_((X;Y), Cost) =>
-    cost_(X, Cost_X),
-    cost_(Y, Cost_Y),
+cost_((X;Y), Cost, Polarity) =>
+    cost_(X, Cost_X, Polarity),
+    cost_(Y, Cost_Y, Polarity),
     (   memberchk(inf, [Cost_X,Cost_Y])
     ->  Cost = inf
     ;   Cost is Cost_X * Cost_Y
     ).
 
-cost_(immediately(Query), Cost) =>
-    cost_(Query, Cost).
+cost_(immediately(Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(opt(Query), Cost) =>
-    cost_(Query, Cost).
+cost_(opt(Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(once(Query), Cost) =>
-    cost_(Query, Cost).
+cost_(once(Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(select(_Vars,Query), Cost) =>
-    cost_(Query, Cost).
+cost_(select(_Vars,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(start(N,Query), Cost) =>
-    cost_(Query, Cost_Query),
+cost_(start(N,Query), Cost, Polarity) =>
+    cost_(Query, Cost_Query, Polarity),
     (   Cost_Query = inf
     ->  Cost = inf
     ;   Cost is max(1.0, Cost_Query - N / Cost_Query)
     ).
 
-cost_(limit(N,Query), Cost) =>
-    cost_(Query, Cost_Query),
+cost_(limit(N,Query), Cost, Polarity) =>
+    cost_(Query, Cost_Query, Polarity),
     (   Cost_Query = inf
     ->  Cost = inf
     ;   Cost is max(1.0, Cost_Query - N / Cost_Query)
     ).
 
-cost_(count(Query,_), Cost) =>
-    cost_(Query, Cost).
+cost_(count(Query,_), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(order_by(_,Query), Cost) =>
-    cost_(Query, Cost).
+cost_(order_by(_,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(opt(Query), Cost) =>
-    cost_(Query, Cost).
+cost_(opt(Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(not(Query), Cost) =>
-    cost_(Query, Cost).
+cost_(not(Query), Cost, _Polarity) =>
+    cost_(Query, Cost, neg).
 
-cost_(group_by(_,_,Query,_), Cost) =>
-    cost_(Query, Cost).
+cost_(group_by(_,_,Query,_), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(distinct(_,Query), Cost) =>
-    cost_(Query, Cost).
+cost_(distinct(_,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(using(_,Query), Cost) =>
-    cost_(Query, Cost).
+cost_(using(_,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(from(_,Query), Cost) =>
-    cost_(Query, Cost).
+cost_(from(_,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(into(_,Query), Cost) =>
-    cost_(Query, Cost).
+cost_(into(_,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
 
-cost_(get_document(_,_), Cost) =>
+cost_(get_document(_,_), Cost, _Polarity) =>
     Cost = 10.
 
-cost_(insert_document(_), Cost) =>
+cost_(insert_document(_), Cost, _Polarity) =>
     Cost = 15.
 
-cost_(insert_document(_,_), Cost) =>
+cost_(insert_document(_,_), Cost, _Polarity) =>
     Cost = 15.
 
-cost_(replace_document(_), Cost) =>
+cost_(replace_document(_), Cost, _Polarity) =>
     Cost = 20.
 
-cost_(replace_document(_,_), Cost) =>
+cost_(replace_document(_,_), Cost, _Polarity) =>
     Cost = 20.
 
-cost_(delete_document(_), Cost) =>
+cost_(delete_document(_), Cost, _Polarity) =>
     Cost = 15.
 
-cost_(get(_,_,_), Cost) =>
+cost_(get(_,_,_), Cost, _Polarity) =>
     Cost = 0.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
     Cost = 100.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
     Cost = 100.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 5.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 5.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 3.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 3.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 6.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 6.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 15.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 15.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 10.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 10.
 
-cost_(t(X, Y, Z), Cost),
+cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 30.
 
-cost_(t(X, Y, Z, _), Cost),
+cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 30.
 
 /* addition */
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost_(addition(X, Y, Z), Cost),
+cost_(addition(X, Y, Z), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost_(addition(X, Y, Z, _), Cost),
+cost_(addition(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 1.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z) =>
     Cost = 3.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 4.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 2.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 non_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 8.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 is_var(Z) =>
     Cost = 12.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 non_var(Z) =>
     Cost = 6.
 
-cost_(removal(X, Y, Z), Cost),
+cost_(removal(X, Y, Z), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost_(removal(X, Y, Z, _), Cost),
+cost_(removal(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 is_var(Y),
 is_var(Z) =>
     Cost = 24.
 
-cost_(delete(_,_,_), Cost) =>
+cost_(delete(_,_,_), Cost, _Polarity) =>
     Cost = 5.
 
-cost_(delete(_,_,_,_), Cost) =>
+cost_(delete(_,_,_,_), Cost, _Polarity) =>
     Cost = 5.
 
-cost_(insert(_,_,_), Cost) =>
+cost_(insert(_,_,_), Cost, _Polarity) =>
     Cost = 5.
 
-cost_(insert(_,_,_,_), Cost) =>
+cost_(insert(_,_,_,_), Cost, _Polarity) =>
     Cost = 5.
 
-cost_(path(X, _, Y), Cost),
+cost_(path(X, _, Y), Cost, _Polarity),
 is_var(X),
 non_var(Y) =>
     Cost = 15.
 
-cost_(path(X, _, Y), Cost),
+cost_(path(X, _, Y), Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
     Cost = 15.
 
-cost_(path(X, _, Y, _), Cost),
+cost_(path(X, _, Y, _), Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
     Cost = 25.
 
-cost_(path(X, _, Y), Cost),
+cost_(path(X, _, Y), Cost, _Polarity),
 is_var(X),
 is_var(Y) =>
     Cost = 225.
 
-cost_(path(X, _, Y, _), Cost),
+cost_(path(X, _, Y, _), Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
     Cost = 625.
 
-cost_(path(X, _, Y, _), Cost),
+cost_(path(X, _, Y, _), Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
     Cost = 625.
 
-cost_(sum(_,_), Cost) =>
+cost_(sum(_,_), Cost, _Polarity) =>
     Cost = 10.
 
-cost_(member(_,_), Cost) =>
+cost_(member(_,_), Cost, _Polarity) =>
     Cost = 10.
 
-cost_(Term, Cost),
+cost_(X=Y, Cost, Polarity),
+Polarity = neg,
+\+ term_vars(X=Y, []) =>
+    Cost = inf.
+
+cost_(Term, Cost, _Polarity),
 operator(Term) =>
     Cost = 1.
 
-cost_(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost, _Polarity),
 non_var(X),
 non_var(Y) =>
     Cost = 1.
 
-cost_(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost, _Polarity),
 is_var(X),
 non_var(Y) =>
     Cost = 100.
 
-cost_(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
     Cost = 2.
 
-cost_(isa(X,Y), Cost),
+cost_(isa(X,Y), Cost, _Polarity),
 is_var(X),
 is_var(Y) =>
     Cost = 200.
 
-cost_(X << Y, Cost),
+cost_(X << Y, Cost, _Polarity),
 non_var(X),
 non_var(Y) =>
     Cost = 1.
 
-cost_(X << Y, Cost),
+cost_(X << Y, Cost, _Polarity),
 is_var(X),
 non_var(Y) =>
     Cost = 10.
 
-cost_(X << Y, Cost),
+cost_(X << Y, Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
     Cost = 10.
 
-cost_(X << Y, Cost),
+cost_(X << Y, Cost, _Polarity),
 is_var(X),
 is_var(Y) =>
     Cost = 100.
 
-cost_(typecast(_,_,_), Cost) =>
+cost_(typecast(_,_,_), Cost, _Polarity) =>
     Cost = 1.
 
-cost_(typeof(_,_), Cost) =>
+cost_(typeof(_,_), Cost, _Polarity) =>
     Cost = 1.
 
-cost_(true, Cost) =>
+cost_(true, Cost, _Polarity) =>
     Cost = 0.
 
-cost_(false, Cost) =>
+cost_(false, Cost, _Polarity) =>
     Cost = 0.
+
+unmodable(Query) :-
+    cost(Query, inf).
 
 :- begin_tests(mode).
 
@@ -1107,6 +1116,17 @@ test(limit_distinct_start_select, []) :-
 										       ],
 										       v(regex))
 								      ))))),
+    cost(AST, Cost),
+    \+ Cost = inf.
+
+test(cost_of_negation_binding, []) :-
+    AST = not((v(type) = rdf:'List')),
+    cost(AST, Cost),
+    Cost = inf.
+
+test(cost_of_supplied_binding, []) :-
+    AST = not((t(v(id), rdf:type, v(type)),
+               v(type) = rdf:'List')),
     cost(AST, Cost),
     \+ Cost = inf.
 
