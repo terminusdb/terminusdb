@@ -14,23 +14,23 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 The last released version of TerminusDB is: <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v11.1.8`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.8)
+[`v11.1.9`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.9)
 <!-- [[[end]]] -->
 
 The current repository version is: <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v11.1.9`
+`v11.1.10`
 <!-- [[[end]]] -->
 
 1. Look at the changes to `main` since the last released version: <!--
    [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-   [`11.1.8...main`](https://github.com/terminusdb/terminusdb/compare/v11.1.8...main)
+   [`11.1.9...main`](https://github.com/terminusdb/terminusdb/compare/v11.1.9...main)
    <!-- [[[end]]] -->
 
 2. (_PR_) Update [`RELEASE_NOTES.md`](./RELEASE_NOTES.md) in `main`:
    1. Add a new section for <!--
       [[[cog cog.out(current_repo_version) ]]] -->
-      `v11.1.9`
+      `v11.1.10`
       <!-- [[[end]]] -->
       at the beginning of the file.
    2. Use the following subsection headers:
@@ -60,20 +60,20 @@ The current repository version is: <!--
    ```
    git checkout main
    git pull
-   git tag v11.1.9
-   git push origin v11.1.9
+   git tag v11.1.10
+   git push origin v11.1.10
    ```
    <!-- [[[end]]] -->
 
 5. Create a new GitHub release for the tag: <!--
    [[[cog cog.out(current_repo_version_link) ]]] -->
-   [`v11.1.9`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.9)
+   [`v11.1.10`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.10)
    <!-- [[[end]]] -->
 
 6. (_PR_) Update the versions in [`ci.yml`](../.github/workflows/ci.yml):
    1. Change the value for `LAST_RELEASED_VERSION` to: <!--
       [[[cog cog.out(current_repo_version) ]]] -->
-      `v11.1.9`
+      `v11.1.10`
       <!-- [[[end]]] -->
    2. Change the value for `CURRENT_REPO_VERSION` to the next planned version.
 
