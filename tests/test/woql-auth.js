@@ -324,7 +324,7 @@ describe('woql-auth', function () {
 
     it('fails when we try to use an unmodable query', async function () {
       const query = {
-        '@type': 'Equals',
+        '@type': 'Less',
         left: {
           '@type': 'Value',
           variable: 'x',

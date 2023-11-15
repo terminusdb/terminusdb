@@ -74,19 +74,25 @@ fn num(input: &str) -> IResult<&str, usize> {
     )(input)
 }
 
+fn ws(input: &str) -> IResult<&str, &str> {
+    take_while(|c: char| c.is_whitespace())(input)
+}
+
 fn pred(input: &str) -> IResult<&str, Pred> {
     alt((
-        map(tag("."), |_| Pred::Any),
-        map(named, |string| Pred::Named(string.to_string())),
+        map(delimited(ws, tag("."), ws), |_| Pred::Any),
+        map(delimited(ws, named, ws), |string| {
+            Pred::Named(string.to_string())
+        }),
     ))(input)
 }
 
 fn positive(input: &str) -> IResult<&str, Pred> {
-    alt((terminated(pred, tag(">")), pred))(input)
+    alt((terminated(pred, terminated(tag(">"), ws)), pred))(input)
 }
 
 fn negative(input: &str) -> IResult<&str, Pred> {
-    preceded(tag("<"), pred)(input)
+    preceded(preceded(ws, tag("<")), pred)(input)
 }
 
 fn patterns(input: &str) -> IResult<&str, Path> {
@@ -261,6 +267,57 @@ mod tests {
                         1,
                         4
                     )
+                ])
+            ))
+        )
+    }
+
+    #[test]
+    fn whitespace() {
+        let source = "<carried_out_by, <part, <created_by";
+        let results = parse_path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Negative(Pred::Named("carried_out_by".to_string())),
+                    Path::Negative(Pred::Named("part".to_string())),
+                    Path::Negative(Pred::Named("created_by".to_string())),
+                ])
+            ))
+        )
+    }
+
+    #[test]
+    fn whitespace_leads() {
+        let source = "carried_out_by>, part>, created_by>";
+        let results = parse_path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Positive(Pred::Named("carried_out_by".to_string())),
+                    Path::Positive(Pred::Named("part".to_string())),
+                    Path::Positive(Pred::Named("created_by".to_string())),
+                ])
+            ))
+        )
+    }
+
+    #[test]
+    fn whitespace_both() {
+        let source = " carried_out_by , part , created_by ";
+        let results = parse_path(source);
+        assert_eq!(
+            results,
+            Ok((
+                "",
+                Path::Seq(vec![
+                    Path::Positive(Pred::Named("carried_out_by".to_string())),
+                    Path::Positive(Pred::Named("part".to_string())),
+                    Path::Positive(Pred::Named("created_by".to_string())),
                 ])
             ))
         )
