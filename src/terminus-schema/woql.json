@@ -1,1240 +1,1705 @@
-{ "@type" : "@context",
-  "@documentation" : {
-      "@title" : "WOQL schema",
-      "@description" : "This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
-      "@authors" : ["Gavin Mendel-Gleason"]
-  },
-  "@schema" : "http://terminusdb.com/schema/woql#",
-  "@base" : "terminusdb://woql/data/",
-  "xsd" : "http://www.w3.org/2001/XMLSchema#" }
-
-{ "@id" : "NamedQuery",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A named query names a specific query for later retrieval and re-use.",
-      "@properties" : { "name" : "The name of the NamedQuery to be retrieved",
-                        "query" : "The query AST as WOQL JSON" }
-  },
-  "@key" : { "@type" : "Lexical",
-             "@fields" : [ "name" ] },
-  "name" : "xsd:string",
-  "query" : "Query" }
-
-{ "@id" : "NamedParametricQuery",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A named parametric query which names a specific query for later retrieval and re-use and allows the specification of bindings for a specific set of variables in the query.",
-      "@properties" : { "name" : "The name of the NamedParametricQuery to be retrieved.",
-                       "parameters" : "Variable name list for auxilliary bindings.",
-                        "query" : "The query AST as WOQL JSON." }
-  },
-  "@key" : { "@type" : "Lexical",
-             "@fields" : [ "name" ] },
-  "name" : "xsd:string",
-  "parameters" : { "@type" : "List",
-                   "@class" : "xsd:string" },
-  "query" : "Query" }
-
-{ "@id" : "Query",
-  "@documentation" : {
-      "@comment" : "An abstract class which represents an arbitrary query AST."
-  },
-  "@type" : "Class",
-  "@subdocument" : [],
-  "@abstract" : [] }
-
-{ "@id" : "DictionaryTemplate",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A representation of a JSON style dictionary, but with free variables. It is similar to an interpolated string in that it is a template with quoted data and substituted values.",
-      "@properties" : { "data" : "Pairs of Key-Values to be constructed into a dictionary" }
-  },
-  "@subdocument" : [],
-  "@key" : { "@type" : "ValueHash" },
-  "data" : { "@type" : "Set",
-             "@class" : "FieldValuePair" }}
-
-{ "@id" : "FieldValuePair",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A representation of a JSON style dictionary, but with free variables. It is similar to an interpolated string in that it is a template with quoted data and substituted values.",
-      "@properties" : { "field" : "The field or key of a dictionary value pair",
-                        "value" : "The value of a dictionary value pair." }
-  },
-  "@subdocument" : [],
-  "@key" : { "@type" : "ValueHash" },
-  "field" : "xsd:string",
-  "value" : "Value" }
-
-{ "@id" : "Value",
-  "@type" : "TaggedUnion",
-  "@documentation" : {
-      "@comment" : "A variable, node or data point.",
-      "@properties" : { "node" : "A URI representing a resource.",
-                        "variable" : "A variable.",
-                        "list" : "A list of datavalues",
-                        "data" : "An xsd data type value." }
-  },
-  "@subdocument" : [],
-  "@key" : { "@type" : "ValueHash" },
-  "dictionary" : "DictionaryTemplate",
-  "list" : { "@type" : "List",
-             "@class" : "Value" },
-  "node" : "xsd:string",
-  "variable" : "xsd:string",
-  "data" : "xsd:anySimpleType" }
-
-{ "@id" : "NodeValue",
-  "@type" : "TaggedUnion",
-  "@documentation" : {
-      "@comment" : "A variable or node.",
-      "@properties" : { "node" : "A URI representing a resource.",
-                        "variable" : "A variable." }
-  },
-  "@subdocument" : [],
-  "@key" : { "@type" : "ValueHash" },
-  "node" : "xsd:string",
-  "variable" : "xsd:string" }
-
-{ "@id" : "DataValue",
-  "@type" : "TaggedUnion",
-  "@documentation" : {
-      "@comment" : "A variable or node.",
-      "@properties" : { "data" : "An xsd data type value.",
-                        "variable" : "A variable.",
-                        "list" : "A list of datavalues" }
-  },
-  "@subdocument" : [],
-  "@key" : { "@type" : "ValueHash" },
-  "list" : { "@type" : "List",
-             "@class" : "DataValue" },
-  "data" : "xsd:anySimpleType",
-  "variable" : "xsd:string" }
-
-{ "@id" : "Using",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Select a specific collection for query.",
-      "@properties" : { "collection" : "The resource over which to run the query." ,
-                        "query" : "The query which will be run on the selected collection." }
-  },
-  "@inherits" : "Query",
-  "@key" : { "@type" : "ValueHash" },
-  "query" : "Query",
-  "collection" : "xsd:string"}
-
-{ "@id" : "Select",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Select specific variables from a query to return.",
-      "@properties" : { "variables" : "The variables to select from the query.",
-                        "query" : "The query which will be run prior to selection." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "variables" : { "@type" : "List",
-                  "@class" : "xsd:string" } }
-
-{ "@id" : "Distinct",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Ensure variables listed result in distinct solutions.",
-      "@properties" : { "variables" : "The variables which must be distinct from the query.",
-                        "query" : "The query which will be run prior to selection." }
-  },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "variables" : { "@type" : "List",
-                  "@class" : "xsd:string" } }
-
-{ "@id" : "And",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A conjunction of queries which must all have a solution.",
-      "@properties" : { "and" : "List of queries which must hold." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "and" : { "@type" : "List",
-            "@class" : "Query" } }
-
-{ "@id" : "Or",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A disjunction of queries any of which can provide a solution.",
-      "@properties" : { "or" : "List of queries which may hold." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "or" : { "@type" : "List",
-           "@class" : "Query" } }
-
-{ "@id" : "From",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Change the default read graph (between instance/schema).",
-      "@properties" : { "query" : "The subquery with a new default graph.",
-                        "graph" : "The graph filter: 'schema' or 'instance' or '*'." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "graph" : "xsd:string" }
-
-{ "@id" : "Into",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Change the default write graph (between instance/schema).",
-      "@properties" : { "query" : "The subquery with a new default write graph.",
-                        "graph" : "The graph filter: schema or instance." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "graph" : "xsd:string" }
-
-{ "@id" : "Triple",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern in the graph.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI, datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "Value",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "AddTriple",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge to add to the graph.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI, datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "Value",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "AddedTriple",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern which was *added* at *this commit*.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI, datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "Value",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "DeleteTriple",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern to remove from the graph.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI, datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "Value",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "DeletedTriple",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern which was *deleted* at *this commit*.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI, datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "Value",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "Link",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern which is not terminal, but a link between objects.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "NodeValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-
-{ "@id" : "Data",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern which is terminal, and provides a data value association.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A data type or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "DataValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "Subsumption",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Provides class subsumption (the inheritance model) according to the schema design. True whenver 'child' is a child of 'parent'. Can be used as a generator or a check.",
-      "@properties" : { "child" : "The child class as a URI or variable.",
-                        "parent" : "The parent class as a URI or variable" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "child" : "NodeValue",
-  "parent" : "NodeValue" }
-
-{ "@id" : "Equals",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "True whenever 'left' is the same as 'right'. Performs unification.",
-      "@properties" : { "left" : "A URI, data value or variable.",
-                        "right" : "A URI, data value or variable."}
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "left" : "DataValue",
-  "right" : "DataValue"}
-
-{ "@id" : "Substring",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Finds the boundaries of a substring in a string.",
-      "@properties" : { "string" : "The super-string as data or variable.",
-                        "substring" : "The super-string as data or variable.",
-                        "length" : "The length of the string as an integer or variable.",
-                        "before" : "The count of characters before substring as an integer or variable.",
-                        "after" : "The count of characters after substring as an integer or variable."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "string" : "DataValue",
-  "length" : "DataValue",
-  "before" : "DataValue",
-  "after" : "DataValue",
-  "substring" : "DataValue" }
-
-{ "@id" : "ReadDocument",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Read a full document from an identifier.",
-      "@properties" : { "document" : "Variable which will be bound to the document.",
-                        "identifier" : "The URI of the document to load."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "document" : "Value",
-  "identifier" : "NodeValue" }
-
-{ "@id" : "UpdateDocument",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Update a document in the graph.",
-      "@properties" : { "document" : "The document to update. Must either have an '@id' or have a class specified key.",
-                        "identifier" : "An optional returned identifier specifying the documentation location."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "document" : "Value",
-  "identifier" : { "@type" : "Optional",
-                   "@class" : "NodeValue" } }
-
-{ "@id" : "InsertDocument",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Insert a document in the graph.",
-      "@properties" : { "document" : "The document to insert. Must either have an '@id' or have a class specified key.",
-                        "identifier" : "An optional returned identifier specifying the documentation location."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "document" : "Value",
-  "identifier" : { "@type" : "Optional",
-                   "@class" : "NodeValue" } }
-
-{ "@id" : "DeleteDocument",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Delete a document from the graph.",
-      "@properties" : { "identifier" : "An identifier specifying the documentation location to delete." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "identifier" : "NodeValue" }
-
-{ "@id" : "Indicator",
-  "@type" : "TaggedUnion",
-  "@key" : { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "name" : "xsd:string",
-  "index" : "xsd:nonNegativeInteger" }
-
-{ "@id" : "Column",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "indicator" : "Indicator",
-  "variable" : "xsd:string",
-  "type" : { "@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "Source",
-  "@type" : "TaggedUnion",
-  "@key" : { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "post" : "xsd:string",
-  "url" : "xsd:string" }
-
-{ "@id" : "FormatType",
-  "@type" : "Enum",
-  "@key" : { "@type" : "ValueHash" },
-  "@value" : [ "csv" ] }
-
-{ "@id" : "QueryResource",
-  "@type" : "TaggedUnion",
-  "@key" : { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "source" : "Source",
-  "format" : "FormatType",
-  "options" : { "@type" : "Optional",
-                "@class" : "xdd:json" } }
-
-{ "@id" : "Get",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "columns" : { "@type" : "List",
-                "@class" : "Column" },
-  "resource" : "QueryResource",
-  "has_header" : { "@type" : "Optional",
-                   "@class" : "xsd:boolean" } }
-
-{ "@id" : "AddedData",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern with data value which was added in *this* commit*.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A datatype or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "DataValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "AddLink",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Add an edge which links between nodes in the graph.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "NodeValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "AddedLink",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Specify an edge pattern which links between nodes at *this* commit.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "NodeValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "AddData",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Add an edge with a data value.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge. The variable must be bound.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge. The variable must be bound.",
-                        "object" : "A data value or variable which is the target or object of the graph edge. The variable must be bound.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "DataValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "DeleteLink",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Delete an edge linking nodes.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge. The variable must be bound.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge. The variable must be bound.",
-                        "object" : "A URI or variable which is the target or object of the graph edge. The variable must be bound.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "NodeValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "DeletedLink",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "An edge pattern specifying a link beween nodes deleted *at this commit*.",
-      "@properties" : { "subject" : "A URI or variable which is the source or subject of the graph edge.",
-                        "predicate" : "A URI or variable which is the edge-label or predicate of the graph edge.",
-                        "object" : "A URI or variable which is the target or object of the graph edge.",
-                        "graph" : "An optional graph (either 'instance' or 'schema')" }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "NodeValue",
-  "predicate" : "NodeValue",
-  "object" : "NodeValue",
-  "graph" : {"@type" : "Optional",
-             "@class" : "xsd:string" } }
-
-{ "@id" : "If",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A conditional which runs the then clause for every success from the test clause, otherwise runs the else clause.",
-      "@properties" : { "test" : "A query which will provide bindings for the then clause.",
-                        "then" : "A query which will run for every solution of test with associated bindings.",
-                        "else" : "A query which runs whenever test fails." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "test" : "Query",
-  "then" : "Query",
-  "else" : "Query" }
-
-{ "@id" : "Trim",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Trims whitespace from 'untrimmed'.",
-      "@properties" : { "untrimmed" : "The untrimmed string.",
-                        "trimmed" : "The string to be trimmed." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "untrimmed" : "DataValue",
-  "trimmed" : "DataValue" }
-
-{ "@id" : "Eval",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Evaluate an arithmetic expression to obtain a result.",
-      "@properties" : { "expression" : "The expression to be evaluated.",
-                        "result" : "The numeric result." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "expression" : "ArithmeticExpression",
-  "result" : "ArithmeticValue" }
-
-{ "@id" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "An abstract class specifying the AST super-class of all arithemtic expressions."
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "@abstract" : [] }
-
-{ "@id" : "ArithmeticValue",
-  "@type" : "TaggedUnion",
-  "@documentation" : {
-      "@comment" : "A variable or node.",
-      "@properties" : { "data" : "An xsd data type value.",
-                        "variable" : "A variable." }
-  },
-  "@subdocument" : [],
-  "@inherits" : "ArithmeticExpression",
-  "@key" : { "@type" : "ValueHash" },
-  "data" : "xsd:anySimpleType",
-  "variable" : "xsd:string" }
-
-{ "@id" : "Plus",
-  "@documentation" : {
-      "@comment" : "Add two numbers.",
-      "@properties" : { "left" : "First operand of add.",
-                        "right" : "Second operand of add." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression" }
-
-{ "@id" : "Minus",
-  "@documentation" : {
-      "@comment" : "Subtract two numbers.",
-      "@properties" : { "left" : "First operand of minus.",
-                        "right" : "Second operand of minus." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression" }
-
-{ "@id" : "Times",
-  "@documentation" : {
-      "@comment" : "Multiply two numbers.",
-      "@properties" : { "left" : "First operand of times.",
-                        "right" : "Second operand of times." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression" }
-
-{ "@id" : "Divide",
-  "@documentation" : {
-      "@comment" : "Divide two numbers.",
-      "@properties" : { "left" : "First operand of divide.",
-                        "right" : "Second operand of divide." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression" }
-
-{ "@id" : "Div",
-  "@documentation" : {
-      "@comment" : "Integer divide two numbers.",
-      "@properties" : { "left" : "First operand of div.",
-                        "right" : "Second operand of div." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression" }
-
-{ "@id" : "Exp",
-  "@documentation" : {
-      "@comment" : "Exponentiate a number.",
-      "@properties" : { "left" : "The base.",
-                        "right" : "The exponent." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "left" : "ArithmeticExpression",
-  "right" : "ArithmeticExpression" }
-
-{ "@id" : "Floor",
-  "@documentation" : {
-      "@comment" : "Find the integral part of a number.",
-      "@properties" : { "argument" : "The number to floor." }
-  },
-  "@inherits" : "ArithmeticExpression",
-  "@type" : "Class",
-  "@key" : { "@type" : "ValueHash" },
-  "argument" : "ArithmeticExpression" }
-
-{ "@id" : "IsA",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Test (or generate) the type of an element.",
-      "@properties" : { "element" : "The element to test.",
-                        "type" : "The type of the element."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "element" : "NodeValue",
-  "type" : "NodeValue" }
-
-{ "@id" : "Like",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Distance between strings, similar to a Levenstein distance.",
-      "@properties" : { "left" : "The first string.",
-                        "right" : "The second string.",
-                        "similarity" : "Number between -1 and 1 which gives a scale for similarity."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "left" : "DataValue",
-  "right" : "DataValue",
-  "similarity" : "DataValue" }
-
-{ "@id" : "Less",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Predicate determining if one thing is less than another according to natural ordering.",
-      "@properties" : { "left" : "The lesser element.",
-                        "right" : "The greater element."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "left" : "DataValue",
-  "right" : "DataValue" }
-
-{ "@id" : "Greater",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Predicate determining if one thing is greater than another according to natural ordering.",
-      "@properties" : { "left" : "The greater element.",
-                        "right" : "The lesser element."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "left" : "DataValue",
-  "right" : "DataValue" }
-
-{ "@id" : "Optional",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A query which will succeed (without bindings) even in the case of failure.",
-      "@properties" : { "query" : "The query to run." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query" }
-
-{ "@id" : "LexicalKey",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Generates a key identical to those generated automatically by 'LexicalKey' specifications.",
-      "@properties" : { "base" : "The URI base to the left of the key.",
-                        "key_list" : "List of data elements required to generate the key.",
-                        "uri" : "The resulting URI."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "base" : "DataValue",
-  "key_list" : { "@type" : "List",
-                 "@class" : "DataValue" },
-  "uri" : "NodeValue" }
-
-{ "@id" : "RandomKey",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Generates a key identical to those generated automatically by 'RandomKey' specifications.",
-      "@properties" : { "base" : "The URI base to the left of the key.",
-                        "uri" : "The resulting URI."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "base" : "DataValue",
-  "uri" : "NodeValue" }
-
-{ "@id" : "HashKey",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Generates a key identical to those generated automatically by 'HashKey' specifications.",
-      "@properties" : { "base" : "The URI base to the left of the key.",
-                        "key_list" : "List of data elements required to generate the key.",
-                        "uri" : "The resulting URI."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "base" : "DataValue",
-  "key_list" : { "@type" : "List",
-                 "@class" : "DataValue" },
-  "uri" : "NodeValue" }
-
-{ "@id" : "Upper",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Uppercase a string.",
-      "@properties" : { "mixed" : "The mixed case string.",
-                        "upper" : "The upper case string."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "mixed" : "DataValue",
-  "upper" : "DataValue" }
-
-{ "@id" : "Lower",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Lowercase a string.",
-      "@properties" : { "mixed" : "The mixed case string.",
-                        "lower" : "The lower case string."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "mixed" : "DataValue",
-  "lower" : "DataValue" }
-
-{ "@id" : "Pad",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Pad a string.",
-      "@properties" : { "string" : "The starting string.",
-                        "char" : "The padding character.",
-                        "times" : "The number of times to repeat the padding character.",
-                        "result" : "The result of the padding as a string."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "string" : "DataValue",
-  "char" : "DataValue",
-  "times" : "DataValue",
-  "result" : "DataValue" }
-
-{ "@id" : "Split",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Split a string.",
-      "@properties" : { "string" : "The starting string.",
-                        "pattern" : "The splitting pattern.",
-                        "list" : "The result list of strings."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "string" : "DataValue",
-  "pattern" : "DataValue",
-  "list" : "DataValue" }
-
-{ "@id" : "Member",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Generate or test every element of a list.",
-      "@properties" : { "member" : "The element to test for membership or to supply as generated.",
-                        "list" : "The list of elements against which to generate or test."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "member" : "DataValue",
-  "list" : "DataValue" }
-
-{ "@id" : "Concatenate",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Concatenate a list of strings.",
-      "@properties" : { "list" : "The list to concatenate.",
-                        "result" : "The result string."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "list" : "DataValue",
-  "result" : "DataValue" }
-
-{ "@id" : "Join",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Join a list of strings using 'separator'.",
-      "@properties" : { "list" : "The list to concatenate.",
-                        "separator" : "The separator between each joined string",
-                        "result" : "The result string."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "list" : "DataValue",
-  "separator" : "DataValue",
-  "result" : "DataValue" }
-
-{ "@id" : "Sum",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Sum a list of strings.",
-      "@properties" : { "list" : "The list of numbers to sum.",
-                        "result" : "The result of the sum as a number."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "list" : "DataValue",
-  "result" : "DataValue" }
-
-{ "@id" : "Start",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Start a query at the nth solution specified by 'start'. Allows resumption and paging of queries.",
-      "@properties" : { "query" : "The query to perform.",
-                        "start" : "The numbered solution to start at."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "start" : "xsd:nonNegativeInteger" }
-
-{ "@id" : "Limit",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Limit a query to a particular maximum number of solutions specified by 'limit'. Can be used with start to perform paging.",
-      "@properties" : { "query" : "The query to perform.",
-                        "limit" : "Maximum number of solutions."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "limit" : "xsd:nonNegativeInteger" }
-
-{ "@id" : "Regexp",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Test a string against a PCRE style regex pattern.",
-      "@properties" : { "pattern" : "The PCRE style pattern.",
-                        "string" : "The string to test.",
-                        "result" : "An optional result list of matches."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "pattern" : "DataValue",
-  "string" : "DataValue",
-  "result" : { "@type" : "Optional",
-               "@class" : "DataValue"} }
-
-{ "@id" : "True",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The query which is always true."
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query" }
-
-{ "@id" : "Order",
-  "@type" : "Enum",
-  "@key" : { "@type" : "ValueHash" },
-  "@value" : [ "asc", "desc" ] }
-
-{ "@id" : "OrderTemplate",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The order template, consisting of the variable and ordering direction.",
-      "@properties" : { "order" : "An enum either 'asc' or 'desc'.",
-                        "variable" : "The variable to order."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@subdocument" : [],
-  "order" : "Order",
-  "variable" : "xsd:string" }
-
-{ "@id" : "OrderBy",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Orders query results according to an ordering specification.",
-      "@properties" : { "query" : "The base query giving the solutions to order.",
-                        "ordering" : "A specification of the ordering of solutions."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "ordering" : { "@type" : "List",
-                 "@class" : "OrderTemplate" } }
-
-{ "@id" : "GroupBy",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Group a query into a list with each element of the list specified by 'template' using a given variable set for the group.",
-      "@properties" : { "template" : "The template of elements in the result list.",
-                        "group_by" : "The variables which should be grouped into like solutions.",
-                        "query" : "The subquery providing the solutions for the grouping.",
-                        "grouped" : "The final list of templated solutions."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "template" : "Value",
-  "group_by" : { "@type" : "List",
-                 "@class" : "xsd:string" },
-  "query" : "Query",
-  "grouped" : "Value" }
-
-{ "@id" : "Length",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The length of a list.",
-      "@properties" : { "list" : "The list of which to find the length.",
-                        "length" : "The length of the list."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "list" : "DataValue",
-  "length" : "DataValue" }
-
-{ "@id" : "Not",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The negation of a query. Provides no solution bindings, but will succeed if its sub-query fails.",
-      "@properties" : { "query" : "The query which must not hold." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query" }
-
-{ "@id" : "Once",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Obtains exactly one solution from a query. Simliar to a limit of 1.",
-      "@properties" : { "query" : "The query from which to obtain a solution." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query" }
-
-{ "@id" : "Immediately",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Attempts to perform all side-effecting operations immediately. Can have strange non-backtracking effects but can also increase performance. Use at your own risk.",
-      "@properties" : { "query" : "The query from which to obtain the side-effects." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query" }
-
-{ "@id" : "Count",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Counts the number of solutions of a query.",
-      "@properties" : { "query" : "The query from which to obtain the count.",
-                        "count" : "The count of the number of solutions." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "query" : "Query",
-  "count" : "DataValue" }
-
-{ "@id" : "Typecast",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Casts one type as another if possible.",
-      "@properties" : { "value" : "The value to cast.",
-                        "type" : "The type to which to cast.",
-                        "result" : "The resulting value after cast." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "value" : "Value",
-  "type" : "NodeValue",
-  "result" : "Value" }
-
-{ "@id" : "PathPattern",
-  "@type" : "Class",
-  "@abstract" : [] }
-
-{ "@id" : "Path",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Find a path through the graph according to 'pattern'. This 'pattern' is a regular graph expression which avoids cycles.",
-      "@properties" : { "subject" : "The starting node.",
-                        "pattern" : "The pattern which describes how to traverse edges.",
-                        "object" : "The ending node.",
-                        "path" : "An optional list of edges traversed."
-                      }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "subject" : "Value",
-  "pattern" : "PathPattern",
-  "object" : "Value",
-  "path" : { "@type" : "Optional",
-             "@class" : "Value" }}
-
-{ "@id" : "PathPredicate",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A predicate to traverse.",
-      "@properties" : { "predicate" : "The predicate to use in the pattern traversal." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "predicate" : { "@type" : "Optional",
-                  "@class" : "xsd:string" }}
-
-{ "@id" : "InversePathPredicate",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A predicate to traverse *backwards*.",
-      "@properties" : { "predicate" : "The predicate to use in reverse direction in the pattern traversal." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "predicate" : { "@type" : "Optional",
-                  "@class" : "xsd:string" }}
-
-{ "@id" : "PathSequence",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A sequence of patterns in which each of the patterns in the list must result in objects which are subjects of the next pattern in the list.",
-      "@properties" : { "sequence" : "A sequence of path patterns." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "sequence" : { "@type" : "List",
-                 "@class" : "PathPattern" } }
-
-{ "@id" : "PathOr",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "A set of patterns in which each of the patterns can result in objects starting from our current subject set.",
-      "@properties" : { "or" : "A disjunction of path patterns." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "or" : { "@type" : "List",
-           "@class" : "PathPattern" } }
-
-{ "@id" : "PathPlus",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The path pattern specified by 'plus' must hold one or more times in succession.",
-      "@properties" : { "plus" : "A path patterns." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "plus" : "PathPattern" }
-
-{ "@id" : "PathStar",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The path pattern specified by 'star' may hold zero or more times in succession.",
-      "@properties" : { "star" : "A path pattern." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "star" : "PathPattern" }
-
-{ "@id" : "PathTimes",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The path pattern specified by 'times' may hold 'from' to 'to' times in succession.",
-      "@properties" : { "times" : "A path pattern.",
-                        "from" : "The number of times to start the repetition of the pattern",
-                        "to" : "The number of times after which to end the repeition of the pattern." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "PathPattern",
-  "times" : "PathPattern",
-  "from" : "xsd:nonNegativeInteger",
-  "to" : "xsd:nonNegativeInteger" }
-
-{ "@id" : "Dot",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Extract the value of a key in a bound document.",
-      "@properties" : { "document" : "Document which is being accessed.",
-                        "field" : "The field from which the document which is being accessed.",
-                        "value" : "The value for the document and field." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "document" : "DataValue",
-  "field" : "DataValue",
-  "value" : "DataValue" }
-
-{ "@id" : "Size",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "Size of a database in magic units (bytes?).",
-      "@properties" : { "resource" : "The resource to obtain the size of.",
-                        "size" : "The size." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "resource" : "xsd:string",
-  "size" : "DataValue" }
-
-{ "@id" : "TripleCount",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "The number of edges in a database.",
-      "@properties" : { "resource" : "The resource to obtain the edges from.",
-                        "count" : "The count of edges." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "resource" : "xsd:string",
-  "count" : "DataValue" }
-
-{ "@id" : "TypeOf",
-  "@type" : "Class",
-  "@documentation" : {
-      "@comment" : "TypeOf gives the type of an element.",
-      "@properties" : { "value" : "The value of which to obtain the type.",
-                        "type" : "The URI which that specifies the type." }
-  },
-  "@key" : { "@type" : "ValueHash" },
-  "@inherits" : "Query",
-  "value" : "Value",
-  "type" : "NodeValue" }
+{
+  "@base":"terminusdb://woql/data/",
+  "@documentation": {
+    "@authors": ["Gavin Mendel-Gleason" ],
+    "@description":"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
+    "@title":"WOQL schema"
+  },
+  "@metadata" : { "schema_version" : "v1.0.0" },
+  "@schema":"http://terminusdb.com/schema/woql#",
+  "@type":"@context",
+  "xsd":"http://www.w3.org/2001/XMLSchema#"
+}
+{
+  "@documentation": {
+    "@comment":"A named query names a specific query for later retrieval and re-use.",
+    "@properties": {
+      "name":"The name of the NamedQuery to be retrieved",
+      "query":"The query AST as WOQL JSON"
+    }
+  },
+  "@id":"NamedQuery",
+  "@key": {"@fields": ["name" ], "@type":"Lexical"},
+  "@type":"Class",
+  "name":"xsd:string",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"A named parametric query which names a specific query for later retrieval and re-use and allows the specification of bindings for a specific set of variables in the query.",
+    "@properties": {
+      "name":"The name of the NamedParametricQuery to be retrieved.",
+      "parameters":"Variable name list for auxilliary bindings.",
+      "query":"The query AST as WOQL JSON."
+    }
+  },
+  "@id":"NamedParametricQuery",
+  "@key": {"@fields": ["name" ], "@type":"Lexical"},
+  "@type":"Class",
+  "name":"xsd:string",
+  "parameters": {"@class":"xsd:string", "@type":"List"},
+  "query":"Query"
+}
+{
+  "@abstract": [],
+  "@documentation": {
+    "@comment":"An abstract class which represents an arbitrary query AST."
+  },
+  "@id":"Query",
+  "@subdocument": [],
+  "@type":"Class"
+}
+{
+  "@documentation": {
+    "@comment":"A representation of a JSON style dictionary, but with free variables. It is similar to an interpolated string in that it is a template with quoted data and substituted values.",
+    "@properties": {"data":"Pairs of Key-Values to be constructed into a dictionary"}
+  },
+  "@id":"DictionaryTemplate",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"Class",
+  "data": {"@class":"FieldValuePair", "@type":"Set"}
+}
+{
+  "@documentation": {
+    "@comment":"A representation of a JSON style dictionary, but with free variables. It is similar to an interpolated string in that it is a template with quoted data and substituted values.",
+    "@properties": {
+      "field":"The field or key of a dictionary value pair",
+      "value":"The value of a dictionary value pair."
+    }
+  },
+  "@id":"FieldValuePair",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"Class",
+  "field":"xsd:string",
+  "value":"Value"
+}
+{
+  "@documentation": {
+    "@comment":"A variable, node or data point.",
+    "@properties": {
+      "data":"An xsd data type value.",
+      "list":"A list of datavalues",
+      "node":"A URI representing a resource.",
+      "variable":"A variable."
+    }
+  },
+  "@id":"Value",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "data":"xsd:anySimpleType",
+  "dictionary":"DictionaryTemplate",
+  "list": {"@class":"Value", "@type":"List"},
+  "node":"xsd:string",
+  "variable":"xsd:string"
+}
+{
+  "@documentation": {
+    "@comment":"A variable or node.",
+    "@properties": {
+      "node":"A URI representing a resource.",
+      "variable":"A variable."
+    }
+  },
+  "@id":"NodeValue",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "node":"xsd:string",
+  "variable":"xsd:string"
+}
+{
+  "@documentation": {
+    "@comment":"A variable or node.",
+    "@properties": {
+      "data":"An xsd data type value.",
+      "list":"A list of datavalues",
+      "variable":"A variable."
+    }
+  },
+  "@id":"DataValue",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "data":"xsd:anySimpleType",
+  "list": {"@class":"DataValue", "@type":"List"},
+  "variable":"xsd:string"
+}
+{
+  "@documentation": {
+    "@comment":"Select a specific collection for query.",
+    "@properties": {
+      "collection":"The resource over which to run the query.",
+      "query":"The query which will be run on the selected collection."
+    }
+  },
+  "@id":"Using",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["collection", "query" ],
+      "mode": ["+", ":" ],
+      "types": ["collection", "query" ]
+    }
+  },
+  "@type":"Class",
+  "collection":"xsd:string",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Select specific variables from a query to return.",
+    "@properties": {
+      "query":"The query which will be run prior to selection.",
+      "variables":"The variables to select from the query."
+    }
+  },
+  "@id":"Select",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["variables", "query" ],
+      "mode": [ ["?" ], ":" ],
+      "types": ["list(string)", "query" ]
+    }
+  },
+  "@type":"Class",
+  "query":"Query",
+  "variables": {"@class":"xsd:string", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"Ensure variables listed result in distinct solutions.",
+    "@properties": {
+      "query":"The query which will be run prior to selection.",
+      "variables":"The variables which must be distinct from the query."
+    }
+  },
+  "@id":"Distinct",
+  "@inherits":"Query",
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["variables", "query" ],
+      "mode": ["?", ":" ],
+      "types": ["list(string)", "query" ]
+    }
+  },
+  "@type":"Class",
+  "query":"Query",
+  "variables": {"@class":"xsd:string", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"A conjunction of queries which must all have a solution.",
+    "@properties": {"and":"List of queries which must hold."}
+  },
+  "@id":"And",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["and" ], "mode": [ [":" ] ], "types": ["list(query)" ]}
+  },
+  "@type":"Class",
+  "and": {"@class":"Query", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"A disjunction of queries any of which can provide a solution.",
+    "@properties": {"or":"List of queries which may hold."}
+  },
+  "@id":"Or",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["or" ], "mode": [ [":" ] ], "types": ["list(query)" ]}
+  },
+  "@type":"Class",
+  "or": {"@class":"Query", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"Change the default read graph (between instance/schema).",
+    "@properties": {
+      "graph":"The graph filter: 'schema' or 'instance' or '*'.",
+      "query":"The subquery with a new default graph."
+    }
+  },
+  "@id":"From",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["graph", "query" ],
+      "mode": ["+", ":" ],
+      "types": ["graph", "query" ]
+    }
+  },
+  "@type":"Class",
+  "graph":"xsd:string",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Change the default write graph (between instance/schema).",
+    "@properties": {
+      "graph":"The graph filter: schema or instance.",
+      "query":"The subquery with a new default write graph."
+    }
+  },
+  "@id":"Into",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["graph", "query" ],
+      "mode": ["+", ":" ],
+      "types": ["graph", "query" ]
+    }
+  },
+  "@type":"Class",
+  "graph":"xsd:string",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern in the graph.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"Triple",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+" ],
+      "types": ["node", "node", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge to add to the graph.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"AddTriple",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "optional(graph)" ],
+      "mode": ["+", "+", "+", "+" ],
+      "types": ["node", "node", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern which was *added* at *this commit*.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"AddedTriple",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+" ],
+      "types": ["node", "node", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern to remove from the graph.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"DeleteTriple",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "optional(graph)" ],
+      "mode": ["+", "+", "+", "+" ],
+      "types": ["node", "node", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern which was *deleted* at *this commit*.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"DeletedTriple",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+" ],
+      "types": ["node", "node", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern which is not terminal, but a link between objects.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"Link",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"NodeValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern which is terminal, and provides a data value association.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A data type or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"Data",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"DataValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Provides class subsumption (the inheritance model) according to the schema design. True whenver 'child' is a child of 'parent'. Can be used as a generator or a check.",
+    "@properties": {
+      "child":"The child class as a URI or variable.",
+      "parent":"The parent class as a URI or variable"
+    }
+  },
+  "@id":"Subsumption",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["child", "parent" ],
+      "mode": ["?", "?" ],
+      "types": ["node", "node" ]
+    }
+  },
+  "@type":"Class",
+  "child":"NodeValue",
+  "parent":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"True whenever 'left' is the same as 'right'. Performs unification.",
+    "@properties": {
+      "left":"A URI, data value or variable.",
+      "right":"A URI, data value or variable."
+    }
+  },
+  "@id":"Equals",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["?", "?" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Finds the boundaries of a substring in a string.",
+    "@properties": {
+      "after":"The count of characters after substring as an integer or variable.",
+      "before":"The count of characters before substring as an integer or variable.",
+      "length":"The length of the string as an integer or variable.",
+      "string":"The super-string as data or variable.",
+      "substring":"The super-string as data or variable."
+    }
+  },
+  "@id":"Substring",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["string", "before", "length", "after", "substring" ],
+      "mode": ["+", "?", "?", "?", "?" ],
+      "types": ["string", "integer", "integer", "integer", "string" ]
+    }
+  },
+  "@type":"Class",
+  "after":"DataValue",
+  "before":"DataValue",
+  "length":"DataValue",
+  "string":"DataValue",
+  "substring":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Read a full document from an identifier.",
+    "@properties": {
+      "document":"Variable which will be bound to the document.",
+      "identifier":"The URI of the document to load."
+    }
+  },
+  "@id":"ReadDocument",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["identifier", "document" ],
+      "mode": ["+", "?" ],
+      "types": ["node", "json" ]
+    }
+  },
+  "@type":"Class",
+  "document":"Value",
+  "identifier":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Update a document in the graph.",
+    "@properties": {
+      "document":"The document to update. Must either have an '@id' or have a class specified key.",
+      "identifier":"An optional returned identifier specifying the documentation location."
+    }
+  },
+  "@id":"UpdateDocument",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["document", "optional(identifier)" ],
+      "mode": ["+", "?" ],
+      "types": ["node", "json" ]
+    }
+  },
+  "@type":"Class",
+  "document":"Value",
+  "identifier": {"@class":"NodeValue", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"Insert a document in the graph.",
+    "@properties": {
+      "document":"The document to insert. Must either have an '@id' or have a class specified key.",
+      "identifier":"An optional returned identifier specifying the documentation location."
+    }
+  },
+  "@id":"InsertDocument",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["document", "optional(identifier)" ],
+      "mode": ["+", "?" ],
+      "types": ["node", "json" ]
+    }
+  },
+  "@type":"Class",
+  "document":"Value",
+  "identifier": {"@class":"NodeValue", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"Delete a document from the graph.",
+    "@properties": {
+      "identifier":"An identifier specifying the documentation location to delete."
+    }
+  },
+  "@id":"DeleteDocument",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["identifier" ], "mode": ["+" ], "types": ["node" ]}
+  },
+  "@type":"Class",
+  "identifier":"NodeValue"
+}
+{
+  "@id":"Indicator",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "index":"xsd:nonNegativeInteger",
+  "name":"xsd:string"
+}
+{
+  "@id":"Column",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"Class",
+  "indicator":"Indicator",
+  "type": {"@class":"xsd:string", "@type":"Optional"},
+  "variable":"xsd:string"
+}
+{
+  "@id":"Source",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "post":"xsd:string",
+  "url":"xsd:string"
+}
+{
+  "@id":"FormatType",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Enum",
+  "@value": ["csv" ]
+}
+{
+  "@id":"QueryResource",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "format":"FormatType",
+  "options": {"@class":"xdd:json", "@type":"Optional"},
+  "source":"Source"
+}
+{
+  "@id":"Get",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["columns", "resource", "optional(has_header)" ],
+      "mode": [ ["?" ], "+", "+" ],
+      "types": ["list(column)", "resource" ]
+    }
+  },
+  "@type":"Class",
+  "columns": {"@class":"Column", "@type":"List"},
+  "has_header": {"@class":"xsd:boolean", "@type":"Optional"},
+  "resource":"QueryResource"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern with data value which was added in *this* commit*.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"AddedData",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"DataValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Add an edge which links between nodes in the graph.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"AddLink",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"NodeValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Specify an edge pattern which links between nodes at *this* commit.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"AddedLink",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"NodeValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Add an edge with a data value.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A data value or variable which is the target or object of the graph edge. The variable must be bound.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge. The variable must be bound.",
+      "subject":"A URI or variable which is the source or subject of the graph edge. The variable must be bound."
+    }
+  },
+  "@id":"AddData",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"DataValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Delete an edge linking nodes.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI or variable which is the target or object of the graph edge. The variable must be bound.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge. The variable must be bound.",
+      "subject":"A URI or variable which is the source or subject of the graph edge. The variable must be bound."
+    }
+  },
+  "@id":"DeleteLink",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"NodeValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"An edge pattern specifying a link beween nodes deleted *at this commit*.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"DeletedLink",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"NodeValue",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"A conditional which runs the then clause for every success from the test clause, otherwise runs the else clause.",
+    "@properties": {
+      "else":"A query which runs whenever test fails.",
+      "test":"A query which will provide bindings for the then clause.",
+      "then":"A query which will run for every solution of test with associated bindings."
+    }
+  },
+  "@id":"If",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "else":"Query",
+  "test":"Query",
+  "then":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Trims whitespace from 'untrimmed'.",
+    "@properties": {
+      "trimmed":"The string to be trimmed.",
+      "untrimmed":"The untrimmed string."
+    }
+  },
+  "@id":"Trim",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["untrimmed", "trimmed" ],
+      "mode": ["+", "?" ],
+      "types": ["string", "string" ]
+    }
+  },
+  "@type":"Class",
+  "trimmed":"DataValue",
+  "untrimmed":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Evaluate an arithmetic expression to obtain a result.",
+    "@properties": {
+      "expression":"The expression to be evaluated.",
+      "result":"The numeric result."
+    }
+  },
+  "@id":"Eval",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["expression", "result" ],
+      "mode": ["+", "?" ],
+      "types": ["arithmetic", "decimal" ]
+    }
+  },
+  "@type":"Class",
+  "expression":"ArithmeticExpression",
+  "result":"ArithmeticValue"
+}
+{
+  "@abstract": [],
+  "@documentation": {
+    "@comment":"An abstract class specifying the AST super-class of all arithemtic expressions."
+  },
+  "@id":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"Class"
+}
+{
+  "@documentation": {
+    "@comment":"A variable or node.",
+    "@properties": {"data":"An xsd data type value.", "variable":"A variable."}
+  },
+  "@id":"ArithmeticValue",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"TaggedUnion",
+  "data":"xsd:anySimpleType",
+  "variable":"xsd:string"
+}
+{
+  "@documentation": {
+    "@comment":"Add two numbers.",
+    "@properties": {"left":"First operand of add.", "right":"Second operand of add."}
+  },
+  "@id":"Plus",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "left":"ArithmeticExpression",
+  "right":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Subtract two numbers.",
+    "@properties": {
+      "left":"First operand of minus.",
+      "right":"Second operand of minus."
+    }
+  },
+  "@id":"Minus",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "left":"ArithmeticExpression",
+  "right":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Multiply two numbers.",
+    "@properties": {
+      "left":"First operand of times.",
+      "right":"Second operand of times."
+    }
+  },
+  "@id":"Times",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "left":"ArithmeticExpression",
+  "right":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Divide two numbers.",
+    "@properties": {
+      "left":"First operand of divide.",
+      "right":"Second operand of divide."
+    }
+  },
+  "@id":"Divide",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "left":"ArithmeticExpression",
+  "right":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Integer divide two numbers.",
+    "@properties": {"left":"First operand of div.", "right":"Second operand of div."}
+  },
+  "@id":"Div",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "left":"ArithmeticExpression",
+  "right":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Exponentiate a number.",
+    "@properties": {"left":"The base.", "right":"The exponent."}
+  },
+  "@id":"Exp",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "left":"ArithmeticExpression",
+  "right":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Find the integral part of a number.",
+    "@properties": {"argument":"The number to floor."}
+  },
+  "@id":"Floor",
+  "@inherits":"ArithmeticExpression",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "argument":"ArithmeticExpression"
+}
+{
+  "@documentation": {
+    "@comment":"Test (or generate) the type of an element.",
+    "@properties": {
+      "element":"The element to test.",
+      "type":"The type of the element."
+    }
+  },
+  "@id":"IsA",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["element", "type" ],
+      "mode": ["?", "?" ],
+      "types": ["node", "node" ]
+    }
+  },
+  "@type":"Class",
+  "element":"NodeValue",
+  "type":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Distance between strings, similar to a Levenstein distance.",
+    "@properties": {
+      "left":"The first string.",
+      "right":"The second string.",
+      "similarity":"Number between -1 and 1 which gives a scale for similarity."
+    }
+  },
+  "@id":"Like",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right", "similarity" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["string", "string", "float" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue",
+  "similarity":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Predicate determining if one thing is less than another according to natural ordering.",
+    "@properties": {"left":"The lesser element.", "right":"The greater element."}
+  },
+  "@id":"Less",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["+", "+" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Predicate determining if one thing is greater than another according to natural ordering.",
+    "@properties": {"left":"The greater element.", "right":"The lesser element."}
+  },
+  "@id":"Greater",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["+", "+" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"A query which will succeed (without bindings) even in the case of failure.",
+    "@properties": {"query":"The query to run."}
+  },
+  "@id":"Optional",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["query" ], "mode": [":" ], "types": ["query" ]}
+  },
+  "@type":"Class",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Generates a key identical to those generated automatically by 'LexicalKey' specifications.",
+    "@properties": {
+      "base":"The URI base to the left of the key.",
+      "key_list":"List of data elements required to generate the key.",
+      "uri":"The resulting URI."
+    }
+  },
+  "@id":"LexicalKey",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "base":"DataValue",
+  "key_list": {"@class":"DataValue", "@type":"List"},
+  "uri":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generates a key identical to those generated automatically by 'RandomKey' specifications.",
+    "@properties": {
+      "base":"The URI base to the left of the key.",
+      "uri":"The resulting URI."
+    }
+  },
+  "@id":"RandomKey",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "base":"DataValue",
+  "uri":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generates a key identical to those generated automatically by 'HashKey' specifications.",
+    "@properties": {
+      "base":"The URI base to the left of the key.",
+      "key_list":"List of data elements required to generate the key.",
+      "uri":"The resulting URI."
+    }
+  },
+  "@id":"HashKey",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "base":"DataValue",
+  "key_list": {"@class":"DataValue", "@type":"List"},
+  "uri":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Uppercase a string.",
+    "@properties": {
+      "mixed":"The mixed case string.",
+      "upper":"The upper case string."
+    }
+  },
+  "@id":"Upper",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["mixed", "upper" ],
+      "mode": ["+", "?" ],
+      "types": ["string", "string" ]
+    }
+  },
+  "@type":"Class",
+  "mixed":"DataValue",
+  "upper":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Lowercase a string.",
+    "@properties": {
+      "lower":"The lower case string.",
+      "mixed":"The mixed case string."
+    }
+  },
+  "@id":"Lower",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["mixed", "lower" ],
+      "mode": ["+", "?" ],
+      "types": ["string", "string" ]
+    }
+  },
+  "@type":"Class",
+  "lower":"DataValue",
+  "mixed":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Pad a string.",
+    "@properties": {
+      "char":"The padding character.",
+      "result":"The result of the padding as a string.",
+      "string":"The starting string.",
+      "times":"The number of times to repeat the padding character."
+    }
+  },
+  "@id":"Pad",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["string", "char", "times", "result" ],
+      "mode": ["+", "+", "+", "?" ],
+      "types": ["string", "string", "integer", "string" ]
+    }
+  },
+  "@type":"Class",
+  "char":"DataValue",
+  "result":"DataValue",
+  "string":"DataValue",
+  "times":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Split a string.",
+    "@properties": {
+      "list":"The result list of strings.",
+      "pattern":"The splitting pattern.",
+      "string":"The starting string."
+    }
+  },
+  "@id":"Split",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["string", "pattern", "list" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["string", "string", "list(string)" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "pattern":"DataValue",
+  "string":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generate or test every element of a list.",
+    "@properties": {
+      "list":"The list of elements against which to generate or test.",
+      "member":"The element to test for membership or to supply as generated."
+    }
+  },
+  "@id":"Member",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["member", "list" ],
+      "mode": ["?", "+" ],
+      "types": ["any", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "member":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Concatenate a list of strings.",
+    "@properties": {"list":"The list to concatenate.", "result":"The result string."}
+  },
+  "@id":"Concatenate",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result" ],
+      "mode": ["+", "?" ],
+      "types": ["list(string)", "string" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Join a list of strings using 'separator'.",
+    "@properties": {
+      "list":"The list to concatenate.",
+      "result":"The result string.",
+      "separator":"The separator between each joined string"
+    }
+  },
+  "@id":"Join",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "separator", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "string", "string" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue",
+  "separator":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Sum a list of strings.",
+    "@properties": {
+      "list":"The list of numbers to sum.",
+      "result":"The result of the sum as a number."
+    }
+  },
+  "@id":"Sum",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result" ],
+      "mode": ["+", "?" ],
+      "types": ["list(any)", "decimal" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Start a query at the nth solution specified by 'start'. Allows resumption and paging of queries.",
+    "@properties": {
+      "query":"The query to perform.",
+      "start":"The numbered solution to start at."
+    }
+  },
+  "@id":"Start",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "query" ],
+      "mode": ["+", ":" ],
+      "types": ["integer", "query" ]
+    }
+  },
+  "@type":"Class",
+  "query":"Query",
+  "start":"xsd:nonNegativeInteger"
+}
+{
+  "@documentation": {
+    "@comment":"Limit a query to a particular maximum number of solutions specified by 'limit'. Can be used with start to perform paging.",
+    "@properties": {
+      "limit":"Maximum number of solutions.",
+      "query":"The query to perform."
+    }
+  },
+  "@id":"Limit",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["limit", "query" ],
+      "mode": ["+", ":" ],
+      "types": ["integer", "query" ]
+    }
+  },
+  "@type":"Class",
+  "limit":"xsd:nonNegativeInteger",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Test a string against a PCRE style regex pattern.",
+    "@properties": {
+      "pattern":"The PCRE style pattern.",
+      "result":"An optional result list of matches.",
+      "string":"The string to test."
+    }
+  },
+  "@id":"Regexp",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["pattern", "string", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["string", "string", "list(string)" ]
+    }
+  },
+  "@type":"Class",
+  "pattern":"DataValue",
+  "result": {"@class":"DataValue", "@type":"Optional"},
+  "string":"DataValue"
+}
+{
+  "@documentation": {"@comment":"The query which is always true."},
+  "@id":"True",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {"https://terminusdb.com": {"fields": [], "mode": [], "types": []}},
+  "@type":"Class"
+}
+{
+  "@id":"Order",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Enum",
+  "@value": ["asc", "desc" ]
+}
+{
+  "@documentation": {
+    "@comment":"The order template, consisting of the variable and ordering direction.",
+    "@properties": {
+      "order":"An enum either 'asc' or 'desc'.",
+      "variable":"The variable to order."
+    }
+  },
+  "@id":"OrderTemplate",
+  "@key": {"@type":"ValueHash"},
+  "@subdocument": [],
+  "@type":"Class",
+  "order":"Order",
+  "variable":"xsd:string"
+}
+{
+  "@documentation": {
+    "@comment":"Orders query results according to an ordering specification.",
+    "@properties": {
+      "ordering":"A specification of the ordering of solutions.",
+      "query":"The base query giving the solutions to order."
+    }
+  },
+  "@id":"OrderBy",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["ordering", "query" ],
+      "mode": [ ["?" ], ":" ],
+      "types": ["list(order)", "query" ]
+    }
+  },
+  "@type":"Class",
+  "ordering": {"@class":"OrderTemplate", "@type":"List"},
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Group a query into a list with each element of the list specified by 'template' using a given variable set for the group.",
+    "@properties": {
+      "group_by":"The variables which should be grouped into like solutions.",
+      "grouped":"The final list of templated solutions.",
+      "query":"The subquery providing the solutions for the grouping.",
+      "template":"The template of elements in the result list."
+    }
+  },
+  "@id":"GroupBy",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["template", "group_by", "value", "query" ],
+      "mode": ["?", "?", "?", ":" ],
+      "types": ["value", "template", "data_value", "query" ]
+    }
+  },
+  "@type":"Class",
+  "group_by": {"@class":"xsd:string", "@type":"List"},
+  "grouped":"Value",
+  "query":"Query",
+  "template":"Value"
+}
+{
+  "@documentation": {
+    "@comment":"The length of a list.",
+    "@properties": {
+      "length":"The length of the list.",
+      "list":"The list of which to find the length."
+    }
+  },
+  "@id":"Length",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "length" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "integer" ]
+    }
+  },
+  "@type":"Class",
+  "length":"DataValue",
+  "list":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"The negation of a query. Provides no solution bindings, but will succeed if its sub-query fails.",
+    "@properties": {"query":"The query which must not hold."}
+  },
+  "@id":"Not",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["query" ], "mode": [":" ], "types": ["query" ]}
+  },
+  "@type":"Class",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Obtains exactly one solution from a query. Simliar to a limit of 1.",
+    "@properties": {"query":"The query from which to obtain a solution."}
+  },
+  "@id":"Once",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["query" ], "mode": [":" ], "types": ["query" ]}
+  },
+  "@type":"Class",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Attempts to perform all side-effecting operations immediately. Can have strange non-backtracking effects but can also increase performance. Use at your own risk.",
+    "@properties": {"query":"The query from which to obtain the side-effects."}
+  },
+  "@id":"Immediately",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {"fields": ["query" ], "mode": [":" ], "types": ["query" ]}
+  },
+  "@type":"Class",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Counts the number of solutions of a query.",
+    "@properties": {
+      "count":"The count of the number of solutions.",
+      "query":"The query from which to obtain the count."
+    }
+  },
+  "@id":"Count",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["query", "count" ],
+      "mode": [":", "?" ],
+      "types": ["query", "count" ]
+    }
+  },
+  "@type":"Class",
+  "count":"DataValue",
+  "query":"Query"
+}
+{
+  "@documentation": {
+    "@comment":"Casts one type as another if possible.",
+    "@properties": {
+      "result":"The resulting value after cast.",
+      "type":"The type to which to cast.",
+      "value":"The value to cast."
+    }
+  },
+  "@id":"Typecast",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["value", "type", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["value", "node", "value" ]
+    }
+  },
+  "@type":"Class",
+  "result":"Value",
+  "type":"NodeValue",
+  "value":"Value"
+}
+{"@abstract": [], "@id":"PathPattern", "@type":"Class"}
+{
+  "@documentation": {
+    "@comment":"Find a path through the graph according to 'pattern'. This 'pattern' is a regular graph expression which avoids cycles.",
+    "@properties": {
+      "object":"The ending node.",
+      "path":"An optional list of edges traversed.",
+      "pattern":"The pattern which describes how to traverse edges.",
+      "subject":"The starting node."
+    }
+  },
+  "@id":"Path",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "pattern", "object", "optional(path)" ],
+      "mode": ["?", "+", "?", "-" ],
+      "types": ["node", "pattern", "node", "json" ]
+    }
+  },
+  "@type":"Class",
+  "object":"Value",
+  "path": {"@class":"Value", "@type":"Optional"},
+  "pattern":"PathPattern",
+  "subject":"Value"
+}
+{
+  "@documentation": {
+    "@comment":"A predicate to traverse.",
+    "@properties": {"predicate":"The predicate to use in the pattern traversal."}
+  },
+  "@id":"PathPredicate",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "predicate": {"@class":"xsd:string", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"A predicate to traverse *backwards*.",
+    "@properties": {
+      "predicate":"The predicate to use in reverse direction in the pattern traversal."
+    }
+  },
+  "@id":"InversePathPredicate",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "predicate": {"@class":"xsd:string", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"A sequence of patterns in which each of the patterns in the list must result in objects which are subjects of the next pattern in the list.",
+    "@properties": {"sequence":"A sequence of path patterns."}
+  },
+  "@id":"PathSequence",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "sequence": {"@class":"PathPattern", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"A set of patterns in which each of the patterns can result in objects starting from our current subject set.",
+    "@properties": {"or":"A disjunction of path patterns."}
+  },
+  "@id":"PathOr",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "or": {"@class":"PathPattern", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"The path pattern specified by 'plus' must hold one or more times in succession.",
+    "@properties": {"plus":"A path patterns."}
+  },
+  "@id":"PathPlus",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "plus":"PathPattern"
+}
+{
+  "@documentation": {
+    "@comment":"The path pattern specified by 'star' may hold zero or more times in succession.",
+    "@properties": {"star":"A path pattern."}
+  },
+  "@id":"PathStar",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "star":"PathPattern"
+}
+{
+  "@documentation": {
+    "@comment":"The path pattern specified by 'times' may hold 'from' to 'to' times in succession.",
+    "@properties": {
+      "from":"The number of times to start the repetition of the pattern",
+      "times":"A path pattern.",
+      "to":"The number of times after which to end the repeition of the pattern."
+    }
+  },
+  "@id":"PathTimes",
+  "@inherits":"PathPattern",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "from":"xsd:nonNegativeInteger",
+  "times":"PathPattern",
+  "to":"xsd:nonNegativeInteger"
+}
+{
+  "@documentation": {
+    "@comment":"Extract the value of a key in a bound document.",
+    "@properties": {
+      "document":"Document which is being accessed.",
+      "field":"The field from which the document which is being accessed.",
+      "value":"The value for the document and field."
+    }
+  },
+  "@id":"Dot",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["document", "field", "value" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["json", "string", "data_value" ]
+    }
+  },
+  "@type":"Class",
+  "document":"DataValue",
+  "field":"DataValue",
+  "value":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Size of a database in magic units (bytes?).",
+    "@properties": {
+      "resource":"The resource to obtain the size of.",
+      "size":"The size."
+    }
+  },
+  "@id":"Size",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "resource":"xsd:string",
+  "size":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"The number of edges in a database.",
+    "@properties": {
+      "count":"The count of edges.",
+      "resource":"The resource to obtain the edges from."
+    }
+  },
+  "@id":"TripleCount",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@type":"Class",
+  "count":"DataValue",
+  "resource":"xsd:string"
+}
+{
+  "@documentation": {
+    "@comment":"TypeOf gives the type of an element.",
+    "@properties": {
+      "type":"The URI which that specifies the type.",
+      "value":"The value of which to obtain the type."
+    }
+  },
+  "@id":"TypeOf",
+  "@inherits":"Query",
+  "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["value", "type" ],
+      "mode": ["+", "?" ],
+      "types": ["value", "node" ]
+    }
+  },
+  "@type":"Class",
+  "type":"NodeValue",
+  "value":"Value"
+}
