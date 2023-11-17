@@ -12,6 +12,12 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
+:- use_module(core(util),
+              [interpolate/2,
+               json_read_list_stream_head/3,
+               json_read_tail_stream/2,
+               terminus_schema_path/1]).
+:- use_module(library(http/json), [json_write_dict/3]).
 
 is_var(v(_)).
 
@@ -194,7 +200,7 @@ definition(
         name: 'Get',
         fields: [columns, resource, optional(has_header)],
         mode: [[?],+,+],
-        types: [list(column), resource]
+        types: [list(column), resource, boolean]
     }).
 
 /* documents */
@@ -1038,6 +1044,49 @@ cost_(false, Cost, _Polarity) =>
 unmodable(Query) :-
     cost(Query, inf).
 
+update_woql_schema :-
+    terminus_schema_path(Path),
+    interpolate([Path,'woql.json'], WOQL_Path),
+    open(WOQL_Path, read, Stream),
+    json_read_list_stream_head(Stream, Context, Tail_Stream),
+    findall(
+        Dict,
+        json_read_tail_stream(Tail_Stream, Dict),
+        Dicts),
+    close(Stream),
+    !,
+    maplist(inject_woql_info, Dicts, Updated_Dicts),
+    open(WOQL_Path, write, Output_Stream),
+    json_write_dict(Output_Stream, Context, []),
+    nl(Output_Stream),
+    forall(
+        member(Output_Dict, Updated_Dicts),
+        (   json_write_dict(Output_Stream, Output_Dict, [serialize_unknown(true)]),
+            nl(Output_Stream)
+        )
+    ),
+    close(Output_Stream).
+
+inject_woql_info(Dict, New_Dict) :-
+    get_dict('@id', Dict, Name),
+    atom_string(Atom, Name),
+    Def = _{name:Atom,fields:Fields,mode:Mode,types:Types},
+    definition(Def),
+    !,
+    metadata(Dict, Metadata),
+    New_Metadata = _{ types: Types,
+                      fields: Fields,
+                      mode: Mode },
+    put_dict('https://terminusdb.com', Metadata, New_Metadata, Output_Metadata),
+    put_dict('@metadata', Dict, Output_Metadata, New_Dict).
+inject_woql_info(Dict, Dict).
+
+metadata(Dict, Metadata) :-
+    (   get_dict('@metadata', Dict, Metadata)
+    ->  true
+    ;   Metadata = metadata{}
+    ).
+
 :- begin_tests(mode).
 
 test(list_mvar_term_mode) :-
@@ -1131,3 +1180,57 @@ test(cost_of_supplied_binding, []) :-
     \+ Cost = inf.
 
 :- end_tests(mode).
+
+:- begin_tests(woql_injection).
+
+test(not_there, []) :-
+
+    JSON = _{'@documentation':_{'@comment':"Specify an edge pattern in the graph.", '@properties':_{graph:"An optional graph (either 'instance' or 'schema')", object:"A URI, datatype or variable which is the target or object of the graph edge.", predicate:"A URI or variable which is the edge-label or predicate of the graph edge.", subject:"A URI or variable which is the source or subject of the graph edge."}}, '@id':"Triple", '@inherits':"Query", '@key':_{'@type':"ValueHash"}, '@type':"Class", graph:_{'@class':"xsd:string", '@type':"Optional"}, object:"Value", predicate:"NodeValue", subject:"NodeValue"},
+    inject_woql_info(JSON, New),
+    get_dict('@metadata', New, Metadata),
+    Metadata = metadata{
+                   'https://terminusdb.com':
+                   _{ fields:[ subject,
+							   predicate,
+							   object,
+							   optional(graph)
+							 ],
+					  mode:[ ?,
+							 ?,
+							 ?,
+							 +
+						   ],
+					  types:[ node,
+							  node,
+							  value,
+							  graph
+							]
+					}
+			   }.
+
+test(already_there, []) :-
+    JSON = _{'@documentation':_{'@comment':"Specify an edge pattern in the graph.", '@properties':_{graph:"An optional graph (either 'instance' or 'schema')", object:"A URI, datatype or variable which is the target or object of the graph edge.", predicate:"A URI or variable which is the edge-label or predicate of the graph edge.", subject:"A URI or variable which is the source or subject of the graph edge."}}, '@id':"Triple", '@inherits':"Query", '@key':_{'@type':"ValueHash"}, '@type':"Class", graph:_{'@class':"xsd:string", '@type':"Optional"}, object:"Value", predicate:"NodeValue", subject:"NodeValue", '@metadata' : _{ my_own_values: ["asdf", "fdsa"]}},
+    inject_woql_info(JSON, New),
+    get_dict('@metadata', New, Metadata),
+    Metadata = metadata{
+                   my_own_values: ["asdf", "fdsa"],
+                   'https://terminusdb.com':
+                   _{ fields:[ subject,
+							   predicate,
+							   object,
+							   optional(graph)
+							 ],
+					  mode:[ ?,
+							 ?,
+							 ?,
+							 +
+						   ],
+					  types:[ node,
+							  node,
+							  value,
+							  graph
+							]
+					}
+			   }.
+
+:- end_tests(woql_injection).

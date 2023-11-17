@@ -196,6 +196,7 @@ initialize_database_with_store(Key, Store, Force) :-
 
     initialize_system_instance(Store, System_Schema, Key, Force).
 
+current_woql_version("v1.0.0").
 current_repository_version("v1.0.1").
 current_ref_version("v1.0.1").
 
@@ -211,6 +212,8 @@ current_schema_version(repo_schema, Version) :-
     current_repository_version(Version).
 current_schema_version(ref_schema, Version) :-
     current_ref_version(Version).
+current_schema_version(woql_schema, Version) :-
+    current_woql_version(Version).
 
 update_system_graph(Label, Path, Predicate, Initialization) :-
     Descriptor = label_descriptor{
@@ -253,11 +256,21 @@ update_commit_graph :-
                         ref_schema,
                         api_init:initialize_ref_schema).
 
+update_woql_graph :-
+    woql_ontology(WOQL_Label),
+    api_init:woql_schema_json(WOQL_Path),
+    update_system_graph(WOQL_Label,
+                        WOQL_Path,
+                        woql_schema,
+                        api_init:initialize_woql_schema).
+
 update_system_graphs :-
     (   has_no_store
     ->  true
     ;   update_repository_graph,
-        update_commit_graph).
+        update_commit_graph,
+        update_woql_graph
+    ).
 
 % FIXME! These tests should go into `src/config/terminus_config.pl`, but I
 % couldn't run them when they were there.

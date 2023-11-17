@@ -1,5 +1,12 @@
+# TerminusDB Server v11.1.9 Release Notes
+## Enhancements
+* path patterns in GraphQL can now have whitespace
+
+## Bug fixes
+* Fixes for reordering in query cost
+
 # TerminusDB Server v11.1.8 Release Notes
-# Enhancement
+## Enhancement
 * Speed up db listing
 * Add db list by organization
 * Query cost estimations are more robust, and modalities are now used
