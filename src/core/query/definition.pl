@@ -200,7 +200,7 @@ definition(
         name: 'Get',
         fields: [columns, resource, optional(has_header)],
         mode: [[?],+,+],
-        types: [list(column), resource]
+        types: [list(column), resource, boolean]
     }).
 
 /* documents */
