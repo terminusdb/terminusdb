@@ -38,6 +38,6 @@
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^6.0.0",
     "http-server": "^14.1.0",
-    "start-server-and-test": "^1.14.0"
+    "start-server-and-test": "^2.0.3"
   }
 }
