@@ -115,8 +115,10 @@ json_list_value_to_woql_ast([JSON|J_Rest],N,[WOQL|W_Rest],Path) :-
 json_value_to_woql_ast(JSON,WOQL,Path) :-
     is_dict(JSON),
     !,
-    _{'@type' : Pre_Type} :< JSON,
-    atom_string(Type,Pre_Type),
+    (   _{'@type' : Pre_Type} :< JSON
+    ->  atom_string(Type,Pre_Type)
+    ;   Type = 'Value'
+    ),
     json_value_to_woql_ast(Type,JSON,WOQL,Path).
 json_value_to_woql_ast(JSON,WOQL,Path) :-
     is_list(JSON),
@@ -128,25 +130,7 @@ json_value_to_woql_ast(JSON,_,Path) :-
 
 json_value_to_woql_ast('True',_,WOQL,_) :-
     WOQL = true.
-json_value_to_woql_ast('NodeValue',JSON,WOQL,_) :-
-    (   _{node: Node} :< JSON
-    ->  prefix_split(Node, WOQL)
-    ;   _{variable: Var} :< JSON
-    ->  json_data_to_woql_ast(Var,Var_String^^_),
-        atom_string(Var_Atom, Var_String),
-        WOQL = v(Var_Atom)
-    ).
-json_value_to_woql_ast('DataValue',JSON,WOQL,Path) :-
-    (   _{data: Data} :< JSON
-    ->  json_data_to_woql_ast(Data,WOQL)
-    ;   _{variable: Var} :< JSON
-    ->  json_data_to_woql_ast(Var,Var_String^^_),
-        atom_string(Var_Atom, Var_String),
-        WOQL = v(Var_Atom)
-    ;   _{list: List} :< JSON
-    ->  json_list_value_to_woql_ast(List,WOQL,[list|Path])
-    ).
-json_value_to_woql_ast('Value',JSON,WOQL,Path) :-
+json_value_to_woql_ast(_,JSON,WOQL,Path) :-
     (   _{node: Node} :< JSON
     ->  prefix_split(Node, WOQL)
     ;   _{variable: Var} :< JSON
