@@ -129,8 +129,10 @@ json_value_to_woql_ast(JSON,_,Path) :-
     throw(error(woql_syntax_error(JSON,Director,JSON), _)).
 
 json_value_to_woql_ast('True',_,WOQL,_) :-
+    !,
     WOQL = true.
-json_value_to_woql_ast(_,JSON,WOQL,Path) :-
+json_value_to_woql_ast(Type,JSON,WOQL,Path) :-
+    memberchk(Type, ['Value', 'NodeValue', 'DataValue']),
     (   _{node: Node} :< JSON
     ->  prefix_split(Node, WOQL)
     ;   _{variable: Var} :< JSON
