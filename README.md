@@ -52,50 +52,6 @@ You should be able to view TerminusDB running by default at `localhost:6363`
 
 > If you're installing TerminusDB on Windows with Docker, our friends at DFRNT wrote this [comprehensive guide](https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/).
 
-
-### Get this repo, cd to it
-
-```
-git clone https://github.com/terminusdb/terminusdb-bootstrap
-cd terminusdb-bootstrap
-```
-
-### Run the container by using the script (the first time)
-
-```
-./terminusdb-container run
-
-Unable to find image 'terminusdb/terminusdb-server:latest' locally
-latest: Pulling from terminusdb/terminusdb-server
-8f91359f1fff: Pulling fs layer
-939634dec138: Pulling fs layer
-f30474226dd6: Pulling fs layer
-32a63113e3ae: Pulling fs layer
-ae35de9092ce: Pulling fs layer
-023c02983955: Pulling fs layer
-d9fa4a1acf93: Pulling fs layer
-[ ... ]
-```
-
-### To stop, attach, etc, see usage
-```
-./terminusdb-container
-
-USAGE:
-  terminusdb-container [COMMAND]
-
-  help        show usage
-  run         run container
-  cli         use the terminusdb cli
-  stop        stop container
-  attach      attach to prolog shell
-  exec        execute a command inside the container
-  rm          remove volumes
-```
-
-More information in the [docs](https://terminusdb.com/docs/install-terminusdb-as-a-docker-container), or in the [TerminusDB Bootstrap](https://github.com/terminusdb/terminusdb-bootstrap) repository.
-
-
 You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/install-terminusdb-from-source-code).
 
 
