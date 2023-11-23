@@ -12,10 +12,6 @@ services:
     env_file: .env
     environment:
       - TERMINUSDB_SERVER_PORT=6363
-      # DISABLE THESE ENV VARIABLES WHEN RUNNING TERMINUSDB IN PRODUCTION
-      # OR PUT AN AUTHENTICATION GATEWAY IN FRONT OF TERMINUSDB
-      - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
-      - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
     volumes:
       # For the use of a local dashboard
       #      - ./dashboard:/app/terminusdb/dashboard
