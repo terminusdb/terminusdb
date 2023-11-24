@@ -971,6 +971,12 @@ opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
            shortflags([i]),
            default('_'),
            help('document id to delete')],
+          [opt(type),
+           type(atom),
+           longflags([type]),
+           shortflags([t]),
+           default('_'),
+           help('document type to delete')],
           [opt(data),
            type(atom),
            longflags([data]),
@@ -2148,6 +2154,7 @@ run_command(doc,delete, [Path], Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
     option(id(Id), Opts),
+    option(type(Type), Opts),
     option(nuke(Nuke), Opts),
     option(data(Data), Opts),
 
@@ -2159,6 +2166,10 @@ run_command(doc,delete, [Path], Opts) :-
         ;   (   ground(Id)
             ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
                 Ids = [Id]
+            ;   ground(Type)
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, Opts),
+                format(atom(Msg), 'All documents of type ~q', [Type]),
+                Ids = [Msg] % silly
             ;   (   var(Data)
                 ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts))
                 ;   open_string(Data, Stream),
