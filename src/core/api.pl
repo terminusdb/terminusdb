@@ -122,6 +122,7 @@
               api_can_read_document/6,
               api_insert_documents/8,
               api_delete_documents/8,
+              api_delete_documents_by_type/7,
               api_delete_document/7,
               api_replace_documents/8,
               api_nuke_documents/6,

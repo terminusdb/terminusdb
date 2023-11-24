@@ -695,6 +695,9 @@ Delete documents.
   * `-i`, `--id`=[value]:
   document id to delete
 
+  * `-t`, `--type`=[value]:
+  document type to delete
+
   * `-d`, `--data`=[value]:
   document data
 

@@ -3,6 +3,7 @@
               api_insert_documents/8,
               api_delete_documents/8,
               api_delete_document/7,
+              api_delete_documents_by_type/7,
               api_replace_documents/8,
               api_nuke_documents/6,
               api_generate_document_ids/4,
@@ -441,6 +442,20 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
+                     Meta_Data,
+                     Options),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Options) :-
+    option(graph_type(Graph_Type), Options),
+    option(author(Author), Options),
+    option(message(Message), Options),
+
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    with_transaction(Context,
+                     forall(api_generate_document_ids_by_type(Graph_Type, Context, Type, _{skip: 0, count: unlimited}, ID),
+                            api_delete_document_(Graph_Type, Transaction, ID)),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
