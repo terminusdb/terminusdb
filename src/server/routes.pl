@@ -573,6 +573,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_graph_type(Search, Graph_Type),
             param_value_search_optional(Search, nuke, boolean, false, Nuke),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
+            param_value_search_optional(Search, type, non_empty_atom, _, Type),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
 
@@ -589,6 +590,8 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Options)
             ;   ground(Id)
             ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Options)
+            ;   ground(Type)
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Options)
             ;   http_read_json_semidet(stream(Stream), Request)
             ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, _Ids, Options)
             ;   throw(error(missing_targets, _))
