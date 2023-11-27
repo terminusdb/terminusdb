@@ -470,12 +470,20 @@ class_property_optional('@oneOf', Weakening, Class, _) :-
                                         class: Class,
                                         property: '@oneOf',
                                         candidate: Weakening}),_)).
+class_property_optional('@metadata',Weakening,Class,Operation) :-
+    get_dict('@metadata',Weakening,Metadata),
+    !,
+    Operation = replace_class_metadata(Class,Metadata).
+class_property_optional('@documentation',Weakening,Class,Operation) :-
+    get_dict('@documentation',Weakening,Docs),
+    !,
+    Operation = replace_class_documentation(Class,Docs).
 class_property_optional(Property,Weakening,Class,Operation) :-
     get_dict(Property,Weakening,Type),
     do_or_die(
         type_is_optional(Type),
         error(weakening_failure(json{ reason: class_property_addition_not_optional,
-                                      message: "The class property which was not added, did not have an optional type",
+                                      message: "The class property which was added, did not have an optional type",
                                       class: Class,
                                       property: Property,
                                       candidate: Weakening}),_)),
@@ -1552,7 +1560,7 @@ test(property_weakening_optional, [
          error(
              weakening_failure(
                  json{ reason: class_property_addition_not_optional,
-                       message: "The class property which was not added, did not have an optional type",
+                       message: "The class property which was added, did not have an optional type",
                        class: 'Squash',
                        property: is_a_pumpkin,
                        candidate: _Weakening}),
@@ -3188,5 +3196,145 @@ test(not_unfoldable,
                     d : 'xsd:string'
 				   }.
 
+test(class_weakened_metadata, []) :-
+    Before = json{'@id':'A', '@type':'Class', a:'xsd:string'},
+    After = json{'@id':'A', '@metadata':json{embeddings:json{}}, '@type':'Class', a:'xsd:string'},
+    class_weakened('A', Before, After, supermap{'@context':[], 'A':[]}, Ops),
+    Ops = [ replace_class_metadata('A',
+								   json{ embeddings:json{}
+									   })
+		  ].
+
+test(metadata_schema_inference_rule,
+     []) :-
+    Before = json{'@context':_{'@base':"http://somewhere.for.now/document/",
+                               '@schema':"http://somewhere.for.now/schema#",
+                               '@type':'Context'},
+                  'A':json{'@id':'A',
+                           '@type':'Class',
+                           a:'xsd:string'}},
+    After = json{'@context':_{'@base':"http://somewhere.for.now/document/",
+                              '@schema':"http://somewhere.for.now/schema#",
+                              '@type':'Context'},
+                 'A':json{'@id':'A',
+                          '@metadata':json{embeddings:json{}},
+                          '@type':'Class',
+                          a:'xsd:string'}},
+    schema_inference_rule(weakening, Before, After, Operations),
+    Operations = [ replace_class_metadata('A',
+								          json{ embeddings:json{}
+									          })
+		         ].
+
+test(metadata_weakening_inference,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin, metadata)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/metadata", Descriptor),
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_schema_document(C1,
+                                    _{ '@type' : "Class",
+                                       '@id' : "A",
+                                       'a' : "xsd:string"})
+        )
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C2,
+        (   insert_document(C2,
+                            _{ '@type' : "A", '@id' : 'A/1', a : "asdf" },
+                            _)
+        )
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C3,
+        (   replace_schema_document(C3,
+                                    _{ '@type' : "Class",
+                                       '@id' : "A",
+                                       'a' : "xsd:string",
+                                       '@metadata' : _{ 'embeddings' : _{ } }})
+        )
+    ),
+
+    Repo = (Descriptor.repository_descriptor),
+    branch_head_commit(Repo, "main", Commit_Uri),
+    commit_id_uri(Repo, Commit_Id, Commit_Uri),
+    schema_change_for_commit(Repo, Commit_Id, Change),
+    Change = migration([ json{ '@type':"ReplaceClassMetadata",
+		                       class:"A",
+		                       metadata:json{embeddings:json{}}
+		}
+	  ]).
+
+test(documentation_weakening_inference,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin, metadata)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/metadata", Descriptor),
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_schema_document(C1,
+                                    _{ '@type' : "Class",
+                                       '@id' : "A",
+                                       'a' : "xsd:string"})
+        )
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C2,
+        (   insert_document(C2,
+                            _{ '@type' : "A", '@id' : 'A/1', a : "asdf" },
+                            _)
+        )
+    ),
+
+    with_test_transaction(
+        Descriptor,
+        C3,
+        (   replace_schema_document(C3,
+                                    _{ '@type' : "Class",
+                                       '@id' : "A",
+                                       '@documentation' :
+                                       _{ '@label': "Le A",
+                                          '@comment' : "An A.",
+                                          '@properties' : _{ a : "Of course it has an a" }
+                                        },
+                                       'a' : "xsd:string",
+                                       '@metadata' : _{ some : _{ garbage: "fo you" }}})
+        )
+    ),
+
+    Repo = (Descriptor.repository_descriptor),
+    branch_head_commit(Repo, "main", Commit_Uri),
+    commit_id_uri(Repo, Commit_Id, Commit_Uri),
+    schema_change_for_commit(Repo, Commit_Id, Change),
+    Change = migration([ json{ '@type':"ReplaceClassDocumentation",
+							   class:"A",
+							   documentation:json{ '@comment':"An A.",
+											     '@label':"Le A",
+											     '@properties':json{ a:"Of course it has an a"
+													               }
+											   }
+							 },
+						 json{ '@type':"ReplaceClassMetadata",
+							   class:"A",
+							   metadata:json{ some:json{ garbage:"fo you"
+												       }
+										    }
+							 }
+					   ]).
 
 :- end_tests(migration).
