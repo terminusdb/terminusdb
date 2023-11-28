@@ -446,6 +446,12 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
+api_delete_documents_by_type_for_graph(schema, Transaction, Type) :-
+    forall(api_generate_document_ids_by_type(schema, Transaction, Type, _{skip: 0, count: unlimited}, ID),
+           api_delete_document_(schema, Transaction, ID)).
+api_delete_documents_by_type_for_graph(instance, Transaction, Type) :-
+    delete_documents_by_type(Transaction, Type, true).
+
 api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Options) :-
     option(graph_type(Graph_Type), Options),
     option(author(Author), Options),
@@ -454,8 +460,7 @@ api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version,
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
-                     forall(api_generate_document_ids_by_type(Graph_Type, Context, Type, _{skip: 0, count: unlimited}, ID),
-                            api_delete_document_(Graph_Type, Transaction, ID)),
+                     api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).

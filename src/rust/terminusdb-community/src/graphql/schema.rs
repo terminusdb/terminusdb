@@ -14,7 +14,7 @@ use terminusdb_store_prolog::terminus_store::structure::TypedDictEntry;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
-use crate::doc::{retrieve_all_index_ids, ArrayIterator, GetDocumentContext};
+use crate::doc::{retrieve_all_index_ids, ArrayIterator, DocumentContext};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
@@ -53,7 +53,7 @@ pub struct TerminusContext<'a> {
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
     pub type_collection: TerminusTypeCollectionInfo,
-    pub document_context: Arc<Lazy<GetDocumentContext<SyncStoreLayer>>>,
+    pub document_context: Arc<Lazy<DocumentContext<SyncStoreLayer>>>,
 }
 
 impl<'a> TerminusContext<'a> {
@@ -107,9 +107,9 @@ impl<'a> TerminusContext<'a> {
         })
     }
 
-    pub fn document_context(&self) -> &GetDocumentContext<SyncStoreLayer> {
+    pub fn document_context(&self) -> &DocumentContext<SyncStoreLayer> {
         self.document_context
-            .get_or_create(|| GetDocumentContext::new(self.schema.clone(), self.instance.clone()))
+            .get_or_create(|| DocumentContext::new(self.schema.clone(), self.instance.clone()))
     }
 }
 
@@ -1089,7 +1089,7 @@ fn extract_json_fragment(
     object_id: u64,
 ) -> Result<juniper::Value, juniper::FieldError> {
     // TODO this should really not just recreate a context, but it's cheap enough since it is schema independent.
-    let context = GetDocumentContext::new_json(Some(instance.clone()));
+    let context = DocumentContext::new_json(Some(instance.clone()));
     let doc = context.get_id_document(object_id, true, true)?;
     let json = serde_json::Value::Object(doc);
     Ok(juniper::Value::Scalar(DefaultScalarValue::String(
