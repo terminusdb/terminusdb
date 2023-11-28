@@ -7,8 +7,7 @@
               get_json_object/3,
               graph_get_json_object/3,
               insert_json_object/3,
-              delete_json_object/3,
-              delete_json_object/4
+              delete_json_object/3
           ]).
 
 :- use_module(core(util)).
@@ -263,19 +262,6 @@ has_no_other_link(DB, Id, V) :-
         atom_string(Id,Some)
     ).
 
-delete_json_subobject(DB, Id, V) :-
-    (   atom(V),
-        instance_of(DB, V, C)
-    ->  (   has_no_other_link(DB, Id, V)
-        ->  (   global_prefix_expand(sys:'JSON', C)
-            ->  delete_json_object(DB, V)
-            ;   is_list_type(C)
-            ->  delete_json_object(DB, V)
-            ;   true)
-        ;   true
-        )
-    ;   true).
-
 delete_json_object(Transaction, Id) :-
     delete_json_object(Transaction, true, Id).
 
@@ -283,37 +269,15 @@ delete_json_object(Transaction, Unlink, Id) :-
     is_transaction(Transaction),
     !,
     database_prefixes(Transaction, Prefixes),
-    delete_json_object(Transaction, Prefixes, Unlink, Id).
+    prefix_expand_schema(Id, Prefixes, Id_Ex),
+    tabled_get_document_context(Transaction, Context),
+    ensure_transaction_has_builder(instance, Transaction),
+    '$doc':delete_json_document(Context, Transaction, Id_Ex, Unlink).
 delete_json_object(Query_Context, Unlink, Id) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
     delete_json_object(TO, Unlink, Id).
-
-/* Basically use a reference count for deletion. */
-delete_json_object(Transaction, Prefixes, Unlink, Id) :-
-    database_instance(Transaction, Instance),
-    prefix_expand(Id,Prefixes,Id_Ex),
-    global_prefix_expand(rdf:type, RDF_Type),
-    do_or_die(xrdf(Instance, Id_Ex, RDF_Type, Type),
-              error(document_not_found(Id), _)),
-    global_prefix_expand(sys:'JSON', Subdocument_Type),
-    global_prefix_expand(sys:'JSONDocument', Document_Type),
-    global_prefix_expand(rdf:'List', List_Type),
-    do_or_die(
-        memberchk(Type, [Subdocument_Type,
-                         Document_Type,
-                         List_Type]),
-        error(stored_document_is_not_a_json(Id), _)),
-    forall(
-        xquad(Instance, G, Id_Ex, P, V),
-        (   delete(G, Id_Ex, P, V, _),
-            delete_json_subobject(Transaction,Id_Ex,V)
-        )
-    ),
-    (   Unlink = true
-    ->  unlink_object(Instance, Id_Ex)
-    ;   true).
 
 :- begin_tests(json_rdf, [concurrent(true)]).
 

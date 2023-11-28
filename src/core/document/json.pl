@@ -19,6 +19,7 @@
               get_document_uri_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
+              delete_documents_by_type/3,
               delete_subdocument/3,
               insert_document/3,
               insert_document/7,
@@ -66,7 +67,8 @@
               document_exists/2,
               compress_schema_uri/4,
               compress_dict_uri/4,
-              pairs_satisfying_diamond_property/4
+              pairs_satisfying_diamond_property/4,
+              tabled_get_document_context/2
           ]).
 
 :- use_module(instance).
@@ -2624,6 +2626,9 @@ json_to_database_type(D^^T, OC) :-
 json_to_database_type(O, O).
 
 %% Document insert / delete / update
+:- table tabled_get_document_context/2 as private.
+tabled_get_document_context(Transaction, Context) :-
+    '$doc':get_document_context(Transaction, Context).
 
 run_delete_document(Desc, Commit, ID) :-
     create_context(Desc,Commit,Context),
@@ -2632,6 +2637,7 @@ run_delete_document(Desc, Commit, ID) :-
         delete_document(Context, ID),
         _).
 
+% only being used by migrations.
 delete_subdocument(DB, Prefixes, V) :-
     (   atom(V),
         instance_of(DB, V, C)
@@ -2646,31 +2652,14 @@ delete_subdocument(DB, Prefixes, V) :-
         )
     ;   true).
 
-delete_document(DB, Prefixes, Unlink, Id) :-
-    database_instance(DB,Instance),
-    prefix_expand(Id,Prefixes,Id_Ex),
-    (   xrdf(Instance, Id_Ex, rdf:type, Type)
-    ->  true
-    ;   throw(error(document_not_found(Id), _))
-    ),
-    (   Type = 'http://terminusdb.com/schema/sys#JSONDocument'
-    ->  delete_json_object(DB, Prefixes, Unlink, Id)
-    ;   forall(
-            xquad(Instance, G, Id_Ex, P, V),
-            (   delete(G, Id_Ex, P, V, _),
-                delete_subdocument(DB,Prefixes,V)
-            )
-        ),
-        (   Unlink = true
-        ->  unlink_object(Instance, Id_Ex)
-        ;   true)
-    ).
-
 delete_document(DB, Unlink, Id) :-
     is_transaction(DB),
     !,
     database_prefixes(DB,Prefixes),
-    delete_document(DB, Prefixes, Unlink, Id).
+    prefix_expand(Id,Prefixes,Id_Ex),
+    ensure_transaction_has_builder(instance, DB),
+    tabled_get_document_context(DB, Context),
+    '$doc':delete_document(Context, DB, Id_Ex, Unlink).
 delete_document(Query_Context, Unlink, Id) :-
     is_query_context(Query_Context),
     !,
@@ -2683,13 +2672,27 @@ delete_document(DB, Id) :-
 nuke_documents(Transaction) :-
     is_transaction(Transaction),
     !,
-    database_instance(Transaction, [Instance]),
-    delete_all(Instance).
+    ensure_transaction_has_builder(instance, Transaction),
+    '$doc':delete_all(Transaction).
 nuke_documents(Query_Context) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
     nuke_documents(TO).
+
+delete_documents_by_type(DB, Type, Unlink) :-
+    is_transaction(DB),
+    !,
+    database_prefixes(DB,Prefixes),
+    prefix_expand_schema(Type,Prefixes,Type_Ex),
+    ensure_transaction_has_builder(instance, DB),
+    tabled_get_document_context(DB, Context),
+    '$doc':delete_documents_by_type(Context, DB, Type_Ex, Unlink).
+delete_documents_by_type(Query_Context, Type, Unlink) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    delete_documents_by_type(TO, Type, Unlink).
 
 nuke_schema_documents(Transaction) :-
     is_transaction(Transaction),
