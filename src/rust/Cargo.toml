@@ -7,5 +7,5 @@ debug = true
 
 [patch.crates-io]
 #terminus-store = {path="../../../terminusdb-store"}
-#terminus-store = {git="https://github.com/terminusdb/terminusdb-store"}
+terminus-store = {git="https://github.com/terminusdb/terminusdb-store", branch="fix_id_object_is_node"}
 #swipl = {git="https://github.com/terminusdb-labs/swipl-rs", branch="type_erased_contexts"}

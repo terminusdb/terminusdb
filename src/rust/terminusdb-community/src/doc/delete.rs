@@ -98,18 +98,18 @@ pub fn delete_json_id_document<L: Layer + Clone>(
         for triple in layer.triples_s(id) {
             builder.remove_id_triple(triple);
             if let Some(true) = layer.id_object_is_node(triple.object) {
-                if !visited.contains(&triple.object) && !has_other_link(context, triple.object, id)
-                {
-                    if json_document_exists(
+                if !visited.contains(&triple.object)
+                    && !has_other_link(context, triple.object, id)
+                    && json_document_exists(
                         layer,
                         triple.object,
                         rdf_type,
                         rdf_list,
                         sys_json_document,
                         sys_json,
-                    )? {
-                        visit_next.push(triple.object);
-                    }
+                    )?
+                {
+                    visit_next.push(triple.object);
                 }
             }
         }
@@ -127,7 +127,6 @@ fn json_document_exists<L: Layer>(
 ) -> Result<bool, DeleteError> {
     let type_triple = layer.single_triple_sp(id, rdf_type);
     if type_triple.is_none() {
-        let thing = layer.id_subject(id);
         return Ok(false);
     }
     let typ = Some(type_triple.unwrap().object);
@@ -138,7 +137,7 @@ fn json_document_exists<L: Layer>(
         ));
     }
 
-    return Ok(true);
+    Ok(true)
 }
 
 fn has_other_link<L: Layer + Clone>(
