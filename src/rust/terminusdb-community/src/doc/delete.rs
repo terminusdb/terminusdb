@@ -269,16 +269,16 @@ predicates! {
     #[module("$doc")]
     semidet fn delete_document(context, document_context_term, transaction_term, iri_term, unlink_term) {
         let document_context: DocumentContextBlob = document_context_term.get_ex()?;
+        let iri: PrologText = iri_term.get_ex()?;
         if document_context.layer.is_none() {
             // no layer means nothing to delete.
-            return Ok(())
+            return context.try_or_die(Err(DeleteError::DocumentNotFound(iri.to_string())));
         }
         let builder = transaction_instance_builder(context, transaction_term)?;
         if builder.is_none() {
             return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
         }
         let builder = builder.unwrap();
-        let iri: PrologText = iri_term.get_ex()?;
         let unlink: bool = unlink_term.get_ex()?;
         context.try_or_die(
             context.try_or_die(builder.with_builder(|builder| {
@@ -288,16 +288,16 @@ predicates! {
     #[module("$doc")]
     semidet fn delete_json_document(context, document_context_term, transaction_term, iri_term, unlink_term) {
         let document_context: DocumentContextBlob = document_context_term.get_ex()?;
+        let iri: PrologText = iri_term.get_ex()?;
         if document_context.layer.is_none() {
             // no layer means nothing to delete.
-            return Ok(())
+            return context.try_or_die(Err(DeleteError::DocumentNotFound(iri.to_string())));
         }
         let builder = transaction_instance_builder(context, transaction_term)?;
         if builder.is_none() {
             return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
         }
         let builder = builder.unwrap();
-        let iri: PrologText = iri_term.get_ex()?;
         let unlink: bool = unlink_term.get_ex()?;
         context.try_or_die(
             context.try_or_die(builder.with_builder(|builder| {
