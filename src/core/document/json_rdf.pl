@@ -272,7 +272,7 @@ delete_json_object(Transaction, Unlink, Id) :-
     prefix_expand_schema(Id, Prefixes, Id_Ex),
     tabled_get_document_context(Transaction, Context),
     ensure_transaction_has_builder(instance, Transaction),
-    '$doc':delete_document(Context, Transaction, Id_Ex, Unlink).
+    '$doc':delete_json_document(Context, Transaction, Id_Ex, Unlink).
 delete_json_object(Query_Context, Unlink, Id) :-
     is_query_context(Query_Context),
     !,
