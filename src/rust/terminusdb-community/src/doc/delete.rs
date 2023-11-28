@@ -80,8 +80,13 @@ pub fn delete_json_id_document<L: Layer + Clone>(
     }
     let rdf_type = rdf_type.unwrap();
     let rdf_list = context.rdf.list();
-    let sys_json = context.sys.json();
     let sys_json_document = context.sys.json_document();
+    let sys_json = context.sys.json();
+    if !json_document_exists(layer, id, rdf_type, rdf_list, sys_json_document, sys_json)? {
+        return Err(DeleteError::DocumentNotFound(
+            layer.id_subject(id).expect("id was not in dictionary"),
+        ));
+    }
     loop {
         let id = visit_next.pop();
         if id.is_none() {
@@ -90,30 +95,50 @@ pub fn delete_json_id_document<L: Layer + Clone>(
         let id = id.unwrap();
         visited.insert(id);
 
-        let type_triple = layer.single_triple_sp(id, rdf_type);
-        if type_triple.is_none() {
-            return Err(DeleteError::DocumentNotFound(
-                layer.id_subject(id).expect("id was not in dictionary"),
-            ));
-        }
-        let typ = Some(type_triple.unwrap().object);
-        if typ != sys_json && typ != sys_json_document && typ != rdf_list {
-            // none of the valid json types found. this must be an error.
-            return Err(DeleteError::StoredDocumentIsNotAJson(
-                layer.id_subject(id).expect("id was not in dictionary"),
-            ));
-        }
-
         for triple in layer.triples_s(id) {
             builder.remove_id_triple(triple);
             if let Some(true) = layer.id_object_is_node(triple.object) {
                 if !visited.contains(&triple.object) && !has_other_link(context, triple.object, id)
                 {
-                    visit_next.push(triple.object);
+                    if json_document_exists(
+                        layer,
+                        triple.object,
+                        rdf_type,
+                        rdf_list,
+                        sys_json_document,
+                        sys_json,
+                    )? {
+                        visit_next.push(triple.object);
+                    }
                 }
             }
         }
     }
+}
+
+// does a bunch of checking in addition to returning whether the document exists.
+fn json_document_exists<L: Layer>(
+    layer: &L,
+    id: u64,
+    rdf_type: u64,
+    rdf_list: Option<u64>,
+    sys_json_document: Option<u64>,
+    sys_json: Option<u64>,
+) -> Result<bool, DeleteError> {
+    let type_triple = layer.single_triple_sp(id, rdf_type);
+    if type_triple.is_none() {
+        let thing = layer.id_subject(id);
+        return Ok(false);
+    }
+    let typ = Some(type_triple.unwrap().object);
+    if typ != sys_json && typ != sys_json_document && typ != rdf_list {
+        // none of the valid json types found. this must be an error.
+        return Err(DeleteError::StoredDocumentIsNotAJson(
+            layer.id_subject(id).expect("id was not in dictionary"),
+        ));
+    }
+
+    return Ok(true);
 }
 
 fn has_other_link<L: Layer + Clone>(
