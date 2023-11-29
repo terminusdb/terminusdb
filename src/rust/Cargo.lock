@@ -1923,8 +1923,9 @@ dependencies = [
 
 [[package]]
 name = "terminus-store"
-version = "0.21.3"
-source = "git+https://github.com/terminusdb/terminusdb-store?branch=fix_id_object_is_node#b5ec070d6e4df5a3f6afc23fde65e7b176826d5a"
+version = "0.21.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "784cdca108cea0276f0e1fb855a7a751702484c9f75aa549b5933ebdb37f7e46"
 dependencies = [
  "async-trait",
  "base64",
