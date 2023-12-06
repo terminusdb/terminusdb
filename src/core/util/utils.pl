@@ -972,7 +972,7 @@ time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
 
 % Read a JSON Term from Stream. Fail if no JSON terms are found in Stream.
 json_read_term(Stream, Term) :-
-    json_read_dict(Stream, Term, [default_tag(json), end_of_file(eof)]),
+    '$util':json_read_dict_fast(Stream, Term),
     (   Term = eof
     ->  !,
         fail
