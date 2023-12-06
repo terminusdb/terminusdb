@@ -142,7 +142,7 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
     } else if let Some(val) = value.lt {
         FilterValue::String(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::String(GenericOperation::Lt, val, string_type.to_string())
+        FilterValue::String(GenericOperation::Le, val, string_type.to_string())
     } else if let Some(val) = value.gt {
         FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
@@ -169,7 +169,7 @@ fn compile_big_int_input_value(string_type: &str, value: BigIntFilterInputObject
     } else if let Some(val) = value.lt {
         FilterValue::BigInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::BigInt(GenericOperation::Lt, val, string_type.to_string())
+        FilterValue::BigInt(GenericOperation::Le, val, string_type.to_string())
     } else if let Some(val) = value.gt {
         FilterValue::BigInt(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
@@ -190,7 +190,7 @@ fn compile_datetime_input_value(
     } else if let Some(val) = value.lt {
         FilterValue::DateTime(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::DateTime(GenericOperation::Lt, val, string_type.to_string())
+        FilterValue::DateTime(GenericOperation::Le, val, string_type.to_string())
     } else if let Some(val) = value.gt {
         FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
@@ -208,7 +208,7 @@ fn compile_float_input_value(string_type: &str, value: FloatFilterInputObject) -
     } else if let Some(val) = value.lt {
         FilterValue::Float(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::Float(GenericOperation::Lt, val, string_type.to_string())
+        FilterValue::Float(GenericOperation::Le, val, string_type.to_string())
     } else if let Some(val) = value.gt {
         FilterValue::Float(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
@@ -226,7 +226,7 @@ fn compile_decimal_input_value(string_type: &str, value: BigFloatFilterInputObje
     } else if let Some(val) = value.lt {
         FilterValue::BigFloat(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::BigFloat(GenericOperation::Lt, val, string_type.to_string())
+        FilterValue::BigFloat(GenericOperation::Le, val, string_type.to_string())
     } else if let Some(val) = value.gt {
         FilterValue::BigFloat(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
@@ -247,7 +247,7 @@ fn compile_small_integer_input_value(
     } else if let Some(val) = value.lt {
         FilterValue::SmallInt(GenericOperation::Lt, val, string_type.to_string())
     } else if let Some(val) = value.le {
-        FilterValue::SmallInt(GenericOperation::Lt, val, string_type.to_string())
+        FilterValue::SmallInt(GenericOperation::Le, val, string_type.to_string())
     } else if let Some(val) = value.gt {
         FilterValue::SmallInt(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
