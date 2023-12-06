@@ -1140,6 +1140,7 @@ impl AllFrames {
         self.class_renaming.get_by_right(short_name).cloned()
     }
 
+    #[allow(dead_code)]
     pub fn short_name_to_graphql_name<'a>(&'a self, db_name: &ShortName) -> GraphQLName<'a> {
         self.short_to_graphql_name_opt(db_name)
             .unwrap_or_else(|| panic!("This class name {db_name} *should* exist"))

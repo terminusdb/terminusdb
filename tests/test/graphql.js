@@ -253,6 +253,17 @@ describe('GraphQL', function () {
     '@inherits': 'UnprefixedParent',
     child_name: 'xsd:string',
   },
+  {
+    '@type': 'Class',
+    '@id': 'A',
+    '@key': {
+      '@fields': [
+        'name',
+      ],
+      '@type': 'Lexical',
+    },
+    name: 'xsd:string',
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -840,6 +851,35 @@ query EverythingQuery {
             name: 'Dad',
           },
         ])
+    })
+
+    it('collects le filtered strings', async function () {
+      const instance = [
+        {
+          '@id': 'A/a1',
+          '@type': 'A',
+          name: 'a1',
+        },
+        {
+          '@id': 'A/a2',
+          '@type': 'A',
+          name: 'a2',
+        }]
+      await document.insert(agent, { instance })
+      const TEST_QUERY = gql`
+ query TEST {
+    A(filter:{name:{le:"a2"}}) { name }
+}`
+
+      const result = await client.query({ query: TEST_QUERY })
+      expect(result.data.A).to.have.deep.members([
+        {
+          name: 'a1',
+        },
+        {
+          name: 'a2',
+        },
+      ])
     })
 
     it('graphql meta-tags', async function () {
