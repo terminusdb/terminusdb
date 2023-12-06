@@ -13,7 +13,7 @@ stream_to_lazy_docs(Stream, List) :-
 attr_unify_hook(State, Value) :-
     State = lazy_input(Stream, Peek),
     (   var(Peek)
-    ->  json_read_dict(Stream, Term, [default_tag(json), end_of_file(eof)]),
+    ->  '$util':json_read_dict_fast(Stream, Term),
         (   Term = eof
         ->  nb_setarg(2, State, []),
             Value = []

@@ -16,6 +16,8 @@ mod template;
 mod types;
 mod value;
 
+mod json;
+
 pub use swipl;
 use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
@@ -119,4 +121,5 @@ pub fn install() {
     template::register();
     changes::register();
     embedding::register();
+    json::register();
 }
