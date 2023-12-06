@@ -45,6 +45,6 @@ describe('document-delete', function () {
 
   it('fails for document not found', async function () {
     const id = util.randomString()
-    await document.delete(agent, { query: { id } }).notFound(id)
+    await document.delete(agent, { query: { id } }).notFound(`terminusdb:///data/${id}`)
   })
 })

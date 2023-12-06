@@ -233,6 +233,23 @@ impl<'a, L: Layer + Clone> SchemaQueryContext<'a, L> {
         result
     }
 
+    pub fn get_valuehash_type_ids(&self) -> HashSet<u64> {
+        if let (Some(sys_key), Some(sys_value_hash)) = (self.sys.key(), self.sys.value_hash()) {
+            let mut result = HashSet::new();
+            for triple in self.layer.triples_o(sys_value_hash) {
+                if triple.predicate != sys_key {
+                    continue;
+                }
+
+                result.insert(triple.subject);
+            }
+
+            result
+        } else {
+            HashSet::with_capacity(0)
+        }
+    }
+
     pub fn translate_subject_id<L2: Layer>(&self, layer2: &L2, id: u64) -> Option<u64> {
         let subject = self.layer.id_subject(id).unwrap();
         layer2.subject_id(&subject)

@@ -1,3 +1,11 @@
+# TerminusDB Server v11.1.10 Release Notes
+
+## Enhancements
+* WOQL AST parser now infers types for values
+* Changing '@metadata' or '@documentation' is now interpreted as a 'weakening' operation and will generate a migration
+* document endpoint can now delete all documents of a type
+* speed up deletions
+
 # TerminusDB Server v11.1.9 Release Notes
 ## Enhancements
 * path patterns in GraphQL can now have whitespace

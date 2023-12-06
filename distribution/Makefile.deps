@@ -1,6 +1,6 @@
 TUS_VERSION := v0.0.14
 JWT_VERSION := v1.0.3
-DASHBOARD_VERSION := v6.0.9-no-hardcoded-server
+DASHBOARD_VERSION := v6.0.10
 DASHBOARD_GITHUB_REPO := terminusdb/terminusdb-dashboard
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl

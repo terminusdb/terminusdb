@@ -1,3 +1,5 @@
+mod delete;
+
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::io::Write;
@@ -21,7 +23,7 @@ use lazy_static::lazy_static;
 use rayon::prelude::*;
 use swipl::prelude::*;
 
-pub struct GetDocumentContext<L: Layer + Clone> {
+pub struct DocumentContext<L: Layer + Clone> {
     schema: Option<L>,
     layer: Option<L>,
     prefixes: Lazy<PrefixContracter>,
@@ -32,6 +34,7 @@ pub struct GetDocumentContext<L: Layer + Clone> {
     unfoldables: HashSet<u64>,
     enums: HashMap<u64, String>,
     set_pairs: HashSet<(u64, u64)>,
+    value_hashes: HashSet<u64>,
     sys_index_ids: Vec<u64>,
 
     rdf: Arc<RdfIds<L>>,
@@ -39,8 +42,8 @@ pub struct GetDocumentContext<L: Layer + Clone> {
     schema_sys: Arc<SysIds<L>>,
 }
 
-impl<L: Layer + Clone> GetDocumentContext<L> {
-    pub fn new(schema: L, instance: Option<L>) -> GetDocumentContext<L> {
+impl<L: Layer + Clone> DocumentContext<L> {
+    pub fn new(schema: L, instance: Option<L>) -> DocumentContext<L> {
         let schema_rdf = RdfIds::new(Some(schema.clone()));
         let schema_sys = Arc::new(SysIds::new(Some(schema.clone())));
         let schema_query_context = SchemaQueryContext::new(&schema, &schema_rdf, &schema_sys);
@@ -51,6 +54,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
         let unfoldables: HashSet<u64>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
+        let mut value_hashes: HashSet<u64>;
         let sys_index_ids: Vec<u64>;
 
         let sys = Arc::new(SysIds::new(instance.clone()));
@@ -115,6 +119,16 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
                 }
             }
 
+            value_hashes = HashSet::new();
+            let schema_value_hashes = schema_query_context.get_valuehash_type_ids();
+            for schema_type_id in schema_value_hashes {
+                if let Some(type_id) =
+                    schema_query_context.translate_subject_id(instance, schema_type_id)
+                {
+                    value_hashes.insert(type_id);
+                }
+            }
+
             if let Some(sys_json_document_type_id) = sys.json_document() {
                 document_types.insert(sys_json_document_type_id);
             }
@@ -127,10 +141,11 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
             unfoldables = HashSet::with_capacity(0);
             enums = HashMap::with_capacity(0);
             set_pairs = HashSet::with_capacity(0);
+            value_hashes = HashSet::with_capacity(0);
             sys_index_ids = Vec::with_capacity(0);
         }
 
-        GetDocumentContext {
+        DocumentContext {
             layer: instance,
             schema: Some(schema),
 
@@ -142,6 +157,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
             unfoldables,
             enums,
             set_pairs,
+            value_hashes,
             sys_index_ids,
 
             rdf,
@@ -150,7 +166,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
         }
     }
 
-    pub fn new_json(instance: Option<L>) -> GetDocumentContext<L> {
+    pub fn new_json(instance: Option<L>) -> DocumentContext<L> {
         Self {
             layer: instance.clone(),
             schema: None,
@@ -163,6 +179,7 @@ impl<L: Layer + Clone> GetDocumentContext<L> {
             unfoldables: HashSet::with_capacity(0),
             enums: HashMap::with_capacity(0),
             set_pairs: HashSet::with_capacity(0),
+            value_hashes: HashSet::with_capacity(0),
             sys_index_ids: Vec::with_capacity(0),
 
             rdf: Arc::new(RdfIds::new(instance.clone())),
@@ -682,7 +699,7 @@ impl<'a, L: Layer + Clone> StackEntry<'a, L> {
 
     fn integrate(
         &mut self,
-        context: &GetDocumentContext<L>,
+        context: &DocumentContext<L>,
         child: StackEntry<'a, L>,
         compress: bool,
     ) {
@@ -694,7 +711,7 @@ impl<'a, L: Layer + Clone> StackEntry<'a, L> {
 
     fn integrate_array(
         &mut self,
-        context: &GetDocumentContext<L>,
+        context: &DocumentContext<L>,
         array: ArrayStackEntry<'a, L>,
         compress: bool,
     ) {
@@ -719,7 +736,7 @@ impl<'a, L: Layer + Clone> StackEntry<'a, L> {
         }
     }
 
-    fn integrate_value(&mut self, context: &GetDocumentContext<L>, value: Value, compress: bool) {
+    fn integrate_value(&mut self, context: &DocumentContext<L>, value: Value, compress: bool) {
         match self {
             Self::Document {
                 doc,
@@ -807,8 +824,8 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
 
 wrapped_arc_blob!(
     "GetDocumentContext",
-    GetDocumentContextBlob,
-    GetDocumentContext<SyncStoreLayer>,
+    DocumentContextBlob,
+    DocumentContext<SyncStoreLayer>,
     defaults
 );
 
@@ -855,7 +872,7 @@ fn print_documents_of_types<
     I: IntoIterator<Item = &'a u64>,
 >(
     context: &Context<C>,
-    doc_context: &GetDocumentContext<L>,
+    doc_context: &DocumentContext<L>,
     stream_term: &Term,
     skip_term: &Term,
     count_term: &Term,
@@ -900,7 +917,7 @@ fn print_documents_of_types<
 
 fn par_print_documents_of_types<C: QueryableContextType, L: Layer + Clone + 'static>(
     context: &Context<C>,
-    doc_context: &Arc<GetDocumentContext<L>>,
+    doc_context: &Arc<DocumentContext<L>>,
     stream_term: &Term,
     skip_term: &Term,
     count_term: &Term,
@@ -985,7 +1002,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + Clone + 'sta
 
 fn print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static>(
     context: &Context<C>,
-    doc_context: &Arc<GetDocumentContext<L>>,
+    doc_context: &Arc<DocumentContext<L>>,
     stream_term: &Term,
     skip_term: &Term,
     count_term: &Term,
@@ -1024,7 +1041,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static>(
 
 fn par_print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static>(
     context: &Context<C>,
-    doc_context: &Arc<GetDocumentContext<L>>,
+    doc_context: &Arc<DocumentContext<L>>,
     stream_term: &Term,
     skip_term: &Term,
     count_term: &Term,
@@ -1112,9 +1129,9 @@ predicates! {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?;
 
-        let get_context = GetDocumentContext::new(schema_layer, instance_layer);
+        let get_context = DocumentContext::new(schema_layer, instance_layer);
 
-        context_term.unify(GetDocumentContextBlob(Arc::new(get_context)))
+        context_term.unify(DocumentContextBlob(Arc::new(get_context)))
     }
 
     #[module("$doc")]
@@ -1124,7 +1141,7 @@ predicates! {
             return fail();
         }
 
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         let s: PrologText = doc_name_term.get()?;
         let as_list: bool = as_list_term.get()?;
         let compress: bool = compress_term.get()?;
@@ -1150,7 +1167,7 @@ predicates! {
 
     #[module("$doc")]
     semidet fn print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
@@ -1171,7 +1188,7 @@ predicates! {
 
     #[module("$doc")]
     semidet fn par_print_all_documents_json_by_type(context, stream_term, get_context_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
@@ -1192,7 +1209,7 @@ predicates! {
 
     #[module("$doc")]
     semidet fn print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
@@ -1211,7 +1228,7 @@ predicates! {
 
     #[module("$doc")]
     semidet fn par_print_all_documents_json(context, stream_term, get_context_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
@@ -1231,7 +1248,7 @@ predicates! {
 
     #[module("$doc")]
     semidet fn print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
@@ -1244,7 +1261,7 @@ predicates! {
 
     #[module("$doc")]
     semidet fn par_print_documents_json_by_id(context, stream_term, get_context_term, ids_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
-        let doc_context: GetDocumentContextBlob = get_context_term.get()?;
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
         if doc_context.layer.is_none() {
             return Ok(());
         }
@@ -1290,6 +1307,8 @@ pub fn register() {
     register_par_print_all_documents_json_by_type();
     register_print_documents_json_by_id();
     register_par_print_documents_json_by_id();
+
+    delete::register();
 }
 
 #[cfg(test)]
