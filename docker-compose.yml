@@ -1,11 +1,11 @@
-version: "3"
 
 services:
   terminusdb-server:
     image: terminusdb/terminusdb-server:latest
     container_name: terminusdb-server
     pull_policy: always
-    hostname: terminusdb-server
+    # hostname: terminusdb-server
+    hostname: ${DOMAIN}
     tty: true
     ports:
       - 6364:6363
@@ -14,12 +14,19 @@ services:
       - TERMINUSDB_SERVER_PORT=6363
       # DISABLE THESE ENV VARIABLES WHEN RUNNING TERMINUSDB IN PRODUCTION
       # OR PUT AN AUTHENTICATION GATEWAY IN FRONT OF TERMINUSDB
-      - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
-      - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
+      # - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
+      # - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.terminusdb-server.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.terminusdb-server.entrypoints=https
+      - traefik.http.routers.terminusdb-server.tls.certresolver=letsencrypt
+      - traefik.http.services.terminusdb-server.loadbalancer.server.port=6363
     volumes:
       # For the use of a local dashboard
       #      - ./dashboard:/app/terminusdb/dashboard
       - ./storage:/app/terminusdb/storage
+
   vectorlink:
     image: terminusdb/vectorlink:v0.0.8
     env_file: .env
@@ -29,6 +36,7 @@ services:
     volumes:
       - ./vector_storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage"]
+
   change-request-api:
     image: terminusdb/terminusdb-change-request-api:v0.0.9
     restart: always
@@ -52,3 +60,49 @@ services:
 
       # The storage path of terminusdb databases is /app/terminusdb/storage in case
       # you want to persist storage somewhere else.
+
+  traefik:
+    image: traefik:2.4.8
+    command:
+      # Try to enable this if something isn't working. 
+      # Chances are, Traefik will tell you why.
+      # Be careful in production as it exposes the traffic you might not want to expose.
+      #--log.level=DEBUG
+
+      - --entrypoints.http.address=:80
+      - --entrypoints.https.address=:443
+
+      - --providers.docker=true
+
+      - --api.dashboard=true
+      - --api.insecure=false
+
+      # LetsEncrypt Staging Server - uncomment when testing
+      # - --certificatesResolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
+
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=http
+      - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    labels:
+      # Redirect all HTTP traffic to HTTPS
+      - traefik.http.routers.to-https.rule=HostRegexp(`{host:.+}`)
+      - traefik.http.routers.to-https.entrypoints=http
+      - traefik.http.routers.to-https.middlewares=to-https
+
+      - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN}`)
+      - traefik.http.routers.traefik.entrypoints=https
+      - traefik.http.routers.traefik.middlewares=auth
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.tls=true
+      - traefik.http.routers.traefik.tls.certresolver=${CERT_RESOLVER}
+
+      - traefik.http.middlewares.to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
+    env_file: .env
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./data/letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
