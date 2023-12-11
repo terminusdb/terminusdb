@@ -583,5 +583,25 @@ test(sum_swap) :-
         sum([v('Person')],v('Count'))
     ).
 
+test(type_label) :-
+    AST = limit(10,
+                (
+                    t(v('Subject'), rdf:type, '@schema':'TemporalSubdivision'),
+                    t(v('Subject'), label, v('Object'))
+                )
+               ),
+    partition(AST,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    print_term(Prog, []),
+    % Swap reorder
+    Prog = (
+        count(t(v('Doc_0'),
+			    rdf:type,
+			    '@schema':'Person'),
+		      v('Person')),
+        sum([v('Person')],v('Count'))
+    ).
+
 
 :- end_tests(reorder_query).
