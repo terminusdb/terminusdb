@@ -507,8 +507,8 @@ test(greater, []) :-
     xfy_list(',', Prog, Reads),
 
     Prog = (
-        t(v(uri),predicate,v(value)),
         t(v(uri),rdf:type,'SubjectType'),
+        t(v(uri),predicate,v(value)),
         v(value) < 1,
         get_document(v(uri),v(doc))
     ).
@@ -593,15 +593,11 @@ test(type_label) :-
     partition(AST,Reads_Unordered,_Writes),
     optimize_read_order(Reads_Unordered, Reads),
     xfy_list(',', Prog, Reads),
-    print_term(Prog, []),
     % Swap reorder
-    Prog = (
-        count(t(v('Doc_0'),
-			    rdf:type,
-			    '@schema':'Person'),
-		      v('Person')),
-        sum([v('Person')],v('Count'))
-    ).
+    Prog = limit(10,
+				 ( t(v('Subject'),rdf:type,'@schema':'TemporalSubdivision'),
+				   t(v('Subject'),label,v('Object'))
+				 )).
 
 
 :- end_tests(reorder_query).

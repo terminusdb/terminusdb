@@ -646,14 +646,14 @@ is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
-    Cost = 100.
+    Cost = 14.
 
 cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
-    Cost = 100.
+    Cost = 14.
 
 cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),
