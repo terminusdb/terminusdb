@@ -170,6 +170,13 @@ definition(
         mode: [?,:],
         types: [list(string),query]
     }).
+definition(
+    pin{
+        name: 'Pin',
+        fields: [query],
+        mode: [:],
+        types: [query]
+    }).
 
 /* collection selection */
 definition(
@@ -597,6 +604,9 @@ cost_(group_by(_,_,Query,_), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
 cost_(distinct(_,Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
+
+cost_(pin(Query), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
 cost_(using(_,Query), Cost, Polarity) =>

@@ -137,6 +137,8 @@ deep_order(start(N,Query),Deep) =>
 deep_order(distinct(X,Query),Deep) =>
     deep_order(Query, DQuery),
     Deep = distinct(X,DQuery).
+deep_order(pin(Query),Deep) =>
+    Deep = pin(Query).
 deep_order((A,B),Deep) =>
     flatten_conjuncts((A,B), Flat),
     optimize_conjuncts(Flat, Ordered),
@@ -187,6 +189,8 @@ non_commutative(not(Query)) =>
 non_commutative(group_by(_,_,Query,_)) =>
     non_commutative(Query).
 non_commutative(distinct(_,Query)) =>
+    non_commutative(Query).
+non_commutative(pin(Query)) =>
     non_commutative(Query).
 non_commutative(using(_,Query)) =>
     non_commutative(Query).
@@ -598,6 +602,20 @@ test(type_label) :-
 				 ( t(v('Subject'),rdf:type,'@schema':'TemporalSubdivision'),
 				   t(v('Subject'),label,v('Object'))
 				 )).
+
+test(type_label) :-
+    AST = pin(
+              (
+                  t(v(a), v(b), v(c)),
+                  t(a,b,c)
+              )
+          ),
+    partition(AST,Reads_Unordered,_Writes),
+    optimize_read_order(Reads_Unordered, Reads),
+    xfy_list(',', Prog, Reads),
+    % Swap reorder
+    AST = Prog.
+
 
 
 :- end_tests(reorder_query).
