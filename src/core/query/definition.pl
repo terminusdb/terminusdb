@@ -170,6 +170,13 @@ definition(
         mode: [?,:],
         types: [list(string),query]
     }).
+definition(
+    pin{
+        name: 'Pin',
+        fields: [query],
+        mode: [:],
+        types: [query]
+    }).
 
 /* collection selection */
 definition(
@@ -599,6 +606,9 @@ cost_(group_by(_,_,Query,_), Cost, Polarity) =>
 cost_(distinct(_,Query), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
+cost_(pin(Query), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
+
 cost_(using(_,Query), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
@@ -646,14 +656,14 @@ is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
-    Cost = 100.
+    Cost = 14.
 
 cost_(t(X, Y, Z, _), Cost, _Polarity),
 is_var(X),
 non_var(Y),
 non_var(Z),
 Y = rdf:type =>
-    Cost = 100.
+    Cost = 14.
 
 cost_(t(X, Y, Z), Cost, _Polarity),
 is_var(X),

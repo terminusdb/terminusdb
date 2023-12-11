@@ -779,6 +779,8 @@ find_resources(group_by(_,_,P, _), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(distinct(_,P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(pin(P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(put(_,P, _), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(once(P), Collection, DRG, DWG, Read, Write) :-
@@ -1316,6 +1318,8 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,
     resolve(WAcc,Acc).
 compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
     resolve(X,XE),
+    compile_wf(WQuery,Query).
+compile_wf(pin(WQuery), Query) -->
     compile_wf(WQuery,Query).
 compile_wf(length(L,N),Length) -->
     resolve(L,LE),
@@ -4668,6 +4672,25 @@ test(triple_graph, [
     query_test_response(Descriptor, Query_Out, JSON),
     _{ 'api:status': 'api:success' } :< JSON.
 
+test(triple_graph_pinned, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query = _{'@type' : "Pin",
+              query: _{'@type': "Triple",
+                       'subject': _{'@type': "NodeValue", node: '@schema:City'},
+                       'predicate': _{'@type': "NodeValue", node: "rdf:type"},
+                       'object': _{'@type': "Value", 'variable': "C"},
+                       'graph': "schema"}
+              },
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    _{ 'api:status': 'api:success' } :< JSON,
+    JSON.bindings = [_{'C':'sys:Class'}].
+
 test(delete_triple1, [
          setup((setup_temp_store(State),
                 create_db_without_schema("admin", "test"))),
@@ -5018,6 +5041,7 @@ test(json_unbound_capture, [
     query_test_response(Descriptor, Query, Response),
     (Response.bindings) = [_{'Y':_{a:1,b:null},asdf:null}].
 
+
 test(insert_read_document, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "test"))),
@@ -5210,6 +5234,9 @@ test(doc_select_reorder, [
 								     }
 					   }
 					].
+
+
+
 
 :- end_tests(woql).
 
