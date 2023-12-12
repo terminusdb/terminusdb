@@ -616,6 +616,7 @@ test(type_label) :-
     % Swap reorder
     AST = Prog.
 
-
+test(cost_of_path) :-
+    cost(path(mv(_Component),n(hasComponent),mv(_Match)),_Cost).
 
 :- end_tests(reorder_query).
