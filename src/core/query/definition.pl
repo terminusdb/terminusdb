@@ -959,6 +959,11 @@ is_var(X),
 non_var(Y) =>
     Cost = 15.
 
+cost_(path(X, _, Y, _), Cost, _Polarity),
+is_var(X),
+non_var(Y) =>
+    Cost = 15.
+
 cost_(path(X, _, Y), Cost, _Polarity),
 non_var(X),
 is_var(Y) =>
@@ -975,14 +980,15 @@ is_var(Y) =>
     Cost = 225.
 
 cost_(path(X, _, Y, _), Cost, _Polarity),
-non_var(X),
+is_var(X),
 is_var(Y) =>
     Cost = 625.
 
-cost_(path(X, _, Y, _), Cost, _Polarity),
-non_var(X),
-is_var(Y) =>
-    Cost = 625.
+cost_(path(_, _, _), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(path(_, _, _, _), Cost, _Polarity) =>
+    Cost = 10.
 
 cost_(sum(_,_), Cost, _Polarity) =>
     Cost = 10.
