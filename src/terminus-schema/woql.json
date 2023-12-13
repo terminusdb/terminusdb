@@ -5,7 +5,7 @@
     "@description":"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
     "@title":"WOQL schema"
   },
-  "@metadata": {"schema_version":"v1.0.1"},
+  "@metadata": {"schema_version":"v1.0.2"},
   "@schema":"http://terminusdb.com/schema/woql#",
   "@type":"@context",
   "xsd":"http://www.w3.org/2001/XMLSchema#"
@@ -191,6 +191,25 @@
   "@type":"Class",
   "query":"Query",
   "variables": {"@class":"xsd:string", "@type":"List"}
+}
+{
+  "@documentation": {
+    "@comment":"Keep a subquery from being optimized, 'Pin' it in the order given",
+    "@properties": {
+      "query" : "The query to pin"
+    }
+  },
+  "@id":"Pin",
+  "@inherits":"Query",
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["query" ],
+      "mode": [":" ],
+      "types": ["query" ]
+    }
+  },
+  "@type":"Class",
+  "query":"Query"
 }
 {
   "@documentation": {
