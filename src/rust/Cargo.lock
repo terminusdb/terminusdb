@@ -1851,6 +1851,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "swipl"
 version = "0.3.15"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=decode_latin1#315790262345acb16585e1a1f7745a1928dcc4eb"
 dependencies = [
  "convert_case",
  "either",
@@ -1865,6 +1866,7 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.5"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=decode_latin1#315790262345acb16585e1a1f7745a1928dcc4eb"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -1873,6 +1875,7 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=decode_latin1#315790262345acb16585e1a1f7745a1928dcc4eb"
 dependencies = [
  "regex",
 ]
@@ -1880,6 +1883,7 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.8"
+source = "git+https://github.com/terminusdb-labs/swipl-rs?branch=decode_latin1#315790262345acb16585e1a1f7745a1928dcc4eb"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
