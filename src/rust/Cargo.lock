@@ -1205,6 +1205,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_enum"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683751d591e6d81200c39fb0d1032608b77724f34114db54f571ff1317b337c0"
+dependencies = [
+ "num_enum_derive",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c11e44798ad209ccdd91fc192f0526a369a01234f7373e1b141c96d7cee4f0e"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
+
+[[package]]
 name = "object"
 version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1821,11 +1842,11 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "swipl"
 version = "0.3.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a00b7b2dee328978a5d6d618e70a2c687f3047802c6decab10b607b8f289abd"
 dependencies = [
  "convert_case",
+ "either",
  "lazy_static",
+ "num_enum",
  "serde",
  "swipl-fli",
  "swipl-macros",
@@ -1835,8 +1856,6 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb6896f24b95791d43244183abff286790a7f2a5a38e08cda03f37551cc7b49d"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -1845,8 +1864,6 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3c24ee13ef4f59cce23ccaff3006a861c7f8b02984c2a7821e7f1ced54b6c1a"
 dependencies = [
  "regex",
 ]
@@ -1854,8 +1871,6 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b19bd1b4ca2234088d7e43502a69289552a18f603ec7ae4a09c741956005243"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
