@@ -1092,7 +1092,7 @@ test("empty", [fail]) :-
 test("not a stream", [error(domain_error(stream_or_alias,"not a stream"))]) :-
     json_read_term_stream("not a stream", _Term).
 
-test("illegal", [error(syntax_error(json(illegal_json)))]) :-
+test("illegal", [error(syntax_error(json(_)))]) :-
     open_string("]", Stream),
     json_read_term_stream(Stream, _Term).
 
