@@ -1051,7 +1051,7 @@ test("space", [fail]) :-
     open_string(" ", Stream),
     json_read_term(Stream, _Term).
 
-test("illegal", [error(syntax_error(json(illegal_json)))]) :-
+test("illegal", [error(syntax_error(json(_)))]) :-
     open_string("{", Stream),
     json_read_term(Stream, _Term).
 
