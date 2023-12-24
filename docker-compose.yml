@@ -60,6 +60,12 @@ services:
 
       # The storage path of terminusdb databases is /app/terminusdb/storage in case
       # you want to persist storage somewhere else.
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.change-request-api.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.change-request-api.entrypoints=https
+      - traefik.http.routers.change-request-api.tls.certresolver=letsencrypt
+      - traefik.http.services.change-request-api.loadbalancer.server.port=3035
 
   traefik:
     image: traefik:2.4.8
