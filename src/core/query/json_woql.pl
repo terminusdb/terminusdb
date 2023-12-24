@@ -227,6 +227,11 @@ json_type_to_woql_ast('Distinct',JSON,WOQL,Path) :-
     json_to_woql_ast(Sub_Query,Sub_WOQL,[query
                                          |Path]),
     WOQL = distinct(WOQL_Args,Sub_WOQL).
+json_type_to_woql_ast('Pin',JSON,WOQL,Path) :-
+    _{query : Sub_Query } :< JSON,
+    json_to_woql_ast(Sub_Query,Sub_WOQL,[query
+                                         |Path]),
+    WOQL = pin(Sub_WOQL).
 json_type_to_woql_ast('And',JSON,WOQL,Path) :-
     _{and : Query_List} :< JSON,
     index_list(Query_List, Indexes),
