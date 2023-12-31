@@ -1,0 +1,40 @@
+#!/bin/bash
+
+function set_cert_paths {
+    CERT_PATHS="/etc/ssl/certs/ca-certificates.crt
+/etc/pki/tls/certs/ca-bundle.crt
+/etc/ssl/ca-bundle.pem
+/etc/pki/tls/cacert.pem
+/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+/etc/ssl/cert.pem"
+
+    for CERT in $CERT_PATHS
+    do
+        if [ -f "$CERT" ]; then
+            export TERMINUSDB_SYSTEM_SSL_CERTS="$CERT"
+        fi
+
+    done
+}
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+SOURCE="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+export SWI_HOME_DIR=$SOURCE/usr/lib/swi-prolog
+export TERMINUSDB_DASHBOARD_PATH=${TERMINUSDB_DASHBOARD_PATH:-$SOURCE/usr/share/terminusdb/dashboard}
+export TERMINUSDB_SERVER_PACK_DIR=$SOURCE/usr/lib/swi-prolog/pack
+export TERMINUSDB_SERVER_DB_PATH=${TERMINUSDB_SERVER_DB_PATH:-$(pwd)/storage}
+export TERMINUSDB_SERVER_REGISTRY_PATH=${TERMINUSDB_SERVER_REGISTRY_PATH:-$(pwd)/registry.pl}
+export TERMINUSDB_LOG_PATH=${TERMINUSDB_SERVER_LOG_PATH:-$(pwd)/httpd.log}
+export TERMINUSDB_SERVER_TMP_PATH=${TERMINUSDB_SERVER_TMP_PATH:-/tmp}
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$SOURCE/usr/lib/swi-prolog/lib/x86_64-linux/"
+
+if [[ -z "${TERMINUSDB_SYSTEM_SSL_CERTS}" ]]; then
+    set_cert_paths
+fi
+
+$SOURCE/usr/share/terminusdb/terminusdb "$@"
