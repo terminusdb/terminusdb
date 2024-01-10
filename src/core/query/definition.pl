@@ -508,9 +508,7 @@ is_list(Term) =>
 check_term_mode([_], Term) =>
     is_mvar(Term).
 check_term_mode(-, Term) =>
-    \+ is_var(Term),
-    \+ is_mvar(Term),
-    term_vars(Term, []).
+    is_var(Term).
 check_term_mode(+, Term) =>
     term_vars(Term, []).
 check_term_mode(?, _Term) =>
