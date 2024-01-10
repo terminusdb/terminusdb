@@ -1445,7 +1445,7 @@
   "@metadata": {
     "https://terminusdb.com": {
       "fields": ["list", "length" ],
-      "mode": ["+", "+", "?" ],
+      "mode": ["+", "?" ],
       "types": ["list(any)", "integer" ]
     }
   },

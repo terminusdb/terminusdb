@@ -18,6 +18,7 @@
                json_read_tail_stream/2,
                terminus_schema_path/1]).
 :- use_module(library(http/json), [json_write_dict/3]).
+:- use_module(core(query), [literally/2]).
 
 is_var(v(_)).
 
@@ -282,6 +283,20 @@ definition(
         mode: [+,+,+,+],
         types: [node,node,value,graph]
     }).
+definition(
+    triple_count{
+        name: 'TripleCount',
+        fields: [resource,count],
+        mode: [+,?],
+        types: [collection,decimal]
+    }).
+definition(
+    size{
+        name: 'Size',
+        fields: [resource,size],
+        mode: [+,?],
+        types: [collection,decimal]
+    }).
 
 /* operators */
 definition(
@@ -386,7 +401,7 @@ definition(
     length{
         name: 'Length',
         fields: [list,length],
-        mode: [+,+,?],
+        mode: [+,?],
         types: [list(any),integer]
     }).
 definition(
@@ -420,6 +435,13 @@ definition(
 definition(
     idgen{
         name: 'LexicalKey',
+        fields: [base, key_list, uri],
+        mode: [+, +, ?],
+        types: [string, list(string), node]
+    }).
+definition(
+    hash{
+        name: 'HashKey',
         fields: [base, key_list, uri],
         mode: [+, +, ?],
         types: [string, list(string), node]
@@ -533,10 +555,13 @@ operator(upper(_,_)).
 operator(lower(_,_)).
 operator(_ is _).
 operator(dot(_,_,_)).
-operator(length(_,_,_)).
+operator(length(_,_)).
 operator(join(_,_,_)).
 operator(timestamp_now(_)).
 operator(idgen(_,_,_)).
+operator(hash(_,_,_)).
+operator(triple_count(_,_)).
+operator(size(_,_)).
 
 cost(Term, Cost) :-
     catch(
@@ -579,15 +604,17 @@ cost_(once(Query), Cost, Polarity) =>
 cost_(select(_Vars,Query), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
-cost_(start(N,Query), Cost, Polarity) =>
+cost_(start(N_Term, Query), Cost, Polarity) =>
+    literally(N_Term, N),
     cost_(Query, Cost_Query, Polarity),
     (   Cost_Query = inf
     ->  Cost = inf
     ;   Cost is max(1.0, Cost_Query - N / Cost_Query)
     ).
 
-cost_(limit(N,Query), Cost, Polarity) =>
+cost_(limit(N_Term, Query), Cost, Polarity) =>
     cost_(Query, Cost_Query, Polarity),
+    literally(N_Term, N),
     (   Cost_Query = inf
     ->  Cost = inf
     ;   Cost is max(1.0, Cost_Query - N / Cost_Query)

@@ -9,7 +9,8 @@
               not_literal/1,
               mode_for/1,
               mode_for_compound/2,
-              mode_for_predicate/2
+              mode_for_predicate/2,
+              literally/2
           ]).
 
 /** <module> WOQL Compile
@@ -505,7 +506,7 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
            ->  (   nth1(Idx,Values,Value)
                ->  (   Type = none
                    ->  Value = Xe
-                   ;   typecast(Value,Type,[],Xe))
+                   ;   typecast(Value,Type,Xe))
                ;   throw(error(woql_syntax_error(get_header_does_not_match_values(Header, Values, N, Idx)),_))
                )
            ;   throw(error(woql_syntax_error(get_has_no_such_index(Header,Values,N)), _))
@@ -790,7 +791,7 @@ find_resources(opt(P), Collection, DRG, DWG, Read, Write) :-
 find_resources(not(P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(get(_,_,_), _, _, _, [], []).
-find_resources(typecast(_,_,_,_), _, _, _, [], []).
+find_resources(typecast(_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
 find_resources(random_idgen(_,_,_), _, _, _, [], []).
 find_resources(idgen(_,_,_), _, _, _, [], []).
@@ -1176,7 +1177,7 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [Resource]),
             throw(error(M)))
     }.
-compile_wf(typecast(Val,Type,_Hints,Cast),
+compile_wf(typecast(Val,Type,Cast),
            (   typecast(ValE, TypeE, [prefixes(Prefixes)], CastE))) -->
     view(prefixes,Prefixes),
     resolve(Val,ValE),
@@ -5186,7 +5187,7 @@ test(uri_casting, [
                 (
                     split("Capability/server_access,Role/admin"^^xsd:string,','^^xsd:string,List),
                     member(X, List),
-                    typecast(X, sys:'Top', [], URI)
+                    typecast(X, sys:'Top', URI)
                 )),
             URIs),
 

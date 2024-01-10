@@ -1278,7 +1278,7 @@ interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Ca
                     (   isa(X, Class),
                         t(X, Property, Old_Value),
                         delete(X, Property, Old_Value),
-                        typecast(Old_Value, Simple_Type_Ex, [], Cast),
+                        typecast(Old_Value, Simple_Type_Ex, Cast),
                         insert(X, Property, Cast)
                     )
                    )
