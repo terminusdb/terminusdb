@@ -25,8 +25,8 @@ TerminusDB allows you to link JSON documents in a knowledge graph through a [doc
 [TerminusDB 11](https://github.com/terminusdb/terminusdb/releases/tag/v11.0.0) features a new Rustified storage backend that reduces storage overhead and latency, improves search performance, and simplifies interchange. TerminusDB 11 also comes with some exciting features to make building easier and faster -
 
 - [GraphQL](https://terminusdb.com/docs/graphql-basics) - Use GraphQL as a proper graph query language with deep link discover and path queries
-- Added '@unfoldable' document flag to frames - Making data curation easier by unfolding subdocuments within a frame to add all relevant data in one place
-- Add '@metadata' to frames - Include additional metadata to document frames including data formatted as Markdown.
+- Added `@unfoldable` document flag to frames - Making data curation easier by unfolding subdocuments within a frame to add all relevant data in one place
+- Add `@metadata` to frames - Include additional metadata to document frames including data formatted as Markdown.
 
 
 ## Installation Guide
