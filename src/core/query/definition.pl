@@ -282,6 +282,7 @@ definition(
         mode: [+,+,+,+],
         types: [node,node,value,graph]
     }).
+
 /* operators */
 definition(
     ={
@@ -416,6 +417,13 @@ definition(
         mode: [-],
         types: [decimal]
     }).
+definition(
+    idgen{
+        name: 'LexicalKey',
+        fields: [base, key_list, uri],
+        mode: [+, +, ?],
+        types: [string, list(string), node]
+    }).
 
 /* types */
 definition(
@@ -530,6 +538,7 @@ operator(dot(_,_,_)).
 operator(length(_,_,_)).
 operator(join(_,_,_)).
 operator(timestamp_now(_)).
+operator(idgen(_,_,_)).
 
 cost(Term, Cost) :-
     catch(

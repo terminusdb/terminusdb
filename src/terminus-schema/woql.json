@@ -1058,6 +1058,13 @@
       "uri":"The resulting URI."
     }
   },
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["base", "key_list", "uri"],
+      "mode": ["+", "+", "?"],
+      "types": ["string", "list(string)", "node"]
+    }
+  },
   "@id":"LexicalKey",
   "@inherits":"Query",
   "@key": {"@type":"ValueHash"},

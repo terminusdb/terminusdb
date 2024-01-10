@@ -5304,6 +5304,19 @@ test(limit_limit_bound, [
 				     ]).
 
 
+test(complex_mode, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    Query_Atom = '{"@type":"OrderBy","ordering":[{"@type":"OrderTemplate","variable":"distance","order":"desc"}],"query":{"@type":"Select","variables":["document","value","distance"],"query":{"@type":"And","and":[{"@type":"Limit","limit":100,"query":{"@type":"Distinct","variables":["document"],"query":{"@type":"And","and":[{"@type":"Triple","subject":{"@type":"NodeValue","variable":"document"},"predicate":{"@type":"NodeValue","node":"rdf:type"},"object":{"@type":"Value","variable":"doctype_isolation_94jkls"}},{"@type":"Not","query":{"@type":"Triple","subject":{"@type":"NodeValue","variable":"doctype_isolation_94jkls"},"predicate":{"@type":"NodeValue","node":"sys:subdocument"},"object":{"@type":"Value","node":"rdf:nil"},"graph":"schema"}},{"@type":"Triple","subject":{"@type":"NodeValue","variable":"doctype_isolation_94jkls"},"predicate":{"@type":"NodeValue","node":"rdf:type"},"object":{"@type":"Value","node":"sys:Class"},"graph":"schema"},{"@type":"Or","or":[{"@type":"Triple","subject":{"@type":"NodeValue","variable":"document"},"predicate":{"@type":"NodeValue","node":"@schema:label"},"object":{"@type":"Value","variable":"value"}},{"@type":"And","and":[{"@type":"Not","query":{"@type":"Triple","subject":{"@type":"NodeValue","variable":"document"},"predicate":{"@type":"NodeValue","node":"@schema:label"},"object":{"@type":"Value","variable":"value"}}},{"@type":"Concatenate","list":{"@type":"DataValue","list":[{"@type":"DataValue","variable":"document"}]},"result":{"@type":"DataValue","variable":"value"}}]}]},{"@type":"Or","or":[{"@type":"Regexp","pattern":{"@type":"DataValue","data":{"@type":"xsd:string","@value":"(?i).*ent.*"}},"string":{"@type":"DataValue","variable":"value"},"result":{"@type":"DataValue","variable":"re_result_isolation_94jkls"}},{"@type":"Regexp","pattern":{"@type":"DataValue","data":{"@type":"xsd:string","@value":"(?i).*ent.*"}},"string":{"@type":"DataValue","variable":"document"},"result":{"@type":"DataValue","variable":"re_result_isolation_94jkls"}}]}]}}},{"@type":"LexicalKey","base":{"@type":"DataValue","data":{"@type":"xsd:string","@value":""}},"key_list":[],"uri":{"@type":"NodeValue","variable":"random_isolation_94jkls"}},{"@type":"Concatenate","list":{"@type":"DataValue","list":[{"@type":"DataValue","variable":"re_result_isolation_94jkls"}]},"result":{"@type":"DataValue","variable":"re_compare_isolation_94jkls"}},{"@type":"Like","left":{"@type":"DataValue","variable":"re_compare_isolation_94jkls"},"right":{"@type":"DataValue","data":{"@type":"xsd:string","@value":"ent"}},"similarity":{"@type":"DataValue","variable":"distance"}},{"@type":"Not","query":{"@type":"Equals","left":{"@type":"Value","variable":"distance"},"right":{"@type":"Value","data":{"@type":"xsd:decimal","@value":0}}}}]}}}',
+    atom_json_dict(Query_Atom, Query, []),
+    json_woql(Query, AST),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
 :- end_tests(woql).
 
