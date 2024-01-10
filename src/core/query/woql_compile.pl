@@ -5235,6 +5235,73 @@ test(doc_select_reorder, [
 					   }
 					].
 
+test(times_mode, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    AST = limit(100, (v('Result') is 2 * 3)),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+    (JSON.bindings = [ _{ 'Result':json{ '@type':'xsd:decimal',
+							             '@value':6
+							           }
+					    }
+				     ]).
+
+test(eval_times_var, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    Query_Atom = '{"@type":"Limit","limit":100,
+                   "query":{"@type":"Eval",
+                            "expression":{"@type":"Times",
+                                          "left":{"@type":"ArithmeticValue",
+                                                  "data":{"@type":"xsd:decimal",
+                                                          "@value":2}},
+                                          "right":{"@type":"ArithmeticValue",
+                                                   "data":{"@type":"xsd:decimal",
+                                                   "@value":3}}},
+                            "result":{"@type":"ArithmeticValue","variable":"result"}}}',
+    atom_json_dict(Query_Atom, Query, []),
+    json_woql(Query, AST),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+
+    (JSON.bindings = [ _{ 'result':json{ '@type':'xsd:decimal',
+							             '@value':6
+							           }
+					    }
+				     ]).
+
+test(limit_limit_bound, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    Query_Atom = '{"@type":"Limit","limit":10,"query":{"@type":"Limit","limit":100,"query":{"@type":"Eval","expression":{"@type":"Times","left":{"@type":"ArithmeticValue","data":{"@type":"xsd:decimal","@value":2}},"right":{"@type":"ArithmeticValue","data":{"@type":"xsd:decimal","@value":3}}},"result":{"@type":"ArithmeticValue","variable":"result"}}}}',
+    atom_json_dict(Query_Atom, Query, []),
+    json_woql(Query, AST),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+
+    (JSON.bindings = [ _{ 'result':json{ '@type':'xsd:decimal',
+							             '@value':6
+							           }
+					    }
+				     ]).
 
 
 

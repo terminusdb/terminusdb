@@ -370,9 +370,9 @@ definition(
 definition(
     is{
         name: 'Eval',
-        fields: [expression,result],
-        mode: [+,?],
-        types: [arithmetic,decimal]
+        fields: [result,expression],
+        mode: [?,+],
+        types: [decimal,arithmetic]
     }).
 definition(
     dot{
@@ -416,8 +416,6 @@ definition(
         mode: [-],
         types: [decimal]
     }).
-
-
 
 /* types */
 definition(
