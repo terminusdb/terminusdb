@@ -18,7 +18,7 @@
 :- use_module(library(yall)).
 
 run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
-    Options = _{},
+    Options = _{ optimize: true, all_witnesses: false},
     run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options).
 
 /** <module> Query Response

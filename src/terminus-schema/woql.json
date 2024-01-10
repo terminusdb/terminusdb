@@ -195,18 +195,12 @@
 {
   "@documentation": {
     "@comment":"Keep a subquery from being optimized, 'Pin' it in the order given",
-    "@properties": {
-      "query" : "The query to pin"
-    }
+    "@properties": {"query":"The query to pin"}
   },
   "@id":"Pin",
   "@inherits":"Query",
   "@metadata": {
-    "https://terminusdb.com": {
-      "fields": ["query" ],
-      "mode": [":" ],
-      "types": ["query" ]
-    }
+    "https://terminusdb.com": {"fields": ["query" ], "mode": [":" ], "types": ["query" ]}
   },
   "@type":"Class",
   "query":"Query"
@@ -827,9 +821,9 @@
   "@key": {"@type":"ValueHash"},
   "@metadata": {
     "https://terminusdb.com": {
-      "fields": ["expression", "result" ],
-      "mode": ["+", "?" ],
-      "types": ["arithmetic", "decimal" ]
+      "fields": ["result", "expression" ],
+      "mode": ["?", "+" ],
+      "types": ["decimal", "arithmetic" ]
     }
   },
   "@type":"Class",
@@ -1061,6 +1055,13 @@
   "@id":"LexicalKey",
   "@inherits":"Query",
   "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["base", "key_list", "uri" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["string", "list(string)", "node" ]
+    }
+  },
   "@type":"Class",
   "base":"DataValue",
   "key_list": {"@class":"DataValue", "@type":"List"},
@@ -1093,6 +1094,13 @@
   "@id":"HashKey",
   "@inherits":"Query",
   "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["base", "key_list", "uri" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["string", "list(string)", "node" ]
+    }
+  },
   "@type":"Class",
   "base":"DataValue",
   "key_list": {"@class":"DataValue", "@type":"List"},
@@ -1438,7 +1446,7 @@
   "@metadata": {
     "https://terminusdb.com": {
       "fields": ["list", "length" ],
-      "mode": ["+", "+", "?" ],
+      "mode": ["+", "?" ],
       "types": ["list(any)", "integer" ]
     }
   },
@@ -1681,6 +1689,13 @@
   "@id":"Size",
   "@inherits":"Query",
   "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["resource", "size" ],
+      "mode": ["+", "?" ],
+      "types": ["collection", "decimal" ]
+    }
+  },
   "@type":"Class",
   "resource":"xsd:string",
   "size":"DataValue"
@@ -1696,6 +1711,13 @@
   "@id":"TripleCount",
   "@inherits":"Query",
   "@key": {"@type":"ValueHash"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["resource", "count" ],
+      "mode": ["+", "?" ],
+      "types": ["collection", "decimal" ]
+    }
+  },
   "@type":"Class",
   "count":"DataValue",
   "resource":"xsd:string"
