@@ -7,7 +7,7 @@ Thanks for taking the time to contribute to TerminusDB!
 Before submitting a change, please run `make ; ./terminusdb test` to make sure
 that all tests pass.  Failure should result in a big fail message, and
 success with a final `true`. API tests will require that the admin
-password is `root` or that the enviroment variable
+password is `root` or that the environment variable
 `TERMINUS_ADMIN_PASSWD` is set prior to invocation of `terminusdb`.
 
 ## Submitting changes
