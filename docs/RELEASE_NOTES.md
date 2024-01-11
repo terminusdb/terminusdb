@@ -1,3 +1,16 @@
+# TerminusDB Server v11.1.11 Release Notes
+
+## Enhancements
+* Improved query cost estimations.
+* Added "pin" which allows queries to be fixed during query reordering.
+
+## Bug Fixes
+* Improved test coverage of WOQL query optimizations significantly
+* Fixed bug in `Eval` field order in WOQL.json and internal definitions.
+* Fixed `Length` mode description
+* Added `LexicalKey` and `HashKey` to definitions.
+* Fixed lt/le behaviour in GraphQL (typo in code).
+
 # TerminusDB Server v11.1.10 Release Notes
 
 ## Enhancements
