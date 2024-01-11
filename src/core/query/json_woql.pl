@@ -932,7 +932,7 @@ json_type_to_woql_ast('Typecast',JSON,WOQL,Path) :-
                                        |Path]),
     json_value_to_woql_ast(Var,WVar,[result
                                      |Path]),
-    WOQL = typecast(WVal,WType,[],WVar).
+    WOQL = typecast(WVal,WType,WVar).
 json_type_to_woql_ast('Not',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

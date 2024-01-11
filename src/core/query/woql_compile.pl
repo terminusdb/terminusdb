@@ -9,7 +9,8 @@
               not_literal/1,
               mode_for/1,
               mode_for_compound/2,
-              mode_for_predicate/2
+              mode_for_predicate/2,
+              literally/2
           ]).
 
 /** <module> WOQL Compile
@@ -505,7 +506,7 @@ indexing_as_list([As_Clause|Rest],Header,Values,Bindings,[Term|Result]) :-
            ->  (   nth1(Idx,Values,Value)
                ->  (   Type = none
                    ->  Value = Xe
-                   ;   typecast(Value,Type,[],Xe))
+                   ;   typecast(Value,Type,Xe))
                ;   throw(error(woql_syntax_error(get_header_does_not_match_values(Header, Values, N, Idx)),_))
                )
            ;   throw(error(woql_syntax_error(get_has_no_such_index(Header,Values,N)), _))
@@ -790,7 +791,7 @@ find_resources(opt(P), Collection, DRG, DWG, Read, Write) :-
 find_resources(not(P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(get(_,_,_), _, _, _, [], []).
-find_resources(typecast(_,_,_,_), _, _, _, [], []).
+find_resources(typecast(_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
 find_resources(random_idgen(_,_,_), _, _, _, [], []).
 find_resources(idgen(_,_,_), _, _, _, [], []).
@@ -1176,7 +1177,7 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [Resource]),
             throw(error(M)))
     }.
-compile_wf(typecast(Val,Type,_Hints,Cast),
+compile_wf(typecast(Val,Type,Cast),
            (   typecast(ValE, TypeE, [prefixes(Prefixes)], CastE))) -->
     view(prefixes,Prefixes),
     resolve(Val,ValE),
@@ -5186,7 +5187,7 @@ test(uri_casting, [
                 (
                     split("Capability/server_access,Role/admin"^^xsd:string,','^^xsd:string,List),
                     member(X, List),
-                    typecast(X, sys:'Top', [], URI)
+                    typecast(X, sys:'Top', URI)
                 )),
             URIs),
 
@@ -5235,8 +5236,88 @@ test(doc_select_reorder, [
 					   }
 					].
 
+test(times_mode, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    AST = limit(100, (v('Result') is 2 * 3)),
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+    (JSON.bindings = [ _{ 'Result':json{ '@type':'xsd:decimal',
+							             '@value':6
+							           }
+					    }
+				     ]).
+
+test(eval_times_var, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    Query_Atom = '{"@type":"Limit","limit":100,
+                   "query":{"@type":"Eval",
+                            "expression":{"@type":"Times",
+                                          "left":{"@type":"ArithmeticValue",
+                                                  "data":{"@type":"xsd:decimal",
+                                                          "@value":2}},
+                                          "right":{"@type":"ArithmeticValue",
+                                                   "data":{"@type":"xsd:decimal",
+                                                   "@value":3}}},
+                            "result":{"@type":"ArithmeticValue","variable":"result"}}}',
+    atom_json_dict(Query_Atom, Query, []),
+    json_woql(Query, AST),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+
+    (JSON.bindings = [ _{ 'result':json{ '@type':'xsd:decimal',
+							             '@value':6
+							           }
+					    }
+				     ]).
+
+test(limit_limit_bound, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    Query_Atom = '{"@type":"Limit","limit":10,"query":{"@type":"Limit","limit":100,"query":{"@type":"Eval","expression":{"@type":"Times","left":{"@type":"ArithmeticValue","data":{"@type":"xsd:decimal","@value":2}},"right":{"@type":"ArithmeticValue","data":{"@type":"xsd:decimal","@value":3}}},"result":{"@type":"ArithmeticValue","variable":"result"}}}}',
+    atom_json_dict(Query_Atom, Query, []),
+    json_woql(Query, AST),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, JSON),
+
+    (JSON.bindings = [ _{ 'result':json{ '@type':'xsd:decimal',
+							             '@value':6
+							           }
+					    }
+				     ]).
 
 
+test(complex_mode, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+
+    Query_Atom = '{"@type":"OrderBy","ordering":[{"@type":"OrderTemplate","variable":"distance","order":"desc"}],"query":{"@type":"Select","variables":["document","value","distance"],"query":{"@type":"And","and":[{"@type":"Limit","limit":100,"query":{"@type":"Distinct","variables":["document"],"query":{"@type":"And","and":[{"@type":"Triple","subject":{"@type":"NodeValue","variable":"document"},"predicate":{"@type":"NodeValue","node":"rdf:type"},"object":{"@type":"Value","variable":"doctype_isolation_94jkls"}},{"@type":"Not","query":{"@type":"Triple","subject":{"@type":"NodeValue","variable":"doctype_isolation_94jkls"},"predicate":{"@type":"NodeValue","node":"sys:subdocument"},"object":{"@type":"Value","node":"rdf:nil"},"graph":"schema"}},{"@type":"Triple","subject":{"@type":"NodeValue","variable":"doctype_isolation_94jkls"},"predicate":{"@type":"NodeValue","node":"rdf:type"},"object":{"@type":"Value","node":"sys:Class"},"graph":"schema"},{"@type":"Or","or":[{"@type":"Triple","subject":{"@type":"NodeValue","variable":"document"},"predicate":{"@type":"NodeValue","node":"@schema:label"},"object":{"@type":"Value","variable":"value"}},{"@type":"And","and":[{"@type":"Not","query":{"@type":"Triple","subject":{"@type":"NodeValue","variable":"document"},"predicate":{"@type":"NodeValue","node":"@schema:label"},"object":{"@type":"Value","variable":"value"}}},{"@type":"Concatenate","list":{"@type":"DataValue","list":[{"@type":"DataValue","variable":"document"}]},"result":{"@type":"DataValue","variable":"value"}}]}]},{"@type":"Or","or":[{"@type":"Regexp","pattern":{"@type":"DataValue","data":{"@type":"xsd:string","@value":"(?i).*ent.*"}},"string":{"@type":"DataValue","variable":"value"},"result":{"@type":"DataValue","variable":"re_result_isolation_94jkls"}},{"@type":"Regexp","pattern":{"@type":"DataValue","data":{"@type":"xsd:string","@value":"(?i).*ent.*"}},"string":{"@type":"DataValue","variable":"document"},"result":{"@type":"DataValue","variable":"re_result_isolation_94jkls"}}]}]}}},{"@type":"LexicalKey","base":{"@type":"DataValue","data":{"@type":"xsd:string","@value":""}},"key_list":[],"uri":{"@type":"NodeValue","variable":"random_isolation_94jkls"}},{"@type":"Concatenate","list":{"@type":"DataValue","list":[{"@type":"DataValue","variable":"re_result_isolation_94jkls"}]},"result":{"@type":"DataValue","variable":"re_compare_isolation_94jkls"}},{"@type":"Like","left":{"@type":"DataValue","variable":"re_compare_isolation_94jkls"},"right":{"@type":"DataValue","data":{"@type":"xsd:string","@value":"ent"}},"similarity":{"@type":"DataValue","variable":"distance"}},{"@type":"Not","query":{"@type":"Equals","left":{"@type":"Value","variable":"distance"},"right":{"@type":"Value","data":{"@type":"xsd:decimal","@value":0}}}}]}}}',
+    atom_json_dict(Query_Atom, Query, []),
+    json_woql(Query, AST),
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
 :- end_tests(woql).
 
