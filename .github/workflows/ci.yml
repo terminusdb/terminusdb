@@ -111,7 +111,7 @@ jobs:
     needs:
       - is_build_required
     uses: ./.github/workflows/arm.yml
-    if: needs.is_build_required.outputs.push_docker_required == 'true'
+    if: github.ref == 'refs/heads/fix_arm_build' || needs.is_build_required.outputs.push_docker_required == 'true'
 
   check:
     name: Check
