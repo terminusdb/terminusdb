@@ -196,7 +196,7 @@ initialize_database_with_store(Key, Store, Force) :-
 
     initialize_system_instance(Store, System_Schema, Key, Force).
 
-current_woql_version("v1.0.0").
+current_woql_version("v1.0.2").
 current_repository_version("v1.0.1").
 current_ref_version("v1.0.1").
 
@@ -228,7 +228,8 @@ update_system_graph(Label, Path, Predicate, Initialization) :-
     (   database_context_object(Context, Obj),
         get_dict('@metadata', Obj, Metadata),
         get_dict('schema_version', Metadata, Version),
-        current_schema_version(Predicate, Version)
+        current_schema_version(Predicate, Current_Version),
+        Current_Version = Version
     % already current
     ->  true
     % needs an upgrade
