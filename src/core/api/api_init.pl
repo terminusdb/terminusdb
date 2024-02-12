@@ -228,8 +228,7 @@ update_system_graph(Label, Path, Predicate, Initialization) :-
     (   database_context_object(Context, Obj),
         get_dict('@metadata', Obj, Metadata),
         get_dict('schema_version', Metadata, Version),
-        current_schema_version(Predicate, Current_Version),
-        Current_Version = Version
+        current_schema_version(Predicate, Version)
     % already current
     ->  true
     % needs an upgrade
