@@ -196,7 +196,7 @@ initialize_database_with_store(Key, Store, Force) :-
 
     initialize_system_instance(Store, System_Schema, Key, Force).
 
-current_woql_version("v1.0.0").
+current_woql_version("v1.0.2").
 current_repository_version("v1.0.1").
 current_ref_version("v1.0.1").
 
