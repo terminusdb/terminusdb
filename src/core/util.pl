@@ -265,6 +265,7 @@
               read_data_version_header/2,
               read_data_version/2,
               write_data_version_header/1,
+              serialize_data_version/2,
               transaction_data_version/2,
               validation_data_version/3,
               meta_data_version/3,
