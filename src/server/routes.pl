@@ -760,6 +760,7 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             param_value_json_optional(JSON, commit_info, object, commit_info{}, Commit_Info),
             param_value_json_optional(JSON, all_witnesses, boolean, false, All_Witnesses),
             param_value_json_optional(JSON, optimize, boolean, true, Optimize),
+            param_value_json_optional(JSON, streaming, boolean, false, Streaming),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -768,13 +769,19 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
                           all_witnesses: All_Witnesses,
                           data_version: Requested_Data_Version,
                           commit_info: Commit_Info,
-                          optimize: Optimize
+                          optimize: Optimize,
+                          streaming: Streaming
                       },
-            woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Response, Options),
-
-            write_cors_headers(Request),
-            write_data_version_header(New_Data_Version),
-            reply_json_dict(Response, [width(0)])
+            (   Streaming = true
+            ->  format('Status: 200~n'),
+                format('Content-Type: application/json~n'),
+                format("Transfer-Encoding: chunked~n~n"),
+                woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
+            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Response, Options),
+                write_cors_headers(Request),
+                write_data_version_header(New_Data_Version),
+                reply_json_dict(Response, [width(0)])
+            )
         )).
 
 
