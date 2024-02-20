@@ -85,16 +85,6 @@ touch(File) :-
     close(Stream).
 
 /**
- * ensure_directory(+Path) is det.
- *
- * Create a directory if it does not already exist
- */
-ensure_directory(Directory) :-
-    (   exists_directory(Directory)
-    ->  true
-    ;   make_directory(Directory)).
-
-/**
  * sanitise_file_name(+G,-F) is det.
  *
  * Replace nasty characters.

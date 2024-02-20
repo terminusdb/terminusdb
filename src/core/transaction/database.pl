@@ -412,15 +412,17 @@ collect_commit_metadata(Validations, Meta_Data) :-
  * Marshall commit info into the transaction object and run it.
  */
 query_context_transaction_objects(Query_Context,Transaction_Objects) :-
+    get_dict(transaction_objects, Query_Context, Original_Transaction_Objects),
     maplist({Query_Context}/[Transaction_Object,New_Transaction_Object]>>(
-                (   branch_descriptor{} :< Transaction_Object.descriptor
+                get_dict(descriptor, Transaction_Object, Descriptor),
+                (   branch_descriptor{} :< Descriptor
                 ->  get_dict(commit_info,Query_Context,Commit_Info),
                     put_dict(_{commit_info : Commit_Info},
                              Transaction_Object,
                              New_Transaction_Object)
                 ;   New_Transaction_Object = Transaction_Object)
             ),
-            Query_Context.transaction_objects,
+            Original_Transaction_Objects,
             Transaction_Objects).
 
 :- begin_tests(database_transactions).
