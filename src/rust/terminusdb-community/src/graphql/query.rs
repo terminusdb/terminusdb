@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use itertools::Itertools;
 use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
