@@ -2,7 +2,6 @@
               terminus_path/1,
               storage_version_path/2,
               touch/1,
-              ensure_directory/1,
               sanitise_file_name/2,
               subdirectories/2,
               files/2,
@@ -83,16 +82,6 @@ terminus_schema_path(Path) :-
 touch(File) :-
     open(File,append,Stream),
     close(Stream).
-
-/**
- * ensure_directory(+Path) is det.
- *
- * Create a directory if it does not already exist
- */
-ensure_directory(Directory) :-
-    (   exists_directory(Directory)
-    ->  true
-    ;   make_directory(Directory)).
 
 /**
  * sanitise_file_name(+G,-F) is det.
