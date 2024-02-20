@@ -68,6 +68,7 @@
 
               % api_woql.pl
               woql_query_json/8,
+              woql_query_streaming_json/5,
 
               % api_squash.pl
               api_squash/6,

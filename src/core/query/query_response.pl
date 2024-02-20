@@ -1,6 +1,7 @@
 :- module(query_response,[
               run_context_ast_jsonld_response/5,
               run_context_ast_jsonld_response/6,
+              run_context_ast_jsonld_streaming_response/4,
               pretty_print_query_response/3
           ]).
 
@@ -17,8 +18,10 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 
+:- use_module(library(http/json)).
+
 run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
-    Options = _{ optimize: true, all_witnesses: false},
+    Options = _{ optimize: true, all_witnesses: false, streaming: false},
     run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options).
 
 /** <module> Query Response
@@ -56,6 +59,58 @@ run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_V
                      inserts : Meta_Data.inserts,
                      deletes : Meta_Data.deletes,
                      transaction_retry_count : Meta_Data.transaction_retry_count }.
+
+
+run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, Options) :-
+    compile_query(AST,Prog,Context,Output_Context,Options),
+    do_or_die(
+        query_default_collection(Output_Context, Transaction),
+        error(query_default_collection_failed_unexpectedly(Output_Context), _)),
+    transaction_data_version(Transaction, Actual_Data_Version),
+    compare_data_versions(Requested_Data_Version, Actual_Data_Version),
+    write_preface_record(Output_Context),
+    with_transaction(
+        Output_Context,
+        forall(woql_compile:Prog,
+               query_response:(
+                   get_dict(bindings, Output_Context, Bindings),
+                   json_transform_binding_set(Output_Context, Bindings, JSON_Binding),
+                   write_woql_json_binding(JSON_Binding)
+               )
+              ),
+        Meta_Data
+    ),
+    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Postscript_Record = _{'@type' : 'PostscriptRecord',
+                          status : success,
+                          inserts : (Meta_Data.inserts),
+                          deletes : (Meta_Data.deletes),
+                          transaction_retry_count : (Meta_Data.transaction_retry_count) },
+    (   serialize_data_version(New_Data_Version, Version_String)
+    ->  put_dict(_{ version: Version_String },
+                 Postscript_Record,
+                 Postscript_Record_Final)
+    ;   Postscript_Record = Postscript_Record_Final),
+    json_write_dict(current_output,
+                    Postscript_Record_Final,
+                    [width(0)]),
+    nl.
+
+write_woql_json_binding(JSON_Binding) :-
+    /* We may need to add some identifier here */
+    put_dict(_{'@type' : 'Binding' }, JSON_Binding, Output_Binding),
+    json_write_dict(current_output,
+                    Output_Binding, [width(0)]),
+    nl.
+
+write_preface_record(Context) :-
+    context_variable_names(Context, Names),
+    Preface_Record = _{ '@type' : 'PrefaceRecord',
+                       names : Names },
+    json_write_dict(current_output,
+                    Preface_Record,
+                    [width(0)]),
+    nl.
 
 context_variable_names(Context, Header) :-
     get_dict(bindings, Context, Bindings),

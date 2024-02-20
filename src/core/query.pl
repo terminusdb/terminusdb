@@ -53,6 +53,7 @@
               % query_response.pl
               run_context_ast_jsonld_response/5,
               run_context_ast_jsonld_response/6,
+              run_context_ast_jsonld_streaming_response/4,
               pretty_print_query_response/3,
 
               % resolve_query_resource.pl
