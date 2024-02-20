@@ -454,10 +454,11 @@ commit_validation_objects(Unsorted_Objects, Committed) :-
     predsort(commit_order,Unsorted_Objects, Sorted_Objects),
     commit_validation_objects_(Sorted_Objects, Committed),
     maplist({Committed}/[O]>>(
-                should_retain_layers_for_descriptor(O.descriptor)
+                get_dict(descriptor, O, Descriptor),
+                should_retain_layers_for_descriptor(Descriptor)
             ->  do_or_die(layers_for_validation(O, Committed, Layers),
                           error(wtf1, _)),
-                do_or_die(retain_descriptor_layers(O.descriptor, Layers),
+                do_or_die(retain_descriptor_layers(Descriptor, Layers),
                           error(wtf2, _))
             ;   true
             ),
