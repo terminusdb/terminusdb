@@ -10,7 +10,9 @@
               mode_for/1,
               mode_for_compound/2,
               mode_for_predicate/2,
-              literally/2
+              literally/2,
+              trampoline/2,
+              defined_predicate/1
           ]).
 
 /** <module> WOQL Compile
@@ -37,6 +39,7 @@
 :- use_module(core(api), [call_catch_document_mutation/2]).
 :- use_module(core(query/reorder)).
 :- use_module(core(query/partition)).
+:- use_module(core(query/ask)).
 
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
@@ -1409,6 +1412,48 @@ compile_wf(false,false) -->
     [].
 compile_wf(true,true) -->
     [].
+compile_wf(call(Name, Arguments), trampoline(Pred, ArgumentsE)) -->
+    mapm(resolve, Arguments, ArgumentsE),
+    peek(Context),
+    { atom_string(Pred, Name),
+      late_bind_trampoline(Pred, Context)
+    }.
+
+get_woql_named_query(Descriptor, Name, Query) :-
+    ask(Descriptor,
+        (   t(Id, name, Name^^xsd:string),
+            t(Id, rdf:type, woql:'NamedParametricQuery'))),
+    get_document(Descriptor, Id, Query).
+
+% Set up the trampoline
+:- thread_local defined_predicate/1.
+:- thread_local trampoline/2.
+
+late_bind_trampoline(Name, _) :-
+    defined_predicate(Name),
+    !.
+late_bind_trampoline(Name, Context) :-
+    do_or_die(
+        get_dict(library, Context, Transaction),
+        error(no_specified_library, _)
+    ),
+    get_woql_named_query(Transaction, Name, NPQ),
+    get_dict(query, NPQ, Query),
+    json_woql(Query, AST),
+    put_dict(_{ bindings : []}, Context, Bindingless_Context),
+    get_dict(parameters, NPQ, Parameter_List),
+    maplist([X,A]>>atom_string(A,X), Parameter_List, Vars),
+    length(Vars, N),
+    length(Params, N),
+    mapm(lookup_or_extend, Vars, Params, Bindingless_Context, Input_Context),
+    assertz(defined_predicate(Name) :- true),
+    compile_query(AST, Prog, Input_Context, _, options{}),
+    assertz(
+        trampoline(Name, Params) :-
+            (   !,
+                Prog
+            )
+    ).
 
 typeof(X,T) :-
     var(X),
@@ -5567,3 +5612,120 @@ test(preflight_permissions, [
     once(ask(Context, using('z/test/local/_commits', t(_, _, _)))).
 
 :- end_tests(preflight).
+
+:- begin_tests(trampoline).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+
+query_test_response(Descriptor, Query, Response, Context_Extensions) :-
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    put_dict(Context_Extensions, Context, Context1),
+    json_woql(Query, AST),
+    run_context_ast_jsonld_response(Context1, AST, no_data_version, _, Response).
+
+test(ancestor, [
+         setup((setup_temp_store(State),
+                create_db_with_woql_schema("admin", "queries"),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Ancestor =
+    _{ '@type' : "NamedParametricQuery",
+       name : "ancestor",
+       parameters : ["Younger", "Older" ],
+       query : _{
+                   '@type' : "Or",
+                   or : [_{ '@type' : "Triple",
+                            subject : _{ '@type' : "NodeValue",
+                                         variable : "Younger" },
+                            predicate: _{ '@type' : "NodeValue",
+                                          node : "parent"},
+                            object : _{ '@type' : "Value",
+                                        variable : "Older" }
+                          },
+                         _{ '@type' : "And",
+                            and : [
+                                _{ '@type' : "Triple",
+                                   subject : _{ '@type' : "NodeValue",
+                                                variable : "Younger" },
+                                   predicate: _{ '@type' : "NodeValue",
+                                                 node : "parent"},
+                                   object : _{ '@type' : "Value",
+                                               variable : "Middle" }
+                                 },
+                                _{ '@type' : "Call",
+                                   name: "ancestor",
+                                   arguments: [
+                                       _{ '@type' : "Value",
+                                          variable : "Middle" },
+                                       _{ '@type' : "Value",
+                                          variable : "Older" }
+                                   ]
+                                 }
+                            ]
+                          }
+                        ]
+               }
+     },
+    resolve_absolute_string_descriptor('admin/queries', QueryDesc),
+
+    with_test_transaction(
+        QueryDesc,
+        C0,
+        insert_document(C0,Ancestor,_)
+    ),
+
+    Doc1 =
+    _{ '@type' : "Person",
+       '@id' : "Person/Bill",
+       name: "Bill",
+       address: "here",
+       parent: "Person/Bob"
+    },
+    Doc2 =
+    _{ '@type' : "Person",
+       '@id' : "Person/Bob",
+       name: "Bob",
+       address: "there",
+       parent: "Person/Jane"
+    },
+    Doc3 =
+    _{ '@type' : "Person",
+       '@id' : "Person/Jane",
+       name: "Jane",
+       address: "everywhere"
+    },
+    resolve_absolute_string_descriptor('admin/test', Desc),
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_document(C1, Doc1, _),
+            insert_document(C1, Doc2, _),
+            insert_document(C1, Doc3, _)
+        )
+    ),
+
+    Query =
+    _{ '@type': "Call",
+       name: "ancestor",
+       arguments: [
+           _{ '@type' : "Value",
+              variable : "Younger" },
+           _{ '@type' : "Value",
+              variable : "Older" }
+       ]
+     },
+
+    open_descriptor(QueryDesc, Library_Transaction),
+    query_test_response(Desc, Query, Response, _{ library: Library_Transaction }),
+    Response.bindings = [
+                 _{'Older':'Person/Bob','Younger':'Person/Bill'},
+	             _{'Older':'Person/Jane','Younger':'Person/Bob'},
+	             _{'Older':'Person/Jane','Younger':'Person/Bill'}
+	         ].
+
+:- end_tests(trampoline).

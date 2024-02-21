@@ -992,6 +992,19 @@ json_type_to_woql_ast('TypeOf',JSON,WOQL,Path) :-
                             |Path]),
 
     WOQL = typeof(WOQL_Value,WOQL_Type).
+json_type_to_woql_ast('Call',JSON,WOQL,Path) :-
+    _{name : Name,
+      arguments : Arguments
+     } :< JSON,
+    (   is_dict(Name)
+    ->  get_dict('@value', Name, Name_Value),
+        atom_string(Name_Atom, Name_Value)
+    ;   atom_string(Name_Atom, Name)
+    ),
+    json_value_to_woql_ast(Arguments,WOQL_Arguments,
+                           [arguments
+                            |Path]),
+    WOQL = call(Name_Atom,WOQL_Arguments).
 
 json_to_woql_path_pattern(JSON,Pattern,Path) :-
     is_dict(JSON),
@@ -1064,7 +1077,6 @@ json_type_to_woql_path_pattern('PathTimes',JSON,Pattern,Path) :-
                                 [to|Path],
                                 M), _)),
     Pattern = times(PSubPattern,N_int,M_int).
-
 
 is_json_var(A) :-
     sub_atom(A, 0, _, _, 'http://terminusdb.com/schema/woql/variable/').

@@ -212,7 +212,12 @@ pre_transaction_tabling :-
     true.
 
 post_transaction_tabling :-
+    abolish_trampoline,
     abolish_private_tables.
+
+abolish_trampoline :-
+    retractall(woql_compile:defined_predicate(_)),
+    retractall(woql_compile:trampoline(_,_)).
 
 /**
  * with_transaction(+Query_Context, +Body, -Meta_Data) is semidet.

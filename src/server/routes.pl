@@ -762,6 +762,11 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             param_value_json_optional(JSON, optimize, boolean, true, Optimize),
             param_value_json_optional(JSON, streaming, boolean, false, Streaming),
 
+            (   param_value_json_required(JSON, library, string, Library_String)
+            ->  Library = some(Library_String)
+            ;   Library = none
+            ),
+
             read_data_version_header(Request, Requested_Data_Version),
 
             Options = _{
@@ -770,7 +775,8 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
                           data_version: Requested_Data_Version,
                           commit_info: Commit_Info,
                           optimize: Optimize,
-                          streaming: Streaming
+                          streaming: Streaming,
+                          library: Library
                       },
             (   Streaming = true
             ->  format('Status: 200~n'),

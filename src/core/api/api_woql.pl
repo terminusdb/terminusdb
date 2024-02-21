@@ -13,6 +13,7 @@ prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_
     option(all_witnesses(All_Witnesses), Options),
     option(files(Files), Options),
     option(data_version(Requested_Data_Version), Options),
+    option(library(Maybe_Library), Options),
 
     % No descriptor to work with until the query sets one up
     (   some(Path) = Path_Option
@@ -20,17 +21,30 @@ prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_
                   error(invalid_absolute_path(Path),_)),
         do_or_die(askable_context(Descriptor, System_DB, Auth, Commit_Info, Context0),
                   error(unresolvable_collection(Descriptor),_)),
-        Context = (Context0.put(_{files:Files,
+        Context1 = (Context0.put(_{files:Files,
+                                  library: Library,
                                   all_witnesses : All_Witnesses
                                  }))
     ;   none = Path_Option
     ->  empty_context(Empty),
-        Context = (Empty.put(_{system: System_DB,
+        Context1 = (Empty.put(_{system: System_DB,
                                files: Files,
+                               library: Library,
                                authorization : Auth,
                                all_witnesses : All_Witnesses,
                                commit_info : Commit_Info}))
     ;   throw(error(unexpected_path_option(Path_Option), _))
+    ),
+
+    (   Maybe_Library = some(Library)
+    ->  do_or_die(
+            resolve_absolute_string_descriptor(Library, Library_Descriptor),
+            error(invalid_origin_absolute_path(Library),_)
+        ),
+        check_descriptor_auth(System_DB, Library_Descriptor, '@schema':'Action/instance_read_access', Auth),
+        open_descriptor(Library_Descriptor, Library_Transaction),
+        Context = Context1.put(_{ library: Library_Transaction })
+    ;   Context = Context1
     ),
 
     (   Query = json_query(JSON_Query)
