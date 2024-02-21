@@ -761,7 +761,8 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             param_value_json_optional(JSON, all_witnesses, boolean, false, All_Witnesses),
             param_value_json_optional(JSON, optimize, boolean, true, Optimize),
             param_value_json_optional(JSON, streaming, boolean, false, Streaming),
-            param_value_json_optional(JSON, library, string, none, Library_String)
+            param_value_json_optional(JSON, library, string, none, Library_String),
+
             (   Library_String = none
             ->  Library = some(Library_String)
             ;   Library = none
