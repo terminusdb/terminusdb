@@ -39,7 +39,7 @@ prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_
     (   Maybe_Library = some(Library)
     ->  do_or_die(
             resolve_absolute_string_descriptor(Library, Library_Descriptor),
-            error(invalid_origin_absolute_path(Library),_)
+            error(invalid_absolute_path(Library),_)
         ),
         check_descriptor_auth(System_DB, Library_Descriptor, '@schema':'Action/instance_read_access', Auth),
         open_descriptor(Library_Descriptor, Library_Transaction),

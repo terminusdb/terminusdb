@@ -764,8 +764,8 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             param_value_json_optional(JSON, library, string, none, Library_String),
 
             (   Library_String = none
-            ->  Library = some(Library_String)
-            ;   Library = none
+            ->  Library = none
+            ;   Library = some(Library_String)
             ),
 
             read_data_version_header(Request, Requested_Data_Version),
