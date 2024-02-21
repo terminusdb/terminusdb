@@ -2167,7 +2167,7 @@ test(datavalue_frame, [
 										     variable:"A variable."
 									       }
 					   },
-				      '@key':json{'@type':"ValueHash"},
+				      '@key':json{'@type':"Random"},
 				      '@oneOf':[ json{ data:'xsd:anySimpleType',
 						               list:json{ '@class':json{ '@class':'DataValue',
 										                         '@subdocument':[]
@@ -4802,7 +4802,8 @@ test(less_than, [
                   commit_info: Commit_Info,
                   all_witnesses: false,
                   files: [],
-                  data_version: no_data_version
+                  data_version: no_data_version,
+                  library: none
               },
     woql_query_json(system_descriptor{},
                     Auth,
@@ -4859,7 +4860,8 @@ test(using_resource_works, [
                   commit_info: Commit_Info,
                   all_witnesses: false,
                   files: [],
-                  data_version: no_data_version
+                  data_version: no_data_version,
+                  library: none
               },
 
     woql_query_json(system_descriptor{},
