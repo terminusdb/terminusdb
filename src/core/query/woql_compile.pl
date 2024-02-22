@@ -1456,7 +1456,11 @@ late_bind_trampoline(Name, Context) :-
     assertz(
         trampoline_(Name, Params) :-
             (   !,
-                Prog
+                Prog,
+                do_or_die(
+                    ground(Params),
+                    error(not_well_moded_named_parametric_query(Name), _)
+                )
             )
     ).
 

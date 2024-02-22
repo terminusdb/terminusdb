@@ -496,7 +496,7 @@ definition(
     call{
         name: 'Call',
         fields: [name,arguments],
-        mode: [+,?],
+        mode: [+,[?]],
         types: [string,list(value)]
     }).
 
