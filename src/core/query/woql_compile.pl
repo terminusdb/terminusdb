@@ -1429,6 +1429,7 @@ get_woql_named_query(Descriptor, Name, Query) :-
 :- thread_local defined_predicate/1.
 :- thread_local trampoline_/2.
 
+:- table trampoline/2 as private.
 trampoline(Name, Args) :-
     trampoline_(Name, Args).
 

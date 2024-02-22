@@ -209,14 +209,13 @@ retry_transaction(Query_Context, Transaction_Retry_Count) :-
 
 
 pre_transaction_tabling :-
-    table(woql_compile:trampoline/2).
+    true.
 
 post_transaction_tabling :-
     abolish_trampoline,
     abolish_private_tables.
 
 abolish_trampoline :-
-    untable(woql_compile:trampoline/2),
     retractall(woql_compile:defined_predicate(_)),
     retractall(woql_compile:trampoline_(_,_)).
 
