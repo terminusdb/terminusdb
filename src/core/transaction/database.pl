@@ -209,15 +209,16 @@ retry_transaction(Query_Context, Transaction_Retry_Count) :-
 
 
 pre_transaction_tabling :-
-    true.
+    table(woql_compile:trampoline/2).
 
 post_transaction_tabling :-
     abolish_trampoline,
     abolish_private_tables.
 
 abolish_trampoline :-
+    untable(woql_compile:trampoline/2),
     retractall(woql_compile:defined_predicate(_)),
-    retractall(woql_compile:trampoline(_,_)).
+    retractall(woql_compile:trampoline_(_,_)).
 
 /**
  * with_transaction(+Query_Context, +Body, -Meta_Data) is semidet.

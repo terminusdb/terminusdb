@@ -1427,7 +1427,10 @@ get_woql_named_query(Descriptor, Name, Query) :-
 
 % Set up the trampoline
 :- thread_local defined_predicate/1.
-:- thread_local trampoline/2.
+:- thread_local trampoline_/2.
+
+trampoline(Name, Args) :-
+    trampoline_(Name, Args).
 
 late_bind_trampoline(Name, _) :-
     defined_predicate(Name),
@@ -1440,6 +1443,7 @@ late_bind_trampoline(Name, Context) :-
     get_woql_named_query(Transaction, Name, NPQ),
     get_dict(query, NPQ, Query),
     json_woql(Query, AST),
+    writeq(compiled_json_woql),nl,
     put_dict(_{ bindings : []}, Context, Bindingless_Context),
     get_dict(parameters, NPQ, Parameter_List),
     maplist([X,A]>>atom_string(A,X), Parameter_List, Vars),
@@ -1449,7 +1453,7 @@ late_bind_trampoline(Name, Context) :-
     assertz(defined_predicate(Name) :- true),
     compile_query(AST, Prog, Input_Context, _, options{}),
     assertz(
-        trampoline(Name, Params) :-
+        trampoline_(Name, Params) :-
             (   !,
                 Prog
             )
@@ -5724,10 +5728,13 @@ test(ancestor, [
 
     open_descriptor(QueryDesc, Library_Transaction),
     query_test_response(Desc, Query, Response, _{ library: Library_Transaction }),
-    Response.bindings = [
-                 _{'Older':'Person/Bob','Younger':'Person/Bill'},
-	             _{'Older':'Person/Jane','Younger':'Person/Bob'},
-	             _{'Older':'Person/Jane','Younger':'Person/Bill'}
-	         ].
+    Bindings = (Response.bindings),
+    maplist([X]>>( X >:< json{}),Bindings),
+    sort(Bindings, Expected),
+    Expected = [
+        json{'Older':'Person/Bob','Younger':'Person/Bill'},
+	    json{'Older':'Person/Jane','Younger':'Person/Bill'},
+	    json{'Older':'Person/Jane','Younger':'Person/Bob'}
+	].
 
 :- end_tests(trampoline).
