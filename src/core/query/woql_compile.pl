@@ -1444,7 +1444,6 @@ late_bind_trampoline(Name, Context) :-
     get_woql_named_query(Transaction, Name, NPQ),
     get_dict(query, NPQ, Query),
     json_woql(Query, AST),
-    writeq(compiled_json_woql),nl,
     put_dict(_{ bindings : []}, Context, Bindingless_Context),
     get_dict(parameters, NPQ, Parameter_List),
     maplist([X,A]>>atom_string(A,X), Parameter_List, Vars),
