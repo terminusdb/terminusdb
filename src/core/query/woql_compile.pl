@@ -5101,8 +5101,15 @@ test(json_dict_with_nulls, [
     atom_json_dict(Query_Atom, Query, []),
     resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
     query_test_response(Descriptor, Query, Response),
-    print_term(Response, []),
-    (Response.bindings) = [_{'Y':_{a:1,b:"test"}}].
+    (Response.bindings) = [ _{ contributions:null,
+						       label:null,
+						       person:null,
+						       result:_{ '@id':null,
+								         contributions:null,
+								         label:null
+							           }
+						     }
+						  ].
 
 test(json_unbound_capture, [
          setup((setup_temp_store(State),
