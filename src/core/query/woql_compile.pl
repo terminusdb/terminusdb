@@ -296,8 +296,8 @@ resolve_dictionary_(List, List_Resolved, C1, C2) :-
          ), List, List_Resolved, C1, C2).
 resolve_dictionary_(Val, Dict_Val, C1, C2) :-
     resolve(Val, Res_Val, C1, C2),
-    when((   ground(Res_Val)
-         ;   ground(Dict_Val)),
+    when((   nonvar(Res_Val)
+         ;   nonvar(Dict_Val)),
          (   %format(user_error,"We have converted: ~q",[Res_Val]),
              (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
              ->  true
