@@ -314,7 +314,7 @@ resolve_dictionary_(Val, Dict_Val, C1, C2) :-
              resolve_dictionary_(T, RT, C1, _)
          ;   true)),
     when((   ground(Res_Val)
-         ;   nonvar(Dict_Val)),
+         ;   ground(Dict_Val)),
          (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
          ->  true
          ;   Res_Val = Dict_Val)
