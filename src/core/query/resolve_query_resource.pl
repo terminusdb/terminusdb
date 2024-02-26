@@ -721,6 +721,16 @@ resolve_absolute_graph_descriptor([Organization, DB, "_meta", Type], Graph) :-
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     atom_string(Type_Atom, Type).
+resolve_absolute_graph_descriptor([Organization, DB, Type], Graph) :-
+    !,
+    Graph = branch_graph{ organization_name: Organization_Str,
+                          database_name : DB_Str,
+                          repository_name : "local",
+                          branch_name : "main",
+                          type : Type_Atom},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str),
+    atom_string(Type_Atom, Type).
 resolve_absolute_graph_descriptor(["_system", Type], Graph) :-
     Graph = system_graph{ type : Type_Atom },
     atom_string(Type_Atom, Type).
