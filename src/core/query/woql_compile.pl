@@ -296,13 +296,29 @@ resolve_dictionary_(List, List_Resolved, C1, C2) :-
          ), List, List_Resolved, C1, C2).
 resolve_dictionary_(Val, Dict_Val, C1, C2) :-
     resolve(Val, Res_Val, C1, C2),
+    (   ground(Res_Val)
+    ;   ground(Dict_Val)),
+    !,
+    (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+    ->  true
+    ;   Res_Val = Dict_Val).
+resolve_dictionary_(Val, Dict_Val, C1, C2) :-
+    resolve(Val, Res_Val, C1, C2),
+    when((   nonvar(Res_Val)
+         ;   nonvar(Dict_Val)),
+         (   (  Dict_Val == [_|_]
+             ;  Res_Val ==  [_|_])
+         ->  Dict_Val = [H|T],
+             Res_Val = [RH|RT],
+             resolve_dictionary_(H, RH, C1, _),
+             resolve_dictionary_(T, RT, C1, _)
+         ;   true)),
     when((   ground(Res_Val)
          ;   ground(Dict_Val)),
-         (   %format(user_error,"We have converted: ~q",[Res_Val]),
-             (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
-             ->  true
-             ;   Res_Val = Dict_Val)
-         )).
+         (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+         ->  true
+         ;   Res_Val = Dict_Val)
+        ).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -5069,6 +5085,31 @@ test(json_capture_dict, [
     resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
     query_test_response(Descriptor, Query, Response),
     (Response.bindings) = [_{'Y':_{a:1,b:"test"}}].
+
+
+test(json_dict_with_nulls, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query_Atom =
+    '{"@type": "And", "and": [
+         {"@type": "Equals", "left": {"@type": "Value", "dictionary": {"@type": "DictionaryTemplate", "data": [{"@type": "FieldValuePair", "field": "@id", "value": {"@type": "Value", "variable": "person"}}, {"@type": "FieldValuePair", "field": "label", "value": {"@type": "Value", "variable": "label"}}, {"@type": "FieldValuePair", "field": "contributions", "value": {"@type": "Value", "variable": "contributions"}}]}}, "right": {"@type": "Value", "variable": "result"}}]}',
+
+    atom_json_dict(Query_Atom, Query, []),
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    query_test_response(Descriptor, Query, Response),
+    (Response.bindings) = [ _{ contributions:null,
+						       label:null,
+						       person:null,
+						       result:_{ '@id':null,
+								         contributions:null,
+								         label:null
+							           }
+						     }
+						  ].
 
 test(json_unbound_capture, [
          setup((setup_temp_store(State),
