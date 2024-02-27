@@ -106,6 +106,9 @@ Query a database.
   * `-o`, `--optimize`=[value]:
   allow query reordering
 
+  * `-l`, `--library`=[value]:
+  Add a WOQL library to use for defined predicates.
+
   * `-j`, `--json`=[value]:
   return results as a json object
 

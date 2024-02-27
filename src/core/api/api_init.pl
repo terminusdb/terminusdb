@@ -5,6 +5,7 @@
               initialize_database_with_store/2,
               index_template/1,
               world_ontology_json/1,
+              woql_schema/1,
               graphiql_template/1,
               update_system_graphs/0
           ]).
@@ -196,7 +197,7 @@ initialize_database_with_store(Key, Store, Force) :-
 
     initialize_system_instance(Store, System_Schema, Key, Force).
 
-current_woql_version("v1.0.0").
+current_woql_version("v1.0.3").
 current_repository_version("v1.0.1").
 current_ref_version("v1.0.1").
 

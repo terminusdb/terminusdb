@@ -9399,13 +9399,13 @@ test(subsumption_insert,
     JSON2 = json{'@id':'NamedQuery/TestQuery',
                  '@type':'NamedQuery',
                  name: "TestQuery",
-                 query: json{ '@id':'Subsumption/df269c56e3b263424bb3f9c9e4316a10ceb21e43c14e51bebd705c89068e7ddf',
+                 query: json{ '@id':_,
                               '@type':'Subsumption',
-                              child:json{ '@id':'NodeValue/ce25df5164a1d812aa1e79d8aa0e5cbd61f3f1a4b69d53add7115b267989117b',
+                              child:json{ '@id':_,
                                           '@type':'NodeValue',
                                           node:"system:Organization"
                                         },
-                              parent:json{ '@id':'NodeValue/9f77cd3ff5da0240e21bacceec8c31f137cb92a15426d6b21e7c55ae26cf8390',
+                              parent:json{ '@id':_,
                                            '@type':'NodeValue',
                                            variable:"Parent"
 		                                 }
@@ -9446,25 +9446,25 @@ test(substring_insert, [
     JSON2 = json{'@id':'NamedQuery/TestQuery',
                  '@type':'NamedQuery',
                  name: "TestQuery",
-                 query: json{ '@id':'Substring/58966c0b377f0bef26c5e70c9e1dfcc755a0d0283dfd5c1bd24ab00088dfcf74',
+                 query: json{ '@id':_,
                               '@type':'Substring',
-                              after:json{ '@id':'DataValue/7754f109f1156e98967aab291d4297d84e880a1791bd668cfd92843806006953',
+                              after:json{ '@id':_,
                                           '@type':'DataValue',
                                           data:json{'@type':'xsd:integer','@value':1}
                                         },
-                              before:json{ '@id':'DataValue/7754f109f1156e98967aab291d4297d84e880a1791bd668cfd92843806006953',
+                              before:json{ '@id':_,
                                            '@type':'DataValue',
                                            data:json{'@type':'xsd:integer','@value':1}
                                          },
-                              length:json{ '@id':'DataValue/345e2ac5aa9fdb2497f535fa0b8a3bfbb32ba34bc6b248b804fba60c2259fd6e',
+                              length:json{ '@id':_,
                                            '@type':'DataValue',
                                            variable:"Length"
                                          },
-                              string:json{ '@id':'DataValue/361af56aa6241921e995130e61dd0aaf6d4d307e5e7a5bfce77e188d1ebeacb2',
+                              string:json{ '@id':_,
                                            '@type':'DataValue',
                                            data:json{'@type':'xsd:string','@value':"Test"}
                                          },
-                              substring:json{ '@id':'DataValue/c53baa036cc4e3af24ed85c0e339c592262c6ebccea830850dba0be4bbfd0b66',
+                              substring:json{ '@id':_,
 		                                      '@type':'DataValue',
 		                                      variable:"Substring"
 		                                    }
@@ -9506,30 +9506,30 @@ test(named_parametric_query, [
           '@type':'NamedParametricQuery',
           name:"user_name_uri",
           parameters:["User_Name","URI"],
-          query:json{ '@id':'And/01ee9d3e300ede2b8247ce20665a2d97dcdc9d62a5f4feb21b94a01668369682',
+          query:json{ '@id':_,
                       '@type':'And',
-                      and:[ json{ '@id':'Data/4cb7e7296113897e4c6d25d1af22715ce2d98d6349c36aed61be0ffcc7a532f2',
+                      and:[ json{ '@id':_,
                                   '@type':'Data',
-                                  object:json{ '@id':'DataValue/a49c922485adc3477cbcd489c81111954fa57fb62d5dfcc700a4e7b304cdb965',
+                                  object:json{ '@id':_,
                                                '@type':'DataValue',
                                                variable:"User_Name"
                                              },
-                                  predicate:json{ '@id':'NodeValue/9e6b6c91ec7f10179a5c07fce64f4aa8a4ef00f714f9a3d49d96688559af18da',
+                                  predicate:json{ '@id':_,
                                                   '@type':'NodeValue',
                                                   node:"name"
                                                 },
-                                  subject:json{ '@id':'NodeValue/8d2b6dc02bece9b03cb90064b43637438833a5d69df842cecaf5006302741f5c',
+                                  subject:json{ '@id':_,
                                                 '@type':'NodeValue',
                                                 variable:"URI"
                                               }
                                 },
-                            json{ '@id':'IsA/868517cf306fc73ee346426b7328a416d0639e6efb1f08e452e9787ef5ba0b8a',
+                            json{ '@id':_,
                                   '@type':'IsA',
-                                  element:json{ '@id':'NodeValue/8d2b6dc02bece9b03cb90064b43637438833a5d69df842cecaf5006302741f5c',
+                                  element:json{ '@id':_,
                                                 '@type':'NodeValue',
                                                 variable:"URI"
                                               },
-                                  type:json{ '@id':'NodeValue/0b576982430d0e608a643d6e118c198ef9407c964c1d3353d07964e909cd8bd2',
+                                  type:json{ '@id':_,
 					                         '@type':'NodeValue',
 					                         node:"User"
 				                           }
