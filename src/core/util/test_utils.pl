@@ -13,6 +13,7 @@
               repo_schema_context_from_label_descriptor/3,
               repo_schema_context_from_label_descriptor/4,
               create_db_with_test_schema/2,
+              create_db_with_woql_schema/2,
               create_db_without_schema/2,
               create_db_with_empty_schema/2,
               create_db_with_ttl_schema/3,
@@ -249,6 +250,27 @@ create_db_with_test_schema(Organization, Db_Name) :-
     open_string(OntologyJSON, JSON_Stream),
 
     Commit_Info = commit_info{author: "test", message: "add test schema"},
+    atomic_list_concat([Organization,'/',Db_Name], DB_Path),
+    resolve_absolute_string_descriptor(DB_Path, Desc),
+    create_context(Desc, Commit_Info, Context),
+
+    with_transaction(
+        Context,
+        replace_json_schema(Context, JSON_Stream),
+        _).
+
+create_db_with_woql_schema(Organization, Db_Name) :-
+    Prefixes = _{  '@base':"terminusdb://woql/data/",
+                   '@schema':"http://terminusdb.com/schema/woql#",
+                   xsd:"http://www.w3.org/2001/XMLSchema#" },
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Admin),
+    create_db(System, Admin, Organization, Db_Name, "woql", "a woql db", false, true, Prefixes),
+
+    woql_schema(OntologyJSON),
+    open_string(OntologyJSON, JSON_Stream),
+
+    Commit_Info = commit_info{author: "woql", message: "add woql schema"},
     atomic_list_concat([Organization,'/',Db_Name], DB_Path),
     resolve_absolute_string_descriptor(DB_Path, Desc),
     create_context(Desc, Commit_Info, Context),

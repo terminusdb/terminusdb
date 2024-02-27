@@ -742,12 +742,13 @@ impl GraphQLValue for TerminusType {
                 let document_context = executor.context().document_context();
                 let doc = document_context.get_id_document(self.id, true, true);
                 match doc {
-                    Ok(doc) => {
+                    Ok(Some(doc)) => {
                         let json_string =
                             serde_json::to_string_pretty(&serde_json::Value::Object(doc)).unwrap();
 
                         return Some(Ok(Value::Scalar(DefaultScalarValue::String(json_string))));
                     }
+                    Ok(None) => panic!("document lookup failed unexpectedly"),
                     Err(e) => return Some(Err(e.into())),
                 }
             }
@@ -1091,10 +1092,14 @@ fn extract_json_fragment(
     // TODO this should really not just recreate a context, but it's cheap enough since it is schema independent.
     let context = DocumentContext::new_json(Some(instance.clone()));
     let doc = context.get_id_document(object_id, true, true)?;
-    let json = serde_json::Value::Object(doc);
-    Ok(juniper::Value::Scalar(DefaultScalarValue::String(
-        json.to_string(),
-    )))
+    if let Some(doc) = doc {
+        let json = serde_json::Value::Object(doc);
+        Ok(juniper::Value::Scalar(DefaultScalarValue::String(
+            json.to_string(),
+        )))
+    } else {
+        panic!("could not extract json fragment");
+    }
 }
 
 /// An enum type that is generated dynamically

@@ -6,6 +6,7 @@
               initialize_database/2,
               initialize_database_with_store/2,
               world_ontology_json/1,
+              woql_schema/1,
 
               % db_delete.pl
               delete_db/5,
