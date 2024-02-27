@@ -10,7 +10,9 @@
               mode_for/1,
               mode_for_compound/2,
               mode_for_predicate/2,
-              literally/2
+              literally/2,
+              trampoline/2,
+              defined_predicate/1
           ]).
 
 /** <module> WOQL Compile
@@ -37,6 +39,7 @@
 :- use_module(core(api), [call_catch_document_mutation/2]).
 :- use_module(core(query/reorder)).
 :- use_module(core(query/partition)).
+:- use_module(core(query/ask)).
 
 :- use_module(library(http/json)).
 :- use_module(library(http/json_convert)).
@@ -293,13 +296,29 @@ resolve_dictionary_(List, List_Resolved, C1, C2) :-
          ), List, List_Resolved, C1, C2).
 resolve_dictionary_(Val, Dict_Val, C1, C2) :-
     resolve(Val, Res_Val, C1, C2),
+    (   ground(Res_Val)
+    ;   ground(Dict_Val)),
+    !,
+    (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+    ->  true
+    ;   Res_Val = Dict_Val).
+resolve_dictionary_(Val, Dict_Val, C1, C2) :-
+    resolve(Val, Res_Val, C1, C2),
+    when((   nonvar(Res_Val)
+         ;   nonvar(Dict_Val)),
+         (   (  Dict_Val == [_|_]
+             ;  Res_Val ==  [_|_])
+         ->  Dict_Val = [H|T],
+             Res_Val = [RH|RT],
+             resolve_dictionary_(H, RH, C1, _),
+             resolve_dictionary_(T, RT, C1, _)
+         ;   true)),
     when((   ground(Res_Val)
          ;   ground(Dict_Val)),
-         (   %format(user_error,"We have converted: ~q",[Res_Val]),
-             (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
-             ->  true
-             ;   Res_Val = Dict_Val)
-         )).
+         (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
+         ->  true
+         ;   Res_Val = Dict_Val)
+        ).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -1409,6 +1428,56 @@ compile_wf(false,false) -->
     [].
 compile_wf(true,true) -->
     [].
+compile_wf(call(Name, Arguments), trampoline(Pred, ArgumentsE)) -->
+    mapm(resolve, Arguments, ArgumentsE),
+    peek(Context),
+    { atom_string(Pred, Name),
+      late_bind_trampoline(Pred, Context)
+    }.
+
+get_woql_named_query(Descriptor, Name, Query) :-
+    ask(Descriptor,
+        (   t(Id, name, Name^^xsd:string),
+            t(Id, rdf:type, woql:'NamedParametricQuery'))),
+    get_document(Descriptor, Id, Query).
+
+% Set up the trampoline
+:- thread_local defined_predicate/1.
+:- thread_local trampoline_/2.
+
+:- table trampoline/2 as private.
+trampoline(Name, Args) :-
+    trampoline_(Name, Args).
+
+late_bind_trampoline(Name, _) :-
+    defined_predicate(Name),
+    !.
+late_bind_trampoline(Name, Context) :-
+    do_or_die(
+        get_dict(library, Context, Transaction),
+        error(no_specified_library, _)
+    ),
+    get_woql_named_query(Transaction, Name, NPQ),
+    get_dict(query, NPQ, Query),
+    json_woql(Query, AST),
+    put_dict(_{ bindings : []}, Context, Bindingless_Context),
+    get_dict(parameters, NPQ, Parameter_List),
+    maplist([X,A]>>atom_string(A,X), Parameter_List, Vars),
+    length(Vars, N),
+    length(Params, N),
+    mapm(lookup_or_extend, Vars, Params, Bindingless_Context, Input_Context),
+    assertz(defined_predicate(Name) :- true),
+    compile_query(AST, Prog, Input_Context, _, options{}),
+    assertz(
+        trampoline_(Name, Params) :-
+            (   !,
+                Prog,
+                do_or_die(
+                    ground(Params),
+                    error(not_well_moded_named_parametric_query(Name), _)
+                )
+            )
+    ).
 
 typeof(X,T) :-
     var(X),
@@ -2122,7 +2191,7 @@ test(datavalue_frame, [
 										     variable:"A variable."
 									       }
 					   },
-				      '@key':json{'@type':"ValueHash"},
+				      '@key':json{'@type':"Random"},
 				      '@oneOf':[ json{ data:'xsd:anySimpleType',
 						               list:json{ '@class':json{ '@class':'DataValue',
 										                         '@subdocument':[]
@@ -4757,7 +4826,8 @@ test(less_than, [
                   commit_info: Commit_Info,
                   all_witnesses: false,
                   files: [],
-                  data_version: no_data_version
+                  data_version: no_data_version,
+                  library: none
               },
     woql_query_json(system_descriptor{},
                     Auth,
@@ -4814,7 +4884,8 @@ test(using_resource_works, [
                   commit_info: Commit_Info,
                   all_witnesses: false,
                   files: [],
-                  data_version: no_data_version
+                  data_version: no_data_version,
+                  library: none
               },
 
     woql_query_json(system_descriptor{},
@@ -5014,6 +5085,31 @@ test(json_capture_dict, [
     resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
     query_test_response(Descriptor, Query, Response),
     (Response.bindings) = [_{'Y':_{a:1,b:"test"}}].
+
+
+test(json_dict_with_nulls, [
+         setup((setup_temp_store(State),
+                add_user("TERMINUSQA",some('password'),_Auth),
+                create_db_without_schema("TERMINUSQA", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Query_Atom =
+    '{"@type": "And", "and": [
+         {"@type": "Equals", "left": {"@type": "Value", "dictionary": {"@type": "DictionaryTemplate", "data": [{"@type": "FieldValuePair", "field": "@id", "value": {"@type": "Value", "variable": "person"}}, {"@type": "FieldValuePair", "field": "label", "value": {"@type": "Value", "variable": "label"}}, {"@type": "FieldValuePair", "field": "contributions", "value": {"@type": "Value", "variable": "contributions"}}]}}, "right": {"@type": "Value", "variable": "result"}}]}',
+
+    atom_json_dict(Query_Atom, Query, []),
+    resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
+    query_test_response(Descriptor, Query, Response),
+    (Response.bindings) = [ _{ contributions:null,
+						       label:null,
+						       person:null,
+						       result:_{ '@id':null,
+								         contributions:null,
+								         label:null
+							           }
+						     }
+						  ].
 
 test(json_unbound_capture, [
          setup((setup_temp_store(State),
@@ -5567,3 +5663,123 @@ test(preflight_permissions, [
     once(ask(Context, using('z/test/local/_commits', t(_, _, _)))).
 
 :- end_tests(preflight).
+
+:- begin_tests(trampoline).
+:- use_module(core(util/test_utils)).
+:- use_module(core(api)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+
+query_test_response(Descriptor, Query, Response, Context_Extensions) :-
+    create_context(Descriptor,commit_info{ author : "automated test framework",
+                                           message : "testing"}, Context),
+    put_dict(Context_Extensions, Context, Context1),
+    json_woql(Query, AST),
+    run_context_ast_jsonld_response(Context1, AST, no_data_version, _, Response).
+
+test(ancestor, [
+         setup((setup_temp_store(State),
+                create_db_with_woql_schema("admin", "queries"),
+                create_db_with_test_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Ancestor =
+    _{ '@type' : "NamedParametricQuery",
+       name : "ancestor",
+       parameters : ["Younger", "Older" ],
+       query : _{
+                   '@type' : "Or",
+                   or : [_{ '@type' : "Triple",
+                            subject : _{ '@type' : "NodeValue",
+                                         variable : "Younger" },
+                            predicate: _{ '@type' : "NodeValue",
+                                          node : "parent"},
+                            object : _{ '@type' : "Value",
+                                        variable : "Older" }
+                          },
+                         _{ '@type' : "And",
+                            and : [
+                                _{ '@type' : "Triple",
+                                   subject : _{ '@type' : "NodeValue",
+                                                variable : "Younger" },
+                                   predicate: _{ '@type' : "NodeValue",
+                                                 node : "parent"},
+                                   object : _{ '@type' : "Value",
+                                               variable : "Middle" }
+                                 },
+                                _{ '@type' : "Call",
+                                   name: "ancestor",
+                                   arguments: [
+                                       _{ '@type' : "Value",
+                                          variable : "Middle" },
+                                       _{ '@type' : "Value",
+                                          variable : "Older" }
+                                   ]
+                                 }
+                            ]
+                          }
+                        ]
+               }
+     },
+    resolve_absolute_string_descriptor('admin/queries', QueryDesc),
+
+    with_test_transaction(
+        QueryDesc,
+        C0,
+        insert_document(C0,Ancestor,_)
+    ),
+
+    Doc1 =
+    _{ '@type' : "Person",
+       '@id' : "Person/Bill",
+       name: "Bill",
+       address: "here",
+       parent: "Person/Bob"
+    },
+    Doc2 =
+    _{ '@type' : "Person",
+       '@id' : "Person/Bob",
+       name: "Bob",
+       address: "there",
+       parent: "Person/Jane"
+    },
+    Doc3 =
+    _{ '@type' : "Person",
+       '@id' : "Person/Jane",
+       name: "Jane",
+       address: "everywhere"
+    },
+    resolve_absolute_string_descriptor('admin/test', Desc),
+    with_test_transaction(
+        Desc,
+        C1,
+        (   insert_document(C1, Doc1, _),
+            insert_document(C1, Doc2, _),
+            insert_document(C1, Doc3, _)
+        )
+    ),
+
+    Query =
+    _{ '@type': "Call",
+       name: "ancestor",
+       arguments: [
+           _{ '@type' : "Value",
+              variable : "Younger" },
+           _{ '@type' : "Value",
+              variable : "Older" }
+       ]
+     },
+
+    open_descriptor(QueryDesc, Library_Transaction),
+    query_test_response(Desc, Query, Response, _{ library: Library_Transaction }),
+    Bindings = (Response.bindings),
+    maplist([X]>>( X >:< json{}),Bindings),
+    sort(Bindings, Expected),
+    Expected = [
+        json{'Older':'Person/Bob','Younger':'Person/Bill'},
+	    json{'Older':'Person/Jane','Younger':'Person/Bill'},
+	    json{'Older':'Person/Jane','Younger':'Person/Bob'}
+	].
+
+:- end_tests(trampoline).

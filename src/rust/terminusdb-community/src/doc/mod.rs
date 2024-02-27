@@ -215,7 +215,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
                 .subject_id(iri)
                 .map(|id| self.get_id_document(id, compress, unfold))
         }) {
-            Some(Ok(x)) => Ok(Some(x)),
+            Some(Ok(x)) => Ok(x),
             Some(Err(e)) => Err(e),
             None => Ok(None),
         }
@@ -402,21 +402,26 @@ impl<L: Layer + Clone> DocumentContext<L> {
         id: u64,
         compress: bool,
         unfold: bool,
-    ) -> Result<Map<String, Value>, DocRetrievalError> {
+    ) -> Result<Option<Map<String, Value>>, DocRetrievalError> {
         if self.layer.is_none() {
             panic!("expected id to point at document: {}", id);
         }
 
         let mut stack = Vec::new();
 
-        let (doc, type_id, fields, json) = self.get_doc_stub(id, false, compress, unfold).unwrap();
-        stack.push(StackEntry::Document {
-            id,
-            doc,
-            type_id,
-            fields: Some(fields),
-            json,
-        });
+        if let Ok((doc, type_id, fields, json)) = self.get_doc_stub(id, false, compress, unfold) {
+            stack.push(StackEntry::Document {
+                id,
+                doc,
+                type_id,
+                fields: Some(fields),
+                json,
+            });
+        } else {
+            // Something is wrong. We expected to be looking up a document, but instead we got a single value.
+            // The only way this could have happened is because we're looking up something that doesn't exist.
+            return Ok(None);
+        }
 
         let mut visited: Vec<u64> = Vec::new();
         visited.push(id);
@@ -498,7 +503,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
                 } else {
                     // we're done, this was the root, time to return!
                     match cur {
-                        StackEntry::Document { doc, .. } => return Ok(doc),
+                        StackEntry::Document { doc, .. } => return Ok(Some(doc)),
                         _ => panic!("unexpected element at stack top"),
                     }
                 }
@@ -906,8 +911,9 @@ fn print_documents_of_types<
                 continue;
             }
 
-            let map =
-                context.try_or_die(doc_context.get_id_document(t.subject, compress, unfold))?;
+            let map = context
+                .try_or_die(doc_context.get_id_document(t.subject, compress, unfold))?
+                .expect("expected document lookup by type to succeed as ids were prefetched");
             print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
         }
     }
@@ -968,7 +974,9 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + Clone + 'sta
     let mut result = BinaryHeap::new();
     let mut cur = 0;
     while let Ok((ix, map)) = receiver.recv() {
-        let map = context.try_or_die(map)?;
+        let map = context
+            .try_or_die(map)?
+            .expect("expected parallel document lookup by type to succeed as ids were prefetched");
         if ix == cur {
             print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
 

@@ -491,6 +491,16 @@ definition(
         types: []
     }).
 
+/* Predicates */
+definition(
+    call{
+        name: 'Call',
+        fields: [name,arguments],
+        mode: [+,[?]],
+        types: [string,list(value)]
+    }).
+
+
 % And, Or treated specially as they are n-ary in the AST external AST
 % but binary in the internal one
 mode(Term, Mode) :-
@@ -1088,6 +1098,12 @@ cost_(true, Cost, _Polarity) =>
 
 cost_(false, Cost, _Polarity) =>
     Cost = 0.
+
+/* Currently push the query to end.
+   We don't know how much it should cost at all yet, this needs to be more clever
+*/
+cost_(call(_,_), Cost, _Polarity) =>
+    Cost = 1000.
 
 unmodable(Query) :-
     cost(Query, inf).

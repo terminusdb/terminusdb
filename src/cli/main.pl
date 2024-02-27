@@ -165,6 +165,12 @@ opt_spec(query,'terminusdb query DB_SPEC QUERY OPTIONS',
            longflags([optimize]),
            default(true),
            help('allow query reordering')],
+          [opt(library),
+           type(atom),
+           shortflags([l]),
+           longflags([library]),
+           default('_'),
+           help('Add a WOQL library to use for defined predicates.')],
           [opt(json),
            type(boolean),
            longflags([json]),
@@ -1609,6 +1615,11 @@ run_command(query,[Path,Query],Opts) :-
     option(author(Author), Opts),
     option(message(Message), Opts),
     option(optimize(Optimize), Opts),
+    option(library(Library_Path), Opts),
+    (   var(Library_Path)
+    ->  Library = none
+    ;   Library = some(Library_Path)
+    ),
 
     Commit_Info = commit_info{author : Author, message : Message},
 
@@ -1618,6 +1629,7 @@ run_command(query,[Path,Query],Opts) :-
                          files: [],
                          optimize: Optimize,
                          data_version: no_data_version,
+                         library: Library,
                          all_witnesses: false },
             woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, Response, Options),
             (   option(json(true), Opts)
