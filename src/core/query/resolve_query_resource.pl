@@ -650,11 +650,7 @@ resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph) 
     graph_descriptor_to_collection_descriptor(Graph, Descriptor).
 
 resolve_absolute_string_descriptor_and_graph(String, Descriptor,Graph) :-
-    pattern_string_split('/', String, Path_Unfiltered),
-    exclude('='(""), Path_Unfiltered, Path),
-    once(append(Descriptor_Path,[_Type],Path)),
-    resolve_absolute_descriptor(Descriptor_Path, Descriptor),
-    resolve_absolute_graph_descriptor(Path, Graph).
+    resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph).
 
 resolve_absolute_string_graph_descriptor(String, Graph_Descriptor) :-
     var(String),
