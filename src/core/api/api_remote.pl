@@ -22,6 +22,10 @@ add_remote(SystemDB, Auth, Path, Remote_Name, Remote_Location) :-
         resolve_absolute_string_descriptor(Repo_Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
 
+    die_if(
+        member(Remote_Name, ["instance", "schema"]),
+        error(invalid_remote_name(Remote_Name), _)),
+
     check_descriptor_auth(SystemDB, Descriptor,
                           '@schema':'Action/meta_write_access', Auth),
 

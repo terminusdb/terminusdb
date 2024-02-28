@@ -1280,6 +1280,14 @@ api_error_jsonld_(remote,error(remote_exists(Name),_), JSON) :-
              'api:error' : _{ '@type' : "api:RemoteExists",
                               'api:remote_name' : Name}
             }.
+api_error_jsonld_(remote,error(invalid_remote_name(Name),_), JSON) :-
+    format(string(Msg), "The remote '~q' cannot be named 'instance' or 'schema'", [Name]),
+    JSON = _{'@type' : 'api:RemoteErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RemoteNameInvalid",
+                              'api:remote_name' : Name}
+            }.
 api_error_jsonld_(rollup,error(unresolvable_collection(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor could not be resolved to a resource: ~q", [Path]),

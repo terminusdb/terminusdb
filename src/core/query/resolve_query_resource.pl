@@ -13,7 +13,7 @@
               resolve_absolute_string_descriptor_and_default_graph/3,
               resolve_absolute_or_relative_string_descriptor/3,
               resolve_filter/2,
-	      descriptor_organization/2
+              descriptor_organization/2
           ]).
 
 /** <module> Resolve Query Resource
@@ -646,31 +646,11 @@ resolve_relative_string_descriptor(Context, String, Descriptor) :-
 resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph) :-
     pattern_string_split('/', String, Path_Unfiltered),
     exclude('='(""), Path_Unfiltered, Path),
-    (   resolve_absolute_graph_descriptor(Path, Graph)
-    ->  once(append(Descriptor_Path,[_Type],Path)),
-        resolve_absolute_descriptor(Descriptor_Path, Descriptor)
-    ;   append(Path, [], Path_and_Name),
-        resolve_absolute_graph_descriptor(Path_and_Name, Graph)
-    ->  once(append(Descriptor_Path,[_Type],Path)),
-        resolve_absolute_descriptor(Descriptor_Path, Descriptor)
-    ;   append(Path, [instance], Path_Type_and_Name),
-        resolve_absolute_graph_descriptor(Path_Type_and_Name, Graph)
-    ->  resolve_absolute_descriptor(Path, Descriptor)
-    % This is the case where no graph information is supplied and we're
-    % finding the original descriptor in order to find the graph
-    ;   resolve_absolute_string_descriptor(String, Descriptor),
-        resolve_absolute_descriptor(Absolute, Descriptor),
-        append(Absolute,[instance], Graph_Absolute),
-        resolve_absolute_graph_descriptor(Graph_Absolute, Graph)
-    ),
-    resolve_absolute_descriptor(Descriptor_Path, Descriptor).
+    resolve_absolute_graph_descriptor(Path, Graph),
+    graph_descriptor_to_collection_descriptor(Graph, Descriptor).
 
 resolve_absolute_string_descriptor_and_graph(String, Descriptor,Graph) :-
-    pattern_string_split('/', String, Path_Unfiltered),
-    exclude('='(""), Path_Unfiltered, Path),
-    once(append(Descriptor_Path,[_Type],Path)),
-    resolve_absolute_descriptor(Descriptor_Path, Descriptor),
-    resolve_absolute_graph_descriptor(Path, Graph).
+    resolve_absolute_string_descriptor_and_default_graph(String, Descriptor, Graph).
 
 resolve_absolute_string_graph_descriptor(String, Graph_Descriptor) :-
     var(String),
@@ -693,6 +673,15 @@ resolve_absolute_graph_descriptor([Organization, DB, Repo, "branch", Branch, Typ
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     atom_string(Type_Atom, Type).
+resolve_absolute_graph_descriptor([Organization, DB, Repo, "branch", Branch], Graph) :-
+    !,
+    Graph = branch_graph{ organization_name: Organization_Str,
+                          database_name : DB_Str,
+                          repository_name : Repo,
+                          branch_name : Branch,
+                          type : instance},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str).
 resolve_absolute_graph_descriptor([Organization, DB, Repo, "commit", RefID, Type], Graph) :-
     !,
     Graph = single_commit_graph{ organization_name: Organization_Str,
@@ -713,6 +702,15 @@ resolve_absolute_graph_descriptor([Organization, DB, Repo, "_commits", Type], Gr
     coerce_string(DB, DB_Str),
     coerce_string(Repo, Repo_Str),
     atom_string(Type_Atom, Type).
+resolve_absolute_graph_descriptor([Organization, DB, Repo, "_commits"], Graph) :-
+    !,
+    Graph = commit_graph{ organization_name: Organization_Str,
+                          database_name : DB_Str,
+                          repository_name : Repo_Str,
+                          type : instance },
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str),
+    coerce_string(Repo, Repo_Str).
 resolve_absolute_graph_descriptor([Organization, DB, "_meta", Type], Graph) :-
     !,
     Graph = repo_graph{ organization_name: Organization_Str,
@@ -721,9 +719,95 @@ resolve_absolute_graph_descriptor([Organization, DB, "_meta", Type], Graph) :-
     coerce_string(Organization, Organization_Str),
     coerce_string(DB, DB_Str),
     atom_string(Type_Atom, Type).
+resolve_absolute_graph_descriptor([Organization, DB, "_meta"], Graph) :-
+    !,
+    Graph = repo_graph{ organization_name: Organization_Str,
+                        database_name : DB_Str,
+                        type : instance},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str).
+resolve_absolute_graph_descriptor([Organization, DB, Type], Graph) :-
+    member(Type, ["instance", "schema"]),
+    !,
+    Graph = branch_graph{ organization_name: Organization_Str,
+                          database_name : DB_Str,
+                          repository_name : "local",
+                          branch_name : "main",
+                          type : Type_Atom},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str),
+    atom_string(Type_Atom, Type).
+resolve_absolute_graph_descriptor([Organization, DB, Repo], Graph) :-
+    !,
+    Graph = branch_graph{ organization_name: Organization_Str,
+                          database_name : DB_Str,
+                          repository_name : Repo,
+                          branch_name : "main",
+                          type : instance},
+    coerce_string(Organization, Organization_Str),
+    coerce_string(DB, DB_Str).
 resolve_absolute_graph_descriptor(["_system", Type], Graph) :-
     Graph = system_graph{ type : Type_Atom },
     atom_string(Type_Atom, Type).
+resolve_absolute_graph_descriptor(["_system"], Graph) :-
+    Graph = system_graph{ type : instance }.
+
+graph_descriptor_to_collection_descriptor(Graph_Descriptor, Descriptor),
+system_graph{} :< Graph_Descriptor
+=> Descriptor = system_descriptor{}.
+graph_descriptor_to_collection_descriptor(Graph_Descriptor, Descriptor),
+repo_graph{database_name:Name,
+           organization_name:Org} :< Graph_Descriptor
+=> Descriptor = database_descriptor{
+                    database_name:Name,
+                    organization_name:Org}.
+graph_descriptor_to_collection_descriptor(Graph_Descriptor, Descriptor),
+commit_graph{
+    database_name:Name,
+    organization_name:Org,
+    repository_name:Repo
+} :< Graph_Descriptor
+=> Descriptor = repository_descriptor{
+                    database_descriptor:
+                    database_descriptor{
+                        database_name: Name,
+                        organization_name: Org
+                    },
+                    repository_name: Repo}.
+graph_descriptor_to_collection_descriptor(Graph_Descriptor, Descriptor),
+branch_graph{
+    branch_name:Branch,
+    database_name:Name,
+    organization_name:Org,
+    repository_name:Repo
+} :< Graph_Descriptor
+=> Descriptor = branch_descriptor{
+                    branch_name:Branch,
+                    repository_descriptor:
+                    repository_descriptor{
+                        database_descriptor:
+                        database_descriptor{
+                            database_name:Name,
+                            organization_name:Org
+                         },
+                        repository_name:Repo}}.
+graph_descriptor_to_collection_descriptor(Graph_Descriptor, Descriptor),
+single_commit_graph{
+    organization_name: Org,
+    database_name : Name,
+    repository_name : Repo,
+    commit_id: Commit
+} :< Graph_Descriptor
+=> Descriptor = commit_descriptor{
+                    commit_id: Commit,
+                    repository_descriptor:
+                    repository_descriptor{
+                        database_descriptor:
+                        database_descriptor{
+                            database_name:Name,
+                            organization_name:Org
+                         },
+                        repository_name:Repo}}.
 
 %%
 % resolve_filter(Filter_String,Filter) is det.
