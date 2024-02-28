@@ -13,7 +13,7 @@
               resolve_absolute_string_descriptor_and_default_graph/3,
               resolve_absolute_or_relative_string_descriptor/3,
               resolve_filter/2,
-	          descriptor_organization/2
+              descriptor_organization/2
           ]).
 
 /** <module> Resolve Query Resource
