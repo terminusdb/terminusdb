@@ -1281,7 +1281,7 @@ api_error_jsonld_(remote,error(remote_exists(Name),_), JSON) :-
                               'api:remote_name' : Name}
             }.
 api_error_jsonld_(remote,error(invalid_remote_name(Name),_), JSON) :-
-    format(string(Msg), "The remote '~q' cannot be named'instance' or 'schema'", [Name]),
+    format(string(Msg), "The remote '~q' cannot be named 'instance' or 'schema'", [Name]),
     JSON = _{'@type' : 'api:RemoteErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,
