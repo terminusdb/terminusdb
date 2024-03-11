@@ -5,7 +5,7 @@ use rug::Integer;
 use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use terminusdb_store_prolog::terminus_store::structure::*;
+use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {

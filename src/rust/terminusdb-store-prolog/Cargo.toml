@@ -20,3 +20,4 @@ rug = {version="1.16", default-features=false, features=["integer","rational"]}
 base64 = "0.13"
 
 terminusdb-grpc-labelstore-client = { git="https://github.com/terminusdb-labs/terminusdb-grpc-labelstore", rev="cb8cf29" }
+tdb-succinct = "0.1.2"

@@ -5,7 +5,7 @@ use std::io::Cursor;
 use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
-use terminus_store::structure::*;
+use tdb_succinct::*;
 
 pub fn make_entry_from_term<C: QueryableContextType>(
     context: &Context<C>,
