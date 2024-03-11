@@ -9,8 +9,8 @@ use juniper::{
 };
 use lazy_init::Lazy;
 use swipl::prelude::*;
+use tdb_succinct::TypedDictEntry;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
-use terminusdb_store_prolog::terminus_store::structure::TypedDictEntry;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};

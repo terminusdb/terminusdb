@@ -1,9 +1,9 @@
 use crate::terminus_store::store::sync::*;
-use crate::terminus_store::structure::*;
 use crate::terminus_store::Layer as TSLayer;
 use crate::value::*;
 use juniper::FromContext;
 use juniper::{self, graphql_interface, graphql_object, GraphQLEnum};
+use tdb_succinct::*;
 
 use super::schema::SystemInfo;
 use super::schema::TerminusContext;

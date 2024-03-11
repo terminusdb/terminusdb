@@ -33,3 +33,4 @@ chrono = { version="0.4", features=["serde"]}
 handlebars = "4.3"
 thiserror = "1.0"
 lru = "0.11"
+tdb-succinct = "0.1.2"
