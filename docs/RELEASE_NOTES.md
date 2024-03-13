@@ -1,3 +1,19 @@
+# TerminusDB Server v11.1.12 Release Notes
+## Enhancements
+- Initial support for building with SWI-Prolog 9.2
+- WOQL endpoint can now return streaming data (undocumented)
+- WOQL endpoint can now take a library of WOQL parametric queries for use in complex queries
+- Endpoints that take a graph resource can now take ordinary collection resources, optionally followed by '/schema' or '/instance' (the default)
+
+## Bug Fixes
+- Internal WOQL graph was being recreated every startup
+- Looking up a single document that doesn't exist returned an error
+- WOQL Dictionary templates were considered unbound when only partially filled in
+- Edge condition in delta rollup dictionary translation triggered rust panics in deletion
+
+## Other
+- Changed query optimization to opt-in and disabled by default
+
 # TerminusDB Server v11.1.11 Release Notes
 
 ## Enhancements
