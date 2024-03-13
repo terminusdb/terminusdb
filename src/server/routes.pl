@@ -759,7 +759,7 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             param_value_json_required(JSON, query, object, Query),
             param_value_json_optional(JSON, commit_info, object, commit_info{}, Commit_Info),
             param_value_json_optional(JSON, all_witnesses, boolean, false, All_Witnesses),
-            param_value_json_optional(JSON, optimize, boolean, true, Optimize),
+            param_value_json_optional(JSON, optimize, boolean, false, Optimize),
             param_value_json_optional(JSON, streaming, boolean, false, Streaming),
             param_value_json_optional(JSON, library, string, none, Library_String),
 
