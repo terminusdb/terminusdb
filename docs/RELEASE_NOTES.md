@@ -11,6 +11,9 @@
 - WOQL Dictionary templates were considered unbound when only partially filled in
 - Edge condition in delta rollup dictionary translation triggered rust panics in deletion
 
+## Other
+- Changed query optimization to opt-in and disabled by default
+
 # TerminusDB Server v11.1.11 Release Notes
 
 ## Enhancements
