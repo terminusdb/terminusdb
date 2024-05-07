@@ -17,7 +17,7 @@ function post (agent, query, params) {
     request.type('json').send(bodyString)
   } else {
     util.assertObject('query', query)
-    request.send({ commit_info: commitInfo, query })
+    request.send({ commit_info: commitInfo, query, optimize: true })
   }
 
   return {
