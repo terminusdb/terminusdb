@@ -5,7 +5,7 @@ DASHBOARD_GITHUB_REPO := terminusdb/terminusdb-dashboard
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
 
-PACK_INSTALL_OPTIONS := [interactive(false), git(true)]
+PACK_INSTALL_OPTIONS := [interactive(false)]
 
 ################################################################################
 
