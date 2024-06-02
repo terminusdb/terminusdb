@@ -437,17 +437,35 @@ impl GraphQLValue for TerminusTypeCollection {
 }
 
 pub struct TerminusTypeInfo {
-    class: GraphQLName<'static>,
-    allframes: Arc<AllFrames>,
+    pub class: GraphQLName<'static>,
+    pub allframes: Arc<AllFrames>,
+}
+
+impl TerminusTypeInfo {
+    pub fn new(class: &GraphQLName<'static>, allframes: &Arc<AllFrames>) -> Self {
+        Self {
+            class: class.clone(),
+            allframes: allframes.clone(),
+        }
+    }
+}
+
+pub enum CommitPhase {
+    Original,
+    Modified,
 }
 
 pub struct TerminusType {
+    commit_phase: CommitPhase,
     id: u64,
 }
 
 impl TerminusType {
     fn new(id: u64) -> Self {
-        Self { id }
+        Self {
+            id,
+            commit_phase: CommitPhase::Original,
+        }
     }
 
     fn register_field<'r, T: GraphQLType>(
