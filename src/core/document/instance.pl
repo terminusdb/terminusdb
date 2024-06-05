@@ -78,7 +78,6 @@ is_instance(Validation_Object, X, C) :-
     is_instance_class(Validation_Object, X, C).
 
 is_instance_class(Validation_Object, X, C) :-
-    nonvar(X),
     ground(C),
     !,
     database_instance(Validation_Object, Instance),
