@@ -17,10 +17,10 @@ on:
         default: "linux/amd64"
       runner:
         type: string
-        default: "self-hosted"
+        default: "ubuntu-latest"
       mocha_jobs:
         type: string
-        default: "4"
+        default: "1"
       mocha_parallel:
         type: boolean
         default: true
