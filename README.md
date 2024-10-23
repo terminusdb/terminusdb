@@ -18,7 +18,7 @@ The building blocks of the model are -
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
   - Query: You can query any state of the database at any commit.
 
-TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/document-insertion). TerminusDB is available as a standalone server, or you can use our headless content and knowledge management system [TerminusCMS](https://dashboard.terminusdb.com/).
+TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/document-insertion).
 
 ### TerminusDB Version 11
 
