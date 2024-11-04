@@ -77,7 +77,6 @@ EOF
 ## Community
 
 Come visit us on [Discord](https://discord.gg/yTJKAma)
-or our [community Subreddit](https://www.reddit.com/r/TerminusDB/). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
 
 ## Documentation
 
