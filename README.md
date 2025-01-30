@@ -46,6 +46,8 @@ OPENAI_KEY=YOUR_OPENAI_KEY_HERE
 BUFFER_AMOUNT=120000
 ```
 
+The OPENAI_KEY is not mandatory to use, but without it, the AI indexing will not work. Of course, all the document graph database functionality will still work as intended.
+
 2. `docker compose up`
 
 You should be able to view TerminusDB running by default at `localhost:6363`
