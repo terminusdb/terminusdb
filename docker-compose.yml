@@ -16,6 +16,10 @@ services:
       # OR PUT AN AUTHENTICATION GATEWAY IN FRONT OF TERMINUSDB
       - TERMINUSDB_INSECURE_USER_HEADER=X-User-Forward
       - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
+
+      # Admin-Password should be changed before exposing to the internet:
+      # (it's recommended to use the .env)
+      # -TERMINUSDB_ADMIN_PASS=root
     volumes:
       # For the use of a local dashboard
       #      - ./dashboard:/app/terminusdb/dashboard
@@ -48,7 +52,7 @@ services:
 
       # TerminusDB should be set up behind a TLS-terminating reverse
       # proxy with admin authentication provided by password.
-      # - TERMINUSDB_ADMIN_PASS=root  #  Change before exposing to the internet.
+      # - USER_KEY=root  #  Change before exposing to the internet.
 
       # The storage path of terminusdb databases is /app/terminusdb/storage in case
       # you want to persist storage somewhere else.
