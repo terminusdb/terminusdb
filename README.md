@@ -18,7 +18,7 @@ The building blocks of the model are -
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
   - Query: You can query any state of the database at any commit.
 
-TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/document-insertion). TerminusDB is available as a standalone server, or you can use our headless content and knowledge management system [TerminusCMS](https://dashboard.terminusdb.com/).
+TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/document-insertion).
 
 ### TerminusDB Version 11
 
@@ -45,6 +45,8 @@ OPENAI_KEY=YOUR_OPENAI_KEY_HERE
 # for instance
 BUFFER_AMOUNT=120000
 ```
+
+The OPENAI_KEY is not mandatory to use, but without it, the AI indexing will not work. Of course, all the document graph database functionality will still work as intended.
 
 2. `docker compose up`
 
@@ -74,35 +76,13 @@ terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 EOF
 ```
 
-You can attach this to a database on TerminusCMS in order to distribute it by setting your remote. First you will need to create
-a resource from [TerminusCMS](https://dashboard.terminusdb.com/). This is analogous to creating a repository on GitHub.
-
-Log into TerminusCMS, create a new data product, and make sure
-you have an access token to the team in which we created that data
-product. Then copy the URL to clone from the data product info page.
-
-If you make a data product called `example` in the team
-`Terminators`. We could then issue the following command using the
-TerminusDB CLI. You should get an API token from your profile page and replace `'XYZ'` with this token.
-
-```shell
-terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
-terminusdb fetch admin/example1 --token='XYZ'
-terminusdb push admin/example1 --token='XYZ'
-```
-
-Once completed, you'll have a remote copy of this database.
-
-More on the [CLI here](https://terminusdb.com/blog/distributed-database-with-collaboration-model/)
-
 ## Community
 
 Come visit us on [Discord](https://discord.gg/yTJKAma)
-or our [community Subreddit](https://www.reddit.com/r/TerminusDB/). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
 
 ## Documentation
 
-Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website.
+Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/get-started-with-terminusdb/) website.
 
 We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs).
 
