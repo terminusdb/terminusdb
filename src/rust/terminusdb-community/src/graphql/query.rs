@@ -693,8 +693,7 @@ fn object_type_filter<'a>(
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
                 let object_string = value_to_string(&object_value).to_string();
-                // Datetimes are reverse order: newer is bigger, but less!
-                let cmp = val.cmp(&object_string);
+                let cmp = object_string.cmp(&val);
                 ordering_matches_op(cmp, op)
             }))
         }
