@@ -2940,7 +2940,7 @@ test(move_class_property_which_doesnt_exist,
             )),
       cleanup(teardown_temp_store(State)),
       error(schema_operation_failed(
-                '{"@type":"MoveClassProperty", "class":"A", "from":"b", "to":"c"}',
+                '{"@type":"MoveClassProperty","class":"A","from":"b","to":"c"}',
                 json{'@context':_{'@base':"terminusdb:///data/",'@schema':"terminusdb:///schema#",'@type':'Context'},
                      'A':json{'@id':'A','@type':'Class',a:'xsd:string'},
                      'B':json{'@id':'B','@inherits':'A','@type':'Class'}}), _)
