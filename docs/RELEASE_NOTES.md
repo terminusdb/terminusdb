@@ -1,6 +1,16 @@
 # TerminusDB Server v11.1.13 Release Notes
+
+## Enhancements
+- Change to reflect new behaviour in swipl pack
+- Removed TerminusCMS from README.md
+- Update README.md
+- README copy of clarification note about OPENAI_KEY not being mandatory
+- Correction of the environment-variable in docker-compose.yml
+
 ## Bug Fixes
+- Issue/2135 double content length, fixes #2135
 - Sync with upstreams tus to fix to duplicated Content-Length header
+- Reverse datetime order
 
 # TerminusDB Server v11.1.12 Release Notes
 ## Enhancements
