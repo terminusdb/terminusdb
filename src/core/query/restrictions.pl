@@ -648,13 +648,15 @@ test(referral_for_service,
     open_descriptor(Desc, Db),
 
     Restriction_Name = "ReferralForService",
-    findall(Id-Reason,
-            ids_for_restriction(Db, Restriction_Name, Id, Reason),
+    findall(Id-Reason_Dict,
+            (   ids_for_restriction(Db, Restriction_Name, Id, Reason),
+                atom_json_dict(Reason, Reason_Dict, [])
+            ),
             All),
     All = [
-        3 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoDeathCert\", \"message\":\"Claim had no associated death certificate\"}},  {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}} ]",
-		4 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoPolicy\", \"message\":\"Claim had no associated policy\"}} ]",
-		5 - "[ {\"id\":\"ReferralForService\", \"message\":\"Claim requires servicing\", \"reason\": {\"id\":\"NoDeathCert\", \"message\":\"Claim had no associated death certificate\"}} ]"
+        3 - [ _{id:"ReferralForService", message:"Claim requires servicing", reason: _{id:"NoDeathCert", message:"Claim had no associated death certificate"}},  _{id:"ReferralForService", message:"Claim requires servicing", reason: _{id:"NoPolicy", message:"Claim had no associated policy"}} ],
+		4 - [ _{id:"ReferralForService", message:"Claim requires servicing", reason: _{id:"NoPolicy", message:"Claim had no associated policy"}} ],
+		5 - [ _{id:"ReferralForService", message:"Claim requires servicing", reason: _{id:"NoDeathCert", message:"Claim had no associated death certificate"}} ]
 	].
 
 test(referral_for_assessment,
@@ -669,11 +671,13 @@ test(referral_for_assessment,
     open_descriptor(Desc, Db),
 
     Restriction_Name = "ReferralForAssessment",
-    findall(Id-Reason,
-            ids_for_restriction(Db, Restriction_Name, Id, Reason),
+    findall(Id-Reason_Dict,
+            (   ids_for_restriction(Db, Restriction_Name, Id, Reason),
+                atom_json_dict(Reason, Reason_Dict, [])
+            ),
             All),
     All = [
-        6 - "[ {\"id\":\"ReferralForAssessment\", \"message\":\"Claim requires assessment\", \"reason\": {\"id\":\"CauseOfDeathAssessed\", \"message\":\"Cause is one of manslaughter, murder, accidental, suicide\"}} ]"
+        6 - [ _{id:"ReferralForAssessment", message:"Claim requires assessment", reason: _{id:"CauseOfDeathAssessed", message:"Cause is one of manslaughter, murder, accidental, suicide"}} ]
 	].
 
 test(cause_of_death,
@@ -688,11 +692,13 @@ test(cause_of_death,
     open_descriptor(Desc, Db),
 
     Restriction_Name = "CauseOfDeathAssessed",
-    findall(Id-Reason,
-            ids_for_restriction(Db, Restriction_Name, Id, Reason),
+    findall(Id-Reason_Dict,
+            (   ids_for_restriction(Db, Restriction_Name, Id, Reason),
+                atom_json_dict(Reason, Reason_Dict, [])
+            ),
             All),
     All = [
-        6 - "[ {\"id\":\"CauseOfDeathAssessed\", \"message\":\"Cause is one of manslaughter, murder, accidental, suicide\"} ]"
+        6 - [ _{id:"CauseOfDeathAssessed", message:"Cause is one of manslaughter, murder, accidental, suicide"} ]
 
     ].
 
