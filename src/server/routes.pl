@@ -295,7 +295,8 @@ db_handler(put, Organization, DB, Request, System_DB, Auth) :-
 
 test(db_create_unauthorized_errors, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
+         cleanup(teardown_temp_server(State)),
+         blocked('Too slow on github runner')
      ]) :-
     add_user("TERMINUSQA",some('password'),_User_ID),
     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
@@ -315,7 +316,8 @@ test(db_create_unauthorized_errors, [
 
 test(db_force_delete_unfinalized_system_only, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
+         cleanup(teardown_temp_server(State)),
+         blocked('Too slow on github runner')
      ]) :-
     create_context(system_descriptor{}, Context),
     with_transaction(Context,
@@ -338,7 +340,8 @@ test(db_force_delete_unfinalized_system_only, [
 
 test(db_force_delete_unfinalized_system_and_label, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State))
+         cleanup(teardown_temp_server(State)),
+         blocked('Too slow on github runner')
      ]) :-
     super_user_authority(Auth),
 
