@@ -87,7 +87,7 @@ impl PrefixContracter {
 
         items.push(Prefix::JSON);
 
-        items.sort_by(|p1, p2| p1.expansion().cmp(p2.expansion()));
+        items.sort_by(|p1, p2| (p1.expansion(), p2).cmp(&(p2.expansion(), p1)));
         items.dedup();
         items.reverse();
 
