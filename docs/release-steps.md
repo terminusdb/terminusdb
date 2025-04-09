@@ -1,6 +1,6 @@
 # Release Steps
 
-This document describes the steps we go through we making a new release.
+This document describes the steps we go through when we make a new release.
 
 <!-- [[[cog
 import cog
@@ -81,3 +81,5 @@ The current repository version is: <!--
    1. Wait for CI to pass.
    2. Approve.
    3. Merge.
+
+The versions in this file are generated automatically after updating the version information above.
