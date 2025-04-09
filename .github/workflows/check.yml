@@ -17,7 +17,7 @@ on:
         default: "linux/amd64"
       runner:
         type: string
-        default: "ubuntu-latest"
+        default: "self-hosted"
       mocha_jobs:
         type: string
         default: "4"
