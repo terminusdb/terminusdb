@@ -20,7 +20,7 @@ The building blocks of the model are -
 
 TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.org/docs/document-insertion).
 
-Note that documentation is now maintained at [https://terminusdb.org/docs/](https://terminusdb.org/docs/) and no longer at terminusdb.com that currently has an issue.
+Note that documentation is now maintained at [https://terminusdb.org/docs/](https://terminusdb.org/docs/) and is no longer available at terminusdb.com, which is currently experiencing issues.
 
 ### TerminusDB Version 11
 
