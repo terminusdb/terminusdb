@@ -9,7 +9,7 @@
 
 ## TerminusDB is a distributed database with a collaboration model.
 
-It is designed to be like git, but for data. If you are reading this, **give this repo a star**.
+It is designed to be like git, but for data. If you find this project useful, please consider **starring the repo**.
 
 The building blocks of the model are -
 
