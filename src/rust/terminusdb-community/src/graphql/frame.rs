@@ -35,7 +35,7 @@ impl<'a> GraphQLName<'a> {
 
 impl<'a> PartialOrd<str> for GraphQLName<'a> {
     fn partial_cmp(&self, other: &str) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.into())
+        self.0.partial_cmp(&<&str as Into<std::borrow::Cow<'_, str>>>::into(other))
     }
 }
 
