@@ -420,7 +420,7 @@ describe('GraphQL', function () {
     it('graphql filter dateTime', async function () {
       const DATETIME_QUERY = gql`
  query dateTimeQuery {
-    DateAndTime(filter: {datetime: {ge: "2021-03-05T23:34:43.0003Z" }},
+    DateAndTime(filter: {datetime: {le: "2021-03-05T23:34:43.0003Z" }},
                 orderBy: {datetime: ASC}) {
         datetime
     }

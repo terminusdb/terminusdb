@@ -226,7 +226,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         object: u64,
         compress: bool,
         unfold: bool,
-    ) -> Result<Value, StackEntry<L>> {
+    ) -> Result<Value, StackEntry<'a, L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         } else if Some(object) == self.rdf.nil() {
