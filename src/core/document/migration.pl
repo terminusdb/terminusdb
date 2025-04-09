@@ -2938,12 +2938,7 @@ test(move_class_property_which_doesnt_exist,
              test_document_label_descriptor(database,Descriptor),
              write_schema(before4,Descriptor)
             )),
-      cleanup(teardown_temp_store(State)),
-      error(schema_operation_failed(
-                '{"@type":"MoveClassProperty", "class":"A", "from":"b", "to":"c"}',
-                json{'@context':_{'@base':"terminusdb:///data/",'@schema':"terminusdb:///schema#",'@type':'Context'},
-                     'A':json{'@id':'A','@type':'Class',a:'xsd:string'},
-                     'B':json{'@id':'B','@inherits':'A','@type':'Class'}}), _)
+      cleanup(teardown_temp_store(State))
      ]) :-
 
     Term_Ops = [
@@ -2951,11 +2946,23 @@ test(move_class_property_which_doesnt_exist,
     ],
     migration_list_to_ast_list(Ops,Term_Ops),
 
-    perform_instance_migration(Descriptor, commit_info{ author: "me",
-                                                        message: "Fancy" },
-                               Ops,
-                               _,
-                               []).
+    catch(
+        (   perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                                message: "Fancy" },
+                                       Ops,
+                                       _,
+                                       []),
+            fail
+        ),
+        error(Error, _Ctx),
+        (
+            Error = schema_operation_failed(MoveClassProperty, json{'@context':_{'@base':"terminusdb:///data/",'@schema':"terminusdb:///schema#",'@type':'Context'},
+                     'A':json{'@id':'A','@type':'Class',a:'xsd:string'},
+                     'B':json{'@id':'B','@inherits':'A','@type':'Class'}}),
+            atom_json_dict(MoveClassProperty, Dict, [as(json)]),
+            Dict = _{'@type':"MoveClassProperty", class:"A", from:"b", to:"c"}
+        )
+    ).
 
 test(change_key,
      [setup((setup_temp_store(State),
