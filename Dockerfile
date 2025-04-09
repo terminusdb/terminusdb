@@ -3,7 +3,7 @@
 ARG DIST=community
 
 # Install the SWI-Prolog pack dependencies.
-FROM terminusdb/swipl:v9.0.3-bookworm AS pack_installer
+FROM swipl:9.2.9 AS pack_installer
 RUN set -eux; \
     BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
     apt-get update; \
@@ -14,7 +14,7 @@ COPY distribution/Makefile.deps Makefile
 RUN make
 
 # Install Rust. Prepare to build the Rust code.
-FROM terminusdb/swipl:v9.0.3-bookworm AS rust_builder_base
+FROM swipl:9.2.9 AS rust_builder_base
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
     BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
@@ -43,7 +43,7 @@ RUN make DIST=enterprise
 FROM rust_builder_${DIST} AS rust_builder
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
-FROM terminusdb/swipl:v9.0.3-bookworm AS base
+FROM swipl:9.2.9 AS base
 RUN set -eux; \
     RUNTIME_DEPS="libjwt0 make openssl binutils"; \
     apt-get update; \
@@ -55,7 +55,8 @@ ARG TERMINUSDB_GIT_HASH=null
 ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
-COPY --from=pack_installer /root/.local/share/swi-prolog/pack/ /usr/share/swi-prolog/pack
+COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
+COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
 COPY --from=pack_installer /app/pack/dashboard /app/terminusdb/dashboard
 WORKDIR /app/terminusdb
 COPY distribution/init_docker.sh distribution/
