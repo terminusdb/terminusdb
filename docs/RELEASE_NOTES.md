@@ -1,4 +1,4 @@
-# TerminusDB Server v11.1.13 Release Notes
+# TerminusDB Server v11.1.14 Release Notes
 
 ## Bug fixes
 - Library updates and fixing build issues, minor release
