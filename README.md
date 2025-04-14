@@ -11,7 +11,7 @@
 
 It is designed to be like git, but for data. If you find this project useful, please consider **starring the repo**.
 
-The building blocks of the model are -
+The building blocks of the model are:
 
   - Revision Control: commits for every update
   - Diff: differences between commits can be interpreted as patches between states
