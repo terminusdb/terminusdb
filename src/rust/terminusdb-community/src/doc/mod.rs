@@ -915,6 +915,7 @@ fn print_documents_of_types<
                 .try_or_die(doc_context.get_id_document(t.subject, compress, unfold))?
                 .expect("expected document lookup by type to succeed as ids were prefetched");
             print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
+            context.handle_signals()?;
         }
     }
 
@@ -1001,6 +1002,7 @@ fn par_print_documents_of_types<C: QueryableContextType, L: Layer + Clone + 'sta
                 value: map,
             });
         }
+        context.handle_signals()?;
     }
 
     assert!(result.is_empty());
@@ -1042,6 +1044,7 @@ fn print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static>(
             }
             print_document(context, &mut stream, doc, as_list, minimize, &mut started)?;
         }
+        context.handle_signals()?;
     }
 
     Ok(())
@@ -1124,6 +1127,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static
                 value: map,
             });
         }
+        context.handle_signals()?;
     }
 
     assert!(result.is_empty());
