@@ -10,7 +10,7 @@ info:
   version: 10.0.3
 externalDocs:
   description: Find out more about TerminusDB
-  url: https://terminusdb.com/docs/
+  url: https://terminusdb.org
 servers:
 - url: http://localhost:6363/api
 security:
@@ -20,7 +20,7 @@ tags:
   description: Everything about TerminusDB
   externalDocs:
     description: Find out more
-    url: https://terminusdb.com
+    url: https://terminusdb.org
 paths:
   /:
     get:
