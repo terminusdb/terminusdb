@@ -481,7 +481,7 @@ json_type_to_woql_ast('AddedTriple',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Object,WQC,[object
                                        |Path]),
     WOQL = addition(WQA,WQB,WQC).
-json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
+json_type_to_woql_ast('DeletedTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object,
@@ -500,7 +500,7 @@ json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
                                 [graph|Path],
                                 Graph), _)),
     WOQL = removal(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('RemovedTriple',JSON,WOQL,Path) :-
+json_type_to_woql_ast('DeletedTriple',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object
@@ -550,7 +550,7 @@ json_type_to_woql_ast('AddedQuad',JSON,WOQL,Path) :-
                                 [graph|Path],
                                 Graph), _)),
     WOQL = addition(WQA,WQB,WQC,Graph_String).
-json_type_to_woql_ast('RemovedQuad',JSON,WOQL,Path) :-
+json_type_to_woql_ast('DeletedQuad',JSON,WOQL,Path) :-
     _{subject : Subject,
       predicate : Predicate,
       object : Object,
