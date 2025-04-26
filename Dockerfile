@@ -5,7 +5,7 @@ ARG DIST=community
 # Install the SWI-Prolog pack dependencies.
 FROM terminusdb/swipl:v9.0.3-bookworm AS pack_installer
 RUN set -eux; \
-    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config"; \
+    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
@@ -45,7 +45,7 @@ FROM rust_builder_${DIST} AS rust_builder
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM terminusdb/swipl:v9.0.3-bookworm AS base
 RUN set -eux; \
-    RUNTIME_DEPS="libjwt0 make openssl binutils"; \
+    RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \
     apt-get update; \
     apt-get upgrade -y; \
     apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
