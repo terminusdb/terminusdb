@@ -39,6 +39,14 @@ jobs:
       - name: Install tus
         run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
 
+      - name: Install Protobuf Compiler (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install Protobuf Compiler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
       - run: make
 
       - run: make test
