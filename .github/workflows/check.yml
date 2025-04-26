@@ -149,6 +149,10 @@ jobs:
         run: |
           npm install-ci-test
 
+      - name: Clean up detached container
+        run: |
+          docker stop terminusdb
+          docker rm -f terminusdb
 
   # integration_tests_non_parallel:
   #   name: Integration tests (non-parallel)
