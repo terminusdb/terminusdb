@@ -126,7 +126,7 @@ jobs:
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run --platform ${{ inputs.image_platform }} \
             --volume "${PWD}/tests:/app/terminusdb/tests" \
-            --name=terminusdb \
+            --name=terminusdb-${{ github.run_id }} \
             --detach \
             --net=host \
             terminusdb/terminusdb-server:local
@@ -143,7 +143,7 @@ jobs:
       - name: Run tests
         working-directory: tests
         env:
-          TERMINUSDB_DOCKER_CONTAINER: terminusdb
+          TERMINUSDB_DOCKER_CONTAINER: terminusdb-${{ github.run_id }}
           MOCHA_JOBS: ${{ inputs.mocha_jobs }}
           MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
         run: |
@@ -151,8 +151,8 @@ jobs:
 
       - name: Clean up detached container
         run: |
-          docker stop terminusdb
-          docker rm -f terminusdb
+          docker stop terminusdb-${{ github.run_id }}
+          docker rm -f terminusdb-${{ github.run_id }}
 
   # integration_tests_non_parallel:
   #   name: Integration tests (non-parallel)
