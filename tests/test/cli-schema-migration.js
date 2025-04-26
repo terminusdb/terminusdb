@@ -112,9 +112,9 @@ describe('cli-schema-migration', function () {
       },
     ]
     const rMigration = await execEnv(`./terminusdb.sh migration ${dbSpec} --operations='${JSON.stringify(operations)}'`)
-    const rMigrationResult = JSON.parse(rMigration.stdout); 
-    expect(rMigrationResult.instance_operations).to.equal(2); 
-    expect(rMigrationResult.schema_operations).to.equal(2);
+    const rMigrationResult = JSON.parse(rMigration.stdout)
+    expect(rMigrationResult.instance_operations).to.equal(2)
+    expect(rMigrationResult.schema_operations).to.equal(2)
 
     const rMain = await execEnv(`./terminusdb.sh doc get ${dbSpec} --as-list`)
     const docsMain = JSON.parse(rMain.stdout)
@@ -125,9 +125,9 @@ describe('cli-schema-migration', function () {
     ])
 
     const rBranchMigration = await execEnv(`./terminusdb.sh migration ${dbSpec}/local/branch/foo --target ${dbSpec}`)
-    const rBranchMigrationResult = JSON.parse(rBranchMigration.stdout); 
-    expect(rBranchMigrationResult.instance_operations).to.equal(3); 
-    expect(rBranchMigrationResult.schema_operations).to.equal(2);
+    const rBranchMigrationResult = JSON.parse(rBranchMigration.stdout)
+    expect(rBranchMigrationResult.instance_operations).to.equal(3)
+    expect(rBranchMigrationResult.schema_operations).to.equal(2)
 
     const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}/local/branch/foo --as-list`)
     const docs = JSON.parse(r.stdout)
@@ -180,9 +180,9 @@ describe('cli-schema-migration', function () {
       },
     ]
     const rMigration = await execEnv(`./terminusdb.sh migration ${dbSpec} --operations='${JSON.stringify(operations)}'`)
-    const rMigrationResult = JSON.parse(rMigration.stdout); 
-    expect(rMigrationResult.instance_operations).to.equal(2); 
-    expect(rMigrationResult.schema_operations).to.equal(1);
+    const rMigrationResult = JSON.parse(rMigration.stdout)
+    expect(rMigrationResult.instance_operations).to.equal(2)
+    expect(rMigrationResult.schema_operations).to.equal(1)
 
     const rMain = await execEnv(`./terminusdb.sh doc get ${dbSpec} --as-list`)
     const docsMain = JSON.parse(rMain.stdout)
