@@ -35,7 +35,7 @@ impl<'a> GraphQLName<'a> {
 
 impl<'a> PartialOrd<str> for GraphQLName<'a> {
     fn partial_cmp(&self, other: &str) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.into())
+      self.0.partial_cmp(&<&str as Into<std::borrow::Cow<'_, str>>>::into(other))
     }
 }
 
@@ -608,7 +608,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName> {
+    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&GraphQLName> {
         let range = self.range();
         match range {
             BaseOrDerived::Base(_) => None,
@@ -616,7 +616,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName> {
+    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&GraphQLName> {
         let range = self.range();
         match range {
             BaseOrDerived::Base(_) => None,
@@ -853,7 +853,7 @@ impl ClassDefinition {
         &'a self,
         _prefixes: &Prefixes,
         property: &GraphQLName<'a>,
-    ) -> &IriName {
+    ) -> &'a IriName {
         // is this really fully qualified, I don't see how????
         self.graphql_to_iri
             .get_by_left(property)
@@ -1158,11 +1158,11 @@ impl AllFrames {
     pub fn graphql_to_short_name_opt<'a>(
         &'a self,
         class_name: &GraphQLName<'a>,
-    ) -> Option<&ShortName> {
+    ) -> Option<&'a ShortName> {
         self.class_renaming.get_by_left(class_name)
     }
 
-    pub fn graphql_to_short_name<'a>(&'a self, class_name: &GraphQLName<'a>) -> &ShortName {
+    pub fn graphql_to_short_name<'a>(&'a self, class_name: &GraphQLName<'a>) -> &'a ShortName {
         self.graphql_to_short_name_opt(class_name)
             .unwrap_or_else(|| panic!("This class name {class_name} *should* exist"))
     }
@@ -1176,7 +1176,7 @@ impl AllFrames {
         &'a self,
         class_name: &GraphQLName<'a>,
         property_name: &GraphQLName<'a>,
-    ) -> Option<&IriName> {
+    ) -> Option<&'a IriName> {
         let class_record = self.frames.get(class_name)?;
         let class_definition = class_record.as_class_definition();
         Some(class_definition.graphql_to_iri_name(&self.context, property_name))
