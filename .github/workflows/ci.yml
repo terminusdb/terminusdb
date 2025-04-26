@@ -62,7 +62,11 @@ jobs:
         with:
           filters: |
             change_other_than_docs_alone:
-              - '!(**.md|docs/**|LICENSE)'
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE'            
+#origin filter              - '!(**.md|docs/**|LICENSE)'
 
   versions:
     name: Versions
