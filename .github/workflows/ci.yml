@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 11.1.13
-  CURRENT_REPO_VERSION: 11.1.14
+  LAST_RELEASED_VERSION: 11.1.14
+  CURRENT_REPO_VERSION: 11.1.15
 
 jobs:
   openapi_lint:
@@ -62,7 +62,11 @@ jobs:
         with:
           filters: |
             change_other_than_docs_alone:
-              - '!(**.md|docs/**|LICENSE)'
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE'            
+#origin filter              - '!(**.md|docs/**|LICENSE)'
 
   versions:
     name: Versions

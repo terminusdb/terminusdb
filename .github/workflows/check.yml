@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Download Docker image
         uses: actions/download-artifact@v4
@@ -45,7 +45,7 @@ jobs:
 
       - name: Set up QEMU
         if: ${{ inputs.image_platform == 'linux/arm64' }}
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: 'arm64'
 
@@ -108,7 +108,7 @@ jobs:
           ref: ${{ inputs.test_ref }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Download Docker image
         uses: actions/download-artifact@v4
@@ -117,10 +117,14 @@ jobs:
 
       - name: Set up QEMU
         if: ${{ inputs.image_platform == 'linux/arm64' }}
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: 'arm64'
 
+      - name: Remove old TerminusDB container if exists
+        run: |
+          docker rm -f terminusdb || true
+        
       - name: Run server
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
@@ -323,7 +327,7 @@ jobs:
 
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - uses: actions/checkout@v3
         with:
@@ -332,7 +336,7 @@ jobs:
 
       - name: Set up QEMU
         if: ${{ inputs.image_platform == 'linux/arm64' }}
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: 'arm64'
 
