@@ -123,7 +123,7 @@ jobs:
 
       - name: Remove old TerminusDB container if exists
         run: |
-          docker rm -f terminusdb || true
+          docker rm -f terminusdb-${{ github.run_id }} || true
         
       - name: Run server
         run: |
