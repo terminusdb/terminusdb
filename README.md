@@ -9,22 +9,24 @@
 
 ## TerminusDB is a distributed database with a collaboration model.
 
-It is designed to be like git, but for data. If you are reading this, **give this repo a star**.
+It is designed to be like git, but for data. If you find this project useful, please consider **starring the repo**.
 
-The building blocks of the model are -
+The building blocks of the model are:
 
   - Revision Control: commits for every update
   - Diff: differences between commits can be interpreted as patches between states
   - Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
   - Query: You can query any state of the database at any commit.
 
-TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.com/docs/document-insertion). TerminusDB is available as a standalone server, or you can use our headless content and knowledge management system [TerminusCMS](https://dashboard.terminusdb.com/).
+TerminusDB allows you to link JSON documents in a knowledge graph through a [document API](https://terminusdb.org/docs/document-insertion).
+
+Note that documentation is now maintained at [https://terminusdb.org/docs/](https://terminusdb.org/docs/) and is no longer available at terminusdb.com, which is currently experiencing issues.
 
 ### TerminusDB Version 11
 
 [TerminusDB 11](https://github.com/terminusdb/terminusdb/releases/tag/v11.0.0) features a new Rustified storage backend that reduces storage overhead and latency, improves search performance, and simplifies interchange. TerminusDB 11 also comes with some exciting features to make building easier and faster -
 
-- [GraphQL](https://terminusdb.com/docs/graphql-basics) - Use GraphQL as a proper graph query language with deep link discover and path queries
+- [GraphQL](https://terminusdb.org/docs/graphql-basics) - Use GraphQL as a proper graph query language with deep link discover and path queries
 - Added `@unfoldable` document flag to frames - Making data curation easier by unfolding subdocuments within a frame to add all relevant data in one place
 - Add `@metadata` to frames - Include additional metadata to document frames including data formatted as Markdown.
 
@@ -46,13 +48,15 @@ OPENAI_KEY=YOUR_OPENAI_KEY_HERE
 BUFFER_AMOUNT=120000
 ```
 
+The OPENAI_KEY is not mandatory to use, but without it, the AI indexing will not work. Of course, all the document graph database functionality will still work as intended.
+
 2. `docker compose up`
 
 You should be able to view TerminusDB running by default at `localhost:6363`
 
 > If you're installing TerminusDB on Windows with Docker, our friends at DFRNT wrote this [comprehensive guide](https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/).
 
-You can also install TerminusDB from the [Source Code](https://terminusdb.com/docs/install-terminusdb-from-source-code).
+You can also install TerminusDB from the [Source Code](https://terminusdb.org/docs/install-terminusdb-from-source-code).
 
 
 ## TerminusDB CLI
@@ -74,43 +78,21 @@ terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 EOF
 ```
 
-You can attach this to a database on TerminusCMS in order to distribute it by setting your remote. First you will need to create
-a resource from [TerminusCMS](https://dashboard.terminusdb.com/). This is analogous to creating a repository on GitHub.
-
-Log into TerminusCMS, create a new data product, and make sure
-you have an access token to the team in which we created that data
-product. Then copy the URL to clone from the data product info page.
-
-If you make a data product called `example` in the team
-`Terminators`. We could then issue the following command using the
-TerminusDB CLI. You should get an API token from your profile page and replace `'XYZ'` with this token.
-
-```shell
-terminusdb remote add admin/example1 origin 'https://cloud-dev.terminusdb.com/Terminators/example' --token='XYZ'
-terminusdb fetch admin/example1 --token='XYZ'
-terminusdb push admin/example1 --token='XYZ'
-```
-
-Once completed, you'll have a remote copy of this database.
-
-More on the [CLI here](https://terminusdb.com/blog/distributed-database-with-collaboration-model/)
-
 ## Community
 
 Come visit us on [Discord](https://discord.gg/yTJKAma)
-or our [community Subreddit](https://www.reddit.com/r/TerminusDB/). On Twitter, we're [@TerminusDB](https://twitter.com/TerminusDB).
 
 ## Documentation
 
-Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.com/docs/) website.
+Check out our documentation site for more information: [TerminusDB documentation](https://terminusdb.org/docs/get-started-with-terminusdb/) website.
 
 We are working hard to improve our docs - if you see an issue, please open an issue in the [documentation repo](https://github.com/terminusdb/terminusdb-docs).
 
-White paper on our [delta-encoding approach](https://terminusdb.com/blog/succinct-data-structures-for-modern-databases/) to data management.
+White paper on our [delta-encoding approach](https://terminusdb.org/blog/succinct-data-structures-for-modern-databases/) to data management.
 
 Check the [Python Client](https://pypi.org/project/terminusdb-client/) 🐍. Or the [JavaScript Client](https://github.com/terminusdb/terminusdb-client) 🌐.
 
-WOQL is a powerful query language that allows you to express complex patterns over arbitrary data structures concisely. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.com/blog/the-power-of-web-object-query-language/).
+WOQL is a powerful query language that allows you to express complex patterns over arbitrary data structures concisely. What makes it so expressive and easy to use is the [radical simplicity of the core underlying concepts](https://terminusdb.org/blog/the-power-of-web-object-query-language/).
 
 ## Changes in this Version
 

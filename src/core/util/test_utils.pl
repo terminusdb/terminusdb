@@ -483,7 +483,7 @@ spawn_server_1(Path, URL, PID, Options) :-
     % this very much depends on something being written on startup
     % we read 2 lines, because the first line will report start. the second line will be printed after load is done.
     % This is very fragile though.
-
+    sleep(0.5),
     read_line_until_start_line(Error),
 
     ignore(memberchk(error(Error), Options)),
