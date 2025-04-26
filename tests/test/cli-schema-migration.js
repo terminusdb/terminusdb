@@ -193,7 +193,10 @@ describe('cli-schema-migration', function () {
     ])
 
     const rBranchMigration = await execEnv(`./terminusdb.sh migration ${dbSpec}/local/branch/foo --target ${dbSpec}`)
-    expect(rBranchMigration.stdout).to.match(/{"instance_operations":3, "schema_operations":1}/)
+    const rBranchMigrationResult = JSON.parse(rBranchMigration.stdout)
+    expect(rBranchMigrationResult.instance_operations).to.equal(3)
+    expect(rBranchMigrationResult.schema_operations).to.equal(1)
+
     const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}/local/branch/foo --as-list`)
     const docs = JSON.parse(r.stdout)
     expect(docs).to.deep.equal([{ '@id': 'Int/1', '@type': 'Int', int: 23 },
