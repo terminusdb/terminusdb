@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  LAST_RELEASED_VERSION: 11.1.11
-  CURRENT_REPO_VERSION: 11.1.12
+  LAST_RELEASED_VERSION: 11.1.13
+  CURRENT_REPO_VERSION: 11.1.14
 
 jobs:
   openapi_lint:
@@ -138,7 +138,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Download Docker image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terminusdb-server-docker-image
 
@@ -181,12 +181,12 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Download Docker image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terminusdb-server-docker-image
 
       - name: Download Docker image arm64
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terminusdb-server-docker-image-arm64
 
@@ -282,7 +282,7 @@ jobs:
 
     steps:
       - name: Download Snap image
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terminusdb-snap
           path: download_snap/
