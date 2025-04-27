@@ -47,6 +47,10 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install protobuf
 
+      - name: Use compile gmp in on macOS
+        if: runner.os == 'macOS'
+        run: sed 's/gmp-mpfr-sys = {version = "~1.5", default-features = false, features=\["use-system-libs"\]}/gmp-mpfr-sys = {version = "~1.5", default-features = false, features=\[\]}/' ./src/rust/terminusdb-community/Cargo.toml
+
       - run: make
 
       - run: make test
