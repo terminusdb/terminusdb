@@ -285,11 +285,7 @@ db_handler(put, Organization, DB, Request, System_DB, Auth) :-
         )
     ).
 
-% FIXME: Integration tests disabled currently due to issue 
-% in test_utils.pl that yields server_has_no_output due to
-% timeouts or a string matching failure in the server, to
-% be fixed in upcoming releases
-
+% Integration tests
 :- begin_tests(db_endpoint).
 
 :- use_module(core(util/test_utils)).
@@ -300,8 +296,7 @@ db_handler(put, Organization, DB, Request, System_DB, Auth) :-
 
 test(db_create_unauthorized_errors, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
       ]) :-
      add_user("TERMINUSQA",some('password'),_User_ID),
      atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
@@ -321,8 +316,7 @@ test(db_create_unauthorized_errors, [
  
 test(db_force_delete_unfinalized_system_only, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ]) :-
     create_context(system_descriptor{}, Context),
     with_transaction(Context,
@@ -345,8 +339,7 @@ test(db_force_delete_unfinalized_system_only, [
 
 test(db_force_delete_unfinalized_system_and_label, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ]) :-
     super_user_authority(Auth),
 
@@ -840,9 +833,6 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
                   'api:status' : 'api:success'}, [width(0)])
         )).
 
-% FIXME: Integration tests disabled currently due to issue 
-% in test_utils.pl with server_has_no_output driver
-
 :- begin_tests(clone_endpoint).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -852,8 +842,7 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
 
 test(clone_local, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ])
 :-
     add_user("TERMINUSQA1",some('password1'),_User_ID1),
@@ -899,8 +888,7 @@ test(clone_remote, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-          blocked('Inactive due to test_utils.pl server_has_no_output issue')
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
     with_triple_store(
@@ -990,8 +978,7 @@ test(fetch_first_time, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
 
@@ -1059,8 +1046,7 @@ test(fetch_second_time_no_change, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
 
@@ -1140,8 +1126,7 @@ test(fetch_second_time_with_change, [
          cleanup(
              (
                  teardown_temp_unattached_server(State_1),
-                 teardown_temp_unattached_server(State_2))),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+                 teardown_temp_unattached_server(State_2)))
      ])
 :-
 
@@ -1269,9 +1254,6 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
             ;   Reply = Incomplete_Reply),
             cors_reply_json(Request, Reply, [status(200), width(0)]))).
 
-% FIXME: Integration tests disabled currently due to issue 
-% in test_utils.pl with server_has_no_output driver
-
 :- begin_tests(rebase_endpoint).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -1280,8 +1262,7 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
 
 test(rebase_divergent_history, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ])
 :-
     add_user("TERMINUSQA",some('password'),User_ID),
@@ -1384,8 +1365,7 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
 
 test(pack_stuff, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ]) :-
     add_user('_a_test_user_',some('password'),_User_ID),
     create_db_without_schema('_a_test_user_',foo),
@@ -1444,8 +1424,7 @@ test(pack_stuff, [
 
 test(pack_nothing, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ]) :-
     add_user('_a_test_user_',some('password'),_User_ID),
     create_db_without_schema('_a_test_user_','foo'),
@@ -2466,8 +2445,7 @@ optimize_handler(post, Path, Request, System_DB, Auth) :-
 
 test(optimize_system, [
          setup(setup_temp_server(State, Server)),
-         cleanup(teardown_temp_server(State)),
-         blocked('Inactive due to test_utils.pl server_has_no_output issue')
+         cleanup(teardown_temp_server(State))
      ]) :-
 
     create_db_without_schema("admin", "test"),
