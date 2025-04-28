@@ -7,7 +7,7 @@ on:
 
 jobs:
 
-  lint:
+  swipl-lint:
 
     runs-on: ubuntu-latest
 
@@ -17,6 +17,19 @@ jobs:
 
       - name: Install swi-prolog
         run: ./.github/install-swi-prolog.sh stable
+
+      - name: Checkout tus
+        uses: actions/checkout@v3
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Remove tus sources
+        run: rm -rf ./tus
 
       - name: Download swipl-lint
         run: make download-lint
