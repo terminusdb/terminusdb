@@ -1,5 +1,5 @@
 # Build and run tests every night on non-Docker systems.
-name: Native Build (ubuntu, macos)
+name: Native Build
 
 on:
   push:
@@ -58,6 +58,3 @@ jobs:
 
       - name: Unit tests
         run: make test
-
-      - name: Lint
-        run: make lint

@@ -1,0 +1,33 @@
+# Build and run tests every night on non-Docker systems.
+name: Lint
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  build-and-test:
+
+    strategy:
+      # Run all jobs even when some jobs fail.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            swipl_release: stable
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install swi-prolog
+        run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
+
+      - name: Download swipl-lint
+        run: make
+
+      - name: Lint
+        run: make lint
