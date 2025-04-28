@@ -3,7 +3,9 @@ name: Native Build (ubuntu, macos)
 
 on:
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
     #  schedule:
     #- cron:  '45 1 * * *'
