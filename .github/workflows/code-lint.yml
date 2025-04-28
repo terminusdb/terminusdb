@@ -7,27 +7,19 @@ on:
 
 jobs:
 
-  build-and-test:
+  lint:
 
-    strategy:
-      # Run all jobs even when some jobs fail.
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            swipl_release: stable
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Install swi-prolog
-        run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
+        run: ./.github/install-swi-prolog.sh stable
 
       - name: Download swipl-lint
-        run: make
+        run: make download-lint
 
       - name: Lint
         run: make lint
