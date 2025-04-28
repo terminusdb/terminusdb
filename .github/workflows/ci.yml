@@ -108,7 +108,7 @@ jobs:
   build:
     name: Build
     needs: versions
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/docker-build.yml
 
   arm64_docker:
     name: Trigger arm64 build
