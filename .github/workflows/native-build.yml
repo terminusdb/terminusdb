@@ -2,9 +2,11 @@
 name: Native Build (ubuntu, macos)
 
 on:
-  schedule:
-    - cron:  '45 1 * * *'
+  push:
+  pull_request:
   workflow_dispatch:
+    #  schedule:
+    #- cron:  '45 1 * * *'
 
 jobs:
 
@@ -25,11 +27,13 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
+      - name: Install swi-prolog 
+        run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
 
-      - name: Check out tus
+      - name: Checkout tus
         uses: actions/checkout@v3
         with:
           repository: terminusdb/tus
@@ -47,6 +51,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install protobuf
 
-      - run: make
+      - name: Build
+        run: make
 
-      - run: make test
+      - name: Unit tests
+        run: make test
+
+      - name: Lint
+        run: make lint
