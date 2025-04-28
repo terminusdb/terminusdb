@@ -8,7 +8,7 @@ on:
 jobs:
 
   swipl-lint:
-
+    name: SWI-Prolog Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -36,3 +36,15 @@ jobs:
 
       - name: Lint
         run: make lint
+
+  openapi_lint:
+    name: OpenAPI Lint
+    runs-on: ubuntu-latest
+      
+    steps:
+      - name: Checkout repository      
+        uses: actions/checkout@v3
+
+      - name: Lint
+        run: npx @redocly/cli lint docs/openapi.yaml
+      
