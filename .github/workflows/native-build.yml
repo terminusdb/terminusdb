@@ -61,6 +61,8 @@ jobs:
 
   inter-tests:
     name: "Integration Tests"
+    if: github.event_name == 'pull_request'
+    
     strategy:
       # Run all jobs even when some jobs fail.
       fail-fast: false
