@@ -114,12 +114,12 @@ jobs:
           sleep 5  # wait for server to start
 
       - name: Run tests
-        working-directory: tests
         env:
-          TERMINUSDB_DOCKER_CONTAINER: terminusdb
+#          TERMINUSDB_DOCKER_CONTAINER: terminusdb
           MOCHA_JOBS: "4"
           MOCHA_PARALLEL: true
         run: |
+            cd tests        
             npm install-ci-test
   
       - name: Stop TerminusDB
