@@ -21,8 +21,10 @@ endif
 
 ifeq "$(shell uname)" "Darwin"
   DYLIB_EXT := dylib
+  FEATURES := --no-default-features
 else
   DYLIB_EXT := so
+  FEATURES :=
 endif
 
 TARGET := $(COMMUNITY_SRC_DIR)/librust.$(DYLIB_EXT)
@@ -48,4 +50,4 @@ $(TARGET): $(CARGO_BUILD_TARGET)
 	cp $< $@
 
 $(CARGO_BUILD_TARGET): $(shell find $(COMMUNITY_SRC_DIR) $(BUILD_DIR) -type f \( -name '*.rs' -o -name 'Cargo.*' \))
-	cd $(BUILD_DIR) && cargo build --profile $(PROFILE)
+	cd $(BUILD_DIR) && cargo build $(FEATURES) --profile $(PROFILE)
