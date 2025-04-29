@@ -42,6 +42,4 @@ rug = { version = "1.17", default-features = false, features = [] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 rug = {version = "1.17", default-features = false, features=["integer","rational"]}
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
 gmp-mpfr-sys = { version = "~1.5", default-features = false, features = ["use-system-libs"], optional = true }
