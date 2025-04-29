@@ -30,13 +30,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install swi-prolog 
         run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
 
       - name: Checkout tus
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: terminusdb/tus
           path: tus
@@ -68,8 +68,8 @@ jobs:
         include:
           - os: ubuntu-latest
             swipl_release: stable
-#          - os: macos-latest
-#            swipl_release: homebrew
+          - os: macos-latest
+            swipl_release: homebrew
 #            - os: ubuntu-latest
 #            swipl_release: devel
 
@@ -77,13 +77,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install swi-prolog 
         run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
 
       - name: Checkout tus
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: terminusdb/tus
           path: tus

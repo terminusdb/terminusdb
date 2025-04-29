@@ -13,13 +13,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install swi-prolog
         run: ./.github/install-swi-prolog.sh stable
 
       - name: Checkout tus
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: terminusdb/tus
           path: tus
@@ -43,8 +43,22 @@ jobs:
       
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Lint
         run: npx @redocly/cli lint docs/openapi.yaml
-      
+
+  clippy:
+    name: Rust Clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt update && sudo apt install software-properties-common -y
+      - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox protobuf-compiler libprotobuf-dev
+      - uses: actions-rs/clippy-check@v1
+        continue-on-error: true
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --manifest-path=src/rust/Cargo.toml
+            
