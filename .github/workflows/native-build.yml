@@ -32,10 +32,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check for file changes
+        id: check_changes
+        run: |
+          git fetch --depth=2
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile)' || true)
+          if [ -n "$RELEVANT_CHANGED" ]; then
+            echo "Relevant files changed: $RELEVANT_CHANGED"
+            echo "::set-output name=relevant_changed::true"
+          else
+            echo "No relevant files changed"
+            echo "::set-output name=relevant_changed::false"
+          fi
+
       - name: Install swi-prolog 
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}      
         run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
 
       - name: Checkout tus
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}            
         uses: actions/checkout@v4
         with:
           repository: terminusdb/tus
@@ -43,20 +59,23 @@ jobs:
           ref: v0.0.5
 
       - name: Install tus
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                  
         run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
 
       - name: Install Protobuf Compiler (Linux)
-        if: runner.os == 'Linux'
+        if: ${{runner.os == 'Linux' &&  steps.check_changes.outputs.relevant_changed == 'true' }}            
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install Protobuf Compiler (macOS)
-        if: runner.os == 'macOS'
+        if: ${{ runner.os == 'macOS' && steps.check_changes.outputs.relevant_changed == 'true' }}            
         run: brew install protobuf
 
       - name: Build
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                  
         run: make
 
       - name: Unit tests
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                  
         run: make test
 
   inter-tests:
