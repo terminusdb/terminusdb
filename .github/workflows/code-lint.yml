@@ -4,6 +4,13 @@ name: Lint
 on:
   pull_request:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'docs/**'      
+      - 'tests/**'      
+      - 'distribution/**'            
+      - 'Makefile'            
+      - '.lint_config.pl'                  
 
 jobs:
 
