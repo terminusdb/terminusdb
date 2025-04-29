@@ -6,6 +6,8 @@ on:
     - cron:  '45 2 * * *'
   workflow_dispatch:
   workflow_call:
+  pull_request:
+    paths: [ ".github/workflows/arm.yml" ]
 
 jobs:
   arm64_docker:
