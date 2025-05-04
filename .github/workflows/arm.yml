@@ -6,6 +6,8 @@ on:
     - cron:  '45 2 * * *'
   workflow_dispatch:
   workflow_call:
+  pull_request:
+    paths: [ ".github/workflows/arm.yml" ]
 
 jobs:
   arm64_docker:
@@ -15,10 +17,12 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: latest
 
       - name: Build
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           tags: terminusdb/terminusdb-server:local

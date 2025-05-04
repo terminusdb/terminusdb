@@ -4,14 +4,22 @@
   width="30%"
   align="center"
 />
+---
 
-[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) [![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
+[![Native Build](https://github.com/terminusdb/terminusdb/actions/workflows/native-build.yml/badge.svg?branch=main)](https://github.com/terminusdb/terminusdb/actions/workflows/native-build.yml)
+[![Docker Build](https://github.com/terminusdb/terminusdb/actions/workflows/docker-build.yml/badge.svg?branch=main)](https://github.com/terminusdb/terminusdb/actions/workflows/docker-build.yml)
+[![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+<!--
+[![CI](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/ci.yml) 
+-->
 
 ## TerminusDB is a distributed database with a collaboration model.
 
 It is designed to be like git, but for data. If you find this project useful, please consider **starring the repo**.
 
-The building blocks of the model are -
+The building blocks of the model are:
 
   - Revision Control: commits for every update
   - Diff: differences between commits can be interpreted as patches between states

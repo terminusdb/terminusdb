@@ -20,11 +20,11 @@
   },
   "dependencies": {
     "@apollo/client": "^3.7.1",
-    "buffalo-bench": "^1.0.3",
+    "buffalo-bench": "^2.0.0",
     "chai": "^4.3.6",
     "cross-fetch": "^3.1.5",
     "fast-glob": "^3.2.11",
-    "mocha": "^10.1.0",
+    "mocha": "^10.8.2",
     "optionator": "^0.9.1",
     "stream-json": "^1.7.4",
     "superagent": "^7.1.1"

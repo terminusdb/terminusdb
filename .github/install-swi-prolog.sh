@@ -33,7 +33,7 @@ do_install() {
     homebrew)
       # Install swipl from Homebrew: https://www.swi-prolog.org/build/macos.html
       brew install swi-prolog
-      [ "$(which swipl)" = "/usr/local/bin/swipl" ] || die "swipl command not found"
+      [ "$(which swipl)" = "/opt/homebrew/bin/swipl" ] || die "swipl command not found"
       ;;
     *)
       die "Unexpected release: '$release'"

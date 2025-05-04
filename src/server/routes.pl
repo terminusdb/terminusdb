@@ -285,95 +285,92 @@ db_handler(put, Organization, DB, Request, System_DB, Auth) :-
         )
     ).
 
-% FIXME: Integration tests disabled currently due to issue 
-% in test_utils.pl with server_has_no_output driver
-% Likely due to some timeout
-%
-% :- begin_tests(db_endpoint).
-% 
-% :- use_module(core(util/test_utils)).
-% :- use_module(core(transaction)).
-% :- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% 
-% 
-% test(db_create_unauthorized_errors, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ]) :-
-%     add_user("TERMINUSQA",some('password'),_User_ID),
-%     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
-%     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
-%                            scm : "https://terminushub.com/schema"},
-%              comment : "A quality assurance test",
-%              label : "A label"
-%            },
-%     http_post(URI, json(Doc),
-%               Result, [json_object(dict),
-%                        authorization(basic("TERMINUSQA", "password")),
-%                        status_code(Status)]),
-% 
-%     Status = 403,
-%     _{'api:status' : "api:forbidden"} :< Result.
-% 
-% 
-% test(db_force_delete_unfinalized_system_only, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ]) :-
-%     create_context(system_descriptor{}, Context),
-%     with_transaction(Context,
-%                      insert_db_object(Context, "admin", "foo", "testdb", "test db", _),
-%                      _),
-%     database_exists("admin", "foo"),
-% 
-%     atomic_list_concat([Server, '/api/db/admin/foo'], URI),
-%     admin_pass(Key),
-%     http_get(URI,
-%              Delete_In,
-%              [method(delete),
-%               post(json(_{force:true})),
-%               json_object(dict),
-%               authorization(basic(admin, Key))]),
-% 
-%     _{'api:status' : "api:success"} :< Delete_In,
-% 
-%     \+ database_exists("admin", "foo").
-% 
-% test(db_force_delete_unfinalized_system_and_label, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ]) :-
-%     super_user_authority(Auth),
-% 
-%     organization_database_name("admin","foo",Label),
-%     triple_store(Store),
-% 
-%     create_db_unfinalized(system_descriptor{},
-%                           Auth, "admin", "foo",
-%                           "dblabel", "db comment", false, true,
-%                          _{'@base' : "http://foo/",
-%                           '@schema' : "http://foo/s#"},
-%                          _),
-%     database_exists("admin", "foo"),
-%     safe_open_named_graph(Store, Label, _),
-% 
-%     atomic_list_concat([Server, '/api/db/admin/foo'], URI),
-%     admin_pass(Key),
-%     http_get(URI,
-%              Delete_In,
-%              [method(delete),
-%               post(json(_{force:true})),
-%               json_object(dict),
-%               authorization(basic(admin, Key))]),
-% 
-%     _{'api:status' : "api:success"} :< Delete_In,
-% 
-%     \+ database_exists("admin", "foo"),
-%     \+ safe_open_named_graph(Store, Label, _).
-% 
-% :- end_tests(db_endpoint).
-% 
+% Integration tests
+:- begin_tests(db_endpoint).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+
+test(db_create_unauthorized_errors, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+      ]) :-
+     add_user("TERMINUSQA",some('password'),_User_ID),
+     atomic_list_concat([Server, '/api/db/admin/TEST_DB'], URI),
+     Doc = _{ prefixes : _{ doc : "https://terminushub.com/document",
+                            scm : "https://terminushub.com/schema"},
+              comment : "A quality assurance test",
+              label : "A label"
+            },
+     http_post(URI, json(Doc),
+               Result, [json_object(dict),
+                        authorization(basic("TERMINUSQA", "password")),
+                        status_code(Status)]),
+ 
+     Status = 403,
+     _{'api:status' : "api:forbidden"} :< Result.
+ 
+ 
+test(db_force_delete_unfinalized_system_only, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    create_context(system_descriptor{}, Context),
+    with_transaction(Context,
+                     insert_db_object(Context, "admin", "foo", "testdb", "test db", _),
+                     _),
+    database_exists("admin", "foo"),
+
+    atomic_list_concat([Server, '/api/db/admin/foo'], URI),
+    admin_pass(Key),
+    http_get(URI,
+             Delete_In,
+             [method(delete),
+              post(json(_{force:true})),
+              json_object(dict),
+              authorization(basic(admin, Key))]),
+
+    _{'api:status' : "api:success"} :< Delete_In,
+
+    \+ database_exists("admin", "foo").
+
+test(db_force_delete_unfinalized_system_and_label, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    super_user_authority(Auth),
+
+    organization_database_name("admin","foo",Label),
+    triple_store(Store),
+
+    create_db_unfinalized(system_descriptor{},
+                          Auth, "admin", "foo",
+                          "dblabel", "db comment", false, true,
+                         _{'@base' : "http://foo/",
+                          '@schema' : "http://foo/s#"},
+                         _),
+    database_exists("admin", "foo"),
+    safe_open_named_graph(Store, Label, _),
+
+    atomic_list_concat([Server, '/api/db/admin/foo'], URI),
+    admin_pass(Key),
+    http_get(URI,
+             Delete_In,
+             [method(delete),
+              post(json(_{force:true})),
+              json_object(dict),
+              authorization(basic(admin, Key))]),
+
+    _{'api:status' : "api:success"} :< Delete_In,
+
+    \+ database_exists("admin", "foo"),
+    \+ safe_open_named_graph(Store, Label, _).
+
+:- end_tests(db_endpoint).
+
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
@@ -836,116 +833,113 @@ clone_handler(post, Organization, DB, Request, System_DB, Auth) :-
                   'api:status' : 'api:success'}, [width(0)])
         )).
 
-% FIXME: Integration tests disabled currently due to issue 
-% in test_utils.pl with server_has_no_output driver
-%
-% :- begin_tests(clone_endpoint).
-% :- use_module(core(util/test_utils)).
-% :- use_module(core(transaction)).
-% :- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% :- use_module(library(base64)).
-% 
-% test(clone_local, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ])
-% :-
-%     add_user("TERMINUSQA1",some('password1'),_User_ID1),
-%     add_user("TERMINUSQA2",some('password2'),_User_ID2),
-%     create_db_without_schema("TERMINUSQA1", "foo"),
-%     resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
-%     create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
-%     with_transaction(Foo_Context,
-%                      ask(Foo_Context,
-%                          insert(a,b,c)),
-%                      _),
-% 
-%     atomic_list_concat([Server, '/api/clone/TERMINUSQA2/bar'], URL),
-%     atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
-%     base64("TERMINUSQA1:password1", Base64_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
-% 
-%     http_post(URL,
-%               json(_{comment: "hai hello",
-%                      label: "bar",
-%                      remote_url: Remote_URL}),
-% 
-%               JSON,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     _{
-%         'api:status' : "api:success"
-%     } :< JSON,
-% 
-%     resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
-%     once(ask(Bar_Descriptor,
-%              t(a,b,c))),
-% 
-%     true.
-% 
-% test(clone_remote, [
-%          setup(
-%              (   setup_temp_unattached_server(State_1,Store_1,Server_1),
-%                  setup_temp_unattached_server(State_2,Store_2,Server_2))),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_1),
-%                  teardown_temp_unattached_server(State_2)))
-%      ])
-% :-
-%     with_triple_store(
-%         Store_1,
-%         (   add_user("TERMINUSQA1",some('password1'),_User_ID1),
-%             create_public_db_without_schema("TERMINUSQA1", "foo"),
-%             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
-%             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
-%             with_transaction(Foo_Context,
-%                              ask(Foo_Context,
-%                                  insert(a,b,c)),
-%                              _)
-%         )
-%     ),
-% 
-%     with_triple_store(
-%         Store_2,
-%         (   add_user("TERMINUSQA2",some('password2'),_User_ID2)
-%         )
-%     ),
-% 
-%     atomic_list_concat([Server_2, '/api/clone/TERMINUSQA2/bar'], URL),
-%     atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
-%     base64("TERMINUSQA1:password1", Base64_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
-% 
-%     http_post(URL,
-%               json(_{comment: "hai hello",
-%                      label: "bar",
-%                      remote_url: Remote_URL}),
-% 
-%               JSON,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     _{
-%         'api:status' : "api:success"
-%     } :< JSON,
-% 
-%     with_triple_store(
-%         Store_2,
-%         (   resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
-%             once(ask(Bar_Descriptor,
-%                      t(a,b,c)))
-%         )
-%     ).
-% 
-% 
-% :- end_tests(clone_endpoint).
+:- begin_tests(clone_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+:- use_module(library(base64)).
+
+test(clone_local, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+    add_user("TERMINUSQA1",some('password1'),_User_ID1),
+    add_user("TERMINUSQA2",some('password2'),_User_ID2),
+    create_db_without_schema("TERMINUSQA1", "foo"),
+    resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+    create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+    with_transaction(Foo_Context,
+                     ask(Foo_Context,
+                         insert(a,b,c)),
+                     _),
+
+    atomic_list_concat([Server, '/api/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server, '/TERMINUSQA1/foo'], Remote_URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+
+    http_post(URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{
+        'api:status' : "api:success"
+    } :< JSON,
+
+    resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+    once(ask(Bar_Descriptor,
+             t(a,b,c))),
+
+    true.
+
+test(clone_remote, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+    with_triple_store(
+        Store_1,
+        (   add_user("TERMINUSQA1",some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (   add_user("TERMINUSQA2",some('password2'),_User_ID2)
+        )
+    ),
+
+    atomic_list_concat([Server_2, '/api/clone/TERMINUSQA2/bar'], URL),
+    atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+
+    http_post(URL,
+              json(_{comment: "hai hello",
+                     label: "bar",
+                     remote_url: Remote_URL}),
+
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{
+        'api:status' : "api:success"
+    } :< JSON,
+
+    with_triple_store(
+        Store_2,
+        (   resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            once(ask(Bar_Descriptor,
+                     t(a,b,c)))
+        )
+    ).
+
+
+:- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
@@ -971,259 +965,259 @@ fetch_handler(post,Path,Request, System_DB, Auth) :-
                   'api:head_has_changed' : Head_Has_Updated,
                   'api:head' : New_Head_Layer_Id}, [width(0)]))).
 
-% :- begin_tests(fetch_endpoint).
-% :- use_module(core(util/test_utils)).
-% :- use_module(core(transaction)).
-% :- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% 
-% test(fetch_first_time, [
-%          setup(
-%              (   setup_temp_unattached_server(State_1,Store_1,Server_1),
-%                  setup_temp_unattached_server(State_2,Store_2,Server_2))),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_1),
-%                  teardown_temp_unattached_server(State_2)))
-%      ])
-% :-
-% 
-%     with_triple_store(
-%         Store_1,
-%         (
-%             add_user("TERMINUSQA1",some('password1'),_User_ID1),
-%             create_public_db_without_schema("TERMINUSQA1", "foo"),
-%             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
-%             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
-%             with_transaction(Foo_Context,
-%                              ask(Foo_Context,
-%                                  insert(a,b,c)),
-%                              _),
-%             get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
-%             get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
-%             repository_head(Foo_Database_Desc,"local",Head)
-%         )
-%     ),
-% 
-%     with_triple_store(
-%         Store_2,
-%         (
-%             add_user("TERMINUSQA2",some('password2'),_User_ID2),
-%             create_public_db_without_schema("TERMINUSQA2", "bar"),
-%             resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
-%             get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
-%             get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
-%             create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
-%             atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
-%             with_transaction(
-%                 Bar_Database_Context,
-%                 insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
-%                 _)
-%         )
-%     ),
-%     atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
-%     base64("TERMINUSQA1:password1", Base64_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
-%     http_post(URL,
-%               json(_{}),
-%               JSON,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(200)]),
-% 
-%     _{ '@type' : "api:FetchRequest",
-%        'api:head_has_changed' : true,
-%        'api:head': Head,
-%        'api:status' : "api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_2,
-%         (   resolve_absolute_string_descriptor("TERMINUSQA2/bar/origin", Bar_Descriptor_Origin),
-%             once(ask(Bar_Descriptor_Origin,
-%                      t(a,b,c))),
-%             repository_head(Bar_Database_Desc, "origin", Head)
-%         )
-%     ).
-% 
-% test(fetch_second_time_no_change, [
-%          setup(
-%              (   setup_temp_unattached_server(State_1,Store_1,Server_1),
-%                  setup_temp_unattached_server(State_2,Store_2,Server_2))),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_1),
-%                  teardown_temp_unattached_server(State_2)))
-%      ])
-% :-
-% 
-%     with_triple_store(
-%         Store_1,
-%         (
-%             add_user("TERMINUSQA1",some('password1'),_User_ID1),
-%             create_public_db_without_schema("TERMINUSQA1", "foo"),
-%             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
-%             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
-%             with_transaction(Foo_Context,
-%                              ask(Foo_Context,
-%                                  insert(a,b,c)),
-%                              _),
-%             get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
-%             get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
-%             repository_head(Foo_Database_Desc,"local",Head)
-%         )
-%     ),
-% 
-%     with_triple_store(
-%         Store_2,
-%         (
-%             add_user("TERMINUSQA2",some('password2'),_User_ID2),
-%             create_public_db_without_schema("TERMINUSQA2", "bar"),
-%             resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
-%             get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
-%             get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
-%             create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
-%             atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
-%             with_transaction(
-%                 Bar_Database_Context,
-%                 insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
-%                 _)
-%         )
-%     ),
-%     atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
-%     base64("TERMINUSQA1:password1", Base64_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
-%     http_post(URL,
-%               json(_{}),
-%               JSON1,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(200)]),
-% 
-% 
-%     _{ '@type' : "api:FetchRequest",
-%        'api:head_has_changed' : true,
-%        'api:head': Head,
-%        'api:status' : "api:success"} :< JSON1,
-% 
-%     http_post(URL,
-%               json(_{}),
-%               JSON2,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(200)]),
-% 
-%     _{ '@type' : "api:FetchRequest",
-%        'api:head_has_changed' : false,
-%        'api:head': Head,
-%        'api:status' : "api:success"} :< JSON2,
-% 
-% 
-%     with_triple_store(
-%         Store_2,
-%         (
-%             repository_head(Bar_Database_Desc, "origin", Head)
-%         )
-%     ).
-% 
-% test(fetch_second_time_with_change, [
-%          setup(
-%              (   setup_temp_unattached_server(State_1,Store_1,Server_1),
-%                  setup_temp_unattached_server(State_2,Store_2,Server_2))),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_1),
-%                  teardown_temp_unattached_server(State_2)))
-%      ])
-% :-
-% 
-%     with_triple_store(
-%         Store_1,
-%         (
-%             add_user("TERMINUSQA1",some('password1'),_User_ID1),
-%             create_public_db_without_schema("TERMINUSQA1", "foo"),
-%             resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
-%             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
-%             with_transaction(Foo_Context,
-%                              ask(Foo_Context,
-%                                  insert(a,b,c)),
-%                              _),
-%             get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
-%             get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
-%             repository_head(Foo_Database_Desc,"local",Head)
-%         )
-%     ),
-% 
-%     with_triple_store(
-%         Store_2,
-%         (
-%             add_user("TERMINUSQA2",some('password2'),_User_ID2),
-%             create_public_db_without_schema("TERMINUSQA2", "bar"),
-%             resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
-%             get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
-%             get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
-%             create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
-%             atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
-%             with_transaction(
-%                 Bar_Database_Context,
-%                 insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
-%                 _)
-%         )
-%     ),
-%     atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
-%     base64("TERMINUSQA1:password1", Base64_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
-%     http_post(URL,
-%               json(_{}),
-%               JSON1,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(200)]),
-% 
-% 
-%     _{ '@type' : "api:FetchRequest",
-%        'api:head_has_changed' : true,
-%        'api:head': Head,
-%        'api:status' : "api:success"} :< JSON1,
-% 
-%     with_triple_store(
-%         Store_1,
-%         (
-%             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra1),
-%             with_transaction(Foo_Context_Extra1,
-%                              ask(Foo_Context_Extra1,
-%                                  insert(d,e,f)),
-%                              _),
-%             create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra2),
-%             with_transaction(Foo_Context_Extra2,
-%                              ask(Foo_Context_Extra2,
-%                                  insert(g,h,i)),
-%                              _),
-% 
-%             repository_head(Foo_Database_Desc,"local",New_Head)
-%         )),
-% 
-% 
-%     http_post(URL,
-%               json(_{}),
-%               JSON2,
-%               [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(200)]),
-% 
-%     _{ '@type' : "api:FetchRequest",
-%        'api:head_has_changed' : true,
-%        'api:head': New_Head,
-%        'api:status' : "api:success"} :< JSON2,
-% 
-% 
-%     with_triple_store(
-%         Store_2,
-%         (
-%             repository_head(Bar_Database_Desc, "origin", New_Head)
-%         )
-%     ).
-% 
-% :- end_tests(fetch_endpoint).
+:- begin_tests(fetch_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(fetch_first_time, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON,
+
+    with_triple_store(
+        Store_2,
+        (   resolve_absolute_string_descriptor("TERMINUSQA2/bar/origin", Bar_Descriptor_Origin),
+            once(ask(Bar_Descriptor_Origin,
+                     t(a,b,c))),
+            repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+test(fetch_second_time_no_change, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON1,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON1,
+
+    http_post(URL,
+              json(_{}),
+              JSON2,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : false,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON2,
+
+
+    with_triple_store(
+        Store_2,
+        (
+            repository_head(Bar_Database_Desc, "origin", Head)
+        )
+    ).
+
+test(fetch_second_time_with_change, [
+         setup(
+             (   setup_temp_unattached_server(State_1,Store_1,Server_1),
+                 setup_temp_unattached_server(State_2,Store_2,Server_2))),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_1),
+                 teardown_temp_unattached_server(State_2)))
+     ])
+:-
+
+    with_triple_store(
+        Store_1,
+        (
+            add_user("TERMINUSQA1",some('password1'),_User_ID1),
+            create_public_db_without_schema("TERMINUSQA1", "foo"),
+            resolve_absolute_string_descriptor("TERMINUSQA1/foo", Foo_Descriptor),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context),
+            with_transaction(Foo_Context,
+                             ask(Foo_Context,
+                                 insert(a,b,c)),
+                             _),
+            get_dict(repository_descriptor, Foo_Descriptor, Foo_Repository_Desc),
+            get_dict(database_descriptor, Foo_Repository_Desc, Foo_Database_Desc),
+            repository_head(Foo_Database_Desc,"local",Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_2,
+        (
+            add_user("TERMINUSQA2",some('password2'),_User_ID2),
+            create_public_db_without_schema("TERMINUSQA2", "bar"),
+            resolve_absolute_string_descriptor("TERMINUSQA2/bar", Bar_Descriptor),
+            get_dict(repository_descriptor, Bar_Descriptor, Bar_Repository_Desc),
+            get_dict(database_descriptor, Bar_Repository_Desc, Bar_Database_Desc),
+            create_context(Bar_Database_Desc, commit_info{author:"test",message:"test"}, Bar_Database_Context),
+            atomic_list_concat([Server_1, '/TERMINUSQA1/foo'], Remote_URL),
+            with_transaction(
+                Bar_Database_Context,
+                insert_remote_repository(Bar_Database_Context, "origin", Remote_URL, _),
+                _)
+        )
+    ),
+    atomic_list_concat([Server_2, '/api/fetch/TERMINUSQA2/bar/origin/_commits'], URL),
+    base64("TERMINUSQA1:password1", Base64_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Auth]),
+    http_post(URL,
+              json(_{}),
+              JSON1,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': Head,
+       'api:status' : "api:success"} :< JSON1,
+
+    with_triple_store(
+        Store_1,
+        (
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra1),
+            with_transaction(Foo_Context_Extra1,
+                             ask(Foo_Context_Extra1,
+                                 insert(d,e,f)),
+                             _),
+            create_context(Foo_Descriptor, commit_info{author:"test",message:"test"}, Foo_Context_Extra2),
+            with_transaction(Foo_Context_Extra2,
+                             ask(Foo_Context_Extra2,
+                                 insert(g,h,i)),
+                             _),
+
+            repository_head(Foo_Database_Desc,"local",New_Head)
+        )),
+
+
+    http_post(URL,
+              json(_{}),
+              JSON2,
+              [json_object(dict),authorization(basic('TERMINUSQA2','password2')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(200)]),
+
+    _{ '@type' : "api:FetchRequest",
+       'api:head_has_changed' : true,
+       'api:head': New_Head,
+       'api:status' : "api:success"} :< JSON2,
+
+
+    with_triple_store(
+        Store_2,
+        (
+            repository_head(Bar_Database_Desc, "origin", New_Head)
+        )
+    ).
+
+:- end_tests(fetch_endpoint).
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1260,81 +1254,78 @@ rebase_handler(post, Path, Request, System_DB, Auth) :-
             ;   Reply = Incomplete_Reply),
             cors_reply_json(Request, Reply, [status(200), width(0)]))).
 
-% FIXME: Integration tests disabled currently due to issue 
-% in test_utils.pl with server_has_no_output driver
-%
-% :- begin_tests(rebase_endpoint).
-% :- use_module(core(util/test_utils)).
-% :- use_module(core(transaction)).
-% :- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% 
-% test(rebase_divergent_history, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ])
-% :-
-%     add_user("TERMINUSQA",some('password'),User_ID),
-%     create_db_without_schema("TERMINUSQA", "foo"),
-% 
-%     Master_Path = "TERMINUSQA/foo",
-%     resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
-%     create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
-%     with_transaction(Master_Context1,
-%                      ask(Master_Context1,
-%                          insert(a,b,c)),
-%                     _),
-% 
-%     Second_Path = "TERMINUSQA/foo/local/branch/second",
-%     branch_create(system_descriptor{}, User_ID, Second_Path, branch(Master_Path), _),
-%     resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
-% 
-%     create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
-%     with_transaction(Second_Context1,
-%                      ask(Second_Context1,
-%                          (   insert(d,e,f),
-%                              delete(a,b,c))),
-%                      _),
-% 
-%     create_context(Second_Descriptor, commit_info{author:"test",message:"commit c"}, Second_Context2),
-%     with_transaction(Second_Context2,
-%                      ask(Second_Context2,
-%                          insert(g,h,i)),
-%                      _),
-% 
-%     % we are also doing a commit on the original branch, to create a divergent history
-%     create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
-%     with_transaction(Master_Context2,
-%                      ask(Master_Context2,
-%                          insert(j,k,l)),
-%                      _),
-%     atomic_list_concat([Server, '/api/rebase/TERMINUSQA/foo'], URI),
-%     http_post(URI,
-%               json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
-%                      author : "Gavsky"}),
-%               JSON,
-%               [json_object(dict),
-%                authorization(basic('TERMINUSQA','password')),
-%                status_code(_Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     _{  '@type' : "api:RebaseResponse",
-%         'api:forwarded_commits' : [_Thing, _Another_Thing ],
-%         'api:common_commit_id' : _Common_Something,
-%         'api:rebase_report' : _Reports,
-%         'api:status' : "api:success"
-%     } :< JSON,
-% 
-%     Repository_Descriptor = Master_Descriptor.repository_descriptor,
-%     branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
-%     commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_B, Commit_C, Commit_D]),
-% 
-%     commit_id_to_metadata(Repository_Descriptor, Commit_A, "test", "commit a", _),
-%     commit_id_to_metadata(Repository_Descriptor, Commit_B, "test", "commit b", _),
-%     commit_id_to_metadata(Repository_Descriptor, Commit_C, "test", "commit c", _),
-%     commit_id_to_metadata(Repository_Descriptor, Commit_D, "Gavsky", "commit d", _).
-% :- end_tests(rebase_endpoint).
+:- begin_tests(rebase_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(rebase_divergent_history, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ])
+:-
+    add_user("TERMINUSQA",some('password'),User_ID),
+    create_db_without_schema("TERMINUSQA", "foo"),
+
+    Master_Path = "TERMINUSQA/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+
+    Second_Path = "TERMINUSQA/foo/local/branch/second",
+    branch_create(system_descriptor{}, User_ID, Second_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit c"}, Second_Context2),
+    with_transaction(Second_Context2,
+                     ask(Second_Context2,
+                         insert(g,h,i)),
+                     _),
+
+    % we are also doing a commit on the original branch, to create a divergent history
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+    atomic_list_concat([Server, '/api/rebase/TERMINUSQA/foo'], URI),
+    http_post(URI,
+              json(_{rebase_from: 'TERMINUSQA/foo/local/branch/second',
+                     author : "Gavsky"}),
+              JSON,
+              [json_object(dict),
+               authorization(basic('TERMINUSQA','password')),
+               status_code(_Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    _{  '@type' : "api:RebaseResponse",
+        'api:forwarded_commits' : [_Thing, _Another_Thing ],
+        'api:common_commit_id' : _Common_Something,
+        'api:rebase_report' : _Reports,
+        'api:status' : "api:success"
+    } :< JSON,
+
+    Repository_Descriptor = Master_Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "main", Commit_Uri),
+    commit_uri_to_history_commit_ids(Repository_Descriptor, Commit_Uri, [Commit_A, Commit_B, Commit_C, Commit_D]),
+
+    commit_id_to_metadata(Repository_Descriptor, Commit_A, "test", "commit a", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_B, "test", "commit b", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_C, "test", "commit c", _),
+    commit_id_to_metadata(Repository_Descriptor, Commit_D, "Gavsky", "commit d", _).
+:- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
@@ -1364,94 +1355,94 @@ pack_handler(post,Path,Request, System_DB, Auth) :-
         format('Status: 204 No Response~n~n', [])
     ).
 
-% % Currently just sending binary around...
-% :- begin_tests(pack_endpoint).
-% :- use_module(core(util/test_utils)).
-% %:- use_module(core(transaction)).
-% %:- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% :- use_module(library(terminus_store)).
-% 
-% test(pack_stuff, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ]) :-
-%     add_user('_a_test_user_',some('password'),_User_ID),
-%     create_db_without_schema('_a_test_user_',foo),
-% 
-%     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
-% 
-%     % First commit
-%     create_context(Descriptor, commit_info{author:"user",message:"commit a"}, Master_Context1),
-%     with_transaction(Master_Context1,
-%                      ask(Master_Context1,
-%                          insert(a,b,c)),
-%                      _),
-% 
-%     % Second commit
-%     create_context(Descriptor, commit_info{author:"user",message:"commit b"}, Master_Context2),
-%     % Before updating, grab the repository head layer_ID
-%     [Branch_Transaction] = (Master_Context2.transaction_objects),
-%     Repository = (Branch_Transaction.parent),
-%     repository_head_layerid(Repository,Repository_Head_Layer_ID),
-% 
-%     with_transaction(Master_Context2,
-%                      ask(Master_Context2,
-%                          (   insert(d,e,f),
-%                              delete(a,b,c))),
-%                      _),
-% 
-% 
-%     atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
-% 
-%     Document = _{ repository_head : Repository_Head_Layer_ID },
-%     http_post(URI,
-%               json(Document),
-%               Data,
-%               [authorization(basic('_a_test_user_','password'))]),
-% 
-%     payload_repository_head_and_pack(Data, Head, Pack),
-% 
-%     % Check pack validity
-%     create_context(Descriptor, commit_info{author:"user",message:"commit b"}, New_Head_Context),
-%     % grab the repository head layer_ID and new graph layer_ID
-%     [New_Head_Transaction] = (New_Head_Context.transaction_objects),
-%     New_Head_Repository = (New_Head_Transaction.parent),
-%     repository_head_layerid(New_Head_Repository,New_Repository_Head_Layer_Id),
-%     [Instance_Graph] = (New_Head_Transaction.instance_objects),
-%     Layer = (Instance_Graph.read),
-%     layer_to_id(Layer,Layer_Id),
-% 
-%     pack_layerids_and_parents(Pack,Layerids_and_Parents),
-% 
-%     memberchk(New_Repository_Head_Layer_Id-_,Layerids_and_Parents),
-%     memberchk(Layer_Id-_,Layerids_and_Parents),
-%     memberchk(Head-_,Layerids_and_Parents),
-% 
-%     Head = New_Repository_Head_Layer_Id.
-% 
-% 
-% test(pack_nothing, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ]) :-
-%     add_user('_a_test_user_',some('password'),_User_ID),
-%     create_db_without_schema('_a_test_user_','foo'),
-% 
-%     resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
-%     Repository_Descriptor = (Descriptor.repository_descriptor),
-%     open_descriptor(Repository_Descriptor, Repo_Transaction),
-%     repository_head_layerid(Repo_Transaction, Repository_Head_Layer_ID),
-% 
-%     Document = _{ repository_head : Repository_Head_Layer_ID },
-%     atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
-%     http_post(URI,
-%               json(Document),
-%               _Data,
-%               [authorization(basic('_a_test_user_','password')),status_code(Status)]),
-%     Status = 204.
-% 
-% :- end_tests(pack_endpoint).
+% Currently just sending binary around...
+:- begin_tests(pack_endpoint).
+:- use_module(core(util/test_utils)).
+%:- use_module(core(transaction)).
+%:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+:- use_module(library(terminus_store)).
+
+test(pack_stuff, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    add_user('_a_test_user_',some('password'),_User_ID),
+    create_db_without_schema('_a_test_user_',foo),
+
+    resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
+
+    % First commit
+    create_context(Descriptor, commit_info{author:"user",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                     _),
+
+    % Second commit
+    create_context(Descriptor, commit_info{author:"user",message:"commit b"}, Master_Context2),
+    % Before updating, grab the repository head layer_ID
+    [Branch_Transaction] = (Master_Context2.transaction_objects),
+    Repository = (Branch_Transaction.parent),
+    repository_head_layerid(Repository,Repository_Head_Layer_ID),
+
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         (   insert(d,e,f),
+                             delete(a,b,c))),
+                     _),
+
+
+    atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
+
+    Document = _{ repository_head : Repository_Head_Layer_ID },
+    http_post(URI,
+              json(Document),
+              Data,
+              [authorization(basic('_a_test_user_','password'))]),
+
+    payload_repository_head_and_pack(Data, Head, Pack),
+
+    % Check pack validity
+    create_context(Descriptor, commit_info{author:"user",message:"commit b"}, New_Head_Context),
+    % grab the repository head layer_ID and new graph layer_ID
+    [New_Head_Transaction] = (New_Head_Context.transaction_objects),
+    New_Head_Repository = (New_Head_Transaction.parent),
+    repository_head_layerid(New_Head_Repository,New_Repository_Head_Layer_Id),
+    [Instance_Graph] = (New_Head_Transaction.instance_objects),
+    Layer = (Instance_Graph.read),
+    layer_to_id(Layer,Layer_Id),
+
+    pack_layerids_and_parents(Pack,Layerids_and_Parents),
+
+    memberchk(New_Repository_Head_Layer_Id-_,Layerids_and_Parents),
+    memberchk(Layer_Id-_,Layerids_and_Parents),
+    memberchk(Head-_,Layerids_and_Parents),
+
+    Head = New_Repository_Head_Layer_Id.
+
+
+test(pack_nothing, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+    add_user('_a_test_user_',some('password'),_User_ID),
+    create_db_without_schema('_a_test_user_','foo'),
+
+    resolve_absolute_string_descriptor('_a_test_user_/foo', Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    open_descriptor(Repository_Descriptor, Repo_Transaction),
+    repository_head_layerid(Repo_Transaction, Repository_Head_Layer_ID),
+
+    Document = _{ repository_head : Repository_Head_Layer_ID },
+    atomic_list_concat([Server, '/api/pack/_a_test_user_/foo'], URI),
+    http_post(URI,
+              json(Document),
+              _Data,
+              [authorization(basic('_a_test_user_','password')),status_code(Status)]),
+    Status = 204.
+
+:- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
@@ -1564,282 +1555,282 @@ push_handler(post,Path,Request, System_DB, Auth) :-
                             Response,
                             [status(200), width(0)]))).
 
-% :- begin_tests(push_endpoint).
-% :- use_module(core(util/test_utils)).
-% :- use_module(core(transaction)).
-% :- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% :- use_module(library(base64)).
-% 
-% test(push_empty_to_empty_does_nothing_succesfully,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
-%                  setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
-%                  setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Origin),
-%                  teardown_temp_unattached_server(State_Destination))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
-%     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
-%     Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Origin,
-%         repository_head(Origin_Database_Descriptor, "origin", Head)),
-%     with_triple_store(
-%         Store_Destination,
-%         repository_head(Destination_Database_Descriptor, "local", Head)),
-% 
-%     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
-%     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-%     http_post(Push_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-%     \+ get_dict('api:head', JSON, _),
-% 
-%     _{'@type':"api:PushResponse",
-%       'api:repo_head_updated': false,
-%       'api:repo_head': Head,
-%       'api:status':"api:success"} :< JSON.
-% 
-% test(push_empty_with_prefix_change_to_empty_changes_prefixes,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
-%                  setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
-%                  setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Origin),
-%                  teardown_temp_unattached_server(State_Destination))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
-% 
-%     with_triple_store(
-%         Store_Origin,
-%         (   create_context((Origin_Branch_Descriptor.repository_descriptor),
-%                            Origin_Repository_Context),
-%             with_transaction(Origin_Repository_Context,
-%                              update_prefixes(Origin_Repository_Context,
-%                                              _{doc: "http://this_is_docs/",
-%                                                scm: "http://this_is_scm/",
-%                                                foo: "http://this_is_foo/"}),
-%                              _))),
-% 
-%     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
-%     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-%     http_post(Push_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main",
-%                        push_prefixes: true
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-% 
-%     _{'@type':"api:PushResponse",
-%       'api:repo_head_updated': true,
-%       'api:repo_head': _,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_Destination,
-%         (   repository_prefixes((Destination_Branch_Descriptor.repository_descriptor),
-%                                 Prefixes),
-%             Prefixes = _{doc: 'http://this_is_docs/',
-%                          scm: 'http://this_is_scm/',
-%                          foo: 'http://this_is_foo/'})).
-% 
-% test(push_nonempty_to_empty_advances_remote_head,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
-%                  setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
-%                  setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Origin),
-%                  teardown_temp_unattached_server(State_Destination))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
-%     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
-%     Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Origin,
-%         repository_head(Origin_Database_Descriptor, "origin", Head)),
-%     with_triple_store(
-%         Store_Destination,
-%         repository_head(Destination_Database_Descriptor, "local", Head)),
-%     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
-%     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-%     http_post(Push_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-% 
-%     _{'@type':"api:PushResponse", % todo this should actually not be that
-%       'api:repo_head_updated': false,
-%       'api:repo_head': Head,
-%       'api:status':"api:success"} :< JSON.
-% 
-% test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
-%                  setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
-%                  setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Origin),
-%                  teardown_temp_unattached_server(State_Destination))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
-%     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
-%     Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Origin,
-%         repository_head(Origin_Database_Descriptor, "origin", Head)),
-%     with_triple_store(
-%         Store_Destination,
-%         repository_head(Destination_Database_Descriptor, "local", Head)),
-% 
-%     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
-%     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-%     http_post(Push_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-% 
-%     _{'@type':"api:PushResponse", % todo this should actually not be that
-%       'api:repo_head_updated': false,
-%       'api:repo_head': Head,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_Origin,
-%         repository_head(Origin_Database_Descriptor, "origin", Head)),
-%     with_triple_store(
-%         Store_Destination,
-%         repository_head(Destination_Database_Descriptor, "local", Head)).
-% 
-% test(push_nonempty_to_earlier_nonempty_advances_remote_head,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
-%                  setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
-%                  setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Origin),
-%                  teardown_temp_unattached_server(State_Destination))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
-%     with_triple_store(
-%         Store_Origin,
-%         (   create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello"}, Origin_Context_1),
-%             with_transaction(Origin_Context_1,
-%                              ask(Origin_Context_1,
-%                                  insert(g,h,i)),
-%                              _),
-%             create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello again"}, Origin_Context_2),
-%             with_transaction(Origin_Context_2,
-%                              ask(Origin_Context_2,
-%                                  insert(j,k,l)),
-%                              _)
-%         )
-%     ),
-% 
-%     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
-%     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
-%     http_post(Push_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-% 
-%     _{'@type':"api:PushResponse",
-%       'api:repo_head_updated': true,
-%       'api:repo_head': Head,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
-%     Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Origin,
-%         repository_head(Origin_Database_Descriptor, "origin", Head)),
-%     with_triple_store(
-%         Store_Destination,
-%         repository_head(Destination_Database_Descriptor, "local", Head)).
-% 
-% :- end_tests(push_endpoint).
+:- begin_tests(push_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+:- use_module(library(base64)).
+
+test(push_empty_to_empty_does_nothing_succesfully,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    \+ get_dict('api:head', JSON, _),
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON.
+
+test(push_empty_with_prefix_change_to_empty_changes_prefixes,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        (   create_context((Origin_Branch_Descriptor.repository_descriptor),
+                           Origin_Repository_Context),
+            with_transaction(Origin_Repository_Context,
+                             update_prefixes(Origin_Repository_Context,
+                                             _{doc: "http://this_is_docs/",
+                                               scm: "http://this_is_scm/",
+                                               foo: "http://this_is_foo/"}),
+                             _))),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main",
+                       push_prefixes: true
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': true,
+      'api:repo_head': _,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Destination,
+        (   repository_prefixes((Destination_Branch_Descriptor.repository_descriptor),
+                                Prefixes),
+            Prefixes = _{doc: 'http://this_is_docs/',
+                         scm: 'http://this_is_scm/',
+                         foo: 'http://this_is_foo/'})).
+
+test(push_nonempty_to_empty_advances_remote_head,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse", % todo this should actually not be that
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON.
+
+test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse", % todo this should actually not be that
+      'api:repo_head_updated': false,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)).
+
+test(push_nonempty_to_earlier_nonempty_advances_remote_head,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Origin,Store_Origin,Server_Origin),
+                 setup_temp_unattached_server(State_Destination,Store_Destination,Server_Destination),
+                 setup_cloned_nonempty_situation(Store_Origin, Server_Origin, Store_Destination, Server_Destination)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Origin),
+                 teardown_temp_unattached_server(State_Destination))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    with_triple_store(
+        Store_Origin,
+        (   create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello"}, Origin_Context_1),
+            with_transaction(Origin_Context_1,
+                             ask(Origin_Context_1,
+                                 insert(g,h,i)),
+                             _),
+            create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello again"}, Origin_Context_2),
+            with_transaction(Origin_Context_2,
+                             ask(Origin_Context_2,
+                                 insert(j,k,l)),
+                             _)
+        )
+    ),
+
+    atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
+    base64("KarlKautsky:password_destination", Base64_Destination_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
+    http_post(Push_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+
+    _{'@type':"api:PushResponse",
+      'api:repo_head_updated': true,
+      'api:repo_head': Head,
+      'api:status':"api:success"} :< JSON,
+
+    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Origin,
+        repository_head(Origin_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Destination,
+        repository_head(Destination_Database_Descriptor, "local", Head)).
+
+:- end_tests(push_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
@@ -1849,6 +1840,7 @@ push_handler(post,Path,Request, System_DB, Auth) :-
                  methods([options,post])]).
 
 pull_handler(post,Path,Request, System_DB, Local_Auth) :-
+    % Could we not just ask for the default remote?
     % Could we not just ask for the default remote?
     do_or_die(
         (   get_payload(Document, Request),
@@ -1874,313 +1866,313 @@ pull_handler(post,Path,Request, System_DB, Local_Auth) :-
                             JSON_Response,
                             [status(200), width(0)]))).
 
-% :- begin_tests(pull_endpoint, []).
-% :- use_module(core(util/test_utils)).
-% :- use_module(core(transaction)).
-% :- use_module(core(api)).
-% :- use_module(library(http/http_open)).
-% 
-% test(pull_from_empty_to_empty,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
-%                  setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
-%                  setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Local),
-%                  teardown_temp_unattached_server(State_Remote))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
-%     Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
-%     Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Local,
-%         repository_head(Local_Database_Descriptor, "origin", Head)),
-%     with_triple_store(
-%         Store_Remote,
-%         repository_head(Remote_Database_Descriptor, "local", Head)),
-% 
-%     atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
-%     base64("KarlKautsky:password_destination", Base64_Remote_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
-%     http_post(Pull_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-%     _{'@type' : "api:PullResponse",
-%       'api:pull_status' : "api:pull_unchanged",
-%       'api:fetch_status' : false,
-%       'api:status':"api:success"} :< JSON.
-% 
-% test(pull_from_something_to_empty,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
-%                  setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
-%                  setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Local),
-%                  teardown_temp_unattached_server(State_Remote))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
-%     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
-%     Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
-%     Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
-%     Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Remote,
-%         (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
-%             with_transaction(
-%                 Remote_Context_1,
-%                 ask(Remote_Context_1,
-%                     insert(a,b,c)),
-%                 _),
-%             repository_head(Remote_Database_Descriptor, "local", Head),
-%             branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
-%             commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
-%         )
-%     ),
-% 
-%     atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
-%     base64("KarlKautsky:password_destination", Base64_Remote_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
-%     http_post(Pull_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-%     _{'@type' : "api:PullResponse",
-%       'api:pull_status' : "api:pull_fast_forwarded",
-%       'api:fetch_status' : true,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_Local,
-%         (
-%             repository_head(Local_Database_Descriptor, "origin", Head),
-%             branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
-%             commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
-%         )
-%     ).
-% 
-% test(pull_from_something_to_something,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
-%                  setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
-%                  setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Local),
-%                  teardown_temp_unattached_server(State_Remote))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
-%     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
-%     Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
-%     Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
-%     Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Local,
-%         branch_head_commit(Local_Repository_Descriptor, "main", Local_Orginal_Commit_Uri)
-%     ),
-% 
-%     with_triple_store(
-%         Store_Remote,
-%         (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
-%             with_transaction(
-%                 Remote_Context_1,
-%                 ask(Remote_Context_1,
-%                     insert(e,f,g)),
-%                 _),
-%             repository_head(Remote_Database_Descriptor, "local", Head),
-%             branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
-%             commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
-%         )
-%     ),
-% 
-%     atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
-%     base64("KarlKautsky:password_destination", Base64_Remote_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
-%     http_post(Pull_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-%     _{'@type' : "api:PullResponse",
-%       'api:pull_status' : "api:pull_fast_forwarded",
-%       'api:fetch_status' : true,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_Local,
-%         (
-%             repository_head(Local_Database_Descriptor, "origin", Head),
-%             branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
-%             \+ Local_Orginal_Commit_Uri = Local_Commit_Uri,
-%             commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
-%         )
-%     ).
-% 
-% test(pull_from_something_to_something_equal,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
-%                  setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
-%                  setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Local),
-%                  teardown_temp_unattached_server(State_Remote))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
-%     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
-%     Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Local,
-%         (
-%             repository_head(Local_Database_Descriptor, "origin", Head),
-%             branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
-%         )
-%     ),
-% 
-%     atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
-%     base64("KarlKautsky:password_destination", Base64_Remote_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
-%     http_post(Pull_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-%     _{'@type' : "api:PullResponse",
-%       'api:pull_status' : "api:pull_unchanged",
-%       'api:fetch_status' : false,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_Local,
-%         (
-%             repository_head(Local_Database_Descriptor, "origin", Head),
-%             branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
-%         )
-%     ).
-% 
-% test(pull_from_something_to_something_equal_other_branch,
-%      [
-%          setup(
-%              (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
-%                  setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
-%                  setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
-%              )),
-%          cleanup(
-%              (
-%                  teardown_temp_unattached_server(State_Local),
-%                  teardown_temp_unattached_server(State_Remote))),
-%          blocked(document_refactor)
-%      ]) :-
-%     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
-%     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
-%     Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
-%     resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
-%     Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
-%     Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
-% 
-%     with_triple_store(
-%         Store_Remote,
-%         (
-%             agent_name_uri(system_descriptor{}, "KarlKautsky", User_Uri),
-%             branch_create(system_descriptor{}, User_Uri, "KarlKautsky/foo/local/branch/other", branch("KarlKautsky/foo/local/branch/main"), _),
-%             repository_head(Remote_Database_Descriptor, "local", Head)
-%         )
-%     ),
-% 
-%     with_triple_store(
-%         Store_Local,
-%         (
-%             branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
-%         )
-%     ),
-% 
-%     atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
-%     base64("KarlKautsky:password_destination", Base64_Remote_Auth),
-%     format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
-%     http_post(Pull_URL,
-%               json(_{
-%                        remote: "origin",
-%                        remote_branch: "main"
-%                    }),
-%               JSON,
-%               [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
-%                request_header('Authorization-Remote'=Authorization_Remote),
-%                status_code(Status_Code)]),
-% 
-%     * json_write_dict(current_output, JSON, []),
-% 
-%     Status_Code = 200,
-%     _{'@type' : "api:PullResponse",
-%       'api:pull_status' : "api:pull_unchanged",
-%       'api:fetch_status' : true,
-%       'api:status':"api:success"} :< JSON,
-% 
-%     with_triple_store(
-%         Store_Local,
-%         (
-%             repository_head(Local_Database_Descriptor, "origin", Head),
-%             branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
-%         )
-%     ).
-% 
-% 
-% :- end_tests(pull_endpoint).
+:- begin_tests(pull_endpoint, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(library(http/http_open)).
+
+test(pull_from_empty_to_empty,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        repository_head(Local_Database_Descriptor, "origin", Head)),
+    with_triple_store(
+        Store_Remote,
+        repository_head(Remote_Database_Descriptor, "local", Head)),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : false,
+      'api:status':"api:success"} :< JSON.
+
+test(pull_from_something_to_empty,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Remote,
+        (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
+            with_transaction(
+                Remote_Context_1,
+                ask(Remote_Context_1,
+                    insert(a,b,c)),
+                _),
+            repository_head(Remote_Database_Descriptor, "local", Head),
+            branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_fast_forwarded",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
+            commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        branch_head_commit(Local_Repository_Descriptor, "main", Local_Orginal_Commit_Uri)
+    ),
+
+    with_triple_store(
+        Store_Remote,
+        (   create_context(Remote_Branch_Descriptor, commit_info{author:"KarlKautsky", message:"Boo!"}, Remote_Context_1),
+            with_transaction(
+                Remote_Context_1,
+                ask(Remote_Context_1,
+                    insert(e,f,g)),
+                _),
+            repository_head(Remote_Database_Descriptor, "local", Head),
+            branch_head_commit(Remote_Repository_Descriptor, "main", Remote_Commit_Uri),
+            commit_id_uri(Remote_Repository_Descriptor, Commit_Id, Remote_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_fast_forwarded",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri),
+            \+ Local_Orginal_Commit_Uri = Local_Commit_Uri,
+            commit_id_uri(Local_Repository_Descriptor, Commit_Id, Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something_equal,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : false,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ).
+
+test(pull_from_something_to_something_equal_other_branch,
+     [
+         setup(
+             (   setup_temp_unattached_server(State_Local,Store_Local,Server_Local),
+                 setup_temp_unattached_server(State_Remote,Store_Remote,Server_Remote),
+                 setup_cloned_nonempty_situation(Store_Local, Server_Local, Store_Remote, Server_Remote)
+             )),
+         cleanup(
+             (
+                 teardown_temp_unattached_server(State_Local),
+                 teardown_temp_unattached_server(State_Remote))),
+         blocked(document_refactor)
+     ]) :-
+    resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
+    Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
+    Local_Database_Descriptor = (Local_Repository_Descriptor.database_descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
+    Remote_Repository_Descriptor = (Remote_Branch_Descriptor.repository_descriptor),
+    Remote_Database_Descriptor = (Remote_Repository_Descriptor.database_descriptor),
+
+    with_triple_store(
+        Store_Remote,
+        (
+            agent_name_uri(system_descriptor{}, "KarlKautsky", User_Uri),
+            branch_create(system_descriptor{}, User_Uri, "KarlKautsky/foo/local/branch/other", branch("KarlKautsky/foo/local/branch/main"), _),
+            repository_head(Remote_Database_Descriptor, "local", Head)
+        )
+    ),
+
+    with_triple_store(
+        Store_Local,
+        (
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ),
+
+    atomic_list_concat([Server_Local, '/api/pull/RosaLuxemburg/bar'], Pull_URL),
+    base64("KarlKautsky:password_destination", Base64_Remote_Auth),
+    format(string(Authorization_Remote), "Basic ~s", [Base64_Remote_Auth]),
+    http_post(Pull_URL,
+              json(_{
+                       remote: "origin",
+                       remote_branch: "main"
+                   }),
+              JSON,
+              [json_object(dict),authorization(basic('RosaLuxemburg','password_origin')),
+               request_header('Authorization-Remote'=Authorization_Remote),
+               status_code(Status_Code)]),
+
+    * json_write_dict(current_output, JSON, []),
+
+    Status_Code = 200,
+    _{'@type' : "api:PullResponse",
+      'api:pull_status' : "api:pull_unchanged",
+      'api:fetch_status' : true,
+      'api:status':"api:success"} :< JSON,
+
+    with_triple_store(
+        Store_Local,
+        (
+            repository_head(Local_Database_Descriptor, "origin", Head),
+            branch_head_commit(Local_Repository_Descriptor, "main", Local_Commit_Uri)
+        )
+    ).
+
+
+:- end_tests(pull_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
@@ -2447,34 +2439,34 @@ optimize_handler(post, Path, Request, System_DB, Auth) :-
             cors_reply_json(Request, _{'@type' : 'api:OptimizeResponse',
                                        'api:status' : "api:success"}))).
 
-% :- begin_tests(optimize_endpoint).
-% :- use_module(core(util/test_utils)).
-% :- use_module(library(terminus_store)).
-% 
-% test(optimize_system, [
-%          setup(setup_temp_server(State, Server)),
-%          cleanup(teardown_temp_server(State))
-%      ]) :-
-% 
-%     create_db_without_schema("admin", "test"),
-%     create_db_without_schema("admin", "test2"),
-%     atomic_list_concat([Server, '/api/optimize/_system'], URI),
-% 
-%     admin_pass(Key),
-%     http_post(URI,
-%               json(_{}),
-%               JSON,
-%               [json_object(dict),authorization(basic(admin,Key))]),
-% 
-%     JSON = _{'@type':"api:OptimizeResponse",
-%              'api:status':"api:success"},
-% 
-%     open_descriptor(system_descriptor{}, Transaction),
-%     [RWO] = (Transaction.instance_objects),
-%     Layer = (RWO.read),
-%     \+ parent(Layer,_).
-% 
-% :- end_tests(optimize_endpoint).
+:- begin_tests(optimize_endpoint).
+:- use_module(core(util/test_utils)).
+:- use_module(library(terminus_store)).
+
+test(optimize_system, [
+         setup(setup_temp_server(State, Server)),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    create_db_without_schema("admin", "test"),
+    create_db_without_schema("admin", "test2"),
+    atomic_list_concat([Server, '/api/optimize/_system'], URI),
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON = _{'@type':"api:OptimizeResponse",
+             'api:status':"api:success"},
+
+    open_descriptor(system_descriptor{}, Transaction),
+    [RWO] = (Transaction.instance_objects),
+    Layer = (RWO.read),
+    \+ parent(Layer,_).
+
+:- end_tests(optimize_endpoint).
 
 
 %%%%%%%%%%%%%%%%%%%% Remote handler %%%%%%%%%%%%%%%%%%%%%%%%%
