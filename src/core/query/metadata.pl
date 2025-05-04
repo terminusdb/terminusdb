@@ -64,7 +64,7 @@ current_db_path(Path) :-
     db_path(Path).
 
 set_current_db_path(Path) :-
-    atomic_list_concat([Path,'/'],Directory),
+    atomic_list_concat([Path],Directory),
     asserta(current_db_path_pred(Directory)).
 
 unset_current_db_path :-
