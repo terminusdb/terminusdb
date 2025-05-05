@@ -1,4 +1,4 @@
-name: AMD64 Docker Build
+name: AMD64 Image
 
 on:
   workflow_dispatch:  
@@ -10,7 +10,7 @@ on:
 jobs:
 
   amd64_build:
-    name: AMD64 Build
+    name: Build
     runs-on: self-hosted
 
     steps:
@@ -50,7 +50,7 @@ jobs:
             path: terminusdb-server-snapshot-amd64.tar.gz
 
   amd64_tests:
-    name: AMD64 Tests
+    name: Tests
     needs: amd64_build
     uses: ./.github/workflows/docker-image-test.yml
     with:

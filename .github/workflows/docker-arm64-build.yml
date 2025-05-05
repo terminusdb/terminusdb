@@ -1,5 +1,5 @@
 # Build and run tests every night on non-Docker systems.
-name: ARM64 Docker Build
+name: ARM64 Image
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
 
 jobs:
   arm64_build:
-    name: ARM64 Build
+    name: Build
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
 
     steps:
@@ -46,7 +46,7 @@ jobs:
             path: terminusdb-server-snapshot-arm64.tar.gz
 
   arm64_tests:
-    name: ARM64 Tests
+    name: Tests
     needs: arm64_build
     uses: ./.github/workflows/docker-image-test.yml
     with:
