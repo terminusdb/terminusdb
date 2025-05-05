@@ -1,0 +1,100 @@
+
+name: Generate Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'docs/**'      
+      - 'Makefile'            
+
+jobs:
+
+  check:
+    name: Update docs
+    runs-on: ubuntu-latest
+    
+    outputs:
+      changed: ${{ steps.check_changes.outputs.relevant_changed }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Check for file changes
+      id: check_changes
+      run: |
+        git fetch --deepen=10
+
+        # Check that HEAD~1 exists
+        if git rev-parse HEAD~1 >/dev/null 2>&1; then
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+        else
+          echo "Only one commit available; treating all files as changed"
+          CHANGED_FILES=$(git diff --name-only HEAD)
+        fi
+
+        RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|Makefile|\.github/workflows/)' || true)
+        if [ -n "$RELEVANT_CHANGED" ]; then
+          echo "Relevant files changed: $RELEVANT_CHANGED"
+          echo "::set-output name=relevant_changed::true"
+        else
+          echo "No relevant files changed"
+          echo "::set-output name=relevant_changed::false"
+        fi
+
+  docs:
+    name: Update docs
+    needs: check
+    if: ${{ needs.check.outputs.changed == 'true' }}
+
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install swi-prolog 
+        run: ./.github/install-swi-prolog.sh stable
+
+      - name: Checkout tus
+        uses: actions/checkout@v4
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Install Protobuf Compiler (Linux)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Init TerminusDB
+        run: |
+          ./terminusdb store init
+
+      - name: Start TerminusDB
+        run: |
+          ./terminusdb serve &
+          echo $! > terminusdb.pid
+          sleep 5  # wait for server to start
+
+      - name: Generate man page
+        run: |
+          sudo apt-get install --no-install-recommends ronn
+          ronn --version
+          export HELP="$(./terminusdb help -m)"
+          envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
+          ronn --roff docs/terminusdb.1.ronn
+
+      - name: Stop TerminusDB
+        run: |
+            kill $(cat terminusdb.pid)      
+  
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update man page
+          file_pattern: docs/terminusdb.1.*          
