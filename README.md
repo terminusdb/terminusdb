@@ -45,7 +45,7 @@ Note that documentation is now maintained at [https://terminusdb.org/docs/](http
 
 The easiest way to install TerminusDB as a developer is by using the [Snap](https://snapcraft.io/terminusdb). It does not provide a daemon and is mainly intended for developers that want to try TerminusDB.
 
-For deployments, or if you want to use the local dashboard:
+For deployments:
 
 1. Add the following to a .env file in the source directory:
 

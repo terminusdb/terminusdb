@@ -28,8 +28,6 @@ services:
       # (Create a .env file from .env-template and add a password)
       - "TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:?error}"
     volumes:
-      # For the use of a local dashboard
-      #      - ./dashboard:/app/terminusdb/dashboard
       - ./storage:/app/terminusdb/storage
   vectorlink:
     image: terminusdb/vectorlink:v0.0.8
