@@ -75,6 +75,9 @@ jobs:
       - name: Install Protobuf Compiler (Linux)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      - name: Build TerminusDB
+        run: make
+
       - name: Init TerminusDB
         run: |
           ./terminusdb store init
