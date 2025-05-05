@@ -53,7 +53,7 @@ layer_size(Layer_Name,Size) :-
     current_db_path(Path),
     layer_directory_prefix_length(Length),
     sub_string(Layer_Name, 0, Length, _, Prefix),
-    atomic_list_concat([Path,Prefix,'/',Layer_Name, '.larch'], LayerFile),
+    atomic_list_concat([Path,'/',Prefix,'/',Layer_Name, '.larch'], LayerFile),
     size_file(LayerFile, Size).
 
 :- thread_local current_db_path_pred/1.
@@ -64,7 +64,7 @@ current_db_path(Path) :-
     db_path(Path).
 
 set_current_db_path(Path) :-
-    atomic_list_concat([Path,'/'],Directory),
+    atomic_list_concat([Path],Directory),
     asserta(current_db_path_pred(Directory)).
 
 unset_current_db_path :-
