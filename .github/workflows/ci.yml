@@ -127,13 +127,13 @@ jobs:
       - name: Download Docker image
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-server-docker-image
+          name: terminusdb-server-snapshot-amd64
 
       - name: Generate man page
         run: |
           sudo apt-get install --no-install-recommends ronn
           ronn --version
-          docker load < terminusdb-server-docker-image.tar.gz
+          docker load < terminusdb-server-snapshot-amd64.tar.gz
           export HELP="$(docker run --rm terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)"
           envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
           ronn --roff docs/terminusdb.1.ronn
@@ -167,15 +167,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Docker image
+      - name: Download AMD64 Image
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-server-docker-image
+          name: terminusdb-server-snapshot-amd64
 
-      - name: Download Docker image arm64
+      - name: Download AMR64 Image
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-server-docker-image-arm64
+          name: terminusdb-server-snapshot-arm64
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -188,11 +188,11 @@ jobs:
 
       - name: Load images
         run: |
-          docker load < terminusdb-server-docker-image.tar.gz
+          docker load < terminusdb-server-snapshot-amd64.tar.gz
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
           docker rmi terminusdb/terminusdb-server:local
-          docker load < terminusdb-server-docker-image-arm64.tar.gz
+          docker load < terminusdb-server-snapshot-arm64.tar.gz
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           docker rmi terminusdb/terminusdb-server:local

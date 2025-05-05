@@ -10,14 +10,14 @@ on:
         required: true
         type: string
       image_artifact:
+        required: true        
         type: string
-        default: "terminusdb-server-docker-image"
       image_platform:
+        required: true                
         type: string
-        default: "linux/amd64"
       runner:
         type: string
-        default: "self-hosted"
+        required: true
       mocha_jobs:
         type: string
         default: "4"

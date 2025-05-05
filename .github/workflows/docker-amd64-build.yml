@@ -24,7 +24,7 @@ jobs:
         with:
           context: .
           tags: terminusdb/terminusdb-server:local
-          outputs: type=docker,dest=terminusdb-server-docker-image.tar
+          outputs: type=docker,dest=terminusdb-server-snapshot-amd64.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
@@ -32,7 +32,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.11.2
         with:
-          input: /github/workspace/terminusdb-server-docker-image.tar
+          input: /github/workspace/terminusdb-server-snapshot-amd64.tar
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
@@ -40,13 +40,13 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Compress image
-        run: gzip terminusdb-server-docker-image.tar
+        run: gzip terminusdb-server-snapshot-amd64.tar
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:
-            name: terminusdb-server-docker-image
-            path: terminusdb-server-docker-image.tar.gz
+            name: terminusdb-server-snapshot-amd64
+            path: terminusdb-server-snapshot-amd64.tar.gz
 
   amd64_tests:
     name: AMD64 Tests
@@ -55,7 +55,7 @@ jobs:
     with:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}
-      image_artifact: terminusdb-server-docker-image
+      image_artifact: terminusdb-server-snapshot-amd64
       image_platform: linux/amd64
       runner: self-hosted
       mocha_parallel: true

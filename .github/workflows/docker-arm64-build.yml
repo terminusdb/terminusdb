@@ -29,7 +29,7 @@ jobs:
         with:
           context: .
           tags: terminusdb/terminusdb-server:local
-          outputs: type=docker,dest=terminusdb-server-docker-image-arm64.tar
+          outputs: type=docker,dest=terminusdb-server-snapshot-arm64.tar
           platforms: linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -37,13 +37,13 @@ jobs:
             TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Compress image
-        run: gzip terminusdb-server-docker-image-arm64.tar
+        run: gzip terminusdb-server-snapshot-arm64.tar
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:
-            name: terminusdb-server-docker-image-arm64
-            path: terminusdb-server-docker-image-arm64.tar.gz
+            name: terminusdb-server-snapshot-arm64
+            path: terminusdb-server-snapshot-arm64.tar.gz
 
   arm64_tests:
     name: ARM64 Tests
@@ -52,7 +52,7 @@ jobs:
     with:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}
-      image_artifact: terminusdb-server-docker-image-arm64
+      image_artifact: terminusdb-server-snapshot-arm64
       image_platform: linux/arm64
       runner: ubuntu-latest
       mocha_parallel: false
