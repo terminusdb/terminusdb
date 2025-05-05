@@ -1,5 +1,12 @@
-version: "3"
-
+# Instructions:
+#
+# 1. Copy .env-template to .env
+# 2. Add your admin password to .env
+# 3. docker compose up -d
+# 4. docker compose logs (to verify all started)
+# 5. connect to localhost:6363, login with admin and the .env password
+#
+ 
 services:
   terminusdb-server:
     image: terminusdb/terminusdb-server:latest
@@ -18,8 +25,8 @@ services:
       - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
 
       # Admin-Password should be changed before exposing to the internet:
-      # (it's recommended to use the .env)
-      # -TERMINUSDB_ADMIN_PASS=root
+      # (Create a .env file from .env-template and add a password)
+      - "TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:?error}"
     volumes:
       # For the use of a local dashboard
       #      - ./dashboard:/app/terminusdb/dashboard
@@ -44,15 +51,18 @@ services:
       - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
       # Add your OpenAI key in a .env file
       - OPENAI_SERVER_URL=http://vectorlink:8080
+      - "USER_KEY=${TERMINUSDB_ADMIN_PASS:?error}"
 
       # There are multiple ways to configure TerminusDB security through
       # environment variables. Several reasonable options are included below.
       # Uncomment the option you decide on and comment out others.
-      # Don't forget to change the default password!
+      # Don't forget to change the default password in the .env file
 
       # TerminusDB should be set up behind a TLS-terminating reverse
       # proxy with admin authentication provided by password.
-      # - USER_KEY=root  #  Change before exposing to the internet.
 
       # The storage path of terminusdb databases is /app/terminusdb/storage in case
       # you want to persist storage somewhere else.
+
+      # To change the terminusdb password if already set, to match the .env:
+      # docker compose exec -ti terminusdb-server ./terminusdb user password admin -p [FancyPassword]
