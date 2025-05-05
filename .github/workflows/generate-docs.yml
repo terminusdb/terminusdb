@@ -1,5 +1,5 @@
 
-name: Generate Documentation
+name: Documentation
 
 on:
   push:
@@ -8,11 +8,15 @@ on:
       - 'src/**'
       - 'docs/**'      
       - 'Makefile'            
-
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/generate-docs.yml'
+    
 jobs:
 
   check:
-    name: Update docs
+    name: Check
     runs-on: ubuntu-latest
     
     outputs:
@@ -45,7 +49,7 @@ jobs:
         fi
 
   docs:
-    name: Update docs
+    name: Generate
     needs: check
     if: ${{ needs.check.outputs.changed == 'true' }}
 

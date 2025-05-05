@@ -49,6 +49,10 @@ jobs:
         with:
           platforms: 'arm64'
 
+      - name: Remove old TerminusDB container if exists
+        run: |
+          docker rm -f terminusdb || true
+  
       - name: Run tests
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
