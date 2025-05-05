@@ -57,7 +57,6 @@ ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
 COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
-COPY --from=pack_installer /app/pack/dashboard /app/terminusdb/dashboard
 WORKDIR /app/terminusdb
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
