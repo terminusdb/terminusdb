@@ -1,16 +1,20 @@
-name: Docker Build
+name: AMD64 Docker Build
 
 on:
   workflow_call:
-
+  pull_request:
+    paths: 
+      - ".github/workflows/docker-amd64-build.yml"
+  
 jobs:
 
-  build:
-    name: Docker image
+  amd64_build:
+    name: AMD64 Build
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository      
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -43,3 +47,15 @@ jobs:
         with:
             name: terminusdb-server-docker-image
             path: terminusdb-server-docker-image.tar.gz
+
+  amd64_tests:
+    name: AMD64 Tests
+    needs: amd64_build
+    uses: ./.github/workflows/docker-image-test.yml
+    with:
+      test_repository: ${{ github.repository }}
+      test_ref: ${{ github.sha }}
+      image_artifact: terminusdb-server-docker-image
+      image_platform: linux/amd64
+      runner: self-hosted
+      mocha_parallel: true

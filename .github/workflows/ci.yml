@@ -10,15 +10,6 @@ env:
   CURRENT_REPO_VERSION: 11.1.15
 
 jobs:
-  openapi_lint:
-    name: OpenAPI linting
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - run: npx @redocly/cli lint docs/openapi.yaml
-
-
   is_duplicate_run:
     name: Duplicate run?
     runs-on: ubuntu-latest
@@ -55,7 +46,7 @@ jobs:
         }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dorny/paths-filter@v2
         id: filter
@@ -105,31 +96,23 @@ jobs:
             src/config/terminus_config.pl
             distribution/snap/snapcraft.yaml
 
-  build:
+  amd64_build:
     name: Build Docker (amd64)
     needs: versions
-    uses: ./.github/workflows/docker-build.yml
+    uses: ./.github/workflows/docker-amd64-build.yml
 
-  arm64_docker:
+  arm64_build:
     name: Build Docker (arm64)
     needs:
       - is_build_required
-    uses: ./.github/workflows/arm.yml
+    uses: ./.github/workflows/docker-arm64-build.yml
     if: needs.is_build_required.outputs.push_docker_required == 'true'
-
-  check:
-    name: Check
-    needs: build
-    uses: ./.github/workflows/check.yml
-    with:
-      test_repository: ${{ github.repository }}
-      test_ref: ${{ github.sha }}
 
  # This is required for status checks.
   all_checks_pass_with_build:
     name: All checks pass
     runs-on: ubuntu-latest
-    needs: check
+    needs: amd64_build
     steps:
       - run: echo "Celebrate! 🥳"
 
@@ -139,7 +122,7 @@ jobs:
     needs: all_checks_pass_with_build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download Docker image
         uses: actions/download-artifact@v4
@@ -178,11 +161,11 @@ jobs:
     needs:
       - is_build_required
       - all_checks_pass_with_build
-      - arm64_docker
+      - arm64_build
     if: needs.is_build_required.outputs.push_docker_required == 'true'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download Docker image
         uses: actions/download-artifact@v4

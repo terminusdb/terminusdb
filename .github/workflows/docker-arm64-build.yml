@@ -1,27 +1,30 @@
 # Build and run tests every night on non-Docker systems.
-name: ARM64 docker build
+name: ARM64 Docker Build
 
 on:
-  schedule:
-    - cron:  '45 2 * * *'
   workflow_dispatch:
   workflow_call:
   pull_request:
-    paths: [ ".github/workflows/arm.yml" ]
+    paths: 
+      - ".github/workflows/docker-arm64-build.yml"
+#  schedule:
+#    - cron:  '45 2 * * *'
 
 jobs:
-  arm64_docker:
+  arm64_build:
+    name: ARM64 Build
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository      
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           version: latest
 
-      - name: Build
+      - name: Docker Build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -42,12 +45,10 @@ jobs:
             name: terminusdb-server-docker-image-arm64
             path: terminusdb-server-docker-image-arm64.tar.gz
 
-  arm64_docker_tests:
-    # Only run the tests when the cron is triggered or the job
-    # is triggered manually, otherwise it takes way too long
-    if: ${{ github.event_name == 'schedule' }}
-    needs: arm64_docker
-    uses: ./.github/workflows/check.yml
+  arm64_tests:
+    name: ARM64 Tests
+    needs: arm64_build
+    uses: ./.github/workflows/docker-image-test.yml
     with:
       test_repository: ${{ github.repository }}
       test_ref: ${{ github.sha }}

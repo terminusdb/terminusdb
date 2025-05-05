@@ -50,7 +50,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
           fi
 
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "::set-output name=relevant_changed::true"
@@ -118,7 +118,7 @@ jobs:
         run: |
           git fetch --depth=2
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "::set-output name=relevant_changed::true"
