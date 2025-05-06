@@ -11,7 +11,7 @@ jobs:
 
   amd64_build:
     name: Build
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository      
@@ -58,5 +58,5 @@ jobs:
       test_ref: ${{ github.sha }}
       image_artifact: terminusdb-server-snapshot-amd64
       image_platform: linux/amd64
-      runner: self-hosted
+      runner: ubuntu-latest
       mocha_parallel: true
