@@ -27,7 +27,7 @@ do_install() {
       # Install swipl from PPA: https://www.swi-prolog.org/build/PPA.html
       sudo apt-add-repository "ppa:swi-prolog/$release"
       sudo apt-get update
-      sudo apt-get install swi-prolog
+      sudo apt-get install -y swi-prolog
       [ "$(which swipl)" = "/usr/bin/swipl" ] || die "swipl command not found"
       ;;
     homebrew)
