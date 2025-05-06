@@ -85,19 +85,19 @@ jobs:
         run: brew install protobuf
 
       - name: Set up QEMU for ARM64
-        if: ${{runner.arch == 'arm64' &&  steps.check_changes.outputs.relevant_changed == 'true' }}            
+        if: ${{matrix.arch == 'arm64' &&  steps.check_changes.outputs.relevant_changed == 'true' }}            
         uses: docker/setup-qemu-action@v3
         with:
           platforms: linux/arm64
   
       - name: Set up cross-compilation for ARM64
-        if: ${{runner.arch == 'arm64' &&  steps.check_changes.outputs.relevant_changed == 'true' }}                  
+        if: ${{matrix.arch == 'arm64' &&  steps.check_changes.outputs.relevant_changed == 'true' }}                  
         uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/arm64
   
       - name: Install dependencies for ARM64
-        if: ${{runner.arch == 'arm64' &&  steps.check_changes.outputs.relevant_changed == 'true' }}            
+        if: ${{matrix.arch == 'arm64' &&  steps.check_changes.outputs.relevant_changed == 'true' }}            
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static binfmt-support
