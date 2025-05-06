@@ -10,7 +10,7 @@ tmp/*
 TAGS
 httpd.log
 transcript.pl
-storage/
+storage*/
 src/test/python_tests/venv
 nohup.out
 plugins/registry.pl
@@ -20,3 +20,4 @@ terminusdb
 **/*.dylib
 terminusdb-enterprise
 .env
+docs/terminusdb.1.ronn

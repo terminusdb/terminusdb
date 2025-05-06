@@ -1,6 +1,6 @@
-.\" generated with Ronn-NG/v0.9.1
-.\" http://github.com/apjanke/ronn-ng/tree/0.9.1
-.TH "TERMINUSDB" "1" "January 2022" ""
+.\" generated with Ronn-NG/v0.10.1
+.\" http://github.com/apjanke/ronn-ng/tree/0.10.1
+.TH "TERMINUSDB" "1" "May 2025" ""
 .SH "NAME"
 \fBterminusdb\fR \- command line interface to the terminusdb Graph DBMS
 .SH "SYNOPSIS"
@@ -20,6 +20,9 @@ generate help as markdown
 \fBterminusdb test OPTIONS\fR
 .P
 Run internal TerminusDB tests\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for \fBtest\fR command
@@ -42,17 +45,26 @@ Run server in\-memory, without a persistent store\. Takes a password as an optio
 .SS "list"
 \fBterminusdb list OPTIONS\fR
 .P
-List databases\.
+List available databases\. [DEPRECATED]
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBlist\fR command
 .TP
+\fB\-b\fR, \fB\-\-branches\fR=[value]
+also describe the available branches
+.TP
 \fB\-j\fR, \fB\-\-json\fR=[value]
 Return a JSON as the result of the \fBlist\fR command
 .SS "optimize"
-\fBterminusdb optimize OPTIONS\fR
+\fBterminusdb optimize DB_SPEC OPTIONS\fR
 .P
 Optimize a database (including _system and _meta)\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBoptimize\fR command
@@ -60,6 +72,9 @@ print help for the \fBoptimize\fR command
 \fBterminusdb query DB_SPEC QUERY OPTIONS\fR
 .P
 Query a database\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBquery\fR command
@@ -69,10 +84,22 @@ message to associate with the commit
 .TP
 \fB\-a\fR, \fB\-\-author\fR=[value]
 author to place on the commit
+.TP
+\fB\-o\fR, \fB\-\-optimize\fR=[value]
+allow query reordering
+.TP
+\fB\-l\fR, \fB\-\-library\fR=[value]
+Add a WOQL library to use for defined predicates\.
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+return results as a json object
 .SS "push"
 \fBterminusdb push DB_SPEC\fR
 .P
 Push a branch\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBpush\fR command
@@ -89,6 +116,9 @@ the name of the remote to use
 \fB\-x\fR, \fB\-\-prefixes\fR=[value]
 send prefixes for database
 .TP
+\fB\-t\fR, \fB\-\-token\fR=[value]
+machine access token
+.TP
 \fB\-u\fR, \fB\-\-user\fR=[value]
 the user on the remote
 .TP
@@ -99,8 +129,14 @@ the password on the remote
 .P
 Clone a database (into DB_SPEC)\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBclone\fR command
+.TP
+\fB\-t\fR, \fB\-\-token\fR=[value]
+machine access token
 .TP
 \fB\-u\fR, \fB\-\-user\fR=[value]
 the user on the remote
@@ -114,6 +150,9 @@ organizational owner of the cloned database
 \fB\-l\fR, \fB\-\-label\fR=[value]
 label to use for this database
 .TP
+\fB\-r\fR, \fB\-\-remote\fR=[value]
+remote to use for this database
+.TP
 \fB\-c\fR, \fB\-\-comment\fR=[value]
 long description of the cloned database
 .TP
@@ -124,14 +163,20 @@ whether the cloned database is to be public
 .P
 Pull a branch from a database\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBpull\fR command
 .TP
 \fB\-e\fR, \fB\-\-remote\-branch\fR=[value]
-set the branch on the remote for push
+set the branch on the remote for pull
 .TP
 \fB\-r\fR, \fB\-\-remote\fR=[value]
 the name of the remote to use
+.TP
+\fB\-t\fR, \fB\-\-token\fR=[value]
+machine access token
 .TP
 \fB\-u\fR, \fB\-\-user\fR=[value]
 the user on the remote
@@ -139,15 +184,21 @@ the user on the remote
 \fB\-p\fR, \fB\-\-password\fR=[value]
 the password on the remote
 .SS "fetch"
-\fBterminusdb fetch BRANCH_SPEC\fR
+\fBterminusdb fetch DB_SPEC\fR
 .P
 fetch data from a remote\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBfetch\fR command
 .TP
 \fB\-r\fR, \fB\-\-remote\fR=[value]
 the name of the remote to use
+.TP
+\fB\-t\fR, \fB\-\-token\fR=[value]
+machine access token
 .TP
 \fB\-u\fR, \fB\-\-user\fR=[value]
 the user on the remote
@@ -159,22 +210,50 @@ the password on the remote
 .P
 Rebase a database with commits from FROM_DATABASE_SPEC into TO_DATABASE_SPEC\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBrebase\fR command
 .TP
 \fB\-a\fR, \fB\-\-author\fR=[value]
 The author of the rebase
+.SS "squash"
+\fBterminusdb squash DATABASE_SPEC OPTIONS\fR
+.P
+Squash a commit\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBsquash\fR command
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+output result status as JSON
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
 .SS "rollup"
 \fBterminusdb rollup DATABASE_SPEC OPTIONS\fR
 .P
 Creates an optimisation layer for queries on the given commit\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBrollup\fR command
 .SS "bundle"
 \fBterminusdb bundle DATABASE_SPEC OPTIONS\fR
 .P
-Create a pack for a given DATABASE_SPEC that can then be reconsistuted with \fBterminusdb unpack\fR\.
+Create a pack for a given DATABASE_SPEC that can then be reconsistuted with \fBterminusdb unbundle\fR\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBbundle\fR command
@@ -186,29 +265,238 @@ file name to use for pack output file (defaults to descriptor based name)\.
 .P
 Unbundle a bundle file\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBunbundle\fR command
+.SS "diff"
+\fBterminusdb diff [Path] OPTIONS\fR
+.P
+Create a diff between two JSONs, a JSON and a commit (path required), or two commits (path required)\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBdiff\fR command
+.TP
+\fB\-b\fR, \fB\-\-before\fR=[value]
+JSON document which is the \fIbefore\fR
+.TP
+\fB\-a\fR, \fB\-\-after\fR=[value]
+JSON document which is the \fIafter\fR
+.TP
+\fB\-k\fR, \fB\-\-keep\fR=[value]
+Skeleton of the document to retain as context
+.TP
+\fB\-c\fR, \fB\-\-copy\-value\fR, \fB\-\-copy_value\fR=[value]
+Maintain explit copies of diffs in lists
+.TP
+\fB\-d\fR, \fB\-\-docid\fR=[value]
+document id to use for comparisons
+.TP
+\fB\-p\fR, \fB\-\-before_commit\fR, \fB\-\-before\-commit\fR=[value]
+Commit or branch of the \fIbefore\fR document(s)
+.TP
+\fB\-s\fR, \fB\-\-after_commit\fR, \fB\-\-after\-commit\fR=[value]
+Commit or branch of the \fIafter\fR document(s)
+.TP
+\fB\-n\fR, \fB\-\-start\fR=[value]
+How many diff results to skip before returning (ignored if not comparing resources)
+.TP
+\fB\-l\fR, \fB\-\-count\fR=[value]
+Number of results to return (ignored if not comparing resources)
+.SS "apply"
+\fBterminusdb apply [Path] OPTIONS\fR
+.P
+Apply a diff to path which is obtained from the differences between two commits
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBapply\fR command
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-k\fR, \fB\-\-keep\fR=[value]
+Skeleton of the document to retain as context
+.TP
+\fB\-t\fR, \fB\-\-type\fR=[value]
+Variety of commit to create on apply (currently only squash)
+.TP
+\fB\-f\fR, \fB\-\-match\-final\-state\fR, \fB\-\-match_final_state\fR=[value]
+Allow conflicting patch to apply if patch would yield the same final state
+.TP
+\fB\-p\fR, \fB\-\-before_commit\fR, \fB\-\-before\-commit\fR=[value]
+Commit of the \fIbefore\fR document(s)
+.TP
+\fB\-s\fR, \fB\-\-after_commit\fR, \fB\-\-after\-commit\fR=[value]
+Commit of the \fIafter\fR document(s)
+.SS "log"
+\fBterminusdb log DB_SPEC\fR
+.P
+Get the log for a branch given by DB_SPEC\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBlog\fR command
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+return log as JSON
+.TP
+\fB\-s\fR, \fB\-\-start\fR=[value]
+How far back in commit log to start giving results
+.TP
+\fB\-c\fR, \fB\-\-count\fR=[value]
+Number of results to return
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR=[value]
+Give back additional information on commits
+.SS "history"
+\fBterminusdb history DB_SPEC\fR
+.P
+Get the history for a given document by id in DB_SPEC\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBhistory\fR command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+The id of the document to provide history for
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+return history as JSON
+.TP
+\fB\-s\fR, \fB\-\-start\fR=[value]
+How far back in commit history to start giving results
+.TP
+\fB\-k\fR, \fB\-\-created\fR=[value]
+return time of creation (does not report all history)
+.TP
+\fB\-u\fR, \fB\-\-updated\fR=[value]
+return time of last update (does not report all history)
+.TP
+\fB\-c\fR, \fB\-\-count\fR=[value]
+Number of results to return
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR=[value]
+give back schema update information
+.SS "reset"
+\fBterminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC\fR
+.P
+Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBreset\fR command
+.SS "migration"
+\fBterminusdb migration BRANCH_SPEC\fR
+.P
+Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBmigration\fR command
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-o\fR, \fB\-\-operations\fR=[value]
+operations to perform on the schema
+.TP
+\fB\-t\fR, \fB\-\-target\fR=[value]
+resource with a schema as migration target
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR=[value]
+give back schema update information
+.TP
+\fB\-d\fR, \fB\-\-dry_run\fR=[value]
+provide information about what would occur if the operations were performed
+.SS "concat"
+\fBterminusdb concat DB_SPEC\fR
+.P
+Concatenate any number of space\-separated COMMIT_SPEC or BRANCH_SPEC (provided they are base layers only) passed on standard\-input into a commit on DB_SPEC
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBconcat\fR command
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+Return a JSON readable commit identifier
 .SS "branch create"
 \fBterminusdb branch create BRANCH_SPEC OPTIONS\fR
 .P
 Create a branch\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBbranch create\fR sub command
 .TP
 \fB\-o\fR, \fB\-\-origin\fR=[value]
-the origin branch to use
+the origin branch to use (false for none)
 .SS "branch delete"
 \fBterminusdb branch delete BRANCH_SPEC OPTIONS\fR
 .P
 Delete a branch\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBbranch delete\fR sub command
+.SS "db list"
+\fBterminusdb list DB_SPEC [\.\. DB_SPECN] OPTIONS\fR
+.P
+List available databases\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBlist\fR command
+.TP
+\fB\-b\fR, \fB\-\-branches\fR=[value]
+also describe the available branches
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR=[value]
+return lots of metadata
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+Return a JSON as the result of the \fBlist\fR command
 .SS "db create"
 \fBterminusdb db create DATABASE_SPEC OPTIONS\fR
 .P
 Create a database\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBdb create\fR sub command
@@ -228,10 +516,10 @@ whether this database is to be public
 \fB\-k\fR, \fB\-\-schema\fR=[value]
 whether to use a schema
 .TP
-\fB\-d\fR, \fB\-\-data\-prefix\fR=[value]
+\fB\-d\fR, \fB\-\-data_prefix\fR, \fB\-\-data\-prefix\fR=[value]
 uri prefix to use for data
 .TP
-\fB\-s\fR, \fB\-\-schema\-prefix\fR=[value]
+\fB\-s\fR, \fB\-\-schema_prefix\fR, \fB\-\-schema\-prefix\fR=[value]
 uri prefix to use for schema
 .TP
 \fB\-x\fR, \fB\-\-prefixes\fR=[value]
@@ -241,6 +529,9 @@ additional defined prefixes in JSON
 .P
 Delete a database\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBdb delete\fR sub command
 .TP
@@ -249,10 +540,364 @@ organizational owner of the database
 .TP
 \fB\-f\fR, \fB\-\-force\fR=[value]
 force the deletion of the database (unsafe)
+.SS "db update"
+\fBterminusdb db update DATABASE_SPEC OPTIONS\fR
+.P
+Update a database setting the OPTIONS in an existing database\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBdb update\fR sub command
+.TP
+\fB\-l\fR, \fB\-\-label\fR=[value]
+label to use for this database
+.TP
+\fB\-c\fR, \fB\-\-comment\fR=[value]
+long description of this database
+.TP
+\fB\-p\fR, \fB\-\-public\fR=[value]
+whether this database is to be public
+.TP
+\fB\-k\fR, \fB\-\-schema\fR=[value]
+whether to use a schema
+.TP
+\fB\-x\fR, \fB\-\-prefixes\fR=[value]
+Explicitly defined prefix set (in JSON)
+.SS "doc insert"
+\fBterminusdb doc insert DATABASE_SPEC OPTIONS\fR
+.P
+Insert documents\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBdoc insert\fR sub command
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-g\fR, \fB\-\-graph_type\fR, \fB\-\-graph\-type\fR=[value]
+graph type (instance or schema)
+.TP
+\fB\-r\fR, \fB\-\-require\-migration\fR=[value]
+require an inferred migration (assuming this is a schema change)
+.TP
+\fB\-x\fR, \fB\-\-allow\-destructive\-migration\fR=[value]
+allow inferred migration to be destructive (assuming this is a schema change)
+.TP
+\fB\-d\fR, \fB\-\-data\fR=[value]
+document data
+.TP
+\fB\-j\fR, \fB\-\-raw_json\fR, \fB\-\-raw\-json\fR=[value]
+inserts as raw json
+.TP
+\fB\-s\fR, \fB\-\-merge_repeats\fR, \fB\-\-merge\-repeats\fR=[value]
+merge repeated documents into a single document record
+.TP
+\fB\-f\fR, \fB\-\-full_replace\fR, \fB\-\-full\-replace\fR=[value]
+delete all previous documents and substitute these
+.SS "doc delete"
+\fBterminusdb doc delete DATABASE_SPEC OPTIONS\fR
+.P
+Delete documents\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBdoc delete\fR sub command
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-g\fR, \fB\-\-graph_type\fR, \fB\-\-graph\-type\fR=[value]
+graph type (instance or schema)
+.TP
+\fB\-r\fR, \fB\-\-require\-migration\fR=[value]
+require an inferred migration (assuming this is a schema change)
+.TP
+\fB\-x\fR, \fB\-\-allow\-destructive\-migration\fR=[value]
+allow inferred migration to be destructive (assuming this is a schema change)
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+document id to delete
+.TP
+\fB\-t\fR, \fB\-\-type\fR=[value]
+document type to delete
+.TP
+\fB\-d\fR, \fB\-\-data\fR=[value]
+document data
+.TP
+\fB\-n\fR, \fB\-\-nuke\fR=[value]
+nuke all documents
+.SS "doc replace"
+\fBterminusdb doc replace DATABASE_SPEC OPTIONS\fR
+.P
+Replace documents\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBdoc replace\fR sub command
+.TP
+\fB\-m\fR, \fB\-\-message\fR=[value]
+message to associate with the commit
+.TP
+\fB\-a\fR, \fB\-\-author\fR=[value]
+author to place on the commit
+.TP
+\fB\-g\fR, \fB\-\-graph_type\fR, \fB\-\-graph\-type\fR=[value]
+graph type (instance or schema)
+.TP
+\fB\-r\fR, \fB\-\-require\-migration\fR=[value]
+require an inferred migration (assuming this is a schema change)
+.TP
+\fB\-x\fR, \fB\-\-allow\-destructive\-migration\fR=[value]
+allow inferred migration to be destructive (assuming this is a schema change)
+.TP
+\fB\-d\fR, \fB\-\-data\fR=[value]
+document data
+.TP
+\fB\-j\fR, \fB\-\-raw_json\fR, \fB\-\-raw\-json\fR=[value]
+replace as raw json
+.TP
+\fB\-c\fR, \fB\-\-create\fR=[value]
+create document if it does not exist
+.SS "doc get"
+\fBterminusdb doc get DATABASE_SPEC OPTIONS\fR
+.P
+Query documents\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBdoc get\fR sub command
+.TP
+\fB\-g\fR, \fB\-\-graph_type\fR, \fB\-\-graph\-type\fR=[value]
+graph type (instance or schema)
+.TP
+\fB\-s\fR, \fB\-\-skip\fR=[value]
+number of documents to skip
+.TP
+\fB\-c\fR, \fB\-\-count\fR=[value]
+number of documents to return
+.TP
+\fB\-m\fR, \fB\-\-minimized\fR=[value]
+return minimized prefixes
+.TP
+\fB\-l\fR, \fB\-\-as_list\fR, \fB\-\-as\-list\fR=[value]
+return results as a JSON list (as opposed to JSON\-lines)
+.TP
+\fB\-u\fR, \fB\-\-unfold\fR=[value]
+include subdocuments, or only subdocument ids
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+id of document to retrieve
+.TP
+\fB\-\-ids\fR=[value]
+list of document ids to retrieve
+.TP
+\fB\-t\fR, \fB\-\-type\fR=[value]
+type of document to retrieve
+.TP
+\fB\-z\fR, \fB\-\-compress_ids\fR, \fB\-\-compress\-ids\fR=[value]
+return compressed / minimized ids using default prefixes
+.TP
+\fB\-q\fR, \fB\-\-query\fR=[value]
+document query search template
+.SS "role create"
+\fBterminusdb role create ROLE_NAME ACTION_1 \.\. ACTION_N OPTIONS\fR
+.P
+Create a new role with the listed actions\. Actions may be any of: "create_database", "delete_database", "class_frame", "clone", "fetch", "push", "branch", "rebase", "instance_read_access", "instance_write_access", "schema_read_access", "schema_write_access", "meta_read_access", "meta_write_access", "commit_read_access", "commit_write_access", "manage_capabilities"
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBrole create\fR sub command
+.SS "role delete"
+\fBterminusdb role create ROLE_ID_OR_ROLE_NAME\fR
+.P
+Delete a role from the system database
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBrole delete\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as a role Id rather than a name\.
+.SS "role update"
+\fBterminusdb role update ROLE_ID_OR_ROLE_NAME ACTIONS OPTIONS\fR
+.P
+Update a role from the system database
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBrole update\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as a role Id rather than a name\.
+.SS "role get"
+\fBterminusdb role get <ROLE_ID_OR_ROLE_NAME>\fR
+.P
+Get a role description from name or id, or all roles if unspecified\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBrole get\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as a role id rather than a name\.
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+Return answer as a JSON document
+.SS "organization create"
+\fBterminusdb organization create ORGANIZATION_NAME\fR
+.P
+Create an organization with a given name\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBorganization create\fR sub command
+.SS "organization delete"
+\fBterminusdb organization delete ORGANIZATION_NAME_OR_ID\fR
+.P
+Create an organization with a given name or id\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBorganization delete\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as an organization id rather than a name\.
+.SS "organization get"
+\fBterminusdb organization get <ORGANIZATION_NAME_OR_ID>\fR
+.P
+Get an organization from its name or id, or list all if unspecified\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBorganization get\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as an organization id rather than a name\.
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+Return answer as a JSON document
+.SS "user create"
+\fBterminusdb user create USER\fR
+.P
+Create a user with a given name USER
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBuser create\fR sub command
+.TP
+\fB\-p\fR, \fB\-\-password\fR=[value]
+Specify the password to use for the user
+.SS "user delete"
+\fBterminusdb organization delete USER\fR
+.P
+Delete a user with a given name or ID\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBuser delete\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as an organization id rather than a name\.
+.SS "user get"
+\fBterminusdb user get <USER_NAME_OR_ID>\fR
+.P
+Get a user from its name or id, or list all if unspecified\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBorganization get\fR sub command
+.TP
+\fB\-i\fR, \fB\-\-id\fR=[value]
+Interpret argument as an organization id rather than a name\.
+.TP
+\fB\-c\fR, \fB\-\-capability\fR=[value]
+Report on all capabilities of this user\.
+.TP
+\fB\-j\fR, \fB\-\-json\fR=[value]
+Return answer as a JSON document
+.SS "user password"
+\fBterminusdb user password USER\fR
+.P
+Change password for user USER
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBuser create\fR sub command
+.TP
+\fB\-p\fR, \fB\-\-password\fR=[value]
+Specify the password to use for the user
+.SS "capability grant"
+\fBterminusdb capability grant USER SCOPE ROLE1 <\|\.\|\.\|\.ROLEN>\fR
+.P
+Grant ROLE1 \|\.\|\.\|\. ROLEN over SCOPE to USER
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBstore init\fR sub command
+.TP
+\fB\-s\fR, \fB\-\-scope_type\fR, \fB\-\-scope\-type\fR=[value]
+Should the scope be interpreted as a \fBdatabase\fR (default) or an \fBorganization\fR\. If \fBids\fR is specified then the parameters are assumed to be ids rather than names\.
+.SS "capability revoke"
+\fBterminusdb capability revoke USER SCOPE ROLE1 <\|\.\|\.\|\.ROLEN>\fR
+.P
+Revoke ROLE1 \|\.\|\.\|\. ROLEN over SCOPE from USER
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBstore init\fR sub command
+.TP
+\fB\-s\fR, \fB\-\-scope_type\fR, \fB\-\-scope\-type\fR=[value]
+Should the scope be interpreted as a \fBdatabase\fR (default) or an \fBorganization\fR\. If \fBids\fR is specified then the parameters are assumed to be ids rather than names\.
 .SS "store init"
 \fBterminusdb store init OPTIONS\fR
 .P
 Initialize a store for TerminusDB\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBstore init\fR sub command
@@ -267,6 +912,9 @@ force the creation of a new store even when one already exists
 .P
 Dump an RDF string\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBtriples dump\fR sub command
 .TP
@@ -276,6 +924,9 @@ format of RDF (can be one of: [turtle])
 \fBterminusdb triples update GRAPH_SPEC FILE\fR
 .P
 Update from an RDF file (replaces current content)\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBtriples update\fR sub command
@@ -293,6 +944,9 @@ format of RDF (can be one of: [turtle])
 .P
 Load triples from RDF file (Appending new)\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBtriples load\fR sub command
 .TP
@@ -309,12 +963,18 @@ format of RDF (can be one of: [turtle])
 .P
 Add a remote\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBremote add\fR sub command
 .SS "remote remove"
-\fBterminusdb remote delete DATABASE_SPEC REMOTE_NAME OPTIONS\fR
+\fBterminusdb remote remove DATABASE_SPEC REMOTE_NAME OPTIONS\fR
 .P
 Remove a remote\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBremote remove\fR sub command
@@ -323,12 +983,18 @@ print help for the \fBremote remove\fR sub command
 .P
 Set the URL of a remote\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBremote set\-url\fR sub command
 .SS "remote get\-url"
 \fBterminusdb remote get\-url DATABASE_SPEC REMOTE_NAME OPTIONS\fR
 .P
 Get the URL of a remote\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBremote get\-url\fR sub command
@@ -340,10 +1006,13 @@ the name of the remote to use
 .P
 List remotes\.
 .TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBremote list\fR sub command
 .SH "SYNTAX"
-The designation of databases, repositories, the associated commit graph of a database, and various graphs as used in the above command requires the use of an appropriate descriptor path\.
+The designation of databases, repositories, the associated commit graph of a database, and various graphs as used in the above command requires the use of an appropriate descriptor path which is referred to as the DB_SPEC\.
 .TP
 \fB_system\fR
 This is the system meta\-data, which contains the user information, organization information and database records\.
@@ -365,6 +1034,17 @@ The most specific branch descriptor, allows you to address a branch other than m
 .TP
 \fB<organization>/<database>/<repository>/commit/<commit>\fR
 The descriptor which allows an individual commit to be addressed directly\.
+.P
+For commands that refer to a GRAPH_SPEC, it should be a DB_SPEC (specifying the precise branch if a database) followed by one of:
+.IP "\(bu" 4
+\fBDB_SPEC/instance\fR
+.IP "\(bu" 4
+\fBDB_SPEC/schema\fR
+.IP "" 0
+.P
+For example:
+.P
+\fBterminusdb triples dump admin/people/local/branch/main/schema\fR
 .SH "ENVIRONMENT"
 .TP
 \fBTERMINUSDB_SERVER_NAME\fR
