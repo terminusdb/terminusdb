@@ -68,7 +68,7 @@ prolog-clean:
 
 # Remove everything.
 .PHONY: clean
-clean: realclean-rust clean-deps prolog-clean
+clean: realclean-rust clean-deps prolog-clean docs-clean
 
 # Remove the dylib.
 .PHONY: clean-rust
@@ -85,9 +85,13 @@ realclean-rust:
 clean-deps:
 	@$(MAKE) -f distribution/Makefile.deps clean-deps
 
+.PHONY: docs-clean
+docs-clean:
+	@rm -f $(RONN_FILE)
+
 # Build the documentation.
 .PHONY: docs
-docs: $(ROFF_FILE)
+docs: default $(ROFF_FILE)
 
 ################################################################################
 
