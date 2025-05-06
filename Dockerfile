@@ -87,14 +87,16 @@ COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 FROM base AS base_community
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 RUN set -eux; \
-    make DIST=community
+    make DIST=community; \
+    make test
 
 # Build the enterprise executable.
 FROM base AS base_enterprise
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
 RUN set -eux; \
-    make DIST=enterprise
+    make DIST=enterprise \
+    make test
     
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
