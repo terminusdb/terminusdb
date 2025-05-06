@@ -1,4 +1,3 @@
-# Build and run tests every night on non-Docker systems.
 name: Native Build
 
 on:
@@ -7,11 +6,8 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    #  schedule:
-    #- cron:  '45 1 * * *'
 
 jobs:
-
   unit-tests:
     name: "Unit Tests"
     strategy:
@@ -38,8 +34,8 @@ jobs:
           git fetch --deepen=10
 
           if [ "${{ github.event_name }}" == "push" ]; then
-              # Check that HEAD~1 exists
-              if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            # Check that HEAD~1 exists
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
               CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
             else
               echo "Only one commit available; treating all files as changed"
@@ -50,7 +46,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
           fi
 
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "::set-output name=relevant_changed::true"
@@ -118,7 +114,7 @@ jobs:
         run: |
           git fetch --depth=2
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
-          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile)' || true)
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|docs/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
             echo "Relevant files changed: $RELEVANT_CHANGED"
             echo "::set-output name=relevant_changed::true"
@@ -176,10 +172,6 @@ jobs:
 
       - name: Run tests
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        
-#        env:
-#          TERMINUSDB_DOCKER_CONTAINER: terminusdb
-#          MOCHA_JOBS: "4"
-#          MOCHA_PARALLEL: true
         run: |
             cd tests        
             npm install-ci-test

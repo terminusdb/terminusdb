@@ -1,4 +1,4 @@
-name: Check
+name: Docker Image Test
 
 on:
   workflow_call:
@@ -10,14 +10,14 @@ on:
         required: true
         type: string
       image_artifact:
+        required: true        
         type: string
-        default: "terminusdb-server-docker-image"
       image_platform:
+        required: true                
         type: string
-        default: "linux/amd64"
       runner:
         type: string
-        default: "self-hosted"
+        required: true
       mocha_jobs:
         type: string
         default: "4"
@@ -26,12 +26,12 @@ on:
         default: true
 
 env:
-  NODE_VERSION: '16'
+  NODE_VERSION: '20'
 
 jobs:
 
   unit:
-    name: Unit tests
+    name: Unit Tests
     runs-on: ${{ inputs.runner }}
 
     steps:
@@ -49,6 +49,10 @@ jobs:
         with:
           platforms: 'arm64'
 
+      - name: Remove old TerminusDB container if exists
+        run: |
+          docker rm -f terminusdb || true
+  
       - name: Run tests
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
@@ -98,11 +102,11 @@ jobs:
   #       run: tox -e test
 
   integration_tests_basic:
-    name: Integration tests (basic)
+    name: Integration Tests
     runs-on: ${{ inputs.runner }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
@@ -142,9 +146,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Run tests
+      - name: Run
         working-directory: tests
         env:
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
@@ -317,50 +321,3 @@ jobs:
   #         TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
   #       run: npm install-ci-test
 
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - uses: actions/checkout@v3
-        with:
-          repository: ${{ inputs.test_repository }}
-          ref: ${{ inputs.test_ref }}
-
-      - name: Set up QEMU
-        if: ${{ inputs.image_platform == 'linux/arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: 'arm64'
-
-      - name: Download Docker image
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.image_artifact }}
-
-      - run: make download-lint
-
-      - name: Run lint
-        run: |
-          docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run --platform ${{ inputs.image_platform }} \
-            -v $(pwd):/app/terminusdb \
-            terminusdb/terminusdb-server:local \
-            make lint
-
-  clippy:
-    name: Clippy comments
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - run: sudo apt update && sudo apt install software-properties-common -y
-      - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox protobuf-compiler libprotobuf-dev
-      - uses: actions-rs/clippy-check@v1
-        continue-on-error: true
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features --manifest-path=src/rust/Cargo.toml

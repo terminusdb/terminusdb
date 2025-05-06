@@ -10,7 +10,7 @@ on:
       - 'tests/**'      
       - 'distribution/**'            
       - 'Makefile'            
-      - '.lint_config.pl'                  
+      - '.lint_config.pl'                
 
 jobs:
 

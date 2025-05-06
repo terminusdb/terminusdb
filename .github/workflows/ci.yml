@@ -1,3 +1,4 @@
+# DO NOT USE
 name: CI
 
 on:
@@ -10,16 +11,9 @@ env:
   CURRENT_REPO_VERSION: 11.1.15
 
 jobs:
-  openapi_lint:
-    name: OpenAPI linting
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - run: npx @redocly/cli lint docs/openapi.yaml
-
-
   is_duplicate_run:
+    # DISABLED, DO NOT USE
+    if: false  
     name: Duplicate run?
     runs-on: ubuntu-latest
 
@@ -55,7 +49,7 @@ jobs:
         }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dorny/paths-filter@v2
         id: filter
@@ -105,31 +99,23 @@ jobs:
             src/config/terminus_config.pl
             distribution/snap/snapcraft.yaml
 
-  build:
+  amd64_build:
     name: Build Docker (amd64)
     needs: versions
-    uses: ./.github/workflows/docker-build.yml
+    uses: ./.github/workflows/docker-amd64-build.yml
 
-  arm64_docker:
+  arm64_build:
     name: Build Docker (arm64)
     needs:
       - is_build_required
-    uses: ./.github/workflows/arm.yml
+    uses: ./.github/workflows/docker-arm64-build.yml
     if: needs.is_build_required.outputs.push_docker_required == 'true'
-
-  check:
-    name: Check
-    needs: build
-    uses: ./.github/workflows/check.yml
-    with:
-      test_repository: ${{ github.repository }}
-      test_ref: ${{ github.sha }}
 
  # This is required for status checks.
   all_checks_pass_with_build:
     name: All checks pass
     runs-on: ubuntu-latest
-    needs: check
+    needs: amd64_build
     steps:
       - run: echo "Celebrate! 🥳"
 
@@ -139,18 +125,18 @@ jobs:
     needs: all_checks_pass_with_build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download Docker image
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-server-docker-image
+          name: terminusdb-server-snapshot-amd64
 
       - name: Generate man page
         run: |
           sudo apt-get install --no-install-recommends ronn
           ronn --version
-          docker load < terminusdb-server-docker-image.tar.gz
+          docker load < terminusdb-server-snapshot-amd64.tar.gz
           export HELP="$(docker run --rm terminusdb/terminusdb-server:local /app/terminusdb/terminusdb help -m)"
           envsubst < docs/terminusdb.1.ronn.template > docs/terminusdb.1.ronn
           ronn --roff docs/terminusdb.1.ronn
@@ -174,99 +160,12 @@ jobs:
 
   push_docker:
     name: Push Docker image
-    runs-on: ubuntu-latest
     needs:
       - is_build_required
       - all_checks_pass_with_build
-      - arm64_docker
+      - arm64_build
     if: needs.is_build_required.outputs.push_docker_required == 'true'
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download Docker image
-        uses: actions/download-artifact@v4
-        with:
-          name: terminusdb-server-docker-image
-
-      - name: Download Docker image arm64
-        uses: actions/download-artifact@v4
-        with:
-          name: terminusdb-server-docker-image-arm64
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: terminusdb
-          password: ${{ secrets.DOCKER_PASS }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Load images
-        run: |
-          docker load < terminusdb-server-docker-image.tar.gz
-          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
-          docker push terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
-          docker rmi terminusdb/terminusdb-server:local
-          docker load < terminusdb-server-docker-image-arm64.tar.gz
-          docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
-          docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
-          docker rmi terminusdb/terminusdb-server:local
-
-      - name: Determine image tags to push
-        run: |
-          VERSION=$(echo "$GITHUB_REF" | sed -e 's,.*/\(.*\),\1,')
-
-          # Use Docker `dev` tag convention for main branch
-          [ "$VERSION" == "main" ] && VERSION=dev
-
-          # Image identifiers
-          LOCAL_IMAGE=terminusdb/terminusdb-server:local
-          VERSION_IMAGE=terminusdb/terminusdb-server:$VERSION
-          DEV_COMMIT_IMAGE=terminusdb/terminusdb-server:$VERSION-$GITHUB_SHA
-          LATEST_IMAGE=terminusdb/terminusdb-server:latest
-
-          TAGS="$VERSION_IMAGE"
-
-          if [ "$VERSION" == "dev" ]; then
-            TAGS="${TAGS},${DEV_COMMIT_IMAGE}"
-          fi
-
-          # Tag and push the latest image when a version tag is pushed
-          # We also make sure that rc and beta are not pushed to the latest tag!
-          if [ $(echo "$GITHUB_REF" | grep "refs/tags/v" | grep -v "rc" | grep -v "beta") ]; then
-            # Get the major tag, for instance v11 if the version is v11.0.4
-            VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
-            TAGS="${TAGS},${LATEST_IMAGE},terminusdb/terminusdb-server:${VERSION_MAJOR}"
-          fi
-
-          echo "docker_tags=${TAGS}" >> $GITHUB_ENV
-
-      - name: Create new image manifest
-        run: |
-          TAGS="${{ env.docker_tags }}"
-          for TAG in ${TAGS//,/ }
-          do
-              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
-          done
-
-  trigger_enterprise_build:
-    name: Trigger enterprise build
-    runs-on: ubuntu-latest
-    needs: push_docker
-    if: |
-      github.repository == 'terminusdb/terminusdb' &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Run
-        run: |
-          curl https://api.github.com/repos/${{ secrets.ENTERPRISE_REPO_OWNER }}/${{ secrets.ENTERPRISE_REPO }}/dispatches \
-            -X POST \
-            -H 'Accept: application/vnd.github.everest-preview+json' \
-            -u rrooij:${{ secrets.PAT }} -d '{ "event_type": "Trigger from community", "client_payload": {"commit": "${{ github.sha }}" } }'
+    uses: ./.github/workflows/publish.yml
 
   trigger_snap:
     name: Trigger snap build
@@ -300,19 +199,3 @@ jobs:
           snap: ${{ steps.snap_path_step.outputs.snap_path }}
           release: stable
 
-  trigger_docs_update:
-    name: Trigger docs update
-    runs-on: ubuntu-latest
-    needs: push_docker
-    if: >-
-      github.repository == 'terminusdb/terminusdb' &&
-      github.event_name == 'push' &&
-      startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.PAT }}
-          repository: terminusdb/terminusdb-docs
-          event-type: update-from-terminusdb
-          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'

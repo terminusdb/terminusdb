@@ -1,0 +1,62 @@
+name: AMD64 Image
+
+on:
+  workflow_dispatch:  
+  workflow_call:
+  pull_request:
+    paths: 
+      - ".github/workflows/docker-amd64-build.yml"
+  
+jobs:
+
+  amd64_build:
+    name: Build
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository      
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build and export
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          tags: terminusdb/terminusdb-server:local
+          outputs: type=docker,dest=terminusdb-server-snapshot-amd64.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          input: /github/workspace/terminusdb-server-snapshot-amd64.tar
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Compress image
+        run: gzip terminusdb-server-snapshot-amd64.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+            name: terminusdb-server-snapshot-amd64
+            path: terminusdb-server-snapshot-amd64.tar.gz
+
+  amd64_tests:
+    name: Tests
+    needs: amd64_build
+    uses: ./.github/workflows/docker-image-test.yml
+    with:
+      test_repository: ${{ github.repository }}
+      test_ref: ${{ github.sha }}
+      image_artifact: terminusdb-server-snapshot-amd64
+      image_platform: linux/amd64
+      runner: self-hosted
+      mocha_parallel: true
