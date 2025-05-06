@@ -2,26 +2,12 @@
 
 ARG DIST=community
 
-FROM debian:bookworm-slim AS swipl_minimal
-
-# Set environment to avoid interactive prompts during installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install only essential dependencies for running SWI-Prolog
+FROM swipl:9.2.9 AS swipl_minimal
 RUN apt-get update && \
-    apt-get install -y \
-    swi-prolog \
-    libgmp10 \
-    libarchive13 \
-    libreadline8 \
-    zlib1g \
-    libjwt0 \
-    libssl3 && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends  libjwt0
+
 
 # Install the SWI-Prolog pack dependencies.
-#FROM swipl:9.2.9 AS pack_installer
 FROM swipl_minimal AS pack_installer
 RUN set -eux; \
     BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
@@ -33,7 +19,6 @@ COPY distribution/Makefile.deps Makefile
 RUN make
 
 # Install Rust. Prepare to build the Rust code.
-#FROM swipl:9.2.9 AS rust_builder_base
 FROM swipl_minimal AS rust_builder_base
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
@@ -87,7 +72,7 @@ COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 FROM base AS base_community
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 RUN set -eux; \
-    make DIST=community; \
+    make DIST=community
     make test
 
 # Build the enterprise executable.
