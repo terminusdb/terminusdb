@@ -40,6 +40,25 @@ jobs:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Install swi-prolog 
+        run: ./.github/install-swi-prolog.sh stable
+
+      - name: Checkout tus
+        uses: actions/checkout@v4
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Install Protobuf Compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Build TerminusDB
+        run: make
+  
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -78,13 +97,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Run
-        working-directory: tests
         env:
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
           MOCHA_JOBS: ${{ inputs.mocha_jobs }}
           MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
         run: |
-          npm install-ci-test
+            cd tests        
+            npm install-ci-test
 
 
   # integration_tests_non_parallel:
