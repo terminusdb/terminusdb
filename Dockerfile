@@ -2,8 +2,27 @@
 
 ARG DIST=community
 
+FROM debian:bookworm-slim AS swipl_minimal
+
+# Set environment to avoid interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only essential dependencies for running SWI-Prolog
+RUN apt-get update && \
+    apt-get install -y \
+    swi-prolog \
+    libgmp10 \
+    libarchive13 \
+    libreadline8 \
+    zlib1g \
+    libjwt0 \
+    libssl3 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install the SWI-Prolog pack dependencies.
-FROM swipl:9.2.9 AS pack_installer
+#FROM swipl:9.2.9 AS pack_installer
+FROM swipl_minimal AS pack_installer
 RUN set -eux; \
     BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
@@ -14,7 +33,8 @@ COPY distribution/Makefile.deps Makefile
 RUN make
 
 # Install Rust. Prepare to build the Rust code.
-FROM swipl:9.2.9 AS rust_builder_base
+#FROM swipl:9.2.9 AS rust_builder_base
+FROM swipl_minimal AS rust_builder_base
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
     BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
@@ -43,7 +63,7 @@ RUN make DIST=enterprise
 FROM rust_builder_${DIST} AS rust_builder
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
-FROM swipl:9.2.9 AS base
+FROM pack_installer AS base
 RUN set -eux; \
     RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \
     apt-get update; \
@@ -55,8 +75,8 @@ ARG TERMINUSDB_GIT_HASH=null
 ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
-COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
-COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
+#COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
+#COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
 WORKDIR /app/terminusdb
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
@@ -65,17 +85,26 @@ COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 
 # Build the community executable.
 FROM base AS base_community
+COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 RUN set -eux; \
-    touch src/rust/librust.so; \
     make DIST=community
 
 # Build the enterprise executable.
 FROM base AS base_enterprise
+COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
 RUN set -eux; \
-    touch src/rust/librust.so; \
     make DIST=enterprise
+    
+FROM swipl_minimal AS min_community
+COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
+COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/distribution/
+CMD ["/app/terminusdb/distribution/init_docker.sh"]
+
+FROM swipl_minimal AS min_enterprise
+COPY --from=base_enterprise /app/terminusdb/terminusdb app/terminusdb/
+COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/distribution/
+CMD ["/app/terminusdb/distribution/init_docker.sh"]
 
 # Build the ${DIST} executable. Set the default command.
-FROM base_${DIST}
-CMD ["/app/terminusdb/distribution/init_docker.sh"]
+FROM min_${DIST}
