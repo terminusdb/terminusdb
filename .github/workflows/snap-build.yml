@@ -1,5 +1,5 @@
 # Build Snap
-name: Build Snap
+name: Snap Build
 
 on:
   workflow_dispatch:
@@ -35,17 +35,23 @@ jobs:
           name: terminusdb-snap
           path: ${{ steps.snapcraft.outputs.snap }}
 
-  test:
-    name: Test
+  install:
+    name: Install
     needs: build
     runs-on: ubuntu-latest
 
     steps:          
-      - name: Install
-        run: sudo snap install ${{ needs.build.outputs.snap }} --dangerous
+      - run: sudo snap install ${{ needs.build.outputs.snap }} --dangerous
+        
+  test:
+    name: Integration Tests
+    needs: 
+      - build
+      - install
+    runs-on: ubuntu-latest
 
-      - name: Integration Tests
-        run: |
+    steps:          
+      - run: |
           terminusdb store init
           terminusdb serve &
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
