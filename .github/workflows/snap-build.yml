@@ -9,28 +9,43 @@ on:
       - ".github/workflows/snap-build.yml"
   
 jobs:
-  snap:
-    name: Build & Test
+  build:
+    name: Build
     runs-on: ubuntu-latest
 
+    outputs:
+      snap: ${{ steps.snapcraft.outputs.snap }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - run: rsync -r ./ distribution/terminusdb_source/
+      - name: Copy Sources
+        run: rsync -r ./ distribution/terminusdb_source/
 
-      - uses: snapcore/action-build@v1
+      - name: Build
+        uses: snapcore/action-build@v1
         id: snapcraft
         with:
           path: distribution
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload
+        uses: actions/upload-artifact@v4
         with:
           name: terminusdb-snap
           path: ${{ steps.snapcraft.outputs.snap }}
 
-      - run: sudo snap install ${{ steps.snapcraft.outputs.snap }} --dangerous
+  test:
+    name: Test
+    needs: build
+    runs-on: ubuntu-latest
 
-      - run: |
+    steps:          
+      - name: Install
+        run: sudo snap install ${{ needs.build.outputs.snap }} --dangerous
+
+      - name: Integration Tests
+        run: |
           terminusdb store init
           terminusdb serve &
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb

@@ -1,0 +1,50 @@
+name: Publish Snap
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          name: terminusdb-snap
+          path: download_snap/
+
+      - name: Determine Path
+        id: snap_path
+        run: |
+          echo "snap_path=$(find download_snap -name '*.snap')"  >> "$GITHUB_OUTPUT"
+
+      - name: Extract Version
+        id: version
+        run: |
+          snap_file="${{ steps.snap_path.outputs.snap_path }}"
+          filename=$(basename "$snap_file")
+          # Extract version: everything between first "_" and second "_"
+          version=$(echo "$filename" | sed -n 's/^[^_]*_\([^_]*\)_.*$/\1/p')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set Channel
+        id: channel
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          if [[ "$version" == *-dev ]]; then
+            echo "release=edge" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=stable" >> "$GITHUB_OUTPUT"
+          fi          
+
+      - name: Publish
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_LOGIN }}
+        with:
+          snap: ${{ steps.snap_path.outputs.snap_path }}
+          release: ${{ steps.channel.outputs.release }}
+
