@@ -8,6 +8,9 @@ on:
     paths:
       - ".github/workflows/snap-build.yml"
   
+env:
+  NODE_VERSION: '20'
+
 jobs:
   build:
     name: Build
@@ -42,20 +45,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:   
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download
         uses: actions/download-artifact@v4
         with:
           name: terminusdb-snap
           path: download_snap/
 
-      - name: Install
+      - name: Install Snap
         run: sudo snap install download_snap/*.snap --dangerous
 
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Init TerminusDB
+        run: |
+            terminusdb store init
+  
+      - name: Start TerminusDB
+        run: |
+            terminusdb serve &
+            echo $! > terminusdb.pid
+            sleep 5  # wait for server to start
+  
       - name: Test
         run: |
-          terminusdb store init
-          terminusdb serve &
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
           export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
-          sleep 5 # Sleep a bit to be sure that the server started
           cd tests && npm i && npm run test
+
+      - name: Stop TerminusDB
+        run: |
+          kill $(cat terminusdb.pid)      
+        
