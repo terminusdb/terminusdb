@@ -34,24 +34,25 @@ jobs:
         with:
           name: terminusdb-snap
           path: ${{ steps.snapcraft.outputs.snap }}
-
-  install:
-    name: Install
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:          
-      - run: sudo snap install ${{ needs.build.outputs.snap }} --dangerous
         
   test:
     name: Integration Tests
     needs: 
       - build
-      - install
     runs-on: ubuntu-latest
 
-    steps:          
-      - run: |
+    steps:   
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          name: terminusdb-snap
+          path: download_snap/
+
+      - name: Install
+        run: sudo snap install download_snap/*.snap --dangerous
+
+      - name: Test
+        run: |
           terminusdb store init
           terminusdb serve &
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
