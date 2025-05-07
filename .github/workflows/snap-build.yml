@@ -10,6 +10,7 @@ on:
   
 jobs:
   snap:
+    name: Build & Test
     runs-on: ubuntu-latest
 
     steps:
