@@ -1,0 +1,67 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_version:
+        description: 'The new version to bump to (e.g., 1.5.0, 1.6.0-dev)'        
+        required: true
+        type: string
+
+jobs:
+
+  bump:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    # Build if we need to push a Docker image or there is no duplicate run in
+    # progress and a build is required due to changed files.
+
+    steps:
+      - name: Validate version format
+        run: |
+          VERSION_REGEX="^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$"
+          if [[ ! "${{ github.event.inputs.new_version }}" =~ $VERSION_REGEX ]]; then
+            echo "Error: Invalid version format. Expected format: X.Y.Z or X.Y.Z-dev"
+            exit 1
+          else
+            echo "Version format is valid"
+          fi
+
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Read current version from VERSION file
+        id: version
+        run: |
+          version=$(cat VERSION | tr -d '\n')
+          echo "Current version: $version"
+          echo "version=$version" >> $GITHUB_OUTPUT
+      
+      - name: Bump Version
+        id: bump
+        run: |
+          new_version = "${{  github.event.inputs.new_version }}"
+          echo "New version: $new_version"
+          echo "$new_version" > VERSION
+          echo "version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Run Cog to update versions in files
+        run: |
+          pip install cogapp
+          cog -v
+          cog -r \
+            -D LAST_RELEASED_VERSION=${{ steps.version.outputs.version }} \
+            -D CURRENT_REPO_VERSION=${{ steps.bump.outputs.version }} \
+            docs/release-steps.md \
+            src/config/terminus_config.pl \
+            distribution/snap/snapcraft.yaml
+
+      - name: Commit updated VERSION
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          git config user.name "Bump Version Bot"
+          git config user.email "actions@github.com"
+          git add VERSION docs/release-steps.md src/config/terminus_config.pl distribution/snap/snapcraft.yaml
+          git commit -m "Bump version to ${{ steps.bump.outputs.version }}"
+          git push
+        
