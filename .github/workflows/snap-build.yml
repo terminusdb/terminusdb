@@ -4,7 +4,10 @@ name: Build Snap
 on:
   workflow_dispatch:
   workflow_call:
-
+  pull_request:
+    paths:
+      - ".github/workflows/snap-build.yml"
+  
 jobs:
   snap:
     runs-on: ubuntu-latest
