@@ -1,11 +1,9 @@
-# Build and run tests every night on non-Docker systems.
-name: Snap
+# Build Snap
+name: Build Snap
 
 on:
   workflow_dispatch:
   workflow_call:
-#  schedule:
-#    - cron:  '45 2 * * *'
 
 jobs:
   snap:
@@ -20,7 +18,6 @@ jobs:
         id: snapcraft
         with:
           path: distribution
-
 
       - uses: actions/upload-artifact@v4
         with:

@@ -6,8 +6,7 @@ on:
 
 jobs:
 
-  push_docker:
-    name: Push Docker image
+  publish:
     runs-on: ubuntu-latest
 
     steps:
