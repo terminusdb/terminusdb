@@ -30,77 +30,6 @@ env:
 
 jobs:
 
-  unit:
-    name: Unit Tests
-    runs-on: ${{ inputs.runner }}
-
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Download Docker image
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.image_artifact }}
-
-      - name: Set up QEMU
-        if: ${{ inputs.image_platform == 'linux/arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: 'arm64'
-
-      - name: Remove old TerminusDB container if exists
-        run: |
-          docker rm -f terminusdb || true
-  
-      - name: Run tests
-        run: |
-          docker load < ${{ inputs.image_artifact }}.tar.gz
-          docker run --platform ${{ inputs.image_platform }} \
-            terminusdb/terminusdb-server:local \
-            make test
-
-  # python_client:
-  #   name: Python client tests
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v2
-
-  #     - name: Download Docker image
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: ${{ inputs.image_artifact }}
-
-  #     - name: Set up QEMU
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-  #       uses: docker/setup-qemu-action@v2
-  #       with:
-  #         platforms: 'arm64'
-
-  #     - name: Load Docker image
-  #       run: |
-  #         docker load < ${{ inputs.image_artifact }}.tar.gz
-  #         # Tag a dev image because the docker-compose.yml uses
-  #         # a dev tag. We want it to fetch it locally instead of
-  #         # remotely from Docker Hub
-  #         docker image tag \
-  #           terminusdb/terminusdb-server:local \
-  #           terminusdb/terminusdb-server:dev
-
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         repository: terminusdb/terminusdb-client-python
-
-  #     - name: Install dependencies
-  #       run: |
-  #         python -m pip install --upgrade pip
-  #         python -m pip install shed pytest tox==3.27.1
-
-  #     - name: Test with pytest
-  #       run: tox -e test
-
   integration_tests_basic:
     name: Integration Tests
     runs-on: ${{ inputs.runner }}
@@ -111,6 +40,25 @@ jobs:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
 
+      - name: Install swi-prolog 
+        run: ./.github/install-swi-prolog.sh stable
+
+      - name: Checkout tus
+        uses: actions/checkout@v4
+        with:
+          repository: terminusdb/tus
+          path: tus
+          ref: v0.0.5
+
+      - name: Install tus
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Install Protobuf Compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Build TerminusDB
+        run: make
+  
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -144,18 +92,19 @@ jobs:
         run: sleep 30s
         if: ${{ inputs.image_platform == 'linux/arm64' }}
 
-      - uses: actions/setup-node@v4
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Run
-        working-directory: tests
         env:
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
           MOCHA_JOBS: ${{ inputs.mocha_jobs }}
           MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
         run: |
-          npm install-ci-test
+            cd tests        
+            npm install-ci-test
 
 
   # integration_tests_non_parallel:

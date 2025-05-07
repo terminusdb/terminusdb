@@ -6,6 +6,7 @@ on:
   pull_request:
     paths: 
       - ".github/workflows/docker-amd64-build.yml"
+      - ".github/workflows/docker-image-test.yml"
   
 jobs:
 
