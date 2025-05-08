@@ -48,16 +48,22 @@ The easiest way to install TerminusDB as a developer is by using the [Snap](http
 
 For deployments:
 
-1. Add the following to a .env file in the source directory:
+1. Add the following to a `.env` file in the source directory:
 
 ```shell
-OPENAI_KEY=YOUR_OPENAI_KEY_HERE
-# And optionally specify number of pages for the vector database
-# for instance
+# Database administrator's password (required)
+TERMINUSDB_ADMIN_PASS=
+
+# OpenAI API key (optional)
+OPENAI_KEY=
+
+# Optional: Number of pages to buffer for the vector database
 BUFFER_AMOUNT=120000
 ```
 
-The OPENAI_KEY is not mandatory to use, but without it, the AI indexing will not work. Of course, all the document graph database functionality will still work as intended.
+Notes:
+ * TERMINUSDB_ADMIN_PASS is mandatory and must be set.
+ * OPENAI_KEY is optional. Without it, AI-based indexing will be disabled. All core document graph database functionality will still work normally.
 
 2. `docker compose up`
 

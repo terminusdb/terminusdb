@@ -1,1 +1,0 @@
-source <(cargo swipl listenv)
