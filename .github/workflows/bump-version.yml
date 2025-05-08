@@ -1,0 +1,93 @@
+name: Bump Version
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      new_version:
+        description: 'New version to bump to (e.g., 1.5.0, 1.6.0-dev)'        
+        required: true
+        type: string
+
+jobs:
+
+  bump:
+    runs-on: ubuntu-latest
+    # Build if we need to push a Docker image or there is no duplicate run in
+    # progress and a build is required due to changed files.
+
+    steps:
+      - name: Validate Version Format
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          VERSION_REGEX="^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$"
+          if [[ ! "${{ github.event.inputs.new_version }}" =~ $VERSION_REGEX ]]; then
+            echo "Error: Invalid version format. Expected format: X.Y.Z or X.Y.Z-dev"
+            exit 1
+          else
+            echo "Version format is valid"
+          fi
+
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Read Current Version
+        id: version
+        run: |
+          version=$(cat VERSION | tr -d '\n')
+          echo "Current version: $version"
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Bump version if triggered by workflow_call
+        id: bump
+        if: ${{ github.event_name == 'workflow_call' }}
+        run: |
+          current_version=${{ steps.version.outputs.version }}
+          # Split version: assuming format like 1.5.0 or 1.5.0-dev
+          base_version=$(echo "$current_version" | sed 's/-.*//')
+          suffix=$(echo "$current_version" | grep -oP '(?<=-).*' || echo "")
+
+          IFS='.' read -r major minor patch <<< "$base_version"
+          patch=$((patch + 1))
+          new_version="$major.$minor.$patch"
+
+          # Restore suffix if needed
+          if [[ -n "$suffix" ]]; then
+            new_version="$new_version-$suffix"
+          fi
+
+          echo "New version: $new_version"
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+  
+      - name: Get New Version
+        id: new-version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version = "${{ github.event.inputs.new_version }}"
+          else
+            version = "${{ steps.bump.outputs.new_version }}"
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Update
+        run: |
+          echo "Set version to ${{ steps.new-version.outputs.version }}"        
+          echo "${{ steps.new-version.outputs.version }}" > VERSION
+          pip install cogapp
+          cog -v
+          cog -r \
+            -D LAST_RELEASED_VERSION=${{ steps.version.outputs.version }} \
+            -D CURRENT_REPO_VERSION=${{ steps.new-version.outputs.version }} \
+            docs/release-steps.md \
+            src/config/terminus_config.pl \
+            distribution/snap/snapcraft.yaml
+
+      - name: Commit
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          git config user.name "Bump Version Bot"
+          git config user.email "actions@github.com"
+          git add VERSION docs/release-steps.md src/config/terminus_config.pl distribution/snap/snapcraft.yaml
+          git commit -m "Bump version to ${{ steps.new-version.outputs.version }}"
+          git push
+        

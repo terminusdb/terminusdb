@@ -2,10 +2,10 @@
 
 ARG DIST=community
 
+# Minimal SWI-Prolog
 FROM swipl:9.2.9 AS swipl_minimal
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends  libjwt0
-
+    apt-get install -y --no-install-recommends libjwt0
 
 # Install the SWI-Prolog pack dependencies.
 FROM swipl_minimal AS pack_installer
@@ -85,13 +85,11 @@ RUN set -eux; \
     
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
-COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/distribution/
-CMD ["/app/terminusdb/distribution/init_docker.sh"]
 
 FROM swipl_minimal AS min_enterprise
 COPY --from=base_enterprise /app/terminusdb/terminusdb app/terminusdb/
-COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/distribution/
-CMD ["/app/terminusdb/distribution/init_docker.sh"]
 
 # Build the ${DIST} executable. Set the default command.
 FROM min_${DIST}
+COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/
+CMD ["/app/terminusdb/init_docker.sh"]
