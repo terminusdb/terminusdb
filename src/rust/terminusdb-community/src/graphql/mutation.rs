@@ -1,4 +1,4 @@
-use juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ID};
+nuse juniper::{DefaultScalarValue, GraphQLType, GraphQLValue, ID};
 use swipl::{
     atom, pred,
     prelude::GenericQueryableContext,

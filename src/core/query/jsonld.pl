@@ -457,7 +457,18 @@ term_jsonld(Var,_,null) :-
     var(Var), % Tranform unbound variables to null
     !.
 term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
+    % TODO: This will need to be exhaustive for the various Integer types
+    % We also need string casting from typecast.
     (   compound(D) % check if not bool, number, atom, string
+    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], V^^_)
+    ;   rational(D)
+    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], V^^_)
+    ;   T = 'http://www.w3.org/2001/XMLSchema#integer'
+    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
+                 [], V^^_)
+    ;   T = 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'
     ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
                  [], V^^_)
     ;   D=V),

@@ -241,14 +241,14 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
 %%% xsd:string => xsd:decimal
 typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
-    (   number_string(Casted, Val)
+    (   decimal_to_rational(Val, Casted)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))).
 %%% xsd:decimal => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#decimal', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
     (   number(Val)
-    ->  format(string(S), "~w", [Val])
+    ->  format(string(S), "~20f~n", [Val])
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))).
 %%% xsd:string => xsd:integer
 typecast_switch('http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#integer') :-
@@ -805,6 +805,20 @@ typecast_switch(Type, 'http://www.w3.org/2001/XMLSchema#anySimpleType',Val, _, C
     !,
     typecast_switch(Type,'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast).
 
+% Allow us to marshall to a decimal
+decimal_to_rational(DecimalAtomOrString, Rational) :-
+    (   atom(DecimalAtomOrString)
+    ->  DecimalAtomOrString = DecimalAtom
+    ;   atom_string(DecimalAtom, DecimalAtomOrString)
+    ),
+    atomic_list_concat([IntPart, FracPart], '.', DecimalAtom),
+    atom_number(IntPart, Int),
+    atom_number(FracPart, Frac),
+    atom_length(FracPart, Len),
+    Denominator is 10^Len,
+    N|: umerator is Int * Denominator + Frac,
+    Rational0 is Numerator / |: Denominator,
+    Rational is rational(Rational0).
 
 :- begin_tests(typecast).
 

@@ -90,8 +90,17 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let inner_number: f64 = inner_term.get_ex()?;
         Ok(f64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        Ok(Decimal::make_entry(&Decimal::new(inner_number).unwrap()))
+        {
+            let string_term = context.new_term_ref();
+            let inner_term_vec = vec![inner_term];
+            string_term.unify(functor("string/1"))?
+            attempt(context.call_once(
+                pred!("format/3"),
+                [string_term, "~20f~n", inner_term_vec]
+            ))?;
+            let decimal_string = string_term.get_arg_ex(1)?;
+            Ok(Decimal::make_entry(&Decimal::new(decimal_string).unwrap()))
+        }
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
         let integer: Integer = Integer::parse(inner_number).unwrap().into();
