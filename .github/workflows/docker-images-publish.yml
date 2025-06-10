@@ -5,8 +5,14 @@ on:
   workflow_call:
 
 jobs:
+  build_amd64:
+    uses: ./.github/workflows/docker-amd64-build.yml
+
+  build_arm64:
+    uses: ./.github/workflows/docker-arm64-build.yml
 
   publish:
+    needs: [build_amd64, build_arm64]
     runs-on: ubuntu-latest
 
     steps:
