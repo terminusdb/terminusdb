@@ -63,9 +63,9 @@ jobs:
         id: new-version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version = "${{ github.event.inputs.new_version }}"
+            version="${{ github.event.inputs.new_version }}"
           else
-            version = "${{ steps.bump.outputs.new_version }}"
+            version="${{ steps.bump.outputs.new_version }}"
           fi
           echo "version=$version" >> $GITHUB_OUTPUT
 
