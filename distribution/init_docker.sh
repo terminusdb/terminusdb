@@ -26,5 +26,5 @@ if [ ! -d /app/terminusdb/storage/db ]; then
 fi
 
 echo "SERVER_PORT $TERMINUSDB_SERVER_PORT"
-/app/terminusdb/terminusdb serve
+exec /app/terminusdb/terminusdb serve
 

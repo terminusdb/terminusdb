@@ -508,12 +508,17 @@ spawn_server(Path, URL, PID, Options) :-
               error(Error, _)).
 
 kill_server(PID) :-
-    % As of SWI-Prolog v8.4.0, process_kill(PID), which defaults to SIGTERM,
-    % does not terminate the process on all systems. Until that is fixed, we use
-    % SIGKILL to work around this issue.
-    % See: https://github.com/terminusdb/terminusdb/pull/828
-    process_kill(PID, 9),
-    process_wait(PID, _).
+    % Use SIGTERM for graceful shutdown (signal handlers now properly configured)
+    % Falls back to SIGKILL if needed
+    catch(
+        (   process_kill(PID),  % Default SIGTERM
+            process_wait(PID, _, [timeout(5)])
+        ),
+        _,
+        (   process_kill(PID, 9),  % SIGKILL as fallback
+            process_wait(PID, _)
+        )
+    ).
 
 setup_temp_server(Store-Dir-PID, URL, Options) :-
     setup_temp_store(Store-Dir),

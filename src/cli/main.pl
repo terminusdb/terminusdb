@@ -2720,12 +2720,17 @@ api_error_cli(API, Error) :-
     json_write_dict(user_error,JSON, [serialize_unknown(true)]),
     halt(Status).
 
-initialise_hup :-
+initialise_signals :-
     (   current_prolog_flag(unix, true)
-    ->  on_signal(hup, _, hup)
+    ->  on_signal(hup, _, shutdown_signal),
+        on_signal(term, _, shutdown_signal),
+        on_signal(int, _, shutdown_signal)
     ;   true).
 
-:- initialise_hup.
+:- initialise_signals.
+
+shutdown_signal(_Signal) :-
+    thread_send_message(main, stop).
 
 initialise_log_settings :-
     get_time(Time),
