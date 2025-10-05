@@ -1,3 +1,22 @@
+# TerminusDB Server v11.1.16 Release Notes
+
+Thanks to new contributors @axefrog, @dfrnt-SigmundFuchs, and existing contributors @alexander-mart, @hoijnet. Version 11.1.15 was not fully released.
+
+## Enhancements
+* Ensure consistent WOQL AST with DeletedTriple and DeletedQuad (#2171)
+* Fix docker-compose file, make the project start (#1939, #2051, #2162)
+* Fix WOQL path delimiter issue (#2175)
+* Documentation updates: new url, punctuation (#2169, #2170)
+* Removed deprecated dashboard and reduced image size (#2192)
+
+## Maintenance and bug fixes
+* Major upgrade of swipl from 9.0 to 9.2 (#2162)
+* Numerous build system improvements ([full changelog](https://github.com/terminusdb/terminusdb/compare/v11.1.14...v11.1.16))
+* Numerous library versions bumped ([full changelog](https://github.com/terminusdb/terminusdb/compare/v11.1.14...v11.1.16))
+
+## Other
+* Add missing dependencies to build process (#2153)
+
 # TerminusDB Server v11.1.14 Release Notes
 
 ## Bug fixes
