@@ -1,6 +1,6 @@
 # Instructions:
 #
-# 1. Copy .env-template to .env
+# 1. Copy .env.example to .env
 # 2. Add your admin password to .env
 # 3. docker compose up -d
 # 4. docker compose logs (to verify all started)
@@ -25,7 +25,7 @@ services:
       - TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true
 
       # Admin-Password should be changed before exposing to the internet:
-      # (Create a .env file from .env-template and add a password)
+      # (Create a .env file from .env.example and add a password)
       - "TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:?error}"
     volumes:
       - ./storage:/app/terminusdb/storage
