@@ -41,6 +41,37 @@ prolog:message(server_missing_config(BasePath)) -->
     nl
     ].
 
+% Catch HTTP-related warnings (e.g., malformed cookies) to prevent server crashes
+% These warnings are logged but don't halt execution.
+% This allows the server to gracefully handle invalid cookies like:
+%   Cookie: react-resizable-panels:layout=[15,85]; path=/
+user:message_hook(http(Term), warning, Lines) :-
+    % Log the warning to stderr so it's visible in server output
+    format(user_error, '~N[WARNING] HTTP: ~w~n', [Term]),
+    % Print the detailed message lines
+    (   Lines \= []
+    ->  print_message_lines(user_error, '', Lines)
+    ;   true
+    ),
+    % Return true to prevent the warning from crashing the server
+    true.
+
+% Catch general syntax errors in HTTP headers to prevent crashes
+user:message_hook(syntax_error(Term), warning, Lines) :-
+    % Check if this is an HTTP-related syntax error by examining the error term
+    (   functor(Term, http, _)
+    ;   functor(Term, cookie, _)
+    ;   functor(Term, header, _)
+    ),
+    % Log the warning
+    format(user_error, '~N[WARNING] HTTP Syntax Error: ~w~n', [Term]),
+    (   Lines \= []
+    ->  print_message_lines(user_error, '', Lines)
+    ;   true
+    ),
+    % Return true to prevent crash
+    true.
+
 :- use_module(server(routes)).
 :- use_module(server(main)).
 
