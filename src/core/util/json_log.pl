@@ -20,7 +20,8 @@
               info_log_enabled/0,
               debug_log_enabled/0,
               generate_request_id/2,
-              saved_request/5
+              saved_request/5,
+              log_http_warning/3
           ]).
 
 :- use_module(config(terminus_config), [log_format/1,
@@ -267,4 +268,17 @@ info_log_enabled :-
 
 debug_log_enabled :-
     log_enabled_for_level('DEBUG').
+
+% Helper to log HTTP warnings from message hooks (e.g., malformed cookies)
+% This is used by bootstrap.pl and start.pl message_hook handlers
+log_http_warning(Type, Term, Lines) :-
+    % Format the message with details from Lines if present
+    (   Lines \= [],
+        with_output_to(string(Lines_String),
+                      print_message_lines(current_output, '', Lines))
+    ->  format(string(Message), '~w: ~w~nDetails: ~w', [Type, Term, Lines_String])
+    ;   format(string(Message), '~w: ~w', [Type, Term])
+    ),
+    % Use centralized logging
+    json_log_warning(Message).
 

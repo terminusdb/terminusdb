@@ -38,12 +38,12 @@ user:message_hook(qsave(strip_failed(_)), warning, _).
 % This allows the server to gracefully handle invalid cookies like:
 %   Cookie: react-resizable-panels:layout=[15,85]; path=/
 user:message_hook(http(Term), warning, Lines) :-
-    % Log the warning to stderr so it's visible in server output
-    format(user_error, '~N[WARNING] HTTP: ~w~n', [Term]),
-    % Print the detailed message lines
-    (   Lines \= []
-    ->  print_message_lines(user_error, '', Lines)
-    ;   true
+    % Use centralized logging from json_log module with fallback
+    catch(
+        json_log:log_http_warning('HTTP', Term, Lines),
+        _Error,
+        % Fallback if json_log not loaded yet (early in boot process)
+        format(user_error, '~N[WARNING] HTTP: ~w~n', [Term])
     ),
     % Return true to prevent the warning from crashing the server
     true.
@@ -55,11 +55,11 @@ user:message_hook(syntax_error(Term), warning, Lines) :-
     ;   functor(Term, cookie, _)
     ;   functor(Term, header, _)
     ),
-    % Log the warning
-    format(user_error, '~N[WARNING] HTTP Syntax Error: ~w~n', [Term]),
-    (   Lines \= []
-    ->  print_message_lines(user_error, '', Lines)
-    ;   true
+    % Use centralized logging with fallback
+    catch(
+        json_log:log_http_warning('HTTP Syntax Error', Term, Lines),
+        _Error,
+        format(user_error, '~N[WARNING] HTTP Syntax Error: ~w~n', [Term])
     ),
     % Return true to prevent crash
     true.
