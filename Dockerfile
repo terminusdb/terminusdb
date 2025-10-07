@@ -62,8 +62,6 @@ ARG TERMINUSDB_GIT_HASH=null
 ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
-#COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
-#COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
 WORKDIR /app/terminusdb
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
@@ -96,4 +94,14 @@ COPY --from=base_enterprise /app/terminusdb/terminusdb app/terminusdb/
 # Build the ${DIST} executable. Set the default command.
 FROM min_${DIST}
 COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/
+RUN set -eux; \
+    RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \
+    apt-get update; \
+    apt-get upgrade -y; \
+    apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
+    rm -rf /var/cache/apt/*; \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
+COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
+WORKDIR /app/terminusdb
 CMD ["/app/terminusdb/init_docker.sh"]
