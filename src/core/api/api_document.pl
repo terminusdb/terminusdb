@@ -360,7 +360,9 @@ api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replac
 
 api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
     open_string(String, Stream),
-    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids).
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids_Atoms),
+    % Convert atoms to strings for Rust FFI compatibility
+    maplist(atom_string, Ids_Atoms, Ids).
 
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
@@ -540,7 +542,9 @@ api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Id
 
 api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Ids) :-
     open_string(String, Stream),
-    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids).
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids_Atoms),
+    % Convert atoms to strings for Rust FFI compatibility
+    maplist(atom_string, Ids_Atoms, Ids).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
