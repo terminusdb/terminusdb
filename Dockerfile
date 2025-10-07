@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 ARG DIST=community
+ARG SKIP_TESTS=false
 
 # Minimal SWI-Prolog
 FROM swipl:9.2.9 AS swipl_minimal
@@ -37,7 +38,8 @@ COPY src/rust src/rust/
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
-RUN make DIST=community && cd src/rust && cargo swipl test --release
+ARG SKIP_TESTS=false
+RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo swipl test --release))
 
 # Build the enterprise dylib.
 FROM rust_builder_base AS rust_builder_enterprise
@@ -70,18 +72,20 @@ COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 
 # Build the community executable.
 FROM base AS base_community
+ARG SKIP_TESTS=false
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 RUN set -eux; \
     make DIST=community; \
-    make test
+    [ "$SKIP_TESTS" = "true" ] || make test
 
 # Build the enterprise executable.
 FROM base AS base_enterprise
+ARG SKIP_TESTS=false
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
 RUN set -eux; \
     make DIST=enterprise; \
-    make test
+    [ "$SKIP_TESTS" = "true" ] || make test
     
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
