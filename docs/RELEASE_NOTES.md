@@ -1,6 +1,6 @@
-# TerminusDB Server v11.1.16 Release Notes
+# TerminusDB Server v11.1.17 Release Notes
 
-Thanks to new contributors @axefrog, @dfrnt-SigmundFuchs, and existing contributors @alexander-mart, @hoijnet. Version 11.1.15 was not fully released.
+Thanks to new contributors @axefrog, @dfrnt-SigmundFuchs, and existing contributors @alexander-mart, @hoijnet. Version 11.1.15-16 were not fully released due to changes in the build system.
 
 ## Enhancements
 * Ensure consistent WOQL AST with DeletedTriple and DeletedQuad (#2171)
@@ -10,7 +10,11 @@ Thanks to new contributors @axefrog, @dfrnt-SigmundFuchs, and existing contribut
 * Removed deprecated dashboard and reduced image size (#2192)
 
 ## Maintenance and bug fixes
+
+* Fix GraphQL mutations (_insertDocument, _replaceDocument in #2174)
+* Prevent crash due to improper handling of invalid cookies warning (#2216)
 * Major upgrade of swipl from 9.0 to 9.2 (#2162)
+* Add now handling SIGINT and SIGTERM for clean shutdown
 * Numerous build system improvements ([full changelog](https://github.com/terminusdb/terminusdb/compare/v11.1.14...v11.1.16))
 * Numerous library versions bumped ([full changelog](https://github.com/terminusdb/terminusdb/compare/v11.1.14...v11.1.16))
 
