@@ -18,12 +18,14 @@
 
 :- use_module(library(settings)).
 
-initialise_hup :-
+initialise_signals :-
     (   current_prolog_flag(unix, true)
-    ->  on_signal(hup, _, hup)
+    ->  on_signal(hup, _, shutdown_signal),
+        on_signal(term, _, shutdown_signal),
+        on_signal(int, _, shutdown_signal)
     ;   true).
 
-:- initialise_hup.
+:- initialise_signals.
 
 
 initialise_log_settings :-
@@ -89,8 +91,8 @@ user:message_hook(syntax_error(Term), warning, Lines) :-
 :- use_module(cli(main)).
 :- use_module(library(debug)).
 
-hup(_Signal) :-
-  thread_send_message(main, stop).
+shutdown_signal(_Signal) :-
+    thread_send_message(main, stop).
 
 main(_Argv) :-
     initialize_flags,
