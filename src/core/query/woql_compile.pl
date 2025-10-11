@@ -23,7 +23,7 @@
 
 :- use_module(jsonld).
 :- use_module(json_woql).
-:- use_module(global_prefixes, [default_prefixes/1]).
+:- use_module(global_prefixes, [default_prefixes/1, literal_expand/2]).
 :- use_module(resolve_query_resource).
 :- use_module(path).
 :- use_module(metadata).
@@ -565,38 +565,87 @@ woql_equal(AE,BE) :-
 /*
  * woql_less(AE,BE) is det.
  *
- * TODO: May need other cases.
+ * Compares two typed values. Types are normalized to full URIs before comparison
+ * to handle cases where one uses short form (xsd:decimal) and another uses
+ * full URI form ('http://www.w3.org/2001/XMLSchema#decimal').
+ *
+ * Fixed: Issue #2225 - Type inconsistency in comparison operators
  */
 woql_less(X^^'http://www.w3.org/2001/XMLSchema#dateTime',
           Y^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
     X @< Y.
-woql_less(X^^T1,Y^^T2) :-
-    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
-    !,
-    X < Y.
 woql_less(AE,BE) :-
-    % dodgy - should switch on type
+    % Normalize types to full URIs before comparison
+    % literal_expand/2 only works on typed literals, so we use ignore/1
+    % to pass through untyped values unchanged
+    (literal_expand(AE, AE_Normalized) -> true ; AE_Normalized = AE),
+    (literal_expand(BE, BE_Normalized) -> true ; BE_Normalized = BE),
+    woql_less_normalized(AE_Normalized, BE_Normalized).
+
+/*
+ * woql_less_normalized(+A,+B) is semidet.
+ *
+ * Internal predicate - assumes types are already normalized
+ */
+woql_less_normalized(X^^T1,Y^^T2) :-
+    % Check if both types are numeric (decimal, integer, float, double, etc.)
+    is_numeric_type(T1),
+    is_numeric_type(T2),
+    !,
+    % Do numeric comparison
+    X < Y.
+woql_less_normalized(AE,BE) :-
+    % Fallback: structural comparison
+    % Note: This is only reached for untyped values or non-numeric types
     compare((<),AE,BE).
+
+/*
+ * is_numeric_type(+Type) is semidet.
+ *
+ * True if Type is a numeric XSD type (decimal, integer, float, double, and their subtypes)
+ */
+is_numeric_type(T) :-
+    basetype_subsumption_of(T,'http://www.w3.org/2001/XMLSchema#decimal'), !.
+is_numeric_type('http://www.w3.org/2001/XMLSchema#float') :- !.
+is_numeric_type('http://www.w3.org/2001/XMLSchema#double') :- !.
 
 /*
  * woql_greater(AE,BE) is det.
  *
- * TODO: May need other cases.
+ * Compares two typed values. Types are normalized to full URIs before comparison
+ * to handle cases where one uses short form (xsd:decimal) and another uses
+ * full URI form ('http://www.w3.org/2001/XMLSchema#decimal').
+ *
+ * Fixed: Issue #2225 - Type inconsistency in comparison operators
  */
 woql_greater(X^^'http://www.w3.org/2001/XMLSchema#dateTime',
              Y^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
     X @> Y.
-woql_greater(X^^T1,
-             Y^^T2) :-
-    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
-    !,
-    X > Y.
 woql_greater(AE,BE) :-
-    % dodgy - should switch on type
+    % Normalize types to full URIs before comparison
+    % literal_expand/2 only works on typed literals, so we use conditional
+    % to pass through untyped values unchanged
+    (literal_expand(AE, AE_Normalized) -> true ; AE_Normalized = AE),
+    (literal_expand(BE, BE_Normalized) -> true ; BE_Normalized = BE),
+    woql_greater_normalized(AE_Normalized, BE_Normalized).
+
+/*
+ * woql_greater_normalized(+A,+B) is semidet.
+ *
+ * Internal predicate - assumes types are already normalized
+ */
+woql_greater_normalized(X^^T1,Y^^T2) :-
+    % Check if both types are numeric (decimal, integer, float, double, etc.)
+    is_numeric_type(T1),
+    is_numeric_type(T2),
+    !,
+    % Do numeric comparison
+    X > Y.
+woql_greater_normalized(AE,BE) :-
+    % Fallback: structural comparison
+    % Note: This is only reached for untyped values or non-numeric types
     compare((>),AE,BE).
 
 /*
@@ -5414,6 +5463,60 @@ test(complex_mode, [
 
     create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
     run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
+
+% ========================================
+% Comparison operator type inconsistency regression tests (from issue #2225)
+% ========================================
+
+test(less_than_cross_type_float_decimal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    % Verify cross-type comparison: 21.1 (float) < 33 (decimal)
+    Query = _{ '@type' : "Less",
+               left : _{'@type' : "DataValue", 
+                       'data' : _{'@type': 'xsd:float', '@value': 21.1}},
+               right : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 33}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(greater_than_equal_values_cross_type, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    % Regression: 33.0 (float) > 33 (decimal) should fail (empty bindings)
+    % This was the bug - structural comparison made 33 > 33 return true
+    Query = _{ '@type' : "Greater",
+               left : _{'@type' : "DataValue", 
+                       'data' : _{'@type': 'xsd:float', '@value': 33.0}},
+               right : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 33}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(less_than_mixed_uri_representation, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    % Verify mixed URI forms work: 5 (xsd:decimal) < 10 (full URI)
+    Query = _{ '@type' : "Less",
+               left : _{'@type' : "DataValue", 
+                       'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               right : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'http://www.w3.org/2001/XMLSchema#decimal', 
+                                   '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
 
 :- end_tests(woql).
 
