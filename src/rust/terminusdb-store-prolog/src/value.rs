@@ -90,8 +90,16 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let inner_number: f64 = inner_term.get_ex()?;
         Ok(f64::make_entry(&inner_number))
     } else if atom!("http://www.w3.org/2001/XMLSchema#decimal") == ty {
-        let inner_number: String = context.string_from_term(inner_term)?;
-        Ok(Decimal::make_entry(&Decimal::new(inner_number).unwrap()))
+        // Try to get as PrologText first (for string input with full 20-digit precision)
+        // This allows passing arbitrary-precision decimal strings from Prolog
+        let decimal_str: String = if let Ok(inner_string) = inner_term.get::<PrologText>() {
+            // New way: string from Prolog with full precision (doesn't throw exception on type mismatch)
+            inner_string.into_inner()
+        } else {
+            // Fall back to number for backwards compatibility (converts float/int to string)
+            context.string_from_term(inner_term)?
+        };
+        Ok(Decimal::make_entry(&Decimal::new(decimal_str).unwrap()))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
         let integer: Integer = Integer::parse(inner_number).unwrap().into();
