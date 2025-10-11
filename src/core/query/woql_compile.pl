@@ -5886,3 +5886,6 @@ test(ancestor, [
 	].
 
 :- end_tests(trampoline).
+
+% Load comparison operator tests
+:- use_module(comparison_tests).
