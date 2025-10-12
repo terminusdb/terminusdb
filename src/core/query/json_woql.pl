@@ -68,9 +68,22 @@ json_value_cast_type(V,Type,WOQL) :-
         atom_string(V,String)
     ->  typecast(String^^xsd:string,
                  TE, [], Val)
-    ;   number(V)
-    ->  typecast(V^^xsd:decimal,
+    ;   integer(V)
+    ->  % Keep integers as integers for operations like limit/offset
+        typecast(V^^xsd:decimal,
                  TE, [], Val)
+    ;   float(V)
+    ->  % Convert floats using their natural string representation
+        % Don't use 20-digit precision as that exposes float imprecision
+        % The float's own precision is already determined by JSON parsing
+        format(string(Num_String), '~w', [V]),
+        typecast(Num_String^^xsd:string,
+                 TE, [], Val)
+    ;   rational(V),
+        \+ integer(V)
+    ->  % Handle rationals - preserve exact precision for WOQL arithmetic
+        % These are clean rationals from arithmetic operations
+        Val = V^^TE
     ;   member(V,[false,true])
     ->  typecast(V^^xsd:boolean,
                  TE, [], Val)
@@ -99,9 +112,27 @@ json_data_to_woql_ast(JSON,WOQL) :-
     !,
     WOQL = JSON^^xsd:string.
 json_data_to_woql_ast(JSON,WOQL) :-
-    number(JSON),
+    integer(JSON),
     !,
+    % Keep integers as integers for operations like limit/offset
     WOQL = JSON^^xsd:decimal.
+json_data_to_woql_ast(JSON,WOQL) :-
+    float(JSON),
+    !,
+    % Convert floats using their natural string representation
+    % Don't use 20-digit precision as that exposes float imprecision  
+    % JSON floats already have appropriate precision from parsing
+    format(string(Num_String), '~w', [JSON]),
+    typecast(Num_String^^xsd:string,
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [], WOQL).
+json_data_to_woql_ast(JSON,WOQL) :-
+    rational(JSON),
+    \+ integer(JSON),
+    !,
+    % Handle rationals - preserve exact precision from arithmetic operations
+    % These rationals come from WOQL arithmetic (rdiv, +, -, *) and maintain full precision
+    WOQL = JSON^^'http://www.w3.org/2001/XMLSchema#decimal'.
 
 json_list_value_to_woql_ast(JSON,WOQL,Path) :-
     json_list_value_to_woql_ast(JSON,0,WOQL,Path).
@@ -1394,7 +1425,10 @@ test(decimal_bare, []) :-
                             "data": 1.3}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=1.3^^xsd:decimal).
+    % Decimals from JSON floats are converted via string to clean rationals: 1.3 = 13/10
+    WOQL = (v('X')=Rational^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    rational(Rational),
+    Rational =:= 13 rdiv 10.
 
 test(decimal_typed, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1405,7 +1439,10 @@ test(decimal_typed, []) :-
                                       "@type": "xsd:decimal"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+    % Decimals are now rationals: 1.3 = 13/10
+    WOQL = (v('X')=Rational^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    rational(Rational),
+    Rational =:= 13 rdiv 10.
 
 test(decimal, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1416,7 +1453,10 @@ test(decimal, []) :-
                                       "@type": "xsd:decimal"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+    % Decimals are now rationals: "1.3" parses to 13/10
+    WOQL = (v('X')=Rational^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    rational(Rational),
+    Rational =:= 13 rdiv 10.
 
 test(date, []) :-
     JSON_Atom= '{"@type": "Equals",

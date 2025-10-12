@@ -69,7 +69,6 @@
               compress_dict_uri/4,
               pairs_satisfying_diamond_property/4,
               tabled_get_document_context/2,
-              json_float_hook/4,
               json_write_options/1
           ]).
 
@@ -108,20 +107,56 @@
 :- use_module(core(document/json_rdf)).
 
 /*
- * json_float_hook(+Float, +State, +Action, -String) is det.
+ * json:json_write_hook(+Term, +Stream, +State, +Options) is semidet.
  *
- * Hook for JSON library to write floats with 20-digit precision.
- * This preserves xsd:decimal precision when serializing to JSON.
+ * Hook for JSON library to write terms with custom representations.
+ * This hook intercepts terms BEFORE json_write converts them.
+ * 
+ * Used to preserve precision for xsd:decimal rationals by outputting them
+ * as JSON numbers with 20-digit precision (instead of IEEE 754 floats).
+ * 
+ * For xsd:decimal rationals: Outputs as JSON number with 20-digit precision
+ * For other terms: Fails, allowing default json_write behavior
  */
-json_float_hook(F, _State, write, String) :-
-    format(string(String), '~20f', [F]).
+:- multifile json:json_write_hook/4.
+
+json:json_write_hook(Term, Stream, _State, _Options) :-
+    % Only handle rationals that are not integers
+    rational(Term),
+    \+ integer(Term),
+    !,
+    % Format rational with 20-digit precision
+    % Note: This value matches decimal_precision/1 constant from triple/casting
+    Precision = 20,
+    format(string(FormatStr), '~~~wf', [Precision]),
+    format(string(S), FormatStr, [Term]),
+    % Normalize by removing trailing zeros (e.g., "32.85000..." -> "32.85")
+    'document/json':normalize_decimal(S, Normalized),
+    format(Stream, '~w', [Normalized]).
+
+% Remove trailing zeros from decimal string
+normalize_decimal(S, Normalized) :-
+    atom_chars(S, Chars),
+    reverse(Chars, RevChars),
+    strip_trailing_zeros(RevChars, Stripped),
+    strip_trailing_dot(Stripped, Final),
+    reverse(Final, NormChars),
+    atom_chars(Normalized, NormChars).
+
+strip_trailing_zeros(['0'|Rest], Stripped) :- !,
+    strip_trailing_zeros(Rest, Stripped).
+strip_trailing_zeros(Chars, Chars).
+
+strip_trailing_dot(['.'|Rest], Rest) :- !.
+strip_trailing_dot(Chars, Chars).
 
 /*
  * json_write_options(-Options) is det.
  *
- * Standard JSON write options with float hook for 20-digit precision.
+ * Standard JSON write options.
+ * Note: json_write_hook/4 is used via multifile, not as an option.
  */
-json_write_options([float_hook(json_float_hook)]).
+json_write_options([]).
 
 verify_languages(Docs) :-
     length(Docs,N),
@@ -11299,18 +11334,22 @@ test(foreign_type,
     ),
 
     get_document(Finance_Desc, Payroll_Doc_Id, New_Payroll),
+    % Decimals are now returned as rationals (not floats) for precision
+    % 32.85 = 657/20, 12.30 = 123/10 = 12.3
+    ExpectedPayJane is 657 rdiv 20,  % 32.85
+    ExpectedPayJoe is 123 rdiv 10,    % 12.3
     New_Payroll =
     json{'@id':'Payroll/standard',
          '@type':'Payroll',
          payroll:[json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjane%2B1995-05-03',
                        '@type':'PayRecord',
                        employee:'Employee/jane+1995-05-03',
-                       pay:32.85,
+                       pay:ExpectedPayJane,
                        pay_period:"P1M"},
                   json{'@id':'Payroll/standard/payroll/PayRecord/http%3A%2F%2Fsomewhere.for.now%2Fdocument%2FEmployee%2Fjoe%2B2012-05-03',
                        '@type':'PayRecord',
                        employee:'Employee/joe+2012-05-03',
-                       pay:12.3,
+                       pay:ExpectedPayJoe,
                        pay_period:"P1M"}]}.
 
 :- end_tests(foreign_types).

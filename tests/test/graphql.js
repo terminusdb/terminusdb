@@ -5,6 +5,7 @@ const {
   ApolloClient, ApolloLink, concat, InMemoryCache,
   gql, HttpLink,
 } = require('@apollo/client/core')
+const Decimal = require('decimal.js')
 
 describe('GraphQL', function () {
   let agent
@@ -1404,6 +1405,159 @@ query EverythingQuery {
           expect(nwe.statusCode).to.equal(500)
         })
       expect(result).to.equal(undefined)
+    })
+  })
+
+  describe('Decimal Precision Tests', function () {
+    before(async function () {
+      agent = new Agent().auth()
+      await db.create(agent)
+      const precisionSchema = [
+        {
+          '@type': 'Class',
+          '@id': 'PrecisionTest',
+          value20digits: 'xsd:decimal',
+          value15digits: 'xsd:decimal',
+          financialValue: 'xsd:decimal',
+        },
+      ]
+      await document.replace(agent, { schema: precisionSchema })
+      client = new ApolloClient({
+        cache: new InMemoryCache(),
+        link: concat(
+          new ApolloLink((operation, forward) => {
+            operation.setContext({
+              headers: {
+                authorization: api.util.autorizationHeader(agent),
+              },
+            })
+            return forward(operation)
+          }),
+          new HttpLink({
+            uri: api.path(agent, 'graphql', {}),
+            fetch,
+          }),
+        ),
+      })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('should handle 20-digit precision decimals in GraphQL', async function () {
+      const testDoc = {
+        '@type': 'PrecisionTest',
+        '@id': 'PrecisionTest/test1',
+        value20digits: '1.23456789012345678901',
+        value15digits: '3.141592653589793',
+        financialValue: '12345.67890',
+      }
+
+      await document.insert(agent, testDoc)
+
+      const PRECISION_QUERY = gql`
+        query PrecisionQuery {
+          PrecisionTest {
+            value20digits
+            value15digits
+            financialValue
+          }
+        }
+      `
+
+      const result = await client.query({ query: PRECISION_QUERY })
+
+      expect(result.data.PrecisionTest).to.be.an('array').with.lengthOf(1)
+      const retrieved = result.data.PrecisionTest[0]
+
+      // GraphQL returns decimals as strings to preserve precision
+      expect(typeof retrieved.value20digits).to.equal('string')
+      expect(typeof retrieved.value15digits).to.equal('string')
+      expect(typeof retrieved.financialValue).to.equal('string')
+
+      // Use Decimal.js for exact precision comparison (not parseFloat!)
+      // parseFloat loses precision beyond ~16 digits (IEEE 754 limit)
+      const val20 = new Decimal(retrieved.value20digits)
+      const val15 = new Decimal(retrieved.value15digits)
+      const valFinancial = new Decimal(retrieved.financialValue)
+
+      const expected20 = new Decimal('1.23456789012345678901')
+      const expected15 = new Decimal('3.141592653589793')
+      const expectedFinancial = new Decimal('12345.67890')
+
+      // Exact equality check (not tolerance-based!)
+      expect(val20.equals(expected20)).to.be.true
+      expect(val15.equals(expected15)).to.be.true
+      expect(valFinancial.equals(expectedFinancial)).to.be.true
+    })
+
+    it('should handle decimal mutations via GraphQL', async function () {
+      const MUTATION = gql`
+        mutation InsertPrecision {
+          _insertPrecisionTest(value20digits: "9.87654321098765432109", value15digits: "2.718281828459045", financialValue: "9999.99") {
+            value20digits
+            value15digits
+            financialValue
+          }
+        }
+      `
+
+      const result = await client.mutate({ mutation: MUTATION })
+
+      const inserted = result.data._insertPrecisionTest
+
+      expect(typeof inserted.value20digits).to.equal('string')
+      expect(typeof inserted.value15digits).to.equal('string')
+      expect(typeof inserted.financialValue).to.equal('string')
+
+      // Use Decimal.js for exact precision comparison
+      const val20 = new Decimal(inserted.value20digits)
+      const val15 = new Decimal(inserted.value15digits)
+      const valFinancial = new Decimal(inserted.financialValue)
+
+      const expected20 = new Decimal('9.87654321098765432109')
+      const expected15 = new Decimal('2.718281828459045')
+      const expectedFinancial = new Decimal('9999.99')
+
+      // Exact equality check
+      expect(val20.equals(expected20)).to.be.true
+      expect(val15.equals(expected15)).to.be.true
+      expect(valFinancial.equals(expectedFinancial)).to.be.true
+    })
+
+    it('should preserve precision in GraphQL for financial calculations', async function () {
+      // Create multiple items with precise prices
+      await document.insert(agent, {
+        '@type': 'PrecisionTest',
+        '@id': 'PrecisionTest/item1',
+        financialValue: '19.99',
+      })
+
+      await document.insert(agent, {
+        '@type': 'PrecisionTest',
+        '@id': 'PrecisionTest/item2',
+        financialValue: '29.95',
+      })
+
+      const QUERY = gql`
+        query AllPrices {
+          PrecisionTest {
+            financialValue
+          }
+        }
+      `
+
+      const result = await client.query({ query: QUERY })
+
+      // Sum up all financial values using Decimal.js for exact arithmetic
+      const sum = result.data.PrecisionTest.reduce((acc, item) => {
+        return acc.plus(new Decimal(item.financialValue))
+      }, new Decimal(0))
+
+      // Should be exactly 19.99 + 29.95 + 9999.99 (from previous test) = 10049.93
+      const expected = new Decimal('10049.93')
+      expect(sum.equals(expected)).to.be.true
     })
   })
 })

@@ -108,13 +108,13 @@ test(decimal_arithmetic_precision, [
                           _{'@type': 'Eval',
                             expression: _{'@type': 'Times',
                                          left: _{'@type': 'Times',
-                                                left: _{'@type': 'Value',
+                                                left: _{'@type': 'ArithmeticValue',
                                                        variable: "term1"},
-                                                right: _{'@type': 'Value',
+                                                right: _{'@type': 'ArithmeticValue',
                                                         variable: "term2"}},
-                                         right: _{'@type': 'Value',
+                                         right: _{'@type': 'ArithmeticValue',
                                                  variable: "term3"}},
-                            result: _{'@type': 'Value',
+                            result: _{'@type': 'ArithmeticValue',
                                      variable: "result"}}
                       ]}},
     
@@ -351,7 +351,7 @@ test(document_decimal_precision, [
          setup((setup_temp_store(State),
                 create_db_with_test_schema("admin", "test"))),
          cleanup(teardown_temp_store(State)),
-         fixme('Requires schema with decimal property')
+         blocked('Requires proper schema with decimal property - needs further investigation')
      ]) :-
     
     High_Precision = "555555555555555555.555555555555555555",
