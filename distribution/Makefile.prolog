@@ -48,7 +48,7 @@ test: $(RUST_TARGET)
 	$(SWIPL) \
 	  --on-error=halt \
 	  --on-warning=halt \
-	  -t 'run_tests, halt' \
+	  -g 'run_tests, halt' \
 	  -f src/interactive.pl
 
 .PHONY: download-lint
@@ -71,7 +71,7 @@ $(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -
 	  --on-warning=halt \
 	  --quiet \
 	  -O \
-	  -t 'main, halt' \
+	  -g 'main, halt' \
 	  -f src/bootstrap.pl
 
 $(RUST_TARGET):
