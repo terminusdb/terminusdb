@@ -156,6 +156,10 @@ ignore_ref_and_repo_schema :-
 % Turn off mavis
 :- set_prolog_flag(optimise, true).
 
+% Preserve rational numbers in arithmetic operations for decimal precision
+% This ensures operations like +, -, * preserve exact rationals instead of converting to floats
+:- set_prolog_flag(prefer_rationals, true).
+
 :- dynamic log_level_override/1.
 
 :- table log_level_env/1 as shared.
