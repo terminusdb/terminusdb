@@ -24,24 +24,29 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(util)).
-:- reexport(core(util/syntax)).
-
+:- use_module(core(util/syntax)).
 :- use_module(core(triple)).
-:- use_module(core(transaction)).
+:- use_module(core(triple/literals), [object_storage/2]).
+:- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
+:- use_module(core(document)).
 
-:- use_module(library(pcre)).
-:- use_module(library(pairs)).
-:- use_module(library(http/json)).
 :- use_module(library(lists)).
-:- use_module(library(dicts)).
+:- use_module(library(option)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(plunit)).
 
-% Currently a bug in groundedness checking.
-%:- use_module(library(mavis)).
+:- use_module(library(http/json)).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).
 
 % efficiency
+:- use_module(library(pairs)).
+:- use_module(library(dicts)).
+
+% Currently a bug in groundedness checking.
+%:- use_module(library(mavis)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).

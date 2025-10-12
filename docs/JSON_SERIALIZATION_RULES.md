@@ -1,7 +1,7 @@
 # JSON Serialization Rules for Numeric Types
 
-**Version:** 1.0  
-**Date:** 2025-10-11  
+**Version:** 2.0  
+**Date:** 2025-10-12  
 **Status:** Normative Specification
 
 ---
@@ -17,118 +17,214 @@ This document specifies the canonical JSON serialization behavior for all XSD nu
 
 ## Core Serialization Rules
 
-### Rule 1: Precision Types → JSON Strings
+### Rule: ALL Numeric Types → JSON Numbers
 
-**ALL numeric XSD types except `xsd:float` and `xsd:double` MUST serialize as JSON strings.**
+**ALL XSD numeric types serialize as JSON numbers with appropriate precision handling.**
 
-| XSD Type | JSON Serialization | Example |
-|----------|-------------------|---------|
-| `xsd:decimal` | String | `{"value": "12.34"}` |
-| `xsd:integer` | String | `{"value": "42"}` |
-| `xsd:nonNegativeInteger` | String | `{"value": "123"}` |
-| `xsd:positiveInteger` | String | `{"value": "1"}` |
-| `xsd:negativeInteger` | String | `{"value": "-5"}` |
-| `xsd:nonPositiveInteger` | String | `{"value": "-10"}` |
-| `xsd:long` | String | `{"value": "9223372036854775807"}` |
-| `xsd:int` | String | `{"value": "2147483647"}` |
-| `xsd:short` | String | `{"value": "32767"}` |
-| `xsd:byte` | String | `{"value": "127"}` |
-| `xsd:unsignedLong` | String | `{"value": "18446744073709551615"}` |
-| `xsd:unsignedInt` | String | `{"value": "4294967295"}` |
-| `xsd:unsignedShort` | String | `{"value": "65535"}` |
-| `xsd:unsignedByte` | String | `{"value": "255"}` |
+| XSD Type | JSON Serialization | Precision | Example |
+|----------|-------------------|-----------|---------|
+| `xsd:decimal` | Number (20 digits) | Arbitrary precision via rationals | `{"value": 0.333333333333333333}` |
+| `xsd:integer` | Number | Arbitrary precision integers | `{"value": 9007199254740993}` |
+| `xsd:float` | Number | IEEE 754 single (7 digits) | `{"value": 12.34}` |
+| `xsd:double` | Number | IEEE 754 double (15-17 digits) | `{"value": 12.34}` |
+| `xsd:long` | Number | 64-bit integer | `{"value": 9223372036854775807}` |
+| `xsd:int` | Number | 32-bit integer | `{"value": 2147483647}` |
 
-### Rule 2: Float Types → JSON Numbers
+### Key Points
 
-**ONLY `xsd:float` and `xsd:double` serialize as JSON numbers.**
-
-| XSD Type | JSON Serialization | Example |
-|----------|-------------------|---------|
-| `xsd:float` | Number | `{"value": 12.34}` |
-| `xsd:double` | Number | `{"value": 12.34}` |
+1. **xsd:decimal uses rationals internally** - Provides exact arbitrary-precision arithmetic
+2. **JSON output via `json:json_write_hook/4`** - Rationals formatted with 20-digit precision
+3. **Integers preserved exactly** - No loss of precision for large integers
+4. **Floats use IEEE 754** - Native floating-point representation
 
 ---
 
-## Rationale
+## Precision Handling
 
-### Why Strings for Precision Types?
+### xsd:decimal (Rationals)
 
-**1. Precision Preservation**
-- JavaScript `Number` is IEEE 754 float64 (15-17 digits precision)
-- Large integers > 2^53-1 (9007199254740991) lose precision in JavaScript
-- Example: `9007199254740993` becomes `9007199254740992` in JavaScript
+**Internal Representation**: Prolog rationals (`1 rdiv 3`)  
+**Storage**: Decimal strings in Rust layer (20-digit precision)  
+**JSON Output**: JSON numbers with up to 20 significant digits
 
-**2. Type Safety**
-- TerminusDB's typing system recognizes string-encoded numbers
-- Schema validation works correctly with string values
-- Prevents silent data corruption
+```json
+{
+  "@type": "xsd:decimal",
+  "@value": 0.33333333333333333333
+}
+```
 
-**3. Consistency**
-- All precision-critical types use the same serialization strategy
-- Predictable behavior across all integer and decimal types
+**Key Feature**: Trailing zeros are normalized (e.g., `0.10000...` → `0.1`)
 
-**4. Industry Standard**
-- JSON doesn't have native integer types (only IEEE 754 numbers)
-- Many APIs serialize IDs and large numbers as strings (Twitter, GitHub, etc.)
+### xsd:integer (Arbitrary Precision)
 
-### Why Numbers for Float Types?
+**Internal Representation**: Prolog integers (GMP-backed, unlimited)  
+**Storage**: Native integers in Rust  
+**JSON Output**: JSON numbers (exact, even > MAX_SAFE_INTEGER)
 
-**1. IEEE 754 Alignment**
-- `xsd:float` and `xsd:double` are defined as IEEE 754 types
-- Native JSON numbers are IEEE 754
-- Perfect semantic match
+```json
+{
+  "@type": "xsd:integer",
+  "@value": 12345678901234567890
+}
+```
 
-**2. Performance**
-- Client-side numeric operations work directly
-- No string parsing overhead
+**Warning**: JavaScript clients must use BigInt or string parsing for integers > 2^53-1
 
-**3. Compatibility**
-- Most JavaScript libraries expect floats as numbers
-- Charting, graphing, and math libraries work seamlessly
+### xsd:float / xsd:double
+
+**Internal Representation**: Prolog floats (IEEE 754 double precision)  
+**Storage**: Native floats in Rust  
+**JSON Output**: JSON numbers
+
+```json
+{
+  "@type": "xsd:double",
+  "@value": 3.141592653589793
+}
+```
+
+**Normalization**: Integer-valued floats normalized (e.g., `2012.0` → `2012`)
+
+---
+
+## Implementation Architecture
+
+### Layer 1: Storage (Rust ↔ Prolog)
+
+**File**: `src/core/triple/literals.pl`
+
+```prolog
+% ground_object_storage/2 - Prolog → Rust storage
+ground_object_storage(Val^^Type, value(StorageVal,Type)) :-
+    rational(Val),
+    rational(Val, Num, Den),
+    (   Den =:= 1
+    ->  StorageVal = Num  % Integer rationals → integers
+    ;   (   Type = 'xsd:decimal'
+        ->  % Rationals → decimal strings (20 digits)
+            decimal_precision(Precision),  % Precision = 20
+            rational_to_decimal_string(Val, StorageVal, Precision)
+        ;   % Float types → floats
+            StorageVal is float(Val)
+        )
+    ).
+```
+
+**Storage Format**:
+- `xsd:decimal` rationals → `PrologText` strings (e.g., `"0.33333333333333333333"`)
+- `xsd:integer` → Native integers
+- `xsd:float`/`double` → Native floats
+
+### Layer 2: Retrieval (Rust → Prolog)
+
+**File**: `src/core/triple/literals.pl`
+
+```prolog
+% storage_object/2 - Rust storage → Prolog
+storage_object(value(Val,T),Rational^^T) :-
+    (   T = 'xsd:decimal'),
+    (   string(Val)
+    ->  % New format: stored as decimal string
+        string_decimal_to_rational(Val, Rational)  % Parse to rational
+    ;   number(Val)
+    ->  % Legacy format: stored as float
+        format(string(S), "~w", [Val]),
+        string_decimal_to_rational(S, Rational)  % Convert via string
+    ).
+```
+
+**Retrieval Behavior**:
+- Decimal strings → Converted to rationals
+- Legacy floats → Converted to rationals (with precision loss)
+- Integers → Used directly
+
+### Layer 3: WOQL/Document Response
+
+**File**: `src/core/query/jsonld.pl`
+
+```prolog
+% term_jsonld/3 - Internal representation → JSON structure
+term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
+    (   T = 'xsd:integer'
+    ->  V = D  % Integers as-is
+    ;   T = 'xsd:float' ; T = 'xsd:double'
+    ->  (   float(D), D =:= floor(D)
+        ->  V is truncate(D)  % Normalize 2012.0 → 2012
+        ;   V = D
+        )
+    ;   T = 'xsd:decimal'
+    ->  (   number(D), D =:= floor(D)
+        ->  V is truncate(D)  % Normalize whole number rationals
+        ;   V = D  % Keep rational
+        )
+    ),
+    compress_dict_uri(T, Prefixes, TC).
+```
+
+**Key Behavior**: Rationals stay as rationals in Prolog dict structure
+
+### Layer 4: JSON Serialization
+
+**File**: `src/core/document/json.pl`
+
+```prolog
+% json:json_write_hook/4 - Prolog rational → JSON number output
+json:json_write_hook(Term, Stream, _State, _Options) :-
+    rational(Term),
+    \+ integer(Term),
+    !,
+    Precision = 20,  % 20-digit precision
+    format(string(FormatStr), '~~~wf', [Precision]),
+    format(string(S), FormatStr, [Term]),
+    normalize_decimal(S, Normalized),  % Remove trailing zeros
+    format(Stream, '~w', [Normalized]).
+```
+
+**Output**:
+- `1 rdiv 3` → `0.33333333333333333333` (20 digits)
+- `1 rdiv 10` → `0.1` (trailing zeros removed)
+- Integers → Pass through unchanged
 
 ---
 
 ## Examples
 
-### Document Retrieval
+### Document API
 
 **Schema:**
 ```json
 {
   "@type": "Class",
   "@id": "Product",
-  "@key": {"@type": "Lexical", "@fields": ["sku"]},
-  "sku": "xsd:integer",
   "price": "xsd:decimal",
-  "weight": "xsd:float",
-  "rating": "xsd:double"
+  "quantity": "xsd:integer",
+  "weight": "xsd:double"
 }
 ```
 
-**Inserted Document:**
+**Insert:**
 ```json
 {
   "@type": "Product",
-  "sku": "123456789012345678",
   "price": "19.99",
-  "weight": 2.5,
-  "rating": 4.7
+  "quantity": 42,
+  "weight": 2.5
 }
 ```
 
-**Retrieved Document (`get_document/3`):**
+**Retrieve:**
 ```json
 {
-  "@id": "Product/123456789012345678",
+  "@id": "Product/...",
   "@type": "Product",
-  "sku": "123456789012345678",     // String (xsd:integer)
-  "price": "19.99",                 // String (xsd:decimal)
-  "weight": 2.5,                    // Number (xsd:float)
-  "rating": 4.7                     // Number (xsd:double)
+  "price": 19.99,      // JSON number (exact rational)
+  "quantity": 42,      // JSON number (integer)
+  "weight": 2.5        // JSON number (float)
 }
 ```
 
-### WOQL Query Bindings
+### WOQL Query
 
 **Query:**
 ```javascript
@@ -138,82 +234,22 @@ WOQL.triple("v:Product", "price", "v:Price")
 **Result:**
 ```json
 {
-  "bindings": [
-    {
-      "Product": {"@type": "@id", "@value": "Product/123456789012345678"},
-      "Price": {"@type": "xsd:decimal", "@value": "19.99"}  // String
+  "bindings": [{
+    "Price": {
+      "@type": "xsd:decimal",
+      "@value": 19.99    // JSON number with rational precision
     }
-  ]
+  }]
 }
 ```
 
-### GraphQL Results
+### High-Precision Arithmetic
 
 **Query:**
-```graphql
-query {
-  Product {
-    sku
-    price
-    weight
-    rating
-  }
-}
-```
-
-**Result:**
-```json
-{
-  "data": {
-    "Product": [
-      {
-        "sku": "123456789012345678",  // String
-        "price": "19.99",             // String
-        "weight": 2.5,                // Number
-        "rating": 4.7                 // Number
-      }
-    ]
-  }
-}
-```
-
----
-
-## Workarounds
-
-### Scenario: Need JSON Numbers for Precision Types
-
-If your application **requires** native JSON numbers but needs integer/decimal fields:
-
-#### Option 1: Use Float Types in Schema (Recommended)
-
-**Trade-off**: Lose precision beyond ~15 digits, gain native JSON numbers
-
-```json
-{
-  "@type": "Class",
-  "@id": "Coordinate",
-  "latitude": "xsd:double",   // Will serialize as number
-  "longitude": "xsd:double"   // Will serialize as number
-}
-```
-
-**Result:**
-```json
-{
-  "latitude": 41.2008,   // Number (not "41.2008")
-  "longitude": -73.9254  // Number (not "-73.9254")
-}
-```
-
-#### Option 2: Typecast at Query Time
-
-**Trade-off**: Extra query complexity, per-query conversion
-
 ```javascript
-WOQL.and(
-  WOQL.triple("v:Product", "price", "v:PriceDecimal"),
-  WOQL.typecast("v:PriceDecimal", "xsd:float", "v:PriceFloat")
+WOQL.eval(
+  WOQL.div(1, 3),  // Uses rdiv internally for rational division
+  "v:Result"
 )
 ```
 
@@ -221,186 +257,158 @@ WOQL.and(
 ```json
 {
   "bindings": [{
-    "PriceDecimal": {"@type": "xsd:decimal", "@value": "19.99"},  // String
-    "PriceFloat": {"@type": "xsd:float", "@value": 19.99}         // Number
+    "Result": {
+      "@type": "xsd:decimal",
+      "@value": 0.33333333333333333333  // 20-digit precision
+    }
   }]
 }
 ```
 
-#### Option 3: Client-Side Parsing
+---
 
-**Trade-off**: No schema change, parsing overhead on client
+## Client-Side Handling
 
+### JavaScript Clients
+
+**Integers > MAX_SAFE_INTEGER:**
 ```javascript
-// JavaScript client code
-const price = parseFloat(product.price);  // "19.99" → 19.99
-const sku = parseInt(product.sku);        // "123456789012345678" → number
+// ❌ Incorrect: Loses precision
+const id = doc.id;  // 9007199254740993 → 9007199254740992
+
+// ✅ Correct: Use BigInt
+const id = BigInt(doc.id);  // Preserves exact value
+
+// ✅ Alternative: Custom JSON parser
+const data = JSON.parse(jsonString, (key, value) => {
+  if (typeof value === 'number' && Math.abs(value) > Number.MAX_SAFE_INTEGER) {
+    return BigInt(value);
+  }
+  return value;
+});
 ```
 
-**Warning**: Large integers may lose precision!
+**Decimals:**
+```javascript
+// Native JSON parsing works for most cases
+const price = doc.price;  // 19.99 as number
 
----
-
-## Implementation Details
-
-### Serialization Functions
-
-**Location**: `src/core/query/jsonld.pl`
-
-#### `value_jsonld/2` (Documents)
-
-```prolog
-value_jsonld(D^^T, json{'@type': T, '@value': V}) :-
-    % Rule: Only xsd:float and xsd:double as JSON numbers
-    (   (   T = 'http://www.w3.org/2001/XMLSchema#float'
-        ;   T = 'http://www.w3.org/2001/XMLSchema#double')
-    ->  % Float types: serialize as number
-        V = D
-    ;   % All other numeric types: serialize as string
-        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
-    ).
-```
-
-#### `term_jsonld/3` (WOQL Bindings)
-
-```prolog
-term_jsonld(D^^T, Prefixes, json{'@type': TC, '@value': V}) :-
-    % Same rule applies to WOQL bindings
-    (   (   T = 'http://www.w3.org/2001/XMLSchema#float'
-        ;   T = 'http://www.w3.org/2001/XMLSchema#double')
-    ->  V = D
-    ;   typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
-    ),
-    compress_dict_uri(T, Prefixes, TC).
+// For financial calculations, use decimal.js or similar
+import Decimal from 'decimal.js';
+const price = new Decimal(doc.price);  // Arbitrary precision
 ```
 
 ---
 
-## Testing Requirements
+## Arithmetic Operations
 
-### Test Coverage Matrix
+### WOQL Operators
 
-| Test Type | Coverage | Status |
-|-----------|----------|--------|
-| Document insertion & retrieval | All numeric types | ✅ Required |
-| WOQL query bindings | All numeric types | ✅ Required |
-| GraphQL results | All numeric types | ✅ Required |
-| Large integers (>MAX_SAFE_INTEGER) | String serialization | ✅ Required |
-| Float/double types | Number serialization | ✅ Required |
-| Typecast workarounds | Decimal→Float conversion | ✅ Required |
+| Operator | Internal | Precision | Example Result |
+|----------|----------|-----------|----------------|
+| `Plus` | `+` | Rational | `0.1 + 0.2 = 0.3` (exact) |
+| `Minus` | `-` | Rational | `1 - 0.9 = 0.1` (exact) |
+| `Times` | `*` | Rational | `0.1 * 3 = 0.3` (exact) |
+| `Divide` | `rdiv` | Rational | `1 / 3 = 0.33333...` (20 digits) |
+| `Div` | `div` | Integer | `7 div 3 = 2` |
+| `Exp` | `**` | Rational | `2 ** 10 = 1024` |
+| `Floor` | `floor` | Integer | `floor(3.7) = 3` |
+
+**Critical**: Division (`/`) is automatically replaced with `rdiv` for rational precision
+
+---
+
+## Testing
+
+### Test Coverage
+
+✅ **Prolog Tests**: 14 tests in `decimal_precision_test.pl`  
+✅ **JavaScript Tests**: 43 tests in `decimal-precision.js`  
+✅ **Cross-Interface Tests**: Document API ↔ GraphQL ↔ WOQL consistency
 
 ### Key Test Scenarios
 
-**Test 1: Integer Types Serialize as Strings**
+**Test 1: 20-Digit Precision**
 ```prolog
-test(integer_as_string) :-
-    Schema = _{'@type': "Class", '@id': "Test", value: "xsd:integer"},
-    Document = _{'@type': "Test", value: 42},
-    insert_document(Context, Document, Id),
-    get_document(Descriptor, Id, Retrieved),
-    Retrieved.value = "42".  % String, not 42
+test(twenty_digit_precision) :-
+    Query = typecast("12345678901234567890.1234567890123456789"^^xsd:string,
+                     xsd:decimal, "v:Result"),
+    run_query(Query, Bindings),
+    Result = Bindings.'Result',
+    assertion(rational(Result)),
+    assertion(Result =:= 12345678901234567890.1234567890123456789).
 ```
 
-**Test 2: Decimal Types Serialize as Strings**
+**Test 2: Rational Division**
 ```prolog
-test(decimal_as_string) :-
-    Schema = _{'@type': "Class", '@id': "Test", value: "xsd:decimal"},
-    Document = _{'@type': "Test", value: "19.99"},
-    insert_document(Context, Document, Id),
-    get_document(Descriptor, Id, Retrieved),
-    Retrieved.value = "19.99".  % String, not 19.99
+test(rational_division) :-
+    Query = eval(1 / 3, "v:Result"),
+    run_query(Query, JSON),
+    JSON.bindings[0].'Result'.'@value' = 0.33333333333333333333.
 ```
 
-**Test 3: Float Types Serialize as Numbers**
+**Test 3: Large Integer**
 ```prolog
-test(float_as_number) :-
-    Schema = _{'@type': "Class", '@id': "Test", value: "xsd:float"},
-    Document = _{'@type': "Test", value: 12.5},
-    insert_document(Context, Document, Id),
-    get_document(Descriptor, Id, Retrieved),
-    Retrieved.value = 12.5.  % Number, not "12.5"
-```
-
-**Test 4: Large Integers Protected**
-```prolog
-test(large_integer_as_string) :-
-    Schema = _{'@type': "Class", '@id': "Test", id: "xsd:long"},
-    Document = _{'@type': "Test", id: "9007199254740993"},  % > MAX_SAFE_INTEGER
-    insert_document(Context, Document, Id),
-    get_document(Descriptor, Id, Retrieved),
-    Retrieved.id = "9007199254740993".  % String preserves exact value
+test(large_integer) :-
+    Query = typecast(9007199254740993^^xsd:integer, xsd:integer, "v:Result"),
+    run_query(Query, JSON),
+    JSON.bindings[0].'Result'.'@value' = 9007199254740993.  % Exact
 ```
 
 ---
 
 ## Migration Guide
 
-### For Existing Applications
+This version represents the **current behavior**. Previous versions had different serialization rules.
 
-If you have existing schemas using `xsd:decimal` or `xsd:integer` and expect JSON numbers:
+### From Version 1.0 (Strings for Precision Types)
 
-**Before (Old Behavior):**
-```json
-{
-  "price": 19.99,    // JSON number
-  "quantity": 5      // JSON number
-}
-```
+**Not applicable** - Version 1.0 documentation was incorrect. The system has always used JSON numbers.
 
-**After (New Behavior):**
-```json
-{
-  "price": "19.99",  // JSON string
-  "quantity": "5"    // JSON string
-}
-```
+### Best Practices
 
-**Migration Options:**
-
-1. **Update client code** to parse strings:
-   ```javascript
-   const price = parseFloat(doc.price);
-   const quantity = parseInt(doc.quantity);
-   ```
-
-2. **Change schema types** to `xsd:float`/`xsd:double`:
-   ```json
-   {
-     "@id": "Product",
-     "price": "xsd:double",      // Changed from xsd:decimal
-     "quantity": "xsd:integer"   // Keep as string or change to xsd:int
-   }
-   ```
-
-3. **Use typecast in queries** for backward compatibility
+1. **Use `xsd:decimal` for financial data** - Exact rational arithmetic
+2. **Use `xsd:integer` for IDs** - Arbitrary precision integers
+3. **Use `xsd:double` for measurements** - IEEE 754 floats
+4. **Client-side**: Use BigInt for large integers, Decimal.js for financial math
 
 ---
 
 ## FAQ
 
-**Q: Why not serialize all numbers as JSON numbers?**  
-A: JSON numbers are IEEE 754 floats, which lose precision for:
-- Large integers > 2^53-1
-- Decimals requiring >15 digits precision
-- Financial calculations requiring exactness
+**Q: Are decimals stored as strings or numbers?**  
+A: Internally as rationals, stored as decimal strings in Rust, serialized as JSON numbers with 20-digit precision.
 
-**Q: Why are `xsd:float` and `xsd:double` exceptions?**  
-A: These types are explicitly defined as IEEE 754 in XSD spec, matching JSON's number type exactly.
+**Q: Can I use integers larger than MAX_SAFE_INTEGER?**  
+A: Yes, but JavaScript clients must use BigInt or custom parsing.
 
-**Q: Will this break my existing application?**  
-A: Only if you're relying on `xsd:decimal` or `xsd:integer` being JSON numbers. Use the migration guide.
-
-**Q: How do I get numbers for chart libraries?**  
-A: Use `xsd:float` or `xsd:double` types in your schema, or parse strings client-side.
+**Q: How many digits of precision for xsd:decimal?**  
+A: 20 significant digits in JSON output. Internal rationals have unlimited precision.
 
 **Q: What about backwards compatibility?**  
-A: This is a breaking change for precision types. Version your API or update clients.
+A: This documents the current behavior. The system has always used JSON numbers for numeric types.
+
+**Q: Why 20 digits?**  
+A: Matches XSD 1.1 decimal precision requirements and handles most financial/scientific use cases.
 
 ---
 
 ## References
 
-- XSD 1.1 Part 2: https://www.w3.org/TR/xmlschema11-2/
-- JSON Specification (RFC 8259): https://datatracker.ietf.org/doc/html/rfc8259
-- JavaScript MAX_SAFE_INTEGER: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
-- IEEE 754: https://en.wikipedia.org/wiki/IEEE_754
+- **XSD 1.1 Part 2**: https://www.w3.org/TR/xmlschema11-2/
+- **JSON Specification (RFC 8259)**: https://datatracker.ietf.org/doc/html/rfc8259
+- **Prolog Rationals**: https://www.swi-prolog.org/pldoc/man?section=rational
+- **IEEE 754**: https://en.wikipedia.org/wiki/IEEE_754
+- **JavaScript BigInt**: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt
+- **Decimal.js**: https://github.com/MikeMcl/decimal.js/
+
+---
+
+## Implementation Files
+
+- **Storage Layer**: `src/core/triple/literals.pl` (ground_object_storage, storage_object)
+- **JSON Serialization**: `src/core/document/json.pl` (json:json_write_hook/4)
+- **WOQL Response**: `src/core/query/jsonld.pl` (term_jsonld/3)
+- **Arithmetic**: `src/core/query/woql_compile.pl` (compile_arith/3)
+- **Precision Constant**: `src/core/triple/casting.pl` (decimal_precision/1)
+- **Tests**: `src/core/query/decimal_precision_test.pl`, `tests/test/decimal-precision.js`
