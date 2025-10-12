@@ -58,15 +58,18 @@ string_decimal_to_rational(String, Rational) :-
         Rational is -PositiveRat
     ;   % Split on decimal point to preserve original precision
         (   split_string(String, ".", "", [IntStr, FracStr])
-        ->  % Has decimal point - track the precision
-            number_string(IntPart, IntStr),
+        ->  % Has decimal point - construct numerator from string parts
+            % CRITICAL: Parse as arbitrary precision integers, NOT floats
+            % This preserves full precision (e.g., 20+ digits)
+            atom_number(IntStr, IntPart),
             string_length(FracStr, FracLen),
-            number_string(FracPart, FracStr),
+            % Parse fractional part as integer (don't convert to float!)
+            atom_number(FracStr, FracPart),
             Denominator is 10^FracLen,
             Numerator is IntPart * Denominator + FracPart,
             Rational is Numerator rdiv Denominator
         ;   % No decimal point, just an integer
-            number_string(Rational, String)
+            atom_number(String, Rational)
         )
     ).
 
@@ -94,10 +97,11 @@ rational_to_decimal_string(Rational, String, MaxDecimals) :-
         (   Remainder =:= 0
         ->  % No fractional part
             format(string(String), "~w~w", [Sign, IntPart])
-        ;   % Compute MaxDecimals digits of precision
+        ;   % Compute MaxDecimals digits of precision WITH ROUNDING
             Multiplier is 10^MaxDecimals,
-            % Use integer division for exact computation
-            FracDigits is (Remainder * Multiplier) // Den,
+            % Round to nearest: add 0.5 before truncating
+            % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
+            FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
             % Format with leading zeros if needed, then trim trailing zeros
             format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
             format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])

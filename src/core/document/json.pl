@@ -127,7 +127,6 @@ json:json_write_hook(Term, Stream, _State, _Options) :-
     !,
     % Use rational_to_decimal_string for exact precision (no float conversion)
     % This preserves full rational precision without float rounding errors
-    % Already imported at top: core(triple/casting), [decimal_precision/1, rational_to_decimal_string/3]
     decimal_precision(Precision),
     rational_to_decimal_string(Term, DecimalStr, Precision),
     % Output the decimal string as a JSON number

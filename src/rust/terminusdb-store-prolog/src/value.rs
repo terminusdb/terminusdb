@@ -458,12 +458,8 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::Decimal => {
             let decimal = entry.as_val::<Decimal, String>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&decimal)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            // CRITICAL FIX: Unify as string (PrologText) instead of parsing as term
+            object_term.unify_arg(1, &decimal)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#decimal"))
         }
         Datatype::BigInt => {

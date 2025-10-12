@@ -428,24 +428,41 @@ value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
     % JSON Serialization Rules:
     % - xsd:integer → JSON number (preserves arbitrary precision integers)
     % - xsd:float/double → JSON number (normalized: 2012.0 → 2012)
-    % - xsd:decimal → JSON string (preserves decimal semantics, even for whole numbers)
+    % - xsd:decimal → JSON number (rationals serialize via json_write_hook with 20-digit precision)
     (   (   T = 'http://www.w3.org/2001/XMLSchema#integer'
         ;   T = 'xsd:integer')
     ->  % Integers always as numbers
         V = D
+    ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   T = 'xsd:decimal')
+    ->  % Decimals: check types in order of specificity (rational > float > number)
+        (   rational(D)
+        ->  % Rational: check if whole number
+            (   rational(D, Num, Den),
+                Den =:= 1
+            ->  V = Num  % Whole number rational
+            ;   V = D    % Fractional rational - json_write_hook handles precision
+            )
+        ;   float(D)
+        ->  % Float: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D  % Float value (less precise than rational)
+            )
+        ;   number(D)
+        ->  % Integer: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D
+            )
+        ;   V = D  % Pass through
+        )
     ;   (   T = 'http://www.w3.org/2001/XMLSchema#float'
         ;   T = 'xsd:float'
         ;   T = 'http://www.w3.org/2001/XMLSchema#double'
         ;   T = 'xsd:double')
     ->  % Float/double: normalize integer-valued floats (2012.0 → 2012)
         (   float(D), D =:= floor(D)
-        ->  V is truncate(D)
-        ;   V = D
-        )
-    ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
-        ;   T = 'xsd:decimal')
-    ->  % Decimals: normalize whole numbers to integers
-        (   number(D), D =:= floor(D)
         ->  V is truncate(D)
         ;   V = D
         )
@@ -491,11 +508,35 @@ term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
     % JSON Serialization Rules:
     % - xsd:integer → JSON number (preserves arbitrary precision integers)
     % - xsd:float/double → JSON number (normalized: 2012.0 → 2012)
-    % - xsd:decimal → JSON string (preserves decimal semantics, even for whole numbers)
+    % - xsd:decimal → JSON number (rationals use json_write_hook for 20-digit precision)
     (   (   T = 'http://www.w3.org/2001/XMLSchema#integer'
         ;   T = 'xsd:integer')
     ->  % Integers always as numbers
         V = D
+    ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   T = 'xsd:decimal')
+    ->  % Decimals: check types in order of specificity (rational > float > number)
+        (   rational(D)
+        ->  % Rational: check if whole number
+            (   rational(D, Num, Den),
+                Den =:= 1
+            ->  V = Num  % Whole number rational
+            ;   V = D    % Fractional rational - json_write_hook handles precision
+            )
+        ;   float(D)
+        ->  % Float: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D  % Float value (less precise than rational)
+            )
+        ;   number(D)
+        ->  % Integer: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D
+            )
+        ;   V = D  % Pass through
+        )
     ;   (   T = 'http://www.w3.org/2001/XMLSchema#float'
         ;   T = 'xsd:float'
         ;   T = 'http://www.w3.org/2001/XMLSchema#double'
@@ -505,21 +546,14 @@ term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
         ->  V is truncate(D)
         ;   V = D
         )
-    ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
-        ;   T = 'xsd:decimal')
-    ->  % Decimals: normalize whole numbers to integers
-        (   number(D), D =:= floor(D)
-        ->  V is truncate(D)
-        ;   V = D
-        )
     ;   compound(D)
     ->  % Other compound types: convert to string
         typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
     ;   % Simple values: use as-is
         D=V
     ),
-    !,
-    compress_dict_uri(T, Prefixes, TC).
+    compress_dict_uri(T, Prefixes, TC),
+    !.
 term_jsonld(D@L,_,json{'@language' : L, '@value' : D}) :-
     !.
 term_jsonld(Term,Prefixes,JSON) :-

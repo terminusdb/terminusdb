@@ -92,10 +92,11 @@ rational_to_decimal_string(Rational, String, MaxDecimals) :-
         (   Remainder =:= 0
         ->  % No fractional part
             format(string(String), "~w~w", [Sign, IntPart])
-        ;   % Compute MaxDecimals digits of precision
+        ;   % Compute MaxDecimals digits of precision WITH ROUNDING
             Multiplier is 10^MaxDecimals,
-            % Use integer division for exact computation
-            FracDigits is (Remainder * Multiplier) // Den,
+            % Round to nearest: add 0.5 before truncating
+            % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
+            FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
             % Format with leading zeros if needed, then trim trailing zeros
             format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
             format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
@@ -446,88 +447,94 @@ normalise_triple(rdf(X,P,Y,G),rdf(XF,P,YF)) :-
         set_normalise_warning
     ),
     normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)).
-normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
-    (   X = node(N)
-    ->  atomic_list_concat(['_:',N], XF)
-    ;   X = XF),
-
-    (   Y = node(M)
-    ->  atomic_list_concat(['_:',M], YF)
-    %   Bare atom literal needs to be lifted.
-    ;   Y = literal(_)
-    ->  turtle_to_literal(Y,YF)
-    %   Otherwise walk on by...
-    ;   Y = YF).
 
 ground_object_storage(String@Lang, lang(String,Lang)) :-
     !.
-% CRITICAL: Convert rationals for Rust storage (must be before generic clause)
+% CRITICAL: Handle xsd:decimal type - convert to rational then to string with full precision
+% This clause must come BEFORE the generic rational clause to handle floats typed as decimals
+ground_object_storage(Val^^Type, value(StorageVal,Type)) :-
+    (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ;   Type = 'xsd:decimal'),
+    !,
+    % Convert to rational if needed (handles both floats and existing rationals)
+    (   rational(Val)
+    ->  Rational = Val
+    ;   float(Val)
+    ->  Rational is rationalize(Val)
+    ;   number(Val)
+    ->  Rational is rationalize(Val)
+    ;   Rational = Val  % Already in correct form
+    ),
+    % Now convert rational to decimal string with full precision
+    rational(Rational, Num, Den),
+    (   Den =:= 1
+    ->  StorageVal = Num  % Keep integers as integers
+    ;   decimal_precision(Precision),
+        rational_to_decimal_string(Rational, StorageVal, Precision)
+    ).
+% DO NOT convert xsd:decimal rationals - they need to stay as rationals for precision
 ground_object_storage(Val^^Type, value(StorageVal,Type)) :-
     rational(Val),
+    % Exclude xsd:decimal - it has its own storage handling to preserve precision
+    \+ (Type = 'http://www.w3.org/2001/XMLSchema#decimal'),
+    \+ (Type = 'xsd:decimal'),
     !,
     % If rational is an integer (denominator=1), keep as integer
-    % For xsd:decimal: convert to string with full 20-digit precision (Rust accepts PrologText)
-    % For xsd:float/double: convert to float (in swiple floats are double precision)
+    % For xsd:float/double: convert to float
     rational(Val, Num, Den),
     (   Den =:= 1
     ->  StorageVal = Num  % Keep integers as integers
-    ;   (   (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
-            ;   Type = 'xsd:decimal')
-        ->  % xsd:decimal: convert to decimal string with full precision
-            decimal_precision(Precision),
-            rational_to_decimal_string(Val, StorageVal, Precision)
-            % Rust will accept this as PrologText with arbitrary precision
-        ;   % xsd:float/double: convert to float
-            StorageVal is float(Val)
-        )
+    ;   % xsd:float/double: convert to float
+        StorageVal is float(Val)
     ).
-% Handle floats typed as xsd:decimal (e.g., timestamps)
-% These bypass rational conversion and go straight to storage as floats
-ground_object_storage(Val^^Type, value(Val,Type)) :-
-    float(Val),
-    (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
-    ;   Type = 'xsd:decimal'),
-    !.  % Let Rust convert the float to string
 ground_object_storage(Val^^Type, value(Val,Type)) :-
     !.
 ground_object_storage(O, node(O)).
 
 /*
+{{ ... }}
  * We can only make a concrete referrent if all parts are bound.
  */
 nonvar_literal(String@Lang, lang(String,Lang)) :-
     nonvar(Lang),
     nonvar(String),
     !.
-% CRITICAL: Convert rationals for Rust storage (must be before generic clause)
+% CRITICAL: Handle xsd:decimal type - convert to rational then to string with full precision
+% This clause must come BEFORE the generic rational clause to handle floats typed as decimals
+nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
+    nonvar(Term),
+    (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ;   Type = 'xsd:decimal'),
+    !,
+    % Convert to rational if needed (handles both floats and existing rationals)
+    (   rational(Term)
+    ->  Rational = Term
+    ;   float(Term)
+    ->  Rational is rationalize(Term)
+    ;   number(Term)
+    ->  Rational is rationalize(Term)
+    ;   Rational = Term  % Already in correct form
+    ),
+    % Now convert rational to decimal string with full precision
+    rational(Rational, Num, Den),
+    (   Den =:= 1
+    ->  StorageTerm = Num  % Keep integers as integers
+    ;   decimal_precision(Precision),
+        rational_to_decimal_string(Rational, StorageTerm, Precision)
+    ).
+% CRITICAL: Convert rationals for Rust storage (for non-decimal types)
 nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
     nonvar(Term),
     rational(Term),
     !,
     % If rational is an integer (denominator=1), keep as integer
-    % For xsd:decimal: convert to string with full 20-digit precision (Rust accepts PrologText)
     % For xsd:float/double: convert to float
     rational(Term, Num, Den),
     (   Den =:= 1
     ->  StorageTerm = Num  % Keep integers as integers
-    ;   (   (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
-            ;   Type = 'xsd:decimal')
-        ->  % xsd:decimal: convert to decimal string with full precision
-            decimal_precision(Precision),
-            rational_to_decimal_string(Term, StorageTerm, Precision)
-            % Rust will accept this as PrologText with arbitrary precision
-        ;   % xsd:float/double: convert to float
-            StorageTerm is float(Term)
-        )
+    ;   % xsd:float/double: convert to float
+        StorageTerm is float(Term)
     ).
-% Handle floats typed as xsd:decimal (e.g., timestamps)
-% These bypass rational conversion and go straight to storage as floats
-nonvar_literal(Term^^Type, value(Term,Type)) :-
-    nonvar(Term),
-    float(Term),
-    (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
-    ;   Type = 'xsd:decimal'),
-    !.  % Let Rust convert the float to string
 nonvar_literal(Term^^Type, value(Term,Type)) :-
     nonvar(Type),
     nonvar(Term),
@@ -571,10 +578,19 @@ storage_value(X,V) :-
 storage_literal(X1^^T1,X3^^T2) :-
     storage_atom(T1,T2),
     storage_value(X1,X2),
-    (   is_number_type(T2)
+    % Exclude xsd:decimal from number_string conversion
+    % xsd:decimal needs to stay as string to preserve 20-digit precision
+    % It will be handled specially by storage_object which converts to rational
+    (   is_number_type(T2),
+        \+ (T2 = 'http://www.w3.org/2001/XMLSchema#decimal'),
+        \+ (T2 = 'xsd:decimal')
     ->  (   string(X2)
         ->  number_string(X3,X2)
         ;   X2 = X3)
+    % xsd:decimal: pass through as string (will be converted by storage_object)
+    ;   (   T2 = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   T2 = 'xsd:decimal')
+    ->  X2 = X3
     % NOTE: This is considered special because the anyURI condition
     % used to be less strict.
     % There may be data in the DB that does not meet the current

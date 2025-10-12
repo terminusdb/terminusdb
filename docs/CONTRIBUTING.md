@@ -10,6 +10,30 @@ success with a final `true`. API tests will require that the admin
 password is `root` or that the environment variable
 `TERMINUS_ADMIN_PASSWD` is set prior to invocation of `terminusdb`.
 
+### Quick Rebuild and Test Cycle
+
+When making changes to Prolog code, use this workflow for fast iteration:
+
+```bash
+# 1. Run Prolog tests locally (fastest - ~30 seconds)
+swipl -t halt -g run_tests -f src/interactive.pl
+
+# 2. Rebuild Docker container and restart (for JavaScript integration tests)
+docker build --build-arg SKIP_TESTS=true -t terminusdb-dev . && \
+  docker stop terminusdb-dev 2>/dev/null ; \
+  docker run -d --rm -p 6363:6363 --name terminusdb-dev terminusdb-dev
+
+# 3. Run JavaScript integration tests
+cd tests
+npx mocha test/decimal-precision.js --timeout 10000
+```
+
+**Note:** If Docker uses cached layers and doesn't pick up your changes, add `--no-cache` to force a complete rebuild:
+
+```bash
+docker build --no-cache --build-arg SKIP_TESTS=true -t cleodb .
+```
+
 ## Submitting changes
 
 Please send a [GitHub Pull Request](https://github.com/terminusdb/terminusdb/pull/new/main) to the main branch.
