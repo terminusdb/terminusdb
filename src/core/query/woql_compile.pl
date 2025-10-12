@@ -1364,6 +1364,11 @@ compile_wf(sum(X,Y),Sum) -->
     {
         % Special handling for sum: flatten single-element sublists from group_by
         Sum = (
+            % Validate that first argument is a list at runtime
+            do_or_die(
+                is_list(XE),
+                error(existence_error(matching_rule, sum(XE,YE)), _)
+            ),
             maplist([In,Out]>>(is_list(In), In = [Single] -> literally(Single, Out) ; literally(In, Out)), XE, XE_Flat),
             sum_list(XE_Flat, YE_Lit),
             unliterally(YE_Lit, YE)
