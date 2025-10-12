@@ -71,7 +71,7 @@ $(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -
 	  --on-warning=halt \
 	  --quiet \
 	  -O \
-	  -g 'main, halt' \
+	  -t 'main, halt' \
 	  -f src/bootstrap.pl
 
 $(RUST_TARGET):
