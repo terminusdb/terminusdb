@@ -473,15 +473,89 @@ scalar Decimal
 ```javascript
 const resolvers = {
   BigInt: {
+    // Serialize to string to preserve precision beyond MAX_SAFE_INTEGER
     serialize: (value) => value.toString(),
     parseValue: (value) => BigInt(value),
   },
   Decimal: {
-    serialize: (value) => parseFloat(value),  // Already precise from DB
-    parseValue: (value) => String(value),  // Send as string for precision
+    // CRITICAL: Return as-is (JSON number from TerminusDB already has 20-digit precision)
+    // Do NOT use parseFloat() - it loses precision to IEEE 754 double (15-17 digits)
+    serialize: (value) => value,  // Pass through the precise number from DB
+    parseValue: (value) => value,  // Accept number or string from client
+    parseLiteral: (ast) => {
+      if (ast.kind === 'FloatValue' || ast.kind === 'IntValue') {
+        return ast.value;  // String representation preserves precision
+      }
+      return null;
+    }
   },
 };
 ```
+
+**Client-Side Usage with Decimal.js**:
+
+```javascript
+const Decimal = require('decimal.js');
+
+/**
+ * Extract exact decimal value from raw JSON response text.
+ * CRITICAL: Must extract BEFORE JSON.parse() to preserve 20-digit precision.
+ */
+function extractExactValue(responseText) {
+  // Match "@value": "0.33333333333333333333" or "@value": 42
+  const match = responseText.match(/"@value"\s*:\s*([0-9.eE+-]+)/)
+  if (match) {
+    return match[1]  // Return as string
+  }
+  throw new Error('Could not extract @value from response')
+}
+
+// GraphQL query that preserves precision
+async function queryWithPrecision(query) {
+  const response = await fetch('/api/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query })
+  });
+  
+  // CRITICAL: Get raw text BEFORE parsing
+  const text = await response.text();
+  
+  // Extract precise values from raw JSON text
+  const rawValue = extractExactValue(text);
+  
+  // Create Decimal from string (preserves all 20 digits)
+  const exactValue = new Decimal(rawValue);
+  
+  return exactValue;
+}
+
+// Example: Query and calculate with full precision
+const price = await queryWithPrecision(`
+  query {
+    Product {
+      price  # xsd:decimal with 20-digit precision
+    }
+  }
+`);
+
+// Perform exact calculations
+const tax = price.times('0.08');  // Exact: 8% tax
+const total = price.plus(tax);
+
+console.log(total.toString());  // Full 20-digit precision maintained
+
+// Example with expected value comparison
+const expected = new Decimal('19.99');
+console.log(price.equals(expected));  // true - exact match
+```
+
+**Important Notes**:
+- TerminusDB sends JSON numbers with up to 20 significant digits
+- JavaScript's `JSON.parse()` converts these to IEEE 754 doubles (loses precision beyond 15-17 digits)
+- **CRITICAL**: Extract values from raw JSON text **before** `JSON.parse()`
+- Use `new Decimal(stringValue)` to preserve all 20 digits
+- For **integers > MAX_SAFE_INTEGER**, use same extraction pattern with `BigInt`
 
 ---
 
