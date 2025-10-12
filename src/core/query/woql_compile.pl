@@ -1637,6 +1637,18 @@ literally(Date^^'http://www.w3.org/2001/XMLSchema#dateTime', String) :-
     Date = date(_Y,_M,_D,_HH,_MM,_SS,_,_,_),
     !,
     date_string(Date,String).
+literally(Rational^^'http://www.w3.org/2001/XMLSchema#decimal', Integer) :-
+    % Convert integer-valued rationals to integers for operations like limit/offset
+    rational(Rational),
+    Rational =:= floor(Rational),
+    !,
+    Integer is truncate(Rational).
+literally(Rational^^'xsd:decimal', Integer) :-
+    % Handle xsd:decimal prefix form
+    rational(Rational),
+    Rational =:= floor(Rational),
+    !,
+    Integer is truncate(Rational).
 literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
@@ -1705,13 +1717,20 @@ compile_arith(Exp,Pre_Term,ExpE) -->
     {
         Exp =.. [Functor|Args],
         % lazily snarf everything named...
+        % Additionally, the prefer_rationals flag is configured elsewhere
         % probably need to add stuff here.
-        member(Functor, ['*','-','+','div','/','floor', '**'])
+        member(Functor, ['*','-','+','div','/','floor', '**', 'rdiv'])
     },
     !,
     mapm(compile_arith,Args,Pre_Terms,ArgsE),
     {
-        ExpE =.. [Functor|ArgsE],
+        % Replace / with rdiv for decimal precision (rational division)
+        % '/' produces floats (loses precision), 'rdiv' preserves exact rationals
+        (   Functor = '/'
+        ->  ActualFunctor = rdiv
+        ;   ActualFunctor = Functor
+        ),
+        ExpE =.. [ActualFunctor|ArgsE],
         list_conjunction(Pre_Terms,Pre_Term)
     }.
 compile_arith(Exp,literally(ExpE,ExpL),ExpL) -->
@@ -2256,7 +2275,7 @@ test(like, [
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
     _{'Similarity':_{'@type':'xsd:decimal',
-                     '@value':1.0}} :< Res.
+                     '@value':1}} :< Res.
 
 test(exp, [
          setup((setup_temp_store(State),
@@ -5783,3 +5802,6 @@ test(ancestor, [
 	].
 
 :- end_tests(trampoline).
+
+% Include decimal precision tests from separate file
+:- include('decimal_precision_test.pl').
