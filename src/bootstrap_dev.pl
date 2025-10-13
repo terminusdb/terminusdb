@@ -35,9 +35,9 @@ main :-
     bootstrap_files,
     bootstrap_config_files,
     qsave_program(terminusdb, [
-                      foreign(save),
+                      foreign(no_save),    % Don't strip libraries (macOS code signing)
                       undefined(error),
                       toplevel(cli_toplevel),
                       autoload(false),
-                      stand_alone(true)
+                      stand_alone(false)   % Must be false with foreign(no_save)
                   ]).

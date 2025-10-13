@@ -121,9 +121,8 @@
 :- multifile json:json_write_hook/4.
 
 json:json_write_hook(Term, Stream, _State, _Options) :-
-    % Only handle rationals that are not integers
+    % Handle all rationals (including integers which are rationals with Den=1)
     rational(Term),
-    \+ integer(Term),
     !,
     % Use rational_to_decimal_string for exact precision (no float conversion)
     % This preserves full rational precision without float rounding errors

@@ -39,6 +39,9 @@ RUST_TARGET := src/rust/librust.$(DYLIB_EXT)
 .PHONY: default
 default: $(TARGET)
 
+.PHONY: dev
+dev: dev-build
+
 .PHONY: i
 i: $(RUST_TARGET)
 	$(SWIPL) -f src/interactive.pl
@@ -64,6 +67,22 @@ clean:
 
 ################################################################################
 
+# Development build target (macOS-friendly, no library stripping)
+.PHONY: dev-build
+dev-build: $(RUST_TARGET)
+dev-build: $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
+	@echo "Building development binary (no library stripping)..."
+	$(SWIPL) \
+	  --on-error=halt \
+	  --on-warning=halt \
+	  --quiet \
+	  -O \
+	  -t 'main, halt' \
+	  -f src/bootstrap_dev.pl
+	@echo "Development binary 'terminusdb' created successfully"
+	@echo "Run with: ./terminusdb help"
+
+# Production build target (standalone, with library stripping)
 $(TARGET): $(RUST_TARGET)
 $(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 	$(SWIPL) \
