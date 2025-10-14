@@ -359,7 +359,7 @@ api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), 
             }.
 api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "The store has no defined database version and so can not be opened.", []),
+    format(string(Msg), "The store has no defined database version and so can not be opened. This may indicate the store has not been initialized yet. Try running 'terminusdb store init' or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
