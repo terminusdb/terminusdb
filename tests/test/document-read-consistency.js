@@ -103,10 +103,17 @@ describe('document-read-consistency', function () {
 
       expect(result['@type']).to.equal('Product')
       expect(result.name).to.equal('Test Widget')
-      // Decimals are returned as JSON numbers with arbitrary precision
+
+      // Decimals are returned as JSON numbers - verify type AND exact value
       expect(typeof result.price).to.equal('number')
       expect(typeof result.taxRate).to.equal('number')
       expect(typeof result.quantity).to.equal('number')
+
+      // Verify exact decimal values using Decimal.js to avoid precision loss
+      expect(new Decimal(result.price.toString()).equals(new Decimal('19.99'))).to.be.true
+      expect(new Decimal(result.taxRate.toString()).equals(new Decimal('0.075'))).to.be.true
+      expect(new Decimal(result.quantity.toString()).equals(new Decimal('10.5'))).to.be.true
+
       expect(result.inStock).to.equal(true)
       expect(result.category).to.equal('Electronics')
     })
@@ -116,7 +123,7 @@ describe('document-read-consistency', function () {
       const query = {
         '@type': 'ReadDocument',
         identifier: { '@type': 'NodeValue', node: 'Product/item1' },
-        document: { '@type': 'DataValue', variable: 'Doc' },  // DataValue, not Variable!
+        document: { '@type': 'DataValue', variable: 'Doc' }, // DataValue, not Variable!
       }
 
       const result = await woql.post(agent, query)
@@ -134,6 +141,12 @@ describe('document-read-consistency', function () {
       expect(typeof doc.price).to.equal('number')
       expect(typeof doc.taxRate).to.equal('number')
       expect(typeof doc.quantity).to.equal('number')
+
+      // Verify exact decimal values
+      expect(new Decimal(doc.price.toString()).equals(new Decimal('19.99'))).to.be.true
+      expect(new Decimal(doc.taxRate.toString()).equals(new Decimal('0.075'))).to.be.true
+      expect(new Decimal(doc.quantity.toString()).equals(new Decimal('10.5'))).to.be.true
+
       expect(doc.inStock).to.equal(true)
       expect(doc.category).to.equal('Electronics')
     })
@@ -175,6 +188,12 @@ describe('document-read-consistency', function () {
       expect(typeof doc.price).to.equal('number')
       expect(typeof doc.taxRate).to.equal('number')
       expect(typeof doc.quantity).to.equal('number')
+
+      // Verify exact decimal values
+      expect(new Decimal(doc.price.toString()).equals(new Decimal('19.99'))).to.be.true
+      expect(new Decimal(doc.taxRate.toString()).equals(new Decimal('0.075'))).to.be.true
+      expect(new Decimal(doc.quantity.toString()).equals(new Decimal('10.5'))).to.be.true
+
       expect(doc.inStock).to.equal(true)
       expect(doc.category).to.equal('Electronics')
     })
@@ -282,21 +301,21 @@ describe('document-read-consistency', function () {
       expect(gqlResponse.data.HighPrecision).to.be.an('array').with.lengthOf(1)
       const gqlResult = gqlResponse.data.HighPrecision[0]
 
-      // Small value - use Decimal.js
+      // Small value - verify exact value using Decimal.js
       const docSmall = new Decimal(docResult.smallValue.toString())
       const gqlSmall = new Decimal(gqlResult.smallValue.toString())
-      const zero = new Decimal(0)
+      const expectedSmall = new Decimal('0.00000000000001')
 
-      expect(docSmall.greaterThan(zero)).to.be.true
-      expect(gqlSmall.greaterThan(zero)).to.be.true
+      expect(docSmall.equals(expectedSmall)).to.be.true
+      expect(gqlSmall.equals(expectedSmall)).to.be.true
 
-      // Large value - use Decimal.js
+      // Large value - verify exact value using Decimal.js
       const docLarge = new Decimal(docResult.largeValue.toString())
       const gqlLarge = new Decimal(gqlResult.largeValue.toString())
-      const threshold = new Decimal('9999999999')
+      const expectedLarge = new Decimal('9999999999.99999')
 
-      expect(docLarge.greaterThan(threshold)).to.be.true
-      expect(gqlLarge.greaterThan(threshold)).to.be.true
+      expect(docLarge.equals(expectedLarge)).to.be.true
+      expect(gqlLarge.equals(expectedLarge)).to.be.true
     })
   })
 
