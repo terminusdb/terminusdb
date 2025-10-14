@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, api, db, document, woql } = require('../lib')
+const { Agent, api, db, document, util, woql } = require('../lib')
 const fetch = require('cross-fetch')
 const {
   ApolloClient, ApolloLink, concat, InMemoryCache,
@@ -44,13 +44,13 @@ describe('document-read-consistency', function () {
         new ApolloLink((operation, forward) => {
           operation.setContext({
             headers: {
-              authorization: api.util.autorizationHeader(agent),
+              authorization: util.authorizationHeader(agent),
             },
           })
           return forward(operation)
         }),
         new HttpLink({
-          uri: api.path(agent, 'graphql', {}),
+          uri: `${agent.baseUrl}${api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })}`,
           fetch,
         }),
       ),
@@ -74,14 +74,16 @@ describe('document-read-consistency', function () {
     }
 
     before(async function () {
-      await document.insert(agent, productDoc)
+      await document.insert(agent, { instance: productDoc })
     })
 
     it('should return consistent results via Document API', async function () {
-      const result = await document.get(agent, { id: 'Product/item1' })
+      const response = await document.get(agent, { body: { id: 'Product/item1' } })
+      const result = response.body
 
       expect(result['@type']).to.equal('Product')
       expect(result.name).to.equal('Test Widget')
+      // Decimals are returned as JSON numbers with arbitrary precision
       expect(typeof result.price).to.equal('number')
       expect(typeof result.taxRate).to.equal('number')
       expect(typeof result.quantity).to.equal('number')
@@ -141,16 +143,17 @@ describe('document-read-consistency', function () {
       const doc = result.data.Product[0]
 
       expect(doc.name).to.equal('Test Widget')
-      expect(typeof doc.price).to.equal('string')
-      expect(typeof doc.taxRate).to.equal('string')
-      expect(typeof doc.quantity).to.equal('string')
+      expect(typeof doc.price).to.equal('number')
+      expect(typeof doc.taxRate).to.equal('number')
+      expect(typeof doc.quantity).to.equal('number')
       expect(doc.inStock).to.equal(true)
       expect(doc.category).to.equal('Electronics')
     })
 
     it('should have consistent decimal values across all three interfaces', async function () {
       // Get via Document API
-      const docApiResult = await document.get(agent, { id: 'Product/item1' })
+      const docApiResponse = await document.get(agent, { body: { id: 'Product/item1' } })
+      const docApiResult = docApiResponse.body
 
       // Get via WOQL
       const woqlQuery = {
@@ -211,12 +214,13 @@ describe('document-read-consistency', function () {
     }
 
     before(async function () {
-      await document.insert(agent, precisionDoc)
+      await document.insert(agent, { instance: precisionDoc })
     })
 
     it('should preserve 20-digit precision across all interfaces', async function () {
       // Document API
-      const docResult = await document.get(agent, { id: 'HighPrecision/test1' })
+      const docResponse = await document.get(agent, { body: { id: 'HighPrecision/test1' } })
+      const docResult = docResponse.body
 
       // WOQL
       const woqlResponse = await woql.post(agent, {
@@ -251,7 +255,8 @@ describe('document-read-consistency', function () {
     })
 
     it('should handle edge case values consistently', async function () {
-      const docResult = await document.get(agent, { id: 'HighPrecision/test1' })
+      const docResponse = await document.get(agent, { body: { id: 'HighPrecision/test1' } })
+      const docResult = docResponse.body
 
       const woqlResponse = await woql.post(agent, {
         '@type': 'And',
@@ -291,16 +296,19 @@ describe('document-read-consistency', function () {
 
   describe('Multiple Documents Read Consistency', function () {
     before(async function () {
-      await document.insert(agent, [
-        { '@type': 'Product', '@id': 'Product/multi1', name: 'Item1', price: '10.50', taxRate: '0.08', quantity: '5', inStock: true, category: 'A' },
-        { '@type': 'Product', '@id': 'Product/multi2', name: 'Item2', price: '25.75', taxRate: '0.08', quantity: '3', inStock: false, category: 'B' },
-        { '@type': 'Product', '@id': 'Product/multi3', name: 'Item3', price: '99.99', taxRate: '0.08', quantity: '1', inStock: true, category: 'A' },
-      ])
+      await document.insert(agent, {
+        instance: [
+          { '@type': 'Product', '@id': 'Product/multi1', name: 'Item1', price: '10.50', taxRate: '0.08', quantity: '5', inStock: true, category: 'A' },
+          { '@type': 'Product', '@id': 'Product/multi2', name: 'Item2', price: '25.75', taxRate: '0.08', quantity: '3', inStock: false, category: 'B' },
+          { '@type': 'Product', '@id': 'Product/multi3', name: 'Item3', price: '99.99', taxRate: '0.08', quantity: '1', inStock: true, category: 'A' },
+        ],
+      })
     })
 
     it('should return consistent count across all interfaces', async function () {
       // Document API - get all
-      const docResult = await document.get(agent, { type: 'Product' })
+      const docResponse = await document.get(agent, { body: { type: 'Product' } })
+      const docResult = docResponse.body
       const docCount = docResult.filter(d => d['@id'].startsWith('Product/multi')).length
 
       // WOQL - read all
@@ -325,7 +333,8 @@ describe('document-read-consistency', function () {
 
     it('should return documents in consistent order when sorted', async function () {
       // Document API doesn't support sorting directly, get all and sort
-      const docResult = await document.get(agent, { type: 'Product' })
+      const docResponse = await document.get(agent, { body: { type: 'Product' } })
+      const docResult = docResponse.body
       const docSorted = docResult
         .filter(d => d['@id'].startsWith('Product/multi'))
         .sort((a, b) => a.price - b.price)

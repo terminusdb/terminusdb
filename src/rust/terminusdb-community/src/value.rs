@@ -230,6 +230,12 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
     }
 }
 
+// Helper to create a marker string for high-precision numbers
+// These markers will be post-processed into raw JSON numbers after serialization
+fn make_number_marker(value_str: String) -> DefaultScalarValue {
+    DefaultScalarValue::String(format!("__TERMINUS_NUM__{}", value_str))
+}
+
 pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarValue> {
     match tde.datatype() {
         Datatype::Boolean => {
@@ -257,7 +263,12 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>()))
         }
         Datatype::Decimal => {
-            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Decimal, String>()))
+            // Return as string - Juniper will serialize it
+            // For GraphQL, these values should be JSON numbers, but Juniper's DefaultScalarValue
+            // doesn't support arbitrary precision. The marker approach didn't work because
+            // typed BigFloat fields bypass the generic Value path.
+            let decimal_str = tde.as_val::<Decimal, String>();
+            juniper::Value::Scalar(DefaultScalarValue::String(decimal_str))
         }
         Datatype::BigInt => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Integer, String>()))

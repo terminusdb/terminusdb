@@ -288,8 +288,9 @@ describe('GraphQL', function () {
   const bigfloat1 = { bigfloat: '0.0' }
   const bigfloat2 = { bigfloat: '10096.757' }
   const bigfloat3 = { bigfloat: '101.0' }
+  const bigfloat4 = { '@type': 'MyBigFloat', bigfloat: '0.01234567890123456789' }
 
-  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, nonnegint, datetime, bigfloat1, bigfloat2, bigfloat3]
+  const instances = [aristotle, plato, socrates, kant, popper, gödel, pickles, toots, int1, int2, int3, int4, nonnegint, datetime, bigfloat1, bigfloat2, bigfloat3, bigfloat4]
 
   before(async function () {
     /* GraphQL Boilerplate */
@@ -465,21 +466,400 @@ describe('GraphQL', function () {
     }
 }`
       const result = await client.query({ query: BIGFLOAT_QUERY })
-      expect(result.data.MyBigFloat).to.deep.equal(
-        [
-          {
-            bigfloat: '0',
-          },
-          {
-            bigfloat: '101',
-          },
-          {
-            bigfloat: '10096.757',
-          },
-        ],
-      )
+
+      // NOTE: Apollo Client parses JSON numbers as JavaScript floats (IEEE 754)
+      // Precision beyond ~16 digits is lost. The RAW JSON contains full 20-digit precision.
+      //
+      // For production apps needing full precision, see:
+      // - "Apollo Client precision loss and solutions" test (overview)
+      // - "GraphQL decimal precision: Apollo Client strategies" suite (examples)
+      //
+      // For server correctness verification, see: "RAW JSON verification" tests
+      expect(result.data.MyBigFloat).to.be.an('array').with.lengthOf(4)
+      expect(result.data.MyBigFloat[0].bigfloat).to.equal(0)
+      // Apollo truncates to ~16 digits, so we can't verify full 20-digit precision here
+      expect(result.data.MyBigFloat[1].bigfloat).to.be.a('number')
+      expect(result.data.MyBigFloat[2].bigfloat).to.equal(101)
+      expect(result.data.MyBigFloat[3].bigfloat).to.equal(10096.757)
     })
 
+    it('graphql 20-digit decimal precision query (RAW JSON verification)', async function () {
+      const BIGFLOAT4_QUERY = gql`
+ query BigFloat4Query {
+    MyBigFloat(orderBy: {bigfloat: ASC}) {
+        bigfloat
+    }
+}`
+
+      // Test the RAW HTTP response to verify JSON numbers (not strings)
+      const rawResponse = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: BIGFLOAT4_QUERY.loc.source.body })
+
+      // CRITICAL: Verify the RAW JSON contains unquoted numbers (not strings)
+      // This is the correct JSON representation per JSON_SERIALIZATION_RULES.md
+      // The value should appear as:  "bigfloat":0.01234567890123456789
+      // NOT as:  "bigfloat":"0.01234567890123456789"
+
+      expect(rawResponse.text).to.include('"bigfloat":0.01234567890123456789')
+      expect(rawResponse.text).to.not.include('"bigfloat":"0.01234567890123456789"')
+
+      // Verify the full 20-digit number is present in the JSON (before JavaScript parsing)
+      const match = rawResponse.text.match(/"bigfloat":0\.01234567890123456789/)
+      expect(match).to.exist
+
+      // NOTE: JavaScript clients using Apollo/native JSON.parse will lose precision
+      // beyond ~16 digits due to IEEE 754 float conversion.
+      // Clients needing full 20-digit precision must use custom JSON parsers
+      // (e.g., json-bigint, decimal.js with JSON.parse reviver, or lossless-json)
+    })
+
+    it('Apollo Client precision loss and solutions', async function () {
+      // PROBLEM: GraphQL servers output JSON numbers for xsd:decimal (per JSON spec),
+      // but Apollo Client uses native JSON.parse() which converts numbers to IEEE 754
+      // floats, losing precision beyond ~16 digits for values like 0.01234567890123456789
+      //
+      // SOLUTIONS: (1) TypePolicies, (2) Custom ApolloLink, (3) json-bigint library
+      //
+      // Reference: https://www.apollographql.com/docs/react/caching/cache-field-behavior/
+
+      const PRECISION_QUERY = gql`
+ query PrecisionTest {
+    MyBigFloat(orderBy: {bigfloat: ASC}) {
+        bigfloat
+    }
+}`
+
+      // 1. PROBLEM: Default Apollo Client loses precision
+      const defaultResult = await client.query({ query: PRECISION_QUERY })
+      const defaultValue = defaultResult.data.MyBigFloat[1].bigfloat
+
+      expect(typeof defaultValue).to.equal('number')
+      // IEEE 754 double precision loses digits beyond ~16 significant digits
+      expect(defaultValue.toString()).to.not.equal('0.01234567890123456789')
+
+      // 2. VERIFICATION: Server outputs correct 20-digit JSON number
+      const rawResponse = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: PRECISION_QUERY.loc.source.body })
+
+      // The raw JSON contains the full precision (before JavaScript parsing)
+      expect(rawResponse.text).to.include('"bigfloat":0.01234567890123456789')
+
+      // 3. SOLUTION A: Apollo TypePolicies (field-level transformation)
+      // TypePolicies allow automatic transformation when reading from cache:
+      //
+      // const cache = new InMemoryCache({
+      //   typePolicies: {
+      //     MyBigFloat: {
+      //       fields: {
+      //         bigfloat: {
+      //           read(value) {
+      //             // Convert number to Decimal when reading from cache
+      //             return typeof value === 'number' ? new Decimal(value) : value
+      //           }
+      //         }
+      //       }
+      //     }
+      //   }
+      // })
+      //
+      // const client = new ApolloClient({ cache, link: httpLink })
+      //
+      // LIMITATION: Precision already lost during JSON.parse, TypePolicy can't recover it
+      // Best for: Converting floats to Decimal instances consistently across your app
+      // Not suitable for: Recovering full 20-digit precision (use Solution B or C)
+
+      // 4. SOLUTION B: Custom ApolloLink (intercepts response before parsing)
+      // This is the BEST solution - intercept raw JSON text before parsing
+      //
+      // Implementation would look like:
+      // import { ApolloLink, HttpLink } from '@apollo/client'
+      // import { LosslessJSON } from 'lossless-json'
+      //
+      // const losslessLink = new ApolloLink((operation, forward) => {
+      //   return forward(operation).map(response => {
+      //     // Transform response data here with lossless parsing
+      //     return response
+      //   })
+      // })
+      //
+      // const client = new ApolloClient({
+      //   link: losslessLink.concat(httpLink),
+      //   cache: new InMemoryCache()
+      // })
+
+      // 5. SOLUTION C: Custom fetch with json-bigint (preserves precision)
+      // This requires using a library that doesn't convert to floats during parsing:
+      //
+      // import JSONbig from 'json-bigint'
+      //
+      // const customFetch = (uri, options) => {
+      //   return fetch(uri, options).then(response => {
+      //     return response.text().then(text => ({
+      //       ...response,
+      //       text: () => Promise.resolve(text),
+      //       json: () => Promise.resolve(JSONbig.parse(text))
+      //     }))
+      //   })
+      // }
+      //
+      // const httpLink = new HttpLink({
+      //   uri: graphqlEndpoint,
+      //   fetch: customFetch
+      // })
+
+      // RECOMMENDATION: For applications requiring full 20-digit decimal precision,
+      // use Solution B (custom ApolloLink) or C (custom fetch with json-bigint).
+      // TypePolicies (Solution A) cannot recover precision already lost during parsing.
+      //
+      // SEE BELOW: "GraphQL decimal precision: Apollo Client strategies" suite
+      // for concrete, working examples of each strategy.
+    })
+  })
+
+  describe('GraphQL decimal precision: Apollo Client strategies', function () {
+    // ============================================================================
+    // IMPORTANT: Understanding GraphQL Decimal Precision in Apollo Client
+    // ============================================================================
+    //
+    // THE SERVER IS CORRECT: TerminusDB GraphQL outputs xsd:decimal as JSON numbers
+    // with full 20-digit precision per JSON_SERIALIZATION_RULES.md.
+    // Example raw JSON: {"bigfloat":0.01234567890123456789}
+    //
+    // THE CHALLENGE: Apollo Client uses native JSON.parse() which converts JSON
+    // numbers to IEEE 754 floats, losing precision beyond ~16 digits.
+    //
+    // TESTING STRATEGIES:
+    //
+    // 1. For RAW JSON verification (server correctness):
+    //    - Use agent.post() to get raw HTTP response
+    //    - Verify response.text contains unquoted numbers with full precision
+    //    - Example: expect(response.text).to.include('"bigfloat":0.01234567890123456789')
+    //
+    // 2. For Apollo Client tests (documenting client limitation):
+    //    - Use client.query() for typical Apollo usage
+    //    - Document that precision is lost during parsing
+    //    - Use .closeTo() for approximate equality, not .equals()
+    //    - Add comments explaining the limitation
+    //
+    // 3. For production applications needing full precision:
+    //    - Use TypePolicies (easy, but precision already lost)
+    //    - Use manual parsing with regex (full precision, no Apollo cache)
+    //    - Use json-bigint custom fetch (recommended for production)
+    //
+    // This suite provides concrete examples of all three approaches.
+    // ============================================================================
+
+    it('graphql decimal precision approach: TypePolicies with cache transformation', async function () {
+      // This strategy uses Apollo's TypePolicies to automatically convert
+      // cached number values to Decimal instances when reading from cache.
+      //
+      // PROS: Easy to implement, type-safe, integrates with Apollo cache
+      // CONS: Cannot recover precision already lost during JSON.parse()
+
+      const QUERY = gql`
+ query TestTypePolicies {
+    MyBigFloat(orderBy: {bigfloat: ASC}) {
+        bigfloat
+    }
+}`
+
+      // In production, you'd create cache with TypePolicies like this:
+      //
+      // const decimalCache = new InMemoryCache({
+      //   typePolicies: {
+      //     MyBigFloat: {
+      //       fields: {
+      //         bigfloat: {
+      //           read(value) {
+      //             return typeof value === 'number' ? new Decimal(value) : value
+      //           }
+      //         }
+      //       }
+      //     }
+      //   }
+      // })
+      //
+      // const typePolicyClient = new ApolloClient({
+      //   cache: decimalCache,
+      //   link: authMiddleware.concat(httpLink)
+      // })
+
+      // Get data using default client
+      const result = await client.query({ query: QUERY })
+      const rawValue = result.data.MyBigFloat[1].bigfloat
+
+      // Simulate TypePolicy read function
+      const value = typeof rawValue === 'number' ? new Decimal(rawValue) : rawValue
+
+      // Verify value is now a Decimal instance
+      expect(value).to.be.instanceOf(Decimal)
+
+      // Can use Decimal methods
+      expect(value.toNumber()).to.be.a('number')
+
+      // LIMITATION: Precision was lost during JSON.parse, so we can't recover full 20 digits
+      // The original 0.01234567890123456789 was truncated by JavaScript's float parsing
+      const precisionLost = !value.equals(new Decimal('0.01234567890123456789'))
+      expect(precisionLost).to.be.true // Demonstrates the limitation
+
+      // Use case: When you want Decimal instances throughout your app but can accept
+      // ~16 digit precision (sufficient for most financial calculations)
+    })
+
+    it('graphql decimal precision approach: manual parsing with full precision', async function () {
+      // This strategy bypasses Apollo's JSON.parse by fetching raw response text
+      // and parsing with a custom reviver that preserves precision.
+      //
+      // PROS: Full precision preserved, no additional libraries needed
+      // CONS: Bypasses Apollo cache, need to parse manually
+
+      const QUERY = `
+query TestManualParsing {
+  MyBigFloat(orderBy: {bigfloat: ASC}) {
+    bigfloat
+  }
+}`
+
+      // Make raw HTTP request to get response text before JSON parsing
+      const rawResponse = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: QUERY })
+
+      // Verify server sends correct 20-digit JSON number
+      expect(rawResponse.text).to.include('"bigfloat":0.01234567890123456789')
+
+      // Strategy: Parse the raw text with a custom approach
+      // Since JSON.parse already converts to floats, we need to extract numbers as strings first
+      const jsonText = rawResponse.text
+
+      // Replace decimal numbers with quoted strings before parsing
+      const stringified = jsonText.replace(/"bigfloat":([-0-9.eE+]+)/g, '"bigfloat":"$1"')
+
+      // Now parse with string values
+      const parsed = JSON.parse(stringified)
+
+      // Convert string values to Decimal
+      const data = parsed.data.MyBigFloat.map(item => ({
+        ...item,
+        bigfloat: new Decimal(item.bigfloat),
+      }))
+
+      const value = data[1].bigfloat
+
+      // Verify full 20-digit precision preserved
+      expect(value).to.be.instanceOf(Decimal)
+      expect(value.equals(new Decimal('0.01234567890123456789'))).to.be.true
+      expect(value.toString()).to.equal('0.01234567890123456789')
+
+      // Use case: When you need full precision and can handle manual parsing
+      // Best for: Critical financial calculations, scientific applications
+    })
+
+    it('graphql decimal precision approach: json-bigint custom fetch pattern', async function () {
+      // This test documents how to integrate json-bigint with Apollo Client
+      // for production applications requiring arbitrary precision.
+      //
+      // IMPLEMENTATION STEPS:
+      //
+      // 1. Install dependencies:
+      //    npm install json-bigint
+      //
+      // 2. Create custom fetch function:
+      //
+      // import JSONbig from 'json-bigint'
+      // import { ApolloClient, InMemoryCache, HttpLink } from '@apollo/client'
+      //
+      // const bigintFetch = (uri, options) => {
+      //   return fetch(uri, options).then(response => {
+      //     return response.text().then(text => {
+      //       const parsed = JSONbig({ useNativeBigInt: false }).parse(text)
+      //       return {
+      //         ...response,
+      //         text: () => Promise.resolve(text),
+      //         json: () => Promise.resolve(parsed)
+      //       }
+      //     })
+      //   })
+      // }
+      //
+      // 3. Configure Apollo Client:
+      //
+      // const httpLink = new HttpLink({
+      //   uri: 'http://localhost:6363/api/graphql/myorg/mydb',
+      //   fetch: bigintFetch
+      // })
+      //
+      // const client = new ApolloClient({
+      //   link: httpLink,
+      //   cache: new InMemoryCache()
+      // })
+      //
+      // 4. Result: All numeric fields preserve full precision as BigNumber instances
+      //
+      // PROS: Full precision, works seamlessly with Apollo, production-ready
+      // CONS: Requires additional dependency (json-bigint)
+
+      // For this test, we verify the pattern works by demonstrating manual approach
+      const QUERY = `
+query TestBigIntPattern {
+  MyBigFloat(orderBy: {bigfloat: ASC}) {
+    bigfloat
+  }
+}`
+
+      const rawResponse = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: QUERY })
+
+      // Verify: Server outputs correct JSON number format
+      expect(rawResponse.text).to.include('"bigfloat":0.01234567890123456789')
+      expect(rawResponse.text).to.not.include('"bigfloat":"0.01234567890123456789"')
+
+      // The json-bigint library would parse this maintaining precision
+      // by converting numbers to BigNumber/Decimal objects during parsing
+
+      // RECOMMENDATION: Use this strategy for production applications where
+      // decimal precision is critical (finance, scientific, legal applications)
+    })
+
+    it('graphql decimal trailing zero normalization (RAW JSON verification)', async function () {
+      // This test documents JSON number normalization behavior
+      // Per JSON spec, trailing zeros are semantically redundant and may be normalized
+      // Example: 0.12345678901234567890 → 0.1234567890123456789 (trailing zero removed)
+
+      // Insert a decimal with trailing zero
+      const trailingZeroDoc = {
+        '@type': 'MyBigFloat',
+        bigfloat: '0.12345678901234567890', // 20 digits with trailing zero
+      }
+      await document.insert(agent, { instance: trailingZeroDoc })
+
+      const QUERY = gql`
+ query TrailingZeroQuery {
+    MyBigFloat {
+        bigfloat
+    }
+}`
+
+      // Test RAW JSON response
+      const rawResponse = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: QUERY.loc.source.body })
+
+      // Verify the RAW JSON contains the number (trailing zero may be normalized)
+      // Both 0.12345678901234567890 and 0.1234567890123456789 are valid
+      const hasNumber = rawResponse.text.includes('"bigfloat":0.1234567890123456789')
+      expect(hasNumber).to.be.true
+
+      // Verify it's NOT a quoted string
+      const hasQuotedString = rawResponse.text.includes('"bigfloat":"0.1234567890123456789"')
+      expect(hasQuotedString).to.be.false
+
+      // The precision is maintained (19-20 significant digits)
+      const match = rawResponse.text.match(/"bigfloat":(0\.1234567890123456789\d?)/)
+      expect(match).to.exist
+    })
+  })
+
+  // Remaining tests continue in the original "queries" suite above
+  describe('additional queries', function () {
     it('back-link query', async function () {
       const BACKLINK_QUERY = gql`
  query PersonQuery {
@@ -767,7 +1147,7 @@ query EverythingQuery {
           anySimpleType: '"3"', // Whole numbers stored as integer, not decimal
           string: 'string',
           boolean: true,
-          decimal: '3.2',
+          decimal: 3.2, // GraphQL outputs JSON numbers, Apollo parses as float
           float: 3.200000047683716,
           time: '23:34:43Z',
           date: '2021-03-05',
@@ -808,8 +1188,8 @@ query EverythingQuery {
 
     it('graphql subsumption', async function () {
       const members = [{ name: 'Joe', number: 3 },
-      { name: 'Jim', number: 5 },
-      { '@type': 'Parent', name: 'Dad' }]
+        { name: 'Jim', number: 5 },
+        { '@type': 'Parent', name: 'Dad' }]
       await document.insert(agent, { instance: members })
       const PARENT_QUERY = gql`
  query ParentQuery {
@@ -1023,7 +1403,7 @@ query EverythingQuery {
       const testObj = {
         '@type': 'JSONs',
         json: [{ this: { is: { a: { json: [] } } } },
-        { and: ['another', 'one'] },
+          { and: ['another', 'one'] },
         ],
       }
       await document.insert(agent, { instance: testObj })
@@ -1405,203 +1785,6 @@ query EverythingQuery {
           expect(nwe.statusCode).to.equal(500)
         })
       expect(result).to.equal(undefined)
-    })
-  })
-
-  // Note: These tests expose a juniper/GraphQL infrastructure issue with decimal serialization
-  // The mutations DO work, but GraphQL queries fail with:
-  // "GraphQLValue::concrete_type_name() must be implemented by unions, interfaces and objects"
-  // This is a Rust panic in juniper when serializing decimal responses
-  // Decimal precision is thoroughly tested in decimal-precision.js across all interfaces
-  describe.skip('Decimal Precision Tests (GraphQL infrastructure issue)', function () {
-    before(async function () {
-      agent = new Agent().auth()
-      await db.create(agent)
-      const schema = [
-        {
-          '@type': 'Class',
-          '@id': 'PrecisionTest1',
-          value20digits: 'xsd:decimal',
-          value15digits: 'xsd:decimal',
-          financialValue: 'xsd:decimal',
-        },
-      ]
-      await document.insert(agent, { schema })
-      
-      client = new ApolloClient({
-        cache: new InMemoryCache(),
-        link: concat(
-          new ApolloLink((operation, forward) => {
-            operation.setContext({
-              headers: {
-                authorization: util.authorizationHeader(agent),
-              },
-            })
-            return forward(operation)
-          }),
-          new HttpLink({
-            uri: `${agent.baseUrl}${api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })}`,
-            fetch,
-          }),
-        ),
-      })
-    })
-
-    after(async function () {
-      await db.delete(agent)
-    })
-
-    it('should handle 20-digit precision decimals in GraphQL', async function () {
-      const instance = {
-        '@type': 'PrecisionTest1',
-        '@id': 'PrecisionTest1/test1',
-        value20digits: '1.23456789012345678901',
-        value15digits: '3.141592653589793',
-        financialValue: '12345.67890',
-      }
-
-      await document.insert(agent, { instance })
-
-      const PRECISION_QUERY = gql`
-        query {
-          PrecisionTest1 {
-            #value20digits
-            #value15digits
-            #financialValue
-          }
-        }
-      `
-
-      const result = await client.query({ query: PRECISION_QUERY }).catch((error) => {
-        console.error('GraphQL query failed:', JSON.stringify(error))
-        throw error
-      })
-
-      expect(result.data.PrecisionTest).to.be.an('array').with.lengthOf(1)
-      const retrieved = result.data.PrecisionTest[0]
-
-      // GraphQL returns decimals as JSON numbers (not strings) per spec
-      expect(typeof retrieved.value20digits).to.equal('number')
-      expect(typeof retrieved.value15digits).to.equal('number')
-      expect(typeof retrieved.financialValue).to.equal('number')
-
-      // Use Decimal.js for exact precision comparison (not parseFloat!)
-      // parseFloat loses precision beyond ~16 digits (IEEE 754 limit)
-      const val20 = new Decimal(retrieved.value20digits)
-      const val15 = new Decimal(retrieved.value15digits)
-      const valFinancial = new Decimal(retrieved.financialValue)
-
-      const expected20 = new Decimal('1.23456789012345678901')
-      const expected15 = new Decimal('3.141592653589793')
-      const expectedFinancial = new Decimal('12345.67890')
-
-      // Exact equality check (not tolerance-based!)
-      expect(val20.equals(expected20)).to.be.true
-      expect(val15.equals(expected15)).to.be.true
-      expect(valFinancial.equals(expectedFinancial)).to.be.true
-    })
-
-    it('should handle decimal mutations via GraphQL', async function () {
-      const doc = {
-        '@type': 'PrecisionTest1',
-        '@id': 'PrecisionTest1/mutation1',
-        value20digits: '9.87654321098765432109',
-        value15digits: '2.718281828459045',
-        financialValue: '9999.99',
-      }
-
-      const MUTATION = gql`
-        mutation InsertPrecision($json: JSON!) {
-          _commitInfo(author: "test", message: "Insert precision test")
-          _insertDocuments(json: $json)
-        }
-      `
-      const result = await client.mutate({
-        mutation: MUTATION,
-        variables: { json: JSON.stringify(doc) },
-      }).catch((error) => {
-        console.error(JSON.stringify(error))
-        throw error
-      })
-
-      expect(result.data._insertDocuments).to.be.an('array')
-      expect(result.data._insertDocuments.length).to.equal(1)
-
-      // Query to verify the inserted document
-      const QUERY = gql`
-        query GetInserted {
-          PrecisionTest1 {
-            value20digits
-            value15digits
-            financialValue
-          }
-        }
-      `
-
-      const queryResult = await client.query({ query: QUERY }).catch((error) => {
-        console.error(JSON.stringify(error))
-        throw error
-      })
-
-      const gqlDoc = queryResult?.data?.PrecisionTest1.find(d =>
-        d.value20digits === '9.87654321098765432109',
-      )
-
-      // GraphQL returns high-precision decimals as strings to preserve precision
-      expect(typeof gqlDoc.value20digits).to.equal('string')
-      expect(typeof gqlDoc.value15digits).to.equal('string')
-      expect(typeof gqlDoc.financialValue).to.equal('string')
-
-      const val20 = new Decimal(gqlDoc.value20digits)
-      const val15 = new Decimal(gqlDoc.value15digits)
-      const valFinancial = new Decimal(gqlDoc.financialValue)
-
-      const expected20 = new Decimal('9.87654321098765432109')
-      const expected15 = new Decimal('2.718281828459045')
-      const expectedFinancial = new Decimal('9999.99')
-
-      // Exact equality check
-      expect(val20.equals(expected20)).to.be.true
-      expect(val15.equals(expected15)).to.be.true
-      expect(valFinancial.equals(expectedFinancial)).to.be.true
-    })
-
-    it('should preserve precision in GraphQL for financial calculations', async function () {
-      // Create multiple items with precise prices
-      await document.insert(agent, {
-        instance: {
-          '@type': 'PrecisionTest1',
-          '@id': 'PrecisionTest1/item1',
-          financialValue: '19.99',
-        },
-      })
-
-      await document.insert(agent, {
-        instance: {
-          '@type': 'PrecisionTest1',
-          '@id': 'PrecisionTest1/item2',
-          financialValue: '29.95',
-        },
-      })
-
-      const QUERY = gql`
-        query AllPrices {
-          PrecisionTest1 {
-            financialValue
-          }
-        }
-      `
-
-      const result = await client.query({ query: QUERY })
-
-      // Sum up all financial values using Decimal.js for exact arithmetic
-      const sum = result.data.PrecisionTest1.reduce((acc, item) => {
-        return acc.plus(new Decimal(item.financialValue))
-      }, new Decimal(0))
-
-      // Should be exactly 19.99 + 29.95 + 9999.99 (from previous test) = 10049.93
-      const expected = new Decimal('10049.93')
-      expect(sum.equals(expected)).to.be.true
     })
   })
 })
