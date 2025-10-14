@@ -61,6 +61,11 @@ rust:
 test:
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
+# Run the unit tests in node.
+.PHONY: test-int
+test-int:
+	sh -c "cd tests ; npx mocha"
+
 # Quick command for interactive
 .PHONY: i
 i:
