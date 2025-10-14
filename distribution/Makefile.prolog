@@ -40,7 +40,7 @@ RUST_TARGET := src/rust/librust.$(DYLIB_EXT)
 default: $(TARGET)
 
 .PHONY: dev
-dev: dev-build
+dev: $(RUST_TARGET) dev-build
 
 .PHONY: i
 i: $(RUST_TARGET)
@@ -69,7 +69,6 @@ clean:
 
 # Development build target (macOS-friendly, no library stripping)
 .PHONY: dev-build
-dev-build: $(RUST_TARGET)
 dev-build: $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -name '*.ttl' -o -name '*.json' \))
 	@echo "Building development binary (no library stripping)..."
 	$(SWIPL) \
