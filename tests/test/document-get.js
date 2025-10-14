@@ -29,8 +29,6 @@ describe('document-get', function () {
   const aristotleExpected = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3 }
   const platoExpected = { '@type': 'Person', name: 'Plato', age: 80, order: 2 }
   const socratesExpected = { '@type': 'Person', name: 'Socrates', age: 71, order: 1 }
-  const kantExpected = { '@type': 'Person', name: 'Immanuel Kant', age: 79, order: 3 }
-  const popperExpected = { '@type': 'Person', name: 'Karl Popper', age: 92, order: 5 }
   const gödelExpected = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5 }
 
   const instances = [aristotle, plato, socrates]
@@ -218,7 +216,7 @@ describe('document-get', function () {
     }
   })
 
-  describe('returns expected for prefixed=false', function () {
+  describe('returns expected for prefixed=false ("prefixed" is not supported yet)', function () {
     const options = [
       { query: { graph_type: 'schema', as_list: true, prefixed: false } },
       { body: { graph_type: 'schema', as_list: true, prefixed: false } },

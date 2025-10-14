@@ -72,18 +72,19 @@ json_value_cast_type(V,Type,WOQL) :-
     ->  % Keep integers as integers for operations like limit/offset
         typecast(V^^xsd:decimal,
                  TE, [], Val)
+    ;   rational(V),
+        \+ integer(V)
+    ->  % Handle rationals BEFORE floats - preserve exact precision for WOQL arithmetic
+        % These are clean rationals from arithmetic operations (rdiv, +, -, *)
+        % They maintain full precision without float approximation
+        Val = V^^TE
     ;   float(V)
-    ->  % Convert floats using their natural string representation
-        % Don't use 20-digit precision as that exposes float imprecision
-        % The float's own precision is already determined by JSON parsing
+    ->  % Convert floats using natural representation
+        % With value_string_as(atom) in routes.pl, numeric strings are preserved as atoms
+        % So floats here are actual JSON numbers that already have limited precision
         format(string(Num_String), '~w', [V]),
         typecast(Num_String^^xsd:string,
                  TE, [], Val)
-    ;   rational(V),
-        \+ integer(V)
-    ->  % Handle rationals - preserve exact precision for WOQL arithmetic
-        % These are clean rationals from arithmetic operations
-        Val = V^^TE
     ;   member(V,[false,true])
     ->  typecast(V^^xsd:boolean,
                  TE, [], Val)
@@ -105,8 +106,13 @@ json_data_to_woql_ast(JSON,WOQL) :-
 json_data_to_woql_ast(JSON,WOQL) :-
     atom(JSON),
     !,
-    member(JSON,[true,false]),
-    WOQL = JSON^^xsd:boolean.
+    (   member(JSON,[true,false])
+    ->  WOQL = JSON^^xsd:boolean
+    ;   % Atom is not a boolean - convert to string to preserve precision
+        % This handles numeric strings preserved by value_string_as(atom) in routes.pl
+        atom_string(JSON, String),
+        WOQL = String^^xsd:string
+    ).
 json_data_to_woql_ast(JSON,WOQL) :-
     string(JSON),
     !,
@@ -119,9 +125,9 @@ json_data_to_woql_ast(JSON,WOQL) :-
 json_data_to_woql_ast(JSON,WOQL) :-
     float(JSON),
     !,
-    % Convert floats using their natural string representation
-    % Don't use 20-digit precision as that exposes float imprecision  
-    % JSON floats already have appropriate precision from parsing
+    % Convert floats using natural representation
+    % With value_string_as(atom) in routes.pl, high-precision strings are preserved as atoms
+    % Floats here are actual JSON numbers with inherent precision limits
     format(string(Num_String), '~w', [JSON]),
     typecast(Num_String^^xsd:string,
              'http://www.w3.org/2001/XMLSchema#decimal',

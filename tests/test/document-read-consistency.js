@@ -318,5 +318,4 @@ describe('document-read-consistency', function () {
       expect(gqlLarge.equals(expectedLarge)).to.be.true
     })
   })
-
 })

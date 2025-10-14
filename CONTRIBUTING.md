@@ -156,8 +156,9 @@ npx mocha tests/test/*.js --timeout 10000
 # Run specific test file
 npx mocha tests/test/graphql.js --timeout 10000
 
-# Run tests matching a pattern
+# Run tests matching a pattern (using --grep or -g)
 npx mocha tests/test/graphql.js --grep "decimal precision" --timeout 10000
+npx mocha tests/test/decimal-precision.js -g "should preserve precision when inserting via WOQL InsertDocument" --timeout 10000
 
 # Run with coverage
 npm run test:coverage

@@ -298,8 +298,96 @@ describe('decimal-precision', function () {
     })
   })
 
-  // Note: WOQL Document Operations test skipped - requires WOQL ReadDocument infrastructure
-  // Decimal precision is thoroughly tested via arithmetic operations above
+  describe('WOQL Document Operations Precision', function () {
+    it('should preserve precision when reading documents via WOQL ReadDocument', async function () {
+      // Insert a document with high-precision decimals
+      const testDoc = {
+        '@type': 'HighPrecision',
+        '@id': 'HighPrecision/woql_test1',
+        value20digits: '1.23456789012345678901', // 20 decimals
+        value15digits: '3.141592653589793', // 15 decimals (Pi)
+        calculation: '0.33333333333333333333', // 20 decimals (1/3 approximation)
+      }
+
+      await document.insert(agent, { instance: testDoc })
+
+      // Read via WOQL ReadDocument
+      const query = {
+        '@type': 'ReadDocument',
+        identifier: { '@type': 'NodeValue', node: 'HighPrecision/woql_test1' },
+        document: { '@type': 'DataValue', variable: 'Doc' },
+      }
+
+      const response = await woql.post(agent, query)
+
+      // Verify bindings structure
+      expect(response.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
+      expect(response.body['api:variable_names'][0]).to.equal('Doc')
+      expect(response.body.bindings).to.be.an('array').that.has.lengthOf(1)
+
+      const doc = response.body.bindings[0].Doc
+
+      // Verify document structure
+      expect(doc['@type']).to.equal('HighPrecision')
+      expect(doc['@id']).to.equal('HighPrecision/woql_test1')
+
+      // Extract exact values from raw JSON text to preserve precision
+      const value20Raw = response.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]
+      const value15Raw = response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]
+      const calculationRaw = response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]
+
+      // Use Decimal.js for exact precision comparison
+      const value20 = new Decimal(value20Raw)
+      const value15 = new Decimal(value15Raw)
+      const calculation = new Decimal(calculationRaw)
+
+      // Verify exact decimal values
+      expect(value20.equals(new Decimal('1.23456789012345678901'))).to.be.true
+      expect(value15.equals(new Decimal('3.141592653589793'))).to.be.true
+      expect(calculation.equals(new Decimal('0.33333333333333333333'))).to.be.true
+    })
+
+    it('should preserve precision for financial calculations in documents via WOQL', async function () {
+      const productDoc = {
+        '@type': 'Product',
+        '@id': 'Product/woql_item1',
+        name: 'WOQL Test Widget',
+        price: '19.99',
+        taxRate: '0.075',
+        quantity: '10.5',
+      }
+
+      await document.insert(agent, { instance: productDoc })
+
+      // Read via WOQL ReadDocument
+      const query = {
+        '@type': 'ReadDocument',
+        identifier: { '@type': 'NodeValue', node: 'Product/woql_item1' },
+        document: { '@type': 'DataValue', variable: 'Doc' },
+      }
+
+      const response = await woql.post(agent, query)
+      const doc = response.body.bindings[0].Doc
+
+      // Extract exact values from raw JSON
+      const priceRaw = response.text.match(/"price"\s*:\s*([0-9.eE+-]+)/)[1]
+      const taxRateRaw = response.text.match(/"taxRate"\s*:\s*([0-9.eE+-]+)/)[1]
+      const quantityRaw = response.text.match(/"quantity"\s*:\s*([0-9.eE+-]+)/)[1]
+
+      // Use Decimal.js for exact precision comparison
+      const price = new Decimal(priceRaw)
+      const taxRate = new Decimal(taxRateRaw)
+      const quantity = new Decimal(quantityRaw)
+
+      // Verify exact decimal values match what was inserted
+      expect(price.equals(new Decimal('19.99'))).to.be.true
+      expect(taxRate.equals(new Decimal('0.075'))).to.be.true
+      expect(quantity.equals(new Decimal('10.5'))).to.be.true
+
+      // Verify the document contains correct name
+      expect(doc.name).to.equal('WOQL Test Widget')
+    })
+  })
 
   describe('High Precision Arithmetic Results', function () {
     it('should return 18-digit small decimal results without float representation', async function () {
@@ -1669,9 +1757,9 @@ describe('decimal-precision', function () {
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
     })
 
-    it.skip('should preserve precision when inserting via WOQL InsertDocument (KNOWN LIMITATION)', async function () {
-      // Test case: Insert via WOQL InsertDocument
-      // Verify precision is preserved in storage and retrieval
+    it('should preserve precision when inserting via WOQL InsertDocument', async function () {
+      // Test case: Insert via WOQL InsertDocument with explicit xsd:decimal type
+      // Verifies that value_string_as(atom) in routes.pl preserves full 20-digit precision
 
       const woqlInsertQuery = {
         '@type': 'InsertDocument',
@@ -1694,7 +1782,11 @@ describe('decimal-precision', function () {
               {
                 '@type': 'FieldValuePair',
                 field: 'decimalValue',
-                value: { '@type': 'Value', data: '0.98765432109876543210' },
+                // Use explicit xsd:decimal type to preserve precision
+                value: {
+                  '@type': 'DataValue',
+                  data: { '@type': 'xsd:decimal', '@value': '0.01234567890123456789' },
+                },
               },
               {
                 '@type': 'FieldValuePair',
@@ -1709,7 +1801,10 @@ describe('decimal-precision', function () {
               {
                 '@type': 'FieldValuePair',
                 field: 'bigIntValue',
-                value: { '@type': 'Value', data: '777777777777777777777' },
+                value: {
+                  '@type': 'DataValue',
+                  data: { '@type': 'xsd:integer', '@value': '777777777777777777777' },
+                },
               },
             ],
           },
@@ -1719,10 +1814,13 @@ describe('decimal-precision', function () {
       const insertResult = await woql.post(agent, woqlInsertQuery).unverified()
 
       if (insertResult.status !== 200) {
-        console.log('WOQL Insert failed:', JSON.stringify(insertResult.body, null, 2))
+        console.log('WOQL Insert failed with status:', insertResult.status)
+        console.log('Error:', JSON.stringify(insertResult.body, null, 2))
+        throw new Error(`WOQL InsertDocument failed: ${JSON.stringify(insertResult.body)}`)
       }
 
       expect(insertResult.status).to.equal(200)
+      expect(insertResult.body.inserts).to.be.greaterThan(0)
 
       // Read back via Document API
       const docResult = await document.get(agent, {
@@ -1732,9 +1830,13 @@ describe('decimal-precision', function () {
       expect(docResult.body).to.be.an('array')
       expect(docResult.body.length).to.be.greaterThan(0)
 
-      const doc = docResult.body[0]
-      const docDecimal = new Decimal(doc.decimalValue.toString())
-      const expectedDecimal = new Decimal('0.98765432109876543210')
+      // Extract decimal value from raw JSON text to preserve full 20-digit precision
+      // JavaScript's JSON.parse() converts numbers to floats, losing precision beyond 16 digits
+      const decimalMatch = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)
+      expect(decimalMatch, 'Could not extract decimalValue from response').to.exist
+
+      const docDecimal = new Decimal(decimalMatch[1])
+      const expectedDecimal = new Decimal('0.01234567890123456789')
 
       expect(docDecimal.equals(expectedDecimal)).to.be.true
 
@@ -1830,7 +1932,7 @@ describe('decimal-precision', function () {
       }
     })
 
-    it.skip('should preserve precision when inserting via WOQL InsertDocument with DictionaryTemplate (DEEP INVESTIGATION NEEDED)', async function () {
+    it('should preserve precision when inserting via WOQL InsertDocument with DictionaryTemplate', async function () {
       // KNOWN ISSUE: WOQL InsertDocument fails with decimal values
       // Error: null_unsupported with rational conversion
       // Root cause: Decimal strings are converted to rationals during WOQL processing (expected),
@@ -1896,10 +1998,13 @@ describe('decimal-precision', function () {
       const insertResult = await woql.post(agent, woqlInsertQuery).unverified()
 
       if (insertResult.status !== 200) {
-        console.log('WOQL Insert Error:', JSON.stringify(insertResult.body, null, 2))
+        console.log('WOQL Insert Error with status:', insertResult.status)
+        console.log('Error:', JSON.stringify(insertResult.body, null, 2))
+        throw new Error(`WOQL InsertDocument with DictionaryTemplate failed: ${JSON.stringify(insertResult.body)}`)
       }
 
       expect(insertResult.status).to.equal(200)
+      expect(insertResult.body.inserts).to.be.greaterThan(0)
 
       // Read back via Document API
       const docResult = await document.get(agent, {
@@ -1936,8 +2041,19 @@ describe('decimal-precision', function () {
       )
 
       expect(gqlDoc).to.exist
-      const gqlDecimal = new Decimal(gqlDoc.decimalValue)
-      expect(gqlDecimal.equals(expectedDecimal)).to.be.true
+
+      // Get RAW GraphQL response to verify server outputs full precision
+      const rawGqlResponse = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: QUERY.loc.source.body })
+
+      // Verify RAW JSON contains full 20-digit precision (server-side is correct)
+      expect(rawGqlResponse.text).to.include('"decimalValue":0.13579135791357913579')
+      expect(rawGqlResponse.text).to.not.include('"decimalValue":"0.13579135791357913579"')
+
+      // Apollo Client parses as floats (precision lost beyond ~16 digits during JSON.parse)
+      // But we verify the server sends correct precision above
+      const gqlDecimal = new Decimal(gqlDoc.decimalValue.toString())
+      expect(gqlDecimal.toNumber()).to.be.closeTo(expectedDecimal.toNumber(), 0.00000000000001)
 
       // Read back via WOQL triple query
       const tripleQuery = {
@@ -2025,7 +2141,6 @@ describe('decimal-precision', function () {
 
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
-
     })
   })
 })
