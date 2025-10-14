@@ -2284,6 +2284,16 @@ api_document_error_jsonld(Type, error(bad_field_value(Field, Value, Document),_)
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(reserved_marker_in_string(Field, Marker),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "String values cannot start with reserved marker prefix ~q (found in field ~q)", [Marker, Field]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:ReservedMarkerInString',
+                              'api:field' : Field,
+                              'api:marker' : Marker },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(key_missing_fields(Key_Type, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Missing required @fields array for key type ~q", [Key_Type]),

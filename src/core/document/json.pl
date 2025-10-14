@@ -211,6 +211,12 @@ json_type_to_value_type(J, T, J, T) :-
         T = 'http://www.w3.org/2001/XMLSchema#boolean',
         error(unexpected_boolean_value(J, T), _)).
 json_type_to_value_type(J, T, X, T) :-
+    % Guard: Reject strings starting with reserved marker prefix before typecasting
+    (   string(J),
+        sub_string(J, 0, 16, _, "__TERMINUS_NUM__")
+    ->  throw(error(reserved_marker_in_string('value', '__TERMINUS_NUM__'), _))
+    ;   true
+    ),
     typecast(J^^'http://www.w3.org/2001/XMLSchema#string', T, [], X^^_).
 
 
@@ -754,9 +760,14 @@ check_json_string(_, Val) :-
     atom(Val),
     \+ memberchk(Val, ['', null, false, true]),
     !.
-check_json_string(_, Val) :-
+check_json_string(Field, Val) :-
     string(Val),
     Val \= "",
+    % Guard: Reject strings starting with reserved marker prefix
+    (   sub_string(Val, 0, 16, _, "__TERMINUS_NUM__")
+    ->  throw(error(reserved_marker_in_string(Field, '__TERMINUS_NUM__'), _))
+    ;   true
+    ),
     !.
 check_json_string(Field, Val) :-
     throw(error(bad_field_value(Field, Val), _)).
