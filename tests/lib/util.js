@@ -61,6 +61,11 @@ function randomString () {
   return crypto.randomBytes(16).toString('hex')
 }
 
+function authorizationHeader (agent) {
+  const credentials = `${agent.user}:${agent.password}`
+  return `Basic ${Buffer.from(credentials).toString('base64')}`
+}
+
 function typeString (val) {
   try {
     return val.constructor.name
@@ -140,6 +145,7 @@ module.exports = {
   assertObject,
   assertString,
   assertStringOrArray,
+  authorizationHeader,
   deepClone,
   defaultContext,
   firstCapture,

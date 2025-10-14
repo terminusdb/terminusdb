@@ -75,19 +75,21 @@ describe('decimal-precision', function () {
 
       // Retrieve document
       const response = await document.get(agent, { body: { id: 'HighPrecision/test1' } })
-      const retrieved = response.body
 
-      // Verify precision is preserved
-      expect(retrieved['@type']).to.equal('HighPrecision')
-      // Values are returned as strings to preserve full precision
-      expect(typeof retrieved.value20digits).to.equal('string')
-      expect(typeof retrieved.value15digits).to.equal('string')
-      expect(typeof retrieved.calculation).to.equal('string')
+      // Extract exact values from raw JSON - decimals are returned as strings
+      const value20Raw = response.text.match(/"value20digits"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const value15Raw = response.text.match(/"value15digits"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const calculationRaw = response.text.match(/"calculation"\s*:\s*"([0-9.eE+-]+)"/)[1]
 
-      // Verify the string values match what we sent (full precision preserved)
-      expect(retrieved.value20digits).to.equal('1.23456789012345678901')
-      expect(retrieved.value15digits).to.equal('3.141592653589793')
-      expect(retrieved.calculation).to.equal('0.33333333333333')
+      // Use Decimal.js for exact precision comparison (no f64 loss)
+      const value20 = new Decimal(value20Raw)
+      const value15 = new Decimal(value15Raw)
+      const calculation = new Decimal(calculationRaw)
+
+      // Verify the numeric values match with full precision
+      expect(value20.equals(new Decimal('1.23456789012345678901'))).to.be.true
+      expect(value15.equals(new Decimal('3.141592653589793'))).to.be.true
+      expect(calculation.equals(new Decimal('0.33333333333333'))).to.be.true
     })
 
     it('should handle decimal arithmetic in stored calculations', async function () {
@@ -102,17 +104,21 @@ describe('decimal-precision', function () {
 
       await document.insert(agent, { instance: productDoc })
       const response = await document.get(agent, { body: { id: 'Product/item1' } })
-      const retrieved = response.body
 
-      // Values are returned as strings to preserve full precision
-      expect(typeof retrieved.price).to.equal('string')
-      expect(typeof retrieved.taxRate).to.equal('string')
-      expect(typeof retrieved.quantity).to.equal('string')
+      // Extract exact values from raw JSON - decimals are returned as strings
+      const priceRaw = response.text.match(/"price"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const taxRateRaw = response.text.match(/"taxRate"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const quantityRaw = response.text.match(/"quantity"\s*:\s*"([0-9.eE+-]+)"/)[1]
 
-      // Values should match what we sent (full precision preserved)
-      expect(retrieved.price).to.equal('19.99')
-      expect(retrieved.taxRate).to.equal('0.075')
-      expect(retrieved.quantity).to.equal('3.5')
+      // Use Decimal.js for exact precision comparison (no f64 loss)
+      const price = new Decimal(priceRaw)
+      const taxRate = new Decimal(taxRateRaw)
+      const quantity = new Decimal(quantityRaw)
+
+      // Values should match what we sent (precision preserved in JSON number)
+      expect(price.equals(new Decimal('19.99'))).to.be.true
+      expect(taxRate.equals(new Decimal('0.075'))).to.be.true
+      expect(quantity.equals(new Decimal('3.5'))).to.be.true
     })
   })
 
@@ -1340,7 +1346,7 @@ describe('decimal-precision', function () {
     let graphqlClient
 
     before(async function () {
-      // Setup schema with decimal, double, and integer types
+      // Setup schema with decimal, double, and integer types (add to existing schema)
       const schema = [
         {
           '@type': 'Class',
@@ -1351,7 +1357,12 @@ describe('decimal-precision', function () {
           bigIntValue: 'xsd:integer',
         },
       ]
-      await document.insert(agent, { schema })
+      const schemaResponse = await document.insert(agent, { schema })
+      if (schemaResponse.status !== 200) {
+        console.log('Schema insert failed with status:', schemaResponse.status)
+        console.log('Response body:', schemaResponse.body)
+        console.log('Response text:', schemaResponse.text)
+      }
 
       // Setup GraphQL client (matching pattern from graphql.js test)
       const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
@@ -1399,13 +1410,24 @@ describe('decimal-precision', function () {
       const expectedInteger = new Decimal('42')
       const expectedBigInt = new Decimal('999999999999999999999')
 
-      // Step 2: Read via Document API
+      // Step 2: Read via Document API (extract from raw JSON before JavaScript parses)
       const docResult = await document.get(agent, { query: { id: 'NumericTest/consistency_test', type: 'NumericTest', as_list: true } })
-      const doc = docResult.body[0]
-      const docDecimal = new Decimal(doc.decimalValue.toString())
-      const docDouble = new Decimal(doc.doubleValue.toString())
-      const docInteger = new Decimal(doc.integerValue.toString())
-      const docBigInt = new Decimal(doc.bigIntValue.toString())
+
+      // Decimals and bigInts are returned as JSON strings to preserve precision
+      const decimalMatch = docResult.text.match(/"decimalValue"\s*:\s*"([0-9.eE+-]+)"/)
+      const doubleMatch = docResult.text.match(/"doubleValue"\s*:\s*([0-9.eE+-]+)/)
+      const integerMatch = docResult.text.match(/"integerValue"\s*:\s*"([0-9.eE+-]+)"/)
+      const bigIntMatch = docResult.text.match(/"bigIntValue"\s*:\s*"([0-9.eE+-]+)"/)
+
+      expect(decimalMatch, 'decimalValue not found').to.not.be.null
+      expect(doubleMatch, 'doubleValue not found').to.not.be.null
+      expect(integerMatch, 'integerValue not found').to.not.be.null
+      expect(bigIntMatch, 'bigIntValue not found').to.not.be.null
+
+      const docDecimal = new Decimal(decimalMatch[1])
+      const docDouble = new Decimal(doubleMatch[1])
+      const docInteger = new Decimal(integerMatch[1])
+      const docBigInt = new Decimal(bigIntMatch[1])
 
       expect(docDecimal.equals(expectedDecimal)).to.be.true
       expect(docDouble.equals(expectedDouble)).to.be.true
@@ -1441,13 +1463,14 @@ describe('decimal-precision', function () {
       expect(gqlDoc).to.exist
       expect(gqlDoc.decimalValue).to.exist
 
-      // GraphQL returns decimals as STRINGS to preserve precision
+      // GraphQL returns high-precision values as strings to preserve precision
+      // (GraphQL's Float type is f64 which would lose precision)
       expect(typeof gqlDoc.decimalValue).to.equal('string')
       expect(typeof gqlDoc.bigIntValue).to.equal('string')
 
       const gqlDecimal = new Decimal(gqlDoc.decimalValue)
       const gqlDouble = new Decimal(gqlDoc.doubleValue.toString())
-      const gqlInteger = new Decimal(gqlDoc.integerValue)
+      const gqlInteger = new Decimal(gqlDoc.integerValue.toString())
       const gqlBigInt = new Decimal(gqlDoc.bigIntValue)
 
       // GraphQL preserves full 20-digit precision as strings
@@ -1477,12 +1500,6 @@ describe('decimal-precision', function () {
       // WOQL triple queries now return full 20-digit precision!
       // Fixed by returning decimals as strings from Rust storage layer
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
-
-      // Summary: All interfaces return consistent values with full 20-digit precision
-      console.log('✓ Document API decimal (20 digits):', docDecimal.toString())
-      console.log('✓ GraphQL decimal (20 digits):', gqlDecimal.toString())
-      console.log('✓ WOQL triple decimal (20 digits):', woqlDecimal.toString())
-      console.log('✓ All interfaces preserve full precision!')
     })
 
     it('should handle rational values consistently across interfaces', async function () {
@@ -1507,11 +1524,9 @@ describe('decimal-precision', function () {
       expect(docResult.body).to.be.an('array')
       expect(docResult.body.length).to.be.greaterThan(0)
 
-      const doc = docResult.body[0]
-      expect(doc).to.exist
-      expect(doc.decimalValue).to.exist
-
-      const docDecimal = new Decimal(doc.decimalValue.toString())
+      // Extract from raw JSON - decimals are returned as strings
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
       const expectedRational = new Decimal('0.33333333333333333333')
 
       expect(docDecimal.equals(expectedRational)).to.be.true
@@ -1563,11 +1578,6 @@ describe('decimal-precision', function () {
 
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedRational)).to.be.true
-
-      console.log('✓ 20-digit rational preserved across all interfaces:')
-      console.log('  Document API:', docDecimal.toString())
-      console.log('  GraphQL:', gqlDecimal.toString())
-      console.log('  WOQL:', woqlDecimal.toString())
     })
 
     it('should preserve precision across Document API insert and GraphQL read', async function () {
@@ -1592,8 +1602,9 @@ describe('decimal-precision', function () {
       expect(docResult.body).to.be.an('array')
       expect(docResult.body.length).to.be.greaterThan(0)
 
-      const doc = docResult.body[0]
-      const docDecimal = new Decimal(doc.decimalValue.toString())
+      // Extract from raw JSON - decimals are returned as strings
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
       const expectedDecimal = new Decimal('0.12345678901234567890')
 
       expect(docDecimal.equals(expectedDecimal)).to.be.true
@@ -1635,12 +1646,6 @@ describe('decimal-precision', function () {
 
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
-
-      console.log('✓ Precision preserved (Doc API → Storage → GraphQL/WOQL):')
-      console.log('  Inserted:', '0.12345678901234567890')
-      console.log('  Document API read:', docDecimal.toString())
-      console.log('  GraphQL read:', gqlDecimal.toString())
-      console.log('  WOQL triple read:', woqlDecimal.toString())
     })
 
     it.skip('should preserve precision when inserting via WOQL InsertDocument (KNOWN LIMITATION)', async function () {
@@ -1749,12 +1754,6 @@ describe('decimal-precision', function () {
 
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
-
-      console.log('✓ Document API insert preserves 20-digit precision:')
-      console.log('  Inserted:', '0.98765432109876543210')
-      console.log('  Document API:', docDecimal.toString())
-      console.log('  GraphQL:', gqlDecimal.toString())
-      console.log('  WOQL triple:', woqlDecimal.toString())
     })
 
     it('should verify comprehensive cross-interface precision with different decimal patterns', async function () {
@@ -1783,7 +1782,8 @@ describe('decimal-precision', function () {
         const docResult = await document.get(agent, {
           query: { id: `NumericTest/${testCase.id}`, type: 'NumericTest', as_list: true },
         })
-        const docDecimal = new Decimal(docResult.body[0].decimalValue.toString())
+        const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*"([0-9.eE+-]+)"/)[1]
+        const docDecimal = new Decimal(docDecimalRaw)
 
         // Verify via WOQL triple query
         const tripleQuery = {
@@ -1805,8 +1805,6 @@ describe('decimal-precision', function () {
         expect(woqlDecimal.equals(expectedDecimal)).to.be.true
         expect(docDecimal.equals(woqlDecimal)).to.be.true
       }
-
-      console.log('✓ All decimal patterns preserve 20-digit precision across interfaces')
     })
 
     it.skip('should preserve precision when inserting via WOQL InsertDocument with DictionaryTemplate (DEEP INVESTIGATION NEEDED)', async function () {
@@ -1888,8 +1886,9 @@ describe('decimal-precision', function () {
       expect(docResult.body).to.be.an('array')
       expect(docResult.body.length).to.be.greaterThan(0)
 
-      const doc = docResult.body[0]
-      const docDecimal = new Decimal(doc.decimalValue.toString())
+      // Extract from raw JSON - decimals are returned as strings
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
       const expectedDecimal = new Decimal('0.13579135791357913579')
 
       expect(docDecimal.equals(expectedDecimal)).to.be.true
@@ -1931,12 +1930,6 @@ describe('decimal-precision', function () {
 
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
-
-      console.log('✓ WOQL InsertDocument (DictionaryTemplate) preserves 20-digit precision:')
-      console.log('  Inserted via WOQL:', '0.13579135791357913579')
-      console.log('  Document API read:', docDecimal.toString())
-      console.log('  GraphQL read:', gqlDecimal.toString())
-      console.log('  WOQL triple read:', woqlDecimal.toString())
     })
 
     it('should verify GraphQL reads high-precision decimals correctly after Document API insert', async function () {
@@ -1988,7 +1981,8 @@ describe('decimal-precision', function () {
         query: { id: 'NumericTest/graphql_mutation_insert', type: 'NumericTest', as_list: true },
       })
 
-      const docDecimal = new Decimal(docResult.body[0].decimalValue.toString())
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*"([0-9.eE+-]+)"/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
       expect(docDecimal.equals(expectedDecimal)).to.be.true
 
       // And via WOQL triple
@@ -2006,11 +2000,6 @@ describe('decimal-precision', function () {
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
 
-      console.log('✓ GraphQL mutation path preserves 20-digit precision:')
-      console.log('  Inserted:', '0.24681357902468135790')
-      console.log('  GraphQL read:', gqlDecimal.toString())
-      console.log('  Document API read:', docDecimal.toString())
-      console.log('  WOQL triple read:', woqlDecimal.toString())
     })
   })
 })
