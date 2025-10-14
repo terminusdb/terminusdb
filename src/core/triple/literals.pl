@@ -447,6 +447,18 @@ normalise_triple(rdf(X,P,Y,G),rdf(XF,P,YF)) :-
         set_normalise_warning
     ),
     normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)).
+normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
+    (   X = node(N)
+    ->  atomic_list_concat(['_:',N], XF)
+    ;   X = XF),
+
+    (   Y = node(M)
+    ->  atomic_list_concat(['_:',M], YF)
+    %   Bare atom literal needs to be lifted.
+    ;   Y = literal(_)
+    ->  turtle_to_literal(Y,YF)
+    %   Otherwise walk on by...
+    ;   Y = YF).
 
 ground_object_storage(String@Lang, lang(String,Lang)) :-
     !.
