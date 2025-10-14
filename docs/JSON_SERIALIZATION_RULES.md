@@ -391,6 +391,18 @@ A: This documents the current behavior. The system has always used JSON numbers 
 **Q: Why 20 digits?**  
 A: Matches XSD 1.1 decimal precision requirements and handles most financial/scientific use cases.
 
+**Q: What happens to trailing zeros in decimal values?**  
+A: Trailing zeros after the decimal point may be normalized away per JSON specification. For example, `0.12345678901234567890` may become `0.1234567890123456789`. This is **correct behavior** - both representations are mathematically equal and have the same precision. The significant digits are preserved (20 digits), but trailing zeros are semantically redundant in JSON numbers. Use values like `0.01234567890123456789` (no trailing zero) when testing to avoid confusion and to ensure consistent results across different JSON parsers.
+
+**Example:**
+```json
+// Input (stored)
+{ "value": "0.12345678901234567890" }
+
+// Output (may be normalized)
+{ "value": 0.1234567890123456789 }  // Trailing zero removed, precision maintained
+```
+
 ---
 
 ## References
