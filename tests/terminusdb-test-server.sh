@@ -197,7 +197,7 @@ function status() {
 
 function logs() {
     if [ -f "$LOG_FILE" ]; then
-        tail -f "$LOG_FILE"
+        tail "$@" "$LOG_FILE"
     else
         echo "No log file found at $LOG_FILE"
         return 1
@@ -235,7 +235,8 @@ case "${1:-}" in
         status
         ;;
     logs)
-        logs
+        shift
+        logs "$@"
         ;;
     clean)
         clean
@@ -248,7 +249,7 @@ case "${1:-}" in
         echo "  stop             - Stop TerminusDB test server"
         echo "  restart [--clean]- Restart server (--clean wipes storage)"
         echo "  status           - Check if server is running"
-        echo "  logs             - Tail server logs"
+        echo "  logs [-f]        - Tail server logs (use -f for follow)"
         echo "  clean            - Stop server and remove all test data"
         echo ""
         echo "Examples:"
