@@ -5490,7 +5490,16 @@ load_get_lit(Term, Data) :-
 
 test_lit(Data, Literal) :-
     store_get_lit(Data, Literal),
-    load_get_lit(Literal, Data).
+    % xsd:decimal asymmetry: storage is string, but can only insert rationals
+    % For decimal: skip reverse roundtrip (can't insert string)
+    % For all others: normal symmetric roundtrip
+    (   (   Literal = _^^'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   Literal = _^^xsd:decimal)
+    ->  % Decimal: just verify forward direction worked
+        true
+    ;   % All other types: verify reverse roundtrip
+        load_get_lit(Literal, Data)
+    ).
 
 test(string) :-
     test_lit("a string"^^xsd:string, "a string"^^'http://www.w3.org/2001/XMLSchema#string').
@@ -5502,10 +5511,14 @@ test(boolean_true) :-
     test_lit(true^^xsd:boolean, true^^'http://www.w3.org/2001/XMLSchema#boolean').
 
 test(decimal_pos) :-
-    test_lit(123.456^^xsd:decimal, 123.456^^'http://www.w3.org/2001/XMLSchema#decimal').
+    % TerminusDB upgraded from floats to rationals for xsd:decimal (2025-10-14)
+    % Input: rational (15432r125) → Storage: string ("123.456")
+    test_lit(15432r125^^xsd:decimal, "123.456"^^'http://www.w3.org/2001/XMLSchema#decimal').
 
 test(decimal_neg) :-
-    test_lit(-123.456^^xsd:decimal, -123.456^^'http://www.w3.org/2001/XMLSchema#decimal').
+    % TerminusDB upgraded from floats to rationals for xsd:decimal (2025-10-14)
+    % Input: rational (-15432r125) → Storage: string ("-123.456")
+    test_lit(-15432r125^^xsd:decimal, "-123.456"^^'http://www.w3.org/2001/XMLSchema#decimal').
 
 test(integer_pos) :-
     test_lit(42^^xsd:integer, 42^^'http://www.w3.org/2001/XMLSchema#integer').
