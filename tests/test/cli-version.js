@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { info } = require('../lib')
 
 describe('cli-version', function () {
-  it('passes string match', async function () {
+  it('passes string match (git hash matches binary)', async function () {
     const testDir = path.join(__dirname, '..')
     const terminusdbSh = path.join(testDir, 'terminusdb.sh')
     const rootDir = path.join(testDir, '..')
