@@ -2,6 +2,7 @@
 
 const assert = require('assert')
 const crypto = require('crypto')
+const fs = require('fs')
 
 const defaultContext = {
   '@base': 'terminusdb:///data/',
@@ -136,6 +137,41 @@ function assertArrayOrObject (name, val) {
   )
 }
 
+/**
+ * Returns the correct path to terminusdb.sh based on current working directory.
+ * Supports running tests from both repo root and tests directory.
+ * @returns {string} Path to terminusdb.sh
+ */
+function terminusdbScript () {
+  // Check if running from tests directory
+  if (fs.existsSync('./terminusdb.sh')) {
+    return './terminusdb.sh'
+  }
+  // Check if running from repo root
+  if (fs.existsSync('./tests/terminusdb.sh')) {
+    return './tests/terminusdb.sh'
+  }
+  throw new Error('Could not find terminusdb.sh. Run tests from repo root or tests/ directory.')
+}
+
+/**
+ * Returns the correct path to test served files based on current working directory.
+ * Supports running tests from both repo root and tests directory.
+ * @param {string} filename - The file name in the served directory
+ * @returns {string} Path to the served file
+ */
+function servedPath (filename) {
+  // Check if running from tests directory
+  if (fs.existsSync('./served')) {
+    return `./served/${filename}`
+  }
+  // Check if running from repo root
+  if (fs.existsSync('./tests/served')) {
+    return `./tests/served/${filename}`
+  }
+  throw new Error('Could not find served directory. Run tests from repo root or tests/ directory.')
+}
+
 module.exports = {
   assertArrayOrObject,
   assertBoolean,
@@ -160,5 +196,7 @@ module.exports = {
   isString,
   isUndefinedOrNull,
   randomString,
+  servedPath,
+  terminusdbScript,
   typeString,
 }

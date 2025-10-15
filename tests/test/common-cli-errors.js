@@ -14,12 +14,12 @@ describe('common-cli-errors', function () {
   before(async function () {
     dbPath = './storage/' + util.randomString()
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
-    const r = await execEnv('./terminusdb.sh store init --force')
+    const r = await execEnv(`${util.terminusdbScript()} store init --force`)
     expect(r.stdout).to.match(/^Successfully initialised database/)
   })
 
   after(async function () {
-    await fs.rm(dbPath, { recursive: true })
+    await fs.rm(dbPath, { recursive: true, force: true })
   })
 
   describe('fails for bad descriptor path', function () {
@@ -32,7 +32,7 @@ describe('common-cli-errors', function () {
     for (const [command, beforePath, afterPath] of commands) {
       it(command, async function () {
         const path = util.randomString()
-        await execEnv(`./terminusdb.sh ${command} ${util.isDefined(beforePath) ? beforePath + ' ' : ''}${path}${util.isDefined(afterPath) ? ' ' + afterPath : ''}`)
+        await execEnv(`${util.terminusdbScript()} ${command} ${util.isDefined(beforePath) ? beforePath + ' ' : ''}${path}${util.isDefined(afterPath) ? ' ' + afterPath : ''}`)
           .then((r) => {
             expect.fail(JSON.stringify(r))
           })
@@ -56,7 +56,7 @@ describe('common-cli-errors', function () {
     for (const command of commands) {
       it(command, async function () {
         const dbSpec = util.randomString() + '/' + util.randomString()
-        await execEnv(`./terminusdb.sh ${command} ${dbSpec}`)
+        await execEnv(`${util.terminusdbScript()} ${command} ${dbSpec}`)
           .then((r) => {
             expect.fail(JSON.stringify(r))
           })
