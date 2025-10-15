@@ -1,4 +1,5 @@
 # TerminusDB gitignore defaults
+node_modules
 *~
 \#*\#
 .\#*
