@@ -109,9 +109,13 @@ run_branch_benchmarks() {
     echo "Building..."
     make dev > /dev/null 2>&1
     
-    # Restart test server
+    # Restart test server (handle both old and new script names)
     echo "Restarting test server..."
-    ./tests/terminusdb-test-server.sh restart > /dev/null 2>&1
+    if [ -f "./tests/terminusdb-test-server.sh" ]; then
+        ./tests/terminusdb-test-server.sh restart > /dev/null 2>&1
+    elif [ -f "./tests/terminusdb.sh" ]; then
+        ./tests/terminusdb.sh restart > /dev/null 2>&1
+    fi
     sleep 3
     
     echo ""
