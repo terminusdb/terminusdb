@@ -185,8 +185,20 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         }
         Datatype::Float64 => Value::Number(Number::from_f64(tde.as_val::<f64, f64>()).unwrap()),
         Datatype::String => Value::String(tde.as_val::<String, String>()),
-        Datatype::Decimal => Value::String(tde.as_val::<Decimal, String>()),
-        Datatype::BigInt => Value::String(tde.as_val::<Integer, String>()),
+        Datatype::Decimal => {
+            let s = tde.as_val::<Decimal, String>();
+            match serde_json::from_str::<Value>(&s) {
+                Ok(Value::Number(n)) => Value::Number(n),
+                _ => Value::String(s)
+            }
+        }
+        Datatype::BigInt => {
+            let s = tde.as_val::<Integer, String>();
+            match serde_json::from_str::<Value>(&s) {
+                Ok(Value::Number(n)) => Value::Number(n),
+                _ => Value::String(s)
+            }
+        }
         Datatype::GYear => Value::String(tde.as_val::<GYear, String>()),
         Datatype::GMonth => Value::String(tde.as_val::<GMonth, String>()),
         Datatype::GDay => Value::String(tde.as_val::<GDay, String>()),
@@ -214,10 +226,34 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::ID => Value::String(tde.as_val::<ID, String>()),
         Datatype::IDRef => Value::String(tde.as_val::<IDRef, String>()),
         Datatype::Entity => Value::String(tde.as_val::<Entity, String>()),
-        Datatype::PositiveInteger => Value::String(tde.as_val::<PositiveInteger, String>()),
-        Datatype::NonNegativeInteger => Value::String(tde.as_val::<NonNegativeInteger, String>()),
-        Datatype::NonPositiveInteger => Value::String(tde.as_val::<NonPositiveInteger, String>()),
-        Datatype::NegativeInteger => Value::String(tde.as_val::<NegativeInteger, String>()),
+        Datatype::PositiveInteger => {
+            let s = tde.as_val::<PositiveInteger, String>();
+            match serde_json::from_str::<Value>(&s) {
+                Ok(Value::Number(n)) => Value::Number(n),
+                _ => Value::String(s)
+            }
+        }
+        Datatype::NonNegativeInteger => {
+            let s = tde.as_val::<NonNegativeInteger, String>();
+            match serde_json::from_str::<Value>(&s) {
+                Ok(Value::Number(n)) => Value::Number(n),
+                _ => Value::String(s)
+            }
+        }
+        Datatype::NonPositiveInteger => {
+            let s = tde.as_val::<NonPositiveInteger, String>();
+            match serde_json::from_str::<Value>(&s) {
+                Ok(Value::Number(n)) => Value::Number(n),
+                _ => Value::String(s)
+            }
+        }
+        Datatype::NegativeInteger => {
+            let s = tde.as_val::<NegativeInteger, String>();
+            match serde_json::from_str::<Value>(&s) {
+                Ok(Value::Number(n)) => Value::Number(n),
+                _ => Value::String(s)
+            }
+        }
         Datatype::Date => Value::String(tde.as_val::<Date, String>()),
         Datatype::DateTimeStamp => Value::String(tde.as_val::<DateTimeStamp, String>()),
         Datatype::Time => Value::String(tde.as_val::<NaiveTime, String>()),
@@ -244,18 +280,21 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::String => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<String, String>()))
         }
-        Datatype::UInt32 => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<u32, u32>().to_string(),
-        )),
+        Datatype::UInt32 => {
+            let val = tde.as_val::<u32, u32>();
+            juniper::Value::Scalar(make_number_marker(val.to_string()))
+        }
         Datatype::Int32 => {
             juniper::Value::Scalar(DefaultScalarValue::Int(tde.as_val::<i32, i32>()))
         }
-        Datatype::UInt64 => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<u64, u64>().to_string(),
-        )),
-        Datatype::Int64 => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<i64, i64>().to_string(),
-        )),
+        Datatype::UInt64 => {
+            let val = tde.as_val::<u64, u64>();
+            juniper::Value::Scalar(make_number_marker(val.to_string()))
+        }
+        Datatype::Int64 => {
+            let val = tde.as_val::<i64, i64>();
+            juniper::Value::Scalar(make_number_marker(val.to_string()))
+        }
         Datatype::Float32 => {
             juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f32, f32>() as f64))
         }
@@ -263,15 +302,14 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             juniper::Value::Scalar(DefaultScalarValue::Float(tde.as_val::<f64, f64>()))
         }
         Datatype::Decimal => {
-            // Return as string - Juniper will serialize it
-            // For GraphQL, these values should be JSON numbers, but Juniper's DefaultScalarValue
-            // doesn't support arbitrary precision. The marker approach didn't work because
-            // typed BigFloat fields bypass the generic Value path.
+            // xsd:decimal: Use number marker for full precision in JSON output
             let decimal_str = tde.as_val::<Decimal, String>();
-            juniper::Value::Scalar(DefaultScalarValue::String(decimal_str))
+            juniper::Value::Scalar(make_number_marker(decimal_str))
         }
         Datatype::BigInt => {
-            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Integer, String>()))
+            // xsd:integer: Use number marker for arbitrary precision
+            let int_str = tde.as_val::<Integer, String>();
+            juniper::Value::Scalar(make_number_marker(int_str))
         }
         Datatype::Token => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Token, String>()))
@@ -333,18 +371,22 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::Entity => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Entity, String>()))
         }
-        Datatype::PositiveInteger => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<PositiveInteger, String>(),
-        )),
-        Datatype::NonNegativeInteger => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<NonNegativeInteger, String>(),
-        )),
-        Datatype::NonPositiveInteger => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<NonPositiveInteger, String>(),
-        )),
-        Datatype::NegativeInteger => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<NegativeInteger, String>(),
-        )),
+        Datatype::PositiveInteger => {
+            let int_str = tde.as_val::<PositiveInteger, String>();
+            juniper::Value::Scalar(make_number_marker(int_str))
+        }
+        Datatype::NonNegativeInteger => {
+            let int_str = tde.as_val::<NonNegativeInteger, String>();
+            juniper::Value::Scalar(make_number_marker(int_str))
+        }
+        Datatype::NonPositiveInteger => {
+            let int_str = tde.as_val::<NonPositiveInteger, String>();
+            juniper::Value::Scalar(make_number_marker(int_str))
+        }
+        Datatype::NegativeInteger => {
+            let int_str = tde.as_val::<NegativeInteger, String>();
+            juniper::Value::Scalar(make_number_marker(int_str))
+        }
         Datatype::Date => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<Date, String>()))
         }

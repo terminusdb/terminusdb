@@ -426,13 +426,44 @@ test(compress_base, [])
  */
 value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
     % JSON Serialization Rules:
-    % - xsd:integer → JSON number (preserves arbitrary precision integers)
+    % - xsd:integer and subtypes → JSON number (string-to-number conversion in Prolog)
     % - xsd:float/double → JSON number (normalized: 2012.0 → 2012)
     % - xsd:decimal → JSON number (rationals serialize via json_write_hook with 20-digit precision)
     (   (   T = 'http://www.w3.org/2001/XMLSchema#integer'
-        ;   T = 'xsd:integer')
-    ->  % Integers always as numbers
-        V = D
+        ;   T = 'xsd:integer'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#long'
+        ;   T = 'xsd:long'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#int'
+        ;   T = 'xsd:int'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#short'
+        ;   T = 'xsd:short'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#byte'
+        ;   T = 'xsd:byte'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#positiveInteger'
+        ;   T = 'xsd:positiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#negativeInteger'
+        ;   T = 'xsd:negativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'
+        ;   T = 'xsd:nonPositiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'
+        ;   T = 'xsd:nonNegativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedLong'
+        ;   T = 'xsd:unsignedLong'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedInt'
+        ;   T = 'xsd:unsignedInt'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedShort'
+        ;   T = 'xsd:unsignedShort'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedByte'
+        ;   T = 'xsd:unsignedByte')
+    ->  % All integer types: convert string to number for JSON output
+        (   string(D)
+        ->  atom_number(D, V)
+        ;   atom(D)
+        ->  atom_number(D, V)
+        ;   number(D)
+        ->  V = D
+        ;   V = D  % Fallback
+        )
     ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
         ;   T = 'xsd:decimal')
     ->  % Decimals: check types in order of specificity (rational > float > number)
@@ -506,13 +537,44 @@ term_jsonld(Var,_,null) :-
     !.
 term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
     % JSON Serialization Rules:
-    % - xsd:integer → JSON number (preserves arbitrary precision integers)
+    % - xsd:integer and subtypes → JSON number (string-to-number conversion in Prolog)
     % - xsd:float/double → JSON number (normalized: 2012.0 → 2012)
     % - xsd:decimal → JSON number (rationals use json_write_hook for 20-digit precision)
     (   (   T = 'http://www.w3.org/2001/XMLSchema#integer'
-        ;   T = 'xsd:integer')
-    ->  % Integers always as numbers
-        V = D
+        ;   T = 'xsd:integer'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#long'
+        ;   T = 'xsd:long'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#int'
+        ;   T = 'xsd:int'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#short'
+        ;   T = 'xsd:short'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#byte'
+        ;   T = 'xsd:byte'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#positiveInteger'
+        ;   T = 'xsd:positiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#negativeInteger'
+        ;   T = 'xsd:negativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'
+        ;   T = 'xsd:nonPositiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'
+        ;   T = 'xsd:nonNegativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedLong'
+        ;   T = 'xsd:unsignedLong'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedInt'
+        ;   T = 'xsd:unsignedInt'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedShort'
+        ;   T = 'xsd:unsignedShort'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedByte'
+        ;   T = 'xsd:unsignedByte')
+    ->  % All integer types: convert string to number for JSON output
+        (   string(D)
+        ->  atom_number(D, V)
+        ;   atom(D)
+        ->  atom_number(D, V)
+        ;   number(D)
+        ->  V = D
+        ;   V = D  % Fallback
+        )
     ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
         ;   T = 'xsd:decimal')
     ->  % Decimals: check types in order of specificity (rational > float > number)

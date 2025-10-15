@@ -347,12 +347,12 @@ describe('GraphQL', function () {
       const result = await client.query({ query: PERSON_QUERY })
 
       expect(result.data.Person).to.deep.equal([
-        { name: 'Aristotle', age: '61', order: '3' },
-        { name: 'Immanuel Kant', age: '79', order: '3' },
-        { name: 'Karl Popper', age: '92', order: '5' },
-        { name: 'Kurt Gödel', age: '71', order: '5' },
-        { name: 'Plato', age: '80', order: '2' },
-        { name: 'Socrates', age: '71', order: '1' },
+        { name: 'Aristotle', age: 61, order: 3 },
+        { name: 'Immanuel Kant', age: 79, order: 3 },
+        { name: 'Karl Popper', age: 92, order: 5 },
+        { name: 'Kurt Gödel', age: 71, order: 5 },
+        { name: 'Plato', age: 80, order: 2 },
+        { name: 'Socrates', age: 71, order: 1 },
       ])
     })
 
@@ -367,10 +367,10 @@ describe('GraphQL', function () {
 }`
       const result = await client.query({ query: FILTER_QUERY })
       expect(result.data.Person).to.deep.equal([
-        { name: 'Socrates', age: '71', order: '1' },
-        { name: 'Plato', age: '80', order: '2' },
-        { name: 'Karl Popper', age: '92', order: '5' },
-        { name: 'Kurt Gödel', age: '71', order: '5' },
+        { name: 'Socrates', age: 71, order: 1 },
+        { name: 'Plato', age: 80, order: 2 },
+        { name: 'Karl Popper', age: 92, order: 5 },
+        { name: 'Kurt Gödel', age: 71, order: 5 },
       ])
     })
 
@@ -385,16 +385,16 @@ describe('GraphQL', function () {
       expect(result.data.Integer).to.deep.equal(
         [
           {
-            int: '1',
+            int: 1,
           },
           {
-            int: '2',
+            int: 2,
           },
           {
-            int: '11',
+            int: 11,
           },
           {
-            int: '100',
+            int: 100,
           },
 
         ],
@@ -412,7 +412,7 @@ describe('GraphQL', function () {
       expect(result.data.NonNegativeInteger).to.deep.equal(
         [
           {
-            nonnegint: '300',
+            nonnegint: 300,
           },
 
         ],
@@ -449,10 +449,10 @@ describe('GraphQL', function () {
       expect(result.data.Integer).to.deep.equal(
         [
           {
-            int: '11',
+            int: 11,
           },
           {
-            int: '100',
+            int: 100,
           },
         ],
       )
@@ -874,11 +874,11 @@ query TestBigIntPattern {
 }`
       const result = await client.query({ query: BACKLINK_QUERY })
       expect(result.data.Person).to.deep.equal([
-        { name: 'Socrates', age: '71', order: '1', _friend_of_Person: [] },
+        { name: 'Socrates', age: 71, order: 1, _friend_of_Person: [] },
         {
           name: 'Plato',
-          age: '80',
-          order: '2',
+          age: 80,
+          order: 2,
           _friend_of_Person: [
             {
               name: 'Aristotle',
@@ -890,8 +890,8 @@ query TestBigIntPattern {
         },
         {
           name: 'Aristotle',
-          age: '61',
-          order: '3',
+          age: 61,
+          order: 3,
           _friend_of_Person: [
             {
               name: 'Plato',
@@ -900,8 +900,8 @@ query TestBigIntPattern {
         },
         {
           name: 'Immanuel Kant',
-          age: '79',
-          order: '3',
+          age: 79,
+          order: 3,
           _friend_of_Person: [{
             name: 'Immanuel Kant',
           },
@@ -910,8 +910,8 @@ query TestBigIntPattern {
           },
           ],
         },
-        { name: 'Karl Popper', age: '92', order: '5', _friend_of_Person: [] },
-        { name: 'Kurt Gödel', age: '71', order: '5', _friend_of_Person: [] },
+        { name: 'Karl Popper', age: 92, order: 5, _friend_of_Person: [] },
+        { name: 'Kurt Gödel', age: 71, order: 5, _friend_of_Person: [] },
       ])
     })
 
@@ -1080,10 +1080,10 @@ query TestBigIntPattern {
         unsignedInt: 8,
         unsignedLong: 10,
         integer: 20,
-        positiveInteger: '2342423',
-        negativeInteger: '-2348982734',
-        nonPositiveInteger: '-334',
-        nonNegativeInteger: '3243323',
+        positiveInteger: 2342423,
+        negativeInteger: -2348982734,
+        nonPositiveInteger: -334,
+        nonNegativeInteger: 3243323,
         base64nary: 'VGhpcyBpcyBhIHRlc3Q=',
         hexBinary: '5468697320697320612074657374',
         anyURI: 'http://this.com',
@@ -1163,16 +1163,16 @@ query EverythingQuery {
           byte: -8,
           short: -10,
           int: -32,
-          long: '-532',
+          long: -532,
           unsignedByte: 3,
           unsignedShort: 5,
-          unsignedInt: '8',
-          unsignedLong: '10',
-          integer: '20',
-          positiveInteger: '2342423',
-          negativeInteger: '-2348982734',
-          nonPositiveInteger: '-334',
-          nonNegativeInteger: '3243323',
+          unsignedInt: 8,
+          unsignedLong: 10,
+          integer: 20,
+          positiveInteger: 2342423,
+          negativeInteger: -2348982734,
+          nonPositiveInteger: -334,
+          nonNegativeInteger: 3243323,
           base64nary: 'VGhpcyBpcyBhIHRlc3Q=',
           hexBinary: '5468697320697320612074657374',
           anyURI: 'http://this.com',

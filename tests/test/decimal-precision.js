@@ -1563,25 +1563,33 @@ describe('decimal-precision', function () {
       // Verify RAW JSON contains unquoted numbers (not strings)
       expect(rawGqlResponse.text).to.include('"decimalValue":0.33333333333333333333')
       expect(rawGqlResponse.text).to.not.include('"decimalValue":"0.33333333333333333333"')
+      expect(rawGqlResponse.text).to.include('"bigIntValue":999999999999999999999')
+      expect(rawGqlResponse.text).to.not.include('"bigIntValue":"999999999999999999999"')
 
       // Apollo Client parses as floats (precision lost beyond ~16 digits)
       // But we can still verify the values are numbers, not strings
       expect(typeof gqlDoc.decimalValue).to.equal('number')
-      expect(typeof gqlDoc.bigIntValue).to.equal('string') // BigInt still as string
+      expect(typeof gqlDoc.bigIntValue).to.equal('number') // Now a number with marker pattern
 
       // For cross-interface consistency, we verify the RAW JSON is correct
+      // Extract bigInt value directly from raw JSON text (before JavaScript parsing loses precision)
+      const gqlBigIntMatch = rawGqlResponse.text.match(/"bigIntValue":(\d+)/)
+      expect(gqlBigIntMatch).to.not.be.null
+      const rawBigIntValue = gqlBigIntMatch[1]
+      const rawBigInt = new Decimal(rawBigIntValue)
+
       // Client-side precision loss is a JavaScript limitation, not a server issue
       const gqlDecimal = new Decimal(gqlDoc.decimalValue.toString())
       const gqlDouble = new Decimal(gqlDoc.doubleValue.toString())
       const gqlInteger = new Decimal(gqlDoc.integerValue.toString())
-      const gqlBigInt = new Decimal(gqlDoc.bigIntValue)
 
-      // Values should be approximately equal (precision lost during Apollo parsing)
+      // Values should be approximately equal (precision lost during Apollo parsing for 20-digit decimals)
       // For true precision verification, see "RAW JSON verification" tests in graphql.js
       expect(gqlDecimal.toNumber()).to.be.closeTo(expectedDecimal.toNumber(), 0.00000000000001)
       expect(gqlDouble.equals(expectedDouble)).to.be.true
       expect(gqlInteger.equals(expectedInteger)).to.be.true
-      expect(gqlBigInt.equals(expectedBigInt)).to.be.true
+      // BigInt: verify the RAW JSON value (before JavaScript parsing) is exact
+      expect(rawBigInt.equals(expectedBigInt)).to.be.true
 
       // Step 4: Read via WOQL (triple pattern)
       // Use the full schema URI for the predicate
