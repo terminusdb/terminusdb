@@ -55,6 +55,13 @@ NUM_RUNS="$3"
 cd "$(dirname "$0")/../.."
 REPO_ROOT=$(pwd)
 
+# Save the original branch to restore at the end
+ORIGINAL_BRANCH=$(git branch --show-current)
+if [ -z "$ORIGINAL_BRANCH" ]; then
+    # In detached HEAD state, save the commit hash
+    ORIGINAL_BRANCH=$(git rev-parse HEAD)
+fi
+
 echo "═══════════════════════════════════════════════════════════"
 echo "BRANCH COMPARISON BENCHMARK"
 echo "═══════════════════════════════════════════════════════════"
@@ -109,13 +116,9 @@ run_branch_benchmarks() {
     echo "Building..."
     make dev > /dev/null 2>&1
     
-    # Restart test server (handle both old and new script names)
+    # Restart test server
     echo "Restarting test server..."
-    if [ -f "./tests/terminusdb-test-server.sh" ]; then
-        ./tests/terminusdb-test-server.sh restart > /dev/null 2>&1
-    elif [ -f "./tests/terminusdb.sh" ]; then
-        ./tests/terminusdb.sh restart > /dev/null 2>&1
-    fi
+    ./tests/terminusdb-test-server.sh restart > /dev/null 2>&1
     sleep 3
     
     echo ""
@@ -214,7 +217,7 @@ echo "GENERATING COMPARISON REPORT"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
-python3 tests/benchmark_compare_excel.py "$BRANCH1" "$BRANCH2" "$NUM_RUNS"
+python3 tests/benchmark/benchmark_compare_excel.py "$BRANCH1" "$BRANCH2" "$NUM_RUNS"
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
@@ -226,3 +229,7 @@ echo ""
 echo "To modify test selection, edit the MOCHA_TESTS and"
 echo "PLUNIT_TESTS arrays at the top of this script."
 echo ""
+
+# Restore the original branch
+echo "Restoring original branch: $ORIGINAL_BRANCH"
+git checkout "$ORIGINAL_BRANCH" > /dev/null 2>&1
