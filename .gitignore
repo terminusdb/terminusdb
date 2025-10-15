@@ -1,4 +1,5 @@
 # TerminusDB gitignore defaults
+.DS_Store
 tests/.terminusdb-test-storage
 tests/benchmark/benchmark_results
 tests/benchmark_results

@@ -6,27 +6,35 @@
 
 set -e
 
+cd "$(dirname "$0")/../.."
+
 # ============================================================================
 # CONFIGURATION - Edit these to select which test suites to run
 # ============================================================================
 
-# Mocha test files to benchmark (relative to tests/test/)
+# Mocha test files to benchmark (just filenames, not paths)
 # Examples:
-#   - Single file: MOCHA_TESTS=("capabilities.js")
-#   - Multiple files: MOCHA_TESTS=("capabilities.js" "auth.js" "branch-auth.js")
-#   - All files: MOCHA_TESTS=($(ls tests/test/*.js))
-MOCHA_TESTS=(
-    "capabilities.js"
-)
+#   - Quick test (2-3 mins): MOCHA_TESTS=("capabilities.js" "info_ok.js")
+#   - Full suite (30-60 mins): MOCHA_TESTS=($(cd tests/test && ls *.js))
+# Quick benchmark (uncomment for fast testing):
+#MOCHA_TESTS=(
+#    "capabilities.js"
+#    "info_ok.js"
+#)
+# Full benchmark (uncomment to run all tests):
+MOCHA_TESTS=($(cd tests/test && ls *.js))
 
 # PL-Unit test suites to benchmark
 # Examples:
-#   - Single suite: PLUNIT_TESTS=("json_read_term")
-#   - Multiple suites: PLUNIT_TESTS=("json_read_term" "json_read_term_stream")
-#   - All tests: PLUNIT_TESTS=("_")  # underscore means all tests
-PLUNIT_TESTS=(
-    "api_prefixes"
-)
+#   - Quick test: PLUNIT_TESTS=("api_prefixes" "json_read_term")
+#   - Full suite: PLUNIT_TESTS=("_")  # underscore means ALL tests (very slow!)
+# Quick benchmark (uncomment for fast testing):
+#PLUNIT_TESTS=(
+#    "api_prefixes"
+#    "json_read_term"
+#)
+# Full benchmark (uncomment to run all tests):
+PLUNIT_TESTS=("_")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
@@ -52,7 +60,7 @@ BRANCH1="$1"
 BRANCH2="$2"
 NUM_RUNS="$3"
 
-cd "$(dirname "$0")/../.."
+
 REPO_ROOT=$(pwd)
 
 # Save the original branch to restore at the end
@@ -174,7 +182,7 @@ if match:
                     2>&1 > "$OUTPUT_DIR/plunit_all_run_${RUN}_raw.txt"
             else
                 # Run specific suite - interactive.pl loads plunit_json_reporter automatically
-                swipl -g "consult('src/interactive.pl'), run_tests_json($TEST_SUITE)" -t halt \
+                swipl -g "consult('src/interactive.pl'), run_tests_json('$TEST_SUITE')" -t halt \
                     2>&1 > "$OUTPUT_DIR/plunit_${TEST_SUITE}_run_${RUN}_raw.txt"
             fi
             
