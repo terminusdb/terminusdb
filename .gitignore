@@ -1,4 +1,5 @@
 # TerminusDB gitignore defaults
+tests/.terminusdb-test-storage
 node_modules
 *~
 \#*\#
