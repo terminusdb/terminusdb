@@ -75,8 +75,8 @@ echo "  PL-Unit tests: ${PLUNIT_TESTS[*]}"
 echo ""
 
 # Create results directories
-mkdir -p tests/benchmark_results/branch1
-mkdir -p tests/benchmark_results/branch2
+mkdir -p tests/benchmark/benchmark_results/branch1
+mkdir -p tests/benchmark/benchmark_results/branch2
 
 # ============================================================================
 # Function to run benchmarks on a branch
@@ -205,8 +205,8 @@ if match:
 # Run benchmarks on both branches
 # ============================================================================
 
-run_branch_benchmarks "$BRANCH1" "tests/benchmark_results/branch1" "Branch 1"
-run_branch_benchmarks "$BRANCH2" "tests/benchmark_results/branch2" "Branch 2"
+run_branch_benchmarks "$BRANCH1" "tests/benchmark/benchmark_results/branch1" "Branch 1"
+run_branch_benchmarks "$BRANCH2" "tests/benchmark/benchmark_results/branch2" "Branch 2"
 
 # ============================================================================
 # Generate comparison Excel
@@ -224,7 +224,7 @@ echo "════════════════════════�
 echo "✅ BENCHMARK COMPARISON COMPLETE"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
-echo "Results saved in: tests/benchmark_results/"
+echo "Results saved in: tests/benchmark/benchmark_results/"
 echo ""
 echo "To modify test selection, edit the MOCHA_TESTS and"
 echo "PLUNIT_TESTS arrays at the top of this script."
