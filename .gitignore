@@ -1,5 +1,6 @@
 # TerminusDB gitignore defaults
 tests/.terminusdb-test-storage
+tests/benchmark/benchmark_results
 tests/benchmark_results
 node_modules
 *~
