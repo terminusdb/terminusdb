@@ -15,6 +15,7 @@
 
 :- use_module(core(util)).
 :- use_module(library(plunit)).
+:- use_module(core(util/plunit_json_reporter)).
 
 :- set_test_options([run(manual), load(always), concurrent(true)]).
 

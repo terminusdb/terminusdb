@@ -56,6 +56,7 @@ prolog:message(server_missing_config(BasePath)) -->
 :- use_module(config(terminus_config)).
 
 :- use_module(library(plunit)).
+:- use_module(core(util/plunit_json_reporter)).
 
 :- set_test_options([run(manual),concurrent(true)]).
 
