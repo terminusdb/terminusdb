@@ -13,28 +13,38 @@ cd "$(dirname "$0")/../.."
 # ============================================================================
 
 # Mocha test files to benchmark (just filenames, not paths)
-# Examples:
-#   - Quick test (2-3 mins): MOCHA_TESTS=("capabilities.js" "info_ok.js")
-#   - Full suite (30-60 mins): MOCHA_TESTS=($(cd tests/test && ls *.js))
-# Quick benchmark (uncomment for fast testing):
-#MOCHA_TESTS=(
-#    "capabilities.js"
-#    "info_ok.js"
-#)
+# VERIFIED to exist in both branches - focus on document/WOQL/numeric operations
+MOCHA_TESTS=(
+    "graphql.js"                 # GraphQL (JSON serialization with decimals)
+    "document-get.js"            # Document retrieval
+    "woql-noauth.js"             # WOQL operations (arithmetic expressions)
+    "patch.js"                   # Document patch operations
+    "frame.js"                   # Schema/frame operations
+    "diff.js"                    # Diff with numeric data
+    "document-backlink.js"       # Document relationships
+    "woql-no-schema.js"          # WOQL without schema
+    "capabilities.js"            # System capabilities
+    "info_ok.js"                 # Quick sanity check
+)
 # Full benchmark (uncomment to run all tests):
-MOCHA_TESTS=($(cd tests/test && ls *.js))
+#MOCHA_TESTS=($(cd tests/test && ls *.js))
 
 # PL-Unit test suites to benchmark
-# Examples:
-#   - Quick test: PLUNIT_TESTS=("api_prefixes" "json_read_term")
-#   - Full suite: PLUNIT_TESTS=("_")  # underscore means ALL tests (very slow!)
-# Quick benchmark (uncomment for fast testing):
-#PLUNIT_TESTS=(
-#    "api_prefixes"
-#    "json_read_term"
-#)
+# VERIFIED test suites - focus on numeric/document/JSON operations
+PLUNIT_TESTS=(
+    "typecast"                   # Type conversion (decimals, rationals)
+    "json"                       # JSON serialization with rationals
+    "json_read_term"             # JSON term parsing (rational preservation)
+    "json_read_term_stream"      # JSON stream reading
+    "json_datatype"              # JSON datatype handling
+    "arithmetic_document"        # Document arithmetic operations
+    "employee_documents"         # Documents with numeric fields
+    "woql_document"              # WOQL document operations
+    "schema_checker"             # Schema validation
+    "terminus_store"             # Core storage (baseline)
+)
 # Full benchmark (uncomment to run all tests):
-PLUNIT_TESTS=("_")
+#PLUNIT_TESTS=("_")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
@@ -131,42 +141,7 @@ run_branch_benchmarks() {
     
     echo ""
     
-    # Run Mocha tests
-    echo "Running Mocha tests ($NUM_RUNS runs)..."
-    echo "───────────────────────────────────────────────────────────"
-    
-    for TEST_FILE in "${MOCHA_TESTS[@]}"; do
-        TEST_NAME=$(basename "$TEST_FILE" .js)
-        echo "  Suite: $TEST_NAME"
-        
-        for RUN in $(seq 1 $NUM_RUNS); do
-            echo -n "    Run $RUN/$NUM_RUNS... "
-            
-            npx mocha "tests/test/$TEST_FILE" --timeout $TIMEOUT --reporter json \
-                > "$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}_raw.txt" 2>&1
-            
-            # Extract JSON
-            python3 -c "
-import re
-with open('$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}_raw.txt', 'r') as f:
-    content = f.read()
-match = re.search(r'\{.*\}', content, re.DOTALL)
-if match:
-    with open('$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}.json', 'w') as out:
-        out.write(match.group(0))
-"
-            
-            if [ -s "$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}.json" ]; then
-                echo "✓"
-            else
-                echo "✗ Failed"
-            fi
-        done
-    done
-    
-    echo ""
-    
-    # Run PL-Unit tests
+    # Run PL-Unit tests (faster, so run first)
     echo "Running PL-Unit tests ($NUM_RUNS runs)..."
     echo "───────────────────────────────────────────────────────────"
     
@@ -190,6 +165,7 @@ if match:
             SUITE_NAME=$([ "$TEST_SUITE" = "_" ] && echo "all" || echo "$TEST_SUITE")
             python3 -c "
 import re
+import json
 with open('$OUTPUT_DIR/plunit_${SUITE_NAME}_run_${RUN}_raw.txt', 'r') as f:
     content = f.read()
 match = re.search(r'\{.*\}', content, re.DOTALL)
@@ -198,10 +174,92 @@ if match:
         out.write(match.group(0))
 "
             
+            # Check if test exists (has tests > 0) or if file was created
             if [ -s "$OUTPUT_DIR/plunit_${SUITE_NAME}_run_${RUN}.json" ]; then
-                echo "✓"
+                # Check if the test suite actually ran (stats.tests > 0 or no error)
+                HAS_TESTS=$(python3 -c "
+import json
+try:
+    with open('$OUTPUT_DIR/plunit_${SUITE_NAME}_run_${RUN}.json', 'r') as f:
+        data = json.load(f)
+        print(1 if data.get('stats', {}).get('tests', 0) > 0 else 0)
+except:
+    print(0)
+" 2>/dev/null || echo 0)
+                
+                if [ "$HAS_TESTS" -eq 1 ]; then
+                    echo "✓"
+                else
+                    echo "⊘ (suite not found in this branch)"
+                fi
             else
                 echo "✗ Failed"
+            fi
+        done
+    done
+    
+    echo ""
+    
+    # Run Mocha tests
+    echo "Running Mocha tests ($NUM_RUNS runs)..."
+    echo "───────────────────────────────────────────────────────────"
+    
+    for TEST_FILE in "${MOCHA_TESTS[@]}"; do
+        TEST_NAME=$(basename "$TEST_FILE" .js)
+        
+        # Skip if test doesn't exist in this branch
+        if [ ! -f "tests/test/$TEST_FILE" ]; then
+            echo "  Suite: $TEST_NAME (skipped - not in this branch)"
+            continue
+        fi
+        
+        echo "  Suite: $TEST_NAME"
+        
+        for RUN in $(seq 1 $NUM_RUNS); do
+            echo -n "    Run $RUN/$NUM_RUNS... "
+            
+            # Capture exit code
+            set +e
+            npx mocha "tests/test/$TEST_FILE" --timeout $TIMEOUT --reporter json \
+                > "$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}_raw.txt" 2>&1
+            EXIT_CODE=$?
+            set -e
+            
+            # Extract JSON and check for failures
+            RESULT=$(python3 -c "
+import re
+import json
+import sys
+try:
+    with open('$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}_raw.txt', 'r') as f:
+        content = f.read()
+    match = re.search(r'\{.*\}', content, re.DOTALL)
+    if match:
+        with open('$OUTPUT_DIR/mocha_${TEST_NAME}_run_${RUN}.json', 'w') as out:
+            out.write(match.group(0))
+        data = json.loads(match.group(0))
+        failures = data.get('stats', {}).get('failures', 0)
+        tests = data.get('stats', {}).get('tests', 0)
+        if tests == 0:
+            print('no_tests')
+        elif failures > 0:
+            print('failed')
+        else:
+            print('passed')
+    else:
+        print('no_json')
+except Exception as e:
+    print('error')
+" 2>/dev/null || echo "error")
+            
+            if [ "$RESULT" = "passed" ]; then
+                echo "✓"
+            elif [ "$RESULT" = "failed" ]; then
+                echo "✗ (test failures)"
+            elif [ "$RESULT" = "no_tests" ]; then
+                echo "⊘ (no tests found)"
+            else
+                echo "✗ Failed to parse"
             fi
         done
     done

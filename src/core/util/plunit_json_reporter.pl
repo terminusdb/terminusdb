@@ -25,15 +25,18 @@ run_tests_json(Spec) :-
     % Capture test output using a temporary file
     % PL-Unit writes to user_error, so we redirect that stream
     tmp_file_stream(text, TmpFile, TmpStream),
-    setup_call_cleanup(
-        (   stream_property(OldErr, alias(user_error)),
-            set_stream(TmpStream, alias(user_error))
+    stream_property(OldErr, alias(user_error)),
+    catch(
+        setup_call_cleanup(
+            set_stream(TmpStream, alias(user_error)),
+            run_tests(Spec),
+            (   flush_output(TmpStream),
+                close(TmpStream),
+                set_stream(OldErr, alias(user_error))
+            )
         ),
-        run_tests(Spec),
-        (   flush_output(TmpStream),
-            close(TmpStream),
-            set_stream(OldErr, alias(user_error))
-        )
+        error(existence_error(unit_test, _), _),
+        true  % Catch non-existent test suite but continue
     ),
     read_file_to_string(TmpFile, Output, []),
     delete_file(TmpFile),
@@ -71,34 +74,46 @@ run_tests_json(Spec) :-
 parse_test_output(Output, Tests, Suites, Passes, Failures, TestObjects, PassObjects, FailObjects) :-
     split_string(Output, "\n", "\n", Lines),
     
-    % Parse individual test lines
-    % Format: % [1/3] sample_tests:simple_pass ... passed (0.002 sec)
-    findall(
-        TestObj,
-        (   member(Line, Lines),
-            sub_string(Line, _, _, _, "] "),
-            sub_string(Line, _, _, _, ":"),
-            parse_test_line(Line, TestObj)
-        ),
-        TestObjects
-    ),
-    
-    % Separate passed and failed tests
-    include(is_passed_test, TestObjects, PassObjects),
-    include(is_failed_test, TestObjects, FailObjects),
-    
-    % Get counts
-    length(TestObjects, Tests),
-    length(PassObjects, Passes),
-    length(FailObjects, Failures),
-    
-    % Count test suites by counting "End unit" lines
-    findall(
-        1,
-        (member(L, Lines), sub_string(L, _, _, _, "End unit")),
-        SuiteList
-    ),
-    length(SuiteList, Suites).
+    % Modern PL-Unit output format: "% All 98 tests passed" or "% 2 tests passed, 1 failed"
+    (   member(Line, Lines),
+        sub_string(Line, _, _, _, "tests passed"),
+        parse_summary_line(Line, Tests, Passes, Failures)
+    ->  % Found summary line
+        Suites = 1,
+        % Create placeholder test objects (we don't have individual test details)
+        length(PassList, Passes),
+        maplist(create_pass_object, PassList, PassObjects),
+        length(FailList, Failures),
+        maplist(create_fail_object, FailList, FailObjects),
+        append(PassObjects, FailObjects, TestObjects)
+    ;   % No summary found - no tests ran
+        Tests = 0,
+        Passes = 0,
+        Failures = 0,
+        Suites = 0,
+        TestObjects = [],
+        PassObjects = [],
+        FailObjects = []
+    ).
+
+parse_summary_line(Line, Tests, Passes, Failures) :-
+    % Parse "% All 98 tests passed" or "% 2 tests passed, 1 failed"
+    (   sub_string(Line, _, _, _, "All "),
+        split_string(Line, " ", " ", Parts),
+        nth0(2, Parts, TestStr),
+        atom_number(TestStr, Tests),
+        Passes = Tests,
+        Failures = 0
+    ;   split_string(Line, " ,", " ,", Parts),
+        nth0(1, Parts, PassStr),
+        nth0(5, Parts, FailStr),
+        atom_number(PassStr, Passes),
+        atom_number(FailStr, Failures),
+        Tests is Passes + Failures
+    ).
+
+create_pass_object(_, _{title: "test", fullTitle: "test", duration: 0, currentRetry: 0, speed: fast, err: _{}, state: passed}).
+create_fail_object(_, _{title: "test", fullTitle: "test", duration: 0, currentRetry: 0, err: _{message: "Test failed", stack: ""}, state: failed}).
 
 parse_test_line(Line, TestObj) :-
     % Extract: suite:test_name ... passed/failed (X.XXX sec)
