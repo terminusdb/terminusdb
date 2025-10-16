@@ -30,7 +30,7 @@ MOCHA_TESTS=(
 # )
 # Full benchmark (uncomment to run all tests):
 # PLUNIT_TESTS=("auto")
-PLUNIT_TESTS=("typecast")
+PLUNIT_TESTS=("auto")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
