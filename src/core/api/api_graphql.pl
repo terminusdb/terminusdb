@@ -6,6 +6,7 @@
 :- use_module(core(account)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(library(pcre), [re_replace/4]).
 
 descriptor_db_uri(System_DB, Desc, Database_Uri) :-
     (   branch_descriptor{} :< Desc

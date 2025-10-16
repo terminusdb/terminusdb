@@ -12635,6 +12635,11 @@ test(big,
 :- use_module(core(query)).
 :- use_module(core(triple/casting), [decimal_precision/1]).
 
+% Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
+:- if(\+ current_predicate(assertion/1)).
+assertion(Goal) :- call(Goal).
+:- endif.
+
 json_schema('
 { "@base": "terminusdb:///data/",
   "@schema": "terminusdb:///schema#",

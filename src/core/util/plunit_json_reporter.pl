@@ -7,6 +7,9 @@
 
 :- use_module(library(plunit)).
 :- use_module(library(http/json)).
+:- use_module(library(lists), [member/2, append/3, nth0/3]).
+:- use_module(library(apply), [maplist/3]).
+:- use_module(library(readutil), [read_file_to_string/3]).
 
 %! run_tests_json is det.
 %

@@ -26,6 +26,11 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 
+% Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
+:- if(\+ current_predicate(assertion/1)).
+assertion(Goal) :- call(Goal).
+:- endif.
+
 % Helper for running queries in decimal tests
 query_test_response_decimal(Descriptor, Query, Response) :-
     create_context(Descriptor,

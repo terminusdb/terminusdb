@@ -33,6 +33,7 @@
 :- reexport(core(util/syntax)).
 :- use_module(library(pcre)).
 :- use_module(library(apply)).
+:- use_module(library(lists), [reverse/2]).
 :- use_module(library(sort)).
 :- use_module(core(util)).
 :- use_module(core(triple/casting), [typecast/4, decimal_precision/1]).

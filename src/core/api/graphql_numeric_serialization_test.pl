@@ -1,12 +1,5 @@
 :- module(graphql_numeric_serialization_test, []).
 
-:- use_module(core(util/test_utils)).
-:- use_module(core(triple)).
-:- use_module(core(transaction)).
-:- use_module(core(api)).
-:- use_module(library(http/json)).
-:- use_module(library(http/http_open)).
-
 /**
  * GraphQL Numeric Serialization Tests
  * 
@@ -18,6 +11,18 @@
  */
 
 :- begin_tests(graphql_numeric_serialization, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(api)).
+:- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2]).
+:- use_module(library(http/json)).
+:- use_module(library(http/http_open)).
+
+% Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
+:- if(\+ current_predicate(assertion/1)).
+assertion(Goal) :- call(Goal).
+:- endif.
 
 test(graphql_integer_as_json_number, [
     setup((setup_temp_store(State),
@@ -393,7 +398,7 @@ api_test_graphql_request(Descriptor, Path, Query, JSON_Response) :-
     
     % Call the GraphQL API
     open_descriptor(Descriptor, Transaction),
-    system_descriptor(System),
+    System = system_descriptor{},
     
     % Create a temporary stream with the query
     setup_call_cleanup(
