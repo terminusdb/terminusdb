@@ -29,7 +29,7 @@ MOCHA_TESTS=(
 #     "terminus_store"             # Core storage (baseline)
 # )
 # Full benchmark (uncomment to run all tests):
-PLUNIT_TESTS=("_")
+PLUNIT_TESTS=("auto")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
