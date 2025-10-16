@@ -29,7 +29,8 @@ MOCHA_TESTS=(
 #     "terminus_store"             # Core storage (baseline)
 # )
 # Full benchmark (uncomment to run all tests):
-PLUNIT_TESTS=("auto")
+# PLUNIT_TESTS=("auto")
+PLUNIT_TESTS=("typecast")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
@@ -233,9 +234,9 @@ run_branch_benchmarks() {
     # Build (try 'make dev' first, fallback to 'make' for older branches)
     echo "Building..."
     if make -n dev > /dev/null 2>&1; then
-        make dev > /dev/null 2>&1
+        make clean && make dev > /dev/null 2>&1
     else
-        make > /dev/null 2>&1
+        make clean && make > /dev/null 2>&1
     fi
     
     # Restart test server (handle both old and new script names)
