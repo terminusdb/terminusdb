@@ -7,30 +7,42 @@
 set -e
 
 # ============================================================================
-# CONFIGURATION - Edit these to select which test suites to run
+# CONFIGURATION - Edit .env file or these defaults to select test suites
 # ============================================================================
 
-# Mocha test files to benchmark (just filenames, not paths)
-# VERIFIED to exist in both branches - focus on document/WOQL/numeric operations
-MOCHA_TESTS=(
-    "auto"                 # Quick sanity check
-)
-# Full benchmark (uncomment to run all tests):
-#MOCHA_TESTS=($(cd tests/test && ls *.js))
+# Load configuration from .env file if it exists
+ENV_FILE="$(dirname "$0")/.env"
+if [ -f "$ENV_FILE" ]; then
+    echo "Loading configuration from .env file..."
+    source "$ENV_FILE"
+    echo "✓ Configuration loaded"
+    echo ""
+fi
 
-# PL-Unit test suites to benchmark
-# VERIFIED test suites - focus on numeric/document/JSON operations
-# PLUNIT_TESTS=(
-#     "typecast"                   # Type conversion (decimals, rationals)
-#     "json"                       # JSON serialization with rationals
-#     "json_read_term"             # JSON term parsing (rational preservation)
-#     "json_datatype"              # JSON datatype handling
-#     "arithmetic_document"        # Document arithmetic operations
-#     "terminus_store"             # Core storage (baseline)
-# )
-# Full benchmark (uncomment to run all tests):
-# PLUNIT_TESTS=("auto")
-PLUNIT_TESTS=("typecast")
+# Default Mocha test files (used if not set in .env)
+# Space-separated list or "auto" to discover all
+if [ -z "${MOCHA_TESTS_CONFIG+x}" ]; then
+    MOCHA_TESTS_CONFIG="db-auth"
+fi
+
+# Default PL-Unit test suites (used if not set in .env)
+# Space-separated list or "auto" to discover all
+if [ -z "${PLUNIT_TESTS_CONFIG+x}" ]; then
+    PLUNIT_TESTS_CONFIG="typecast"
+fi
+
+# Convert space-separated strings to arrays
+if [ "$MOCHA_TESTS_CONFIG" = "auto" ]; then
+    MOCHA_TESTS=("auto")
+else
+    read -ra MOCHA_TESTS <<< "$MOCHA_TESTS_CONFIG"
+fi
+
+if [ "$PLUNIT_TESTS_CONFIG" = "auto" ]; then
+    PLUNIT_TESTS=("auto")
+else
+    read -ra PLUNIT_TESTS <<< "$PLUNIT_TESTS_CONFIG"
+fi
 
 # Test timeout in milliseconds
 TIMEOUT=30000
@@ -68,8 +80,8 @@ if [ "${#ARGS[@]}" -lt 3 ]; then
     echo "  --allow-dirty    Skip check for uncommitted changes (for development)"
     echo ""
     echo "Configuration:"
-    echo "  Edit MOCHA_TESTS and PLUNIT_TESTS arrays in this script"
-    echo "  to select which test suites to run."
+    echo "  Create a .env file in tests/benchmark/ to configure test suites."
+    echo "  See .env.example for available options."
     exit 1
 fi
 
@@ -411,6 +423,6 @@ echo "════════════════════════�
 echo ""
 echo "Results saved in: tests/benchmark_results/"
 echo ""
-echo "To modify test selection, edit the MOCHA_TESTS and"
-echo "PLUNIT_TESTS arrays at the top of this script."
+echo "To modify test selection, create/edit tests/benchmark/.env"
+echo "See tests/benchmark/.env.example for configuration options."
 echo ""
