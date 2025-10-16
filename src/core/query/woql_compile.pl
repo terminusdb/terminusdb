@@ -23,7 +23,7 @@
 
 :- use_module(jsonld).
 :- use_module(json_woql).
-:- use_module(global_prefixes, [default_prefixes/1]).
+:- use_module(global_prefixes, [default_prefixes/1, literal_expand/2]).
 :- use_module(resolve_query_resource).
 :- use_module(path).
 :- use_module(metadata).
@@ -565,38 +565,87 @@ woql_equal(AE,BE) :-
 /*
  * woql_less(AE,BE) is det.
  *
- * TODO: May need other cases.
+ * Compares two typed values. Types are normalized to full URIs before comparison
+ * to handle cases where one uses short form (xsd:decimal) and another uses
+ * full URI form ('http://www.w3.org/2001/XMLSchema#decimal').
+ *
+ * Fixed: Issue #2225 - Type inconsistency in comparison operators
  */
 woql_less(X^^'http://www.w3.org/2001/XMLSchema#dateTime',
           Y^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
     X @< Y.
-woql_less(X^^T1,Y^^T2) :-
-    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
-    !,
-    X < Y.
 woql_less(AE,BE) :-
-    % dodgy - should switch on type
+    % Normalize types to full URIs before comparison
+    % literal_expand/2 only works on typed literals, so we use ignore/1
+    % to pass through untyped values unchanged
+    (literal_expand(AE, AE_Normalized) -> true ; AE_Normalized = AE),
+    (literal_expand(BE, BE_Normalized) -> true ; BE_Normalized = BE),
+    woql_less_normalized(AE_Normalized, BE_Normalized).
+
+/*
+ * woql_less_normalized(+A,+B) is semidet.
+ *
+ * Internal predicate - assumes types are already normalized
+ */
+woql_less_normalized(X^^T1,Y^^T2) :-
+    % Check if both types are numeric (decimal, integer, float, double, etc.)
+    is_numeric_type(T1),
+    is_numeric_type(T2),
+    !,
+    % Do numeric comparison
+    X < Y.
+woql_less_normalized(AE,BE) :-
+    % Fallback: structural comparison
+    % Note: This is only reached for untyped values or non-numeric types
     compare((<),AE,BE).
+
+/*
+ * is_numeric_type(+Type) is semidet.
+ *
+ * True if Type is a numeric XSD type (decimal, integer, float, double, and their subtypes)
+ */
+is_numeric_type(T) :-
+    basetype_subsumption_of(T,'http://www.w3.org/2001/XMLSchema#decimal'), !.
+is_numeric_type('http://www.w3.org/2001/XMLSchema#float') :- !.
+is_numeric_type('http://www.w3.org/2001/XMLSchema#double') :- !.
 
 /*
  * woql_greater(AE,BE) is det.
  *
- * TODO: May need other cases.
+ * Compares two typed values. Types are normalized to full URIs before comparison
+ * to handle cases where one uses short form (xsd:decimal) and another uses
+ * full URI form ('http://www.w3.org/2001/XMLSchema#decimal').
+ *
+ * Fixed: Issue #2225 - Type inconsistency in comparison operators
  */
 woql_greater(X^^'http://www.w3.org/2001/XMLSchema#dateTime',
              Y^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
     X @> Y.
-woql_greater(X^^T1,
-             Y^^T2) :-
-    basetype_subsumption_of(T1,'http://www.w3.org/2001/XMLSchema#decimal'),
-    basetype_subsumption_of(T2,'http://www.w3.org/2001/XMLSchema#decimal'),
-    !,
-    X > Y.
 woql_greater(AE,BE) :-
-    % dodgy - should switch on type
+    % Normalize types to full URIs before comparison
+    % literal_expand/2 only works on typed literals, so we use conditional
+    % to pass through untyped values unchanged
+    (literal_expand(AE, AE_Normalized) -> true ; AE_Normalized = AE),
+    (literal_expand(BE, BE_Normalized) -> true ; BE_Normalized = BE),
+    woql_greater_normalized(AE_Normalized, BE_Normalized).
+
+/*
+ * woql_greater_normalized(+A,+B) is semidet.
+ *
+ * Internal predicate - assumes types are already normalized
+ */
+woql_greater_normalized(X^^T1,Y^^T2) :-
+    % Check if both types are numeric (decimal, integer, float, double, etc.)
+    is_numeric_type(T1),
+    is_numeric_type(T2),
+    !,
+    % Do numeric comparison
+    X > Y.
+woql_greater_normalized(AE,BE) :-
+    % Fallback: structural comparison
+    % Note: This is only reached for untyped values or non-numeric types
     compare((>),AE,BE).
 
 /*
@@ -1362,17 +1411,8 @@ compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
     resolve(Y,YE),
     {
-        % Special handling for sum: flatten single-element sublists from group_by
-        Sum = (
-            % Validate that first argument is a list at runtime
-            do_or_die(
-                is_list(XE),
-                error(existence_error(matching_rule, sum(XE,YE)), _)
-            ),
-            maplist([In,Out]>>(is_list(In), In = [Single] -> literally(Single, Out) ; literally(In, Out)), XE, XE_Flat),
-            sum_list(XE_Flat, YE_Lit),
-            unliterally(YE_Lit, YE)
-        )
+        marshall_args(sum_list(XE,YE), Goal),
+        Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
@@ -1639,16 +1679,6 @@ marshall_args(M_Pred,Goal) :-
     append([Pre,[M:Lit_Pred],Post], Term_List),
     xfy_list(',',Goal,Term_List).
 
-% is_numeric_type(+Type) is semidet.
-%
-% True if Type is a numeric XSD type (integer, decimal, float, double, or subtypes).
-is_numeric_type(Type) :-
-    (   Type = 'http://www.w3.org/2001/XMLSchema#float'
-    ;   Type = 'http://www.w3.org/2001/XMLSchema#double'
-    ;   basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#decimal')
-    ;   basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#integer')
-    ).
-
 literally(X, _X) :-
     var(X),
     !.
@@ -1656,24 +1686,6 @@ literally(Date^^'http://www.w3.org/2001/XMLSchema#dateTime', String) :-
     Date = date(_Y,_M,_D,_HH,_MM,_SS,_,_,_),
     !,
     date_string(Date,String).
-literally(Rational^^'http://www.w3.org/2001/XMLSchema#decimal', Integer) :-
-    % Convert integer-valued rationals to integers for operations like limit/offset
-    rational(Rational),
-    Rational =:= floor(Rational),
-    !,
-    Integer is truncate(Rational).
-literally(Rational^^'xsd:decimal', Integer) :-
-    % Handle xsd:decimal prefix form
-    rational(Rational),
-    Rational =:= floor(Rational),
-    !,
-    Integer is truncate(Rational).
-literally(X^^T, N) :-
-    % Convert string-encoded numbers to actual numbers for numeric operations
-    string(X),
-    woql_compile:is_numeric_type(T),
-    !,
-    number_string(N, X).
 literally(X^^_T, X) :-
     !.
 literally(X@_L, X) :-
@@ -1684,16 +1696,6 @@ literally([H|T],[HL|TL]) :-
     !,
     literally(H,HL),
     literally(T,TL).
-literally(X, N) :-
-    % Handle plain strings that represent numbers (from database literals)
-    string(X),
-    catch(number_string(N, X), _, fail),
-    !.
-literally(X, N) :-
-    % Handle atoms that represent numbers
-    atom(X),
-    catch(atom_number(X, N), _, fail),
-    !.
 literally(X, X) :-
     (   atom(X)
     ->  true
@@ -2935,20 +2937,6 @@ test(group_by_simple_template, [
        'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': ['@schema:p','@schema:p'],
        'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
-
-test(literally_converts_decimal_strings, []) :-
-    % Test that literally/2 converts string-encoded decimal values to numbers
-    literally("2.0"^^'http://www.w3.org/2001/XMLSchema#decimal', Num1),
-    assertion(number(Num1)),
-    assertion(Num1 =:= 2.0),
-    
-    literally("4.0"^^'http://www.w3.org/2001/XMLSchema#decimal', Num2),
-    assertion(number(Num2)),
-    assertion(Num2 =:= 4.0),
-    
-    literally("-2"^^'http://www.w3.org/2001/XMLSchema#integer', Num3),
-    assertion(number(Num3)),
-    assertion(Num3 =:= -2).
 
 test(select, [setup(setup_temp_store(State)),
               cleanup(teardown_temp_store(State))
@@ -5476,6 +5464,60 @@ test(complex_mode, [
     create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context),
     run_context_ast_jsonld_response(Context, AST, no_data_version, _, _JSON).
 
+% ========================================
+% Comparison operator type inconsistency regression tests (from issue #2225)
+% ========================================
+
+test(less_than_cross_type_float_decimal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    % Verify cross-type comparison: 21.1 (float) < 33 (decimal)
+    Query = _{ '@type' : "Less",
+               left : _{'@type' : "DataValue", 
+                       'data' : _{'@type': 'xsd:float', '@value': 21.1}},
+               right : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 33}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(greater_than_equal_values_cross_type, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    % Regression: 33.0 (float) > 33 (decimal) should fail (empty bindings)
+    % This was the bug - structural comparison made 33 > 33 return true
+    Query = _{ '@type' : "Greater",
+               left : _{'@type' : "DataValue", 
+                       'data' : _{'@type': 'xsd:float', '@value': 33.0}},
+               right : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 33}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(less_than_mixed_uri_representation, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    % Verify mixed URI forms work: 5 (xsd:decimal) < 10 (full URI)
+    Query = _{ '@type' : "Less",
+               left : _{'@type' : "DataValue", 
+                       'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               right : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'http://www.w3.org/2001/XMLSchema#decimal', 
+                                   '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
@@ -5844,3 +5886,6 @@ test(ancestor, [
 	].
 
 :- end_tests(trampoline).
+
+% Load comparison operator tests
+:- use_module(comparison_tests).
