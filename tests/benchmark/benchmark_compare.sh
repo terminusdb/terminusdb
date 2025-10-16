@@ -305,6 +305,15 @@ run_branch_benchmarks "$BRANCH1" "tests/benchmark_results/branch1" "Branch 1"
 run_branch_benchmarks "$BRANCH2" "tests/benchmark_results/branch2" "Branch 2"
 
 # ============================================================================
+# Switch back to BRANCH1 before Excel generation (Excel script may differ between branches)
+# ============================================================================
+
+echo ""
+echo "Switching back to $BRANCH1 for report generation..."
+git checkout "$BRANCH1" > /dev/null 2>&1
+echo ""
+
+# ============================================================================
 # Generate comparison Excel
 # ============================================================================
 
