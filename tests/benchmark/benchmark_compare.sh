@@ -13,7 +13,7 @@ set -e
 # Mocha test files to benchmark (just filenames, not paths)
 # VERIFIED to exist in both branches - focus on document/WOQL/numeric operations
 MOCHA_TESTS=(
-    "info_ok.js"                 # Quick sanity check
+    "auto"                 # Quick sanity check
 )
 # Full benchmark (uncomment to run all tests):
 #MOCHA_TESTS=($(cd tests/test && ls *.js))
@@ -30,7 +30,7 @@ MOCHA_TESTS=(
 # )
 # Full benchmark (uncomment to run all tests):
 # PLUNIT_TESTS=("auto")
-PLUNIT_TESTS=("auto")
+PLUNIT_TESTS=("typecast")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
