@@ -74,9 +74,24 @@ run_tests_json(Spec) :-
 parse_test_output(Output, Tests, Suites, Passes, Failures, TestObjects, PassObjects, FailObjects) :-
     split_string(Output, "\n", "\n", Lines),
     
-    % Modern PL-Unit output format: "% All 98 tests passed" or "% 2 tests passed, 1 failed"
+    % Modern PL-Unit output formats: 
+    % - "% All 98 tests passed" 
+    % - "% 2 tests passed, 1 failed"
+    % - "% 14 tests passed"
+    % - "% test passed" (singular for 1 test)
+    % - "% No tests to run" (test suite with no tests)
     (   member(Line, Lines),
-        sub_string(Line, _, _, _, "tests passed"),
+        sub_string(Line, _, _, _, "No tests to run")
+    ->  % Test suite exists but has no tests
+        Tests = 0,
+        Passes = 0,
+        Failures = 0,
+        Suites = 1,
+        TestObjects = [],
+        PassObjects = [],
+        FailObjects = []
+    ;   member(Line, Lines),
+        (sub_string(Line, _, _, _, "tests passed") ; sub_string(Line, _, _, _, "test passed")),
         parse_summary_line(Line, Tests, Passes, Failures)
     ->  % Found summary line
         Suites = 1,
@@ -86,7 +101,7 @@ parse_test_output(Output, Tests, Suites, Passes, Failures, TestObjects, PassObje
         length(FailList, Failures),
         maplist(create_fail_object, FailList, FailObjects),
         append(PassObjects, FailObjects, TestObjects)
-    ;   % No summary found - no tests ran
+    ;   % No summary found - suite doesn't exist
         Tests = 0,
         Passes = 0,
         Failures = 0,
@@ -97,19 +112,39 @@ parse_test_output(Output, Tests, Suites, Passes, Failures, TestObjects, PassObje
     ).
 
 parse_summary_line(Line, Tests, Passes, Failures) :-
-    % Parse "% All 98 tests passed" or "% 2 tests passed, 1 failed"
-    (   sub_string(Line, _, _, _, "All "),
+    % Parse various PL-Unit summary formats
+    (   % Format 1: "% All 98 tests passed"
+        sub_string(Line, _, _, _, "All "),
         split_string(Line, " ", " ", Parts),
         nth0(2, Parts, TestStr),
         atom_number(TestStr, Tests),
         Passes = Tests,
         Failures = 0
-    ;   split_string(Line, " ,", " ,", Parts),
+    ;   % Format 2: "% 2 tests passed, 1 failed"
+        sub_string(Line, _, _, _, ","),
+        split_string(Line, " ,", " ,", Parts),
         nth0(1, Parts, PassStr),
         nth0(5, Parts, FailStr),
         atom_number(PassStr, Passes),
         atom_number(FailStr, Failures),
         Tests is Passes + Failures
+    ;   % Format 3: "% test passed" (singular, 1 test)
+        sub_string(Line, _, _, _, "test passed"),
+        \+ sub_string(Line, _, _, _, "tests passed"),  % Not plural
+        Tests = 1,
+        Passes = 1,
+        Failures = 0
+    ;   % Format 4: "% 0 tests passed" (all tests blocked/skipped)
+        sub_string(Line, _, _, _, "0 tests passed")
+    ->  Tests = 0,
+        Passes = 0,
+        Failures = 0
+    ;   % Format 5: "% 14 tests passed" (no "All", no failures)
+        split_string(Line, " ", " ", Parts),
+        nth0(1, Parts, TestStr),
+        atom_number(TestStr, Tests),
+        Passes = Tests,
+        Failures = 0
     ).
 
 create_pass_object(_, _{title: "test", fullTitle: "test", duration: 0, currentRetry: 0, speed: fast, err: _{}, state: passed}).

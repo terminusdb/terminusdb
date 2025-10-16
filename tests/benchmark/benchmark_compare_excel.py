@@ -10,7 +10,8 @@ import glob
 
 try:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Font, PatternFill, Alignment, Color
+    from openpyxl.formatting.rule import ColorScaleRule
 except ImportError:
     print("❌ openpyxl not installed. Install with: pip3 install openpyxl")
     sys.exit(1)
@@ -81,8 +82,18 @@ def calculate_suite_stats(runs):
         'max': max(durations)
     }
 
+def sanitize_sheet_name(name):
+    """Sanitize sheet name for Excel (max 31 chars, no invalid characters)"""
+    # Remove invalid characters: : \ / ? * [ ]
+    invalid_chars = [':', '\\', '/', '?', '*', '[', ']']
+    for char in invalid_chars:
+        name = name.replace(char, '_')
+    # Trim to 31 characters (Excel limit)
+    return name[:31]
+
 def create_test_sheet(wb, sheet_name, test_stats, num_runs):
     """Create a test details sheet"""
+    sheet_name = sanitize_sheet_name(sheet_name)
     ws = wb.create_sheet(sheet_name)
     
     # Headers
@@ -91,8 +102,9 @@ def create_test_sheet(wb, sheet_name, test_stats, num_runs):
         headers.append(f'Run {i}')
     headers.extend(['Avg', 'StdDev', 'Min', 'Max', 'Speed', 'Status'])
     
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(1, col, header)
+    # Write headers with explicit column numbering for clarity
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
         cell.font = Font(bold=True)
         cell.fill = PatternFill(start_color='DDDDDD', end_color='DDDDDD', fill_type='solid')
     
@@ -233,6 +245,23 @@ def create_comparison_overview(wb, branch1_name, branch2_name, branch1_data, bra
         ws.column_dimensions[col].width = 10
     ws.column_dimensions['I'].width = 10
     ws.column_dimensions['J'].width = 15
+    
+    # Add heat mapping to Diff (%) column (column I)
+    # Green (negative %) = faster, Red (positive %) = slower
+    if row > 4:  # Only add if we have data
+        diff_range = f'I4:I{row-1}'
+        ws.conditional_formatting.add(
+            diff_range,
+            ColorScaleRule(
+                start_type='min',
+                start_color='63BE7B',  # Green (good - negative diff means faster)
+                mid_type='num',
+                mid_value=0,
+                mid_color='FFFFFF',    # White (neutral)
+                end_type='max',
+                end_color='F8696B'     # Red (bad - positive diff means slower)
+            )
+        )
 
 def main():
     if len(sys.argv) < 4:
