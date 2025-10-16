@@ -101,6 +101,80 @@ else
     echo ""
 fi
 
+# ============================================================================
+# Auto-discover test suites if requested
+# ============================================================================
+
+discover_plunit_suites() {
+    echo "Discovering PL-Unit test suites..." >&2
+    
+    # Verify we're in the repo root
+    if [ ! -f "src/interactive.pl" ]; then
+        echo "  ⚠ Warning: src/interactive.pl not found, using fallback list" >&2
+        echo "typecast json json_read_term json_datatype arithmetic_document employee_documents"
+        return
+    fi
+    
+    # Use current_test_unit/2 to query loaded test units
+    TEMP_SCRIPT=$(mktemp)
+    TEMP_OUTPUT=$(mktemp)
+    
+    # Get absolute path to interactive.pl
+    ABS_INTERACTIVE="$(pwd)/src/interactive.pl"
+    
+    cat > "$TEMP_SCRIPT" << EOF
+:- use_module(library(plunit)).
+:- consult('$ABS_INTERACTIVE').
+
+:- initialization(discover_and_exit).
+
+discover_and_exit :-
+    findall(Unit, current_test_unit(Unit, _), Units),
+    sort(Units, Sorted),
+    forall(member(U, Sorted), (atom_string(U, Str), writeln(Str))),
+    halt(0).
+
+discover_and_exit :-
+    halt(1).
+EOF
+    
+    # Run with a timeout of 30 seconds (macOS doesn't have timeout, use perl)
+    perl -e 'alarm shift; exec @ARGV' 30 swipl -f "$TEMP_SCRIPT" > "$TEMP_OUTPUT" 2>&1 || true
+    
+    # Extract only the test suite names (filter out errors/warnings)
+    DISCOVERED=$(grep -v '^%' "$TEMP_OUTPUT" | grep -v '^Warning:' | grep -v '^ERROR:' | grep -v '^Unknown message:' | grep -v '^\s*$' | tr '\n' ' ')
+    
+    rm -f "$TEMP_SCRIPT" "$TEMP_OUTPUT"
+    
+    if [ -z "$DISCOVERED" ]; then
+        echo "  ⚠ Warning: Could not discover test suites, using fallback list" >&2
+        echo "typecast json json_read_term json_datatype arithmetic_document employee_documents"
+    else
+        SUITE_COUNT=$(echo "$DISCOVERED" | wc -w | tr -d ' ')
+        echo "  Found $SUITE_COUNT test suites" >&2
+        echo "$DISCOVERED"
+    fi
+}
+
+# Expand "auto" for Mocha tests
+if [ "${#MOCHA_TESTS[@]}" -eq 1 ] && [ "${MOCHA_TESTS[0]}" = "auto" ]; then
+    echo "Discovering Mocha test files..."
+    if [ -d "tests/test" ]; then
+        MOCHA_TESTS=($(cd tests/test && ls *.js 2>/dev/null || echo ""))
+        echo "  Discovered ${#MOCHA_TESTS[@]} Mocha test files"
+    else
+        echo "  ⚠ Warning: tests/test directory not found"
+        MOCHA_TESTS=()
+    fi
+    echo ""
+fi
+
+# Expand "auto" for PL-Unit tests
+if [ "${#PLUNIT_TESTS[@]}" -eq 1 ] && [ "${PLUNIT_TESTS[0]}" = "auto" ]; then
+    PLUNIT_TESTS=($(discover_plunit_suites))
+    echo ""
+fi
+
 echo "═══════════════════════════════════════════════════════════"
 echo "BRANCH COMPARISON BENCHMARK"
 echo "═══════════════════════════════════════════════════════════"
@@ -109,8 +183,8 @@ echo "Configuration:"
 echo "  Branch 1: $BRANCH1"
 echo "  Branch 2: $BRANCH2"
 echo "  Runs per branch: $NUM_RUNS"
-echo "  Mocha tests: ${MOCHA_TESTS[*]}"
-echo "  PL-Unit tests: ${PLUNIT_TESTS[*]}"
+echo "  Mocha tests: ${#MOCHA_TESTS[@]} files"
+echo "  PL-Unit tests: ${#PLUNIT_TESTS[@]} suites"
 echo ""
 
 # Clean and create results directories
