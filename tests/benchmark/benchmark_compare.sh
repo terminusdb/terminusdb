@@ -13,11 +13,6 @@ set -e
 # Mocha test files to benchmark (just filenames, not paths)
 # VERIFIED to exist in both branches - focus on document/WOQL/numeric operations
 MOCHA_TESTS=(
-    "decimal-precision.js"       # NEW: Decimal precision tests (core feature)
-    "graphql.js"                 # GraphQL with JSON serialization
-    "document-get.js"            # Document retrieval
-    "woql-noauth.js"             # WOQL operations (arithmetic expressions)
-    "frame.js"                   # Schema/frame operations
     "info_ok.js"                 # Quick sanity check
 )
 # Full benchmark (uncomment to run all tests):
@@ -25,16 +20,16 @@ MOCHA_TESTS=(
 
 # PL-Unit test suites to benchmark
 # VERIFIED test suites - focus on numeric/document/JSON operations
-PLUNIT_TESTS=(
-    "typecast"                   # Type conversion (decimals, rationals)
-    "json"                       # JSON serialization with rationals
-    "json_read_term"             # JSON term parsing (rational preservation)
-    "json_datatype"              # JSON datatype handling
-    "arithmetic_document"        # Document arithmetic operations
-    "terminus_store"             # Core storage (baseline)
-)
+# PLUNIT_TESTS=(
+#     "typecast"                   # Type conversion (decimals, rationals)
+#     "json"                       # JSON serialization with rationals
+#     "json_read_term"             # JSON term parsing (rational preservation)
+#     "json_datatype"              # JSON datatype handling
+#     "arithmetic_document"        # Document arithmetic operations
+#     "terminus_store"             # Core storage (baseline)
+# )
 # Full benchmark (uncomment to run all tests):
-#PLUNIT_TESTS=("_")
+PLUNIT_TESTS=("_")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
