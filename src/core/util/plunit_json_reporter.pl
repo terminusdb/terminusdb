@@ -29,7 +29,7 @@ run_tests_json(Spec) :-
     catch(
         setup_call_cleanup(
             set_stream(TmpStream, alias(user_error)),
-            run_tests(Spec),
+            ignore(run_tests(Spec)),  % ignore/1 makes it always succeed
             (   flush_output(TmpStream),
                 close(TmpStream),
                 set_stream(OldErr, alias(user_error))
@@ -90,10 +90,19 @@ parse_test_output(Output, Tests, Suites, Passes, Failures, TestObjects, PassObje
         TestObjects = [],
         PassObjects = [],
         FailObjects = []
+    ;   % Try multiline format first (separate lines for passes and failures)
+        parse_test_output_multiline(Lines, Passes, Failures)
+    ->  Suites = 1,
+        Tests is Passes + Failures,
+        length(PassList, Passes),
+        maplist(create_pass_object, PassList, PassObjects),
+        length(FailList, Failures),
+        maplist(create_fail_object, FailList, FailObjects),
+        append(PassObjects, FailObjects, TestObjects)
     ;   member(Line, Lines),
         (sub_string(Line, _, _, _, "tests passed") ; sub_string(Line, _, _, _, "test passed")),
         parse_summary_line(Line, Tests, Passes, Failures)
-    ->  % Found summary line
+    ->  % Found single-line summary
         Suites = 1,
         % Create placeholder test objects (we don't have individual test details)
         length(PassList, Passes),
@@ -146,6 +155,26 @@ parse_summary_line(Line, Tests, Passes, Failures) :-
         Passes = Tests,
         Failures = 0
     ).
+
+% Helper to parse multi-line format where passes and failures are on separate lines
+parse_test_output_multiline(Lines, Passes, Failures) :-
+    % Find "% N test(s) passed"
+    member(PassLine, Lines),
+    sub_string(PassLine, _, _, _, "tests passed"),
+    split_string(PassLine, " ", " ", PassParts),
+    nth0(1, PassParts, PassStr),
+    atom_number(PassStr, Passes),
+    % Find "% M test(s) failed"
+    (   member(FailLine, Lines),
+        sub_string(FailLine, _, _, _, "test"),
+        sub_string(FailLine, _, _, _, "failed"),
+        split_string(FailLine, " ", " ", FailParts),
+        nth0(1, FailParts, FailStr),
+        atom_number(FailStr, Failures)
+    ->  true
+    ;   Failures = 0
+    ),
+    !.
 
 create_pass_object(_, _{title: "test", fullTitle: "test", duration: 0, currentRetry: 0, speed: fast, err: _{}, state: passed}).
 create_fail_object(_, _{title: "test", fullTitle: "test", duration: 0, currentRetry: 0, err: _{message: "Test failed", stack: ""}, state: failed}).

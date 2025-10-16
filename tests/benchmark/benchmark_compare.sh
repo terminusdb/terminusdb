@@ -6,29 +6,25 @@
 
 set -e
 
-cd "$(dirname "$0")/../.."
-
 # ============================================================================
 # CONFIGURATION - Edit these to select which test suites to run
 # ============================================================================
 
 # Mocha test files to benchmark (just filenames, not paths)
-# Options:
-# 1. "auto" - Discovers all .js test files (recommended)
-# 2. Specific list - Only run these tests: MOCHA_TESTS=("graphql.js" "woql-noauth.js")
-# 3. Empty - Skip Mocha tests: MOCHA_TESTS=()
-
-#MOCHA_TESTS=("auto")  # Auto-discover all test files in tests/test/
-MOCHA_TESTS=("woql-noauth.js")  # Minimal test
+# VERIFIED to exist in both branches - focus on document/WOQL/numeric operations
+MOCHA_TESTS=(
+    "info_ok.js"                 # Quick sanity check
+)
+# Full benchmark (uncomment to run all tests):
+#MOCHA_TESTS=($(cd tests/test && ls *.js))
 
 # PL-Unit test suites to benchmark
-# Options:
-# 1. "auto" - Auto-discover all test units (finds ~123 suites)
-# 2. Curated list - Only stable tests: PLUNIT_TESTS=("typecast" "json" ...)
-# 3. Empty - Skip PL-Unit tests: PLUNIT_TESTS=()
-
-#PLUNIT_TESTS=("auto")  # Auto-discover all test units
-PLUNIT_TESTS=("typecast")  # Minimal test
+# VERIFIED test suites - focus on numeric/document/JSON operations
+PLUNIT_TESTS=(
+    "typecast"                   # Type conversion (decimals, rationals)
+)
+# Full benchmark (uncomment to run all tests):
+#PLUNIT_TESTS=("_")
 
 # Test timeout in milliseconds
 TIMEOUT=30000
@@ -37,12 +33,33 @@ TIMEOUT=30000
 # Command Line Arguments
 # ============================================================================
 
-if [ "$#" -lt 3 ]; then
-    echo "Usage: $0 <branch1> <branch2> <num_runs>"
+# Check for --allow-dirty flag (can be anywhere in arguments)
+ALLOW_DIRTY=""
+for arg in "$@"; do
+    if [ "$arg" = "--allow-dirty" ]; then
+        ALLOW_DIRTY="--allow-dirty"
+    fi
+done
+
+# Filter out --allow-dirty from positional arguments
+ARGS=()
+for arg in "$@"; do
+    if [ "$arg" != "--allow-dirty" ]; then
+        ARGS+=("$arg")
+    fi
+done
+
+if [ "${#ARGS[@]}" -lt 3 ]; then
+    echo "Usage: $0 [--allow-dirty] <branch1> <branch2> <num_runs>"
     echo ""
     echo "Examples:"
     echo "  $0 main feature/new-index 10"
     echo "  $0 v1.0 v1.1 5"
+    echo "  $0 --allow-dirty main develop 5    # Skip git clean check"
+    echo "  $0 main develop 5 --allow-dirty    # Flag can be anywhere"
+    echo ""
+    echo "Options:"
+    echo "  --allow-dirty    Skip check for uncommitted changes (for development)"
     echo ""
     echo "Configuration:"
     echo "  Edit MOCHA_TESTS and PLUNIT_TESTS arrays in this script"
@@ -50,198 +67,55 @@ if [ "$#" -lt 3 ]; then
     exit 1
 fi
 
-BRANCH1="$1"
-BRANCH2="$2"
-NUM_RUNS="$3"
+BRANCH1="${ARGS[0]}"
+BRANCH2="${ARGS[1]}"
+NUM_RUNS="${ARGS[2]}"
 
-
+cd "$(dirname "$0")/../.."
 REPO_ROOT=$(pwd)
 
-# Save the original branch to restore at the end
-ORIGINAL_BRANCH=$(git branch --show-current)
-if [ -z "$ORIGINAL_BRANCH" ]; then
-    # In detached HEAD state, save the commit hash
-    ORIGINAL_BRANCH=$(git rev-parse HEAD)
-fi
-
-# ============================================================================
-# Pre-flight checks: Validate branch switching before running tests
-# ============================================================================
-
-echo "==================================================================="
-echo "PRE-FLIGHT CHECKS"
-echo "==================================================================="
-echo ""
-
-# Check for uncommitted changes
-echo "Checking for uncommitted changes..."
-if ! git diff-index --quiet HEAD -- 2>/dev/null; then
-    echo "❌ ERROR: You have uncommitted changes in your working directory."
-    echo ""
-    echo "Git status:"
-    git status --short
-    echo ""
-    echo "Options:"
-    echo "  1. Commit your changes:    git commit -am 'Your message'"
-    echo "  2. Stash your changes:     git stash"
-    echo "  3. Discard your changes:   git reset --hard"
-    echo ""
-    exit 1
-fi
-echo "✓ No uncommitted changes"
-
-# Check if branches exist
-echo ""
-echo "Validating branches..."
-if ! git rev-parse --verify "$BRANCH1" >/dev/null 2>&1; then
-    echo "❌ ERROR: Branch '$BRANCH1' does not exist"
-    echo ""
-    echo "Available branches:"
-    git branch -a | head -20
-    exit 1
-fi
-echo "✓ Branch '$BRANCH1' exists"
-
-if ! git rev-parse --verify "$BRANCH2" >/dev/null 2>&1; then
-    echo "❌ ERROR: Branch '$BRANCH2' does not exist"
-    echo ""
-    echo "Available branches:"
-    git branch -a | head -20
-    exit 1
-fi
-echo "✓ Branch '$BRANCH2' exists"
-
-# Test branch switching
-echo ""
-echo "Testing branch switching (dry run)..."
-
-# Try switching to branch1
-echo -n "  Switching to $BRANCH1... "
-if ! git checkout "$BRANCH1" 2>&1 | grep -q "Switched to\|Already on"; then
-    echo "❌ FAILED"
-    echo ""
-    echo "Cannot switch to branch '$BRANCH1'."
-    echo "This may be due to conflicts or other git issues."
-    git checkout "$ORIGINAL_BRANCH" 2>/dev/null
-    exit 1
-fi
-echo "✓"
-
-# Try switching to branch2
-echo -n "  Switching to $BRANCH2... "
-if ! git checkout "$BRANCH2" 2>&1 | grep -q "Switched to\|Already on"; then
-    echo "❌ FAILED"
-    echo ""
-    echo "Cannot switch to branch '$BRANCH2'."
-    git checkout "$ORIGINAL_BRANCH" 2>/dev/null
-    exit 1
-fi
-echo "✓"
-
-# Return to original branch
-echo -n "  Returning to $ORIGINAL_BRANCH... "
-if ! git checkout "$ORIGINAL_BRANCH" 2>&1 | grep -q "Switched to\|Already on"; then
-    echo "❌ FAILED"
-    echo ""
-    echo "Cannot return to original branch."
-    exit 1
-fi
-echo "✓"
-
-echo ""
-echo "✅ All pre-flight checks passed!"
-echo ""
-
-# ============================================================================
-# Auto-discover test suites if requested
-# ============================================================================
-
-discover_plunit_suites() {
-    echo "Discovering PL-Unit test suites..." >&2
-    
-    # Verify we're in the repo root
-    if [ ! -f "src/interactive.pl" ]; then
-        echo "  ⚠ Warning: src/interactive.pl not found, using fallback list" >&2
-        echo "typecast json json_read_term json_datatype arithmetic_document employee_documents"
-        return
+# Check for uncommitted changes before starting (unless --allow-dirty)
+if [ "$ALLOW_DIRTY" != "--allow-dirty" ]; then
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        echo "❌ ERROR: You have uncommitted changes."
+        echo ""
+        echo "Git status:"
+        git status --short
+        echo ""
+        echo "Please commit or stash your changes before running the benchmark:"
+        echo "  git commit -am 'Your message'"
+        echo "  OR"
+        echo "  git stash"
+        echo "  OR"
+        echo "  bash $0 $BRANCH1 $BRANCH2 $NUM_RUNS --allow-dirty    # Skip this check"
+        echo ""
+        exit 1
     fi
-    
-    # Use current_test_unit/2 to query loaded test units
-    TEMP_SCRIPT=$(mktemp)
-    TEMP_OUTPUT=$(mktemp)
-    
-    # Get absolute path to interactive.pl
-    ABS_INTERACTIVE="$(pwd)/src/interactive.pl"
-    
-    cat > "$TEMP_SCRIPT" << EOF
-:- use_module(library(plunit)).
-:- consult('$ABS_INTERACTIVE').
-
-:- initialization(discover_and_exit).
-
-discover_and_exit :-
-    findall(Unit, current_test_unit(Unit, _), Units),
-    sort(Units, Sorted),
-    forall(member(U, Sorted), (atom_string(U, Str), writeln(Str))),
-    halt(0).
-
-discover_and_exit :-
-    halt(1).
-EOF
-    
-    # Run with a timeout of 30 seconds (macOS doesn't have timeout, use perl)
-    perl -e 'alarm shift; exec @ARGV' 30 swipl -f "$TEMP_SCRIPT" > "$TEMP_OUTPUT" 2>&1 || true
-    
-    # Extract only the test suite names (filter out errors/warnings)
-    DISCOVERED=$(grep -v '^%' "$TEMP_OUTPUT" | grep -v '^Warning:' | grep -v '^ERROR:' | grep -v '^Unknown message:' | grep -v '^\s*$' | tr '\n' ' ')
-    
-    rm -f "$TEMP_SCRIPT" "$TEMP_OUTPUT"
-    
-    if [ -z "$DISCOVERED" ]; then
-        echo "  ⚠ Warning: Could not discover test suites, using fallback list" >&2
-        echo "typecast json json_read_term json_datatype arithmetic_document employee_documents"
-    else
-        SUITE_COUNT=$(echo "$DISCOVERED" | wc -w | tr -d ' ')
-        echo "  Found $SUITE_COUNT test suites" >&2
-        echo "$DISCOVERED"
-    fi
-}
-
-# Expand "auto" for Mocha tests
-if [ "${#MOCHA_TESTS[@]}" -eq 1 ] && [ "${MOCHA_TESTS[0]}" = "auto" ]; then
-    echo "Discovering Mocha test files..."
-    if [ -d "tests/test" ]; then
-        MOCHA_TESTS=($(cd tests/test && ls *.js 2>/dev/null || echo ""))
-        echo "  Discovered ${#MOCHA_TESTS[@]} Mocha test files"
-    else
-        echo "  ⚠ Warning: tests/test directory not found"
-        MOCHA_TESTS=()
-    fi
+else
+    echo "⚠️  WARNING: Running with uncommitted changes (--allow-dirty)"
     echo ""
 fi
 
-# Expand "auto" to discovered suites
-if [ "${#PLUNIT_TESTS[@]}" -eq 1 ] && [ "${PLUNIT_TESTS[0]}" = "auto" ]; then
-    PLUNIT_TESTS=($(discover_plunit_suites))
-    echo "  Discovered ${#PLUNIT_TESTS[@]} PL-Unit test suites"
-    echo ""
-fi
-
-echo "================================================================="
+echo "═══════════════════════════════════════════════════════════"
 echo "BRANCH COMPARISON BENCHMARK"
-echo "================================================================="
+echo "═══════════════════════════════════════════════════════════"
 echo ""
 echo "Configuration:"
 echo "  Branch 1: $BRANCH1"
 echo "  Branch 2: $BRANCH2"
 echo "  Runs per branch: $NUM_RUNS"
-echo "  Mocha tests: ${#MOCHA_TESTS[@]} files"
-echo "  PL-Unit tests: ${#PLUNIT_TESTS[@]} suites"
+echo "  Mocha tests: ${MOCHA_TESTS[*]}"
+echo "  PL-Unit tests: ${PLUNIT_TESTS[*]}"
 echo ""
 
-# Create results directories
-mkdir -p tests/benchmark/benchmark_results/branch1
-mkdir -p tests/benchmark/benchmark_results/branch2
+# Clean and create results directories
+echo "Cleaning previous benchmark results..."
+rm -rf tests/benchmark_results/branch1
+rm -rf tests/benchmark_results/branch2
+mkdir -p tests/benchmark_results/branch1
+mkdir -p tests/benchmark_results/branch2
+echo "✓ Clean slate ready"
+echo ""
 
 # ============================================================================
 # Function to run benchmarks on a branch
@@ -252,9 +126,9 @@ run_branch_benchmarks() {
     local OUTPUT_DIR=$2
     local BRANCH_LABEL=$3
     
-    echo "================================================================="
+    echo "═══════════════════════════════════════════════════════════"
     echo "BENCHMARKING: $BRANCH"
-    echo "================================================================="
+    echo "═══════════════════════════════════════════════════════════"
     echo ""
     
     # Checkout branch (only if not already on it)
@@ -277,13 +151,21 @@ run_branch_benchmarks() {
         git checkout "$BRANCH" 2>&1 | grep -v "Already on"
     fi
     
-    # Build
+    # Build (try 'make dev' first, fallback to 'make' for older branches)
     echo "Building..."
-    make dev > /dev/null 2>&1
+    if make -n dev > /dev/null 2>&1; then
+        make dev > /dev/null 2>&1
+    else
+        make > /dev/null 2>&1
+    fi
     
-    # Restart test server
+    # Restart test server (handle both old and new script names)
     echo "Restarting test server..."
-    ./tests/terminusdb-test-server.sh restart > /dev/null 2>&1
+    if [ -f "./tests/terminusdb-test-server.sh" ]; then
+        ./tests/terminusdb-test-server.sh restart > /dev/null 2>&1
+    elif [ -f "./tests/terminusdb.sh" ]; then
+        ./tests/terminusdb.sh restart > /dev/null 2>&1
+    fi
     sleep 3
     
     echo ""
@@ -292,12 +174,8 @@ run_branch_benchmarks() {
     echo "Running PL-Unit tests ($NUM_RUNS runs)..."
     echo "───────────────────────────────────────────────────────────"
     
-    PLUNIT_TOTAL=${#PLUNIT_TESTS[@]}
-    PLUNIT_COUNT=0
-    
     for TEST_SUITE in "${PLUNIT_TESTS[@]}"; do
-        PLUNIT_COUNT=$((PLUNIT_COUNT + 1))
-        echo "  Suite: $TEST_SUITE ($PLUNIT_COUNT/$PLUNIT_TOTAL)"
+        echo "  Suite: $TEST_SUITE"
         
         for RUN in $(seq 1 $NUM_RUNS); do
             echo -n "    Run $RUN/$NUM_RUNS... "
@@ -308,7 +186,8 @@ run_branch_benchmarks() {
                     2>&1 > "$OUTPUT_DIR/plunit_all_run_${RUN}_raw.txt"
             else
                 # Run specific suite - interactive.pl loads plunit_json_reporter automatically
-                swipl -g "consult('src/interactive.pl'), run_tests_json('$TEST_SUITE')" -t halt \
+                # Quotes around $TEST_SUITE are required for Prolog
+                swipl -f src/interactive.pl -g "run_tests_json('$TEST_SUITE')" -t halt \
                     2>&1 > "$OUTPUT_DIR/plunit_${TEST_SUITE}_run_${RUN}_raw.txt"
             fi
             
@@ -355,20 +234,16 @@ except:
     echo "Running Mocha tests ($NUM_RUNS runs)..."
     echo "───────────────────────────────────────────────────────────"
     
-    MOCHA_TOTAL=${#MOCHA_TESTS[@]}
-    MOCHA_COUNT=0
-    
     for TEST_FILE in "${MOCHA_TESTS[@]}"; do
-        MOCHA_COUNT=$((MOCHA_COUNT + 1))
         TEST_NAME=$(basename "$TEST_FILE" .js)
         
         # Skip if test doesn't exist in this branch
         if [ ! -f "tests/test/$TEST_FILE" ]; then
-            echo "  Suite: $TEST_NAME ($MOCHA_COUNT/$MOCHA_TOTAL) (skipped - not in this branch)"
+            echo "  Suite: $TEST_NAME (skipped - not in this branch)"
             continue
         fi
         
-        echo "  Suite: $TEST_NAME ($MOCHA_COUNT/$MOCHA_TOTAL)"
+        echo "  Suite: $TEST_NAME"
         
         for RUN in $(seq 1 $NUM_RUNS); do
             echo -n "    Run $RUN/$NUM_RUNS... "
@@ -426,31 +301,27 @@ except Exception as e:
 # Run benchmarks on both branches
 # ============================================================================
 
-run_branch_benchmarks "$BRANCH1" "tests/benchmark/benchmark_results/branch1" "Branch 1"
-run_branch_benchmarks "$BRANCH2" "tests/benchmark/benchmark_results/branch2" "Branch 2"
+run_branch_benchmarks "$BRANCH1" "tests/benchmark_results/branch1" "Branch 1"
+run_branch_benchmarks "$BRANCH2" "tests/benchmark_results/branch2" "Branch 2"
 
 # ============================================================================
 # Generate comparison Excel
 # ============================================================================
 
-echo "================================================================="
+echo "═══════════════════════════════════════════════════════════"
 echo "GENERATING COMPARISON REPORT"
-echo "================================================================="
+echo "═══════════════════════════════════════════════════════════"
 echo ""
 
 python3 tests/benchmark/benchmark_compare_excel.py "$BRANCH1" "$BRANCH2" "$NUM_RUNS"
 
 echo ""
-echo "================================================================="
+echo "═══════════════════════════════════════════════════════════"
 echo "✅ BENCHMARK COMPARISON COMPLETE"
-echo "================================================================="
+echo "═══════════════════════════════════════════════════════════"
 echo ""
-echo "Results saved in: tests/benchmark/benchmark_results/"
+echo "Results saved in: tests/benchmark_results/"
 echo ""
 echo "To modify test selection, edit the MOCHA_TESTS and"
 echo "PLUNIT_TESTS arrays at the top of this script."
 echo ""
-
-# Restore the original branch
-echo "Restoring original branch: $ORIGINAL_BRANCH"
-git checkout "$ORIGINAL_BRANCH" > /dev/null 2>&1

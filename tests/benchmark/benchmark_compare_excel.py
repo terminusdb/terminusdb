@@ -10,8 +10,7 @@ import glob
 
 try:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Color
-    from openpyxl.formatting.rule import ColorScaleRule
+    from openpyxl.styles import Font, PatternFill, Alignment
 except ImportError:
     print("❌ openpyxl not installed. Install with: pip3 install openpyxl")
     sys.exit(1)
@@ -84,12 +83,17 @@ def calculate_suite_stats(runs):
 
 def sanitize_sheet_name(name):
     """Sanitize sheet name for Excel (max 31 chars, no invalid characters)"""
-    # Remove invalid characters: : \ / ? * [ ]
-    invalid_chars = [':', '\\', '/', '?', '*', '[', ']']
+    # Remove invalid characters for Excel sheet names: : \ / ? * [ ]
+    invalid_chars = [':', '\\', '/', '?', '*', '[', ']', '"', "'"]
     for char in invalid_chars:
-        name = name.replace(char, '_')
+        name = name.replace(char, '')
     # Trim to 31 characters (Excel limit)
-    return name[:31]
+    if len(name) > 31:
+        name = name[:31]
+    # Ensure name is not empty
+    if not name:
+        name = "sheet"
+    return name
 
 def create_test_sheet(wb, sheet_name, test_stats, num_runs):
     """Create a test details sheet"""
@@ -102,9 +106,8 @@ def create_test_sheet(wb, sheet_name, test_stats, num_runs):
         headers.append(f'Run {i}')
     headers.extend(['Avg', 'StdDev', 'Min', 'Max', 'Speed', 'Status'])
     
-    # Write headers with explicit column numbering for clarity
-    for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(1, col, header)
         cell.font = Font(bold=True)
         cell.fill = PatternFill(start_color='DDDDDD', end_color='DDDDDD', fill_type='solid')
     
@@ -245,23 +248,6 @@ def create_comparison_overview(wb, branch1_name, branch2_name, branch1_data, bra
         ws.column_dimensions[col].width = 10
     ws.column_dimensions['I'].width = 10
     ws.column_dimensions['J'].width = 15
-    
-    # Add heat mapping to Diff (%) column (column I)
-    # Green (negative %) = faster, Red (positive %) = slower
-    if row > 4:  # Only add if we have data
-        diff_range = f'I4:I{row-1}'
-        ws.conditional_formatting.add(
-            diff_range,
-            ColorScaleRule(
-                start_type='min',
-                start_color='63BE7B',  # Green (good - negative diff means faster)
-                mid_type='num',
-                mid_value=0,
-                mid_color='FFFFFF',    # White (neutral)
-                end_type='max',
-                end_color='F8696B'     # Red (bad - positive diff means slower)
-            )
-        )
 
 def main():
     if len(sys.argv) < 4:
@@ -272,29 +258,32 @@ def main():
     branch2_name = sys.argv[2]
     num_runs = int(sys.argv[3])
     
-    base_dir = Path(__file__).parent
+    # Results are in tests/benchmark_results/ (parent of benchmark dir)
+    base_dir = Path(__file__).parent.parent  # Go up to tests/
     branch1_dir = base_dir / 'benchmark_results' / 'branch1'
     branch2_dir = base_dir / 'benchmark_results' / 'branch2'
+    results_dir = base_dir / 'benchmark_results'
     
     print("Loading test results...")
     
-    # Discover all test suites from files, filtering out garbage names
-    def is_valid_suite_file(filename):
-        """Filter out garbage test suite names from broken auto-discovery"""
-        name = filename.stem  # filename without extension
-        # Skip files with garbage names
-        invalid_patterns = ['Could', 'Warning', 'Discovering', 'PL-Unit', 'available', 
-                           'discover', 'fallback', 'list_run', 'not_run', 'suites', 'test_run', 'using', 'all_b']
-        for pattern in invalid_patterns:
+    def is_valid_test_file(filepath):
+        """Filter out garbage test files from broken auto-discovery"""
+        name = filepath.stem  # filename without extension
+        # Skip garbage files from broken auto-discovery
+        garbage_patterns = [
+            'Could', 'Warning', 'Discovering', 'PL-Unit', 'available',
+            'discover', 'fallback', 'list', 'not_run', 'suites', 'test_run',
+            'using', 'all_run'
+        ]
+        for pattern in garbage_patterns:
             if pattern in name:
+                print(f"  Skipping garbage file: {filepath.name}")
                 return False
-        # Skip files with quotes or colons (invalid for Excel sheets)
-        if '"' in name or ':' in str(filename):
-            return False
         return True
     
-    branch1_files = [f for f in branch1_dir.glob('*_run_1.json') if is_valid_suite_file(f)]
-    branch2_files = [f for f in branch2_dir.glob('*_run_1.json') if is_valid_suite_file(f)]
+    # Discover all test suites from files, filtering garbage
+    branch1_files = [f for f in branch1_dir.glob('*_run_1.json') if is_valid_test_file(f)]
+    branch2_files = [f for f in branch2_dir.glob('*_run_1.json') if is_valid_test_file(f)]
     
     all_suites = set()
     for f in branch1_files:
@@ -303,14 +292,20 @@ def main():
         if len(parts) >= 3:
             test_type = parts[0]
             suite_name = '_'.join(parts[1:-2])  # Everything between type and "run_N"
-            all_suites.add((test_type, suite_name))
+            # Clean up quotes and other invalid characters
+            suite_name = suite_name.replace('"', '').replace("'", '').replace(':', '')
+            if suite_name:  # Only add if not empty after cleaning
+                all_suites.add((test_type, suite_name))
     
     for f in branch2_files:
         parts = f.stem.split('_')
         if len(parts) >= 3:
             test_type = parts[0]
             suite_name = '_'.join(parts[1:-2])
-            all_suites.add((test_type, suite_name))
+            # Clean up quotes and other invalid characters
+            suite_name = suite_name.replace('"', '').replace("'", '').replace(':', '')
+            if suite_name:  # Only add if not empty after cleaning
+                all_suites.add((test_type, suite_name))
     
     print(f"Found {len(all_suites)} test suites to compare")
     
@@ -353,7 +348,7 @@ def main():
     filename = f'benchmark_comparison_{branch1_name}_vs_{branch2_name}_{timestamp}.xlsx'
     # Sanitize filename
     filename = filename.replace('/', '_').replace(' ', '_')
-    filepath = base_dir / 'benchmark_results' / filename
+    filepath = results_dir / filename
     
     wb.save(filepath)
     
