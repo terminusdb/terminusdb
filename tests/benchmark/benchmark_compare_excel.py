@@ -278,9 +278,23 @@ def main():
     
     print("Loading test results...")
     
-    # Discover all test suites from files
-    branch1_files = list(branch1_dir.glob('*_run_1.json'))
-    branch2_files = list(branch2_dir.glob('*_run_1.json'))
+    # Discover all test suites from files, filtering out garbage names
+    def is_valid_suite_file(filename):
+        """Filter out garbage test suite names from broken auto-discovery"""
+        name = filename.stem  # filename without extension
+        # Skip files with garbage names
+        invalid_patterns = ['Could', 'Warning', 'Discovering', 'PL-Unit', 'available', 
+                           'discover', 'fallback', 'list_run', 'not_run', 'suites', 'test_run', 'using', 'all_b']
+        for pattern in invalid_patterns:
+            if pattern in name:
+                return False
+        # Skip files with quotes or colons (invalid for Excel sheets)
+        if '"' in name or ':' in str(filename):
+            return False
+        return True
+    
+    branch1_files = [f for f in branch1_dir.glob('*_run_1.json') if is_valid_suite_file(f)]
+    branch2_files = [f for f in branch2_dir.glob('*_run_1.json') if is_valid_suite_file(f)]
     
     all_suites = set()
     for f in branch1_files:
