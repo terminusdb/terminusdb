@@ -1362,8 +1362,17 @@ compile_wf(sum(X,Y),Sum) -->
     resolve(X,XE),
     resolve(Y,YE),
     {
-        marshall_args(sum_list(XE,YE), Goal),
-        Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
+        % Special handling for sum: flatten single-element sublists from group_by
+        Sum = (
+            % Validate that first argument is a list at runtime
+            do_or_die(
+                is_list(XE),
+                error(existence_error(matching_rule, sum(XE,YE)), _)
+            ),
+            maplist([In,Out]>>(is_list(In), In = [Single] -> literally(Single, Out) ; literally(In, Out)), XE, XE_Flat),
+            sum_list(XE_Flat, YE_Lit),
+            unliterally(YE_Lit, YE)
+        )
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
@@ -1630,6 +1639,16 @@ marshall_args(M_Pred,Goal) :-
     append([Pre,[M:Lit_Pred],Post], Term_List),
     xfy_list(',',Goal,Term_List).
 
+% is_numeric_type(+Type) is semidet.
+%
+% True if Type is a numeric XSD type (integer, decimal, float, double, or subtypes).
+is_numeric_type(Type) :-
+    (   Type = 'http://www.w3.org/2001/XMLSchema#float'
+    ;   Type = 'http://www.w3.org/2001/XMLSchema#double'
+    ;   basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#decimal')
+    ;   basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#integer')
+    ).
+
 literally(X, _X) :-
     var(X),
     !.
@@ -1659,6 +1678,16 @@ literally([H|T],[HL|TL]) :-
     !,
     literally(H,HL),
     literally(T,TL).
+literally(X, N) :-
+    % Handle plain strings that represent numbers (from database literals)
+    string(X),
+    catch(number_string(N, X), _, fail),
+    !.
+literally(X, N) :-
+    % Handle atoms that represent numbers
+    atom(X),
+    catch(atom_number(X, N), _, fail),
+    !.
 literally(X, X) :-
     (   atom(X)
     ->  true
@@ -2907,6 +2936,20 @@ test(group_by_simple_template, [
        'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': ['@schema:p','@schema:p'],
        'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
+
+test(literally_converts_decimal_strings, []) :-
+    % Test that literally/2 converts string-encoded decimal values to numbers
+    literally("2.0"^^'http://www.w3.org/2001/XMLSchema#decimal', Num1),
+    assertion(number(Num1)),
+    assertion(Num1 =:= 2.0),
+    
+    literally("4.0"^^'http://www.w3.org/2001/XMLSchema#decimal', Num2),
+    assertion(number(Num2)),
+    assertion(Num2 =:= 4.0),
+    
+    literally("-2"^^'http://www.w3.org/2001/XMLSchema#integer', Num3),
+    assertion(number(Num3)),
+    assertion(Num3 =:= -2).
 
 test(select, [setup(setup_temp_store(State)),
               cleanup(teardown_temp_store(State))
