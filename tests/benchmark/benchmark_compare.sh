@@ -327,6 +327,11 @@ except:
     echo "───────────────────────────────────────────────────────────"
     
     for TEST_FILE in "${MOCHA_TESTS[@]}"; do
+        # Ensure .js extension (support both "db-auth" and "db-auth.js")
+        if [[ "$TEST_FILE" != *.js ]]; then
+            TEST_FILE="${TEST_FILE}.js"
+        fi
+        
         TEST_NAME=$(basename "$TEST_FILE" .js)
         
         # Skip if test doesn't exist in this branch
