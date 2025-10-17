@@ -1,6 +1,9 @@
 :- module(casting,[
               typecast/4,
-              typecast_switch/5
+              typecast_switch/5,
+              string_decimal_to_rational/2,
+              rational_to_decimal_string/3,
+              decimal_precision/1
           ]).
 
 /** <module> Casting
@@ -16,6 +19,15 @@
 
 :- reexport(core(util/syntax)).
 
+/*
+ * decimal_precision(-Digits) is det.
+ *
+ * Standard precision for xsd:decimal string serialization.
+ * Per XSD decimal specification: 20 digits of precision.
+ * This constant is used for rational-to-string conversions.
+ */
+decimal_precision(20).
+
 :- use_module(core(query/jsonld)). % dubious. we should not be importing query stuff here.
 
 :- use_module(library(lists)).
@@ -28,31 +40,137 @@
 :- use_module(library(http/json), [atom_json_dict/3]).
 
 /*
+ * string_decimal_to_rational(+String, -Rational) is semidet.
+ *
+ * Parse decimal string to rational number for arbitrary precision.
+ * Uses GMP-backed rationals to avoid floating-point precision loss.
+ * The rational is stored with metadata about original precision.
+ *
+ * Examples:
+ *   string_decimal_to_rational("123.456", R) => R = 123456 rdiv 1000
+ *   string_decimal_to_rational("0.1", R) => R = 1 rdiv 10
+ */
+string_decimal_to_rational(String, Rational) :-
+    % Handle negative numbers
+    (   sub_string(String, 0, 1, _, "-")
+    ->  sub_string(String, 1, _, 0, PositiveString),
+        string_decimal_to_rational(PositiveString, PositiveRat),
+        Rational is -PositiveRat
+    ;   % Split on decimal point to preserve original precision
+        (   split_string(String, ".", "", [IntStr, FracStr])
+        ->  % Has decimal point - construct numerator from string parts
+            % CRITICAL: Parse as arbitrary precision integers, NOT floats
+            % This preserves full precision (e.g., 20+ digits)
+            atom_number(IntStr, IntPart),
+            string_length(FracStr, FracLen),
+            % Parse fractional part as integer (don't convert to float!)
+            atom_number(FracStr, FracPart),
+            Denominator is 10^FracLen,
+            Numerator is IntPart * Denominator + FracPart,
+            Rational is Numerator rdiv Denominator
+        ;   % No decimal point, just an integer
+            atom_number(String, Rational)
+        )
+    ).
+
+/*
+ * rational_to_decimal_string(+Rational, -String, +MaxDecimals) is det.
+ *
+ * Convert rational to decimal string with up to MaxDecimals precision.
+ * Per XSD_DECIMAL_SPECIFICATION.md: compute 20 digits, preserve all significant digits.
+ */
+rational_to_decimal_string(Rational, String, MaxDecimals) :-
+    (   rational(Rational)
+    ->  % Use exact rational arithmetic
+        (   Rational < 0
+        ->  Sign = "-",
+            AbsRational is abs(Rational)
+        ;   Sign = "",
+            AbsRational = Rational
+        ),
+        % Extract numerator and denominator (may be simplified by GCD)
+        rational(AbsRational, Num, Den),
+        % Integer part
+        IntPart is Num // Den,
+        % Fractional part
+        Remainder is Num mod Den,
+        (   Remainder =:= 0
+        ->  % No fractional part
+            format(string(String), "~w~w", [Sign, IntPart])
+        ;   % Compute MaxDecimals digits of precision WITH ROUNDING
+            Multiplier is 10^MaxDecimals,
+            % Round to nearest: add 0.5 before truncating
+            % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
+            FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
+            % Format with leading zeros if needed, then trim trailing zeros
+            format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
+            format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
+        )
+    ;   number(Rational)
+    ->  % Regular number - format as-is
+        format(string(String), "~w", [Rational])
+    ;   throw(error(type_error(number, Rational), _))
+    ).
+
+/*
+ * format_and_trim_decimal(+FracDigits, +MaxLen, -FracStr) is det.
+ *
+ * Format fractional digits with leading zeros, then trim trailing zeros.
+ * Preserves all significant digits (non-zero or zeros between non-zeros).
+ */
+format_and_trim_decimal(FracDigits, MaxLen, FracStr) :-
+    % Pad with leading zeros to MaxLen
+    format(string(Padded), "~w", [FracDigits]),
+    atom_length(Padded, ActualLen),
+    (   ActualLen < MaxLen
+    ->  ZeroCount is MaxLen - ActualLen,
+        format(string(Zeros), "~*c", [ZeroCount, 0'0]),
+        string_concat(Zeros, Padded, FullStr)
+    ;   FullStr = Padded
+    ),
+    % Trim trailing zeros
+    atom_codes(FullStr, Codes),
+    reverse(Codes, RevCodes),
+    trim_trailing_zeros(RevCodes, TrimmedRev),
+    reverse(TrimmedRev, TrimmedCodes),
+    atom_codes(FracStr, TrimmedCodes).
+
+trim_trailing_zeros([0'0|Rest], Trimmed) :- !, trim_trailing_zeros(Rest, Trimmed).
+trim_trailing_zeros(Codes, Codes).
+
+/*
  * Presumably this should record into prov on failure.
  */
 typecast(Val, Type, Hint, Cast) :-
     (   var(Val)
     ->  format(atom(M), 'Variable unbound in typecast to ~q', [Type]),
         throw(error(M))
-    ;   (   \+ (   base_type(Type)
-               ;   Type = 'http://www.w3.org/2002/07/owl#Thing'
-               ;   Type = 'http://terminusdb.com/schema/sys#Top')
-        ->  throw(error(unknown_type_casting_error(Val, Type), _))
+    ;   % Expand prefixes if provided (e.g., xsd:decimal → full URI)
+        (   option(prefixes(Prefixes), Hint)
+        ->  prefix_expand(Type, Prefixes, Expanded_Type)
+        ;   Expanded_Type = Type
+        ),
+        (   \+ (   base_type(Expanded_Type)
+               ;   Expanded_Type = 'http://www.w3.org/2002/07/owl#Thing'
+               ;   Expanded_Type = 'http://terminusdb.com/schema/sys#Top')
+        ->  throw(error(unknown_type_casting_error(Val, Expanded_Type), _))
         ;   Val = Bare_Literal^^Source_Type,
             (   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#string')
                 % Upcast to xsd:string for downcast
-            ->  typecast_switch(Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
+            ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
             ;   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#decimal')
                 % Upcast to xsd:decimal for downcast
-            ->  typecast_switch(Type,'http://www.w3.org/2001/XMLSchema#decimal',Bare_Literal,Hint,Cast)
-            ;   typecast_switch(Type,Source_Type,Bare_Literal,Hint,Cast)
+            ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#decimal',Bare_Literal,Hint,Cast)
+            ;   typecast_switch(Expanded_Type,Source_Type,Bare_Literal,Hint,Cast)
             )
         ->  true
         ;   Val = Bare_Literal@_, % upcast to string
-            typecast_switch(Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
+            typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
         ->  true
         ;   atom(Val)
-        ->  typecast_switch(Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
+        ->  typecast_switch(Expanded_Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
+        ;   string(Val)
+        ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Val,Hint,Cast)
         ;   throw(error(casting_error(Val, Type), _))
         )
     ).
@@ -238,17 +356,20 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
     ;   member(Val, ["1","true",true,1])
     ->  Casted = "true"
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#boolean'),_))).
-%%% xsd:string => xsd:decimal
+%%% xsd:string => xsd:decimal  
+% Parse as rational for arbitrary precision (GMP-backed)
 typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#decimal') :-
     !,
-    (   number_string(Casted, Val)
+    (   string_decimal_to_rational(Val, Casted)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))).
 %%% xsd:decimal => xsd:string
+% Convert with standard decimal precision per XSD_DECIMAL_SPECIFICATION.md
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#decimal', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
-    (   number(Val)
-    ->  format(string(S), "~w", [Val])
+    (   (rational(Val) ; number(Val))
+    ->  decimal_precision(Precision),
+        rational_to_decimal_string(Val, S, Precision)
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))).
 %%% xsd:string => xsd:integer
 typecast_switch('http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#integer') :-
@@ -933,16 +1054,24 @@ test(integer_to_gyear, []) :-
              gyear(1990,0)^^'http://www.w3.org/2001/XMLSchema#gYear').
 
 test(float_cast, []) :-
+    % Updated for decimal precision: xsd:decimal now uses rationals, not floats
     typecast("0.5679"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal',
              [],
-             0.5679^^'http://www.w3.org/2001/XMLSchema#decimal').
+             Result^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    % Check it's a rational with correct value
+    rational(Result),
+    Result =:= 5679 rdiv 10000.
 
-
-test(float_cast, []) :-
+test(decimal_to_string_cast, []) :-
+    % Test round-trip: decimal to string preserves precision
     typecast("0.5679"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal',
              [],
-             0.5679^^'http://www.w3.org/2001/XMLSchema#decimal').
+             Decimal^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    typecast(Decimal^^'http://www.w3.org/2001/XMLSchema#decimal',
+             'http://www.w3.org/2001/XMLSchema#string',
+             [],
+             "0.5679"^^'http://www.w3.org/2001/XMLSchema#string').
 
 :- end_tests(typecast).

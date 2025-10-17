@@ -17,6 +17,7 @@ describe('document-get', function () {
     order: 'xsd:integer',
   }
 
+  // Test data with string values for insertion (will be returned as numbers per JSON serialization rules)
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3' }
   const plato = { '@type': 'Person', name: 'Plato', age: '80', order: '2' }
   const socrates = { '@type': 'Person', name: 'Socrates', age: '71', order: '1' }
@@ -24,7 +25,14 @@ describe('document-get', function () {
   const popper = { '@type': 'Person', name: 'Karl Popper', age: '92', order: '5' }
   const gödel = { '@type': 'Person', name: 'Kurt Gödel', age: '71', order: '5' }
 
+  // Expected values when retrieved (decimals and integers returned as JSON numbers)
+  const aristotleExpected = { '@type': 'Person', name: 'Aristotle', age: 61, order: 3 }
+  const platoExpected = { '@type': 'Person', name: 'Plato', age: 80, order: 2 }
+  const socratesExpected = { '@type': 'Person', name: 'Socrates', age: 71, order: 1 }
+  const gödelExpected = { '@type': 'Person', name: 'Kurt Gödel', age: 71, order: 5 }
+
   const instances = [aristotle, plato, socrates]
+  const instancesExpected = [aristotleExpected, platoExpected, socratesExpected]
 
   function personId (person, prefix) {
     return encodeURI((prefix || '') + person['@type'] + '/' + person.name)
@@ -157,7 +165,7 @@ describe('document-get', function () {
           objects.push(data.value)
         })
         r.on('end', () => {
-          expectInstances(objects, instances)
+          expectInstances(objects, instancesExpected)
         })
       })
     }
@@ -171,7 +179,7 @@ describe('document-get', function () {
     for (const option of options) {
       it(JSON.stringify(option), async function () {
         const r = await document.get(agent, option)
-        expectInstances(r.body, instances)
+        expectInstances(r.body, instancesExpected)
       })
     }
   })
@@ -203,12 +211,12 @@ describe('document-get', function () {
           option.body.as_list = true
         }
         const r = await document.get(agent, option)
-        expectInstances(r.body, instances, params)
+        expectInstances(r.body, instancesExpected, params)
       })
     }
   })
 
-  describe('returns expected for prefixed=false', function () {
+  describe('returns expected for prefixed=false ("prefixed" is not supported yet)', function () {
     const options = [
       { query: { graph_type: 'schema', as_list: true, prefixed: false } },
       { body: { graph_type: 'schema', as_list: true, prefixed: false } },
@@ -239,7 +247,7 @@ describe('document-get', function () {
             expectSchema(r.body, { prefixed: false })
             break
           case 'instance':
-            expectInstances(r.body, instances, { prefixed: false })
+            expectInstances(r.body, instancesExpected, { prefixed: false })
             break
           default:
             throw new Error(`Unexpected 'graphType': ${graphType}`)
@@ -294,7 +302,7 @@ describe('document-get', function () {
     for (const option of options) {
       it(JSON.stringify(option), async function () {
         const r = await document.get(agent, option)
-        expectInstances(r.body, instances)
+        expectInstances(r.body, instancesExpected)
       })
     }
   })
@@ -309,7 +317,7 @@ describe('document-get', function () {
       it(JSON.stringify(query), async function () {
         Object.assign(query, { '@type': 'Person' })
         const r = await document.get(agent, { body: { query } })
-        expectInstances([r.body], instances.slice(index, index + 1))
+        expectInstances([r.body], instancesExpected.slice(index, index + 1))
       })
     }
   })
@@ -369,7 +377,7 @@ describe('document-get', function () {
 
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
-      expectInstances(r.body, [socrates, gödel])
+      expectInstances(r.body, [socratesExpected, gödelExpected])
     })
   })
 
@@ -418,7 +426,7 @@ describe('document-get', function () {
 
     it(JSON.stringify(q2), async function () {
       const r = await document.get(agent, { body: { query: q2, as_list: true } })
-      expectInstances(r.body, [socrates, gödel])
+      expectInstances(r.body, [socratesExpected, gödelExpected])
     })
   })
 })

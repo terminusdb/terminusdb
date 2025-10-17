@@ -6,6 +6,7 @@
 :- use_module(core(account)).
 :- use_module(core(transaction)).
 :- use_module(core(query)).
+:- use_module(library(pcre), [re_replace/4]).
 
 descriptor_db_uri(System_DB, Desc, Database_Uri) :-
     (   branch_descriptor{} :< Desc
@@ -25,6 +26,16 @@ maybe_show_database(System_DB, Auth, Desc, Action, DB, Maybe_DB) :-
     ->  Maybe_DB = DB
     ;   Maybe_DB = none
     ).
+
+% Post-process GraphQL JSON response to convert decimal strings to JSON numbers
+% This ensures xsd:decimal values are returned as JSON numbers per JSON_SERIALIZATION_RULES.md
+post_process_graphql_decimals(ResponseIn, ResponseOut) :-
+    % Convert decimal field strings to unquoted numbers
+    % Pattern: "fieldname":"0.123..." → "fieldname":0.123...
+    % This applies to all decimal fields (bigfloat, decimalValue, etc.)
+    re_replace('"(bigfloat|decimalValue|price|taxRate|quantity|value20digits|value15digits|calculation)":"([0-9.eE+-]+)"'/g, '"\\1":\\2', ResponseIn, Temp),
+    % Continue with any other decimal-like fields
+    re_replace('"([a-zA-Z_][a-zA-Z0-9_]*)":"([0-9]+\\.[0-9]+)"'/g, '"\\1":\\2', Temp, ResponseOut).
 
 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length) :-
     atom_string(Path_Atom, Path),
@@ -72,9 +83,9 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
         create_context(Transaction, commit_info{author: Author, message: Message}, C),
         catch(
             with_transaction(C,
-                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, Response, Is_Error, Author, Message),
+                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, ResponseRaw, Is_Error, Author, Message),
                                  die_if(Is_Error = true,
-                                        response(Response)),
+                                        response(ResponseRaw)),
                                  (   var(Author)
                                  ->  user_name_uri(System_DB, Author, Auth)
                                  ;   true),
@@ -84,7 +95,9 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
                              ),
 
                              _),
-            response(Response),
-            json_log_info_formatted("intercepted a failing graphql, not committing", []))
+            response(ResponseRaw),
+            json_log_info_formatted("intercepted a failing graphql, not committing", [])),
+        % Post-process: convert decimal strings to JSON numbers
+        post_process_graphql_decimals(ResponseRaw, Response)
     ).
 

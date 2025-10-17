@@ -43,6 +43,10 @@ string(X) =>
     global_prefix_expand(xsd:string, T),
     R = X^^T.
 json_type_rdf_type(X,R),
+float(X) =>
+    global_prefix_expand(xsd:double, T),
+    R = X^^T.
+json_type_rdf_type(X,R),
 number(X) =>
     global_prefix_expand(xsd:decimal, T),
     R = X^^T.

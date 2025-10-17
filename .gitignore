@@ -1,4 +1,10 @@
 # TerminusDB gitignore defaults
+tus
+.DS_Store
+tests/.terminusdb-test-storage
+tests/benchmark/benchmark_results
+tests/benchmark_results
+node_modules
 *~
 \#*\#
 .\#*
@@ -21,3 +27,7 @@ terminusdb
 terminusdb-enterprise
 .env
 docs/terminusdb.1.ronn
+tests/.terminusdb-test-storage
+admin?2fdb-*.bundle
+.terminusdb-test.log
+.terminusdb-test.pid

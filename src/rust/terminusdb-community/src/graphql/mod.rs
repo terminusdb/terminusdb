@@ -8,12 +8,23 @@ use terminusdb_store_prolog::terminus_store::Layer;
 
 use lazy_static::lazy_static;
 use lru::LruCache;
+use regex::Regex;
 use std::{collections::HashMap, io::Read};
 use std::{
     num::NonZeroUsize,
     sync::{Arc, Mutex},
 };
 use swipl::prelude::*;
+
+/// Post-processes GraphQL JSON to convert high-precision number markers to JSON numbers.
+/// Replaces "__TERMINUS_NUM__<digits>" markers with raw JSON numbers to achieve 20-digit precision.
+fn post_process_graphql_numbers(json_str: String) -> String {
+    lazy_static! {
+        static ref NUM_MARKER_RE: Regex = Regex::new(r#""__TERMINUS_NUM__([0-9.eE+-]+)""#).unwrap();
+    }
+    // Replace quoted marker strings with unquoted numbers
+    NUM_MARKER_RE.replace_all(&json_str, "$1").to_string()
+}
 
 mod filter;
 pub mod frame;
@@ -209,7 +220,29 @@ predicates! {
                                                 .unwrap_or(false);
                                             is_error_term.unify(errored)?;
                                             match serde_json::to_string(&response){
-                                                Ok(r) => response_term.unify(r),
+                                                Ok(r) => {
+                                                    use std::io::Write;
+                                                    use chrono::Utc;
+                                                    
+                                                    // Debug: Log to single file with timestamp per entry
+                                                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/graphql_debug.log") {
+                                                        let timestamp = Utc::now().to_rfc3339();
+                                                        let _ = writeln!(f, "\n=== {} BEFORE POST-PROCESS ===", timestamp);
+                                                        let _ = writeln!(f, "{}", &r[..1000.min(r.len())]);
+                                                        let _ = writeln!(f, "Contains marker: {}", r.contains("__TERMINUS_NUM__"));
+                                                    }
+                                                    
+                                                    // Post-process to convert high-precision markers to JSON numbers
+                                                    let processed = post_process_graphql_numbers(r.clone());
+                                                    
+                                                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/graphql_debug.log") {
+                                                        let _ = writeln!(f, "=== AFTER POST-PROCESS ===");
+                                                        let _ = writeln!(f, "{}", &processed[..1000.min(processed.len())]);
+                                                        let _ = writeln!(f, "Changed: {}", processed != r);
+                                                    }
+                                                    
+                                                    response_term.unify(processed)
+                                                },
                                                 Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
                                             }
                                         })
@@ -240,7 +273,11 @@ predicates! {
         let system_data = SystemData { user, system };
         let response = request.execute_sync(&root_node, &system_data);
         match serde_json::to_string(&response){
-            Ok(r) => response_term.unify(r),
+            Ok(r) => {
+                // Post-process to convert high-precision markers to JSON numbers
+                let processed = post_process_graphql_numbers(r);
+                response_term.unify(processed)
+            },
             Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }

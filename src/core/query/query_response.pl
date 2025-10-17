@@ -20,6 +20,10 @@
 
 :- use_module(library(http/json)).
 
+% Load document/json module to register json:json_write_hook/4 for rational precision
+% This must be loaded AFTER library(http/json) to ensure the multifile hook is registered
+:- use_module(core(document/json)).
+
 run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
     Options = _{ optimize: true, all_witnesses: false, streaming: false},
     run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options).

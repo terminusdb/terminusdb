@@ -1,5 +1,6 @@
 const exec = require('util').promisify(require('child_process').exec)
 const fs = require('fs/promises')
+const path = require('path')
 
 const { Params } = require('../params.js')
 const util = require('../util.js')
@@ -15,7 +16,15 @@ class Cli {
     this.params = params
     this.filesToDelete = []
     const dbPath = `./storage/${util.randomString()}`
-    this.envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
+    const testDir = path.join(__dirname, '..', '..')
+    const rootDir = path.join(testDir, '..')
+    const terminusdbExec = path.join(rootDir, 'terminusdb')
+    this.terminusdbSh = path.join(testDir, 'terminusdb.sh')
+    this.envs = {
+      ...process.env,
+      TERMINUSDB_SERVER_DB_PATH: dbPath,
+      TERMINUSDB_EXEC_PATH: terminusdbExec,
+    }
   }
 
   async deleteFiles () {
@@ -29,7 +38,7 @@ class Cli {
   }
 
   builder () {
-    return new CommandBuilder(this.filesToDelete, this.params)
+    return new CommandBuilder(this.filesToDelete, this.params, this.terminusdbSh, this.envs)
   }
 
   get store () {
@@ -54,12 +63,13 @@ class Cli {
 }
 
 class CommandBuilder {
-  constructor (filesToDelete, params) {
+  constructor (filesToDelete, params, terminusdbSh, envs) {
     params = new Params({ ...params })
     this.debugCommand = params.boolean('debugCommand', false)
     this.debugOutput = params.boolean('debugOutput', false)
-    this.command = ['./terminusdb.sh']
+    this.command = [terminusdbSh]
     this.filesToDelete = filesToDelete
+    this.envs = envs
   }
 
   arg (a) {

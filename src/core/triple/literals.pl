@@ -33,10 +33,106 @@
 :- reexport(core(util/syntax)).
 :- use_module(library(pcre)).
 :- use_module(library(apply)).
+:- use_module(library(lists), [reverse/2]).
 :- use_module(library(sort)).
 :- use_module(core(util)).
-:- use_module(core(triple/casting), [typecast/4]).
+:- use_module(core(triple/casting), [typecast/4, decimal_precision/1]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
+
+/*
+ * Decimal precision utilities (inlined to avoid circular dependency with casting.pl)
+ */
+
+/*
+ * string_decimal_to_rational(+String, -Rational) is semidet.
+ *
+ * Parse decimal string to rational number for arbitrary precision.
+ * Uses GMP-backed rationals to avoid floating-point precision loss.
+ */
+string_decimal_to_rational(String, Rational) :-
+    % Handle negative numbers
+    (   sub_string(String, 0, 1, _, "-")
+    ->  sub_string(String, 1, _, 0, PositiveString),
+        string_decimal_to_rational(PositiveString, PositiveRat),
+        Rational is -PositiveRat
+    ;   % Split on decimal point to preserve original precision
+        (   split_string(String, ".", "", [IntStr, FracStr])
+        ->  % Has decimal point - track the precision
+            number_string(IntPart, IntStr),
+            string_length(FracStr, FracLen),
+            number_string(FracPart, FracStr),
+            Denominator is 10^FracLen,
+            Numerator is IntPart * Denominator + FracPart,
+            Rational is Numerator rdiv Denominator
+        ;   % No decimal point, just an integer
+            number_string(Rational, String)
+        )
+    ).
+
+/*
+ * rational_to_decimal_string(+Rational, -String, +MaxDecimals) is det.
+ *
+ * Convert rational to decimal string with up to MaxDecimals precision.
+ * Per XSD_DECIMAL_SPECIFICATION.md: compute 20 digits, preserve all significant digits.
+ */
+rational_to_decimal_string(Rational, String, MaxDecimals) :-
+    (   rational(Rational)
+    ->  % Use exact rational arithmetic
+        (   Rational < 0
+        ->  Sign = "-",
+            AbsRational is abs(Rational)
+        ;   Sign = "",
+            AbsRational = Rational
+        ),
+        % Extract numerator and denominator (may be simplified by GCD)
+        rational(AbsRational, Num, Den),
+        % Integer part
+        IntPart is Num // Den,
+        % Fractional part
+        Remainder is Num mod Den,
+        (   Remainder =:= 0
+        ->  % No fractional part
+            format(string(String), "~w~w", [Sign, IntPart])
+        ;   % Compute MaxDecimals digits of precision WITH ROUNDING
+            Multiplier is 10^MaxDecimals,
+            % Round to nearest: add 0.5 before truncating
+            % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
+            FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
+            % Format with leading zeros if needed, then trim trailing zeros
+            format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
+            format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
+        )
+    ;   number(Rational)
+    ->  % Regular number - format as-is
+        format(string(String), "~w", [Rational])
+    ;   throw(error(type_error(number, Rational), _))
+    ).
+
+/*
+ * format_and_trim_decimal(+FracDigits, +MaxLen, -FracStr) is det.
+ *
+ * Format fractional digits with leading zeros, then trim trailing zeros.
+ * Preserves all significant digits (non-zero or zeros between non-zeros).
+ */
+format_and_trim_decimal(FracDigits, MaxLen, FracStr) :-
+    % Pad with leading zeros to MaxLen
+    format(string(Padded), "~w", [FracDigits]),
+    atom_length(Padded, ActualLen),
+    (   ActualLen < MaxLen
+    ->  ZeroCount is MaxLen - ActualLen,
+        format(string(Zeros), "~*c", [ZeroCount, 0'0]),
+        string_concat(Zeros, Padded, FullStr)
+    ;   FullStr = Padded
+    ),
+    % Trim trailing zeros
+    atom_codes(FullStr, Codes),
+    reverse(Codes, RevCodes),
+    trim_trailing_zeros(RevCodes, TrimmedRev),
+    reverse(TrimmedRev, TrimmedCodes),
+    atom_codes(FracStr, TrimmedCodes).
+
+trim_trailing_zeros([0'0|Rest], Trimmed) :- !, trim_trailing_zeros(Rest, Trimmed).
+trim_trailing_zeros(Codes, Codes).
 
 /*
  * date_time_string(-Date_Time,+String) is det.
@@ -367,17 +463,91 @@ normalise_triple(rdf(X,P,Y),rdf(XF,P,YF)) :-
 
 ground_object_storage(String@Lang, lang(String,Lang)) :-
     !.
+% CRITICAL: Handle xsd:decimal type - convert to rational then to string with full precision
+% This clause must come BEFORE the generic rational clause to handle floats typed as decimals
+ground_object_storage(Val^^Type, value(StorageVal,Type)) :-
+    (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ;   Type = 'xsd:decimal'),
+    !,
+    % Convert to rational if needed (handles both floats and existing rationals)
+    (   rational(Val)
+    ->  Rational = Val
+    ;   float(Val)
+    ->  Rational is rationalize(Val)
+    ;   number(Val)
+    ->  Rational is rationalize(Val)
+    ;   Rational = Val  % Already in correct form
+    ),
+    % Now convert rational to decimal string with full precision
+    rational(Rational, Num, Den),
+    (   Den =:= 1
+    ->  StorageVal = Num  % Keep integers as integers
+    ;   decimal_precision(Precision),
+        rational_to_decimal_string(Rational, StorageVal, Precision)
+    ).
+% DO NOT convert xsd:decimal rationals - they need to stay as rationals for precision
+ground_object_storage(Val^^Type, value(StorageVal,Type)) :-
+    rational(Val),
+    % Exclude xsd:decimal - it has its own storage handling to preserve precision
+    \+ (Type = 'http://www.w3.org/2001/XMLSchema#decimal'),
+    \+ (Type = 'xsd:decimal'),
+    !,
+    % If rational is an integer (denominator=1), keep as integer
+    % For xsd:float/double: convert to float
+    rational(Val, Num, Den),
+    (   Den =:= 1
+    ->  StorageVal = Num  % Keep integers as integers
+    ;   % xsd:float/double: convert to float
+        StorageVal is float(Val)
+    ).
 ground_object_storage(Val^^Type, value(Val,Type)) :-
     !.
 ground_object_storage(O, node(O)).
 
 /*
+{{ ... }}
  * We can only make a concrete referrent if all parts are bound.
  */
 nonvar_literal(String@Lang, lang(String,Lang)) :-
     nonvar(Lang),
     nonvar(String),
     !.
+% CRITICAL: Handle xsd:decimal type - convert to rational then to string with full precision
+% This clause must come BEFORE the generic rational clause to handle floats typed as decimals
+nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
+    nonvar(Term),
+    (   Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ;   Type = 'xsd:decimal'),
+    !,
+    % Convert to rational if needed (handles both floats and existing rationals)
+    (   rational(Term)
+    ->  Rational = Term
+    ;   float(Term)
+    ->  Rational is rationalize(Term)
+    ;   number(Term)
+    ->  Rational is rationalize(Term)
+    ;   Rational = Term  % Already in correct form
+    ),
+    % Now convert rational to decimal string with full precision
+    rational(Rational, Num, Den),
+    (   Den =:= 1
+    ->  StorageTerm = Num  % Keep integers as integers
+    ;   decimal_precision(Precision),
+        rational_to_decimal_string(Rational, StorageTerm, Precision)
+    ).
+% CRITICAL: Convert rationals for Rust storage (for non-decimal types)
+nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
+    nonvar(Term),
+    rational(Term),
+    !,
+    % If rational is an integer (denominator=1), keep as integer
+    % For xsd:float/double: convert to float
+    rational(Term, Num, Den),
+    (   Den =:= 1
+    ->  StorageTerm = Num  % Keep integers as integers
+    ;   % xsd:float/double: convert to float
+        StorageTerm is float(Term)
+    ).
 nonvar_literal(Term^^Type, value(Term,Type)) :-
     nonvar(Type),
     nonvar(Term),
@@ -421,10 +591,19 @@ storage_value(X,V) :-
 storage_literal(X1^^T1,X3^^T2) :-
     storage_atom(T1,T2),
     storage_value(X1,X2),
-    (   is_number_type(T2)
+    % Exclude xsd:decimal from number_string conversion
+    % xsd:decimal needs to stay as string to preserve 20-digit precision
+    % It will be handled specially by storage_object which converts to rational
+    (   is_number_type(T2),
+        \+ (T2 = 'http://www.w3.org/2001/XMLSchema#decimal'),
+        \+ (T2 = 'xsd:decimal')
     ->  (   string(X2)
         ->  number_string(X3,X2)
         ;   X2 = X3)
+    % xsd:decimal: pass through as string (will be converted by storage_object)
+    ;   (   T2 = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   T2 = 'xsd:decimal')
+    ->  X2 = X3
     % NOTE: This is considered special because the anyURI condition
     % used to be less strict.
     % There may be data in the DB that does not meet the current
@@ -439,6 +618,21 @@ storage_literal(X1@L1,X2@L2) :-
     storage_value(X1,X2).
 
 storage_object(lang(S,L),S@L).
+% Special handling for xsd:decimal - convert strings/floats from storage back to rationals
+storage_object(value(Val,T),Rational^^T) :-
+    (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
+    ;   T = 'xsd:decimal'),
+    !,
+    % xsd:decimal can be stored as string (new way with full precision) or float (legacy)
+    (   string(Val)
+    ->  % New way: stored as decimal string with full 20-digit precision
+        string_decimal_to_rational(Val, Rational)
+    ;   number(Val)
+    ->  % Legacy way: stored as float, convert via string (loses precision)
+        format(string(S), "~w", [Val]),
+        string_decimal_to_rational(S, Rational)
+    ;   throw(error(type_error(decimal_value, Val), _))
+    ).
 storage_object(value(S,T),S^^T).
 storage_object(id(Id),id(Id)).
 storage_object(node(S),O) :-

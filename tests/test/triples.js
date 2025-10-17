@@ -117,6 +117,13 @@ describe('triples', function () {
   })
 
   it('responds with proper status code on anonymous request', async function () {
-    this.skip()
+    const anonAgent = new Agent() // No .auth() = anonymous
+    const response = await anonAgent.get(api.path.triplesSystem())
+    // Anonymous requests return 403 Forbidden
+    expect(response.status).to.equal(403)
+    expect(response.body).to.deep.include({
+      'api:status': 'api:forbidden',
+    })
+    expect(response.body.auth).to.include('anonymous')
   })
 })

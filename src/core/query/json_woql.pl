@@ -68,8 +68,22 @@ json_value_cast_type(V,Type,WOQL) :-
         atom_string(V,String)
     ->  typecast(String^^xsd:string,
                  TE, [], Val)
-    ;   number(V)
-    ->  typecast(V^^xsd:decimal,
+    ;   integer(V)
+    ->  % Keep integers as integers for operations like limit/offset
+        typecast(V^^xsd:decimal,
+                 TE, [], Val)
+    ;   rational(V),
+        \+ integer(V)
+    ->  % Handle rationals BEFORE floats - preserve exact precision for WOQL arithmetic
+        % These are clean rationals from arithmetic operations (rdiv, +, -, *)
+        % They maintain full precision without float approximation
+        Val = V^^TE
+    ;   float(V)
+    ->  % Convert floats using natural representation
+        % With value_string_as(atom) in routes.pl, numeric strings are preserved as atoms
+        % So floats here are actual JSON numbers that already have limited precision
+        format(string(Num_String), '~w', [V]),
+        typecast(Num_String^^xsd:string,
                  TE, [], Val)
     ;   member(V,[false,true])
     ->  typecast(V^^xsd:boolean,
@@ -92,16 +106,39 @@ json_data_to_woql_ast(JSON,WOQL) :-
 json_data_to_woql_ast(JSON,WOQL) :-
     atom(JSON),
     !,
-    member(JSON,[true,false]),
-    WOQL = JSON^^xsd:boolean.
+    (   member(JSON,[true,false])
+    ->  WOQL = JSON^^xsd:boolean
+    ;   % Atom is not a boolean - convert to string to preserve precision
+        % This handles numeric strings preserved by value_string_as(atom) in routes.pl
+        atom_string(JSON, String),
+        WOQL = String^^xsd:string
+    ).
 json_data_to_woql_ast(JSON,WOQL) :-
     string(JSON),
     !,
     WOQL = JSON^^xsd:string.
 json_data_to_woql_ast(JSON,WOQL) :-
-    number(JSON),
+    integer(JSON),
     !,
+    % Keep integers as integers for operations like limit/offset
     WOQL = JSON^^xsd:decimal.
+json_data_to_woql_ast(JSON,WOQL) :-
+    float(JSON),
+    !,
+    % Convert floats using natural representation
+    % With value_string_as(atom) in routes.pl, high-precision strings are preserved as atoms
+    % Floats here are actual JSON numbers with inherent precision limits
+    format(string(Num_String), '~w', [JSON]),
+    typecast(Num_String^^xsd:string,
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [], WOQL).
+json_data_to_woql_ast(JSON,WOQL) :-
+    rational(JSON),
+    \+ integer(JSON),
+    !,
+    % Handle rationals - preserve exact precision from arithmetic operations
+    % These rationals come from WOQL arithmetic (rdiv, +, -, *) and maintain full precision
+    WOQL = JSON^^'http://www.w3.org/2001/XMLSchema#decimal'.
 
 json_list_value_to_woql_ast(JSON,WOQL,Path) :-
     json_list_value_to_woql_ast(JSON,0,WOQL,Path).
@@ -1394,7 +1431,10 @@ test(decimal_bare, []) :-
                             "data": 1.3}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=1.3^^xsd:decimal).
+    % Decimals from JSON floats are converted via string to clean rationals: 1.3 = 13/10
+    WOQL = (v('X')=Rational^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    rational(Rational),
+    Rational =:= 13 rdiv 10.
 
 test(decimal_typed, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1405,7 +1445,10 @@ test(decimal_typed, []) :-
                                       "@type": "xsd:decimal"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+    % Decimals are now rationals: 1.3 = 13/10
+    WOQL = (v('X')=Rational^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    rational(Rational),
+    Rational =:= 13 rdiv 10.
 
 test(decimal, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -1416,7 +1459,10 @@ test(decimal, []) :-
                                       "@type": "xsd:decimal"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=1.3^^'http://www.w3.org/2001/XMLSchema#decimal').
+    % Decimals are now rationals: "1.3" parses to 13/10
+    WOQL = (v('X')=Rational^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    rational(Rational),
+    Rational =:= 13 rdiv 10.
 
 test(date, []) :-
     JSON_Atom= '{"@type": "Equals",

@@ -11,6 +11,11 @@ TARGET=terminusdb
 default:
 	@$(MAKE) -f distribution/Makefile.prolog
 
+# Build the development binary (macOS-friendly, no library stripping).
+.PHONY: dev
+dev:
+	@$(MAKE) -f distribution/Makefile.prolog $@
+
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
 .PHONY: docker
@@ -55,6 +60,11 @@ rust:
 .PHONY: test
 test:
 	@$(MAKE) -f distribution/Makefile.prolog $@
+
+# Run the unit tests in node.
+.PHONY: test-int
+test-int:
+	sh -c "cd tests ; npx mocha"
 
 # Quick command for interactive
 .PHONY: i

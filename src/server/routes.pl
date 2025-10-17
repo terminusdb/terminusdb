@@ -748,10 +748,10 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
     api_report_errors(
         woql,
         Request,
-        (   (   http_read_json_semidet(json_dict(JSON), Request)
+        (   (   http_read_woql_json_semidet(json_dict(JSON), Request)
             ->  Files = []
             ;   http_read_multipart_semidet(Request, Form_Data),
-                http_read_multipart_json_semidet(Form_Data, JSON, Other_Form_Data),
+                http_read_multipart_woql_json_semidet(Form_Data, JSON, Other_Form_Data),
                 collect_multipart_files(Other_Form_Data, Files)
             ->  true
             ;   throw(error(missing_content_type("application/json or multipart/form-data"), _))
@@ -3664,12 +3664,25 @@ get_param(Key,Request,Value) :-
 /*
  * read_json_dict(+Atom, -JSON) is det.
  * read_json_dict(+Text, -JSON) is det.
+ * read_json_dict(+Atom, -JSON, +Options) is det.
  *
  * - Read JSON from an atom or text and catch syntax errors.
  */
 read_json_dict(AtomOrText, JSON) :-
+    read_json_dict(AtomOrText, JSON, []).
+
+read_json_dict(AtomOrText, JSON, Options) :-
     catch(
-        atom_json_dict(AtomOrText, JSON, [default_tag(json)]),
+        atom_json_dict(AtomOrText, JSON, [default_tag(json)|Options]),
+        error(syntax_error(json(_Kind)), _),
+        throw(error(malformed_json_payload(AtomOrText), _))
+    ).
+
+% WOQL-specific JSON reader that preserves numeric string precision
+% Use value_string_as(atom) to prevent "0.01234567890123456789" → 0.012345678901234568
+read_woql_json_dict(AtomOrText, JSON) :-
+    catch(
+        atom_json_dict(AtomOrText, JSON, [default_tag(json), value_string_as(atom)]),
         error(syntax_error(json(_Kind)), _),
         throw(error(malformed_json_payload(AtomOrText), _))
     ).
@@ -3701,6 +3714,12 @@ http_read_utf8(json_dict(JSON), Request) :-
     memberchk(content_length(_Len), Request),
     read_json_dict(String, JSON).
 
+% WOQL-specific UTF-8 reader that preserves numeric string precision
+http_read_woql_utf8(json_dict(JSON), Request) :-
+    http_read_utf8(string(String), Request),
+    memberchk(content_length(_Len), Request),
+    read_woql_json_dict(String, JSON).
+
 /*
  * http_read_json_required(-Output, +Request) is det.
  *
@@ -3722,6 +3741,12 @@ http_read_json_semidet(Output, Request) :-
     json_content_type(Request),
     memberchk(content_length(_Len), Request),
     http_read_utf8(Output, Request).
+
+% WOQL-specific JSON reader that preserves numeric string precision
+http_read_woql_json_semidet(Output, Request) :-
+    json_content_type(Request),
+    memberchk(content_length(_Len), Request),
+    http_read_woql_utf8(Output, Request).
 
 /*
  * http_read_multipart_semidet(+Request, -Form_Data) is semidet.
@@ -3749,6 +3774,17 @@ http_read_multipart_json_semidet([mime(Mime_Header, Value, _) | Form_Data], JSON
     read_json_dict(Value, JSON).
 http_read_multipart_json_semidet([Part | Form_Data], JSON, [Part | Form_Data_Out]) :-
     http_read_multipart_json_semidet(Form_Data, JSON, Form_Data_Out).
+
+% WOQL-specific multipart JSON reader that preserves numeric string precision
+http_read_multipart_woql_json_semidet([], _JSON, []) :-
+    !,
+    fail.
+http_read_multipart_woql_json_semidet([mime(Mime_Header, Value, _) | Form_Data], JSON, Form_Data) :-
+    json_mime_type(Mime_Header),
+    !,
+    read_woql_json_dict(Value, JSON).
+http_read_multipart_woql_json_semidet([Part | Form_Data], JSON, [Part | Form_Data_Out]) :-
+    http_read_multipart_woql_json_semidet(Form_Data, JSON, Form_Data_Out).
 
 /*
  * add_payload_to_request(Request:request,JSON:json) is det.
