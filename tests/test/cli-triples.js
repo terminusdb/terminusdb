@@ -43,8 +43,7 @@ describe('cli-triples', function () {
   })
 
   it('load trig file', async function () {
-    const testDir = path.join(__dirname, '..')
-    const trigFile = path.join(testDir, 'served', 'MW00KG01635.trig')
+    const trigFile = util.servedPath('MW00KG01635.trig')
     const db = util.randomString()
     await execEnv(`${util.terminusdbScript()} db create admin/${db} --schema=false`)
     const r = await execEnv(`${util.terminusdbScript()} triples load admin/${db}/local/branch/main/instance ${trigFile}`)
