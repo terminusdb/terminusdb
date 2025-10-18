@@ -1,8 +1,9 @@
 # JSON Serialization Rules for Numeric Types
 
-**Version:** 2.0  
-**Date:** 2025-10-12  
-**Status:** Normative Specification
+**Version:** 3.1  
+**Date:** 2025-10-18  
+**Status:** Normative Specification  
+**Last Updated:** 2025-10-18 (Added String Serialization section)
 
 ---
 
@@ -12,6 +13,74 @@ This document specifies the canonical JSON serialization behavior for all XSD nu
 - **Document retrieval** (`get_document/3`)
 - **GraphQL query results**
 - **WOQL query bindings**
+- **Document insertion and updates**
+
+**Key Principle**: All numeric inputs are canonicalized at the input parsing stage according to their XSD type, ensuring consistent representation and mathematical equivalence across all interfaces.
+
+---
+
+## Numeric Type Hierarchy
+
+TerminusDB strictly follows the XML Schema Datatypes hierarchy:
+
+```
+Numeric Types
+├── xsd:decimal (Rational arithmetic, arbitrary precision)
+│   ├── xsd:integer (GMP arbitrary precision)
+│   │   ├── xsd:nonNegativeInteger
+│   │   │   ├── xsd:positiveInteger
+│   │   │   └── xsd:unsignedLong
+│   │   ├── xsd:nonPositiveInteger
+│   │   │   └── xsd:negativeInteger
+│   │   └── xsd:long
+│   │       └── xsd:int
+│   │           └── xsd:short
+│   │               └── xsd:byte
+│
+└── IEEE 754 Floating Point (NOT derived from xsd:decimal)
+    ├── xsd:float (32-bit)
+    └── xsd:double (64-bit)
+```
+
+**Important**: `xsd:float` and `xsd:double` are **not** subtypes of `xsd:decimal`. They use different internal representations and arithmetic semantics.
+
+---
+
+## Canonicalization Rules
+
+### Input Canonicalization
+
+All numeric inputs are canonicalized according to their target XSD type:
+
+| Input Examples | Target Type | Canonical Internal | Canonical Output |
+|----------------|-------------|-------------------|------------------|
+| `2`, `2.0`, `2.00` | `xsd:decimal` | `2 rdiv 1` | `2` |
+| `.1`, `0.1`, `0.10` | `xsd:decimal` | `1 rdiv 10` | `0.1` |
+| `2`, `2.0` | `xsd:integer` | `2` (GMP int) | `2` |
+| `2`, `2.0` | `xsd:float` | `2.0` (IEEE 754) | `2.0` |
+| `2`, `2.0` | `xsd:double` | `2.0` (IEEE 754) | `2.0` |
+
+### Canonical Form Rules
+
+**xsd:decimal (whole numbers)**:
+- **Canonical**: No decimal point (e.g., `2`)
+- **Non-canonical**: With decimal point (e.g., `2.0`, `2.00`)
+- **Rule**: Inputs `2`, `2.0`, `2.00` all canonicalize to `2`
+
+**xsd:decimal (fractional)**:
+- **Canonical**: Leading zero before decimal point (e.g., `0.1`)
+- **Non-canonical**: No leading zero (e.g., `.1`)
+- **Rule**: Input `.1` canonicalizes to `0.1`
+
+**xsd:integer**:
+- **Canonical**: No decimal point (e.g., `2`)
+- **Non-canonical**: With decimal point (e.g., `2.0`)
+- **Rule**: Input `2.0` must represent a whole number, stored as `2`
+
+**xsd:float / xsd:double**:
+- **Canonical**: Decimal point preserved (e.g., `2.0`)
+- **Note**: Whole numbers maintain `.0` for float/double types
+- **Rule**: Input `2` becomes `2.0` for float/double types
 
 ---
 
@@ -296,7 +365,268 @@ const price = doc.price;  // 19.99 as number
 // For financial calculations, use decimal.js or similar
 import Decimal from 'decimal.js';
 const price = new Decimal(doc.price);  // Arbitrary precision
+
+const data = JSON.parse(jsonString, (key, value) => {
+  if (typeof value === 'number') {
+    return new Decimal(value);
+  }
+  return value;
+});
 ```
+
+---
+
+## String Serialization (Typecast to xsd:string)
+
+### Overview
+
+When numeric types are typecast to `xsd:string`, the serialization follows type-specific rules to maintain type semantics and ensure proper round-tripping.
+
+### Typecast Rules by Type
+
+**File**: `src/core/triple/casting.pl` (lines 406-442)
+
+| Source Type | String Format | Example | Rule |
+|-------------|--------------|---------|------|
+| `xsd:double` | Always with decimal point | `33` → `"33.0"` | Whole numbers get `.0` suffix |
+| `xsd:float` | Always with decimal point | `33` → `"33.0"` | Whole numbers get `.0` suffix |
+| `xsd:decimal` | Minimal form | `33` → `"33"` | No trailing zeros |
+| `xsd:integer` | No decimal point | `33` → `"33"` | Integer form |
+
+### Implementation Details
+
+#### xsd:double and xsd:float to String
+
+```prolog
+%%% xsd:double => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 
+                'http://www.w3.org/2001/XMLSchema#double', 
+                Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    (   number(Val)
+    ->  % CRITICAL: Ensure doubles always have decimal point
+        % xsd:double values must have .0 for whole numbers (IEEE 754 semantics)
+        (   (float(Val) ; integer(Val)),
+            Val =:= floor(Val)
+        ->  % Whole number: add .0 suffix
+            Truncated is truncate(Val),
+            format(string(S), "~w.0", [Truncated])
+        ;   % Fractional float: use normal representation
+            format(string(S), "~w", [Val])
+        )
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#double'),_))).
+```
+
+**Rationale**: 
+- IEEE 754 types represent **real numbers**, not integers
+- String representation should reflect floating-point nature
+- Enables type distinction in string form (`"33.0"` vs `"33"`)
+- Ensures proper round-tripping: `xsd:double → string → xsd:double`
+
+### Numeric JSON Input Handling
+
+**Problem Fixed** (2025-10-18): Numeric JSON values for xsd:double/float types were losing decimal notation.
+
+#### Before Fix
+
+```json
+{
+  "@type": "Typecast",
+  "value": { "@type": "xsd:double", "@value": 33 },
+  "type": "xsd:string",
+  "result": { "variable": "Result" }
+}
+```
+
+**Output (Bug)**: `{ "Result": "33" }` ❌ Missing decimal point
+
+#### After Fix
+
+**Output (Fixed)**: `{ "Result": "33.0" }` ✅ Correct
+
+### JSON Input Processing
+
+**Files Modified**:
+1. `src/core/query/json_woql.pl` - WOQL JSON parsing
+2. `src/core/document/json.pl` - Document JSON parsing
+
+```prolog
+% json_woql.pl - Convert integer JSON values to floats for xsd:double/float
+json_value_cast_type(V,Type,WOQL) :-
+    ...
+    (   integer(V)
+    ->  % CRITICAL FIX: Convert integers to floats for xsd:double/xsd:float types
+        (   is_float_or_double_type(TE)
+        ->  FloatV is float(V),
+            typecast(FloatV^^TE, TE, [], Val)
+        ;   typecast(V^^xsd:decimal, TE, [], Val)
+        )
+    ...
+```
+
+```prolog
+% json.pl - Convert integer JSON values to floats in document parsing
+json_type_to_value_type(J, T, X, T) :-
+    number(J),
+    !,
+    % CRITICAL FIX: Convert integers to floats for xsd:double/xsd:float types
+    (   integer(J),
+        (   T = 'http://www.w3.org/2001/XMLSchema#float'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#double'
+        ;   T = 'xsd:float'
+        ;   T = 'xsd:double'
+        )
+    ->  X is float(J)  % Convert integer to float
+    ;   X = J          % Keep as-is for other numeric types
+    ).
+```
+
+### Examples
+
+#### Example 1: Typecast with String Values
+
+```json
+{
+  "@type": "And",
+  "and": [
+    {
+      "@type": "Equals",
+      "left": { "variable": "Val" },
+      "right": { "data": { "@type": "xsd:double", "@value": "33" } }
+    },
+    {
+      "@type": "Typecast",
+      "value": { "variable": "Val" },
+      "type": { "node": "xsd:string" },
+      "result": { "variable": "AsString" }
+    }
+  ]
+}
+```
+
+**Result**:
+```json
+{
+  "bindings": [{
+    "AsString": { "@type": "xsd:string", "@value": "33.0" },
+    "Val": { "@type": "xsd:double", "@value": 33 }
+  }]
+}
+```
+
+#### Example 2: Typecast with Numeric Values
+
+```json
+{
+  "@type": "And",
+  "and": [
+    {
+      "@type": "Equals",
+      "left": { "variable": "Val" },
+      "right": { "data": { "@type": "xsd:double", "@value": 33 } }
+    },
+    {
+      "@type": "Typecast",
+      "value": { "variable": "Val" },
+      "type": { "node": "xsd:string" },
+      "result": { "variable": "AsString" }
+    }
+  ]
+}
+```
+
+**Result** (After Fix):
+```json
+{
+  "bindings": [{
+    "AsString": { "@type": "xsd:string", "@value": "33.0" },
+    "Val": { "@type": "xsd:double", "@value": 33 }
+  }]
+}
+```
+
+#### Example 3: All Numeric Types
+
+```json
+// Input: { "@value": 33 } for each type
+// String typecast results:
+
+{ "@type": "xsd:double",  "@value": 33 } → "33.0"  // With decimal
+{ "@type": "xsd:float",   "@value": 33 } → "33.0"  // With decimal  
+{ "@type": "xsd:decimal", "@value": 33 } → "33"    // Minimal form
+{ "@type": "xsd:integer", "@value": 33 } → "33"    // Integer form
+```
+
+#### Example 4: Fractional Values
+
+```json
+// Fractional values work correctly for all types
+{ "@type": "xsd:double",  "@value": 33.5 } → "33.5"
+{ "@type": "xsd:float",   "@value": 33.5 } → "33.5"
+{ "@type": "xsd:decimal", "@value": 33.5 } → "33.5"
+```
+
+### Testing
+
+**Test File**: `tests/test/float-double-string-representation.js`
+
+**Coverage**: 8 comprehensive tests
+- ✅ xsd:double with string value → `"33.0"`
+- ✅ xsd:float with string value → `"33.0"`
+- ✅ xsd:double with numeric value → `"33.0"` (Fixed 2025-10-18)
+- ✅ xsd:float with numeric value → `"33.0"` (Fixed 2025-10-18)
+- ✅ xsd:decimal → `"33"` (minimal form)
+- ✅ xsd:integer → `"33"` (no decimal)
+- ✅ Fractional values preserved
+- ✅ Edge cases (zero values)
+
+```bash
+# Run string serialization tests
+npx mocha tests/test/float-double-string-representation.js --timeout 10000
+```
+
+### Design Rationale
+
+**Why Always Add `.0` for xsd:double/xsd:float?**
+
+1. **Type Semantics**: Float/double represent **real numbers**, not integers
+2. **IEEE 754 Compliance**: String form should reflect floating-point nature  
+3. **Type Distinction**: `"33.0"` clearly indicates float vs `"33"` for integer
+4. **Round-Tripping**: Ensures `xsd:double → string → xsd:double` preserves type
+5. **XSD Specification**: Lexical representation distinguishes float from integer types
+
+**Why Not for xsd:decimal?**
+
+- `xsd:decimal` can represent both integers and non-integers
+- Both `"33"` and `"33.0"` are valid canonical forms
+- Minimal form `"33"` is more concise and equally correct
+- Decimal arithmetic uses rationals, not floats
+
+### Client Usage
+
+#### JavaScript
+
+```javascript
+// Query with numeric value (works correctly after fix)
+const query = {
+  "@type": "Typecast",
+  value: { "@type": "xsd:double", "@value": 33 },  // Numeric value
+  type: "xsd:string",
+  result: { variable: "Result" }
+};
+
+// Result: { "Result": "33.0" } ✅
+```
+
+#### GraphQL
+
+```graphql
+query {
+  typecast(value: 33.0, type: "xsd:double", asType: "xsd:string")
+}
+```
+
+**Result**: `"33.0"`
 
 ---
 
@@ -419,8 +749,12 @@ A: Trailing zeros after the decimal point may be normalized away per JSON specif
 ## Implementation Files
 
 - **Storage Layer**: `src/core/triple/literals.pl` (ground_object_storage, storage_object)
-- **JSON Serialization**: `src/core/document/json.pl` (json:json_write_hook/4)
+- **Type Casting**: `src/core/triple/casting.pl` (typecast_switch/5, decimal_precision/1)
+- **JSON Serialization**: `src/core/document/json.pl` (json:json_write_hook/4, json_type_to_value_type/4)
+- **WOQL JSON Parsing**: `src/core/query/json_woql.pl` (json_value_cast_type/3)
 - **WOQL Response**: `src/core/query/jsonld.pl` (term_jsonld/3)
 - **Arithmetic**: `src/core/query/woql_compile.pl` (compile_arith/3)
-- **Precision Constant**: `src/core/triple/casting.pl` (decimal_precision/1)
-- **Tests**: `src/core/query/decimal_precision_test.pl`, `tests/test/decimal-precision.js`
+- **Tests**: 
+  - `src/core/query/decimal_precision_test.pl` - Prolog precision tests
+  - `tests/test/decimal-precision.js` - JavaScript precision tests
+  - `tests/test/float-double-string-representation.js` - String serialization tests (8 tests)

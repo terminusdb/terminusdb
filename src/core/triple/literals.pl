@@ -55,17 +55,27 @@ string_decimal_to_rational(String, Rational) :-
     ->  sub_string(String, 1, _, 0, PositiveString),
         string_decimal_to_rational(PositiveString, PositiveRat),
         Rational is -PositiveRat
-    ;   % Split on decimal point to preserve original precision
-        (   split_string(String, ".", "", [IntStr, FracStr])
-        ->  % Has decimal point - track the precision
-            number_string(IntPart, IntStr),
-            string_length(FracStr, FracLen),
-            number_string(FracPart, FracStr),
-            Denominator is 10^FracLen,
-            Numerator is IntPart * Denominator + FracPart,
-            Rational is Numerator rdiv Denominator
-        ;   % No decimal point, just an integer
-            number_string(Rational, String)
+    ;   % Canonicalize: add leading zero if starts with decimal point
+        % ".1" -> "0.1" per XSD canonical form
+        (   sub_string(String, 0, 1, _, ".")
+        ->  string_concat("0", String, CanonicalString),
+            string_decimal_to_rational(CanonicalString, Rational)
+        ;   % Split on decimal point to preserve original precision
+            (   split_string(String, ".", "", [IntStr, FracStr])
+            ->  % Has decimal point - track the precision
+                (   IntStr = ""
+                ->  % Empty integer part means leading decimal point (already handled above)
+                    IntPart = 0
+                ;   number_string(IntPart, IntStr)
+                ),
+                string_length(FracStr, FracLen),
+                number_string(FracPart, FracStr),
+                Denominator is 10^FracLen,
+                Numerator is IntPart * Denominator + FracPart,
+                Rational is Numerator rdiv Denominator
+            ;   % No decimal point, just an integer
+                number_string(Rational, String)
+            )
         )
     ).
 
@@ -535,6 +545,26 @@ nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
     ;   decimal_precision(Precision),
         rational_to_decimal_string(Rational, StorageTerm, Precision)
     ).
+% CRITICAL: Handle xsd:double and xsd:float - canonicalize by converting to number
+% This fixes the bug where 33 and 33.0 are treated as different values
+nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
+    nonvar(Term),
+    (   Type = 'http://www.w3.org/2001/XMLSchema#double'
+    ;   Type = 'xsd:double'
+    ;   Type = 'http://www.w3.org/2001/XMLSchema#float'
+    ;   Type = 'xsd:float'),
+    !,
+    % Convert string to number for canonical representation
+    (   number(Term)
+    ->  NumericTerm = Term
+    ;   atom_number(Term, NumericTerm)
+    ->  true
+    ;   number_string(NumericTerm, Term)
+    ->  true
+    ;   NumericTerm = Term  % Keep as-is if not convertible
+    ),
+    % Convert to float for IEEE 754 representation
+    StorageTerm is float(NumericTerm).
 % CRITICAL: Convert rationals for Rust storage (for non-decimal types)
 nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
     nonvar(Term),

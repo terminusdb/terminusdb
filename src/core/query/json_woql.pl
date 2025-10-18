@@ -58,6 +58,17 @@ prefix_split(Node, Term) :-
         Term = Prefix_Atom:Suffix_Atom
     ;   atom_string(Term,Node)).
 
+/*
+ * is_float_or_double_type(+Type) is semidet.
+ *
+ * True if Type is xsd:float or xsd:double
+ */
+is_float_or_double_type(Type) :-
+    member(Type, ['http://www.w3.org/2001/XMLSchema#float',
+                  'http://www.w3.org/2001/XMLSchema#double',
+                  'xsd:float',
+                  'xsd:double']).
+
 json_value_cast_type(V,Type,WOQL) :-
     default_prefixes(Default_Prefixes),
     prefix_expand(Type, Default_Prefixes, TE),
@@ -69,9 +80,16 @@ json_value_cast_type(V,Type,WOQL) :-
     ->  typecast(String^^xsd:string,
                  TE, [], Val)
     ;   integer(V)
-    ->  % Keep integers as integers for operations like limit/offset
-        typecast(V^^xsd:decimal,
-                 TE, [], Val)
+    ->  % CRITICAL FIX: Convert integers to floats for xsd:double/xsd:float types
+        % This ensures proper string serialization (33.0 not 33)
+        (   is_float_or_double_type(TE)
+        ->  % Convert to float first, then typecast
+            FloatV is float(V),
+            typecast(FloatV^^TE, TE, [], Val)
+        ;   % Keep integers as integers for operations like limit/offset
+            typecast(V^^xsd:decimal,
+                     TE, [], Val)
+        )
     ;   rational(V),
         \+ integer(V)
     ->  % Handle rationals BEFORE floats - preserve exact precision for WOQL arithmetic

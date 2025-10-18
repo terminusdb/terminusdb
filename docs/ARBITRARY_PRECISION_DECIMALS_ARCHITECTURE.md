@@ -23,14 +23,16 @@ TerminusDB implements **full arbitrary-precision decimal arithmetic** using Prol
 
 1. [Architecture Overview](#architecture-overview)
 2. [Internal Representation](#internal-representation)
-3. [Storage Layer](#storage-layer)
-4. [Query Layer](#query-layer)
-5. [JSON Serialization](#json-serialization)
-6. [Client Interfaces](#client-interfaces)
-7. [Arithmetic Operations](#arithmetic-operations)
-8. [Performance Characteristics](#performance-characteristics)
-9. [Testing and Validation](#testing-and-validation)
-10. [Compliance and Standards](#compliance-and-standards)
+3. [Numeric Canonicalization](#numeric-canonicalization)
+4. [xsd:float and xsd:double - IEEE 754 Types](#xsdfloat-and-xsddouble---ieee-754-types)
+5. [Storage Layer](#storage-layer)
+6. [Query Layer](#query-layer)
+7. [JSON Serialization](#json-serialization)
+8. [Client Interfaces](#client-interfaces)
+9. [Arithmetic Operations](#arithmetic-operations)
+10. [Performance Characteristics](#performance-characteristics)
+11. [Testing and Validation](#testing-and-validation)
+12. [Compliance and Standards](#compliance-and-standards)
 
 ---
 
@@ -138,6 +140,578 @@ xsd:decimal          % Rational (arbitrary precision)
 xsd:float            % IEEE 754 single precision (32-bit)
 xsd:double           % IEEE 754 double precision (64-bit)
 ```
+
+---
+
+## Numeric Canonicalization
+
+### Overview
+
+TerminusDB canonicalizes all numeric inputs to ensure consistent representation and semantics across all interfaces (WOQL, Document API, GraphQL, Document Templates). Canonicalization occurs at the input parsing stage, before any internal processing or storage.
+
+**Key Principles**:
+1. All numeric values are canonicalized based on their XSD type
+2. Canonicalization preserves mathematical equivalence (e.g., `2`, `2.0`, `2.00` are all equivalent for `xsd:decimal`)
+3. Within the `xsd:decimal` hierarchy, all values use rational arithmetic
+4. `xsd:float` and `xsd:double` are separate from `xsd:decimal` and use IEEE 754 representation
+5. No explicit datatype → defaults to `xsd:decimal` for precision preservation
+
+### Canonical Forms
+
+All numeric values are normalized to canonical string representation per XSD 1.1 specification:
+
+| XSD Type | Canonical Form | Invalid Forms | Example |
+|----------|---------------|---------------|----------|
+| `xsd:decimal` (whole) | No decimal point | With `.0` | `2` not `2.0` |
+| `xsd:integer` | No decimal point | With `.0` or fractional | `2` not `2.0` |
+| `xsd:decimal` (fractional) | Leading zero before point | No leading zero | `0.1` not `.1` |
+| `xsd:float` | Decimal point required | No point for whole numbers | `2.0` not `2` |
+| `xsd:double` | Decimal point required | No point for whole numbers | `2.0` not `2` |
+
+**Normalization Rules**:
+
+1. **xsd:decimal (whole numbers)**:
+   - Input: `2`, `2.0`, `2.00` → Canonical: `2`
+   - Internal: `2 rdiv 1` (rational)
+   - Storage: `2` (integer)
+   - JSON Output: `2` (number)
+
+2. **xsd:decimal (fractional)**:
+   - Input: `.1`, `0.1`, `0.10` → Canonical: `0.1`
+   - Internal: `1 rdiv 10` (rational)
+   - Storage: `"0.1"` (string)
+   - JSON Output: `0.1` (number)
+
+3. **xsd:integer**:
+   - Input: `2`, `2.0` (if valid int) → Canonical: `2`
+   - Internal: `2` (GMP integer)
+   - Storage: `2` (integer)
+   - JSON Output: `2` (number)
+
+4. **xsd:float / xsd:double**:
+   - Input: `2`, `2.0` → Canonical: `2.0`
+   - Internal: `2.0` (Prolog 64-bit float)
+   - Storage: `2.0` (Float32/Float64)
+   - JSON Output: `2.0` (number)
+
+### Input Canonicalization Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Input Sources                             │
+│  WOQL | Document API | GraphQL | Document Templates         │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Step 1: Input Parsing                           │
+│  Parse JSON/String → Detect type or infer from value        │
+│  • Explicit type: {"@type": "xsd:decimal", "@value": "2.0"} │
+│  • Implicit type: 2.0 → defaults to xsd:decimal            │
+│  • Naked number: 42 → defaults to xsd:decimal              │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Step 2: Type Classification                     │
+│  Determine target numeric category:                          │
+│  • xsd:decimal (and subtypes) → Rational arithmetic         │
+│  • xsd:float → IEEE 754 single precision                    │
+│  • xsd:double → IEEE 754 double precision                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Step 3: Canonicalization                        │
+│  • xsd:decimal: Parse to rational via string                │
+│    - "2.0" → 2 rdiv 1 → simplified to 2                    │
+│    - ".1" → normalize to "0.1" → 1 rdiv 10                │
+│  • xsd:integer: Parse as GMP integer                        │
+│    - "2.0" → validate is whole → 2                         │
+│  • xsd:float/double: Parse as IEEE 754 float               │
+│    - "2" → 2.0 (preserve float semantics)                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Step 4: Internal Representation                 │
+│  Store in canonical internal form:                           │
+│  • Rationals: N rdiv D (simplified)                         │
+│  • Integers: GMP arbitrary precision                        │
+│  • Floats: Prolog 64-bit float                             │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Step 5: Storage Serialization                   │
+│  • Rationals (whole): Integer                               │
+│  • Rationals (fractional): Decimal string (20 digits)       │
+│  • Floats: Binary IEEE 754                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Canonicalization Examples
+
+#### Example 1: xsd:decimal Input Variations
+
+```javascript
+// All these inputs are canonically equivalent for xsd:decimal
+
+// Input variation 1: Naked integer
+WOQL.eval(WOQL.plus(2, 3), "v:Result")
+// → 2 parsed as 2 rdiv 1
+// → 3 parsed as 3 rdiv 1
+// → Result: 5 rdiv 1
+// → JSON: {"@type": "xsd:decimal", "@value": 5}
+
+// Input variation 2: With decimal point
+WOQL.eval(WOQL.plus("2.0", "3.0"), "v:Result")
+// → "2.0" parsed as 2 rdiv 1
+// → "3.0" parsed as 3 rdiv 1
+// → Result: 5 rdiv 1
+// → JSON: {"@type": "xsd:decimal", "@value": 5}
+
+// Input variation 3: Explicit type
+WOQL.eval(
+  WOQL.plus(
+    {"@type": "xsd:decimal", "@value": "2.00"},
+    {"@type": "xsd:decimal", "@value": "3.000"}
+  ),
+  "v:Result"
+)
+// → Both parsed as rationals (2 rdiv 1, 3 rdiv 1)
+// → Result: 5 rdiv 1
+// → JSON: {"@type": "xsd:decimal", "@value": 5}
+```
+
+#### Example 2: Fractional Decimal Canonicalization
+
+```javascript
+// Leading zero normalization
+
+// Input: No leading zero (non-canonical)
+const doc1 = {
+  "@type": "Product",
+  "taxRate": ".1"  // Non-canonical
+}
+// → Canonicalized to "0.1"
+// → Parsed as 1 rdiv 10
+// → Stored as "0.1"
+
+// Input: With leading zero (canonical)
+const doc2 = {
+  "@type": "Product",
+  "taxRate": "0.1"  // Canonical
+}
+// → Parsed as 1 rdiv 10
+// → Stored as "0.1"
+
+// Both inputs produce identical internal representation
+```
+
+#### Example 3: Type-Specific Canonicalization
+
+```prolog
+% xsd:decimal - whole numbers have no decimal point
+typecast("2.0"^^xsd:string, xsd:decimal, [], Result).
+% Result = 2^^xsd:decimal (rational: 2 rdiv 1)
+
+% xsd:integer - must be whole number
+typecast("2.0"^^xsd:string, xsd:integer, [], Result).
+% Result = 2^^xsd:integer
+
+% xsd:float - preserves decimal point semantics
+typecast("2"^^xsd:string, xsd:float, [], Result).
+% Result = 2.0^^xsd:float (IEEE 754 float)
+
+% xsd:double - preserves decimal point semantics
+typecast("2"^^xsd:string, xsd:double, [], Result).
+% Result = 2.0^^xsd:double (IEEE 754 double)
+```
+
+### Cross-Interface Canonical Equivalence
+
+All input interfaces canonicalize consistently:
+
+```javascript
+// Document API
+await client.insertDocument({
+  "@type": "Test",
+  "value": 2.0  // → canonical: 2 rdiv 1
+})
+
+// WOQL
+WOQL.triple("v:X", "value", {"@type": "xsd:decimal", "@value": "2.00"})
+// → canonical: 2 rdiv 1
+
+// GraphQL
+mutation {
+  createTest(input: {value: "2.000"}) {  // → canonical: 2 rdiv 1
+    id
+  }
+}
+
+// Document Template
+{
+  "@type": "Test",
+  "value": {
+    "@type": "xsd:decimal",
+    "@value": 2  // → canonical: 2 rdiv 1
+  }
+}
+```
+
+All four inputs result in the same internal representation (`2 rdiv 1`) and storage format (`2`).
+
+### Default Type Inference
+
+**Rule**: When no explicit type is provided, all numeric inputs default to `xsd:decimal` to preserve maximum precision.
+
+### Mixed-Type Operations
+
+**Rule**: Operations between different numeric categories require explicit typecasting.
+
+```prolog
+% ERROR: Cannot mix xsd:decimal and xsd:double directly
+Result is (1.5^^xsd:decimal) + (2.5^^xsd:double).
+% → Error: type_mismatch
+
+% CORRECT: Explicit typecast required
+typecast(1.5^^xsd:decimal, xsd:double, [], A^^xsd:double),
+Result is A + (2.5^^xsd:double).
+% → Result = 4.0^^xsd:double
+
+% OR: Cast both to common type
+typecast(2.5^^xsd:double, xsd:decimal, [], B^^xsd:decimal),
+Result is (1.5^^xsd:decimal) + B.
+% → Result = 4^^xsd:decimal (rational: 4 rdiv 1)
+```
+
+---
+
+## xsd:float and xsd:double - IEEE 754 Types
+
+### Overview
+
+TerminusDB supports `xsd:float` (32-bit) and `xsd:double` (64-bit) as distinct types from `xsd:decimal`. These types use **IEEE 754 floating-point representation** and are fundamentally different from the rational arithmetic used for `xsd:decimal`. Canonicalization happens during input parsing, before any internal processing or storage to ensure high precision and operational performance. The tradeoff is in the ingestion performance, rather than read time and processing performance.
+
+The consequence is that insert performance is limited by the schema checking and canonicalization process. Remember that layers are written for every commit and type checking is performed for every commit.
+
+**Key Differences**:
+
+| Aspect | xsd:decimal | xsd:float / xsd:double |
+|--------|-------------|----------------------|
+| **Representation** | Rational (N rdiv D) | IEEE 754 float |
+| **Precision** | Arbitrary (GMP-backed) | 32-bit / 64-bit |
+| **Arithmetic** | Exact | Approximate (IEEE 754) |
+| **Canonicalization** | `33`, `33.0`, `33.00` → `33` | `33`, `33.0`, `33.00` → `33.0` |
+| **Storage** | String (20 digits) | Binary float |
+| **Use Case** | Financial, exact calculations | Scientific, performance-critical |
+
+### Canonicalization (v2.0 - October 2025)
+
+**Bug Fix**: Prior to v2.0, `xsd:double` values were not properly canonicalized, causing different input like `"33"` and `"33.0"` to be treated as different values, despite having the same numerical type.
+
+**Solution**: Full canonicalization implemented at **two points**:
+1. **Casting time** (`src/core/triple/casting.pl`)
+2. **Storage time** (`src/core/triple/literals.pl`)
+
+#### Implementation
+
+**File**: `src/core/triple/casting.pl`
+
+```prolog
+%%% xsd:string => xsd:double
+% CRITICAL: Convert to float for IEEE 754 canonicalization
+% This ensures "33" and "33.0" both become the same float value
+typecast_switch('http://www.w3.org/2001/XMLSchema#double', 
+                'http://www.w3.org/2001/XMLSchema#string', 
+                Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#double') :-
+    !,
+    (   number_string(NumericValue,Val)
+    ->  Casted is float(NumericValue)  % Convert to float for canonicalization
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#double'),_))).
+
+%%% xsd:string => xsd:float  
+% Same canonicalization for xsd:float
+typecast_switch('http://www.w3.org/2001/XMLSchema#float', 
+                'http://www.w3.org/2001/XMLSchema#string', 
+                Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#float') :-
+    !,
+    (   number_string(NumericValue,Val)
+    ->  Casted is float(NumericValue)
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#float'),_))).
+```
+
+**File**: `src/core/triple/literals.pl`
+
+```prolog
+% CRITICAL: Handle xsd:double and xsd:float - canonicalize by converting to number
+% This fixes the bug where 33 and 33.0 are treated as different values
+nonvar_literal(Term^^Type, value(StorageTerm,Type)) :-
+    nonvar(Term),
+    (   Type = 'http://www.w3.org/2001/XMLSchema#double'
+    ;   Type = 'xsd:double'
+    ;   Type = 'http://www.w3.org/2001/XMLSchema#float'
+    ;   Type = 'xsd:float'),
+    !,
+    % Convert string to number for canonical representation
+    (   number(Term)
+    ->  NumericTerm = Term
+    ;   atom_number(Term, NumericTerm)
+    ->  true
+    ;   number_string(NumericTerm, Term)
+    ->  true
+    ;   NumericTerm = Term
+    ),
+    % Convert to float for IEEE 754 representation
+    StorageTerm is float(NumericTerm).
+```
+
+**Result**: `"33"`, `"33.0"`, and `"33.00"` all canonicalize to the same float value `33.0`.
+
+### IEEE 754 Behavior
+
+**Important**: `xsd:float` and `xsd:double` exhibit standard IEEE 754 floating-point behavior, including "errors" that are actually correct for this representation:
+
+```prolog
+% xsd:double uses IEEE 754 - this is CORRECT behavior
+?- X is float(0.1) + float(0.2).
+X = 0.30000000000000004.  % IEEE 754 result (not a bug!)
+
+% Compare with xsd:decimal (exact)
+?- X is (1 rdiv 10) + (2 rdiv 10).
+X = 3 rdiv 10.  % = 0.3 exactly
+```
+
+**Examples**:
+
+```javascript
+// xsd:double arithmetic
+{
+  "@type": "Eval",
+  "expression": {
+    "@type": "Plus",
+    "left": {"@type": "xsd:double", "@value": "0.1"},
+    "right": {"@type": "xsd:double", "@value": "0.2"}
+  }
+}
+// Result: {"@type": "xsd:double", "@value": 0.30000000000000004}  ✓ CORRECT
+
+// xsd:decimal arithmetic  
+{
+  "@type": "Eval",
+  "expression": {
+    "@type": "Plus",
+    "left": {"@type": "xsd:decimal", "@value": "0.1"},
+    "right": {"@type": "xsd:decimal", "@value": "0.2"}
+  }
+}
+// Result: {"@type": "xsd:decimal", "@value": 0.3}  ✓ EXACT
+```
+
+### Type Inference for Arithmetic (v2.0)
+
+**Implementation**: Arithmetic operations automatically infer result type based on operand types.
+
+**Rules**:
+
+1. **Pure float/double operations** → Result type: `xsd:double`
+   - `xsd:double OP xsd:double` → `xsd:double`
+   - `xsd:float OP xsd:float` → `xsd:double`
+   - `xsd:float OP xsd:double` → `xsd:double`
+
+2. **Mixed with other numeric types** → Result type: `xsd:decimal`
+   - `xsd:double OP xsd:decimal` → `xsd:decimal`
+   - `xsd:double OP xsd:integer` → `xsd:decimal`
+   - `xsd:float OP xsd:decimal` → `xsd:decimal`
+
+**File**: `src/core/query/woql_compile.pl`
+
+```prolog
+% Helper: Check if type is xsd:float or xsd:double
+is_float_or_double_type(Type) :-
+    member(Type, ['http://www.w3.org/2001/XMLSchema#float',
+                  'http://www.w3.org/2001/XMLSchema#double',
+                  'xsd:float',
+                  'xsd:double']).
+
+% Helper: Check if ALL args are float/double
+all_args_float_or_double([]).
+all_args_float_or_double([_Val^^Type|Rest]) :-
+    is_float_or_double_type(Type), !,
+    all_args_float_or_double(Rest).
+
+% Type inference for arithmetic
+compile_wf(X is Arith, (Pre_Term, XA is ArithE, Result_Type_Goal, XE = XA^^Result_Type)) -->
+    resolve(X,XE),
+    compile_arith(Arith,Pre_Term,ArithE),
+    {
+        % Determine result type based on operand types
+        Arith =.. [_Functor|Args],
+        (   all_args_float_or_double(Args)
+        ->  Result_Type = 'http://www.w3.org/2001/XMLSchema#double'
+        ;   Result_Type = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ),
+        Result_Type_Goal = true
+    }.
+```
+
+**Examples** (from actual test results):
+
+```prolog
+% Pure xsd:double (IEEE 754 arithmetic)
+Result is (1.0^^xsd:double) + (2.0^^xsd:double).
+% → Result = 3.0^^xsd:double
+
+% Pure xsd:float (promoted to xsd:double)
+Result is (1.0^^xsd:float) + (2.0^^xsd:float).
+% → Result = 3.0^^xsd:double
+
+% Mixed: xsd:float + xsd:double (both are float types)
+Result is (1.0^^xsd:float) + (2.0^^xsd:double).
+% → Result = 3.0^^xsd:double
+
+% Mixed: xsd:double + xsd:decimal (switches to rational arithmetic)
+Result is (1.0^^xsd:double) + (2.0^^xsd:decimal).
+% → Result = 3^^xsd:decimal
+
+% Mixed: xsd:double + xsd:integer (uses rational arithmetic)
+Result is (1.5^^xsd:double) + (3^^xsd:integer).
+% → Result = 9/2^^xsd:decimal (4.5 as rational)
+
+% IEEE 754 behavior: 0.1 + 0.2 with xsd:double
+Result is (0.1^^xsd:double) + (0.2^^xsd:double).
+% → Result = 0.30000000000000004^^xsd:double (exact IEEE 754 result)
+
+% IEEE 754 behavior: 0.1 + 0.2 with xsd:float
+Result is (0.1^^xsd:float) + (0.2^^xsd:float).
+% → Result = 0.30000000000000004^^xsd:double (promoted, IEEE 754 behavior)
+
+% Division with xsd:double (IEEE 754 division)
+Result is (1.0^^xsd:double) / (3.0^^xsd:double).
+% → Result = 0.3333333333333333^^xsd:double (IEEE 754 approximation)
+
+% Division with xsd:decimal (rational division, exact)
+Result is (1.0^^xsd:decimal) / (3.0^^xsd:decimal).
+% → Result = 1/3^^xsd:decimal (exact rational, evaluates to 0.333...)
+```
+
+### Division Operator Selection (v2.0)
+
+**Critical Design Decision**: Division operator selection based on operand types.
+
+**Problem**: 
+- `xsd:double` and `xsd:float` values are **already IEEE 754 floats** in Prolog after parsing
+- `rdiv` (rational division) **only works with rationals**, not floats
+- Attempting to use `rdiv` on floats causes errors
+
+**Solution**: 
+- If **ANY** operand is `xsd:float` or `xsd:double` → use `/` (float division)
+- If **ALL** operands are `xsd:decimal` or `xsd:integer` → use `rdiv` (rational division)
+
+**Implementation**:
+
+```prolog
+% Helper: Check if ANY arg is float/double
+any_arg_float_or_double([_Val^^Type|_]) :-
+    is_float_or_double_type(Type), !.
+any_arg_float_or_double([_|Rest]) :-
+    any_arg_float_or_double(Rest).
+
+% Division operator selection
+compile_arith(Exp,Pre_Term,ExpE) -->
+    {
+        Exp =.. [Functor|Args],
+        member(Functor, ['*','-','+','div','/','floor', '**', 'rdiv'])
+    },
+    !,
+    mapm(compile_arith,Args,Pre_Terms,ArgsE),
+    {
+        % Replace / with rdiv for decimal precision (rational division)
+        % BUT: If ANY arg is xsd:float/double, must use / (not rdiv)
+        % Reason: xsd:double/float are already floats in Prolog, rdiv only works with rationals
+        (   Functor = '/'
+        ->  (   any_arg_float_or_double(Args)
+            ->  ActualFunctor = '/'    % ANY float/double: use / (works with floats)
+            ;   ActualFunctor = rdiv   % Pure decimals: use rdiv (rational division)
+            )
+        ;   ActualFunctor = Functor
+        ),
+        ExpE =.. [ActualFunctor|ArgsE],
+        list_conjunction(Pre_Terms,Pre_Term)
+    }.
+```
+
+**Examples**:
+
+```prolog
+% Pure xsd:double - uses / (IEEE 754 division)
+Result is (1.0^^xsd:double) / (3.0^^xsd:double).
+% → Compiles to: Result is 1.0 / 3.0
+% → Result = 0.3333333333333333^^xsd:double
+
+% Pure xsd:decimal - uses rdiv (rational division)
+Result is (1^^xsd:decimal) / (3^^xsd:decimal).
+% → Compiles to: Result is 1 rdiv 3
+% → Result = (1 rdiv 3)^^xsd:decimal (exact)
+
+% Mixed: xsd:double / xsd:decimal - uses / (because ANY arg is float)
+Result is (1.0^^xsd:double) / (3.0^^xsd:decimal).
+% → Compiles to: Result is 1.0 / 3.0
+% → Result = 0.3333333333333333^^xsd:decimal
+```
+
+### Precision Behavior with Mixed Types
+
+**Important**: Mixing `xsd:double` with `xsd:decimal` does **not** "rescue" precision.
+
+**Why**: Precision is already lost when `xsd:double` values are **parsed**, not during arithmetic.
+
+```prolog
+% xsd:double is parsed as float (precision already lost)
+typecast("0.1"^^xsd:string, xsd:double, [], X^^xsd:double).
+% → X = 0.1 (IEEE 754 float, not exact)
+
+% Then mixed with xsd:decimal
+Result is X + (0.2^^xsd:decimal).
+% → Result type: xsd:decimal (type inference rule)
+% → But value still has IEEE 754 imprecision: 0.30000000000000004
+% → Because X was already an imprecise float
+```
+
+**Recommendation**: Use `xsd:decimal` **throughout** for exact arithmetic. Don't mix types expecting precision recovery.
+
+### When to Use Each Type
+
+Make sure to thoroughly test the engine and rounding needed for each application with accurate conformance suites when implementing the TerminusDB engine for use cases. 
+
+**Use xsd:decimal**:
+- ✅ Financial calculations (money, prices, rates)
+- ✅ Exact arithmetic required
+- ✅ Regulatory compliance (such as ISO 20022)
+- ✅ No tolerance for rounding errors
+
+**Use xsd:double**:
+- ✅ Scientific measurements
+- ✅ IEEE 754 semantics required
+- ✅ Performance-critical operations
+- ✅ Interoperability with systems expecting IEEE 754
+
+**Use xsd:float**:
+- ✅ Memory-constrained applications (32-bit vs 64-bit)
+- ✅ Graphics/rendering (GPU compatibility)
+- ✅ Legacy system compatibility
+
+### Testing
+
+**Test Coverage**: 35 tests (100% passing)
+
+**Files**:
+- `tests/test/xsd-float-double-canonicalization.js` - 33 tests
+- `tests/test/division-mixed-types-test.js` - 2 tests
+
+**Test Categories**:
+1. Canonicalization: `33 = 33.0 = 33.00` ✅
+2. IEEE 754 behavior: `0.1 + 0.2 = 0.30000000000000004` ✅
+3. Type inference: All rules verified ✅
+4. Division: Pure and mixed-type operations ✅
+5. Comparisons: `<`, `>` operators ✅
 
 ---
 

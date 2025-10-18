@@ -202,10 +202,10 @@ Always run `npx mocha` from the repository root directory, not from within the `
 
 ```bash
 # Run all Prolog tests
-swipl -g run_tests -t halt src/bootstrap.pl
+swipl -g run_tests -t halt src/interactive.pl
 
 # Run specific Prolog test module
-swipl -g "run_tests(graphql_numeric_serialization)" -t halt src/bootstrap.pl
+swipl -g "run_tests(graphql_numeric_serialization)" -t halt src/interactive.pl
 ```
 
 ### Test Server Management

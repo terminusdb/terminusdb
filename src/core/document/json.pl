@@ -201,9 +201,20 @@ value_type_to_json_type(X, T, X, T) :-
 value_type_to_json_type(X, T, S, T) :-
     typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
 
-json_type_to_value_type(J, T, J, T) :-
+json_type_to_value_type(J, T, X, T) :-
     number(J),
-    !.
+    !,
+    % CRITICAL FIX: Convert integers to floats for xsd:double/xsd:float types
+    % This ensures proper string serialization (33.0 not 33)
+    (   integer(J),
+        (   T = 'http://www.w3.org/2001/XMLSchema#float'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#double'
+        ;   T = 'xsd:float'
+        ;   T = 'xsd:double'
+        )
+    ->  X is float(J)  % Convert integer to float
+    ;   X = J          % Keep as-is for other numeric types
+    ).
 json_type_to_value_type(J, T, J, T) :-
     memberchk(J, [false, true]),
     !,
