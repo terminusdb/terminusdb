@@ -550,17 +550,40 @@ indexing_term(Spec,Header,Values,Bindings,Indexing_Term) :-
 
 /*
  * woql_equal(AE,BE) is det.
+ *
+ * Equality check with type family validation for numeric types.
+ * Ensures that numeric comparisons only happen within compatible type families.
  */
 woql_equal(AE,BE) :-
     nonvar(AE),
     nonvar(BE),
-    % Probably strictly should check subsumption
-    % TODO: Lang!!! Foo@Bar
-    AE = Y^^_T1,
-    BE = Y^^_T2,
-    !.
+    !,
+    % Both are ground - normalize and check type safety
+    (literal_expand(AE, AE_Normalized) -> true ; AE_Normalized = AE),
+    (literal_expand(BE, BE_Normalized) -> true ; BE_Normalized = BE),
+    woql_equal_normalized(AE_Normalized, BE_Normalized).
 woql_equal(AE,BE) :-
-    AE=BE.
+    % At least one is a variable - standard unification
+    AE = BE.
+
+/*
+ * woql_equal_normalized(+A,+B) is det.
+ *
+ * Internal equality check with normalized types.
+ * For numeric types, validates type family compatibility BEFORE comparison.
+ */
+woql_equal_normalized(X^^T1, Y^^T2) :-
+    % Both are numeric types - validate compatibility first
+    is_numeric_type(T1),
+    is_numeric_type(T2),
+    !,
+    % Validate type family compatibility (throws error if incompatible)
+    numeric_types_compatible_for_comparison(X, T1, Y, T2),
+    % Now do the actual value comparison
+    X =:= Y.
+woql_equal_normalized(AE, BE) :-
+    % Non-numeric types or untyped - standard unification
+    AE = BE.
 
 /*
  * woql_less(AE,BE) is det.
@@ -587,12 +610,15 @@ woql_less(AE,BE) :-
  * woql_less_normalized(+A,+B) is semidet.
  *
  * Internal predicate - assumes types are already normalized
+ * Validates type family compatibility before numeric comparison.
  */
 woql_less_normalized(X^^T1,Y^^T2) :-
     % Check if both types are numeric (decimal, integer, float, double, etc.)
     is_numeric_type(T1),
     is_numeric_type(T2),
     !,
+    % Validate that types are from compatible families
+    numeric_types_compatible_for_comparison(X, T1, Y, T2),
     % Do numeric comparison
     X < Y.
 woql_less_normalized(AE,BE) :-
@@ -609,6 +635,97 @@ is_numeric_type(T) :-
     basetype_subsumption_of(T,'http://www.w3.org/2001/XMLSchema#decimal'), !.
 is_numeric_type('http://www.w3.org/2001/XMLSchema#float') :- !.
 is_numeric_type('http://www.w3.org/2001/XMLSchema#double') :- !.
+
+/*
+ * is_rational_family_type(+Type) is semidet.
+ *
+ * True if Type is in the rational arithmetic family (xsd:integer, xsd:decimal, and subtypes)
+ * These types use GMP-backed arbitrary precision rational arithmetic.
+ */
+is_rational_family_type(T) :-
+    basetype_subsumption_of(T,'http://www.w3.org/2001/XMLSchema#decimal'), !.
+
+/*
+ * is_ieee754_family_type(+Type) is semidet.
+ *
+ * True if Type is in the IEEE 754 floating-point family (xsd:float, xsd:double)
+ * These types use approximate binary floating-point arithmetic.
+ */
+is_ieee754_family_type('http://www.w3.org/2001/XMLSchema#float') :- !.
+is_ieee754_family_type('http://www.w3.org/2001/XMLSchema#double') :- !.
+
+/*
+ * numeric_types_compatible_for_comparison(+Val1, +Type1, +Val2, +Type2) is det.
+ *
+ * Succeeds if Type1 and Type2 are in the same numeric family and can be compared.
+ * Throws a type error if they are from incompatible families.
+ *
+ * COMPATIBLE:
+ * - Both in rational family (xsd:integer, xsd:decimal)
+ * - Both in IEEE 754 family (xsd:float, xsd:double)
+ *
+ * INCOMPATIBLE:
+ * - Rational family vs IEEE 754 family
+ *
+ * Rationale: Comparing across families is semantically ambiguous because they use
+ * different arithmetic modes (exact rational vs approximate binary float).
+ */
+numeric_types_compatible_for_comparison(_, T1, _, T2) :-
+    is_rational_family_type(T1),
+    is_rational_family_type(T2),
+    !. % Both rational - OK
+numeric_types_compatible_for_comparison(_, T1, _, T2) :-
+    is_ieee754_family_type(T1),
+    is_ieee754_family_type(T2),
+    !. % Both IEEE 754 - OK
+numeric_types_compatible_for_comparison(V1, T1, V2, T2) :-
+    % One is rational, one is IEEE 754 - ERROR
+    (   is_rational_family_type(T1), is_ieee754_family_type(T2)
+    ;   is_ieee754_family_type(T1), is_rational_family_type(T2)
+    ),
+    !,
+    % Convert values and types to readable strings
+    value_to_string(V1, Str1),
+    value_to_string(V2, Str2),
+    short_type_name(T1, Short1),
+    short_type_name(T2, Short2),
+    format(atom(Msg), '~w (~w) is not safely comparable with ~w (~w). Must typecast explicitly between incompatible numeric type families. Rational integer/decimal types vs. IEEE 754 types (float/double).', [Str1, Short1, Str2, Short2]),
+    throw(error(casting_error(Msg, Str1), _)).
+
+/*
+ * value_to_string(+Value, -String) is det.
+ *
+ * Convert a value to a human-readable string representation.
+ * Handles Prolog rational notation (e.g., 1r10 → "0.1")
+ */
+value_to_string(Val, Str) :-
+    rational(Val),
+    !,
+    % Convert rational to decimal string
+    Decimal is float(Val),
+    format(atom(Str), '~w', [Decimal]).
+value_to_string(Val, Str) :-
+    integer(Val),
+    !,
+    format(atom(Str), '~w', [Val]).
+value_to_string(Val, Str) :-
+    float(Val),
+    !,
+    format(atom(Str), '~w', [Val]).
+value_to_string(Val, Str) :-
+    % Fallback for other types
+    format(atom(Str), '~w', [Val]).
+
+/*
+ * short_type_name(+FullURI, -ShortName) is det.
+ *
+ * Convert XSD type URI to short readable name
+ */
+short_type_name('http://www.w3.org/2001/XMLSchema#integer', 'xsd:integer') :- !.
+short_type_name('http://www.w3.org/2001/XMLSchema#decimal', 'xsd:decimal') :- !.
+short_type_name('http://www.w3.org/2001/XMLSchema#float', 'xsd:float') :- !.
+short_type_name('http://www.w3.org/2001/XMLSchema#double', 'xsd:double') :- !.
+short_type_name(URI, URI). % Fallback: use full URI if not recognized
 
 /*
  * woql_greater(AE,BE) is det.
@@ -635,12 +752,15 @@ woql_greater(AE,BE) :-
  * woql_greater_normalized(+A,+B) is semidet.
  *
  * Internal predicate - assumes types are already normalized
+ * Validates type family compatibility before numeric comparison.
  */
 woql_greater_normalized(X^^T1,Y^^T2) :-
     % Check if both types are numeric (decimal, integer, float, double, etc.)
     is_numeric_type(T1),
     is_numeric_type(T2),
     !,
+    % Validate that types are from compatible families
+    numeric_types_compatible_for_comparison(X, T1, Y, T2),
     % Do numeric comparison
     X > Y.
 woql_greater_normalized(AE,BE) :-
