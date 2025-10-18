@@ -3,6 +3,7 @@
 const assert = require('assert')
 const crypto = require('crypto')
 const fs = require('fs')
+const path = require('path')
 
 const defaultContext = {
   '@base': 'terminusdb:///data/',
@@ -155,21 +156,27 @@ function terminusdbScript () {
 }
 
 /**
- * Returns the correct path to test served files based on current working directory.
- * Supports running tests from both repo root and tests directory.
+ * Returns the absolute path to test served files.
+ * Supports running tests from repo root, tests directory, and containerized environments.
  * @param {string} filename - The file name in the served directory
- * @returns {string} Path to the served file
+ * @returns {string} Absolute path to the served file
  */
 function servedPath (filename) {
   // Check if running from tests directory
   if (fs.existsSync('./served')) {
-    return `./served/${filename}`
+    return path.resolve('./served', filename)
   }
   // Check if running from repo root
   if (fs.existsSync('./tests/served')) {
-    return `./tests/served/${filename}`
+    return path.resolve('./tests/served', filename)
   }
-  throw new Error('Could not find served directory. Run tests from repo root or tests/ directory.')
+  // Fallback: try to find based on __dirname (works in all environments)
+  const utilDir = __dirname // tests/lib/
+  const servedDir = path.join(utilDir, '..', 'served')
+  if (fs.existsSync(servedDir)) {
+    return path.resolve(servedDir, filename)
+  }
+  throw new Error(`Could not find served directory. Tried: ./served, ./tests/served, and ${servedDir}`)
 }
 
 module.exports = {
