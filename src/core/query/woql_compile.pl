@@ -1373,9 +1373,22 @@ compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     mapm(resolve,L,LE).
 compile_wf(X is Arith, (Pre_Term,
                         XA is ArithE,
-                        XE = XA^^'http://www.w3.org/2001/XMLSchema#decimal')) -->
+                        Result_Type_Goal,
+                        XE = XA^^Result_Type)) -->
     resolve(X,XE),
-    compile_arith(Arith,Pre_Term,ArithE).
+    compile_arith(Arith,Pre_Term,ArithE),
+    {
+        % Determine result type based on operand types
+        % Rule: If all operands are xsd:float or xsd:double, result is xsd:double
+        % Otherwise, use rational arithmetic and result is xsd:decimal
+        Arith =.. [_Functor|Args],
+        (   all_args_float_or_double(Args)
+        ->  Result_Type = 'http://www.w3.org/2001/XMLSchema#double',
+            Result_Type_Goal = true  % No additional goal needed
+        ;   Result_Type = 'http://www.w3.org/2001/XMLSchema#decimal',
+            Result_Type_Goal = true
+        )
+    }.
 compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
     resolve(Dict,DictE),
     {atom_string(KeyE,Key)},
@@ -1762,6 +1775,44 @@ unliterally([H|T],[HL|TL]) :-
     unliterally(H,HL),
     unliterally(T,TL).
 
+/*
+ * is_float_or_double_type(+Type) is semidet.
+ * 
+ * True if Type is xsd:float or xsd:double
+ */
+is_float_or_double_type(Type) :-
+    member(Type, ['http://www.w3.org/2001/XMLSchema#float',
+                  'http://www.w3.org/2001/XMLSchema#double',
+                  'xsd:float',
+                  'xsd:double']).
+
+/*
+ * all_args_float_or_double(+Args) is semidet.
+ *
+ * True if all Args are typed values with xsd:float or xsd:double
+ */
+all_args_float_or_double([]).
+all_args_float_or_double([_Val^^Type|Rest]) :-
+    is_float_or_double_type(Type),
+    !,
+    all_args_float_or_double(Rest).
+all_args_float_or_double([Arg|_]) :-
+    % If not a typed value, it's not float/double
+    \+ (Arg = _^^_),
+    !,
+    fail.
+
+/*
+ * any_arg_float_or_double(+Args) is semidet.
+ *
+ * True if ANY arg is typed with xsd:float or xsd:double
+ */
+any_arg_float_or_double([_Val^^Type|_]) :-
+    is_float_or_double_type(Type),
+    !.
+any_arg_float_or_double([_|Rest]) :-
+    any_arg_float_or_double(Rest).
+
 compile_arith(Exp,Pre_Term,ExpE) -->
     {
         Exp =.. [Functor|Args],
@@ -1774,9 +1825,13 @@ compile_arith(Exp,Pre_Term,ExpE) -->
     mapm(compile_arith,Args,Pre_Terms,ArgsE),
     {
         % Replace / with rdiv for decimal precision (rational division)
-        % '/' produces floats (loses precision), 'rdiv' preserves exact rationals
+        % BUT: If ANY arg is xsd:float/double, must use / (not rdiv)
+        % Reason: xsd:double/float are already floats in Prolog, rdiv only works with rationals
         (   Functor = '/'
-        ->  ActualFunctor = rdiv
+        ->  (   any_arg_float_or_double(Args)
+            ->  ActualFunctor = '/'    % ANY float/double: use / (works with floats)
+            ;   ActualFunctor = rdiv   % Pure decimals: use rdiv (rational division)
+            )
         ;   ActualFunctor = Functor
         ),
         ExpE =.. [ActualFunctor|ArgsE],

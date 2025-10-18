@@ -56,20 +56,30 @@ string_decimal_to_rational(String, Rational) :-
     ->  sub_string(String, 1, _, 0, PositiveString),
         string_decimal_to_rational(PositiveString, PositiveRat),
         Rational is -PositiveRat
-    ;   % Split on decimal point to preserve original precision
-        (   split_string(String, ".", "", [IntStr, FracStr])
-        ->  % Has decimal point - construct numerator from string parts
-            % CRITICAL: Parse as arbitrary precision integers, NOT floats
-            % This preserves full precision (e.g., 20+ digits)
-            atom_number(IntStr, IntPart),
-            string_length(FracStr, FracLen),
-            % Parse fractional part as integer (don't convert to float!)
-            atom_number(FracStr, FracPart),
-            Denominator is 10^FracLen,
-            Numerator is IntPart * Denominator + FracPart,
-            Rational is Numerator rdiv Denominator
-        ;   % No decimal point, just an integer
-            atom_number(String, Rational)
+    ;   % Canonicalize: add leading zero if starts with decimal point
+        % ".1" -> "0.1" per XSD canonical form
+        (   sub_string(String, 0, 1, _, ".")
+        ->  string_concat("0", String, CanonicalString),
+            string_decimal_to_rational(CanonicalString, Rational)
+        ;   % Split on decimal point to preserve original precision
+            (   split_string(String, ".", "", [IntStr, FracStr])
+            ->  % Has decimal point - construct numerator from string parts
+                % CRITICAL: Parse as arbitrary precision integers, NOT floats
+                % This preserves full precision (e.g., 20+ digits)
+                (   IntStr = ""
+                ->  % Empty integer part means leading decimal point (already handled above)
+                    IntPart = 0
+                ;   atom_number(IntStr, IntPart)
+                ),
+                string_length(FracStr, FracLen),
+                % Parse fractional part as integer (don't convert to float!)
+                atom_number(FracStr, FracPart),
+                Denominator is 10^FracLen,
+                Numerator is IntPart * Denominator + FracPart,
+                Rational is Numerator rdiv Denominator
+            ;   % No decimal point, just an integer
+                atom_number(String, Rational)
+            )
         )
     ).
 
@@ -385,28 +395,50 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/20
     ->  format(string(S), "~w", [Val])
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#integer'),_))).
 %%% xsd:string => xsd:double
+% CRITICAL: Convert to float for IEEE 754 canonicalization
+% This ensures "33" and "33.0" both become the same float value
 typecast_switch('http://www.w3.org/2001/XMLSchema#double', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#double') :-
     !,
-    (   number_string(Casted,Val)
-    ->  true
+    (   number_string(NumericValue,Val)
+    ->  Casted is float(NumericValue)  % Convert to float for canonicalization
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#double'),_))).
 %%% xsd:double => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#double', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
     (   number(Val)
-    ->  format(string(S), "~w", [Val])
+    ->  % CRITICAL FIX: Ensure doubles always have decimal point
+        % xsd:double values must have .0 for whole numbers (IEEE 754 semantics)
+        (   (float(Val) ; integer(Val)),
+            Val =:= floor(Val)
+        ->  % Whole number: add .0 suffix
+            Truncated is truncate(Val),
+            format(string(S), "~w.0", [Truncated])
+        ;   % Fractional float: use normal representation
+            format(string(S), "~w", [Val])
+        )
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#double'),_))).
 %%% xsd:string => xsd:float
+% CRITICAL: Convert to float for IEEE 754 canonicalization
+% This ensures "33" and "33.0" both become the same float value
 typecast_switch('http://www.w3.org/2001/XMLSchema#float', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#float') :-
     !,
-    (   number_string(Casted,Val)
-    ->  true
+    (   number_string(NumericValue,Val)
+    ->  Casted is float(NumericValue)  % Convert to float for canonicalization
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#float'),_))).
 %%% xsd:float => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#float', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
     (   number(Val)
-    ->  format(string(S), "~w", [Val])
+    ->  % CRITICAL FIX: Ensure floats always have decimal point
+        % xsd:float values must have .0 for whole numbers (IEEE 754 semantics)
+        (   (float(Val) ; integer(Val)),
+            Val =:= floor(Val)
+        ->  % Whole number: add .0 suffix
+            Truncated is truncate(Val),
+            format(string(S), "~w.0", [Truncated])
+        ;   % Fractional float: use normal representation
+            format(string(S), "~w", [Val])
+        )
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#float'),_))).
 %%% xsd:string => xsd:time
 typecast_switch('http://www.w3.org/2001/XMLSchema#time', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#time') :-
