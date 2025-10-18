@@ -279,18 +279,17 @@ describe('xsd-double-canonicalization', function () {
   })
 
   describe('XSD Double vs XSD Decimal', function () {
-    it('xsd:double 33.0 should NOT equal xsd:decimal 33.0 (different types)', async function () {
+    it('xsd:double 33.0 should NOT equal xsd:decimal 33.0 (cross-family comparison forbidden)', async function () {
       const query = {
         '@type': 'Equals',
         left: { '@type': 'DataValue', data: { '@type': 'xsd:double', '@value': '33.0' } },
         right: { '@type': 'DataValue', data: { '@type': 'xsd:decimal', '@value': '33.0' } },
       }
 
-      const r = await woql.post(agent, query)
-      
-      // Different types - should they be equal or not?
-      // This documents the current behavior
-      console.log('xsd:double vs xsd:decimal equality:', r.body.bindings.length > 0 ? 'equal' : 'not equal')
+      // Cross-family comparison (IEEE 754 vs Rational) should throw error
+      const r = await woql.post(agent, query).fails()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:message']).to.match(/incompatible/i)
     })
 
     it('Arithmetic Edge Case: xsd:double + xsd:decimal inherits IEEE 754 precision', async function () {
