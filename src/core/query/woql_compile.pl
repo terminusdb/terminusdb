@@ -5665,9 +5665,11 @@ test(complex_mode, [
 test(less_than_cross_type_float_decimal, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),
-    cleanup(teardown_temp_store(State))
+    cleanup(teardown_temp_store(State)),
+    throws(error(casting_error(_,_),_))
 ]) :-
-    % Verify cross-type comparison: 21.1 (float) < 33 (decimal)
+    % Cross-family comparison should throw error: 21.1 (float) vs 33 (decimal)
+    % Type family safety prevents mixing IEEE 754 (float) with rational (decimal)
     Query = _{ '@type' : "Less",
                left : _{'@type' : "DataValue", 
                        'data' : _{'@type': 'xsd:float', '@value': 21.1}},
@@ -5675,16 +5677,16 @@ test(less_than_cross_type_float_decimal, [
                         'data' : _{'@type': 'xsd:decimal', '@value': 33}}
              },
     save_and_retrieve_woql(Query, Query_Out),
-    query_test_response_test_branch(Query_Out, JSON),
-    [_] = (JSON.bindings).
+    query_test_response_test_branch(Query_Out, _JSON).
 
 test(greater_than_equal_values_cross_type, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),
-    cleanup(teardown_temp_store(State))
+    cleanup(teardown_temp_store(State)),
+    throws(error(casting_error(_,_),_))
 ]) :-
-    % Regression: 33.0 (float) > 33 (decimal) should fail (empty bindings)
-    % This was the bug - structural comparison made 33 > 33 return true
+    % Cross-family comparison should throw error: 33.0 (float) vs 33 (decimal)
+    % Type family safety prevents mixing IEEE 754 (float) with rational (decimal)
     Query = _{ '@type' : "Greater",
                left : _{'@type' : "DataValue", 
                        'data' : _{'@type': 'xsd:float', '@value': 33.0}},
@@ -5692,8 +5694,7 @@ test(greater_than_equal_values_cross_type, [
                         'data' : _{'@type': 'xsd:decimal', '@value': 33}}
              },
     save_and_retrieve_woql(Query, Query_Out),
-    query_test_response_test_branch(Query_Out, JSON),
-    [] = (JSON.bindings).
+    query_test_response_test_branch(Query_Out, _JSON).
 
 test(less_than_mixed_uri_representation, [
     setup((setup_temp_store(State),

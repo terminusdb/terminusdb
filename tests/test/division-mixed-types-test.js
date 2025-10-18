@@ -45,7 +45,7 @@ describe('Division with Mixed Types', function () {
 
     const r = await woql.post(agent, query)
     console.log('xsd:decimal / xsd:double result:', r.body.bindings[0].Result)
-    
+
     expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal')
   })
 })

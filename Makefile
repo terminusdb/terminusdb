@@ -51,6 +51,18 @@ download-lint:
 lint:
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
+.PHONY: clippy
+clippy:
+	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
+
+.PHONY: lint-mocha
+lint-mocha:
+	sh -c "cd tests; npx npm run check"
+
+.PHONY: lint-mocha-fix
+lint-mocha-fix:
+	sh -c "cd tests; npx npm run lint"
+
 # Build the dylib.
 .PHONY: rust
 rust:

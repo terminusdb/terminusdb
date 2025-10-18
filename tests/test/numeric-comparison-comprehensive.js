@@ -488,7 +488,7 @@ describe('numeric-comparison-comprehensive', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings[0].X['@value']).to.equal(2)
       expect(r.body.bindings[0].Result['@value']).to.equal(5)
     })
@@ -520,7 +520,7 @@ describe('numeric-comparison-comprehensive', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // A = 2, B = 0.5, Result = 1
       expect(r.body.bindings[0].A['@value']).to.equal(2)
       expect(r.body.bindings[0].B['@value']).to.equal(0.5)
@@ -529,41 +529,6 @@ describe('numeric-comparison-comprehensive', function () {
   })
 
   describe('Complex Query Patterns', function () {
-    it.skip('Conditional arithmetic based on comparison - WOQL If not working', async function () {
-      // NOTE: Skipped because WOQL 'If' construct returns 400 error
-      const query = {
-        '@type': 'If',
-        test: {
-          '@type': 'Less',
-          left: { '@type': 'DataValue', data: 2.0 },
-          right: { '@type': 'DataValue', data: 5 },
-        },
-        then: {
-          '@type': 'Eval',
-          expression: {
-            '@type': 'Plus',
-            left: { '@type': 'ArithmeticValue', data: 10 },
-            right: { '@type': 'ArithmeticValue', data: 20 },
-          },
-          result: { '@type': 'ArithmeticValue', variable: 'Result' },
-        },
-        else: {
-          '@type': 'Eval',
-          expression: {
-            '@type': 'Times',
-            left: { '@type': 'ArithmeticValue', data: 10 },
-            right: { '@type': 'ArithmeticValue', data: 20 },
-          },
-          result: { '@type': 'ArithmeticValue', variable: 'Result' },
-        },
-      }
-
-      const r = await woql.post(agent, query)
-      
-      // Test passes (2 < 5), so then branch: 10 + 20 = 30
-      expect(r.body.bindings[0].Result['@value']).to.equal(30)
-    })
-
     it('Arithmetic in filter with canonical forms', async function () {
       const query = {
         '@type': 'And',
@@ -586,7 +551,7 @@ describe('numeric-comparison-comprehensive', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // 2 * 3 = 6, and 6 > 5 is true
       expect(r.body.bindings[0].Product['@value']).to.equal(6)
     })

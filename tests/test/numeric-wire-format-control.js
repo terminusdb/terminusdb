@@ -50,7 +50,7 @@ describe('numeric-wire-format-control', function () {
 
         const response = await woql.post(agent, query)
         expect(response.body.bindings).to.have.lengthOf(1)
-        
+
         // All should canonicalize to 2 (no decimal point)
         expect(response.body.bindings[0].Result['@value']).to.equal(2)
       }
@@ -118,7 +118,7 @@ describe('numeric-wire-format-control', function () {
 
         const response = await woql.post(agent, query)
         expect(response.body.bindings).to.have.lengthOf(1)
-        
+
         // All should canonicalize to 0.1 (leading zero added, trailing zeros removed)
         expect(response.body.bindings[0].Result['@value']).to.equal(0.1)
       }
@@ -142,7 +142,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should be exactly 0.3 (not 0.30000000000000004)
       expect(response.body.bindings[0].Result['@value']).to.equal(0.3)
     })
@@ -168,7 +168,7 @@ describe('numeric-wire-format-control', function () {
         }
 
         const response = await woql.post(agent, query)
-        expect(response.body.bindings).to.have.lengthOf(1, 
+        expect(response.body.bindings).to.have.lengthOf(1,
           `"${left}" should equal "${right}"`)
       }
     })
@@ -226,7 +226,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should be exactly 1000000000000000000
       const result = response.body.bindings[0].Result['@value']
       expect(result.toString()).to.equal('1000000000000000000')
@@ -250,7 +250,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should canonicalize to 1000000 (no .0)
       expect(response.body.bindings[0].Result['@value']).to.equal(1000000)
     })
@@ -277,7 +277,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should preserve tiny value (20 decimal places)
       const result = response.body.bindings[0].Result['@value']
       expect(result).to.be.closeTo(0.00000000000000000001, 0.000000000000000000001)
@@ -301,7 +301,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should canonicalize to 0.000001 (leading zero added)
       expect(response.body.bindings[0].Result['@value']).to.equal(0.000001)
     })
@@ -324,7 +324,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should be exactly 0.0003
       expect(response.body.bindings[0].Result['@value']).to.equal(0.0003)
     })
@@ -352,7 +352,7 @@ describe('numeric-wire-format-control', function () {
         }
 
         const response = await woql.post(agent, query)
-        
+
         // All should canonicalize to -2
         expect(response.body.bindings[0].Result['@value']).to.equal(-2)
       }
@@ -379,7 +379,7 @@ describe('numeric-wire-format-control', function () {
         }
 
         const response = await woql.post(agent, query)
-        
+
         // All should canonicalize to -0.5
         expect(response.body.bindings[0].Result['@value']).to.equal(-0.5)
       }
@@ -441,7 +441,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should be high-precision 1/3, not float
       const result = response.body.bindings[0].Result['@value']
       expect(result).to.be.closeTo(0.3333333333333333, 0.0000000000000001)
@@ -472,7 +472,7 @@ describe('numeric-wire-format-control', function () {
       }
 
       const response = await woql.post(agent, query)
-      
+
       // Should be exactly 1 (rational arithmetic is exact)
       expect(response.body.bindings[0].Result['@value']).to.equal(1)
     })

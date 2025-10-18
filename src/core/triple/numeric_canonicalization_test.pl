@@ -29,18 +29,18 @@ test(decimal_whole_number_equivalence, []) :-
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
     % All should produce the same rational
-    assertion(rational(R1)),
-    assertion(rational(R2)),
-    assertion(rational(R3)),
+    rational(R1),
+    rational(R2),
+    rational(R3),
     
     % All should equal 2 rdiv 1 (simplified to 2)
-    assertion(R1 =:= 2),
-    assertion(R2 =:= 2),
-    assertion(R3 =:= 2),
+    R1 =:= 2,
+    R2 =:= 2,
+    R3 =:= 2,
     
     % Exact structural equality
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 2: xsd:decimal fractional canonicalization with leading zero
@@ -56,18 +56,18 @@ test(decimal_leading_zero_canonicalization, []) :-
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
     % All should produce the same rational
-    assertion(rational(R1)),
-    assertion(rational(R2)),
-    assertion(rational(R3)),
+    rational(R1),
+    rational(R2),
+    rational(R3),
     
     % All should equal 1 rdiv 10
-    assertion(R1 =:= 0.1),
-    assertion(R2 =:= 0.1),
-    assertion(R3 =:= 0.1),
+    R1 =:= 0.1,
+    R2 =:= 0.1,
+    R3 =:= 0.1,
     
     % Exact structural equality
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 3: xsd:integer canonicalization
@@ -82,11 +82,11 @@ test(integer_canonicalization, []) :-
              'http://www.w3.org/2001/XMLSchema#integer', [], R2^^_),
     
     % Both should produce integer 2
-    assertion(integer(R1)),
-    assertion(integer(R2)),
-    assertion(R1 =:= 2),
-    assertion(R2 =:= 2),
-    assertion(R1 = R2).
+    integer(R1),
+    integer(R2),
+    R1 =:= 2,
+    R2 =:= 2,
+    R1 = R2.
 
 /*
  * Test 4: Negative number canonicalization
@@ -100,14 +100,14 @@ test(negative_decimal_canonicalization, []) :-
     typecast("-2.00"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
-    assertion(rational(R1)),
-    assertion(rational(R2)),
-    assertion(rational(R3)),
-    assertion(R1 =:= -2),
-    assertion(R2 =:= -2),
-    assertion(R3 =:= -2),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    rational(R1),
+    rational(R2),
+    rational(R3),
+    R1 =:= -2,
+    R2 =:= -2,
+    R3 =:= -2,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 5: Negative fractional with leading zero
@@ -121,14 +121,14 @@ test(negative_fractional_leading_zero, []) :-
     typecast("-0.10"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
-    assertion(rational(R1)),
-    assertion(rational(R2)),
-    assertion(rational(R3)),
-    assertion(R1 =:= -0.1),
-    assertion(R2 =:= -0.1),
-    assertion(R3 =:= -0.1),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    rational(R1),
+    rational(R2),
+    rational(R3),
+    R1 =:= -0.1,
+    R2 =:= -0.1,
+    R3 =:= -0.1,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 6: Trailing zeros are normalized by rational simplification
@@ -142,14 +142,14 @@ test(trailing_zeros_normalized, []) :-
     typecast("1.100"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
-    assertion(rational(R1)),
-    assertion(rational(R2)),
-    assertion(rational(R3)),
-    assertion(R1 =:= 1.1),
-    assertion(R2 =:= 1.1),
-    assertion(R3 =:= 1.1),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    rational(R1),
+    rational(R2),
+    rational(R3),
+    R1 =:= 1.1,
+    R2 =:= 1.1,
+    R3 =:= 1.1,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 7: High precision inputs maintain precision
@@ -162,10 +162,10 @@ test(high_precision_equivalence, []) :-
     typecast("0.333333333333333333330"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R2^^_),
     
-    assertion(rational(R1)),
-    assertion(rational(R2)),
+    rational(R1),
+    rational(R2),
     % Should be mathematically equal
-    assertion(R1 =:= R2).
+    R1 =:= R2.
 
 /*
  * Test 8: String decimal parsing for literals.pl
@@ -177,14 +177,14 @@ test(string_decimal_to_rational_leading_zero, []) :-
     string_decimal_to_rational("0.1", R2),
     string_decimal_to_rational("0.10", R3),
     
-    assertion(rational(R1)),
-    assertion(rational(R2)),
-    assertion(rational(R3)),
-    assertion(R1 =:= 0.1),
-    assertion(R2 =:= 0.1),
-    assertion(R3 =:= 0.1),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    rational(R1),
+    rational(R2),
+    rational(R3),
+    R1 =:= 0.1,
+    R2 =:= 0.1,
+    R3 =:= 0.1,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 9: String decimal parsing for whole numbers
@@ -195,11 +195,11 @@ test(string_decimal_to_rational_whole_numbers, []) :-
     string_decimal_to_rational("2.0", R2),
     string_decimal_to_rational("2.00", R3),
     
-    assertion(R1 =:= 2),
-    assertion(R2 =:= 2),
-    assertion(R3 =:= 2),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 =:= 2,
+    R2 =:= 2,
+    R3 =:= 2,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 10: Arithmetic with canonicalized inputs
@@ -219,11 +219,11 @@ test(arithmetic_with_canonical_inputs, []) :-
     R2 is A2 + A2,
     R3 is A3 + A3,
     
-    assertion(R1 =:= 0.2),
-    assertion(R2 =:= 0.2),
-    assertion(R3 =:= 0.2),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 =:= 0.2,
+    R2 =:= 0.2,
+    R3 =:= 0.2,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 11: Rational to string round-trip preserves canonicalization
@@ -242,7 +242,7 @@ test(rational_to_string_roundtrip, []) :-
     string_decimal_to_rational(Str, R2),
     
     % Should be mathematically equal
-    assertion(R1 =:= R2).
+    R1 =:= R2.
 
 /*
  * Test 12: Very small decimals with leading zeros
@@ -256,11 +256,11 @@ test(small_decimal_leading_zeros, []) :-
     typecast("0.0010"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
-    assertion(R1 =:= 0.001),
-    assertion(R2 =:= 0.001),
-    assertion(R3 =:= 0.001),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 =:= 0.001,
+    R2 =:= 0.001,
+    R3 =:= 0.001,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 13: Zero representations are canonical
@@ -276,13 +276,13 @@ test(zero_canonicalization, []) :-
     typecast(".0"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R4^^_),
     
-    assertion(R1 =:= 0),
-    assertion(R2 =:= 0),
-    assertion(R3 =:= 0),
-    assertion(R4 =:= 0),
-    assertion(R1 = R2),
-    assertion(R2 = R3),
-    assertion(R3 = R4).
+    R1 =:= 0,
+    R2 =:= 0,
+    R3 =:= 0,
+    R4 =:= 0,
+    R1 = R2,
+    R2 = R3,
+    R3 = R4.
 
 /*
  * Test 14: Large whole numbers with decimal points
@@ -296,11 +296,11 @@ test(large_whole_number_canonicalization, []) :-
     typecast("1000000.00"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#decimal', [], R3^^_),
     
-    assertion(R1 =:= 1000000),
-    assertion(R2 =:= 1000000),
-    assertion(R3 =:= 1000000),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 =:= 1000000,
+    R2 =:= 1000000,
+    R3 =:= 1000000,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 15: Comparison operations use canonical forms
@@ -313,14 +313,14 @@ test(comparison_with_canonical_inputs, []) :-
              'http://www.w3.org/2001/XMLSchema#decimal', [], B^^_),
     
     % Should be equal
-    assertion(A =:= B),
-    assertion(A = B),
+    A =:= B,
+    A = B,
     
     % Comparisons should work correctly
-    assertion(\+ (A < B)),
-    assertion(\+ (A > B)),
-    assertion(A =< B),
-    assertion(A >= B).
+    \+ (A < B),
+    \+ (A > B),
+    A =< B,
+    A >= B.
 
 /*
  * Test 16: xsd:double canonicalization (THE ORIGINAL BUG)
@@ -337,23 +337,23 @@ test(double_whole_number_equivalence, []) :-
              'http://www.w3.org/2001/XMLSchema#double', [], R3^^T3),
     
     % All should be the same type
-    assertion(T1 = 'http://www.w3.org/2001/XMLSchema#double'),
-    assertion(T2 = 'http://www.w3.org/2001/XMLSchema#double'),
-    assertion(T3 = 'http://www.w3.org/2001/XMLSchema#double'),
+    T1 = 'http://www.w3.org/2001/XMLSchema#double',
+    T2 = 'http://www.w3.org/2001/XMLSchema#double',
+    T3 = 'http://www.w3.org/2001/XMLSchema#double',
     
     % All should produce the same float
-    assertion(float(R1)),
-    assertion(float(R2)),
-    assertion(float(R3)),
+    float(R1),
+    float(R2),
+    float(R3),
     
     % All should equal 33.0
-    assertion(R1 =:= 33.0),
-    assertion(R2 =:= 33.0),
-    assertion(R3 =:= 33.0),
+    R1 =:= 33.0,
+    R2 =:= 33.0,
+    R3 =:= 33.0,
     
     % Exact structural equality (critical for the bug fix)
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 17: xsd:double zero canonicalization
@@ -367,14 +367,14 @@ test(double_zero_canonicalization, []) :-
     typecast("0.00"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#double', [], R3^^_),
     
-    assertion(float(R1)),
-    assertion(float(R2)),
-    assertion(float(R3)),
-    assertion(R1 =:= 0.0),
-    assertion(R2 =:= 0.0),
-    assertion(R3 =:= 0.0),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    float(R1),
+    float(R2),
+    float(R3),
+    R1 =:= 0.0,
+    R2 =:= 0.0,
+    R3 =:= 0.0,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 18: xsd:double with fractional part
@@ -388,14 +388,14 @@ test(double_fractional_canonicalization, []) :-
     typecast("2.500"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#double', [], R3^^_),
     
-    assertion(float(R1)),
-    assertion(float(R2)),
-    assertion(float(R3)),
-    assertion(R1 =:= 2.5),
-    assertion(R2 =:= 2.5),
-    assertion(R3 =:= 2.5),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    float(R1),
+    float(R2),
+    float(R3),
+    R1 =:= 2.5,
+    R2 =:= 2.5,
+    R3 =:= 2.5,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 19: xsd:float canonicalization
@@ -409,18 +409,18 @@ test(float_whole_number_equivalence, []) :-
     typecast("33.00"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#float', [], R3^^T3),
     
-    assertion(T1 = 'http://www.w3.org/2001/XMLSchema#float'),
-    assertion(T2 = 'http://www.w3.org/2001/XMLSchema#float'),
-    assertion(T3 = 'http://www.w3.org/2001/XMLSchema#float'),
+    T1 = 'http://www.w3.org/2001/XMLSchema#float',
+    T2 = 'http://www.w3.org/2001/XMLSchema#float',
+    T3 = 'http://www.w3.org/2001/XMLSchema#float',
     
-    assertion(float(R1)),
-    assertion(float(R2)),
-    assertion(float(R3)),
-    assertion(R1 =:= 33.0),
-    assertion(R2 =:= 33.0),
-    assertion(R3 =:= 33.0),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    float(R1),
+    float(R2),
+    float(R3),
+    R1 =:= 33.0,
+    R2 =:= 33.0,
+    R3 =:= 33.0,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 20: xsd:float with fractional part
@@ -434,14 +434,14 @@ test(float_fractional_canonicalization, []) :-
     typecast("1.500"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#float', [], R3^^_),
     
-    assertion(float(R1)),
-    assertion(float(R2)),
-    assertion(float(R3)),
-    assertion(R1 =:= 1.5),
-    assertion(R2 =:= 1.5),
-    assertion(R3 =:= 1.5),
-    assertion(R1 = R2),
-    assertion(R2 = R3).
+    float(R1),
+    float(R2),
+    float(R3),
+    R1 =:= 1.5,
+    R2 =:= 1.5,
+    R3 =:= 1.5,
+    R1 = R2,
+    R2 = R3.
 
 /*
  * Test 21: xsd:double vs xsd:decimal (different types should NOT be equal)
@@ -454,10 +454,10 @@ test(double_vs_decimal_different_types, []) :-
              'http://www.w3.org/2001/XMLSchema#decimal', [], Decimal^^DecType),
     
     % Should be numerically equal
-    assertion(Double =:= Decimal),
+    Double =:= Decimal,
     
     % But structurally different (float vs rational)
-    assertion(Double \= Decimal),
-    assertion(DType \= DecType).
+    Double \= Decimal,
+    DType \= DecType.
 
 :- end_tests(numeric_canonicalization).
