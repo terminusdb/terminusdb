@@ -4,11 +4,11 @@ const { Agent, db, woql } = require('../lib')
 /**
  * Float/Double String Representation Test
  *
- * Issue: literal(33, "xsd:double") when typecast to string returns "33" 
+ * Issue: literal(33, "xsd:double") when typecast to string returns "33"
  * instead of "33.0"
  *
  * Expected behavior:
- * - xsd:double and xsd:float should preserve decimal notation when 
+ * - xsd:double and xsd:float should preserve decimal notation when
  *   converted to string ("33.0" not "33")
  * - xsd:decimal can be "33" or "33.0" (both valid)
  * - xsd:integer should be "33" (no decimal)
@@ -47,14 +47,14 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(1)
-      
+
       const stringValue = r.body.bindings[0].AsString['@value']
-      
+
       // Verify: xsd:double should preserve decimal notation in string representation
       // Float/double values should preserve decimal notation
-      expect(stringValue).to.match(/33\.0+$/, 
+      expect(stringValue).to.match(/33\.0+$/,
         'xsd:double should typecast to string with decimal point (e.g., "33.0")')
     })
 
@@ -77,13 +77,13 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(1)
-      
+
       const stringValue = r.body.bindings[0].AsString['@value']
-      
+
       // Verify: xsd:float should preserve decimal notation in string representation
-      expect(stringValue).to.match(/33\.0+$/, 
+      expect(stringValue).to.match(/33\.0+$/,
         'xsd:float should typecast to string with decimal point (e.g., "33.0")')
     })
 
@@ -106,11 +106,11 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(1)
-      
+
       const stringValue = r.body.bindings[0].AsString['@value']
-      
+
       // xsd:decimal can be "33" or "33.0" - both are valid
       // The implementation chooses to omit trailing zeros
       expect(stringValue).to.equal('33')
@@ -135,11 +135,11 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(1)
-      
+
       const stringValue = r.body.bindings[0].AsString['@value']
-      
+
       // Integer should never have decimal point
       expect(stringValue).to.equal('33')
     })
@@ -269,49 +269,49 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Should return 4 bindings (one for each type)
       expect(r.body.bindings).to.have.lengthOf(4)
-      
+
       // Find each type (TypeOf might be an object with @value)
       const getTypeValue = (b) => {
         if (typeof b.TypeOf === 'string') return b.TypeOf
         if (b.TypeOf && b.TypeOf['@value']) return b.TypeOf['@value']
         return b.TypeOf
       }
-      
+
       const matchesType = (typeOf, expectedType) => {
         const typeValue = getTypeValue({ TypeOf: typeOf })
         // Handle both "xsd:double" and full URI formats
-        return typeValue === expectedType || 
+        return typeValue === expectedType ||
                typeValue === `xsd:${expectedType.split('#')[1]}`
       }
-      
-      const doubleBinding = r.body.bindings.find(b => 
-        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#double')
+
+      const doubleBinding = r.body.bindings.find(b =>
+        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#double'),
       )
-      const floatBinding = r.body.bindings.find(b => 
-        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#float')
+      const floatBinding = r.body.bindings.find(b =>
+        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#float'),
       )
-      const decimalBinding = r.body.bindings.find(b => 
-        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#decimal')
+      const decimalBinding = r.body.bindings.find(b =>
+        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#decimal'),
       )
-      const integerBinding = r.body.bindings.find(b => 
-        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#integer')
+      const integerBinding = r.body.bindings.find(b =>
+        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#integer'),
       )
-      
+
       expect(doubleBinding).to.exist
       expect(floatBinding).to.exist
       expect(decimalBinding).to.exist
       expect(integerBinding).to.exist
-      
+
       // VERIFIED: Float and double correctly return "33.0"
-      expect(doubleBinding.AsString['@value']).to.match(/33\.0+$/, 
+      expect(doubleBinding.AsString['@value']).to.match(/33\.0+$/,
         'xsd:double should preserve decimal notation in string representation')
-      
-      expect(floatBinding.AsString['@value']).to.match(/33\.0+$/, 
+
+      expect(floatBinding.AsString['@value']).to.match(/33\.0+$/,
         'xsd:float should preserve decimal notation in string representation')
-      
+
       // Decimal and integer correctly return "33" (no decimal)
       expect(decimalBinding.AsString['@value']).to.equal('33')
       expect(integerBinding.AsString['@value']).to.equal('33')
@@ -357,12 +357,12 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(3)
-      
+
       // All should preserve "33.5" (with fractional part, this works correctly)
       for (const binding of r.body.bindings) {
-        expect(binding.AsString['@value']).to.match(/33\.5/, 
+        expect(binding.AsString['@value']).to.match(/33\.5/,
           'All types should preserve fractional part in string representation')
       }
     })
@@ -403,26 +403,26 @@ describe('float-double-string-representation', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(2)
-      
+
       const matchesType = (typeOf, expectedType) => {
         const typeValue = typeof typeOf === 'string' ? typeOf : (typeOf && typeOf['@value'])
-        return typeValue === expectedType || 
+        return typeValue === expectedType ||
                typeValue === `xsd:${expectedType.split('#')[1]}`
       }
-      
-      const doubleZero = r.body.bindings.find(b => 
-        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#double')
+
+      const doubleZero = r.body.bindings.find(b =>
+        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#double'),
       )
-      const integerZero = r.body.bindings.find(b => 
-        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#integer')
+      const integerZero = r.body.bindings.find(b =>
+        matchesType(b.TypeOf, 'http://www.w3.org/2001/XMLSchema#integer'),
       )
-      
+
       // Double zero should be "0.0"
-      expect(doubleZero.AsString['@value']).to.match(/0\.0+$/, 
+      expect(doubleZero.AsString['@value']).to.match(/0\.0+$/,
         'xsd:double zero should be "0.0"')
-      
+
       // Integer zero should be "0"
       expect(integerZero.AsString['@value']).to.equal('0')
     })

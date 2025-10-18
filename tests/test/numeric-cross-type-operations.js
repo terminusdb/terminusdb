@@ -272,15 +272,15 @@ describe('numeric-cross-type-operations', function () {
         ],
       }
       const r = await woql.post(agent, query)
-      
+
       // Should return all 3 documents
       expect(r.body.bindings).to.have.lengthOf(3)
-      
+
       // Filter to find where fields are equal (tests cross-type equality)
       const equalBindings = r.body.bindings.filter(b =>
-        b.Decimal['@value'] === b.Integer['@value']
+        b.Decimal['@value'] === b.Integer['@value'],
       )
-      
+
       // Should find exactly 1 match (MixedNumeric/2 where both are 50)
       expect(equalBindings).to.have.lengthOf(1)
       expect(equalBindings[0].Decimal['@value']).to.equal(50)
@@ -298,15 +298,15 @@ describe('numeric-cross-type-operations', function () {
         ],
       }
       const r = await woql.post(agent, query)
-      
+
       // Should return all 3 documents
       expect(r.body.bindings).to.have.lengthOf(3)
-      
+
       // Filter to find where decimal < integer (tests cross-type comparison)
       const lessBindings = r.body.bindings.filter(b =>
-        b.Decimal['@value'] < b.Integer['@value']
+        b.Decimal['@value'] < b.Integer['@value'],
       )
-      
+
       // Should find exactly 1 match (MixedNumeric/3 where 25.5 < 100)
       expect(lessBindings).to.have.lengthOf(1)
       expect(lessBindings[0].Decimal['@value']).to.equal(25.5)
@@ -321,13 +321,13 @@ describe('numeric-cross-type-operations', function () {
         object: { '@type': 'Value', variable: 'Decimal' },
       }
       const r = await woql.post(agent, query)
-      
+
       // Should return all 3 documents
       expect(r.body.bindings).to.have.lengthOf(3)
-      
+
       // Filter to find decimal = 50 (tests cross-type equality with literal)
       const matchBindings = r.body.bindings.filter(b => b.Decimal['@value'] === 50)
-      
+
       // Should find exactly 1 match (MixedNumeric/2)
       expect(matchBindings).to.have.lengthOf(1)
       expect(matchBindings[0].Decimal['@value']).to.equal(50)
@@ -342,13 +342,13 @@ describe('numeric-cross-type-operations', function () {
         object: { '@type': 'Value', variable: 'Integer' },
       }
       const r = await woql.post(agent, query)
-      
+
       // Should return all 3 documents
       expect(r.body.bindings).to.have.lengthOf(3)
-      
+
       // Filter to find integer = 50 (tests cross-type equality with literal)
       const matchBindings = r.body.bindings.filter(b => b.Integer['@value'] === 50)
-      
+
       // Should find exactly 2 matches (MixedNumeric/1 and MixedNumeric/2)
       expect(matchBindings).to.have.lengthOf(2)
       for (const binding of matchBindings) {

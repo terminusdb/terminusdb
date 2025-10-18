@@ -379,7 +379,7 @@ describe('numeric-arithmetic-edge-cases', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Should be exact rational 1/3 = 0.333333... (with many digits)
       expect(r.body.bindings[0].Result['@value']).to.be.closeTo(0.3333333333, 0.0000000001)
     })
@@ -400,7 +400,7 @@ describe('numeric-arithmetic-edge-cases', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Should be exactly 1 (rational arithmetic is exact)
       expect(r.body.bindings[0].Result['@value']).to.equal(1)
     })
@@ -417,7 +417,7 @@ describe('numeric-arithmetic-edge-cases', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // 1/7 = 0.142857142857...
       expect(r.body.bindings[0].Result['@value']).to.be.closeTo(0.14285714285714, 0.00000000000001)
     })
@@ -581,7 +581,7 @@ describe('numeric-arithmetic-edge-cases', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Should be exactly 0.3 (rational arithmetic)
       expect(r.body.bindings[0].Result['@value']).to.equal(0.3)
     })
@@ -598,7 +598,7 @@ describe('numeric-arithmetic-edge-cases', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Should be exactly 1
       expect(r.body.bindings[0].Result['@value']).to.equal(1)
     })
@@ -615,7 +615,7 @@ describe('numeric-arithmetic-edge-cases', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Should be exactly 0.1
       expect(r.body.bindings[0].Result['@value']).to.equal(0.1)
     })

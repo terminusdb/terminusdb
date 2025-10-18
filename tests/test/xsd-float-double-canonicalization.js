@@ -43,7 +43,7 @@ describe('xsd-double-canonicalization', function () {
           }
 
           const r = await woql.post(agent, query)
-          
+
           expect(r.body.bindings).to.have.lengthOf(1,
             `xsd:double ${values[i]['@value']} should equal ${values[j]['@value']}`)
         }
@@ -59,7 +59,7 @@ describe('xsd-double-canonicalization', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       expect(r.body.bindings).to.have.lengthOf(1,
         'literal(33, xsd:double) should equal literal(33.0, xsd:double)')
     })
@@ -80,7 +80,7 @@ describe('xsd-double-canonicalization', function () {
           }
 
           const r = await woql.post(agent, query)
-          
+
           expect(r.body.bindings).to.have.lengthOf(1,
             `xsd:double ${values[i]['@value']} should equal ${values[j]['@value']}`)
         }
@@ -103,7 +103,7 @@ describe('xsd-double-canonicalization', function () {
           }
 
           const r = await woql.post(agent, query)
-          
+
           expect(r.body.bindings).to.have.lengthOf(1,
             `xsd:double ${values[i]['@value']} should equal ${values[j]['@value']}`)
         }
@@ -165,16 +165,16 @@ describe('xsd-double-canonicalization', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       const resultValue = r.body.bindings[0].Result['@value']
       const resultType = r.body.bindings[0].Result['@type']
-      
+
       console.log('0.1 + 0.2 (xsd:double) result value:', resultValue)
       console.log('0.1 + 0.2 (xsd:double) result type:', resultType)
-      
+
       // xsd:double uses IEEE 754, so floating point "error" is expected and correct
       expect(resultValue).to.be.closeTo(0.30000000000000004, 0.0000000000000001)
-      
+
       // Type: Pure xsd:double arithmetic should return xsd:double
       expect(resultType).to.equal('xsd:double', 'Pure float/double ops return xsd:double')
     })
@@ -294,11 +294,11 @@ describe('xsd-double-canonicalization', function () {
 
     it('Arithmetic Edge Case: xsd:double + xsd:decimal inherits IEEE 754 precision', async function () {
       // EDGE CASE DOCUMENTED: Mixing xsd:double with xsd:decimal
-      // 
+      //
       // IMPORTANT: Precision is already lost when xsd:double values are parsed!
       // xsd:double('0.1') → IEEE 754 float (0.1000000000000000055...)
       // Even though result type is xsd:decimal, the input precision is gone
-      
+
       const query = {
         '@type': 'Eval',
         expression: {
@@ -310,11 +310,11 @@ describe('xsd-double-canonicalization', function () {
       }
 
       const r = await woql.post(agent, query)
-      
-      // ACTUAL BEHAVIOR: Still get IEEE 754 error because xsd:double(0.1) 
+
+      // ACTUAL BEHAVIOR: Still get IEEE 754 error because xsd:double(0.1)
       // was already converted to imprecise float before arithmetic
       expect(r.body.bindings[0].Result['@value']).to.equal(0.30000000000000004)
-      
+
       // Type IS xsd:decimal (mixed types rule), but precision already lost
       expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal')
     })
@@ -322,7 +322,7 @@ describe('xsd-double-canonicalization', function () {
     it('Edge Case: Pure xsd:decimal avoids IEEE 754 precision issues', async function () {
       // CONTRAST: Pure xsd:decimal arithmetic gives exact results
       // This shows the difference - use xsd:decimal throughout for precision
-      
+
       const query = {
         '@type': 'Eval',
         expression: {
@@ -334,7 +334,7 @@ describe('xsd-double-canonicalization', function () {
       }
 
       const r = await woql.post(agent, query)
-      
+
       // Pure xsd:decimal: EXACT result (no IEEE 754 error)
       expect(r.body.bindings[0].Result['@value']).to.equal(0.3)
       expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal')

@@ -216,7 +216,7 @@ describe('numeric-raw-json-control', function () {
 
       // Convert to Decimal from string (preserves precision)
       const valueFromText = new Decimal(valueStrFromText)
-      
+
       // Verify server sent full 20 digits
       expect(valueFromText.equals(new Decimal('12345678901234567890'))).to.be.true
 
