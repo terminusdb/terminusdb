@@ -43,7 +43,8 @@ describe('cli-triples', function () {
   })
 
   it('load trig file', async function () {
-    const trigFile = util.servedPath('MW00KG01635.trig')
+    // Use relative path for Docker compatibility (working directory is /app/terminusdb/tests inside container)
+    const trigFile = 'served/MW00KG01635.trig'
     const db = util.randomString()
     await execEnv(`${util.terminusdbScript()} db create admin/${db} --schema=false`)
     const r = await execEnv(`${util.terminusdbScript()} triples load admin/${db}/local/branch/main/instance ${trigFile}`)
