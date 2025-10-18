@@ -842,6 +842,69 @@ typecast_switch('http://terminusdb.com/schema/xdd#decimalRange', 'http://www.w3.
     !,
     Cast = Val^^'http://terminusdb.com/schema/xdd#decimalRange'.
 %%%
+%%%
+%%% Cross-Family Numeric Typecasts
+%%%
+
+%%% xsd:double => xsd:decimal
+typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#double', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#decimal') :-
+    !,
+    (   float(Val)
+    ->  Casted = Val  % Convert IEEE 754 float to rational (via Prolog's automatic conversion)
+    ;   integer(Val)
+    ->  Casted = Val
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))
+    ).
+
+%%% xsd:float => xsd:decimal
+typecast_switch('http://www.w3.org/2001/XMLSchema#decimal', 'http://www.w3.org/2001/XMLSchema#float', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#decimal') :-
+    !,
+    (   float(Val)
+    ->  Casted = Val  % Convert IEEE 754 float to rational
+    ;   integer(Val)
+    ->  Casted = Val
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#decimal'),_))
+    ).
+
+%%% xsd:double => xsd:integer
+typecast_switch('http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#double', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#integer') :-
+    !,
+    (   number(Val),
+        Val =:= floor(Val)  % Must be a whole number
+    ->  Casted is truncate(Val)
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#integer'),_))
+    ).
+
+%%% xsd:float => xsd:integer
+typecast_switch('http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#float', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#integer') :-
+    !,
+    (   number(Val),
+        Val =:= floor(Val)  % Must be a whole number
+    ->  Casted is truncate(Val)
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#integer'),_))
+    ).
+
+%%% xsd:double => xsd:float
+typecast_switch('http://www.w3.org/2001/XMLSchema#float', 'http://www.w3.org/2001/XMLSchema#double', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#float') :-
+    !,
+    (   float(Val)
+    ->  true  % Both are IEEE 754 floats in Prolog
+    ;   integer(Val)
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#float'),_))
+    ).
+
+%%% xsd:float => xsd:double
+typecast_switch('http://www.w3.org/2001/XMLSchema#double', 'http://www.w3.org/2001/XMLSchema#float', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#double') :-
+    !,
+    (   float(Val)
+    ->  true  % Both are IEEE 754 floats in Prolog
+    ;   integer(Val)
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#double'),_))
+    ).
+
+%%%
 %%% Numeric Downcasting
 %%%
 typecast_switch('http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#decimal', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#integer') :-
