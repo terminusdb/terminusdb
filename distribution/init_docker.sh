@@ -21,7 +21,7 @@ file_env() {
 file_env 'TERMINUSDB_ADMIN_PASS'
 TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:-root}
 
-if [ ! -d /app/terminusdb/storage/db ]; then
+if [ ! -f /app/terminusdb/storage/db/terminusdb%3a%2f%2f%2fsystem%2fschema.label ]; then
     /app/terminusdb/terminusdb store init --key "$TERMINUSDB_ADMIN_PASS"
 fi
 

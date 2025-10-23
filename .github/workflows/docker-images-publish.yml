@@ -38,15 +38,32 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Load images
+      - name: Load and push AMD64 images
         run: |
+          # Load AMD64 base image
           docker load < terminusdb-server-snapshot-amd64.tar.gz
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
+          
+          # Build and push AMD64 noroot image from local
+          docker build -t terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA docker/no-root
+          docker push terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA
+          
+          # Clean up local tag
           docker rmi terminusdb/terminusdb-server:local
+
+      - name: Load and push ARM64 images
+        run: |
+          # Load ARM64 base image
           docker load < terminusdb-server-snapshot-arm64.tar.gz
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          
+          # Build and push ARM64 noroot image from local
+          docker build -t terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA docker/no-root
+          docker push terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
+          
+          # Clean up local tag
           docker rmi terminusdb/terminusdb-server:local
 
       - name: Determine image tags to push
@@ -81,13 +98,32 @@ jobs:
 
           # Set the tags as an environment variable
           echo "docker_tags=${TAGS}" >> $GITHUB_ENV
+          
+          # Also create noroot tags
+          NOROOT_TAGS="${VERSION}-noroot"
+          if [ "$VERSION" == "dev" ]; then
+            NOROOT_TAGS="${NOROOT_TAGS},${VERSION}-noroot-$GITHUB_SHA"
+          fi
+          if echo "$GITHUB_REF" | grep -q "refs/tags/v" && ! echo "$VERSION" | grep -qE "(rc|beta)"; then
+            VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
+            NOROOT_TAGS="${NOROOT_TAGS},latest-noroot,${VERSION_MAJOR}-noroot"
+          fi
+          echo "noroot_tags=${NOROOT_TAGS}" >> $GITHUB_ENV
 
-      - name: Create new image manifest
+      - name: Create multi-arch image manifests
         run: |
+          # Create manifests for standard images
           TAGS="${{ env.docker_tags }}"
           for TAG in ${TAGS//,/ }
           do
               docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
+          done
+          
+          # Create manifests for noroot images
+          NOROOT_TAGS="${{ env.noroot_tags }}"
+          for TAG in ${NOROOT_TAGS//,/ }
+          do
+              docker buildx imagetools create -t terminusdb/terminusdb-server:$TAG terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
           done
 
   trigger_enterprise_build:

@@ -63,6 +63,9 @@ ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 WORKDIR /app/terminusdb
+RUN mkdir -p storage/db
+RUN mkdir -p storage/plugins
+COPY docker/plugins/auto-optimize.pl storage/plugins/
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
 COPY src src/
