@@ -63,10 +63,6 @@ ENV TERMINUSDB_GIT_HASH=${TERMINUSDB_GIT_HASH}
 ARG TERMINUSDB_JWT_ENABLED=true
 ENV TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED}
 WORKDIR /app/terminusdb
-RUN mkdir -p storage \
-    && chown -R 1000:1000 storage
-ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
-COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
 COPY src src/
@@ -107,5 +103,9 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
 COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
+RUN mkdir -p storage \
+    && chown -R 1000:1000 storage
+ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
+COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 WORKDIR /app/terminusdb
 CMD ["/app/terminusdb/init_docker.sh"]
