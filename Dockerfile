@@ -104,4 +104,8 @@ RUN set -eux; \
 COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
 COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
 WORKDIR /app/terminusdb
+RUN mkdir -p storage \
+    && chown -R 1000:1000 storage
+ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
+COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 CMD ["/app/terminusdb/init_docker.sh"]
