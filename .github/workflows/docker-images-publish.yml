@@ -48,9 +48,6 @@ jobs:
           # Build and push AMD64 noroot image from local
           docker build -t terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA docker/no-root
           docker push terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA
-          
-          # Clean up local tag
-          docker rmi terminusdb/terminusdb-server:local
 
       - name: Load and push ARM64 images
         run: |
@@ -62,7 +59,9 @@ jobs:
           # Build and push ARM64 noroot image from local
           docker build -t terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA docker/no-root
           docker push terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
-          
+
+      - name: Clean up the local tag
+        run: |         
           # Clean up local tag
           docker rmi terminusdb/terminusdb-server:local
 
