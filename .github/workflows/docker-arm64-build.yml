@@ -55,5 +55,5 @@ jobs:
       test_ref: ${{ github.sha }}
       image_artifact: terminusdb-server-snapshot-arm64
       image_platform: linux/arm64
-      runner: ubuntu-latest
+      runner: buildjet-4vcpu-ubuntu-2204-arm
       mocha_parallel: false
