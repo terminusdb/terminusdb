@@ -13,6 +13,7 @@
 
 :- reexport(core(util/syntax)).
 :- use_module(core(util)).
+:- use_module(core(util/trace_context), [parse_traceparent/3]).
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -33,6 +34,7 @@
 :- use_module(library(option)).
 :- use_module(library(yall)).
 :- use_module(library(zlib)).
+:- use_module(library(uuid)).
 
 % unit tests
 :- use_module(library(plunit)).
@@ -3356,16 +3358,62 @@ customise_exception(error(E)) :-
                  'api:message' : EM},
                [status(500), width(0)]).
 customise_exception(error(E, CTX)) :-
-    json_log_error_formatted('~N[Exception] ~q',[error(E,CTX)]),
+    % Get request and operation IDs for correlation
+    (   get_current_id_from_stream(Local_Id)
+    ->  generate_request_id(Local_Id, Request_Id)
+    ;   Request_Id = 'unknown'),
+    (   saved_request(Local_Id, _, _, some(Operation_Id), _)
+    ->  true
+    ;   Operation_Id = Request_Id),
+    
+    % Extract and format stack trace for logging
     (   CTX = context(prolog_stack(Stack),_)
-    ->  with_output_to(
-            string(Ctx_String),
-            print_prolog_backtrace(current_output,Stack))
-    ;   format(string(Ctx_String), "~q", [CTX])),
-    format(atom(EM),'Error: ~q~n~s', [E, Ctx_String]),
-    reply_json(_{'api:status' : 'api:server_error',
-                 'api:message' : EM},
-               [status(500), width(0)]).
+    ->  with_output_to(string(Stack_String), 
+                       print_prolog_backtrace(current_output, Stack))
+    ;   format(string(Stack_String), "~q", [CTX])),
+    
+    % Log full error server-side (always includes stack trace)
+    format(string(Error_Details), '~q', [E]),
+    json_log_error(_{
+        request_id: Request_Id,
+        operation_id: Operation_Id,
+        error_type: 'api:InternalServerError',
+        error: Error_Details,
+        stack_trace: Stack_String
+    }),
+    
+    % Generate user-facing message (includes error term but NOT stack trace)
+    format(string(Error_Term_String), '~q', [E]),
+    format(string(User_Message), 
+           'Processing error: ~w',
+           [Error_Term_String]),
+    
+    % Build response (without stack trace by default)
+    Base_Response = _{'@type' : 'api:ErrorResponse',
+                      'api:status' : 'api:server_error',
+                      'api:error' : _{'@type' : 'api:InternalServerError'},
+                      'api:message' : User_Message,
+                      'api:request_id' : Request_Id},
+    
+    % Add trace ID if available (parse from operation_id if it's traceparent)
+    (   parse_traceparent(Operation_Id, Trace_Id, _Span_Id)
+    ->  put_dict('api:trace_id', Base_Response, Trace_Id, Response_With_Trace)
+    ;   Response_With_Trace = Base_Response),
+    
+    % Add stack trace only if debug mode enabled
+    (   expose_stack_traces
+    ->  format(string(Debug_Message), '~q~n~s', [E, Stack_String]),
+        put_dict('api:debug', Response_With_Trace, Debug_Message, Final_Response)
+    ;   Final_Response = Response_With_Trace),
+    
+    % Add trace headers to response
+    format('Access-Control-Expose-Headers: X-Request-ID, X-Operation-ID~n'),
+    format('X-Request-ID: ~w~n', [Request_Id]),
+    (   nonvar(Operation_Id)
+    ->  format('X-Operation-ID: ~w~n', [Operation_Id])
+    ;   true),
+    
+    reply_json(Final_Response, [status(500), width(0)]).
 customise_exception(http_reply(Obj)) :-
     throw(http_reply(Obj)).
 customise_exception(E) :-
@@ -3380,13 +3428,37 @@ customise_exception(E) :-
  */
 api_error_http_reply(API, Error, Request) :-
     api_error_jsonld(API,Error,JSON),
-    json_http_code(JSON,Status),
-    cors_reply_json(Request,JSON,[status(Status),serialize_unknown(true)]).
+    
+    % Add request ID if available (new top-level field, backward compatible)
+    (   get_current_id_from_stream(Local_Id)
+    ->  generate_request_id(Local_Id, Request_Id),
+        put_dict('api:request_id', JSON, Request_Id, JSON_With_Id),
+        % Add trace ID if available (parse from operation_id if it's traceparent)
+        (   saved_request(Local_Id, _, _, some(Operation_Id), _),
+            parse_traceparent(Operation_Id, Trace_Id, _Span_Id)
+        ->  put_dict('api:trace_id', JSON_With_Id, Trace_Id, JSON_Final)
+        ;   JSON_Final = JSON_With_Id)
+    ;   JSON_Final = JSON),
+    
+    json_http_code(JSON_Final,Status),
+    cors_reply_json(Request,JSON_Final,[status(Status),serialize_unknown(true)]).
 
 api_error_http_reply(API, Error, Type, Request) :-
     api_error_jsonld(API,Error,Type,JSON),
-    json_http_code(JSON,Status),
-    cors_reply_json(Request,JSON,[status(Status),serialize_unknown(true)]).
+    
+    % Add request ID if available (new top-level field, backward compatible)
+    (   get_current_id_from_stream(Local_Id)
+    ->  generate_request_id(Local_Id, Request_Id),
+        put_dict('api:request_id', JSON, Request_Id, JSON_With_Id),
+        % Add trace ID if available (parse from operation_id if it's traceparent)
+        (   saved_request(Local_Id, _, _, some(Operation_Id), _),
+            parse_traceparent(Operation_Id, Trace_Id, _Span_Id)
+        ->  put_dict('api:trace_id', JSON_With_Id, Trace_Id, JSON_Final)
+        ;   JSON_Final = JSON_With_Id)
+    ;   JSON_Final = JSON),
+    
+    json_http_code(JSON_Final,Status),
+    cors_reply_json(Request,JSON_Final,[status(Status),serialize_unknown(true)]).
 
 :- meta_predicate api_report_errors(?,?,0).
 api_report_errors(API,Request,Goal) :-
@@ -3922,6 +3994,10 @@ match_http_info(content_length(Size), _Method, _Protocol, _Host, _Port, _Url_Suf
     term_string(Size, Size_String).
 match_http_info(x_operation_id(Operation_Id), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, Operation_Id_String) :-
     atom_string(Operation_Id, Operation_Id_String).
+match_http_info(traceparent(Trace_Context), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, Operation_Id_String) :-
+    atom_string(Trace_Context, Operation_Id_String).
+match_http_info(x_request_id(Request_Id), _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, Operation_Id_String) :-
+    atom_string(Request_Id, Operation_Id_String).
 match_http_info(_, _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).
 
 extract_http_info_([], _Method, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id).

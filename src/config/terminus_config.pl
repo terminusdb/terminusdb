@@ -36,7 +36,8 @@
               grpc_label_endpoint/1,
               crypto_password_cost/1,
               lru_cache_size/1,
-              trust_migrations/0
+              trust_migrations/0,
+              expose_stack_traces/0
 ]).
 
 :- use_module(library(pcre)).
@@ -329,6 +330,24 @@ lru_cache_size(Cache_Size) :-
 :- table trust_migrations/0.
 trust_migrations :-
     getenv('TERMINUSDB_TRUST_MIGRATIONS', true).
+
+/**
+ * expose_stack_traces is semidet.
+ *
+ * Succeeds (returns true) if stack traces should be exposed in HTTP error responses.
+ * Default is FALSE (secure by default). Only enabled if env var is explicitly set to
+ * a truthy value.
+ *
+ * Security: Stack traces may contain sensitive information, so they should only be
+ * exposed in development/debug environments.
+ */
+:- table expose_stack_traces/0.
+expose_stack_traces :-
+    getenv('TERMINUSDB_EXPOSE_STACK_TRACES', Value),
+    atom_string(Value_Atom, Value),
+    memberchk(Value_Atom, [true, 'true', '1', 'yes']),
+    !.
+% Predicate fails (returns false) if env var not set or set to any other value
 
 :- table semantic_indexer_endpoint/1.
 semantic_indexer_endpoint(Endpoint) :-
