@@ -5693,7 +5693,7 @@ test(less_than_cross_type_float_decimal, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),
     cleanup(teardown_temp_store(State)),
-    throws(error(casting_error(_,_),_))
+    throws(error(incompatible_numeric_comparison(_,_),_))
 ]) :-
     % Cross-family comparison should throw error: 21.1 (float) vs 33 (decimal)
     % Type family safety prevents mixing IEEE 754 (float) with rational (decimal)
@@ -5710,7 +5710,7 @@ test(greater_than_equal_values_cross_type, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),
     cleanup(teardown_temp_store(State)),
-    throws(error(casting_error(_,_),_))
+    throws(error(incompatible_numeric_comparison(_,_),_))
 ]) :-
     % Cross-family comparison should throw error: 33.0 (float) vs 33 (decimal)
     % Type family safety prevents mixing IEEE 754 (float) with rational (decimal)
