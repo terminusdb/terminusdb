@@ -1,3 +1,8 @@
+# TerminusDB Server v11.2-rc3 Release Notes (pending)
+
+## Maintenance and bug fixes
+* Ensure correct resulting type (floats are contagious)
+
 # TerminusDB Server v11.2-rc2 Release Notes
 
 This marks a substantial release of TerminusDB with support for high precision calculations in the WOQL core, and with alignment to JSON, letting clients handling native JSON with high precision.
