@@ -1,3 +1,20 @@
+# TerminusDB Server v11.2-rc2 Release Notes
+
+This marks a substantial release of TerminusDB with support for high precision calculations in the WOQL core, and with alignment to JSON, letting clients handling native JSON with high precision.
+
+## Enhancements
+* Rationals are now used by default for all calculations (#128)
+* xsd:decimals are now normalized (2 and 2.0 are the same) fixing #2242
+* greater, less and eq require commensurable types to compare (#2225)
+* Auto optimizer plugin is now included by default for continuous performance
+* JSON output is now consistent between WOQL, Document API and GraphQL:
+  * Numbers are outputed as number, arbitrary size, capped at 20 decimals
+
+## Maintenance and bug fixes
+* Dashboard routes are back and dashboard is clearly deprecated (#2238)
+* Further improvements to the build system
+* group_by with decimals works as intended again (#2094)
+
 # TerminusDB Server v11.1.17 Release Notes
 
 Thanks to new contributors @axefrog, @dfrnt-SigmundFuchs, and existing contributors @alexander-mart, @hoijnet. Version 11.1.15-16 were not fully released due to changes in the build system.
