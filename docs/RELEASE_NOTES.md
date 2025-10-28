@@ -1,7 +1,18 @@
 # TerminusDB Server v11.2-rc3 Release Notes (pending)
 
+## Enhancements
+* Improved error handling and observability (#XXXX)
+  * Added unique request IDs (UUID v4) to all error responses for easier debugging
+  * Added W3C Trace Context support (traceparent header) for distributed tracing
+  * Stack traces no longer exposed in HTTP responses (security improvement)
+  * Error messages now include helpful Prolog error terms without exposing internal stack traces
+  * All error responses maintain backward compatibility while adding `api:request_id` and optional `api:trace_id` fields
+  * New error type: `api:IncompatibleNumericComparison` for clearer numeric type mismatch errors
+  * See `docs/ERROR_HANDLING_STANDARDS.md` for complete error handling documentation
+
 ## Maintenance and bug fixes
 * Ensure correct resulting type (floats are contagious)
+* Fixed error message duplication between `api:error` and `api:message` fields
 
 # TerminusDB Server v11.2-rc2 Release Notes
 

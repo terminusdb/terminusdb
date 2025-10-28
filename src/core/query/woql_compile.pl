@@ -689,8 +689,10 @@ numeric_types_compatible_for_comparison(V1, T1, V2, T2) :-
     value_to_string(V2, Str2),
     short_type_name(T1, Short1),
     short_type_name(T2, Short2),
-    format(atom(Msg), '~w (~w) is not safely comparable with ~w (~w). Must typecast explicitly between incompatible numeric type families. Rational integer/decimal types vs. IEEE 754 types (float/double).', [Str1, Short1, Str2, Short2]),
-    throw(error(casting_error(Msg, Str1), _)).
+    % Throw with structured data: value and type info
+    format(atom(ValueInfo), '~w (~w)', [Str1, Short1]),
+    format(atom(TypeInfo), '~w (~w)', [Str2, Short2]),
+    throw(error(incompatible_numeric_comparison(ValueInfo, TypeInfo), _)).
 
 /*
  * value_to_string(+Value, -String) is det.

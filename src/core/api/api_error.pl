@@ -709,6 +709,17 @@ api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
                               'api:type' : Type},
              'api:message' : Msg
             }.
+api_error_jsonld_(woql,error(incompatible_numeric_comparison(Val1,Val2),_), JSON) :-
+    format(string(Val1S), "~w", [Val1]),
+    format(string(Val2S), "~w", [Val2]),
+    format(string(Msg), "~s is not safely comparable with ~s. Must typecast explicitly between incompatible numeric type families. Rational integer/decimal types vs. IEEE 754 types (float/double).", [Val1S, Val2S]),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:IncompatibleNumericComparison',
+                              'api:left' : Val1S,
+                              'api:right' : Val2S},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(woql,error(existence_error(matching_rule,Term),_), JSON) :-
     format(string(TermW), "~q", [Term]),
     format(string(Msg), "The program: '~w' used a predicate with unhandled arguments", [Term]),
