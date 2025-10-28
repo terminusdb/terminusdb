@@ -52,8 +52,10 @@ jobs:
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           # Since this is a standard ubuntu-latest, we have to emulate with buildx...
-          docker buildx build --platform linux/arm64 --tag terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA --load docker/no-root
-          docker push terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
+          docker buildx build --platform linux/arm64 \
+            --build-arg BASE_IMAGE=terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA \
+            --tag terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA \
+            --push docker/no-root
           docker rmi terminusdb/terminusdb-server:local
 
       - name: Determine image tags to push
