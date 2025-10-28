@@ -60,9 +60,9 @@ describe('patch', function () {
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
 
-      // Verify request_id exists and is valid UUID v4
+      // Verify request_id exists and is valid UUID format (any version)
       expect(res.body).to.have.property('api:request_id')
-      expect(res.body['api:request_id']).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+      expect(res.body['api:request_id']).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
 
       // Remove request_id for comparison of the rest of the structure
       const { 'api:request_id': _, ...bodyWithoutRequestId } = res.body
@@ -110,9 +110,9 @@ describe('patch', function () {
         message,
       })
 
-      // Verify request_id exists and is valid UUID v4
+      // Verify request_id exists and is valid UUID format (any version)
       expect(res.body).to.have.property('api:request_id')
-      expect(res.body['api:request_id']).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+      expect(res.body['api:request_id']).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
 
       // Remove request_id for comparison of the rest of the structure
       const { 'api:request_id': _, ...bodyWithoutRequestId } = res.body

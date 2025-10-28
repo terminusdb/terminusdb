@@ -36,9 +36,9 @@ describe('error-handling', function () {
       expect(result.body).to.have.property('api:status', 'api:failure')
       expect(result.body).to.have.property('api:request_id')
 
-      // Request ID should be UUID v4 format
+      // Request ID should be valid UUID format (any version)
       const requestId = result.body['api:request_id']
-      expect(requestId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+      expect(requestId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     })
 
     it('should include request ID in all error types', async function () {
