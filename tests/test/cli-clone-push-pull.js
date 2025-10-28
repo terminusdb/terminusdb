@@ -110,6 +110,49 @@ describe('cli-clone-push-pull', function () {
     await db.delete(agent)
   })
 
+  it('returns semantic error response when remote history diverged (error structure)', async function () {
+    this.timeout(200000)
+    const agent = new Agent().auth()
+    const dbSpec = agent.orgName + '/' + agent.dbName
+    const url = agent.baseUrl + '/' + dbSpec
+
+    // Create the remote database
+    await db.create(agent)
+
+    // Clone to a local database (CLI creates it in CLI storage)
+    const cloneResult = await execEnv(`${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`)
+    expect(cloneResult.stdout).to.match(/^Cloning the remote 'origin'/)
+
+    // Insert doc in remote database to create divergence
+    const remoteSchema = { '@type': 'Class', '@id': 'RemoteClass_' + util.randomString() }
+    await document.insert(agent, { schema: remoteSchema })
+
+    // Now attempt to push via CLI - this should fail with remote_diverged error
+    // The CLI will output the error which we verify contains the right message
+    await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
+      .then((r) => {
+        expect.fail(JSON.stringify(r))
+      })
+      .catch((r) => {
+        expect(r.code).to.not.equal(0)
+        expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
+
+        // Verify the error message is semantic and helpful (not a stack trace)
+        expect(r.stderr).to.match(/diverged/)
+        expect(r.stderr).to.not.include('prolog_stack')
+        expect(r.stderr).to.not.include('context(')
+
+        // The error should mention it's a remote connection issue
+        expect(r.stderr).to.match(/Remote/)
+      })
+
+    // Delete the local database
+    await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
+
+    // Delete the remote database
+    await db.delete(agent)
+  })
+
   it('catches push has no head', async function () {
     this.timeout(200000)
     const agent = new Agent().auth()

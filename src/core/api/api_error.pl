@@ -961,6 +961,17 @@ api_error_jsonld_(push,error(unknown_remote_repository(Remote_Repo),_), JSON) :-
                               'api:remote_repository' : Remote_Repo},
              'api:message' : Msg
             }.
+api_error_jsonld_(push,error(remote_diverged(Remote_Repository, Remote_Branch_Path),_), JSON) :-
+    resolve_absolute_string_descriptor(Remote_Path, Remote_Repository),
+    format(string(Path_String), "~w", [Remote_Branch_Path]),
+    format(string(Msg), "Remote repository '~w' has diverged. The remote has commits that are not in your local branch: ~w", [Remote_Path, Path_String]),
+    JSON = _{'@type' : 'api:PushErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:RemoteDiverged',
+                              'api:remote_repository' : Remote_Path,
+                              'api:divergent_commits' : Path_String},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(pull,error(not_a_valid_remote_branch(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The remote branch described by the path ~q does not exist", [Path]),
