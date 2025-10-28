@@ -142,7 +142,7 @@ expand_json_log(Dict, Operation_Id, Request_Id, Severity, Output) :-
 :- dynamic saved_request/5.
 
 generate_request_id(_Local_Id, Request_Id) :-
-    % Generate a proper UUID v4 for request ID
+    % Generate a UUID for request ID
     uuid(UUID),
     atom_string(UUID, Request_Id).
 
