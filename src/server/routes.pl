@@ -3217,6 +3217,35 @@ graphiql_handler(_Method, Path_Atom, _Request, _System_DB, _Auth) :-
     format(string(Result), Template, [Full_Path]),
     throw(http_reply(bytes('text/html', Result))).
 
+%%%%%%%%%%%%%%%%%%%% Dashboard Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+http:location(dashboard,root(dashboard),[]).
+http:location(assets,root(assets),[]).
+
+:- http_handler(root(.), redirect_to_dashboard,
+                [methods([options,get])]).
+:- http_handler(dashboard(.), dashboard_handler,
+                [prefix,
+                 methods([options,get])]).
+:- http_handler(assets(.), serve_dashboard_assets,
+                [prefix,
+                 methods([options,get])]).
+
+:- meta_predicate try_dashboard(+, :).
+try_dashboard(Request, Goal) :-
+    (   config:dashboard_enabled
+    ->  call(Goal)
+    ;   memberchk(request_uri(Uri), Request),
+        throw(http_reply(gone(Uri)))).
+
+serve_dashboard_assets(Request) :-
+    try_dashboard(Request, serve_files_in_directory(assets, Request)).
+
+redirect_to_dashboard(Request) :-
+    try_dashboard(Request, http_redirect(moved_temporary, dashboard(.), Request)).
+
+dashboard_handler(Request) :-
+    try_dashboard(Request, http_reply_file(dashboard('index.html'), [], Request)).
+
 %%%%%%%%%%%%%%%%%%%% Reply Hackery %%%%%%%%%%%%%%%%%%%%%%
 :- meta_predicate cors_handler(+,2,?).
 :- meta_predicate cors_handler(+,2,?,+).
