@@ -11,7 +11,7 @@ This marks a substantial release of TerminusDB with support for high precision c
   * Numbers are outputed as number, arbitrary size, capped at 20 decimals
 
 ## Maintenance and bug fixes
-* Dashboard routes are back and dashboard is clearly deprecated (#2238)
+* Dashboard component has been discontinued. A deprecation notice is shown at `/dashboard` with instructions for legacy usage. See https://terminusdb.org/docs/dashboard for full documentation (#2238)
 * Further improvements to the build system
 * group_by with decimals works as intended again (#2094)
 
