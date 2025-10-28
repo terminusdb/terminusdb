@@ -16,7 +16,7 @@ describe('Division with Mixed Types', function () {
   it('xsd:double / xsd:decimal uses float division', async function () {
     // Mixed types: xsd:double / xsd:decimal
     // Uses / (float division) because ANY arg is xsd:double
-    // Result type is xsd:decimal (mixed type rule)
+    // Result type is xsd:double (mixed type rule)
     const query = {
       '@type': 'Eval',
       expression: {
@@ -28,7 +28,7 @@ describe('Division with Mixed Types', function () {
     }
 
     const r = await woql.post(agent, query)
-    expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal')
+    expect(r.body.bindings[0].Result['@type']).to.equal('xsd:double')
     expect(r.body.bindings[0].Result['@value']).to.be.closeTo(0.3333333333333333, 0.0000000000000001)
   })
 
@@ -44,8 +44,7 @@ describe('Division with Mixed Types', function () {
     }
 
     const r = await woql.post(agent, query)
-    console.log('xsd:decimal / xsd:double result:', r.body.bindings[0].Result)
 
-    expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal')
+    expect(r.body.bindings[0].Result['@type']).to.equal('xsd:double')
   })
 })

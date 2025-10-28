@@ -1493,22 +1493,10 @@ compile_wf(format(X,A,L),format(atom(XE),A,LE)) -->
     mapm(resolve,L,LE).
 compile_wf(X is Arith, (Pre_Term,
                         XA is ArithE,
-                        Result_Type_Goal,
+                        infer_result_type(XA, Result_Type),
                         XE = XA^^Result_Type)) -->
     resolve(X,XE),
-    compile_arith(Arith,Pre_Term,ArithE),
-    {
-        % Determine result type based on operand types
-        % Rule: If all operands are xsd:float or xsd:double, result is xsd:double
-        % Otherwise, use rational arithmetic and result is xsd:decimal
-        Arith =.. [_Functor|Args],
-        (   all_args_float_or_double(Args)
-        ->  Result_Type = 'http://www.w3.org/2001/XMLSchema#double',
-            Result_Type_Goal = true  % No additional goal needed
-        ;   Result_Type = 'http://www.w3.org/2001/XMLSchema#decimal',
-            Result_Type_Goal = true
-        )
-    }.
+    compile_arith(Arith,Pre_Term,ArithE).
 compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
     resolve(Dict,DictE),
     {atom_string(KeyE,Key)},
@@ -1896,8 +1884,34 @@ unliterally([H|T],[HL|TL]) :-
     unliterally(T,TL).
 
 /*
+ * infer_result_type(+Value, -Type) is det.
+ *
+ * Infer the XSD type of an arithmetic result at runtime following Prolog's rules.
+ * Called AFTER arithmetic is evaluated, so Value is ground.
+ *
+ * Prolog Arithmetic Rules (verified with empirical testing):
+ * - Rationals (including integers): rational(X) succeeds → e.g., 3r10, 8
+ * - IEEE 754 floats: rational(X) fails → e.g., 0.30000000000000004
+ *
+ * XSD Type Mapping:
+ * - Rationals/integers (3r10, 8) → xsd:decimal
+ * - IEEE 754 floats (0.30000000000000004) → xsd:double
+ *
+ * Key Insight: In SWI-Prolog, arithmetic results are EITHER rational OR float.
+ * We check for rational first (covers both pure rationals and integers).
+ * If not rational, it must be a float, so we default to xsd:double.
+ *
+ * Rule: When xsd:double variables are used in arithmetic, Prolog performs IEEE 754
+ * float arithmetic, producing float results that should be typed as xsd:double.
+ */
+infer_result_type(Value, 'http://www.w3.org/2001/XMLSchema#decimal') :-
+    rational(Value),
+    !.
+infer_result_type(_Value, 'http://www.w3.org/2001/XMLSchema#double').
+
+/*
  * is_float_or_double_type(+Type) is semidet.
- * 
+ *
  * True if Type is xsd:float or xsd:double
  */
 is_float_or_double_type(Type) :-
@@ -1909,26 +1923,37 @@ is_float_or_double_type(Type) :-
 /*
  * all_args_float_or_double(+Args) is semidet.
  *
- * True if all Args are typed values with xsd:float or xsd:double
+ * True if all Args are either:
+ * - Typed values with xsd:float or xsd:double (before literally strips types)
+ * - Prolog floats (after literally strips types - xsd:double/float become Prolog floats)
  */
 all_args_float_or_double([]).
 all_args_float_or_double([_Val^^Type|Rest]) :-
     is_float_or_double_type(Type),
     !,
     all_args_float_or_double(Rest).
-all_args_float_or_double([Arg|_]) :-
-    % If not a typed value, it's not float/double
-    \+ (Arg = _^^_),
+all_args_float_or_double([Arg|Rest]) :-
+    % Check if it's a bare Prolog float (after type stripping)
+    float(Arg),
+    !,
+    all_args_float_or_double(Rest).
+all_args_float_or_double([_|_]) :-
+    % Not a float/double
     !,
     fail.
 
 /*
  * any_arg_float_or_double(+Args) is semidet.
  *
- * True if ANY arg is typed with xsd:float or xsd:double
+ * True if ANY arg is either:
+ * - Typed with xsd:float or xsd:double (before literally strips types)
+ * - A bare Prolog float (after literally strips types)
  */
 any_arg_float_or_double([_Val^^Type|_]) :-
     is_float_or_double_type(Type),
+    !.
+any_arg_float_or_double([Arg|_]) :-
+    float(Arg),
     !.
 any_arg_float_or_double([_|Rest]) :-
     any_arg_float_or_double(Rest).

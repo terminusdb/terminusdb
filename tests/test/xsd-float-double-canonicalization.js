@@ -315,8 +315,8 @@ describe('xsd-double-canonicalization', function () {
       // was already converted to imprecise float before arithmetic
       expect(r.body.bindings[0].Result['@value']).to.equal(0.30000000000000004)
 
-      // Type IS xsd:decimal (mixed types rule), but precision already lost
-      expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal')
+      // Type IS xsd:double (Prolog: floats are contagious), and precision already lost
+      expect(r.body.bindings[0].Result['@type']).to.equal('xsd:double')
     })
 
     it('Edge Case: Pure xsd:decimal avoids IEEE 754 precision issues', async function () {
@@ -583,7 +583,7 @@ describe('xsd-double-canonicalization', function () {
         'Rule: xsd:float + xsd:double → xsd:double (both are float types)')
     })
 
-    it('Mixed xsd:double and xsd:decimal returns xsd:decimal', async function () {
+    it('Mixed xsd:double and xsd:decimal returns xsd:double', async function () {
       const query = {
         '@type': 'Eval',
         expression: {
@@ -595,11 +595,11 @@ describe('xsd-double-canonicalization', function () {
       }
 
       const r = await woql.post(agent, query)
-      expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal',
-        'Rule: xsd:double + xsd:decimal → xsd:decimal (mixed with non-float type uses rationals)')
+      expect(r.body.bindings[0].Result['@type']).to.equal('xsd:double',
+        'Rule: xsd:double + xsd:decimal → xsd:double (Prolog: floats are contagious)')
     })
 
-    it('Mixed xsd:double and xsd:integer returns xsd:decimal', async function () {
+    it('Mixed xsd:double and xsd:integer returns xsd:double', async function () {
       const query = {
         '@type': 'Eval',
         expression: {
@@ -611,8 +611,8 @@ describe('xsd-double-canonicalization', function () {
       }
 
       const r = await woql.post(agent, query)
-      expect(r.body.bindings[0].Result['@type']).to.equal('xsd:decimal',
-        'Rule: xsd:double + xsd:integer → xsd:decimal (mixed with non-float type)')
+      expect(r.body.bindings[0].Result['@type']).to.equal('xsd:double',
+        'Rule: xsd:double + xsd:integer → xsd:double (Prolog: floats are contagious)')
     })
   })
 
