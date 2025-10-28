@@ -8,7 +8,8 @@
 ---
 
 [![Native Build](https://github.com/terminusdb/terminusdb/actions/workflows/native-build.yml/badge.svg?branch=main&event=push)](https://github.com/terminusdb/terminusdb/actions/workflows/native-build.yml)
-[![Docker Build](https://github.com/terminusdb/terminusdb/actions/workflows/docker-amd64-build.yml/badge.svg?branch=main)](https://github.com/terminusdb/terminusdb/actions/workflows/docker-images-publish.yml)
+[![Docker Build](https://github.com/terminusdb/terminusdb/actions/workflows/docker-images-publish.yml/badge.svg?branch=main)](https://github.com/terminusdb/terminusdb/actions/workflows/docker-images-publish.yml)
+
 [![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
