@@ -97,11 +97,20 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 - Builds ARM64 image via `.github/workflows/docker-arm64-build.yml` (BuildJet runner)
 - Runs integration tests on both architectures
 - Publishes multi-arch manifests via `.github/workflows/docker-images-publish.yml`:
-  - `terminusdb/terminusdb-server:v<VERSION>`
-  - `terminusdb/terminusdb-server:v<MAJOR>` (e.g., `v11`)
-  - `terminusdb/terminusdb-server:latest` (for non-rc/beta releases)
+  - **Always:** `terminusdb/terminusdb-server:v<VERSION>` (e.g., `v11.2.0-rc3`)
+  - **Production only:** `terminusdb/terminusdb-server:v<MAJOR>` (e.g., `v11`)
+  - **Production only:** `terminusdb/terminusdb-server:latest`
   - Corresponding `-noroot` variants for all tags
+- **Pre-release versions** (`-rc`, `-beta`, `-alpha`, `-dev`) get **only** version-specific tags, not `latest` or major version tags
 - Triggers enterprise build (internal)
+
+**Docker Tag Examples:**
+
+| Release Version | Tags Created |
+|-----------------|--------------|
+| `v11.2.0` | `v11.2.0`, `v11`, `latest`, `v11.2.0-noroot`, `v11-noroot`, `latest-noroot` |
+| `v11.2.0-rc3` | `v11.2.0-rc3`, `v11.2.0-rc3-noroot` (no `latest` or `v11`) |
+| `v11.2.0-beta` | `v11.2.0-beta`, `v11.2.0-beta-noroot` (no `latest` or `v11`) |
 
 #### Snap Package
 - Builds snap via `.github/workflows/snap-build.yml`
