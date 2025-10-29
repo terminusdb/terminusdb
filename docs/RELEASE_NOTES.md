@@ -12,6 +12,7 @@
 * Ensure correct resulting type (floats are contagious)
 * Fixed error message duplication between `api:error` and `api:message` fields
 * Add specific error handling for common git-for-data error "api:RemoteDiverged"
+* Fix string vs atom comparisons when patching enum values (#2141)
 
 # TerminusDB Server v11.2-rc2 Release Notes
 
