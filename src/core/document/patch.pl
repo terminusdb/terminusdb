@@ -104,19 +104,32 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff,
     !,
     pairs_and_conflicts_from_keys(Keys, JSON, Diff, Values, Options).
 
+%
+% values_equal(+Value1, +Value2) is semidet.
+%
+% Compare two values, handling atom vs string type mismatches.
+% In Prolog, atoms and strings don't unify even with identical characters,
+% so we convert both to atoms before comparison.
+%
+values_equal(V1, V2) :-
+    % Convert both to atoms for comparison
+    (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
+    (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
+    A1 = A2.
+
 check_before_after(Original, Before, After, Final, Options) :-
     option(match_final_state(true), Options),
     !,
-    (   Original = After
+    (   values_equal(Original, After)
     ->  Final = success(After)
-    ;   Original = Before
+    ;   values_equal(Original, Before)
     ->  Final = success(After)
     ;   Final = conflict(json{ '@op' : 'Conflict',
                                '@expected' : Before,
                                '@found' : Original })
     ).
 check_before_after(Original, Before, After, Final, _Options) :-
-    (   Original = Before
+    (   values_equal(Original, Before)
     ->  Final = success(After)
     ;   Final = conflict(json{ '@op' : 'Conflict',
                                '@expected' : Before,
