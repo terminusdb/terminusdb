@@ -2,6 +2,8 @@
 
 const assert = require('assert')
 const crypto = require('crypto')
+const fs = require('fs')
+const path = require('path')
 
 const defaultContext = {
   '@base': 'terminusdb:///data/',
@@ -59,6 +61,11 @@ function isUndefinedOrNull (val) {
 
 function randomString () {
   return crypto.randomBytes(16).toString('hex')
+}
+
+function authorizationHeader (agent) {
+  const credentials = `${agent.user}:${agent.password}`
+  return `Basic ${Buffer.from(credentials).toString('base64')}`
 }
 
 function typeString (val) {
@@ -131,6 +138,47 @@ function assertArrayOrObject (name, val) {
   )
 }
 
+/**
+ * Returns the correct path to terminusdb.sh based on current working directory.
+ * Supports running tests from both repo root and tests directory.
+ * @returns {string} Path to terminusdb.sh
+ */
+function terminusdbScript () {
+  // Check if running from tests directory
+  if (fs.existsSync('./terminusdb.sh')) {
+    return './terminusdb.sh'
+  }
+  // Check if running from repo root
+  if (fs.existsSync('./tests/terminusdb.sh')) {
+    return './tests/terminusdb.sh'
+  }
+  throw new Error('Could not find terminusdb.sh. Run tests from repo root or tests/ directory.')
+}
+
+/**
+ * Returns the absolute path to test served files.
+ * Supports running tests from repo root, tests directory, and containerized environments.
+ * @param {string} filename - The file name in the served directory
+ * @returns {string} Absolute path to the served file
+ */
+function servedPath (filename) {
+  // Check if running from tests directory
+  if (fs.existsSync('./served')) {
+    return path.resolve('./served', filename)
+  }
+  // Check if running from repo root
+  if (fs.existsSync('./tests/served')) {
+    return path.resolve('./tests/served', filename)
+  }
+  // Fallback: try to find based on __dirname (works in all environments)
+  const utilDir = __dirname // tests/lib/
+  const servedDir = path.join(utilDir, '..', 'served')
+  if (fs.existsSync(servedDir)) {
+    return path.resolve(servedDir, filename)
+  }
+  throw new Error(`Could not find served directory. Tried: ./served, ./tests/served, and ${servedDir}`)
+}
+
 module.exports = {
   assertArrayOrObject,
   assertBoolean,
@@ -140,6 +188,7 @@ module.exports = {
   assertObject,
   assertString,
   assertStringOrArray,
+  authorizationHeader,
   deepClone,
   defaultContext,
   firstCapture,
@@ -154,5 +203,7 @@ module.exports = {
   isString,
   isUndefinedOrNull,
   randomString,
+  servedPath,
+  terminusdbScript,
   typeString,
 }

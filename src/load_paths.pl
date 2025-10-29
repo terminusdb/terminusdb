@@ -122,6 +122,21 @@ add_enterprise_test_path :-
     directory_file_path(Dir, 'terminusdb-enterprise/test', Enterprise),
     asserta(user:file_search_path(enterprise_test, Enterprise)).
 
+assert_dashboard_path(Dir) :-
+    directory_file_path(Dir, 'assets', Assets),
+    asserta(user:file_search_path(dashboard, Dir)),
+    asserta(user:file_search_path(assets, Assets)).
+
+add_dashboard_path :-
+    getenv('TERMINUSDB_DASHBOARD_PATH', Dir),
+    assert_dashboard_path(Dir).
+add_dashboard_path :-
+    top_level_directory(Dir),
+    directory_file_path(Dir, 'dashboard', Dashboard),
+    assert_dashboard_path(Dashboard).
+
+:- add_dashboard_path.
+
 :- if(getenv("TERMINUSDB_ENTERPRISE", true)).
 :- add_enterprise_path.
 :- add_enterprise_test_path.

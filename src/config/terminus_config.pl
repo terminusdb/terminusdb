@@ -31,11 +31,13 @@
               pinned_databases/1,
               pinned_organizations/1,
               plugin_path/1,
+              dashboard_enabled/0,
               parallelize_enabled/0,
               grpc_label_endpoint/1,
               crypto_password_cost/1,
               lru_cache_size/1,
-              trust_migrations/0
+              trust_migrations/0,
+              expose_stack_traces/0
 ]).
 
 :- use_module(library(pcre)).
@@ -48,7 +50,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.1.16-dev').
+terminusdb_version('11.2-rc2').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -96,6 +98,10 @@ default_database_path(Path) :-
 :- table db_path/1 as shared.
 db_path(Path) :-
     default_database_path(Path).
+
+dashboard_enabled :-
+    getenv_default('TERMINUSDB_ENABLE_DASHBOARD', true, Value),
+    Value = true.
 
 plugin_path(Path) :-
     getenv_default('TERMINUSDB_PLUGINS_PATH', './storage/plugins', Value),
@@ -155,6 +161,10 @@ ignore_ref_and_repo_schema :-
 
 % Turn off mavis
 :- set_prolog_flag(optimise, true).
+
+% Preserve rational numbers in arithmetic operations for decimal precision
+% This ensures operations like +, -, * preserve exact rationals instead of converting to floats
+:- set_prolog_flag(prefer_rationals, true).
 
 :- dynamic log_level_override/1.
 
@@ -320,6 +330,24 @@ lru_cache_size(Cache_Size) :-
 :- table trust_migrations/0.
 trust_migrations :-
     getenv('TERMINUSDB_TRUST_MIGRATIONS', true).
+
+/**
+ * expose_stack_traces is semidet.
+ *
+ * Succeeds (returns true) if stack traces should be exposed in HTTP error responses.
+ * Default is FALSE (secure by default). Only enabled if env var is explicitly set to
+ * a truthy value.
+ *
+ * Security: Stack traces may contain sensitive information, so they should only be
+ * exposed in development/debug environments.
+ */
+:- table expose_stack_traces/0.
+expose_stack_traces :-
+    getenv('TERMINUSDB_EXPOSE_STACK_TRACES', Value),
+    atom_string(Value_Atom, Value),
+    memberchk(Value_Atom, [true, 'true', '1', 'yes']),
+    !.
+% Predicate fails (returns false) if env var not set or set to any other value
 
 :- table semantic_indexer_endpoint/1.
 semantic_indexer_endpoint(Endpoint) :-

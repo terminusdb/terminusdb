@@ -16,23 +16,23 @@ describe('cli-user', function () {
     dbPath = './storage/' + util.randomString()
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
     {
-      const r = await execEnv('./terminusdb.sh store init --force')
+      const r = await execEnv(`${util.terminusdbScript()} store init --force`)
       expect(r.stdout).to.match(/^Successfully initialised database/)
     }
   })
 
   after(async function () {
-    await fs.rm(dbPath, { recursive: true })
+    await fs.rm(dbPath, { recursive: true, force: true })
   })
 
   it('add db, change password, list db', async function () {
     const db = util.randomString()
-    await execEnv(`./terminusdb.sh db create admin/${db}`)
-    const r1 = await execEnv('./terminusdb.sh user get admin -c -j')
+    await execEnv(`${util.terminusdbScript()} db create admin/${db}`)
+    const r1 = await execEnv(`${util.terminusdbScript()} user get admin -c -j`)
     const Users1 = JSON.parse(r1.stdout)
 
-    await execEnv('./terminusdb.sh user password admin -pfoo')
-    const r2 = await execEnv('./terminusdb.sh user get admin -c -j')
+    await execEnv(`${util.terminusdbScript()} user password admin -pfoo`)
+    const r2 = await execEnv(`${util.terminusdbScript()} user get admin -c -j`)
     const Users2 = JSON.parse(r2.stdout)
     expect(Users2[0].capability).to.deep.equal(Users1[0].capability)
   })

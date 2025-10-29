@@ -627,7 +627,8 @@ describe('document', function () {
         const r1 = await document.insert(agent, { instance: { a: [42, 23, 12] }, raw_json: true })
         const id = r1.body[0]
         const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
-        expect(r2.body).to.deep.equal([{ '@id': id, a: ['42', '23', '12'] }])
+        // Numbers are returned as JSON numbers per JSON_SERIALIZATION_RULES.md
+        expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
       })
 
       it('fails insert with invalid JSONDocument @id', async function () {

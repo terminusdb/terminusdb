@@ -156,7 +156,7 @@ resource_user_path(Askable,Resource,User,Path) :-
 
 
 /**
- * assert_write_access(Graph_Descriptor,Context,Context) is det + error.
+ * assert_write_access(Graph_Descriptor,Context,Context) is det.
  *
  * Temporarily set the write_graph for permissions check.
  */
@@ -184,7 +184,7 @@ require_super_user(Context) :-
     throw(error(not_super_user(Context))).
 
 /**
- * assert_write_access(Context, Context) is det + error.
+ * assert_write_access(Context, Context) is det.
  *
  * Throws an error when access is forbidden
  *
@@ -298,7 +298,7 @@ auth_instance_write_access(System, Auth, Transaction) :-
     ).
 
 /**
- * assert_read_access(Filter,Context,Context) is det + error.
+ * assert_read_access(Filter,Context,Context) is det.
  *
  * Temporarily set the filter for permissions check.
  */
@@ -313,7 +313,7 @@ filter_types(type_filter{types:Types}, Types).
 filter_types(type_name_filter{type : Type}, [Type]).
 
 /**
- * assert_read_access(Context, Context) is det + error.
+ * assert_read_access(Context, Context) is det.
  *
  * Throws an error when access is forbidden
  *
@@ -470,7 +470,7 @@ assert_read_access(_System, _Auth, Collection, _Filter) :-
 
 
 /**
- * assert_auth_action_scope(DB, Auth, Action, Scope) is det + error
+ * assert_auth_action_scope(DB, Auth, Action, Scope) is det.
  *
  * Determinise auth_action_scope/4 by throwing an error on failure
  */

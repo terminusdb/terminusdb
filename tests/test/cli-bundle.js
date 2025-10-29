@@ -8,7 +8,7 @@ describe('cli-bundle', function () {
 
   before(async function () {
     agent = new Agent()
-    cli = new Cli({ debugCommand: true, debugOutput: true })
+    cli = new Cli(/* { debugCommand: true, debugOutput: true } */)
     await cli.store.init()
   })
 

@@ -359,7 +359,7 @@ api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), 
             }.
 api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "The store has no defined database version and so can not be opened.", []),
+    format(string(Msg), "The store has no defined database version and so can not be opened. This may indicate the store has not been initialized yet. Try running 'terminusdb store init' or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
@@ -709,6 +709,17 @@ api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
                               'api:type' : Type},
              'api:message' : Msg
             }.
+api_error_jsonld_(woql,error(incompatible_numeric_comparison(Val1,Val2),_), JSON) :-
+    format(string(Val1S), "~w", [Val1]),
+    format(string(Val2S), "~w", [Val2]),
+    format(string(Msg), "~s is not safely comparable with ~s. Must typecast explicitly between incompatible numeric type families. Rational integer/decimal types vs. IEEE 754 types (float/double).", [Val1S, Val2S]),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:IncompatibleNumericComparison',
+                              'api:left' : Val1S,
+                              'api:right' : Val2S},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(woql,error(existence_error(matching_rule,Term),_), JSON) :-
     format(string(TermW), "~q", [Term]),
     format(string(Msg), "The program: '~w' used a predicate with unhandled arguments", [Term]),
@@ -948,6 +959,17 @@ api_error_jsonld_(push,error(unknown_remote_repository(Remote_Repo),_), JSON) :-
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : "api:UnknownRemoteRepository",
                               'api:remote_repository' : Remote_Repo},
+             'api:message' : Msg
+            }.
+api_error_jsonld_(push,error(remote_diverged(Remote_Repository, Remote_Branch_Path),_), JSON) :-
+    resolve_absolute_string_descriptor(Remote_Path, Remote_Repository),
+    format(string(Path_String), "~w", [Remote_Branch_Path]),
+    format(string(Msg), "Remote repository '~w' has diverged. The remote has commits that are not in your local branch: ~w", [Remote_Path, Path_String]),
+    JSON = _{'@type' : 'api:PushErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:RemoteDiverged',
+                              'api:remote_repository' : Remote_Path,
+                              'api:divergent_commits' : Path_String},
              'api:message' : Msg
             }.
 api_error_jsonld_(pull,error(not_a_valid_remote_branch(Descriptor), _), JSON) :-
@@ -2282,6 +2304,16 @@ api_document_error_jsonld(Type, error(bad_field_value(Field, Value, Document),_)
                               'api:field' : Field,
                               'api:value' : Value,
                               'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(reserved_marker_in_string(Field, Marker),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "String values cannot start with reserved marker prefix ~q (found in field ~q)", [Marker, Field]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:ReservedMarkerInString',
+                              'api:field' : Field,
+                              'api:marker' : Marker },
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(key_missing_fields(Key_Type, Document),_),JSON) :-

@@ -28,6 +28,7 @@
                                         log_level/1,
                                         server_name/1]).
 :- use_module(utils).
+:- use_module(library(uuid)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(http/json)).
@@ -140,9 +141,10 @@ expand_json_log(Dict, Operation_Id, Request_Id, Severity, Output) :-
 
 :- dynamic saved_request/5.
 
-generate_request_id(Local_Id, Request_Id) :-
-    server_name(Server_Name),
-    format(string(Request_Id), "~w-~w", [Server_Name, Local_Id]).
+generate_request_id(_Local_Id, Request_Id) :-
+    % Generate a UUID for request ID
+    uuid(UUID),
+    atom_string(UUID, Request_Id).
 
 generate_operation_id_from_stream(CGI, Request_Id) :-
     cgi_property(CGI, id(Local_Id)),
