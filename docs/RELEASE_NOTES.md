@@ -1,4 +1,6 @@
-# TerminusDB Server v11.2-rc3 Release Notes (pending)
+# TerminusDB Server v11.2-rc3 Release Notes
+
+Release Candidate 3 brings improved error handling and observability, makes it possible again to run the dashboard component (or other static webapp dashboards), and further strengthens the core of TerminusDB with additional bug fixes.
 
 ## Enhancements
 * Improved error handling and observability (#1631)
@@ -7,6 +9,7 @@
   * Stack traces no longer exposed in HTTP responses (security improvement)
   * Error messages now include helpful Prolog error terms without exposing internal stack traces
   * New error type: `api:IncompatibleNumericComparison` for clearer numeric type mismatch errors
+* Dashboard component is possible to enable manually, see [dashboard docs](https://terminusdb.org/docs/dashboard)
 
 ## Maintenance and bug fixes
 * Ensure correct resulting type (floats are contagious)
@@ -19,17 +22,22 @@
 This marks a substantial release of TerminusDB with support for high precision calculations in the WOQL core, and with alignment to JSON, letting clients handling native JSON with high precision.
 
 ## Enhancements
-* Rationals are now used by default for all calculations (#128)
+
 * xsd:decimals are now normalized (2 and 2.0 are the same) fixing #2242
 * greater, less and eq require commensurable types to compare (#2225)
 * Auto optimizer plugin is now included by default for continuous performance
-* JSON output is now consistent between WOQL, Document API and GraphQL:
-  * Numbers are outputed as number, arbitrary size, capped at 20 decimals
 
 ## Maintenance and bug fixes
-* Dashboard component has been discontinued. A deprecation notice is shown at `/dashboard` with instructions for legacy usage. See https://terminusdb.org/docs/dashboard for full documentation (#2238)
 * Further improvements to the build system
 * group_by with decimals works as intended again (#2094)
+
+# TerminusDB Server v11.2-rc1 Release Notes
+
+## Enhancements
+* Rationals are now used by default for all calculations (#128)
+* JSON output is now consistent between WOQL, Document API and GraphQL:
+  * Numbers are outputed as number, arbitrary size, capped at 20 decimals
+* Dashboard component has been discontinued. A deprecation notice is shown at `/dashboard` with instructions for legacy usage. See [dashboard docs](https://terminusdb.org/docs/dashboard) for full documentation (#2238)
 
 # TerminusDB Server v11.1.17 Release Notes
 

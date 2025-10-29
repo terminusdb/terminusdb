@@ -390,7 +390,7 @@ test(graphql_positiveInteger_as_json_number, [
 
 % Helper predicate to make GraphQL requests for testing
 % This simulates the HTTP request flow through the GraphQL API
-api_test_graphql_request(Descriptor, Path, Query, JSON_Response) :-
+api_test_graphql_request(Descriptor, _Path, Query, JSON_Response) :-
     % This would need to call the actual GraphQL handler
     % For now, we'll use a placeholder that needs to be implemented
     format(atom(JSON_Request), '{"query": "~w"}', [Query]),

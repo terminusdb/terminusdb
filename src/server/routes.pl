@@ -3976,7 +3976,7 @@ collect_posted_named_files(Request,Files) :-
 collect_posted_named_files(_Request,[]).
 
 
-%% Logging
+% Logging
 
 match_http_info(method(Method), Method_Upper, _Protocol, _Host, _Port, _Url_Suffix, _Remote_Ip, _User_Agent, _Size, _Operation_Id) :-
     string_upper(Method, Method_Upper).

@@ -1,6 +1,12 @@
 :- module('plugins/auto_optimize', []).
 :- use_module(core(api)).
+:- use_module(core(util/utils)).
+:- use_module(core(util/json_log)).
+:- use_module(core(query/resolve_query_resource)).
 :- use_module(library(http/http_server)).
+:- use_module(library(random)).
+:- use_module(library(lists)).
+:- use_module(library(thread_pool)).
 
 % Copyright (c) TerminusDB, Licensed under the Apache License, Version 2.0
 % Source: https://github.com/terminusdb-labs/terminusdb-plugins/tree/main
