@@ -240,6 +240,13 @@ See [`PREPARE_PR.md`](../PREPARE_PR.md) for complete pre-release testing checkli
 - Verify VERSION file format (no trailing newlines except one)
 - Ensure all cogapp template files have valid syntax
 
+**Version bump PR created but checks don't run:**
+- GitHub Actions don't auto-trigger on PRs created by `GITHUB_TOKEN` (security policy)
+- **Solution**: Close the PR and reopen it manually
+- Checks will automatically run after reopening
+- Alternative: Go to Actions tab and manually approve pending workflow runs if they are visible
+- This is expected behavior to prevent infinite workflow loops
+
 ---
 
 The versions in this file are auto-generated via cogapp when the version bump workflow runs.
