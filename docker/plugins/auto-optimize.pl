@@ -1,8 +1,7 @@
 :- module('plugins/auto_optimize', []).
 :- use_module(core(api)).
-:- use_module(core(util/utils)).
-:- use_module(core(util/json_log)).
-:- use_module(core(query/resolve_query_resource)).
+:- use_module(core(util)).
+:- use_module(core(query)).
 :- use_module(library(http/http_server)).
 :- use_module(library(random)).
 :- use_module(library(lists)).

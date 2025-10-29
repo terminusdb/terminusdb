@@ -22,17 +22,17 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Last released version:** <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v11.1.17`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.17)
+[`v11.2-rc2`](https://github.com/terminusdb/terminusdb/releases/tag/v11.2-rc2)
 <!-- [[[end]]] -->
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v11.2-rc2`
+`v11.2.0-rc3`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`11.1.17...main`](https://github.com/terminusdb/terminusdb/compare/v11.1.17...main)
+[`11.2-rc2...main`](https://github.com/terminusdb/terminusdb/compare/v11.2-rc2...main)
 <!-- [[[end]]] -->
 
 ---
@@ -239,6 +239,13 @@ See [`PREPARE_PR.md`](../PREPARE_PR.md) for complete pre-release testing checkli
 - Check cogapp installation in workflow
 - Verify VERSION file format (no trailing newlines except one)
 - Ensure all cogapp template files have valid syntax
+
+**Version bump PR created but checks don't run:**
+- GitHub Actions don't auto-trigger on PRs created by `GITHUB_TOKEN` (security policy)
+- **Solution**: Close the PR and reopen it manually
+- Checks will automatically run after reopening
+- Alternative: Go to Actions tab and manually approve pending workflow runs if they are visible
+- This is expected behavior to prevent infinite workflow loops
 
 ---
 
