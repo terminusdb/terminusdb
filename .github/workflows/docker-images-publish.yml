@@ -38,7 +38,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Load images
+      - name: Load and push AMD64 images
         run: |
           # Build regular and noroot for amd64
           docker load < terminusdb-server-snapshot-amd64.tar.gz
