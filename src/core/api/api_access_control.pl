@@ -65,7 +65,7 @@ api_get_role_from_id(SystemDB, Auth, Id, Role) :-
         error(no_role_with_given_id(Id), _)
     ).
 
-%% get_role_from_name(+,+,-) is det + error
+%! get_role_from_id(+SystemDB, +Id, -Role) is det.
 get_role_from_id(SystemDB, Id, Role) :-
     ask(SystemDB,
         (   t(Id, rdf:type, '@schema':'Role'),
@@ -78,7 +78,7 @@ api_get_role_from_name(SystemDB, Auth, RoleName, Role) :-
         error(access_not_authorised(Auth,'Action/manage_capabilities','SystemDatabase'), _)),
     get_role_from_name(SystemDB, RoleName, Role).
 
-%% get_role_from_name(+,+,-) is det + error
+%! get_role_from_name(+SystemDB, +RoleName, -Role) is det.
 get_role_from_name(SystemDB, RoleName, Role) :-
     findall(Role,
             ask(SystemDB,

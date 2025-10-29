@@ -276,10 +276,10 @@ copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
             copy_commits(Origin_Context, Destination_Context, Parent_Id)
         ;   true)).
 
-%% copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
-%%     context_default_prefixes(Origin_Context, Origin_Context_Stripped),
-%%     context_default_prefixes(Destination_Context, Destination_Context_Stripped),
-%%     copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
+% copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
+%     context_default_prefixes(Origin_Context, Origin_Context_Stripped),
+%     context_default_prefixes(Destination_Context, Destination_Context_Stripped),
+%     copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
 
 :- begin_tests(branch_objects).
 :- use_module(core(util/test_utils)).
