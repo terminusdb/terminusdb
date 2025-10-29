@@ -40,29 +40,22 @@ jobs:
 
       - name: Load and push AMD64 images
         run: |
-          # Load AMD64 base image
+          # Build regular and noroot for amd64
           docker load < terminusdb-server-snapshot-amd64.tar.gz
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA
-          
-          # Build and push AMD64 noroot image from local
           docker build -t terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA docker/no-root
           docker push terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA
-
-      - name: Load and push ARM64 images
-        run: |
-          # Load ARM64 base image
+          docker rmi terminusdb/terminusdb-server:local
+          # Build regular and noroot for arm64
           docker load < terminusdb-server-snapshot-arm64.tar.gz
           docker tag terminusdb/terminusdb-server:local terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           docker push terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
-          
-          # Build and push ARM64 noroot image from local
-          docker build -t terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA docker/no-root
-          docker push terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
-
-      - name: Clean up the local tag
-        run: |         
-          # Clean up local tag
+          # Since this is a standard ubuntu-latest, we have to emulate with buildx...
+          docker buildx build --platform linux/arm64 \
+            --build-arg BASE_IMAGE=terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA \
+            --tag terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA \
+            --push docker/no-root
           docker rmi terminusdb/terminusdb-server:local
 
       - name: Determine image tags to push

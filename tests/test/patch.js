@@ -59,7 +59,15 @@ describe('patch', function () {
       const author = 'me'
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
-      expect(res.body).to.deep.equal({
+
+      // Verify request_id exists and is valid UUID format (any version)
+      expect(res.body).to.have.property('api:request_id')
+      expect(res.body['api:request_id']).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+
+      // Remove request_id for comparison of the rest of the structure
+      const { 'api:request_id': _, ...bodyWithoutRequestId } = res.body
+
+      expect(bodyWithoutRequestId).to.deep.equal({
         '@type': 'api:PatchResponse',
         'api:error': {
           '@type': 'api:PatchConflict',
@@ -102,7 +110,14 @@ describe('patch', function () {
         message,
       })
 
-      expect(res.body).to.deep.equal({
+      // Verify request_id exists and is valid UUID format (any version)
+      expect(res.body).to.have.property('api:request_id')
+      expect(res.body['api:request_id']).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+
+      // Remove request_id for comparison of the rest of the structure
+      const { 'api:request_id': _, ...bodyWithoutRequestId } = res.body
+
+      expect(bodyWithoutRequestId).to.deep.equal({
         '@type': 'api:PatchResponse',
         'api:error':
         {
@@ -117,6 +132,51 @@ describe('patch', function () {
         'api:message': 'The patch did not apply cleanly because of the attached conflicts',
         'api:status': 'api:conflict',
       })
+    })
+
+    it('applies patch to enum value without false conflict', async function () {
+      // Schema with enum type
+      const enumSchema = [
+        {
+          '@id': 'LocalStatusType',
+          '@type': 'Enum',
+          '@value': ['UP_TO_DATE', 'NEVER_RAN'],
+        },
+        {
+          '@id': 'B',
+          '@key': { '@type': 'Random' },
+          '@type': 'Class',
+          local_status_type: 'LocalStatusType',
+        },
+      ]
+      await document.insert(agent, { schema: enumSchema })
+
+      // Insert instance with enum value
+      const instance = [
+        {
+          '@type': 'B',
+          local_status_type: 'UP_TO_DATE',
+        },
+      ]
+      const response = await document.insert(agent, { instance })
+      const enumId = response.body[0]
+
+      // Apply patch to change enum value
+      const path = api.path.patchDb(agent)
+      const patch = {
+        '@id': enumId,
+        local_status_type: {
+          '@op': 'SwapValue',
+          '@before': 'UP_TO_DATE',
+          '@after': 'NEVER_RAN',
+        },
+      }
+      const author = 'test'
+      const message = 'change enum value'
+      const res = await agent.post(path).send({ patch, author, message })
+
+      // Should succeed without conflict
+      expect(res.body).to.deep.equal([enumId])
     })
   })
 })

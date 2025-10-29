@@ -298,3 +298,4 @@
 :- use_module(util/json_stream).
 :- use_module(util/iana).
 :- use_module(util/lazy_docs).
+:- use_module(util/trace_context).

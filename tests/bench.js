@@ -1,7 +1,7 @@
 const glob = require('fast-glob')
 const path = require('path')
 const process = require('process')
-const { default: Benchmark } = require('buffalo-bench')
+const { Benchmark } = require('buffalo-bench')
 
 const { util } = require('./lib')
 

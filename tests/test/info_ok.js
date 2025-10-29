@@ -14,7 +14,7 @@ describe('info_ok', function () {
     expect(r.header['content-length']).to.equal('0')
   })
 
-  it('responds to /api/info with success', async function () {
+  it('responds to /api/info with success (git hash matches binary version)', async function () {
     const terminusdbVersion = await info.terminusdbVersion()
     const gitHash = await info.gitHash()
     const r = await agent.get('/api/info')

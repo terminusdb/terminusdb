@@ -15,16 +15,16 @@ describe('cli-clone-push-pull', function () {
   before(async function () {
     dbPath = './storage/' + util.randomString()
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
-    const r = await execEnv('./terminusdb.sh store init --force')
+    const r = await execEnv(`${util.terminusdbScript()} store init --force`)
     expect(r.stdout).to.match(/^Successfully initialised database/)
   })
 
   after(async function () {
-    await fs.rm(dbPath, { recursive: true })
+    await fs.rm(dbPath, { recursive: true, force: true })
   })
 
   it('fails clone with socket error', async function () {
-    const cmd = `./terminusdb.sh clone --user=${util.randomString()} --password=${util.randomString()}`
+    const cmd = `${util.terminusdbScript()} clone --user=${util.randomString()} --password=${util.randomString()}`
     const urls = [
       // Connection refused
       'http://localhost:65535/' + util.randomString(),
@@ -55,14 +55,14 @@ describe('cli-clone-push-pull', function () {
     // Create the remote database.
     await db.create(agent)
     { // Clone to a local database.
-      const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
+      const r = await execEnv(`${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     // Delete the remote database.
     await db.delete(agent)
     // Attempt to push to the remote database.
-    await execEnv(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
+    await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
       .then((r) => {
         expect.fail(JSON.stringify(r))
       })
@@ -72,7 +72,7 @@ describe('cli-clone-push-pull', function () {
         expect(r.stderr).to.match(new RegExp(`^Error: Remote connection failed: Unknown database: ${dbSpec}`))
       })
     { // Delete the local database.
-      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     }
   })
@@ -85,7 +85,7 @@ describe('cli-clone-push-pull', function () {
     // Create the remote database.
     await db.create(agent)
     { // Clone to a local database.
-      const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
+      const r = await execEnv(`${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
@@ -93,7 +93,7 @@ describe('cli-clone-push-pull', function () {
     const schema = { '@type': 'Class', '@id': util.randomString() }
     await document.insert(agent, { schema })
     // Attempt to push to the remote database.
-    await execEnv(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
+    await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
       .then((r) => {
         expect.fail(JSON.stringify(r))
       })
@@ -103,10 +103,53 @@ describe('cli-clone-push-pull', function () {
         expect(r.stderr).to.match(/^Error: Remote connection failed: Remote history has diverged/)
       })
     { // Delete the local database.
-      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     }
     // Delete the remote database.
+    await db.delete(agent)
+  })
+
+  it('returns semantic error response when remote history diverged (error structure)', async function () {
+    this.timeout(200000)
+    const agent = new Agent().auth()
+    const dbSpec = agent.orgName + '/' + agent.dbName
+    const url = agent.baseUrl + '/' + dbSpec
+
+    // Create the remote database
+    await db.create(agent)
+
+    // Clone to a local database (CLI creates it in CLI storage)
+    const cloneResult = await execEnv(`${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`)
+    expect(cloneResult.stdout).to.match(/^Cloning the remote 'origin'/)
+
+    // Insert doc in remote database to create divergence
+    const remoteSchema = { '@type': 'Class', '@id': 'RemoteClass_' + util.randomString() }
+    await document.insert(agent, { schema: remoteSchema })
+
+    // Now attempt to push via CLI - this should fail with remote_diverged error
+    // The CLI will output the error which we verify contains the right message
+    await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
+      .then((r) => {
+        expect.fail(JSON.stringify(r))
+      })
+      .catch((r) => {
+        expect(r.code).to.not.equal(0)
+        expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
+
+        // Verify the error message is semantic and helpful (not a stack trace)
+        expect(r.stderr).to.match(/diverged/)
+        expect(r.stderr).to.not.include('prolog_stack')
+        expect(r.stderr).to.not.include('context(')
+
+        // The error should mention it's a remote connection issue
+        expect(r.stderr).to.match(/Remote/)
+      })
+
+    // Delete the local database
+    await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
+
+    // Delete the remote database
     await db.delete(agent)
   })
 
@@ -115,10 +158,10 @@ describe('cli-clone-push-pull', function () {
     const agent = new Agent().auth()
     const dbSpec = agent.orgName + '/' + agent.dbName
     // Create the db
-    await execEnv(`./terminusdb.sh db create ${dbSpec}`)
+    await execEnv(`${util.terminusdbScript()} db create ${dbSpec}`)
     // Add remote
-    await execEnv(`./terminusdb.sh remote add ${dbSpec} testremote example.org`)
-    await execEnv(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec} --remote testremote`)
+    await execEnv(`${util.terminusdbScript()} remote add ${dbSpec} testremote example.org`)
+    await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec} --remote testremote`)
       .catch((r) => {
         expect(r.stderr).to.match(/^Error: The following repository has no head:/)
       })
@@ -132,22 +175,22 @@ describe('cli-clone-push-pull', function () {
     // Create the remote database.
     await db.create(agent)
     { // Clone to a local database.
-      const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
+      const r = await execEnv(`${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
       expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
     }
     { // Push once.
-      const r = await execEnv(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
       expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
       expect(r.stdout).to.match(/Remote updated \(head is .*\)/)
     }
     { // Push again.
-      const r = await execEnv(`./terminusdb.sh push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
       expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
       expect(r.stdout).to.match(/Remote already up to date \(head is .*\)/)
     }
     { // Delete the local database.
-      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     }
     // Delete the remote database.
@@ -171,7 +214,7 @@ describe('cli-clone-push-pull', function () {
     })
 
     it('fails clone with auth error (#1127)', async function () {
-      await execEnv(`./terminusdb.sh clone --user=${util.randomString()} --password=${util.randomString()} ${url}`)
+      await execEnv(`${util.terminusdbScript()} clone --user=${util.randomString()} --password=${util.randomString()} ${url}`)
         .then((r) => {
           expect.fail(JSON.stringify(r))
         })
@@ -184,18 +227,18 @@ describe('cli-clone-push-pull', function () {
 
     describe('clone', function () {
       before(async function () {
-        const r = await execEnv(`./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`)
+        const r = await execEnv(`${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`)
         expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
         expect(r.stdout).to.match(new RegExp(`Database created: ${dbSpec}`))
       })
 
       after(async function () {
-        const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+        const r = await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
         expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
       })
 
       it('fails push with auth error', async function () {
-        await execEnv(`./terminusdb.sh push --user=${util.randomString()} --password=${util.randomString()} ${dbSpec}`)
+        await execEnv(`${util.terminusdbScript()} push --user=${util.randomString()} --password=${util.randomString()} ${dbSpec}`)
           .then((r) => {
             expect.fail(JSON.stringify(r))
           })
@@ -208,7 +251,7 @@ describe('cli-clone-push-pull', function () {
 
       it('passes pull twice', async function () {
         const branchSpec = `${dbSpec}/local/branch/main`
-        const cmd = `./terminusdb.sh pull --user=${agent.user} --password=${agent.password} ${branchSpec}`
+        const cmd = `${util.terminusdbScript()} pull --user=${agent.user} --password=${agent.password} ${branchSpec}`
         {
           const r = await execEnv(cmd)
           expect(r.stdout).to.match(/^Pulling from remote 'origin'/)
@@ -229,11 +272,11 @@ describe('cli-clone-push-pull', function () {
             let expectedStdout
             switch (cmd) {
               case 'db create':
-                cmd = `./terminusdb.sh db create ${dbSpec}`
+                cmd = `${util.terminusdbScript()} db create ${dbSpec}`
                 expectedStdout = ''
                 break
               case 'clone':
-                cmd = `./terminusdb.sh clone --user=${agent.user} --password=${agent.password} ${url}`
+                cmd = `${util.terminusdbScript()} clone --user=${agent.user} --password=${agent.password} ${url}`
                 expectedStdout = 'Cloning the remote \'origin\'\n'
                 break
               default:
@@ -263,7 +306,7 @@ describe('cli-clone-push-pull', function () {
       agent = new Agent().auth()
       dbSpec = agent.orgName + '/' + agent.dbName
       localDbSpec = dbSpec + '_local'
-      const r = await execEnv(`./terminusdb.sh db create ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db create ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database created: ${dbSpec}`))
       const schema = [
         {
@@ -272,39 +315,39 @@ describe('cli-clone-push-pull', function () {
           name: 'xsd:string',
         },
       ]
-      await execEnv(`./terminusdb.sh doc insert -g schema ${dbSpec} --data='${JSON.stringify(schema)}'`)
+      await execEnv(`${util.terminusdbScript()} doc insert -g schema ${dbSpec} --data='${JSON.stringify(schema)}'`)
       const instance = { name: 'bar' }
-      await execEnv(`./terminusdb.sh doc insert ${dbSpec} --data='${JSON.stringify(instance)}'`)
+      await execEnv(`${util.terminusdbScript()} doc insert ${dbSpec} --data='${JSON.stringify(instance)}'`)
     })
 
     after(async function () {
-      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     })
 
     it('performs local clone', async function () {
-      const r = await execEnv(`./terminusdb.sh clone ${dbSpec} ${localDbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} clone ${dbSpec} ${localDbSpec}`)
       expect(r.stdout).to.match(/^Cloning the remote 'origin'/)
     })
 
     it('document is in local clone', async function () {
-      const r = await execEnv(`./terminusdb.sh doc get ${localDbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} doc get ${localDbSpec}`)
       expect(r.stdout).to.match(/^.*"name":"bar"/)
     })
 
     it('updates the local clone', async function () {
       const instance = { name: 'foo' }
-      const r = await execEnv(`./terminusdb.sh doc insert ${localDbSpec} --data='${JSON.stringify(instance)}'`)
+      const r = await execEnv(`${util.terminusdbScript()} doc insert ${localDbSpec} --data='${JSON.stringify(instance)}'`)
       expect(r.stdout).to.match(/^Documents inserted:/)
     })
 
     it('can push the update', async function () {
-      const r = await execEnv(`./terminusdb.sh push ${localDbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} push ${localDbSpec}`)
       expect(r.stdout).to.match(/^Pushing to remote 'origin'/)
     })
 
     it('can see the update in origin', async function () {
-      const r = await execEnv(`./terminusdb.sh doc get ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} doc get ${dbSpec}`)
       expect(r.stdout).to.match(/^.*"name":"bar".*\n.*"name":"foo"/)
     })
   })
@@ -316,17 +359,17 @@ describe('cli-clone-push-pull', function () {
     before(async function () {
       agent = new Agent().auth()
       dbSpec = agent.orgName + '/' + agent.dbName
-      const r = await execEnv(`./terminusdb.sh db create ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db create ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database created: ${dbSpec}`))
     })
 
     after(async function () {
-      const r = await execEnv(`./terminusdb.sh db delete ${dbSpec}`)
+      const r = await execEnv(`${util.terminusdbScript()} db delete ${dbSpec}`)
       expect(r.stdout).to.match(new RegExp(`^Database deleted: ${dbSpec}`))
     })
 
     it('fails push with unknown remote repository', async function () {
-      await execEnv('./terminusdb.sh push --user=' + agent.user + ' --password=' + agent.password + ' ' + dbSpec)
+      await execEnv(`${util.terminusdbScript()} push --user=${agent.user} --password=${agent.password} ${dbSpec}`)
         .then((r) => {
           expect.fail(JSON.stringify(r))
         })
@@ -339,7 +382,7 @@ describe('cli-clone-push-pull', function () {
 
     it('fails pull with unknown local branch', async function () {
       const branchSpec = `${dbSpec}/remote/branch/${util.randomString()}`
-      await execEnv(`./terminusdb.sh pull --user=${agent.user} --password=${agent.password} ${branchSpec}`)
+      await execEnv(`${util.terminusdbScript()} pull --user=${agent.user} --password=${agent.password} ${branchSpec}`)
         .then((r) => {
           expect.fail(JSON.stringify(r))
         })

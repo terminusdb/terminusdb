@@ -11,6 +11,11 @@ TARGET=terminusdb
 default:
 	@$(MAKE) -f distribution/Makefile.prolog
 
+# Build the development binary (macOS-friendly, no library stripping).
+.PHONY: dev
+dev:
+	@$(MAKE) -f distribution/Makefile.prolog $@
+
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
 .PHONY: docker
@@ -46,6 +51,18 @@ download-lint:
 lint:
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
+.PHONY: clippy
+clippy:
+	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
+
+.PHONY: lint-mocha
+lint-mocha:
+	sh -c "cd tests; npx npm run check"
+
+.PHONY: lint-mocha-fix
+lint-mocha-fix:
+	sh -c "cd tests; npx npm run lint"
+
 # Build the dylib.
 .PHONY: rust
 rust:
@@ -55,6 +72,11 @@ rust:
 .PHONY: test
 test:
 	@$(MAKE) -f distribution/Makefile.prolog $@
+
+# Run the unit tests in node.
+.PHONY: test-int
+test-int:
+	sh -c "cd tests ; npx mocha"
 
 # Quick command for interactive
 .PHONY: i

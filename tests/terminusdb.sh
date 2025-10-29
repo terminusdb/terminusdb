@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
 # This is a script used to test the command-line interface (CLI).
-# It should be run in this directory.
+# It can be run from any directory.
 
 # We use `set -x` to show the executed command if the output is a terminal.
 # Don't show it if the script is being run by the tests, because the tests
 # expect certain output.
+
+# Get the directory where this script is located
+SCRIPT_DIR="`dirname "$0"`"
+cd "${SCRIPT_DIR}"
 
 # Determine whether the $TERMINUSDB_DOCKER_IMAGE_TAG was passed and we should
 # use Docker or whether we have a valid executable path and we should use it.

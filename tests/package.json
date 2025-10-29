@@ -23,6 +23,7 @@
     "buffalo-bench": "^2.0.0",
     "chai": "^4.3.6",
     "cross-fetch": "^3.1.5",
+    "decimal.js": "^10.6.0",
     "fast-glob": "^3.2.11",
     "mocha": "^10.8.2",
     "optionator": "^0.9.1",

@@ -1,4 +1,5 @@
 const fs = require('fs/promises')
+const path = require('path')
 const exec = require('util').promisify(require('child_process').exec)
 const { expect } = require('chai')
 const { util } = require('../lib')
@@ -13,31 +14,42 @@ describe('cli-triples', function () {
 
   before(async function () {
     this.timeout(200000)
+    const testDir = path.join(__dirname, '..')
+    const rootDir = path.join(testDir, '..')
+    const terminusdbExec = path.join(rootDir, 'terminusdb')
+
     dbPath = './storage/' + util.randomString()
-    envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
+    envs = {
+      ...process.env,
+      TERMINUSDB_SERVER_DB_PATH: dbPath,
+      TERMINUSDB_EXEC_PATH: terminusdbExec,
+    }
     {
-      const r = await execEnv('./terminusdb.sh store init --force')
+      const r = await execEnv(`${util.terminusdbScript()} store init --force`)
       expect(r.stdout).to.match(/^Successfully initialised database/)
     }
   })
 
   after(async function () {
-    await fs.rm(dbPath, { recursive: true })
+    await fs.rm(dbPath, { recursive: true, force: true })
   })
 
   it('load non-existent file', async function () {
     const db = util.randomString()
-    await execEnv(`./terminusdb.sh db create admin/${db}`)
-    const r = await execEnv(`./terminusdb.sh triples load admin/${db}/local/branch/main/instance ${db} | true`)
+    await execEnv(`${util.terminusdbScript()} db create admin/${db}`)
+    const r = await execEnv(`${util.terminusdbScript()} triples load admin/${db}/local/branch/main/instance ${db} | true`)
     expect(r.stderr).to.match(new RegExp(`^Error: File not found: ${db}`))
-    await execEnv(`./terminusdb.sh db delete admin/${db}`)
+    await execEnv(`${util.terminusdbScript()} db delete admin/${db}`)
   })
 
   it('load trig file', async function () {
+    // Use relative path for Docker compatibility (working directory is /app/terminusdb/tests inside container)
+    const trigFile = 'served/MW00KG01635.trig'
     const db = util.randomString()
-    await execEnv(`./terminusdb.sh db create admin/${db} --schema=false`)
-    const r = await execEnv(`./terminusdb.sh triples load admin/${db}/local/branch/main/instance served/MW00KG01635.trig`)
-    expect(r.stdout).to.match(/Successfully inserted triples from 'served\/MW00KG01635.trig'/)
-    await execEnv(`./terminusdb.sh db delete admin/${db}`)
+    await execEnv(`${util.terminusdbScript()} db create admin/${db} --schema=false`)
+    const r = await execEnv(`${util.terminusdbScript()} triples load admin/${db}/local/branch/main/instance ${trigFile}`)
+    const escapedPath = trigFile.replace(/\\/g, '\\\\')
+    expect(r.stdout).to.match(new RegExp(`Successfully inserted triples from '${escapedPath}'`))
+    await execEnv(`${util.terminusdbScript()} db delete admin/${db}`)
   })
 })

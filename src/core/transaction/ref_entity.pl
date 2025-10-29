@@ -111,7 +111,12 @@ commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp) :-
     once(ask(Askable,
              (   t(Commit_Uri, author, Author^^xsd:string),
                  t(Commit_Uri, message, Message^^xsd:string),
-                 t(Commit_Uri, timestamp, Timestamp^^xsd:decimal)))).
+                 t(Commit_Uri, timestamp, TS^^xsd:decimal)))),
+    % Convert rational to float for backward compatibility
+    (   rational(TS)
+    ->  Timestamp is float(TS)
+    ;   Timestamp = TS
+    ).
 
 commit_id_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
@@ -271,10 +276,10 @@ copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
             copy_commits(Origin_Context, Destination_Context, Parent_Id)
         ;   true)).
 
-%% copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
-%%     context_default_prefixes(Origin_Context, Origin_Context_Stripped),
-%%     context_default_prefixes(Destination_Context, Destination_Context_Stripped),
-%%     copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
+% copy_commits(Origin_Context, Destination_Context, Commit_Id) :-
+%     context_default_prefixes(Origin_Context, Origin_Context_Stripped),
+%     context_default_prefixes(Destination_Context, Destination_Context_Stripped),
+%     copy_commits_(Origin_Context_Stripped, Destination_Context_Stripped, Commit_Id).
 
 :- begin_tests(branch_objects).
 :- use_module(core(util/test_utils)).

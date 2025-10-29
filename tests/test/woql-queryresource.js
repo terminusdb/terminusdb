@@ -52,7 +52,7 @@ describe('woql-queryresource', function () {
     query.resource.source.post = 'employees.csv'
     const r = await woql
       .multipart(agent, query)
-      .attach('file', 'served/employees.csv')
+      .attach('file', util.servedPath('employees.csv'))
     expect(r.body['api:variable_names']).to.be.an('array').that.has.lengthOf(1)
     expect(r.body['api:variable_names'][0]).to.equal('Name')
     expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)

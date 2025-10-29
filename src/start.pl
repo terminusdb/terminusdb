@@ -78,6 +78,7 @@ user:message_hook(syntax_error(Term), warning, Lines) :-
 :- use_module(server(main)).
 
 :- use_module(library(plunit)).
+:- use_module(core(util/plunit_json_reporter)).
 
 % Plugins
 %:- use_module(plugins(registry)).

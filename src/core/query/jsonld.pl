@@ -24,24 +24,30 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 :- use_module(core(util)).
-:- reexport(core(util/syntax)).
-
+:- use_module(core(util/syntax)).
 :- use_module(core(triple)).
-:- use_module(core(transaction)).
+:- use_module(core(triple/literals), [object_storage/2]).
+:- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
+:- use_module(core(document)).
 
-:- use_module(library(pcre)).
-:- use_module(library(pairs)).
-:- use_module(library(http/json)).
 :- use_module(library(lists)).
-:- use_module(library(dicts)).
+:- use_module(library(option)).
+:- use_module(library(apply)).
+:- use_module(library(yall)).
+:- use_module(library(plunit)).
+:- use_module(library(pcre), [re_match/2]).
 
-% Currently a bug in groundedness checking.
-%:- use_module(library(mavis)).
+:- use_module(library(http/json)).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).
 
 % efficiency
+:- use_module(library(pairs)).
+:- use_module(library(dicts)).
+
+% Currently a bug in groundedness checking.
+%:- use_module(library(mavis)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
@@ -420,10 +426,84 @@ test(compress_base, [])
  *
  */
 value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
-    (   compound(D)
-    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], V^^_)
-    ;   D=V),
+    % JSON Serialization Rules:
+    % - xsd:integer and subtypes → JSON number (string-to-number conversion in Prolog)
+    % - xsd:float/double → JSON number (normalized: 2012.0 → 2012)
+    % - xsd:decimal → JSON number (rationals serialize via json_write_hook with 20-digit precision)
+    (   (   T = 'http://www.w3.org/2001/XMLSchema#integer'
+        ;   T = 'xsd:integer'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#long'
+        ;   T = 'xsd:long'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#int'
+        ;   T = 'xsd:int'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#short'
+        ;   T = 'xsd:short'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#byte'
+        ;   T = 'xsd:byte'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#positiveInteger'
+        ;   T = 'xsd:positiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#negativeInteger'
+        ;   T = 'xsd:negativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'
+        ;   T = 'xsd:nonPositiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'
+        ;   T = 'xsd:nonNegativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedLong'
+        ;   T = 'xsd:unsignedLong'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedInt'
+        ;   T = 'xsd:unsignedInt'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedShort'
+        ;   T = 'xsd:unsignedShort'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedByte'
+        ;   T = 'xsd:unsignedByte')
+    ->  % All integer types: convert string to number for JSON output
+        (   string(D)
+        ->  atom_number(D, V)
+        ;   atom(D)
+        ->  atom_number(D, V)
+        ;   number(D)
+        ->  V = D
+        ;   V = D  % Fallback
+        )
+    ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   T = 'xsd:decimal')
+    ->  % Decimals: check types in order of specificity (rational > float > number)
+        (   rational(D)
+        ->  % Rational: check if whole number
+            (   rational(D, Num, Den),
+                Den =:= 1
+            ->  V = Num  % Whole number rational
+            ;   V = D    % Fractional rational - json_write_hook handles precision
+            )
+        ;   float(D)
+        ->  % Float: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D  % Float value (less precise than rational)
+            )
+        ;   number(D)
+        ->  % Integer: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D
+            )
+        ;   V = D  % Pass through
+        )
+    ;   (   T = 'http://www.w3.org/2001/XMLSchema#float'
+        ;   T = 'xsd:float'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#double'
+        ;   T = 'xsd:double')
+    ->  % Float/double: normalize integer-valued floats (2012.0 → 2012)
+        (   float(D), D =:= floor(D)
+        ->  V is truncate(D)
+        ;   V = D
+        )
+    ;   compound(D)
+    ->  % Other compound types: convert to string
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+    ;   % Simple values: use as-is
+        D=V
+    ),
     !.
 value_jsonld(D@L,json{'@language' : L, '@value' : D}) :-
     !.
@@ -457,12 +537,86 @@ term_jsonld(Var,_,null) :-
     var(Var), % Tranform unbound variables to null
     !.
 term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
-    (   compound(D) % check if not bool, number, atom, string
-    ->  typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string',
-                 [], V^^_)
-    ;   D=V),
-    !,
-    compress_dict_uri(T, Prefixes, TC).
+    % JSON Serialization Rules:
+    % - xsd:integer and subtypes → JSON number (string-to-number conversion in Prolog)
+    % - xsd:float/double → JSON number (normalized: 2012.0 → 2012)
+    % - xsd:decimal → JSON number (rationals use json_write_hook for 20-digit precision)
+    (   (   T = 'http://www.w3.org/2001/XMLSchema#integer'
+        ;   T = 'xsd:integer'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#long'
+        ;   T = 'xsd:long'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#int'
+        ;   T = 'xsd:int'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#short'
+        ;   T = 'xsd:short'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#byte'
+        ;   T = 'xsd:byte'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#positiveInteger'
+        ;   T = 'xsd:positiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#negativeInteger'
+        ;   T = 'xsd:negativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonPositiveInteger'
+        ;   T = 'xsd:nonPositiveInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger'
+        ;   T = 'xsd:nonNegativeInteger'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedLong'
+        ;   T = 'xsd:unsignedLong'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedInt'
+        ;   T = 'xsd:unsignedInt'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedShort'
+        ;   T = 'xsd:unsignedShort'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#unsignedByte'
+        ;   T = 'xsd:unsignedByte')
+    ->  % All integer types: convert string to number for JSON output
+        (   string(D)
+        ->  atom_number(D, V)
+        ;   atom(D)
+        ->  atom_number(D, V)
+        ;   number(D)
+        ->  V = D
+        ;   V = D  % Fallback
+        )
+    ;   (   T = 'http://www.w3.org/2001/XMLSchema#decimal'
+        ;   T = 'xsd:decimal')
+    ->  % Decimals: check types in order of specificity (rational > float > number)
+        (   rational(D)
+        ->  % Rational: check if whole number
+            (   rational(D, Num, Den),
+                Den =:= 1
+            ->  V = Num  % Whole number rational
+            ;   V = D    % Fractional rational - json_write_hook handles precision
+            )
+        ;   float(D)
+        ->  % Float: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D  % Float value (less precise than rational)
+            )
+        ;   number(D)
+        ->  % Integer: check if whole number
+            (   D =:= floor(D)
+            ->  V is truncate(D)
+            ;   V = D
+            )
+        ;   V = D  % Pass through
+        )
+    ;   (   T = 'http://www.w3.org/2001/XMLSchema#float'
+        ;   T = 'xsd:float'
+        ;   T = 'http://www.w3.org/2001/XMLSchema#double'
+        ;   T = 'xsd:double')
+    ->  % Float/double: normalize integer-valued floats (2012.0 → 2012)
+        (   float(D), D =:= floor(D)
+        ->  V is truncate(D)
+        ;   V = D
+        )
+    ;   compound(D)
+    ->  % Other compound types: convert to string
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+    ;   % Simple values: use as-is
+        D=V
+    ),
+    compress_dict_uri(T, Prefixes, TC),
+    !.
 term_jsonld(D@L,_,json{'@language' : L, '@value' : D}) :-
     !.
 term_jsonld(Term,Prefixes,JSON) :-
