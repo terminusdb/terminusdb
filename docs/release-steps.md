@@ -54,11 +54,13 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 Use the **Bump Version** GitHub Action to update the `VERSION` file and related references:
 
-#### Option A: Manual Version (Recommended for Releases)
+#### Option A: Manual Version (Normally not needed)
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0` or `11.2.0-dev`
+- **New version:** e.g., `11.2.0`, `11.2.0-rc3`, or `11.2.0-dev`
+
+The workflow accepts any suffix after the version number: `-rc1`, `-rc2`, `-alpha`, `-beta`, `-dev`, or no suffix etc.
 
 This will:
 - Update `VERSION` file
@@ -67,9 +69,9 @@ This will:
 - Update `distribution/snap/snapcraft.yaml`
 - Create a PR with the changes
 
-#### Option B: Automatic Patch Bump (not currently used)
+#### Option B: Automatic Patch Bump
 
-When called as `workflow_call` (from other workflows), the action automatically bumps the patch version while preserving any suffix (e.g., `11.1.5-dev` → `11.1.6-dev`).
+When called as `workflow_call` (from other workflows), the action automatically bumps the patch version while preserving any suffix (e.g., `11.1.5-dev` → `11.1.6`, `11.1.6` → `11.2.0-rc1`, `11.2.0-rc1` → `11.2.0`).
 
 **Review and merge** the version bump PR before proceeding.
 
@@ -116,8 +118,10 @@ After automated builds complete (monitor in Actions tab):
 3. Select the tag you created
 4. **Release title:** `TerminusDB v<VERSION>`
 5. **Description:** Copy relevant section from `RELEASE_NOTES.md`
-6. Check **Set as a pre-release** for RC/beta versions
+6. **Set as a pre-release:** Check this for versions with `-rc`, `-beta`, `-alpha` suffixes
 7. Click **Publish release**
+
+> **Note:** RC versions (e.g., `11.2.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
 
 ### 6. Verify Release
 
@@ -216,9 +220,16 @@ See [`PREPARE_PR.md`](../PREPARE_PR.md) for complete pre-release testing checkli
 - Verify image tags are correctly formatted
 
 **Version bump PR not created:**
+- Verify the workflow ran on `main` branch (PR creation only runs on main)
+- Check that branch `version-bump-<VERSION>` was created and pushed
+- Review workflow logs for `gh pr create` output
+- Ensure `GH_TOKEN` has PR creation permissions
+- If branch exists but no PR, manually create: `gh pr create --base main --head version-bump-<VERSION>`
+
+**Cogapp failures:**
 - Check cogapp installation in workflow
 - Verify VERSION file format (no trailing newlines except one)
-- Review bump-version.yml workflow logs
+- Ensure all cogapp template files have valid syntax
 
 ---
 
