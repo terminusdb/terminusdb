@@ -52,7 +52,8 @@ parts:
       - pkg-config
       - swi-prolog-nox
     stage-packages:
-      - libssl3t64
+      - libjwt0
+      - libssl3
     override-build: |
       # Build the jwt_io C extension in place
       echo "=== Building jwt_io pack with C extension ==="
