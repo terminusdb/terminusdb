@@ -3,24 +3,17 @@ export SWI_HOME_DIR="$SNAP/usr/lib/swi-prolog"
 export TERMINUSDB_SERVER_PACK_DIR="$SNAP"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}${SWI_HOME_DIR}/lib/x86_64-linux/"
 
-# DEBUG: Check if packs exist (output to stderr to not interfere with commands)
-echo "=== Pack Debug Info ===" >&2
-echo "SNAP=$SNAP" >&2
-echo "TERMINUSDB_SERVER_PACK_DIR=$TERMINUSDB_SERVER_PACK_DIR" >&2
-echo "" >&2
-if [ -d "$SNAP/tus" ]; then
-    echo "✓ TUS pack found at $SNAP/tus" >&2
-    ls -la "$SNAP/tus/pack.pl" 2>/dev/null || echo "  WARNING: pack.pl not found!" >&2
-else
-    echo "✗ ERROR: TUS pack not found at $SNAP/tus" >&2
+# Set default storage location if not already set (allows override)
+if [ -z "$TERMINUSDB_SERVER_DB_PATH" ]; then
+    export TERMINUSDB_SERVER_DB_PATH="$SNAP_DATA/storage"
 fi
-if [ -d "$SNAP/jwt_io" ]; then
-    echo "✓ JWT pack found at $SNAP/jwt_io" >&2
-    ls -la "$SNAP/jwt_io/pack.pl" 2>/dev/null || echo "  WARNING: pack.pl not found!" >&2
-else
-    echo "✗ ERROR: JWT pack not found at $SNAP/jwt_io" >&2
+
+# Silent pack validation - only report errors
+if [ ! -d "$SNAP/tus" ] || [ ! -f "$SNAP/tus/pack.pl" ]; then
+    echo "ERROR: TUS pack not found or incomplete at $SNAP/tus" >&2
 fi
-echo "====================" >&2
-echo "" >&2
+if [ ! -d "$SNAP/jwt_io" ] || [ ! -f "$SNAP/jwt_io/pack.pl" ]; then
+    echo "ERROR: JWT pack not found or incomplete at $SNAP/jwt_io" >&2
+fi
 
 $SNAP/terminusdb "$@"
