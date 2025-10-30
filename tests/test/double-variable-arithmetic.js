@@ -293,7 +293,6 @@ describe('double-variable-arithmetic', function () {
 
     let range2000
     const count = 2000
-    const totalCount = count * count
 
     before(function () {
       // Helper to generate array of integers for Member list (just for cardinality)
