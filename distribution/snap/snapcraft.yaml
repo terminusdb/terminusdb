@@ -43,13 +43,30 @@ parts:
       craftctl default
   
   jwt:
-    plugin: dump
+    plugin: make
     source: https://github.com/terminusdb-labs/jwt_io.git
     source-tag: v1.0.4
+    build-packages:
+      - libjwt-dev
+      - libssl-dev
+      - pkg-config
+      - swi-prolog-nox
+    stage-packages:
+      - libjwt0
+      - libssl3
     override-build: |
-      mkdir -p jwt_io
-      mv * jwt_io/ 2>/dev/null || true
-      craftctl default
+      # Build the jwt_io C extension in place
+      echo "=== Building jwt_io pack with C extension ==="
+      make all
+      
+      # Install to jwt_io subdirectory for pack structure
+      mkdir -p $CRAFT_PART_INSTALL/jwt_io
+      cp -r prolog pack.pl $CRAFT_PART_INSTALL/jwt_io/
+      
+      # Copy compiled shared library
+      PACKSODIR=$(swipl -q -g "use_module(library(build/tools)), build_tools:def_environment('PACKSODIR', X, []), writeln(X)." -t halt)
+      mkdir -p $CRAFT_PART_INSTALL/jwt_io/lib
+      cp $PACKSODIR/*.so $CRAFT_PART_INSTALL/jwt_io/lib/ 2>/dev/null || true
   
   terminusdb:
     after:
@@ -101,5 +118,6 @@ apps:
       LC_ALL: C.UTF-8
       SWI_HOME_DIR: $SNAP/usr/lib/swi-prolog
       TERMINUSDB_SERVER_PACK_DIR: $SNAP
+      TERMINUSDB_JWT_ENABLED: "false"
       PATH: $SNAP/usr/bin:$PATH
     plugs: [home, network, network-bind, process-control]
