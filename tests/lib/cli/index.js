@@ -23,7 +23,8 @@ class Cli {
     this.envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,
-      TERMINUSDB_EXEC_PATH: terminusdbExec,
+      // Use existing TERMINUSDB_EXEC_PATH if set (e.g., snap), otherwise default to local binary
+      TERMINUSDB_EXEC_PATH: process.env.TERMINUSDB_EXEC_PATH || terminusdbExec,
     }
   }
 
