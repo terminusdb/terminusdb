@@ -96,24 +96,42 @@ jobs:
             # Show where logs are being written
             echo "Server logs: $(pwd)/terminusdb-server.log"
             
+            # Give server a moment to start writing logs
+            sleep 2
+            echo "Initial server output:"
+            head -20 terminusdb-server.log || echo "No output yet"
+            
             # Wait for server AND database storage to be fully ready
             echo "Waiting for TerminusDB to be ready..."
             TEST_DB="healthcheck-test"
             
             for i in {1..120}; do
-              # First check: API responding
-              if ! curl -sf -u admin:root http://127.0.0.1:6363/api/ok > /dev/null 2>&1; then
+              # First check: Basic HTTP (no auth)
+              if ! curl -sf http://127.0.0.1:6363/ > /dev/null 2>&1; then
                 if [ $((i % 10)) -eq 0 ]; then
-                  echo "Still waiting for API... ($i/120 seconds)"
+                  echo "Still waiting for HTTP server... ($i/120 seconds)"
                 fi
                 sleep 1
                 continue
               fi
               
-              # Second check: Can list databases (read operation)
+              # Second check: API with auth
+              if ! curl -sf -u admin:root http://127.0.0.1:6363/api/ok > /dev/null 2>&1; then
+                if [ $((i % 10)) -eq 0 ]; then
+                  echo "HTTP up, waiting for authentication... ($i/120 seconds)"
+                  # Show what the server is saying
+                  curl -v http://127.0.0.1:6363/api/ok 2>&1 | head -15
+                fi
+                sleep 1
+                continue
+              fi
+              
+              # Third check: Can list databases (read operation)
               if ! curl -sf -u admin:root http://127.0.0.1:6363/api/db/admin > /dev/null 2>&1; then
                 if [ $((i % 10)) -eq 0 ]; then
-                  echo "API up, waiting for storage read capability... ($i/120 seconds)"
+                  echo "Auth OK, waiting for storage read capability... ($i/120 seconds)"
+                  # Show the actual error
+                  curl -v -u admin:root http://127.0.0.1:6363/api/db/admin 2>&1 | head -20
                 fi
                 sleep 1
                 continue
