@@ -118,6 +118,7 @@ apps:
       LC_ALL: C.UTF-8
       SWI_HOME_DIR: $SNAP/usr/lib/swi-prolog
       TERMINUSDB_SERVER_PACK_DIR: $SNAP
+      TERMINUSDB_SERVER_DB_PATH: $SNAP_DATA/storage
       TERMINUSDB_JWT_ENABLED: "false"
       PATH: $SNAP/usr/bin:$PATH
     plugs: [home, network, network-bind, process-control]
