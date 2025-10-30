@@ -73,6 +73,26 @@ jobs:
           snap connections terminusdb
           
           echo "NOTE: Running in classic mode (no confinement)"
+          
+          # Debug: Check SWI-Prolog version in snap
+          echo "=== Checking SWI-Prolog version in snap ==="
+          ls -la /snap/terminusdb/current/usr/lib/swi-prolog/ || echo "SWI-Prolog directory not found"
+          
+          # Check for library files
+          echo "=== Checking for libswipl.so ==="
+          find /snap/terminusdb/current -name "libswipl.so*" -ls || echo "No libswipl.so found"
+          
+          # Try to determine version from file dates
+          echo "=== SWI-Prolog boot.prc timestamp ==="
+          ls -l /snap/terminusdb/current/usr/lib/swi-prolog/boot.prc 2>/dev/null || echo "No boot.prc found"
+          
+          # Check what architecture
+          echo "=== Architecture ==="
+          uname -m
+          
+          # Try running terminusdb --version
+          echo "=== TerminusDB version ==="
+          terminusdb --version || echo "Failed to run terminusdb"
 
       - name: Install NodeJS
         uses: actions/setup-node@v4
