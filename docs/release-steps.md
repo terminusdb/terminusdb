@@ -22,17 +22,17 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Last released version:** <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v11.1.17`](https://github.com/terminusdb/terminusdb/releases/tag/v11.1.17)
+[`v11.2-rc2`](https://github.com/terminusdb/terminusdb/releases/tag/v11.2-rc2)
 <!-- [[[end]]] -->
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v11.2-rc2`
+`v11.2.0-rc3`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`11.1.17...main`](https://github.com/terminusdb/terminusdb/compare/v11.1.17...main)
+[`11.2-rc2...main`](https://github.com/terminusdb/terminusdb/compare/v11.2-rc2...main)
 <!-- [[[end]]] -->
 
 ---
@@ -54,11 +54,13 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 Use the **Bump Version** GitHub Action to update the `VERSION` file and related references:
 
-#### Option A: Manual Version (Recommended for Releases)
+#### Option A: Manual Version (Normally not needed)
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0` or `11.2.0-dev`
+- **New version:** e.g., `11.2.0`, `11.2.0-rc3`, or `11.2.0-dev`
+
+The workflow accepts any suffix after the version number: `-rc1`, `-rc2`, `-alpha`, `-beta`, `-dev`, or no suffix etc.
 
 This will:
 - Update `VERSION` file
@@ -67,9 +69,9 @@ This will:
 - Update `distribution/snap/snapcraft.yaml`
 - Create a PR with the changes
 
-#### Option B: Automatic Patch Bump (not currently used)
+#### Option B: Automatic Patch Bump
 
-When called as `workflow_call` (from other workflows), the action automatically bumps the patch version while preserving any suffix (e.g., `11.1.5-dev` → `11.1.6-dev`).
+When called as `workflow_call` (from other workflows), the action automatically bumps the patch version while preserving any suffix (e.g., `11.1.5-dev` → `11.1.6`, `11.1.6` → `11.2.0-rc1`, `11.2.0-rc1` → `11.2.0`).
 
 **Review and merge** the version bump PR before proceeding.
 
@@ -95,11 +97,20 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 - Builds ARM64 image via `.github/workflows/docker-arm64-build.yml` (BuildJet runner)
 - Runs integration tests on both architectures
 - Publishes multi-arch manifests via `.github/workflows/docker-images-publish.yml`:
-  - `terminusdb/terminusdb-server:v<VERSION>`
-  - `terminusdb/terminusdb-server:v<MAJOR>` (e.g., `v11`)
-  - `terminusdb/terminusdb-server:latest` (for non-rc/beta releases)
+  - **Always:** `terminusdb/terminusdb-server:v<VERSION>` (e.g., `v11.2.0-rc3`)
+  - **Production only:** `terminusdb/terminusdb-server:v<MAJOR>` (e.g., `v11`)
+  - **Production only:** `terminusdb/terminusdb-server:latest`
   - Corresponding `-noroot` variants for all tags
+- **Pre-release versions** (`-rc`, `-beta`, `-alpha`, `-dev`) get **only** version-specific tags, not `latest` or major version tags
 - Triggers enterprise build (internal)
+
+**Docker Tag Examples:**
+
+| Release Version | Tags Created |
+|-----------------|--------------|
+| `v11.2.0` | `v11.2.0`, `v11`, `latest`, `v11.2.0-noroot`, `v11-noroot`, `latest-noroot` |
+| `v11.2.0-rc3` | `v11.2.0-rc3`, `v11.2.0-rc3-noroot` (no `latest` or `v11`) |
+| `v11.2.0-beta` | `v11.2.0-beta`, `v11.2.0-beta-noroot` (no `latest` or `v11`) |
 
 #### Snap Package
 - Builds snap via `.github/workflows/snap-build.yml`
@@ -116,8 +127,10 @@ After automated builds complete (monitor in Actions tab):
 3. Select the tag you created
 4. **Release title:** `TerminusDB v<VERSION>`
 5. **Description:** Copy relevant section from `RELEASE_NOTES.md`
-6. Check **Set as a pre-release** for RC/beta versions
+6. **Set as a pre-release:** Check this for versions with `-rc`, `-beta`, `-alpha` suffixes
 7. Click **Publish release**
+
+> **Note:** RC versions (e.g., `11.2.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
 
 ### 6. Verify Release
 
@@ -216,9 +229,23 @@ See [`PREPARE_PR.md`](../PREPARE_PR.md) for complete pre-release testing checkli
 - Verify image tags are correctly formatted
 
 **Version bump PR not created:**
+- Verify the workflow ran on `main` branch (PR creation only runs on main)
+- Check that branch `version-bump-<VERSION>` was created and pushed
+- Review workflow logs for `gh pr create` output
+- Ensure `GH_TOKEN` has PR creation permissions
+- If branch exists but no PR, manually create: `gh pr create --base main --head version-bump-<VERSION>`
+
+**Cogapp failures:**
 - Check cogapp installation in workflow
 - Verify VERSION file format (no trailing newlines except one)
-- Review bump-version.yml workflow logs
+- Ensure all cogapp template files have valid syntax
+
+**Version bump PR created but checks don't run:**
+- GitHub Actions don't auto-trigger on PRs created by `GITHUB_TOKEN` (security policy)
+- **Solution**: Close the PR and reopen it manually
+- Checks will automatically run after reopening
+- Alternative: Go to Actions tab and manually approve pending workflow runs if they are visible
+- This is expected behavior to prevent infinite workflow loops
 
 ---
 

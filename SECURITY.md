@@ -7,10 +7,10 @@ listed below.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| > 11.0  | :white_check_mark: |
+| >= 11.1  | :white_check_mark: |
 | < 11.0  | :x:                |
 
-Report the vulnerability to <security@terminusdb.com>.
+Report the vulnerability to <security@dfrnt.com> (current maintainers of TerminusDB).
 
 > :warning: Please do **not** file a public issue when reporting a
 > vulnerability. This allows us to fix the issue and minimize the impact before
