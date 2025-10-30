@@ -17,7 +17,7 @@ contact: team@terminusdb.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
 confinement: strict
-base: core20
+base: core24
 grade: stable
 package-repositories:
  - type: apt
@@ -30,11 +30,11 @@ parts:
   tus:
     plugin: dump
     source: https://github.com/terminusdb/tus.git
-    source-tag: v0.0.5
+    source-tag: v0.0.16
     override-build: |
-      mkdir tus
-      mv * tus/ || true
-      snapcraftctl build
+      mkdir -p tus
+      mv * tus/ 2>/dev/null || true
+      craftctl default
   terminusdb:
     after:
       - tus
@@ -51,19 +51,26 @@ parts:
     stage-packages:
       - swi-prolog-nox
     override-build: |
-      mkdir -p /snap/terminusdb/current/usr/lib
-      cp -r /usr/lib/swi-prolog /snap/terminusdb/current/usr/lib/
+      echo "=== Installing Rust ==="
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-      export PATH=/root/.cargo/bin:$PATH
-      export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
-      export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
-      export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+LD_LIBRARY_PATH:}${LIBRARY_PATH}"
-      rsync -rt ./ /snap/terminusdb/current/
-      cd /snap/terminusdb/current
+      export PATH=$HOME/.cargo/bin:$PATH
+      
+      echo "=== Setting up SWI-Prolog from PPA ==="
+      export SWI_HOME_DIR=/usr/lib/swi-prolog
+      export PATH=/usr/bin:$PATH
+      export LD_LIBRARY_PATH=/usr/lib:$LD_LIBRARY_PATH
+      
+      echo "=== Verifying SWI-Prolog ==="
+      swipl --version
+      
+      echo "=== Building TerminusDB ==="
+      cd $CRAFT_PART_SRC
       make
-      cp -r terminusdb distribution "$SNAPCRAFT_PART_INSTALL/"
+      
+      echo "=== Installing to snap ==="
+      cp -r terminusdb distribution src $CRAFT_PART_INSTALL/
     build-environment:
-      - TERMINUSDB_SERVER_PACK_DIR: /root/stage
+      - TERMINUSDB_SERVER_PACK_DIR: $CRAFT_STAGE
       - LANG: C.UTF-8
       - LC_ALL: C.UTF-8
     source: ./terminusdb_source
@@ -75,4 +82,7 @@ apps:
     environment:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
+      SWI_HOME_DIR: $SNAP/usr/lib/swi-prolog
+      PATH: $SNAP/usr/bin:$PATH
+      LD_LIBRARY_PATH: $SNAP/usr/lib:$LD_LIBRARY_PATH
     plugs: [home, network, network-bind, process-control]
