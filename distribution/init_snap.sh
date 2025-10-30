@@ -1,4 +1,5 @@
 #!/bin/bash
 export SWI_HOME_DIR="$SNAP/usr/lib/swi-prolog"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+LD_LIBRARY_PATH:}${SWI_HOME_DIR}/lib/x86_64-linux/"
+export TERMINUSDB_SERVER_PACK_DIR="$SNAP"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$SNAP/usr/lib"
 $SNAP/terminusdb "$@"
