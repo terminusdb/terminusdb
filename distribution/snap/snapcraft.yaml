@@ -52,8 +52,7 @@ parts:
       - pkg-config
       - swi-prolog-nox
     stage-packages:
-      - libjwt0
-      - libssl3
+      - libssl3t64
     override-build: |
       # Build the jwt_io C extension in place
       echo "=== Building jwt_io pack with C extension ==="
@@ -67,6 +66,10 @@ parts:
       PACKSODIR=$(swipl -q -g "use_module(library(build/tools)), build_tools:def_environment('PACKSODIR', X, []), writeln(X)." -t halt)
       mkdir -p $CRAFT_PART_INSTALL/jwt_io/lib
       cp $PACKSODIR/*.so $CRAFT_PART_INSTALL/jwt_io/lib/ 2>/dev/null || true
+      
+      # Copy libjwt shared library dependencies
+      mkdir -p $CRAFT_PART_INSTALL/usr/lib
+      cp -P /usr/lib/*/libjwt.so* $CRAFT_PART_INSTALL/usr/lib/ 2>/dev/null || true
   
   terminusdb:
     after:
