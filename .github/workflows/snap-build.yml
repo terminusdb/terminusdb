@@ -64,10 +64,25 @@ jobs:
 
       - name: Init TerminusDB
         run: |
-            terminusdb store init
+            # Set required environment variables for TerminusDB
+            export TERMINUSDB_SERVER_DB_PATH="$HOME/.terminusdb/storage"
+            export TERMINUSDB_SERVER_NAME=127.0.0.1
+            export TERMINUSDB_SERVER_PORT=6363
+            export TERMINUSDB_ADMIN_PASS=root
+            
+            # Create storage directory
+            mkdir -p "$TERMINUSDB_SERVER_DB_PATH"
+            
+            terminusdb store init --key root
   
       - name: Start TerminusDB
         run: |
+            # Set required environment variables for TerminusDB
+            export TERMINUSDB_SERVER_DB_PATH="$HOME/.terminusdb/storage"
+            export TERMINUSDB_SERVER_NAME=127.0.0.1
+            export TERMINUSDB_SERVER_PORT=6363
+            export TERMINUSDB_ADMIN_PASS=root
+            
             terminusdb serve &
             echo $! > terminusdb.pid
             
@@ -100,8 +115,14 @@ jobs:
   
       - name: Test
         run: |
+          # Set required environment variables for tests
+          export TERMINUSDB_SERVER_DB_PATH="$HOME/.terminusdb/storage"
+          export TERMINUSDB_SERVER_NAME=127.0.0.1
+          export TERMINUSDB_SERVER_PORT=6363
+          export TERMINUSDB_ADMIN_PASS=root
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
           export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
+          
           cd tests && npm i && npm run test
 
       - name: Stop TerminusDB
