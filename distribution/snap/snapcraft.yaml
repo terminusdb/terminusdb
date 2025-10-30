@@ -61,7 +61,9 @@ parts:
       rsync -rt ./ /snap/terminusdb/current/
       cd /snap/terminusdb/current
       make
-      cp -r terminusdb distribution "$SNAPCRAFT_PART_INSTALL/"
+      # Copy binary, startup scripts, AND source files
+      # Source files may be needed even though binary is a saved state
+      cp -r terminusdb distribution src "$SNAPCRAFT_PART_INSTALL/"
     build-environment:
       - TERMINUSDB_SERVER_PACK_DIR: /root/stage
       - LANG: C.UTF-8
