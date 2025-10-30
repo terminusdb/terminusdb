@@ -20,6 +20,11 @@ icon: snap/local/terminusdb_icon.png
 confinement: strict
 base: core24
 grade: stable
+
+lint:
+  ignore:
+    - library  # SWI-Prolog dependencies may be loaded dynamically
+
 package-repositories:
  - type: apt
    ppa: swi-prolog/stable
