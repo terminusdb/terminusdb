@@ -91,5 +91,4 @@ apps:
       SWI_HOME_DIR: $SNAP/usr/lib/swi-prolog
       TERMINUSDB_SERVER_PACK_DIR: $SNAP
       PATH: $SNAP/usr/bin:$PATH
-      LD_LIBRARY_PATH: $SNAP/usr/lib:$LD_LIBRARY_PATH
     plugs: [home, network, network-bind, process-control]
