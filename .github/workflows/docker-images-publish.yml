@@ -81,8 +81,8 @@ jobs:
           fi
 
           # Tag and push the latest image when a version tag is pushed
-          # Exclude tags like rc and beta from the latest tag
-          if echo "$GITHUB_REF" | grep -q "refs/tags/v" && ! echo "$VERSION" | grep -qE "(rc|beta)"; then
+          # Exclude pre-release versions (anything with a suffix like -rc, -beta, -alpha, -dev)
+          if echo "$GITHUB_REF" | grep -q "refs/tags/v" && ! echo "$VERSION" | grep -qE "-(rc|beta|alpha|dev)"; then
             # Get the major version from the version (e.g., v11 from v11.0.4)
             VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
             TAGS="${TAGS},${LATEST_IMAGE},terminusdb/terminusdb-server:${VERSION_MAJOR}"
@@ -96,7 +96,7 @@ jobs:
           if [ "$VERSION" == "dev" ]; then
             NOROOT_TAGS="${NOROOT_TAGS},${VERSION}-noroot-$GITHUB_SHA"
           fi
-          if echo "$GITHUB_REF" | grep -q "refs/tags/v" && ! echo "$VERSION" | grep -qE "(rc|beta)"; then
+          if echo "$GITHUB_REF" | grep -q "refs/tags/v" && ! echo "$VERSION" | grep -qE "-(rc|beta|alpha|dev)"; then
             VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
             NOROOT_TAGS="${NOROOT_TAGS},latest-noroot,${VERSION_MAJOR}-noroot"
           fi
