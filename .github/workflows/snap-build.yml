@@ -70,7 +70,33 @@ jobs:
         run: |
             terminusdb serve &
             echo $! > terminusdb.pid
-            sleep 30  # wait for server to start (snap initialization can be slow)
+            
+            # Wait for server to be ready with proper health check
+            # Test the actual API endpoint with authentication to ensure DB is ready
+            echo "Waiting for TerminusDB API to be ready..."
+            for i in {1..90}; do
+              # Test the /api/ok endpoint which requires the full stack to be initialized
+              if curl -sf -u admin:root http://127.0.0.1:6363/api/ok > /dev/null 2>&1; then
+                echo "TerminusDB API is fully ready after $i seconds"
+                break
+              fi
+              if [ $i -eq 90 ]; then
+                echo "ERROR: TerminusDB API failed to initialize after 90 seconds"
+                echo "Trying to fetch any available logs..."
+                cat /var/snap/terminusdb/common/terminusdb.log 2>/dev/null || echo "No log file found"
+                echo "Testing basic HTTP response:"
+                curl -v http://127.0.0.1:6363/ || true
+                exit 1
+              fi
+              if [ $((i % 10)) -eq 0 ]; then
+                echo "Still waiting... ($i/90 seconds)"
+              fi
+              sleep 1
+            done
+            
+            # Give it a few more seconds for any async initialization
+            echo "API responding, waiting 5 more seconds for full stability..."
+            sleep 5
   
       - name: Test
         run: |
