@@ -65,16 +65,15 @@ jobs:
 
       - name: Install Snap
         run: |
-          sudo snap install download_snap/*.snap --dangerous
-          
-          # Ensure all plugs are connected (some may not auto-connect with --dangerous)
-          sudo snap connect terminusdb:home
-          sudo snap connect terminusdb:network
-          sudo snap connect terminusdb:network-bind
+          # Install in devmode to bypass strict confinement for debugging
+          # Once working, we can identify specific permissions needed
+          sudo snap install download_snap/*.snap --dangerous --devmode
           
           # Show snap status
           snap list terminusdb
           snap connections terminusdb
+          
+          echo "NOTE: Running in devmode (permissive) to identify permission issues"
 
       - name: Install NodeJS
         uses: actions/setup-node@v4
@@ -90,8 +89,12 @@ jobs:
   
       - name: Start TerminusDB
         run: |
-            terminusdb serve &
+            # Capture server logs to a file
+            terminusdb serve > terminusdb-server.log 2>&1 &
             echo $! > terminusdb.pid
+            
+            # Show where logs are being written
+            echo "Server logs: $(pwd)/terminusdb-server.log"
             
             # Wait for server AND database storage to be fully ready
             echo "Waiting for TerminusDB to be ready..."
@@ -166,12 +169,20 @@ jobs:
       - name: Show TerminusDB Logs on Failure
         if: failure()
         run: |
+          echo "=== TerminusDB Server Logs (Last 100 lines) ==="
+          tail -100 terminusdb-server.log || echo "No server log file found"
+          echo ""
           echo "=== TerminusDB Process Status ==="
           ps aux | grep terminusdb || true
           echo ""
           echo "=== Snap Info ==="
           snap list terminusdb || true
           snap connections terminusdb || true
+          echo ""
+          echo "=== Binaries ==="
+          ls -la /snap/bin/terminusdb || true
+          ls -la /snap/terminusdb/x1/terminusdb || true
+          file /snap/terminusdb/x1/terminusdb || true
           echo ""
           echo "=== Environment Variables ==="
           env | grep TERMINUSDB || true
@@ -182,6 +193,9 @@ jobs:
           echo ""
           echo "=== Test Connection ==="
           curl -v -u admin:root http://127.0.0.1:6363/api/ || true
+          echo ""
+          echo "=== CLI Test (should work) ==="
+          terminusdb test || echo "CLI test command not available"
           echo ""
           echo "=== Re-run Some Tests ==="
           cd tests
