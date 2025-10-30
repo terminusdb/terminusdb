@@ -150,7 +150,7 @@ jobs:
                 break
               fi
               
-              if [ $i -eq 120 ]; then
+              if [ $i -eq 30 ]; then
                 echo "ERROR: TerminusDB failed to fully initialize after 120 seconds"
                 echo "Trying to fetch any available logs..."
                 cat /var/snap/terminusdb/common/terminusdb.log 2>/dev/null || echo "No log file found"
@@ -172,7 +172,7 @@ jobs:
               fi
               
               if [ $((i % 10)) -eq 0 ]; then
-                echo "Storage read OK, waiting for write capability... ($i/120 seconds)"
+                echo "Storage read OK, waiting for write capability... ($i/30 seconds)"
               fi
               sleep 1
             done
@@ -204,6 +204,17 @@ jobs:
             echo "Looking for log files..."
             find . -name "*.log" -type f 2>/dev/null || true
           fi
+          echo ""
+          echo "=== Snap Logs ==="
+          sudo snap logs terminusdb || true
+          echo ""
+          echo "=== AppArmor Denials (snap confinement issues) ==="
+          sudo dmesg | grep -i apparmor | grep -i terminusdb | tail -50 || echo "No AppArmor denials found in dmesg"
+          echo ""
+          sudo journalctl -b | grep -i apparmor | grep -i terminusdb | tail -50 || echo "No AppArmor denials found in journal"
+          echo ""
+          echo "=== Snap Confinement Mode ==="
+          snap debug confinement || true
           echo ""
           echo "=== TerminusDB Process Status ==="
           ps aux | grep terminusdb || true
