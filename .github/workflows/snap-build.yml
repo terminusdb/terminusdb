@@ -43,6 +43,15 @@ jobs:
     needs: 
       - build
     runs-on: ubuntu-latest
+    
+    env:
+      # Standard snap user data directory (guaranteed writable by snap)
+      TERMINUSDB_SERVER_DB_PATH: /home/runner/snap/terminusdb/common/storage
+      TERMINUSDB_SERVER_NAME: 127.0.0.1
+      TERMINUSDB_SERVER_PORT: 6363
+      TERMINUSDB_ADMIN_PASS: root
+      TERMINUSDB_EXEC_PATH: /snap/bin/terminusdb
+      TERMINUSDB_BASE_URL: http://127.0.0.1:6363
 
     steps:   
       - name: Checkout
@@ -64,12 +73,6 @@ jobs:
 
       - name: Init TerminusDB
         run: |
-            # Set required environment variables for TerminusDB
-            export TERMINUSDB_SERVER_DB_PATH="$HOME/.terminusdb/storage"
-            export TERMINUSDB_SERVER_NAME=127.0.0.1
-            export TERMINUSDB_SERVER_PORT=6363
-            export TERMINUSDB_ADMIN_PASS=root
-            
             # Create storage directory
             mkdir -p "$TERMINUSDB_SERVER_DB_PATH"
             
@@ -77,12 +80,6 @@ jobs:
   
       - name: Start TerminusDB
         run: |
-            # Set required environment variables for TerminusDB
-            export TERMINUSDB_SERVER_DB_PATH="$HOME/.terminusdb/storage"
-            export TERMINUSDB_SERVER_NAME=127.0.0.1
-            export TERMINUSDB_SERVER_PORT=6363
-            export TERMINUSDB_ADMIN_PASS=root
-            
             terminusdb serve &
             echo $! > terminusdb.pid
             
@@ -114,16 +111,7 @@ jobs:
             sleep 5
   
       - name: Test
-        run: |
-          # Set required environment variables for tests
-          export TERMINUSDB_SERVER_DB_PATH="$HOME/.terminusdb/storage"
-          export TERMINUSDB_SERVER_NAME=127.0.0.1
-          export TERMINUSDB_SERVER_PORT=6363
-          export TERMINUSDB_ADMIN_PASS=root
-          export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
-          export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
-          
-          cd tests && npm i && npm run test
+        run: cd tests && npm i && npm run test
 
       - name: Stop TerminusDB
         run: |
