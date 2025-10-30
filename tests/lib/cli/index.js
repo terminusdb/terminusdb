@@ -15,9 +15,10 @@ class Cli {
   constructor (params) {
     this.params = params
     this.filesToDelete = []
-    const dbPath = `./storage/${util.randomString()}`
     const testDir = path.join(__dirname, '..', '..')
     const rootDir = path.join(testDir, '..')
+    // Use absolute path to avoid snap working directory ambiguity
+    const dbPath = path.resolve(testDir, 'storage', util.randomString())
     const terminusdbExec = path.join(rootDir, 'terminusdb')
     this.terminusdbSh = path.join(testDir, 'terminusdb.sh')
     this.envs = {

@@ -27,7 +27,8 @@ describe('cli-branch', function () {
     const rootDir = path.join(testDir, '..')
     const terminusdbExec = path.join(rootDir, 'terminusdb')
 
-    dbPath = './storage/' + util.randomString()
+    // Use absolute path to avoid snap working directory ambiguity
+    dbPath = path.resolve(testDir, 'storage', util.randomString())
     envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,
