@@ -64,7 +64,17 @@ jobs:
           path: download_snap/
 
       - name: Install Snap
-        run: sudo snap install download_snap/*.snap --dangerous
+        run: |
+          sudo snap install download_snap/*.snap --dangerous
+          
+          # Ensure all plugs are connected (some may not auto-connect with --dangerous)
+          sudo snap connect terminusdb:home
+          sudo snap connect terminusdb:network
+          sudo snap connect terminusdb:network-bind
+          
+          # Show snap status
+          snap list terminusdb
+          snap connections terminusdb
 
       - name: Install NodeJS
         uses: actions/setup-node@v4
@@ -83,37 +93,102 @@ jobs:
             terminusdb serve &
             echo $! > terminusdb.pid
             
-            # Wait for server to be ready with proper health check
-            # Test the actual API endpoint with authentication to ensure DB is ready
-            echo "Waiting for TerminusDB API to be ready..."
-            for i in {1..90}; do
-              # Test the /api/ok endpoint which requires the full stack to be initialized
-              if curl -sf -u admin:root http://127.0.0.1:6363/api/ok > /dev/null 2>&1; then
-                echo "TerminusDB API is fully ready after $i seconds"
+            # Wait for server AND database storage to be fully ready
+            echo "Waiting for TerminusDB to be ready..."
+            TEST_DB="healthcheck-test"
+            
+            for i in {1..120}; do
+              # First check: API responding
+              if ! curl -sf -u admin:root http://127.0.0.1:6363/api/ok > /dev/null 2>&1; then
+                if [ $((i % 10)) -eq 0 ]; then
+                  echo "Still waiting for API... ($i/120 seconds)"
+                fi
+                sleep 1
+                continue
+              fi
+              
+              # Second check: Can list databases (read operation)
+              if ! curl -sf -u admin:root http://127.0.0.1:6363/api/db/admin > /dev/null 2>&1; then
+                if [ $((i % 10)) -eq 0 ]; then
+                  echo "API up, waiting for storage read capability... ($i/120 seconds)"
+                fi
+                sleep 1
+                continue
+              fi
+              
+              # Third check: Can create a database (write operation)
+              # This ensures full storage layer initialization
+              if curl -sf -u admin:root -X POST \
+                   -H "Content-Type: application/json" \
+                   -d '{"label":"Health Check","comment":""}' \
+                   http://127.0.0.1:6363/api/db/admin/$TEST_DB > /dev/null 2>&1; then
+                echo "TerminusDB fully ready (API + read + write) after $i seconds"
+                # Clean up test database
+                curl -sf -u admin:root -X DELETE \
+                     http://127.0.0.1:6363/api/db/admin/$TEST_DB > /dev/null 2>&1 || true
                 break
               fi
-              if [ $i -eq 90 ]; then
-                echo "ERROR: TerminusDB API failed to initialize after 90 seconds"
+              
+              if [ $i -eq 120 ]; then
+                echo "ERROR: TerminusDB failed to fully initialize after 120 seconds"
                 echo "Trying to fetch any available logs..."
                 cat /var/snap/terminusdb/common/terminusdb.log 2>/dev/null || echo "No log file found"
                 echo "Testing basic HTTP response:"
                 curl -v http://127.0.0.1:6363/ || true
+                echo ""
+                echo "Testing /api/ok:"
+                curl -v -u admin:root http://127.0.0.1:6363/api/ok || true
+                echo ""
+                echo "Testing database list (read):"
+                curl -v -u admin:root http://127.0.0.1:6363/api/db/admin || true
+                echo ""
+                echo "Testing database create (write):"
+                curl -v -u admin:root -X POST \
+                     -H "Content-Type: application/json" \
+                     -d '{"label":"Health Check","comment":""}' \
+                     http://127.0.0.1:6363/api/db/admin/$TEST_DB || true
                 exit 1
               fi
+              
               if [ $((i % 10)) -eq 0 ]; then
-                echo "Still waiting... ($i/90 seconds)"
+                echo "Storage read OK, waiting for write capability... ($i/120 seconds)"
               fi
               sleep 1
             done
             
-            # Give it a few more seconds for any async initialization
-            echo "API responding, waiting 5 more seconds for full stability..."
-            sleep 5
+            # Additional stability wait
+            echo "Waiting 10 more seconds for full stability..."
+            sleep 10
   
       - name: Test
         run: cd tests && npm i && npm run test
+        
+      - name: Show TerminusDB Logs on Failure
+        if: failure()
+        run: |
+          echo "=== TerminusDB Process Status ==="
+          ps aux | grep terminusdb || true
+          echo ""
+          echo "=== Snap Info ==="
+          snap list terminusdb || true
+          snap connections terminusdb || true
+          echo ""
+          echo "=== Environment Variables ==="
+          env | grep TERMINUSDB || true
+          echo ""
+          echo "=== Storage Directory ==="
+          ls -la /home/runner/snap/terminusdb/common/ || true
+          ls -la /home/runner/snap/terminusdb/common/storage/ || true
+          echo ""
+          echo "=== Test Connection ==="
+          curl -v -u admin:root http://127.0.0.1:6363/api/ || true
+          echo ""
+          echo "=== Re-run Some Tests ==="
+          cd tests
+          npm run test -- --grep "auth.*unknown user.*connect" || true
 
       - name: Stop TerminusDB
+        if: always()
         run: |
-          kill $(cat terminusdb.pid)      
+          kill $(cat terminusdb.pid) || true      
         
