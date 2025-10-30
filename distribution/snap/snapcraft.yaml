@@ -58,7 +58,7 @@ parts:
       echo "=== Setting up SWI-Prolog from PPA ==="
       export SWI_HOME_DIR=/usr/lib/swi-prolog
       export PATH=/usr/bin:$PATH
-      export LD_LIBRARY_PATH=/usr/lib:$LD_LIBRARY_PATH
+      export LD_LIBRARY_PATH=/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
       
       echo "=== Verifying SWI-Prolog ==="
       swipl --version
