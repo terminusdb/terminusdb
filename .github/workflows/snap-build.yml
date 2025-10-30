@@ -78,12 +78,25 @@ jobs:
             echo $! > terminusdb.pid
             sleep 5  # wait for server to start
   
+      - name: Verify Server Running
+        run: |
+            if ! kill -0 $(cat terminusdb.pid) 2>/dev/null; then
+              echo "ERROR: TerminusDB server is not running!"
+              exit 1
+            fi
+            echo "Server PID $(cat terminusdb.pid) is running"
+            curl -f http://127.0.0.1:6363/api/ok || echo "WARNING: Server not responding to HTTP yet"
+  
       - name: Test
         run: |
           # Tests run from repository root (writable)
-          # CLI tests will create ./storage/* directories here
+          # CLI tests use isolated storage via TERMINUSDB_SERVER_DB_PATH
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
           export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
+          echo "Verifying terminusdb binary is accessible:"
+          which terminusdb || echo "terminusdb not in PATH"
+          ls -la /snap/bin/terminusdb || echo "/snap/bin/terminusdb not found"
+          $TERMINUSDB_EXEC_PATH --version || echo "Failed to run terminusdb --version"
           cd tests && npm i && npm run test
 
       - name: Stop TerminusDB

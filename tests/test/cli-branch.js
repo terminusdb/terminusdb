@@ -9,7 +9,16 @@ describe('cli-branch', function () {
   let envs
 
   async function execEnv (command) {
-    return exec(command, { env: envs })
+    try {
+      return await exec(command, { env: envs })
+    } catch (error) {
+      // Enhance error with stdout/stderr for better debugging
+      console.error('Command failed:', command)
+      console.error('Exit code:', error.code)
+      console.error('STDOUT:', error.stdout || '(empty)')
+      console.error('STDERR:', error.stderr || '(empty)')
+      throw error
+    }
   }
 
   before(async function () {

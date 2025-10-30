@@ -86,11 +86,24 @@ class CommandBuilder {
     if (this.debugCommand) {
       console.error('>>>', command)
     }
-    const r = await exec(command, { env: this.envs })
-    if (this.debugOutput) {
-      console.error(r)
+    try {
+      const r = await exec(command, { env: this.envs })
+      if (this.debugOutput) {
+        console.error(r)
+      }
+      return r
+    } catch (error) {
+      // Always log stdout/stderr on command failure for debugging
+      console.error('❌ Command failed:', command)
+      console.error('Exit code:', error.code)
+      console.error('STDOUT:', error.stdout || '(empty)')
+      console.error('STDERR:', error.stderr || '(empty)')
+      console.error('Environment:', {
+        TERMINUSDB_EXEC_PATH: this.envs.TERMINUSDB_EXEC_PATH,
+        TERMINUSDB_SERVER_DB_PATH: this.envs.TERMINUSDB_SERVER_DB_PATH,
+      })
+      throw error
     }
-    return r
   }
 }
 

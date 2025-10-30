@@ -49,5 +49,6 @@ elif [[ $use_exec -eq 0 ]]; then
   if [ -t 1 ]; then
     set -x
   fi
+  # TERMINUSDB_SERVER_DB_PATH is inherited from parent environment (and set by tests)
   TERMINUSDB_LOG_LEVEL="ERROR" "$TERMINUSDB_EXEC_PATH" "$@"
 fi
