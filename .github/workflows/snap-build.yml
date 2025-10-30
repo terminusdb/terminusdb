@@ -65,15 +65,14 @@ jobs:
 
       - name: Install Snap
         run: |
-          # Install in devmode to bypass strict confinement for debugging
-          # Once working, we can identify specific permissions needed
-          sudo snap install download_snap/*.snap --dangerous --devmode
+          # Classic confinement snaps need --classic flag
+          sudo snap install download_snap/*.snap --dangerous --classic
           
           # Show snap status
           snap list terminusdb
           snap connections terminusdb
           
-          echo "NOTE: Running in devmode (permissive) to identify permission issues"
+          echo "NOTE: Running in classic mode (no confinement)"
 
       - name: Install NodeJS
         uses: actions/setup-node@v4

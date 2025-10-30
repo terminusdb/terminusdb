@@ -17,7 +17,7 @@ website: https://terminusdb.org
 contact: business@dfrnt.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
-confinement: strict
+confinement: classic
 base: core22
 grade: stable
 package-repositories:
