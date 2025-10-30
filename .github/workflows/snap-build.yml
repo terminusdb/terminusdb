@@ -70,7 +70,7 @@ jobs:
         run: |
             terminusdb serve &
             echo $! > terminusdb.pid
-            sleep 5  # wait for server to start
+            sleep 30  # wait for server to start (snap initialization can be slow)
   
       - name: Test
         run: |
