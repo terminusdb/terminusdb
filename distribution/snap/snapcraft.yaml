@@ -41,9 +41,20 @@ parts:
       mkdir -p tus
       mv * tus/ 2>/dev/null || true
       craftctl default
+  
+  jwt:
+    plugin: dump
+    source: https://github.com/terminusdb-labs/jwt_io.git
+    source-tag: v1.0.4
+    override-build: |
+      mkdir -p jwt_io
+      mv * jwt_io/ 2>/dev/null || true
+      craftctl default
+  
   terminusdb:
     after:
       - tus
+      - jwt
     plugin: make
     build-packages:
       - rsync
