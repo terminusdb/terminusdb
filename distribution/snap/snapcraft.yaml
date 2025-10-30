@@ -6,14 +6,15 @@ version: v11.2.0-rc3
 license: Apache-2.0
 summary: Document graph database
 description: |
-  TerminusDB is a distributed database with a collaboration model.
+  TerminusDB is a distributed graph database with a collaboration model.
   It is designed to be like git, but for data. The building blocks of the model are:
-    Revision Control: commits for every update
+    Revision Control: commits for every update of the document knowledge graph
     Diff: differences between commits can be interpreted as patches between states
     Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
-    TerminusDB allows you to link JSON documents in a knowledge graph through a document API: https://terminusdb.com/docs/#/reference/reference-document-interface
+    TerminusDB allows you to link JSON documents in a knowledge graph through a document API: https://terminusdb.org/docs/document-graph-api/
 source-code: https://github.com/terminusdb/terminusdb
-contact: team@terminusdb.com
+website: https://terminusdb.org
+contact: business@dfrnt.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
 confinement: strict
