@@ -180,6 +180,11 @@ jobs:
             # Additional stability wait
             echo "Waiting 10 more seconds for full stability..."
             sleep 10
+            
+            # Show server logs before tests to see any errors
+            echo ""
+            echo "=== Server logs before tests (last 50 lines) ==="
+            tail -150 terminusdb-server.log || echo "No log file yet"
   
       - name: Test
         run: cd tests && npm i && npm run test
@@ -187,8 +192,18 @@ jobs:
       - name: Show TerminusDB Logs on Failure
         if: failure()
         run: |
-          echo "=== TerminusDB Server Logs (Last 100 lines) ==="
-          tail -100 terminusdb-server.log || echo "No server log file found"
+          echo "=== TerminusDB Server Logs ==="
+          if [ -f terminusdb-server.log ]; then
+            echo "Log file found at: $(pwd)/terminusdb-server.log"
+            echo "Log file size: $(wc -l < terminusdb-server.log) lines"
+            echo ""
+            echo "--- Server Log Contents ---"
+            cat terminusdb-server.log
+          else
+            echo "ERROR: Log file not found at $(pwd)/terminusdb-server.log"
+            echo "Looking for log files..."
+            find . -name "*.log" -type f 2>/dev/null || true
+          fi
           echo ""
           echo "=== TerminusDB Process Status ==="
           ps aux | grep terminusdb || true
@@ -212,12 +227,8 @@ jobs:
           echo "=== Test Connection ==="
           curl -v -u admin:root http://127.0.0.1:6363/api/ || true
           echo ""
-          echo "=== CLI Test (should work) ==="
-          terminusdb test || echo "CLI test command not available"
-          echo ""
-          echo "=== Re-run Some Tests ==="
-          cd tests
-          npm run test -- --grep "auth.*unknown user.*connect" || true
+          echo "=== Test Database List ==="
+          curl -v -u admin:root http://127.0.0.1:6363/api/db/admin || true
 
       - name: Stop TerminusDB
         if: always()
