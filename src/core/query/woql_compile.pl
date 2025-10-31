@@ -1960,6 +1960,36 @@ any_arg_float_or_double([Arg|_]) :-
 any_arg_float_or_double([_|Rest]) :-
     any_arg_float_or_double(Rest).
 
+/*
+ * all_args_rational(+Args) is semidet.
+ *
+ * True if ALL args are provably rational (xsd:decimal or xsd:integer).
+ * Returns FALSE for unknown types (variables, etc.) - safer to assume non-rational.
+ */
+all_args_rational([]).
+all_args_rational([_Val^^Type|Rest]) :-
+    % Check if type is xsd:decimal or xsd:integer (rational types)
+    member(Type, ['http://www.w3.org/2001/XMLSchema#decimal',
+                  'http://www.w3.org/2001/XMLSchema#integer',
+                  'xsd:decimal',
+                  'xsd:integer']),
+    !,
+    all_args_rational(Rest).
+all_args_rational([Arg|Rest]) :-
+    % Check if it's a Prolog rational
+    rational(Arg),
+    !,
+    all_args_rational(Rest).
+all_args_rational([Arg|Rest]) :-
+    % Check if it's a Prolog integer (also rational)
+    integer(Arg),
+    !,
+    all_args_rational(Rest).
+all_args_rational([_|_]) :-
+    % Unknown type or not rational - fail (safer to use / in this case)
+    !,
+    fail.
+
 compile_arith(Exp,Pre_Term,ExpE) -->
     {
         Exp =.. [Functor|Args],
@@ -1971,13 +2001,13 @@ compile_arith(Exp,Pre_Term,ExpE) -->
     !,
     mapm(compile_arith,Args,Pre_Terms,ArgsE),
     {
-        % Replace / with rdiv for decimal precision (rational division)
-        % BUT: If ANY arg is xsd:float/double, must use / (not rdiv)
-        % Reason: xsd:double/float are already floats in Prolog, rdiv only works with rationals
+        % Division operator selection: Conservative with rdiv
+        % Use rdiv ONLY when we're certain both args are rational (xsd:decimal/integer)
+        % Otherwise use / (works with floats AND rationals, safer default for unknowns)
         (   Functor = '/'
-        ->  (   any_arg_float_or_double(Args)
-            ->  ActualFunctor = '/'    % ANY float/double: use / (works with floats)
-            ;   ActualFunctor = rdiv   % Pure decimals: use rdiv (rational division)
+        ->  (   all_args_rational(Args)
+            ->  ActualFunctor = rdiv   % BOTH provably rational: use rdiv (exact)
+            ;   ActualFunctor = '/'    % Otherwise (floats/unknowns): use / (safe default)
             )
         ;   ActualFunctor = Functor
         ),
