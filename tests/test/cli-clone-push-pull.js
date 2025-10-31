@@ -1,4 +1,5 @@
 const fs = require('fs/promises')
+const path = require('path')
 const exec = require('util').promisify(require('child_process').exec)
 const process = require('process')
 const { expect } = require('chai')
@@ -13,7 +14,8 @@ describe('cli-clone-push-pull', function () {
   }
 
   before(async function () {
-    dbPath = './storage/' + util.randomString()
+    const testDir = path.join(__dirname, '..')
+    dbPath = path.resolve(testDir, 'storage', util.randomString())
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
     const r = await execEnv(`${util.terminusdbScript()} store init --force`)
     expect(r.stdout).to.match(/^Successfully initialised database/)

@@ -70,18 +70,25 @@ jobs:
 
       - name: Init TerminusDB
         run: |
+            # Server uses snap default storage (isolated from test storage)
             terminusdb store init --key root
   
       - name: Start TerminusDB
         run: |
-            terminusdb serve &
+            # Capture server logs to debug crashes
+            # Server storage: ~/snap/terminusdb/common/storage (snap default)
+            # Test storage:   /home/runner/.../tests/storage/* (absolute paths)
+            terminusdb serve > terminusdb.log 2>&1 &
             echo $! > terminusdb.pid
             sleep 5  # wait for server to start
+            echo "Server storage: Uses snap default (~/.snap/terminusdb/common/storage)"
   
       - name: Verify Server Running
         run: |
             if ! kill -0 $(cat terminusdb.pid) 2>/dev/null; then
               echo "ERROR: TerminusDB server is not running!"
+              echo "=== Server Log ==="
+              cat terminusdb.log || echo "No log file"
               exit 1
             fi
             echo "Server PID $(cat terminusdb.pid) is running"
@@ -99,10 +106,31 @@ jobs:
           $TERMINUSDB_EXEC_PATH --version || echo "Failed to run terminusdb --version"
           cd tests && npm i && npm run test
 
-      - name: Stop TerminusDB
+      - name: Check Server Status After Tests
+        if: always()
         run: |
-          kill $(cat terminusdb.pid)
+          if ! kill -0 $(cat terminusdb.pid) 2>/dev/null; then
+            echo "❌ SERVER CRASHED DURING TESTS!"
+            echo "=== Last 100 lines of server log ==="
+            tail -n 100 terminusdb.log || echo "No log file"
+            exit 1
+          else
+            echo "✅ Server still running (PID $(cat terminusdb.pid))"
+          fi
+
+      - name: Stop TerminusDB
+        if: always()
+        run: |
+          kill $(cat terminusdb.pid) 2>/dev/null || echo "Server already stopped"
       
+      - name: Upload Server Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminusdb-server-logs
+          path: terminusdb.log
+          if-no-files-found: warn
+
       - name: Cleanup Test Storage
         if: always()
         run: |
