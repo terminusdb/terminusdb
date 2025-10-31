@@ -25,7 +25,7 @@ describe('cli-version', function () {
       env: { ...process.env, TERMINUSDB_EXEC_PATH: terminusdbExec },
     })
     expect(r.stdout).to.match(new RegExp(
-      `^TerminusDB v${terminusdbVersion} \\(${gitHash}\\)\\nterminusdb-store v.*`,
+      `^TerminusDB v${terminusdbVersion} \\(${gitHash}\\)\nterminusdb-store v.*`,
     ))
   })
 })
