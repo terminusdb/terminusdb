@@ -81,6 +81,18 @@ parts:
       echo "=== Verifying SWI-Prolog ==="
       swipl --version
       
+      echo "=== Checking for HTTP extensions ==="
+      if [ -f /usr/lib/swi-prolog/library/ext/http/http/html_write.pl ]; then
+        echo "✓ html_write.pl (part of swipl ext) found in build environment"
+      else
+        echo "✗ ERROR: html_write.pl NOT FOUND in /usr/lib/swi-prolog/library/ext/http/http/"
+        echo "Available directories in /usr/lib/swi-prolog/library:"
+        ls -la /usr/lib/swi-prolog/library/ || true
+        echo "Checking if ext directory exists:"
+        ls -la /usr/lib/swi-prolog/library/ext/ || echo "ext directory does not exist"
+        exit 1
+      fi
+      
       echo "=== Building TerminusDB ==="
       cd $CRAFT_PART_SRC
       make
