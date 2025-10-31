@@ -3,6 +3,9 @@ export SWI_HOME_DIR="$SNAP/usr/lib/swi-prolog"
 export TERMINUSDB_SERVER_PACK_DIR="$SNAP"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}${SWI_HOME_DIR}/lib/x86_64-linux/"
 
+# Ensure SWI-Prolog can find its library resources (including HTML templates)
+export SWIPL="${SNAP}/usr/bin/swipl"
+
 # Set default storage location if not already set (allows override)
 # Use SNAP_USER_COMMON for per-user storage (no sudo needed)
 if [ -z "$TERMINUSDB_SERVER_DB_PATH" ]; then
@@ -17,4 +20,5 @@ if [ ! -d "$SNAP/jwt_io" ] || [ ! -f "$SNAP/jwt_io/pack.pl" ]; then
     echo "ERROR: JWT pack not found or incomplete at $SNAP/jwt_io" >&2
 fi
 
-$SNAP/terminusdb "$@"
+# Run terminusdb with explicit SWI-Prolog home to find library resources
+exec "$SNAP/terminusdb" --home="$SWI_HOME_DIR" "$@"
