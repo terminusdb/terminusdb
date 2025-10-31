@@ -39,6 +39,6 @@ main :-
                       foreign(save),
                       undefined(error),
                       toplevel(cli_toplevel),
-                      autoload(false),
+                      autoload(true),  % Include all autoloaded modules for snap compatibility
                       stand_alone(true)
                   ]).

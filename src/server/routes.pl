@@ -3280,7 +3280,9 @@ cors_handler(Method, Goal, Options, R) :-
                   error(authentication_incorrect(Reason),_),
 
                   (   write_cors_headers(Request),
-                      json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+                      % SECURITY: Sanitize reason to avoid leaking credentials in logs
+                      sanitize_auth_reason(Reason, SafeReason),
+                      json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [SafeReason]),
                       reply_json(_{'@type' : 'api:ErrorResponse',
                                    'api:status' : 'api:failure',
                                    'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
@@ -3490,21 +3492,38 @@ fetch_authorization_data(Request, Username, KS) :-
 fetch_jwt_data(Token, Username) :-
     atom_string(TokenAtom, Token),
 
+    % SECURITY: Don't include token in error (will be sanitized in logs)
     do_or_die(jwt_decode(TokenAtom, Payload, []),
-              error(authentication_incorrect(jwt_decode_failed(TokenAtom)), _)),
+              error(authentication_incorrect(jwt_decode_failed), _)),
 
+    % SECURITY: Wrap in authentication_incorrect to ensure sanitization
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
             jwt_subject_claim_name(ClaimName),
             % replace with dict key get (or whatever it is called)
             get_dict(ClaimName, PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
-        error(malformed_jwt_payload(Payload))).
+        error(authentication_incorrect(malformed_jwt_payload), _)).
 :- else.
 fetch_jwt_data(_Token, _Username) :-
     throw(error(authentication_incorrect(jwt_authentication_requested_but_no_key_configured),_)).
 :- endif.
 
+/*
+ * sanitize_auth_reason(+Reason, -SafeReason) is det.
+ *
+ * Sanitize authentication failure reasons to prevent credential leakage in logs.
+ * Replaces sensitive data with redacted placeholders.
+ */
+sanitize_auth_reason(basic_auth(_), basic_auth('***')) :- !.
+sanitize_auth_reason(jwt_no_user_with_name(_), jwt_no_user_with_name('***')) :- !.
+sanitize_auth_reason(insecure_user_header_no_user_with_name(_), insecure_user_header_no_user_with_name('***')) :- !.
+sanitize_auth_reason(jwt_decode_failed(_), jwt_decode_failed) :- !.  % Remove token
+sanitize_auth_reason(malformed_jwt_payload(_), malformed_jwt_payload) :- !.  % Remove payload
+% These already have no parameters but included for completeness:
+sanitize_auth_reason(jwt_decode_failed, jwt_decode_failed) :- !.
+sanitize_auth_reason(malformed_jwt_payload, malformed_jwt_payload) :- !.
+sanitize_auth_reason(Reason, Reason).  % Other reasons are safe to log
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
