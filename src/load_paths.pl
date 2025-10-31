@@ -15,8 +15,8 @@ add_swi_library_path :-
     ->  % In snap environment - add SWI-Prolog library paths
         directory_file_path(SwiHome, 'library', LibDir),
         (   exists_directory(LibDir)
-        ->  % Append (not prepend) to avoid shadowing system libraries
-            assertz(user:file_search_path(library, LibDir))
+        ->  % Prepend to ensure snap libraries are found FIRST (saved state may have stale paths)
+            asserta(user:file_search_path(library, LibDir))
         ;   true)
     ;   true). % Not in snap or validation failed, use default SWI-Prolog paths
 
