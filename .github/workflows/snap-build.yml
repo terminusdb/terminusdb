@@ -62,23 +62,106 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Verify Working Directory
+        run: |
+            echo "Working directory: $(pwd)"
+            echo "Directory is writable: $(test -w . && echo 'yes' || echo 'no')"
+            echo "User: $(whoami)"
+
       - name: Init TerminusDB
         run: |
-            terminusdb store init
+            # Server uses snap default storage (isolated from test storage)
+            terminusdb store init --key root
   
       - name: Start TerminusDB
         run: |
-            terminusdb serve &
-            echo $! > terminusdb.pid
+            # Capture server logs to debug crashes
+            # Server storage: ~/snap/terminusdb/common/storage (snap default)
+            # Test storage:   /home/runner/.../tests/storage/* (absolute paths)
+            
+            # Check what libraries the snap binary needs
+            echo "=== Checking snap binary dependencies ==="
+            ldd /snap/terminusdb/current/terminusdb || echo "ldd failed (expected for snaps)"
+            
+            # Start server with debug info
+            terminusdb serve > terminusdb.log 2>&1 &
+            SERVER_PID=$!
+            echo $SERVER_PID > terminusdb.pid
             sleep 5  # wait for server to start
+            echo "Server storage: Uses snap default (~/.snap/terminusdb/common/storage)"
+            echo "Server PID: $SERVER_PID"
+            
+            # Check if server is actually responding
+            echo "=== Testing server health ==="
+            curl -v http://127.0.0.1:6363/api/ok || echo "Server not responding!"
+            
+            # Start background monitor to detect when server dies
+            (
+              while kill -0 $SERVER_PID 2>/dev/null; do
+                sleep 2
+              done
+              wait $SERVER_PID 2>/dev/null
+              EXIT_STATUS=$?
+              echo "❌ SERVER DIED AT: $(date) with exit status: $EXIT_STATUS" | tee -a terminusdb.log
+            ) &
+  
+      - name: Verify Server Running
+        run: |
+            if ! kill -0 $(cat terminusdb.pid) 2>/dev/null; then
+              echo "ERROR: TerminusDB server is not running!"
+              echo "=== Server Log ==="
+              cat terminusdb.log || echo "No log file"
+              exit 1
+            fi
+            echo "Server PID $(cat terminusdb.pid) is running"
+            curl -f http://127.0.0.1:6363/api/ok || echo "WARNING: Server not responding to HTTP yet"
   
       - name: Test
         run: |
+          # Tests run from repository root (writable)
+          # CLI tests use isolated storage via TERMINUSDB_SERVER_DB_PATH
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
           export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
+          # Ensure no test tries to start a server (one is already running)
+          export TERMINUSDB_SERVER_NAME=127.0.0.1
+          export TERMINUSDB_SERVER_PORT=6363
+          echo "Verifying terminusdb binary is accessible:"
+          which terminusdb || echo "terminusdb not in PATH"
+          ls -la /snap/bin/terminusdb || echo "/snap/bin/terminusdb not found"
+          $TERMINUSDB_EXEC_PATH --version || echo "Failed to run terminusdb --version"
+          echo "Server PID before tests: $(cat terminusdb.pid)"
+          ps -p $(cat terminusdb.pid) || echo "WARNING: Server not running before tests!"
+          netstat -ln | grep 6363 || echo "WARNING: Nothing listening on port 6363!"
           cd tests && npm i && npm run test
 
-      - name: Stop TerminusDB
+      - name: Check Server Status After Tests
+        if: always()
         run: |
-          kill $(cat terminusdb.pid)      
+          if ! kill -0 $(cat terminusdb.pid) 2>/dev/null; then
+            echo "❌ SERVER CRASHED DURING TESTS!"
+            echo "=== Last 100 lines of server log ==="
+            tail -n 100 terminusdb.log || echo "No log file"
+            exit 1
+          else
+            echo "Server still running (PID $(cat terminusdb.pid))"
+          fi
+
+      - name: Stop TerminusDB
+        if: always()
+        run: |
+          kill $(cat terminusdb.pid) 2>/dev/null || echo "Server already stopped"
+      
+      - name: Upload Server Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminusdb-server-logs
+          path: terminusdb.log
+          if-no-files-found: warn
+
+      - name: Cleanup Test Storage
+        if: always()
+        run: |
+          # Clean up any storage directories created by CLI tests
+          rm -rf ./storage 2>/dev/null || true      
         
