@@ -78,19 +78,31 @@ jobs:
             # Capture server logs to debug crashes
             # Server storage: ~/snap/terminusdb/common/storage (snap default)
             # Test storage:   /home/runner/.../tests/storage/* (absolute paths)
+            
+            # Check what libraries the snap binary needs
+            echo "=== Checking snap binary dependencies ==="
+            ldd /snap/terminusdb/current/terminusdb || echo "ldd failed (expected for snaps)"
+            
+            # Start server with debug info
             terminusdb serve > terminusdb.log 2>&1 &
             SERVER_PID=$!
             echo $SERVER_PID > terminusdb.pid
             sleep 5  # wait for server to start
             echo "Server storage: Uses snap default (~/.snap/terminusdb/common/storage)"
             echo "Server PID: $SERVER_PID"
+            
+            # Check if server is actually responding
+            echo "=== Testing server health ==="
+            curl -v http://127.0.0.1:6363/api/ok || echo "Server not responding!"
+            
             # Start background monitor to detect when server dies
             (
               while kill -0 $SERVER_PID 2>/dev/null; do
                 sleep 2
               done
-              echo "❌ SERVER DIED AT: $(date)" | tee -a terminusdb.log
-              echo "Exit status: $?" | tee -a terminusdb.log
+              wait $SERVER_PID 2>/dev/null
+              EXIT_STATUS=$?
+              echo "❌ SERVER DIED AT: $(date) with exit status: $EXIT_STATUS" | tee -a terminusdb.log
             ) &
   
       - name: Verify Server Running

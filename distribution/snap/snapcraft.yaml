@@ -67,6 +67,7 @@ parts:
       - libprotobuf-dev
     stage-packages:
       - swi-prolog-nox
+      - binutils  # Provides addr2line for crash stack traces
     override-build: |
       echo "=== Installing Rust ==="
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
@@ -102,5 +103,5 @@ apps:
       SWI_HOME_DIR: $SNAP/usr/lib/swi-prolog
       TERMINUSDB_SERVER_PACK_DIR: $SNAP
       TERMINUSDB_JWT_ENABLED: "false"
-      PATH: $SNAP/usr/bin:$PATH
+      PATH: $SNAP/usr/bin:$SNAP/bin:$PATH  # Include both for addr2line and other tools
     plugs: [home, network, network-bind, process-control]
