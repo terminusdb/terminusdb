@@ -5,24 +5,6 @@
 
 :- set_prolog_flag(terminusdb_monolithic_module, true).
 
-% Ensure SWI-Prolog library path is set correctly in snap environment
-add_swi_library_path :-
-    (   getenv('SWI_HOME_DIR', SwiHome),
-        % SECURITY: Only trust paths within snap environment
-        getenv('SNAP', SnapRoot),
-        % Verify SWI_HOME_DIR is within SNAP directory (prevent path injection)
-        sub_atom(SwiHome, 0, _, _, SnapRoot)
-    ->  % In snap environment - add SWI-Prolog library paths
-        directory_file_path(SwiHome, 'library', LibDir),
-        (   exists_directory(LibDir)
-        ->  % Prepend to ensure snap libraries are found FIRST (saved state may have stale paths)
-            asserta(user:file_search_path(library, LibDir))
-        ;   true)
-    ;   true). % Not in snap or validation failed, use default SWI-Prolog paths
-
-:- add_swi_library_path.
-
-
 % The top-level directory of the repository.
 top_level_directory(Path) :-
     prolog_load_context(file, File),
