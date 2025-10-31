@@ -79,9 +79,19 @@ jobs:
             # Server storage: ~/snap/terminusdb/common/storage (snap default)
             # Test storage:   /home/runner/.../tests/storage/* (absolute paths)
             terminusdb serve > terminusdb.log 2>&1 &
-            echo $! > terminusdb.pid
+            SERVER_PID=$!
+            echo $SERVER_PID > terminusdb.pid
             sleep 5  # wait for server to start
             echo "Server storage: Uses snap default (~/.snap/terminusdb/common/storage)"
+            echo "Server PID: $SERVER_PID"
+            # Start background monitor to detect when server dies
+            (
+              while kill -0 $SERVER_PID 2>/dev/null; do
+                sleep 2
+              done
+              echo "❌ SERVER DIED AT: $(date)" | tee -a terminusdb.log
+              echo "Exit status: $?" | tee -a terminusdb.log
+            ) &
   
       - name: Verify Server Running
         run: |
@@ -100,10 +110,16 @@ jobs:
           # CLI tests use isolated storage via TERMINUSDB_SERVER_DB_PATH
           export TERMINUSDB_EXEC_PATH=/snap/bin/terminusdb
           export TERMINUSDB_BASE_URL='http://127.0.0.1:6363'
+          # Ensure no test tries to start a server (one is already running)
+          export TERMINUSDB_SERVER_NAME=127.0.0.1
+          export TERMINUSDB_SERVER_PORT=6363
           echo "Verifying terminusdb binary is accessible:"
           which terminusdb || echo "terminusdb not in PATH"
           ls -la /snap/bin/terminusdb || echo "/snap/bin/terminusdb not found"
           $TERMINUSDB_EXEC_PATH --version || echo "Failed to run terminusdb --version"
+          echo "Server PID before tests: $(cat terminusdb.pid)"
+          ps -p $(cat terminusdb.pid) || echo "WARNING: Server not running before tests!"
+          netstat -ln | grep 6363 || echo "WARNING: Nothing listening on port 6363!"
           cd tests && npm i && npm run test
 
       - name: Check Server Status After Tests
