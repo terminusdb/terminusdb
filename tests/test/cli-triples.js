@@ -18,7 +18,7 @@ describe('cli-triples', function () {
     const rootDir = path.join(testDir, '..')
     const terminusdbExec = path.join(rootDir, 'terminusdb')
 
-    dbPath = path.resolve(testDir, 'storage', util.randomString())
+    dbPath = util.testDbPath(testDir)
     envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,

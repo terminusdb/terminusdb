@@ -16,7 +16,7 @@ describe('cli-log', function () {
   before(async function () {
     this.timeout(200000)
     const testDir = path.join(__dirname, '..')
-    dbPath = path.resolve(testDir, 'storage', util.randomString())
+    dbPath = util.testDbPath(testDir)
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
     {
       const r = await execEnv(`${util.terminusdbScript()} store init --force`)
