@@ -8,7 +8,7 @@ describe('sys:JSON Bug - Habilidad Example (Nested JSON with shared arrays)', fu
     agent = new Agent().auth()
   })
 
-  describe('User Report: Cannot delete documents with similar JSON function descriptions', function () {
+  describe('can delete documents with similar JSON function descriptions', function () {
     let doc1Id
     let doc2Id
 
@@ -104,10 +104,6 @@ describe('sys:JSON Bug - Habilidad Example (Nested JSON with shared arrays)', fu
 
       doc1Id = result.body[0]
       doc2Id = result.body[1]
-
-      console.log('\nCreated Habilidad documents with overlapping JSON:')
-      console.log('- example1:', doc1Id)
-      console.log('- example2:', doc2Id)
     })
 
     after(async function () {
@@ -115,8 +111,6 @@ describe('sys:JSON Bug - Habilidad Example (Nested JSON with shared arrays)', fu
     })
 
     it('should delete example1 without affecting example2', async function () {
-      console.log('\n[TEST] Attempting to delete example1:', doc1Id)
-
       try {
         const deleteResult = await document.delete(agent, { query: { id: doc1Id } }).unverified()
 
@@ -132,13 +126,10 @@ describe('sys:JSON Bug - Habilidad Example (Nested JSON with shared arrays)', fu
           throw new Error(`Deletion failed with status ${deleteResult.status}: ${JSON.stringify(deleteResult.body)}`)
         }
 
-        console.log('✓ Deletion succeeded')
-
         // Verify example2 still exists
         const doc2 = await document.get(agent, { query: { id: doc2Id } })
         expect(doc2.body.nombre).to.equal('example2')
         expect(doc2.body.json).to.exist
-        console.log('✓ example2 still exists with intact JSON')
       } catch (err) {
         if (err.response) {
           console.log('✗ BUG: Deletion failed')
@@ -151,8 +142,6 @@ describe('sys:JSON Bug - Habilidad Example (Nested JSON with shared arrays)', fu
     })
 
     it('should delete example2 successfully', async function () {
-      console.log('\n[TEST] Attempting to delete example2:', doc2Id)
-
       try {
         const deleteResult = await document.delete(agent, { query: { id: doc2Id } }).unverified()
 
@@ -162,8 +151,6 @@ describe('sys:JSON Bug - Habilidad Example (Nested JSON with shared arrays)', fu
           console.log('Error body:', JSON.stringify(deleteResult.body, null, 2))
           throw new Error(`Deletion failed with status ${deleteResult.status}: ${JSON.stringify(deleteResult.body)}`)
         }
-
-        console.log('✓ Deletion succeeded')
       } catch (err) {
         if (err.response) {
           console.log('✗ BUG: Deletion failed')
