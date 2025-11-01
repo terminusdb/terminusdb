@@ -2076,7 +2076,14 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,DB,Prefixes,_Options,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
     (   C = 'http://terminusdb.com/schema/sys#JSON'
-    ->  get_json_object(DB, Elt, V)
+    ->  get_json_object(DB, Elt, V0),
+        % Unwrap @value for primitives and arrays (they were wrapped during storage)
+        % Objects don't have @value wrapper, so return as-is
+        % NOTE: This code path is not used for document GET - that goes through Rust
+        (   get_dict('@value', V0, Unwrapped)
+        ->  V = Unwrapped
+        ;   V = V0
+        )
     ;   Elt = X^^T
     ->  (   C = T % The type is not just subsumed but identical - no ambiguity.
         ->  value_type_json_type(X,T,V,_)

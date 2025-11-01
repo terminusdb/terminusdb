@@ -27,24 +27,31 @@ describe('sys:JSON Type Support', function () {
       await db.delete(agent)
     })
 
-    it('should accept JSON objects (currently works)', async function () {
+    it('should accept JSON objects and retrieve them correctly', async function () {
+      const originalData = { key: 'value', nested: { prop: 123 } }
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'object-test',
-          data: { key: 'value', nested: { prop: 123 } },
+          data: originalData,
         },
       })
 
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.deep.equal(originalData)
     })
 
-    it('should accept JSON arrays', async function () {
+    it('should accept JSON arrays and retrieve them correctly', async function () {
+      const originalData = ['item1', 'item2', 'item3']
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'array-test',
-          data: ['item1', 'item2', 'item3'],
+          data: originalData,
         },
       }).unverified()
 
@@ -54,14 +61,20 @@ describe('sys:JSON Type Support', function () {
 
       expect(result.status).to.equal(200)
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.deep.equal(originalData)
     })
 
-    it('should accept nested arrays in JSON', async function () {
+    it('should accept nested arrays in JSON and retrieve them correctly', async function () {
+      const originalData = ['a', 'b', ['c', 'd']]
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'nested-array-test',
-          data: ['a', 'b', ['c', 'd']],
+          data: originalData,
         },
       }).unverified()
 
@@ -71,14 +84,20 @@ describe('sys:JSON Type Support', function () {
 
       expect(result.status).to.equal(200)
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.deep.equal(originalData)
     })
 
-    it('should accept objects in arrays', async function () {
+    it('should accept objects in arrays and retrieve them correctly', async function () {
+      const originalData = ['a', 'b', { key: 'value' }]
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'array-object-test',
-          data: ['a', 'b', { key: 'value' }],
+          data: originalData,
         },
       }).unverified()
 
@@ -88,14 +107,20 @@ describe('sys:JSON Type Support', function () {
 
       expect(result.status).to.equal(200)
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.deep.equal(originalData)
     })
 
-    it('should accept JSON strings', async function () {
+    it('should accept JSON strings and retrieve them correctly', async function () {
+      const originalData = 'plain string value'
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'string-test',
-          data: 'plain string value',
+          data: originalData,
         },
       }).unverified()
 
@@ -105,14 +130,20 @@ describe('sys:JSON Type Support', function () {
 
       expect(result.status).to.equal(200)
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.equal(originalData)
     })
 
-    it('should accept JSON numbers', async function () {
+    it('should accept JSON numbers and retrieve them correctly', async function () {
+      const originalData = 42
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'number-test',
-          data: 42,
+          data: originalData,
         },
       }).unverified()
 
@@ -122,14 +153,20 @@ describe('sys:JSON Type Support', function () {
 
       expect(result.status).to.equal(200)
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.equal(originalData)
     })
 
-    it('should accept JSON booleans', async function () {
+    it('should accept JSON booleans and retrieve them correctly', async function () {
+      const originalData = true
       const result = await document.insert(agent, {
         instance: {
           '@type': 'JSONTest',
           name: 'boolean-test',
-          data: true,
+          data: originalData,
         },
       }).unverified()
 
@@ -139,6 +176,35 @@ describe('sys:JSON Type Support', function () {
 
       expect(result.status).to.equal(200)
       expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.equal(originalData)
+    })
+
+    it('should accept array with numeric-key objects and retrieve correctly', async function () {
+      // eslint-disable-next-line quote-props
+      const originalData = [{ '1234': 11234.223 }] // Quoted to test numeric string keys
+      const result = await document.insert(agent, {
+        instance: {
+          '@type': 'JSONTest',
+          name: 'numeric-key-test',
+          data: originalData,
+        },
+      }).unverified()
+
+      if (result.status !== 200) {
+        throw new Error(`Numeric-key object rejected: ${JSON.stringify(result.body)}`)
+      }
+
+      expect(result.status).to.equal(200)
+      expect(result.body).to.be.an('array').with.lengthOf(1)
+      const docId = result.body[0]
+
+      // Retrieve and verify round-trip
+      const retrieved = await document.get(agent, { query: { id: docId } })
+      expect(retrieved.body.data).to.deep.equal(originalData)
     })
 
     it('should accept JSON null within objects (workaround)', async function () {
