@@ -7,6 +7,9 @@
 :- use_module(library(lists)).
 :- use_module(library(thread_pool)).
 
+% Requirement to add to plugins since TerminusDB 11.2.0
+:- multifile plugins:post_commit_hook/2.
+
 % Copyright (c) TerminusDB, Licensed under the Apache License, Version 2.0
 % Source: https://github.com/terminusdb-labs/terminusdb-plugins/tree/main
 
@@ -44,6 +47,14 @@ optimize_all(Validation_Objects) :-
             should_optimize(Descriptor)),
            optimize(Descriptor)).
 
+call_thread_create_in_pool(Pool, Goal, Id, Options) :-
+    (   catch(thread_create_in_pool(Pool, Goal, Id, Options),
+              error(existence_error(procedure, _), _),
+              fail)
+    ->  true
+    ;   thread_create_in_pool(Pool, Goal, Id)
+    ).
+
 :- multifile thread_pool:create_pool/1.
 thread_pool:create_pool(terminusdb_optimizer) :-
     current_prolog_flag(cpu_count, Count),
@@ -51,10 +62,10 @@ thread_pool:create_pool(terminusdb_optimizer) :-
 
 plugins:post_commit_hook(Validation_Objects, _Meta_Data) :-
     (   http_server_property(_, _)
-    ->  catch(thread_create_in_pool(terminusdb_optimizer,
-                              optimize_all(Validation_Objects),
-                              _,
-                              [wait(false)]),
+    ->  catch(call_thread_create_in_pool(terminusdb_optimizer,
+                                         optimize_all(Validation_Objects),
+                                         _,
+                                         [wait(false)]),
 	      error(resource_error(threads_in_pool(terminusdb_optimizer)), _),
 	      true
         )
