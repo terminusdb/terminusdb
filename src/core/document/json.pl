@@ -537,8 +537,11 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     !,
     prefix_expand(Id, Context, Id_Ex),
     prefix_expand(Generated_Id, Context, Generated_Id_Ex),
+    % Normalize to strings for comparison (handle atom vs string)
+    atom_string(Id_Ex, Id_String),
+    atom_string(Generated_Id_Ex, Generated_String),
     do_or_die(
-        Id_Ex = Generated_Id_Ex,
+        Id_String = Generated_String,
         error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
