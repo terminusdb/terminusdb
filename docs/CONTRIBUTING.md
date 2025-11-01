@@ -424,6 +424,12 @@ One of the easier ways to set up a development environment is by forking the git
 4. Run `docker run -it --mount type=bind,source="$(pwd)",target=/app/terminusdb -p 6363:6363 --rm terminusdb/terminusdb:dev` inside the terminusdb directory. It will mount the current sources to the Docker container.
 5. Run `make.` inside the swipl console after you changed the code.
 
+## To establish a testable clean baseline one most platforms
+
+```
+make clean && make dev && tests/terminusdb-test-server.sh restart --clean && make test-int && swipl -g run_tests -t halt src/interactive.pl
+```
+
 ## Coding Conventions
 
 We have a house style for prolog, especially for conditionals. Try to copy what you see.

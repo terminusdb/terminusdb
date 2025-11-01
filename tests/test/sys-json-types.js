@@ -170,10 +170,12 @@ describe('sys:JSON Type Support', function () {
       expect(doc.body.data.nested.field).to.equal(null)
     })
 
-    it.skip('should accept JSON null as top-level value (known limitation - use nested null instead)', async function () {
+    it('DOES NOT accept null as top-level sys:JSON value (known limitation - use nested null instead)', async function () {
       // KNOWN LIMITATION: Top-level null is treated as "field not present" in Prolog dictionaries
-      // WORKAROUND: Use nested null (see test above) - works perfectly!
+      // WORKAROUND: Use nested null (see test above)
       // Example: Instead of { data: null }, use { data: { value: null } }
+
+      // Use Optional or Set instead. This will not be changed unless there is a compelling reason to
 
       const result = await document.insert(agent, {
         instance: {
@@ -183,7 +185,7 @@ describe('sys:JSON Type Support', function () {
         },
       }).unverified()
 
-      expect(result.status).to.equal(200)
+      expect(result.status).to.equal(400)
     })
   })
 })
