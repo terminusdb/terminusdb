@@ -36,6 +36,9 @@ handlebars = "4.3"
 thiserror = "1.0"
 lru = "0.11"
 tdb-succinct = "0.1.2"
+# Security fix: Force upgrade of transitive dependencies to fix CVE in idna 0.5.0
+# Punycode domain masking vulnerability - upgrade to idna 1.0.3+
+url = "2.5.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rug = { version = "1.17", default-features = false, features = [] }
