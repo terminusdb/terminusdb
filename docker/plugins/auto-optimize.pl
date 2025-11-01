@@ -47,14 +47,6 @@ optimize_all(Validation_Objects) :-
             should_optimize(Descriptor)),
            optimize(Descriptor)).
 
-call_thread_create_in_pool(Pool, Goal, Id, Options) :-
-    (   catch(thread_create_in_pool(Pool, Goal, Id, Options),
-              error(existence_error(procedure, _), _),
-              fail)
-    ->  true
-    ;   thread_create_in_pool(Pool, Goal, Id)
-    ).
-
 :- multifile thread_pool:create_pool/1.
 thread_pool:create_pool(terminusdb_optimizer) :-
     current_prolog_flag(cpu_count, Count),
@@ -62,10 +54,10 @@ thread_pool:create_pool(terminusdb_optimizer) :-
 
 plugins:post_commit_hook(Validation_Objects, _Meta_Data) :-
     (   http_server_property(_, _)
-    ->  catch(call_thread_create_in_pool(terminusdb_optimizer,
-                                         optimize_all(Validation_Objects),
-                                         _,
-                                         [wait(false)]),
+    ->  catch(thread_create_in_pool(terminusdb_optimizer,
+                                    optimize_all(Validation_Objects),
+                                    _,
+                                    [wait(false)]),
 	      error(resource_error(threads_in_pool(terminusdb_optimizer)), _),
 	      true
         )
