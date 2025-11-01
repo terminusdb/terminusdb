@@ -17,6 +17,12 @@ with `--clean` will wipe the storage directory. Run the tests with
 npx mocha tests/test/*.js
 ```
 
+Tools often face issues running directly in folders, getting stuck. Instead, use the below pattern to perform tasks such as running the lint tool for javascript tests:
+
+```bash
+sh -c "cd tests && npm run lint"
+```
+
 **Note about running tests from different locations:**
 
 Integration tests can be run from **both** the repository root and the tests directory:
@@ -130,6 +136,9 @@ For local development on macOS, use the development build target which avoids co
 
 ```bash
 make dev
+
+# Seems make rust could also work on macOS, but unclear if it does
+make rust
 ```
 
 This creates a `terminusdb` binary that:
@@ -238,6 +247,156 @@ make dev
 # 4. Run relevant tests (from repo root!)
 npx mocha tests/test/graphql.js --timeout 10000
 ```
+
+## Debugging and Logging
+
+### Prolog Logging
+
+TerminusDB uses a structured JSON logging system defined in `src/core/util/json_log.pl`. Use these functions for consistent logging:
+
+**Logging Functions:**
+```prolog
+:- use_module(core(util)).  % Imports json_log module
+
+% Basic logging (simple message)
+json_log_debug(Message).
+json_log_info(Message).
+json_log_warning(Message).
+json_log_error(Message).
+
+% Formatted logging (with format string)
+json_log_debug_formatted('Variable value: ~q', [Value]).
+json_log_info_formatted('Processing ~w items', [Count]).
+json_log_warning_formatted('Deprecated function ~w called', [FuncName]).
+json_log_error_formatted('Failed at ~w with ~q', [Location, Error]).
+```
+
+**Direct stderr output:**
+```prolog
+% For quick debug output (not structured)
+format(user_error, 'Debug: ~q~n', [SomeValue]).
+```
+
+**Log Levels:**
+- `debug` - Development debugging (disabled by default in production)
+- `info` - General informational messages
+- `warning` - Warning conditions
+- `error` - Error conditions
+
+**Viewing Logs:**
+```bash
+# View test server logs
+./tests/terminusdb-test-server.sh logs
+
+# Or directly
+tail -f tests/.terminusdb-test.log
+```
+
+### Rust Logging
+
+For Rust code in `src/rust/terminusdb-community/`, use file-based logging, until we find a better mechanism:
+
+**Standard Pattern:**
+```rust
+use std::io::Write;
+
+// Inside a function where you need to debug
+if let Ok(mut f) = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open("/tmp/debug_output.log")
+{
+    let _ = writeln!(f, "Debug message: {:?}", some_value);
+    let _ = writeln!(f, "Variable x = {}, y = {}", x, y);
+}
+```
+
+**Best Practices:**
+- Use descriptive log file names: `/tmp/graphql_debug.log`, `/tmp/json_fragment.log`
+- Include timestamps for multi-request debugging
+- Add context to log messages (function name, key identifiers)
+- Remove debug logging before committing (unless part of permanent debugging infrastructure)
+
+**Viewing Rust Logs:**
+```bash
+# Watch log file in real-time
+tail -f /tmp/debug_output.log
+
+# View recent entries
+tail -20 /tmp/debug_output.log
+
+# Clear old logs before testing
+rm /tmp/*.log && npx mocha tests/test/yourtest.js
+```
+
+**Example with Timestamps:**
+```rust
+use std::io::Write;
+use chrono::Utc;  // Add chrono to Cargo.toml if needed
+
+if let Ok(mut f) = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open("/tmp/my_debug.log")
+{
+    let timestamp = Utc::now().to_rfc3339();
+    let _ = writeln!(f, "[{}] Function called with value: {:?}", timestamp, value);
+}
+```
+
+### Debugging GraphQL Queries
+
+GraphQL queries execute in Rust and can be debugged using the file logging pattern above. Key files:
+
+- `src/rust/terminusdb-community/src/graphql/schema.rs` - Schema resolution and field extraction
+- `src/rust/terminusdb-community/src/graphql/mod.rs` - Query execution
+- `src/rust/terminusdb-community/src/graphql/filter.rs` - Filter logic
+
+### Common Debugging Scenarios
+
+**Tracing function execution:**
+```prolog
+my_function(Input, Output) :-
+    json_log_debug_formatted('my_function called with: ~q', [Input]),
+    do_something(Input, Intermediate),
+    json_log_debug_formatted('Intermediate result: ~q', [Intermediate]),
+    final_step(Intermediate, Output),
+    json_log_debug_formatted('Final output: ~q', [Output]).
+```
+
+**Debugging data transformations in Rust:**
+```rust
+fn process_data(input: &Data) -> Result<Output> {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/process_data.log")
+    {
+        let _ = writeln!(f, "INPUT: {:?}", input);
+    }
+    
+    let result = transform(input)?;
+    
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/process_data.log")
+    {
+        let _ = writeln!(f, "OUTPUT: {:?}", result);
+    }
+    
+    Ok(result)
+}
+```
+
+### Important Notes
+
+⚠️ **stderr vs files:** TerminusDB captures stderr in logs, but file-based logging in `/tmp/` gives more control and easier grepping.
+
+⚠️ **Clean up:** Always remove debug logging code before committing unless it's part of a permanent debugging feature.
+
+⚠️ **Performance:** File I/O in hot paths can slow down execution. Use sparingly in production code paths.
 
 ## Submitting Changes
 
