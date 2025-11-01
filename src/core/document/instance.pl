@@ -581,21 +581,29 @@ refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
 refute_object_type_(foreign(_),_,_,_) :-
     fail.
 refute_object_type_(class(C),Validation_Object,Object,Witness) :-
+    % Skip validation for sys:JSON - internal nodes have their own structure
+    \+ is_internal_json_class(C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
 refute_object_type_(set(C),Validation_Object,Object,Witness) :-
+    % Skip validation for sys:JSON - internal nodes have their own structure
+    \+ is_internal_json_class(C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
 refute_object_type_(cardinality(C),Validation_Object,Object,Witness) :-
+    % Skip validation for sys:JSON - internal nodes have their own structure
+    \+ is_internal_json_class(C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
 refute_object_type_(optional(C),Validation_Object,Object,Witness) :-
+    % Skip validation for sys:JSON - internal nodes have their own structure
+    \+ is_internal_json_class(C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
@@ -984,6 +992,12 @@ is_internal_json_node(Type_String) :-
     global_prefix_expand(rdf:'List', Rdf_List_Atom),
     atom_string(Rdf_List_Atom, Rdf_List_String),
     Type_String = Rdf_List_String.
+
+% Check if a class is sys:JSON (for validation skipping)
+is_internal_json_class(C) :-
+    global_prefix_expand(sys:'JSON', C).
+is_internal_json_class(C) :-
+    global_prefix_expand(rdf:'List', C).
 
 % Generator for: ∀ -(s,p,o). ∃ o,p,C. doc(o) ∧ s:C ⇒ card(s,p,C)
 referential_cardinality_candidate(Validation_Object,S,P,C) :-
