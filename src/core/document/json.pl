@@ -537,8 +537,11 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     !,
     prefix_expand(Id, Context, Id_Ex),
     prefix_expand(Generated_Id, Context, Generated_Id_Ex),
+    % Normalize to strings for comparison (handle atom vs string)
+    atom_string(Id_Ex, Id_String),
+    atom_string(Generated_Id_Ex, Generated_String),
     do_or_die(
-        Id_Ex = Generated_Id_Ex,
+        Id_String = Generated_String,
         error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
@@ -2073,7 +2076,14 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,DB,Prefixes,_Options,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
     (   C = 'http://terminusdb.com/schema/sys#JSON'
-    ->  get_json_object(DB, Elt, V)
+    ->  get_json_object(DB, Elt, V0),
+        % Unwrap @value for primitives and arrays (they were wrapped during storage)
+        % Objects don't have @value wrapper, so return as-is
+        % NOTE: This code path is not used for document GET - that goes through Rust
+        (   get_dict('@value', V0, Unwrapped)
+        ->  V = Unwrapped
+        ;   V = V0
+        )
     ;   Elt = X^^T
     ->  (   C = T % The type is not just subsumed but identical - no ambiguity.
         ->  value_type_json_type(X,T,V,_)

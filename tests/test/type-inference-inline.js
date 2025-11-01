@@ -29,8 +29,6 @@ describe('type-inference-inline', function () {
     const response = await woql.post(agent, query).unverified()
     const result = JSON.parse(response.text)
 
-    console.log('Result:', JSON.stringify(result.bindings[0].Result, null, 2))
-
     const resultType = result.bindings[0].Result['@type']
     const resultValue = result.bindings[0].Result['@value']
 

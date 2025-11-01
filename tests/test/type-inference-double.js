@@ -62,11 +62,9 @@ describe('type-inference-double', function () {
 
       // Check the result value
       expect(binding.result).to.exist
-      console.log('Result binding:', JSON.stringify(binding.result, null, 2))
 
       // Check the inferred type
       expect(binding.type_res).to.exist
-      console.log('Type inference result:', binding.type_res)
 
       // According to type inference rules documented in memory [21cfda7f]:
       // Pure float/double: xsd:double + xsd:double → xsd:double

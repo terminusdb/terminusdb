@@ -212,7 +212,6 @@ describe('numeric-raw-json-control', function () {
       expect(valueMatch).to.not.be.null
 
       const valueStrFromText = valueMatch[1]
-      console.log('Server sent (raw JSON):  ', valueStrFromText)
 
       // Convert to Decimal from string (preserves precision)
       const valueFromText = new Decimal(valueStrFromText)
@@ -223,7 +222,6 @@ describe('numeric-raw-json-control', function () {
       // DEMONSTRATE: Using JSON.parse() loses precision
       const parsedBody = JSON.parse(response.text)
       const valueFromParse = parsedBody.bindings[0].Result['@value']
-      console.log('After JSON.parse():      ', valueFromParse.toString())
 
       // This demonstrates the precision loss
       expect(valueFromParse.toString()).to.equal('12345678901234567000') // Lost last 3 digits
