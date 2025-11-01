@@ -110,7 +110,7 @@ plugin_path(Path) :-
     ;   % Resolve relative to db_path to avoid compile-time resolution with autoload
         db_path(Db_Path),
         file_directory_name(Db_Path, Storage_Dir),  % Get parent dir: ./storage/db -> ./storage
-        directory_file_path(Storage_Dir, 'plugins', Path)
+        atomic_list_concat([Storage_Dir, 'plugins'], '/', Path)
     ).
 
 jwt_enabled_env_var :-
