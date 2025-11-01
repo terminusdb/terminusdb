@@ -99,7 +99,7 @@ pub fn delete_json_id_document<L: Layer + Clone>(
             builder.remove_id_triple(triple);
             if let Some(true) = layer.id_object_is_node(triple.object) {
                 if !visited.contains(&triple.object)
-                    && !has_other_link(context, triple.object, id)
+                    && !has_other_link(context, triple.object, id, &visited)
                     && json_document_exists(
                         layer,
                         triple.object,
@@ -144,14 +144,15 @@ fn has_other_link<L: Layer + Clone>(
     context: &DocumentContext<L>,
     id: u64,
     expected_link: u64,
+    visited: &HashSet<u64>,
 ) -> bool {
     let layer = context.layer();
     for triple in layer.triples_o(id) {
-        if triple.subject != expected_link {
+        // Ignore references from documents we're currently deleting
+        if !visited.contains(&triple.subject) && triple.subject != expected_link {
             return true;
         }
     }
-
     false
 }
 

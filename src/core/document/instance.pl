@@ -965,12 +965,25 @@ dangling_reference_candidate(Validation_Object,S,P,O) :-
     %test_utils:print_all_triples(Validation_Object, []),
     !,
     distinct(S-P-O,
-             (   triple_removal(Instance, O, Rdf_Type, node(_)),
+             (   triple_removal(Instance, O, Rdf_Type, node(O_Type)),
+                 % Exclude sys:JSON and rdf:List (Cons) nodes - they have their own
+                 % reference-counted lifecycle managed by has_other_link in delete.rs
+                 \+ is_internal_json_node(O_Type),
                  triple(Instance, S, P, node(O))
              ;   % check if we were dropped from a list
                  was_in_list(Validation_Object, S, O),
                  rdf_first(P)
              )).
+
+% Check if a type is an internal JSON/Cons implementation node
+is_internal_json_node(Type_String) :-
+    global_prefix_expand(sys:'JSON', Sys_JSON_Atom),
+    atom_string(Sys_JSON_Atom, Sys_JSON_String),
+    Type_String = Sys_JSON_String.
+is_internal_json_node(Type_String) :-
+    global_prefix_expand(rdf:'List', Rdf_List_Atom),
+    atom_string(Rdf_List_Atom, Rdf_List_String),
+    Type_String = Rdf_List_String.
 
 % Generator for: ∀ -(s,p,o). ∃ o,p,C. doc(o) ∧ s:C ⇒ card(s,p,C)
 referential_cardinality_candidate(Validation_Object,S,P,C) :-
