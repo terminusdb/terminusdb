@@ -2546,7 +2546,7 @@ run_command(store,init, _, Opts) :-
     api_report_errors(
         store_init,
         initialize_database(Key,Force)),
-    format('Successfully initialised database!!!~n').
+    format('Successfully initialised database.~n').
 run_command(remote,add,[Path,Remote_Name,URL],Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
