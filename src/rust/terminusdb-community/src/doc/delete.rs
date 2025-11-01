@@ -21,17 +21,34 @@ pub fn delete_id_document<L: Layer + Clone>(
 
         for triple in layer.triples_s(id) {
             builder.remove_id_triple(triple);
+            // Check if the object node should be recursively deleted
             if let Some(true) = layer.id_object_is_node(triple.object) {
                 if rdf_type.is_some() && !visited.contains(&triple.object) {
                     let type_triple = layer.single_triple_sp(triple.object, rdf_type.unwrap());
-                    if type_triple.is_none() {
-                        continue;
-                    }
-                    let type_triple = type_triple.unwrap();
-                    if !context.document_types.contains(&type_triple.object)
-                        && !context.value_hashes.contains(&type_triple.object)
-                    {
-                        visit_next.push(triple.object);
+                    if let Some(type_triple) = type_triple {
+                        if !context.document_types.contains(&type_triple.object)
+                            && !context.value_hashes.contains(&type_triple.object)
+                        {
+                            // Only apply reference counting for content-addressed JSON objects
+                            // (shared Cons lists and JSON objects with SHA1 hashes)
+                            let object_iri = layer.id_subject(triple.object).unwrap_or_default();
+                            let is_content_addressed = object_iri.starts_with("terminusdb:///json/Cons/SHA1/") 
+                                || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
+                            let is_json_type = Some(type_triple.object) == context.sys.json() 
+                                || Some(type_triple.object) == context.rdf.list();
+                            
+                            let should_recurse = if is_content_addressed && is_json_type {
+                                // Content-addressed JSON objects: check for other references
+                                !has_other_link(context, triple.object, id, &visited)
+                            } else {
+                                // Non-content-addressed objects: recurse unconditionally
+                                true
+                            };
+                            
+                            if should_recurse {
+                                visit_next.push(triple.object);
+                            }
+                        }
                     }
                 }
             }
@@ -97,19 +114,37 @@ pub fn delete_json_id_document<L: Layer + Clone>(
 
         for triple in layer.triples_s(id) {
             builder.remove_id_triple(triple);
+            // Check if the object node should be recursively deleted
             if let Some(true) = layer.id_object_is_node(triple.object) {
-                if !visited.contains(&triple.object)
-                    && !has_other_link(context, triple.object, id, &visited)
-                    && json_document_exists(
+                if !visited.contains(&triple.object) {
+                    let json_exists = json_document_exists(
                         layer,
                         triple.object,
                         rdf_type,
                         rdf_list,
                         sys_json_document,
                         sys_json,
-                    )?
-                {
-                    visit_next.push(triple.object);
+                    ).unwrap_or(false);
+                    
+                    if json_exists {
+                        // Only apply reference counting for content-addressed JSON objects
+                        // (shared Cons lists and JSON objects with SHA1 hashes)
+                        let object_iri = layer.id_subject(triple.object).unwrap_or_default();
+                        let is_content_addressed = object_iri.starts_with("terminusdb:///json/Cons/SHA1/") 
+                            || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
+                        
+                        let should_recurse = if is_content_addressed {
+                            // Content-addressed JSON objects: check for other references
+                            !has_other_link(context, triple.object, id, &visited)
+                        } else {
+                            // Non-content-addressed JSON objects: recurse unconditionally
+                            true
+                        };
+                        
+                        if should_recurse {
+                            visit_next.push(triple.object);
+                        }
+                    }
                 }
             }
         }

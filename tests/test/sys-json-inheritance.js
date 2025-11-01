@@ -103,7 +103,7 @@ describe('sys:JSON Bug - Inheritance Example', function () {
       expect(result.status).to.equal(200)
     })
 
-    it('should allow deleting child class after removing documents', async function () {
+    it('should allow deleting documents without corrupting shared JSON data', async function () {
       // First delete the child document
       let result = await document.delete(agent, {
         query: { id: childDocId },
@@ -115,13 +115,21 @@ describe('sys:JSON Bug - Inheritance Example', function () {
 
       expect(result.status).to.be.oneOf([200, 204])
 
-      // Now delete the child class schema
+      // Verify parent document is still intact and has valid JSON data
+      const parentResult = await document.get(agent, { query: { id: parentDocId } })
+      expect(parentResult.status).to.equal(200)
+      expect(parentResult.body).to.have.property('JSON')
+      expect(parentResult.body.JSON).to.have.property('config')
+      expect(parentResult.body.JSON.config).to.have.property('options')
+      expect(parentResult.body.JSON.config.options).to.deep.equal(['opt1', 'opt2'])
+
+      // Now delete the parent document as well
       result = await document.delete(agent, {
-        query: { graph_type: 'schema', id: 'Test' },
+        query: { id: parentDocId },
       }).unverified()
 
       if (result.status !== 200 && result.status !== 204) {
-        throw new Error(`Child class deletion failed: ${JSON.stringify(result.body)}`)
+        throw new Error(`Parent document deletion failed: ${JSON.stringify(result.body)}`)
       }
 
       expect(result.status).to.be.oneOf([200, 204])

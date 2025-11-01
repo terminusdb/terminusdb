@@ -236,4 +236,95 @@ describe('sys:JSON deletion variants', function () {
       }
     })
   })
+
+  describe('variant 5: Reference counting - shared sys:JSON survival after deletion', function () {
+    let doc1Id, doc2Id
+    const sharedJSON = {
+      config: {
+        timeout: 30,
+        servers: ['server1', 'server2', 'server3'],
+        retries: 3,
+      },
+    }
+
+    before(async function () {
+      await db.create(agent, { label: 'Test Reference Counting', schema: true })
+
+      await document.insert(agent, {
+        schema: {
+          '@id': 'RefCountDoc',
+          '@type': 'Class',
+          '@key': { '@type': 'Random' },
+          name: 'xsd:string',
+          data: 'sys:JSON',
+        },
+      })
+
+      // Create two documents sharing the exact same sys:JSON object
+      const result = await document.insert(agent, {
+        instance: [
+          { '@type': 'RefCountDoc', name: 'doc1', data: sharedJSON },
+          { '@type': 'RefCountDoc', name: 'doc2', data: sharedJSON },
+        ],
+      })
+
+      doc1Id = result.body[0]
+      doc2Id = result.body[1]
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('should allow reading both documents before deletion', async function () {
+      // Verify both documents exist and have the same data (idempotency check)
+      const result1 = await document.get(agent, { query: { id: doc1Id } })
+      const result2 = await document.get(agent, { query: { id: doc2Id } })
+
+      expect(result1.status, 'Document 1 retrieval status').to.equal(200)
+      expect(result2.status, 'Document 2 retrieval status').to.equal(200)
+
+      // document.get with id returns the document directly, not in an array
+      const d1 = result1.body
+      const d2 = result2.body
+
+      expect(d1.data, 'Original document 1 is the same').to.deep.equal(sharedJSON)
+      expect(d2.data, 'Original document 2 is the same').to.deep.equal(sharedJSON)
+      expect(d1.data, 'Documents are the same').to.deep.equal(d2.data)
+    })
+
+    it('should preserve shared sys:JSON after deleting one document', async function () {
+      // Step 1: Delete the first document
+      const deleteResult = await document.delete(agent, { query: { id: doc1Id } }).unverified()
+
+      if (deleteResult.status !== 200 && deleteResult.status !== 204) {
+        console.log('✗ FAILED: Could not delete first document')
+        console.log('Status:', deleteResult.status)
+        console.log('Error:', JSON.stringify(deleteResult.body, null, 2))
+        throw new Error('Document deletion failed')
+      }
+
+      expect(deleteResult.status, 'Document 1 deletion status').to.be.oneOf([200, 204])
+
+      // Step 2: Read the second document - it should still have the complete JSON
+      const getResult = await document.get(agent, { query: { id: doc2Id } })
+
+      expect(getResult.status, 'Document 2 retrieval status').to.equal(200)
+      expect(getResult.body, 'Document 2 body').to.be.an('object')
+
+      // document.get with id returns the document directly, not in an array
+      const doc2 = getResult.body
+      expect(doc2, 'Document 2').to.have.property('name', 'doc2')
+      expect(doc2, 'Document 2').to.have.property('data')
+
+      // Verify the JSON object is intact with all nested properties
+      expect(doc2.data, 'Document 2 data').to.deep.equal(sharedJSON)
+      expect(doc2.data.config, 'Document 2 config').to.deep.equal({
+        timeout: 30,
+        servers: ['server1', 'server2', 'server3'],
+        retries: 3,
+      })
+      expect(doc2.data.config.servers, 'Document 2 values').to.deep.equal(['server1', 'server2', 'server3'])
+    })
+  })
 })
