@@ -135,17 +135,15 @@ This significantly reduces build time but should **only be used for development*
 For local development on macOS, use the development build target which avoids code signing issues:
 
 ```bash
+rm librust.dylib
 make dev
-
-# Seems make rust could also work on macOS, but unclear if it does
-make rust
 ```
 
 This creates a `terminusdb` binary that:
-- ✅ Works immediately without Gatekeeper/code signing issues
-- ✅ Dynamically links to SWI-Prolog libraries (no stripping)
-- ✅ Faster to rebuild during development
-- ⚠️  Requires SWI-Prolog to be installed (via Homebrew recommended)
+- Works immediately without Gatekeeper/code signing issues
+  Dynamically links to SWI-Prolog libraries (no stripping)
+- Faster to rebuild during development
+- Requires SWI-Prolog to be installed (via Homebrew recommended)
 
 Run the development binary:
 
@@ -294,55 +292,122 @@ tail -f tests/.terminusdb-test.log
 
 ### Rust Logging
 
-For Rust code in `src/rust/terminusdb-community/`, use file-based logging, until we find a better mechanism:
+TerminusDB provides built-in logging functions in Rust that integrate with the server's structured JSON logging system.
 
-**Standard Pattern:**
+**Built-in Logging Functions:**
+
+The logging module (`src/rust/terminusdb-community/src/log.rs`) provides five severity levels:
+
+```rust
+use crate::log::{log_debug, log_info, log_notice, log_warning, log_error};
+
+// Inside a predicate function with a context parameter
+predicates! {
+    #[module("$my_module")]
+    semidet fn my_predicate(context, input_term, output_term) {
+        // Simple logging (pass context and message)
+        log_debug!(context, "Starting processing");
+        log_info!(context, "Processing item");
+        log_warning!(context, "Potential issue detected");
+        log_error!(context, "Operation failed");
+        
+        // Formatted logging (like Rust's format! macro)
+        let value = input_term.get::<i64>()?;
+        log_debug!(context, "Input value: {}", value);
+        log_info!(context, "Processing {} items", count);
+        log_warning!(context, "Value {} exceeds threshold", value);
+        log_error!(context, "Failed to process {} with error: {:?}", id, error);
+        
+        output_term.unify("result")
+    }
+}
+```
+
+**How It Works:**
+
+1. The Rust logging functions call Prolog's `json_log:json_log/2` predicate
+2. Messages appear in the server log with proper timestamps, severity, and metadata
+3. Log output respects `TERMINUSDB_LOG_LEVEL` environment variable
+4. Log format respects `TERMINUSDB_LOG_FORMAT` (text or json)
+
+**Logging Levels:**
+
+- `log_debug!` - Development debugging (only shown when `TERMINUSDB_LOG_LEVEL=DEBUG`)
+- `log_info!` - General informational messages (default level)
+- `log_notice!` - Notable but normal conditions
+- `log_warning!` - Warning conditions
+- `log_error!` - Error conditions
+
+**Controlling Log Output:**
+
+```bash
+# Set log level (DEBUG, INFO, NOTICE, WARNING, ERROR)
+export TERMINUSDB_LOG_LEVEL=DEBUG
+
+# Set log format (text or json)
+export TERMINUSDB_LOG_FORMAT=text
+
+# Start server with debug logging
+TERMINUSDB_LOG_LEVEL=DEBUG ./tests/terminusdb-test-server.sh restart
+
+# View logs
+./tests/terminusdb-test-server.sh logs
+```
+
+**Example Usage in Context:**
+
+```rust
+predicates! {
+    #[module("$json_preserve")]
+    semidet fn json_read_string_preserving_numbers(context, json_string_term, result_term) {
+        log_debug!(context, "json_read_string_preserving_numbers called");
+        
+        let json_string: PrologText = json_string_term.get()?;
+        let json_str = json_string.to_string();
+        
+        log_debug!(context, "Parsing JSON string of length: {}", json_str.len());
+        
+        match serde_json::from_str::<Value>(&json_str) {
+            Ok(parsed) => {
+                log_info!(context, "Successfully parsed JSON");
+                // ... process result
+                result_term.unify(dict)
+            }
+            Err(e) => {
+                log_error!(context, "JSON parse error: {:?}", e);
+                Err(PrologError::Exception)
+            }
+        }
+    }
+}
+```
+
+**Alternative: File-Based Logging (When Built-in Logging Isn't Available):**
+
+For Rust code that doesn't have access to a Prolog context (e.g., standalone functions), use temporary file logging:
+
 ```rust
 use std::io::Write;
 
-// Inside a function where you need to debug
 if let Ok(mut f) = std::fs::OpenOptions::new()
     .create(true)
     .append(true)
     .open("/tmp/debug_output.log")
 {
     let _ = writeln!(f, "Debug message: {:?}", some_value);
-    let _ = writeln!(f, "Variable x = {}, y = {}", x, y);
 }
+
+// View output
+// tail -f /tmp/debug_output.log
 ```
 
 **Best Practices:**
-- Use descriptive log file names: `/tmp/graphql_debug.log`, `/tmp/json_fragment.log`
-- Include timestamps for multi-request debugging
-- Add context to log messages (function name, key identifiers)
-- Remove debug logging before committing (unless part of permanent debugging infrastructure)
 
-**Viewing Rust Logs:**
-```bash
-# Watch log file in real-time
-tail -f /tmp/debug_output.log
-
-# View recent entries
-tail -20 /tmp/debug_output.log
-
-# Clear old logs before testing
-rm /tmp/*.log && npx mocha tests/test/yourtest.js
-```
-
-**Example with Timestamps:**
-```rust
-use std::io::Write;
-use chrono::Utc;  // Add chrono to Cargo.toml if needed
-
-if let Ok(mut f) = std::fs::OpenOptions::new()
-    .create(true)
-    .append(true)
-    .open("/tmp/my_debug.log")
-{
-    let timestamp = Utc::now().to_rfc3339();
-    let _ = writeln!(f, "[{}] Function called with value: {:?}", timestamp, value);
-}
-```
+- ✅ **Always use built-in logging** when you have a `context` parameter
+- ✅ **Use appropriate severity levels** - avoid `log_error!` for non-errors
+- ✅ **Include context in messages** - function name, key identifiers
+- ✅ **Remove debug logging** before committing (or use INFO+ level for permanent logs)
+- ⚠️  **File-based logging** should only be used when context isn't available
 
 ### Debugging GraphQL Queries
 
@@ -365,8 +430,27 @@ my_function(Input, Output) :-
 ```
 
 **Debugging data transformations in Rust:**
+
+With context (preferred):
 ```rust
-fn process_data(input: &Data) -> Result<Output> {
+predicates! {
+    semidet fn process_data(context, input_term, output_term) {
+        let input: Data = input_term.get()?;
+        
+        log_debug!(context, "Processing input: {:?}", input);
+        
+        let result = transform(&input)?;
+        
+        log_debug!(context, "Transform result: {:?}", result);
+        
+        output_term.unify(result)
+    }
+}
+```
+
+Without context (fallback):
+```rust
+fn helper_function(input: &Data) -> Result<Output> {
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
@@ -392,11 +476,13 @@ fn process_data(input: &Data) -> Result<Output> {
 
 ### Important Notes
 
-⚠️ **stderr vs files:** TerminusDB captures stderr in logs, but file-based logging in `/tmp/` gives more control and easier grepping.
+✅ **Use built-in logging:** Always prefer `log_debug!`, `log_info!`, etc. macros in Rust when you have a `context` parameter. They integrate seamlessly with the server's logging system.
 
-⚠️ **Clean up:** Always remove debug logging code before committing unless it's part of a permanent debugging feature.
+⚠️ **Log levels:** Set `TERMINUSDB_LOG_LEVEL=DEBUG` to see debug messages. Default is INFO level.
 
-⚠️ **Performance:** File I/O in hot paths can slow down execution. Use sparingly in production code paths.
+⚠️ **Clean up:** Remove debug logging code before committing unless it's part of permanent monitoring/debugging infrastructure.
+
+⚠️ **Performance:** Excessive logging in hot paths can impact performance. Use INFO+ levels for production code.
 
 ## Submitting Changes
 
