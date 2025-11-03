@@ -1,6 +1,6 @@
 :- module('util/lazy_docs', [stream_to_lazy_docs/2]).
 
-:- use_module(library(http/json)).
+:- use_module(json_preserve).
 :- use_module(library(lists)).
 :- use_module(utils).
 
@@ -13,7 +13,8 @@ stream_to_lazy_docs(Stream, List) :-
 attr_unify_hook(State, Value) :-
     State = lazy_input(Stream, Peek),
     (   var(Peek)
-    ->  json_read_dict(Stream, Term, [default_tag(json), end_of_file(eof)]),
+    ->  % json_read_dict is from json_preserve module (Rust-backed for precision)
+        json_read_dict(Stream, Term, [default_tag(json), end_of_file(eof)]),
         (   Term = eof
         ->  nb_setarg(2, State, []),
             Value = []
