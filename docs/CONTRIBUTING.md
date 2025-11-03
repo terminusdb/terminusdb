@@ -135,7 +135,7 @@ This significantly reduces build time but should **only be used for development*
 For local development on macOS, use the development build target which avoids code signing issues:
 
 ```bash
-rm librust.dylib
+rm ./src/rust/librust.dylib
 make dev
 ```
 
