@@ -401,6 +401,13 @@ api_delete_document_(schema, Transaction, Id) :-
 api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
+% Bulk deletion with reference counting support
+api_delete_documents_bulk_(schema, Transaction, Ids) :-
+    forall(member(Id, Ids),
+           delete_schema_document(Transaction, Id)).
+api_delete_documents_bulk_(instance, Transaction, Ids) :-
+    'document/json':delete_documents_bulk(Transaction, Ids).
+
 delete_documents_default_options(
     options{
         graph_type: instance
@@ -421,12 +428,14 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         forall(
-                             json_read_list_stream(Stream, ID_Unchecked),
-                             (   param_check_json(non_empty_string, id, ID_Unchecked, Id),
-                                 api_delete_document_(Graph_Type, Transaction, Id)
-                             )
-                         )
+                         % First pass: collect all IDs to delete
+                         findall(Id,
+                                 (   json_read_list_stream(Stream, ID_Unchecked),
+                                     param_check_json(non_empty_string, id, ID_Unchecked, Id)
+                                 ),
+                                 Ids_To_Delete),
+                         % Second pass: delete all documents with the full deletion set
+                         api_delete_documents_bulk_(Graph_Type, Transaction, Ids_To_Delete)
                      ),
                      Meta_Data,
                      Options),

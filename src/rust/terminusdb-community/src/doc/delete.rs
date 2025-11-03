@@ -216,6 +216,128 @@ pub fn delete_all_triples<L: Layer + Clone>(layer: &L, builder: &mut dyn LayerBu
     }
 }
 
+/// Delete multiple JSON documents with pre-computed root IDs from Prolog.
+/// This properly handles layer stacking by using root IDs that were found
+/// using Prolog's id_triple/4 (which respects layer removals), rather than
+/// Rust's triples_o() (which returns all triples from all layers).
+pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
+    context: &DocumentContext<L>,
+    builder: &mut dyn LayerBuilder,
+    document_ids: &HashSet<u64>,
+    all_document_roots: &HashSet<u64>,
+) {
+    let layer = context.layer();
+    let rdf_type = context.rdf.type_();
+    if rdf_type.is_none() {
+        return;
+    }
+    let rdf_type = rdf_type.unwrap();
+    let rdf_list = context.rdf.list();
+    let sys_json_document = context.sys.json_document();
+    let sys_json = context.sys.json();
+
+    // Pass 1: Traverse all document roots to build node_to_documents mapping
+    let mut node_to_documents: HashMap<u64, HashSet<u64>> = HashMap::new();
+
+    for &root_id in all_document_roots {
+        let mut visit_next = vec![root_id];
+        let mut visited: HashSet<u64> = HashSet::new();
+
+        while let Some(current_id) = visit_next.pop() {
+            if visited.contains(&current_id) {
+                continue;
+            }
+            visited.insert(current_id);
+
+            // Track that this root uses this node
+            node_to_documents
+                .entry(current_id)
+                .or_insert_with(HashSet::new)
+                .insert(root_id);
+
+            // Traverse outgoing edges
+            for triple in layer.triples_s(current_id) {
+                if let Some(true) = layer.id_object_is_node(triple.object) {
+                    if !visited.contains(&triple.object) {
+                        let json_exists = json_document_exists(
+                            layer,
+                            triple.object,
+                            rdf_type,
+                            rdf_list,
+                            sys_json_document,
+                            sys_json,
+                        )
+                        .unwrap_or(false);
+
+                        if json_exists {
+                            visit_next.push(triple.object);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Pass 2: Delete documents and their content if no other live documents reference them
+    for &doc_id in document_ids {
+        let mut visit_next = vec![doc_id];
+        let mut visited: HashSet<u64> = HashSet::new();
+
+        while let Some(current_id) = visit_next.pop() {
+            if visited.contains(&current_id) {
+                continue;
+            }
+            visited.insert(current_id);
+
+            // Remove all triples with this subject
+            for triple in layer.triples_s(current_id) {
+                builder.remove_id_triple(triple);
+
+                // Check if the object node should be recursively deleted
+                if let Some(true) = layer.id_object_is_node(triple.object) {
+                    if !visited.contains(&triple.object) {
+                        let json_exists = json_document_exists(
+                            layer,
+                            triple.object,
+                            rdf_type,
+                            rdf_list,
+                            sys_json_document,
+                            sys_json,
+                        )
+                        .unwrap_or(false);
+
+                        if json_exists {
+                            // Check if this node is content-addressed (shared)
+                            let object_iri = layer.id_subject(triple.object).unwrap_or_default();
+                            let is_content_addressed =
+                                object_iri.starts_with("terminusdb:///json/Cons/SHA1/")
+                                    || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
+
+                            let should_recurse = if is_content_addressed {
+                                // Content-addressed: check if any non-deleted document still uses it
+                                if let Some(using_docs) = node_to_documents.get(&triple.object) {
+                                    // Should recurse only if ALL documents using this node are being deleted
+                                    using_docs.iter().all(|d| document_ids.contains(d))
+                                } else {
+                                    // No mapping means safe to delete
+                                    true
+                                }
+                            } else {
+                                // Non-content-addressed: always recurse
+                                true
+                            };
+
+                            if should_recurse {
+                                visit_next.push(triple.object);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn delete_all_documents_by_type<L: Layer + Clone>(
     context: &DocumentContext<L>,
     builder: &mut dyn LayerBuilder,
@@ -377,6 +499,61 @@ predicates! {
                 delete_all_triples(&layer, &mut **builder)
         }))
     }
+
+    /// Delete multiple JSON documents using pre-computed root IDs from Prolog.
+    /// This properly handles layer stacking across multiple transactions.
+    /// 
+    /// Parameters:
+    /// - document_context_term: Document context blob
+    /// - transaction_term: Transaction object
+    /// - iris_term: List of document IRIs to delete
+    /// - all_root_ids_term: List of ALL document root IDs (from Prolog's id_triple/4)
+    #[module("$doc")]
+    semidet fn delete_documents_bulk_with_roots(
+        context, 
+        document_context_term, 
+        transaction_term, 
+        iris_term,
+        all_root_ids_term
+    ) {
+        let document_context: DocumentContextBlob = document_context_term.get_ex()?;
+        if document_context.layer.is_none() {
+            // no layer means nothing to delete.
+            return Ok(())
+        }
+        
+        let builder = transaction_instance_builder(context, transaction_term)?;
+        if builder.is_none() {
+            return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
+        }
+        let builder = builder.unwrap();
+        
+        // Parse list of IRIs to delete
+        let iris_list: Vec<PrologText> = iris_term.get_ex()?;
+        
+        // Parse list of all root IDs (from Prolog)
+        let all_root_ids_vec: Vec<u64> = all_root_ids_term.get_ex()?;
+        let all_root_ids: HashSet<u64> = all_root_ids_vec.into_iter().collect();
+        
+        // Convert IRIs to internal IDs
+        let layer = document_context.layer();
+        let mut document_ids = HashSet::new();
+        for iri in iris_list {
+            if let Some(id) = layer.subject_id(&iri) {
+                document_ids.insert(id);
+            }
+        }
+        
+        // Perform bulk deletion with reference counting
+        context.try_or_die(builder.with_builder(|builder| {
+            delete_multiple_documents_with_roots(
+                &document_context, 
+                &mut **builder, 
+                &document_ids,
+                &all_root_ids
+            )
+        }))
+    }
 }
 
 pub fn register() {
@@ -384,4 +561,5 @@ pub fn register() {
     register_delete_json_document();
     register_delete_documents_by_type();
     register_delete_all();
+    register_delete_documents_bulk_with_roots();
 }
