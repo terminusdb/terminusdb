@@ -3873,16 +3873,6 @@ http_read_utf8(stream(Stream), Request) :-
         zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
         read_string(Uncompressed_Stream, _, S1),
         close(Uncompressed_Stream),
-        % DEBUG: Log the decompressed content
-        (   debugging(json_preserve_http)
-        ->  atom_length(S1, Len),
-            (   Len > 200
-            ->  sub_atom(S1, 0, 200, _, Preview),
-                format(user_error, '[DEBUG http] Decompressed ~w bytes: ~w...~n', [Len, Preview])
-            ;   format(user_error, '[DEBUG http] Decompressed ~w bytes: ~w~n', [Len, S1])
-            )
-        ;   true
-        ),
         open_string(S1, Stream)
     ;   http_read_data(Request, String, [to(string), input_encoding(utf8)]),
         open_string(String, Stream)

@@ -5,6 +5,8 @@
 ]).
 
 :- use_module(library(option)).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 /** <module> Fast JSON Parser using Rust
  *
@@ -100,6 +102,11 @@ sys_json_parse_value(JSONString, Value) :-
 
 :- use_module(library(http/json), [atom_json_dict/3]).
 :- use_module(library(plunit)).
+
+% Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
+:- if(\+ current_predicate(assertion/1)).
+assertion(Goal) :- call(Goal).
+:- endif.
 
 :- begin_tests(json_preserve).
 
