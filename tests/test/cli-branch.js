@@ -9,7 +9,16 @@ describe('cli-branch', function () {
   let envs
 
   async function execEnv (command) {
-    return exec(command, { env: envs })
+    try {
+      return await exec(command, { env: envs })
+    } catch (error) {
+      // Enhance error with stdout/stderr for better debugging
+      console.error('Command failed:', command)
+      console.error('Exit code:', error.code)
+      console.error('STDOUT:', error.stdout || '(empty)')
+      console.error('STDERR:', error.stderr || '(empty)')
+      throw error
+    }
   }
 
   before(async function () {
@@ -18,11 +27,13 @@ describe('cli-branch', function () {
     const rootDir = path.join(testDir, '..')
     const terminusdbExec = path.join(rootDir, 'terminusdb')
 
-    dbPath = './storage/' + util.randomString()
+    // Use absolute path to avoid snap working directory ambiguity
+    dbPath = path.resolve(testDir, 'storage', util.randomString())
     envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,
-      TERMINUSDB_EXEC_PATH: terminusdbExec,
+      // Use existing TERMINUSDB_EXEC_PATH if set (e.g., snap), otherwise default to local binary
+      TERMINUSDB_EXEC_PATH: process.env.TERMINUSDB_EXEC_PATH || terminusdbExec,
     }
     {
       const r = await execEnv(`${util.terminusdbScript()} store init --force`)

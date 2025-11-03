@@ -12,13 +12,19 @@ description: |
     Diff: differences between commits can be interpreted as patches between states
     Push/Pull/Clone: communicate diffs between nodes using push / pull / clone
     TerminusDB allows you to link JSON documents in a knowledge graph through a document API: https://terminusdb.com/docs/#/reference/reference-document-interface
+website: https://terminusdb.org
 source-code: https://github.com/terminusdb/terminusdb
 contact: team@terminusdb.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
 confinement: strict
-base: core20
+base: core24
 grade: stable
+
+lint:
+  ignore:
+    - library  # SWI-Prolog dependencies may be loaded dynamically
+
 package-repositories:
  - type: apt
    ppa: swi-prolog/stable
@@ -30,18 +36,29 @@ parts:
   tus:
     plugin: dump
     source: https://github.com/terminusdb/tus.git
-    source-tag: v0.0.5
+    source-tag: v0.0.16
     override-build: |
-      mkdir tus
-      mv * tus/ || true
-      snapcraftctl build
+      mkdir -p tus
+      mv * tus/ 2>/dev/null || true
+      craftctl default
+  
+  jwt:
+    plugin: dump
+    source: https://github.com/terminusdb-labs/jwt_io.git
+    source-tag: v1.0.4
+    override-build: |
+      mkdir -p jwt_io
+      mv * jwt_io/ 2>/dev/null || true
+      craftctl default
+  
   terminusdb:
     after:
       - tus
+      - jwt
     plugin: make
     build-packages:
       - rsync
-      - swi-prolog-nox
+      - swi-prolog  # Full package with all extensions (more robust than -nox)
       - curl
       - clang
       - m4
@@ -49,21 +66,41 @@ parts:
       - protobuf-compiler
       - libprotobuf-dev
     stage-packages:
-      - swi-prolog-nox
+      - swi-prolog  # Full package includes all extensions
+      - binutils  # Provides addr2line for crash stack traces
     override-build: |
-      mkdir -p /snap/terminusdb/current/usr/lib
-      cp -r /usr/lib/swi-prolog /snap/terminusdb/current/usr/lib/
+      echo "=== Installing Rust ==="
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-      export PATH=/root/.cargo/bin:$PATH
-      export SWI_HOME_DIR=/snap/terminusdb/current/usr/lib/swi-prolog
-      export LIBRARY_PATH="$SWI_HOME_DIR/lib/x86_64-linux/"
-      export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+LD_LIBRARY_PATH:}${LIBRARY_PATH}"
-      rsync -rt ./ /snap/terminusdb/current/
-      cd /snap/terminusdb/current
+      export PATH=$HOME/.cargo/bin:$PATH
+      
+      echo "=== Setting up SWI-Prolog from PPA ==="
+      export SWI_HOME_DIR=/usr/lib/swi-prolog
+      export PATH=/usr/bin:$PATH
+      export LD_LIBRARY_PATH=/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+      
+      echo "=== Verifying SWI-Prolog ==="
+      swipl --version
+      
+      echo "=== Checking for HTTP extensions ==="
+      if [ -f /usr/lib/swi-prolog/library/ext/http/http/html_write.pl ]; then
+        echo "✓ html_write.pl (part of swipl ext) found in build environment"
+      else
+        echo "✗ ERROR: html_write.pl NOT FOUND in /usr/lib/swi-prolog/library/ext/http/http/"
+        echo "Available directories in /usr/lib/swi-prolog/library:"
+        ls -la /usr/lib/swi-prolog/library/ || true
+        echo "Checking if ext directory exists:"
+        ls -la /usr/lib/swi-prolog/library/ext/ || echo "ext directory does not exist"
+        exit 1
+      fi
+      
+      echo "=== Building TerminusDB ==="
+      cd $CRAFT_PART_SRC
       make
-      cp -r terminusdb distribution "$SNAPCRAFT_PART_INSTALL/"
+      
+      echo "=== Installing to snap ==="
+      cp -r terminusdb distribution src $CRAFT_PART_INSTALL/
     build-environment:
-      - TERMINUSDB_SERVER_PACK_DIR: /root/stage
+      - TERMINUSDB_SERVER_PACK_DIR: $CRAFT_STAGE
       - LANG: C.UTF-8
       - LC_ALL: C.UTF-8
     source: ./terminusdb_source
@@ -75,4 +112,8 @@ apps:
     environment:
       LANG: C.UTF-8
       LC_ALL: C.UTF-8
+      SWI_HOME_DIR: $SNAP/usr/lib/swi-prolog
+      TERMINUSDB_SERVER_PACK_DIR: $SNAP
+      TERMINUSDB_JWT_ENABLED: "false"
+      PATH: $SNAP/usr/bin:$SNAP/bin:$PATH  # Include both for addr2line and other tools
     plugs: [home, network, network-bind, process-control]
