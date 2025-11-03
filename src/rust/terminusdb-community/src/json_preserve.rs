@@ -118,9 +118,110 @@ predicates! {
         // Unify with result
         result_term.unify(&prolog_term)
     }
+    
+    /// Parse ONE JSON value from a stream (true streaming)
+    /// 
+    /// This reads exactly ONE JSON value from the stream and leaves the stream
+    /// positioned after that value. Subsequent calls will read the next value.
+    /// This enables lazy iteration with minimal memory usage.
+    /// 
+    /// @param stream_term - Prolog stream (ReadablePrologStream)
+    /// @param result_term - Unified with the parsed JSON value, or atom 'eof' if no more data
+    #[module("$json_preserve")]
+    semidet fn json_read_one_from_stream(context, stream_term, result_term) {
+        // Get readable stream from term
+        let stream: ReadablePrologStream = stream_term.get_ex()?;
+        
+        // Create streaming deserializer directly over the Prolog stream
+        let mut deserializer = Deserializer::from_reader(stream).into_iter::<Value>();
+        
+        // Try to read ONE value
+        match deserializer.next() {
+            Some(Ok(value)) => {
+                // Successfully read one value - convert to Prolog term
+                let prolog_term = json_value_to_prolog_term(context, &value)?;
+                result_term.unify(&prolog_term)
+            },
+            Some(Err(e)) if e.is_eof() => {
+                // End of stream - return eof atom
+                result_term.unify(atom!("eof"))
+            },
+            Some(Err(e)) => {
+                // Parse error - raise exception
+                let msg = format!("JSON parse error at line {} column {}", e.line(), e.column());
+                context.raise_exception(&term!{context: error(json_parse_error(#e.line() as u64, #e.column() as u64, #msg), _)}?)?;
+                Err(PrologError::Failure)
+            },
+            None => {
+                // No data available - return eof
+                result_term.unify(atom!("eof"))
+            }
+        }
+    }
+    
+    /// Parse ALL JSON values from a stream with known length
+    /// 
+    /// This uses streaming deserialization to parse multiple JSON values
+    /// separated by whitespace (newlines, spaces, etc.) from a single stream.
+    /// Handles: arrays, objects, strings, multiple values with any whitespace.
+    /// 
+    /// @param stream_term - Prolog stream (ReadablePrologStream)
+    /// @param length_term - Content length in bytes
+    /// @param result_term - Unified with list of parsed JSON values
+    #[module("$json_preserve")]
+    semidet fn json_read_all_from_stream(context, stream_term, length_term, result_term) {
+        use std::io::{Read, Cursor};
+        
+        // Get stream and length
+        let mut stream: ReadablePrologStream = stream_term.get_ex()?;
+        let len = length_term.get_ex::<u64>()? as usize;
+        
+        // Validate minimum content length
+        // Minimum valid JSON for document API: [] or {} (2 bytes)
+        if len < 2 {
+            let error_term = term!{context: error(invalid_content_length(#len as u64), _)}?;
+            context.raise_exception(&error_term)?;
+            return Err(PrologError::Failure);
+        }
+        
+        // Read exact bytes (no hanging - we know the length!)
+        let mut buf = vec![0; len];
+        context.try_or_die_generic(stream.read_exact(&mut buf))?;
+        
+        // Create streaming deserializer over the buffer
+        let cursor = Cursor::new(buf);
+        let stream = Deserializer::from_reader(cursor).into_iter::<Value>();
+        
+        // Parse ALL JSON values from the stream
+        let mut values = Vec::new();
+        for result in stream {
+            match result {
+                Ok(value) => values.push(value),
+                Err(e) if e.is_eof() => break,  // Normal end
+                Err(e) => {
+                    // Parse error - return detailed error
+                    let msg = format!("JSON parse error at line {} column {}", e.line(), e.column());
+                    return context.raise_exception(&term!{context: error(json_parse_error(#e.line() as u64, #e.column() as u64, #msg), _)}?);
+                }
+            }
+        }
+        
+        // Convert all values to Prolog terms
+        let mut terms = Vec::with_capacity(values.len());
+        for value in values {
+            terms.push(json_value_to_prolog_term(context, &value)?);
+        }
+        
+        // Build Prolog list (same pattern as Array case in json_value_to_prolog_term)
+        let list_term = context.new_term_ref();
+        list_term.unify(terms.as_slice())?;
+        result_term.unify(&list_term)
+    }
 }
 
 pub fn register() {
     register_json_read_string();
     register_json_read_stream();
+    register_json_read_one_from_stream();
+    register_json_read_all_from_stream();
 }

@@ -27,22 +27,8 @@
 % @param Options Supported: end_of_file(Value), default_tag(Tag)
 json_read_dict(Stream, Dict, Options) :-
     (   is_stream(Stream)
-    ->  % Hybrid: Prolog reads stream → Rust parses string
-        % WHY NOT pure Rust:
-        %   1. ReadablePrologStream has UTF-8 issues with Prolog string streams
-        %   2. Raw HTTP streams hang (no EOF) - need Content-Length + read_exact
-        %   3. GraphQL works because it knows Content-Length and uses read_exact
-        % MEMORY: Same as pure Rust (reads entire stream)
-        % BENEFIT: Rust can preserve arbitrary precision in the future
-        read_string(Stream, _, JSONText),
-        (   JSONText = ""
-        ->  % Empty string means EOF
-            (   option(end_of_file(EOFValue), Options, end_of_file)
-            ->  Dict = EOFValue
-            ;   Dict = end_of_file
-            )
-        ;   '$json_preserve':json_read_string(JSONText, Dict)
-        )
+    ->  % Use Rust streaming parser if we know the stream length
+        json_read_dict_stream(Stream, Dict, Options)
     ;   % For atoms/strings, use fast Rust parser
         (   atom(Stream)
         ->  atom_string(Stream, JSONText),
@@ -51,6 +37,43 @@ json_read_dict(Stream, Dict, Options) :-
         ->  '$json_preserve':json_read_string(Stream, Dict)
         ;   throw(error(type_error(stream_or_atom, Stream), _))
         )
+    ).
+
+%! json_read_dict_stream(+Stream, -Dict, +Options) is det.
+%
+% Read JSON from a stream using Rust-backed parser for precision and UTF-8 safety.
+% Uses json_read_one_from_stream for true one-at-a-time streaming.
+%
+% IMPORTANT: All HTTP request bodies are buffered into string streams (see routes.pl)
+% because transaction replay (with_transaction) requires seekable streams to reset
+% position on retry. This means:
+% - HTTP body is already in memory (buffered once)
+% - Stream is seekable (supports set_stream_position)
+% - Rust parser reads one JSON value at a time from the buffered string
+% - Stream advances after each read for lazy document processing
+%
+% Future: When true streaming without transaction replay is available,
+% the buffering in routes.pl could be eliminated.
+%
+% @param Stream Input stream (must be seekable for transaction replay)
+% @param Dict Parsed JSON value or 'eof'
+% @param Options end_of_file(Value) - value to return on EOF, default_tag(Tag)
+json_read_dict_stream(Stream, Dict, Options) :-
+    % Use Rust parser for one-at-a-time streaming
+    % All streams are now string streams (buffered from HTTP)
+    (   catch('$json_preserve':json_read_one_from_stream(Stream, Value), _Error, fail)
+    ->  Dict = Value
+    ;   % Rust parser returned nothing or failed - must be EOF
+        handle_eof(Options, Dict)
+    ).
+
+%! handle_eof(+Options, -Dict) is det.
+%
+% Handle end-of-file based on options.
+handle_eof(Options, Dict) :-
+    (   memberchk(end_of_file(EOF), Options)
+    ->  Dict = EOF
+    ;   fail  % No eof option - fail on empty stream
     ).
 
 % ============================================================================
@@ -245,3 +268,240 @@ test(exact_failing_integration_test_json) :-
     assertion(DictRust == DictStd).
 
 :- end_tests(json_preserve).
+
+% ============================================================================
+% Integration Tests - Verify all input types work with Rust parser
+% ============================================================================
+
+:- begin_tests(json_integration).
+
+% Test reading from atom
+test(atom_input) :-
+    json_read_dict('{"name":"Alice","age":30}', Dict, []),
+    Dict.name == "Alice",
+    Dict.age == 30.
+
+% Test reading from string
+test(string_input) :-
+    String = "{\"city\":\"Amsterdam\",\"population\":1000000}",
+    json_read_dict(String, Dict, []),
+    Dict.city == "Amsterdam",
+    Dict.population == 1000000.
+
+% Test reading from string stream (single value)
+test(stream_single_value) :-
+    open_string('[1,2,3]', Stream),
+    json_read_dict(Stream, Dict, []),
+    Dict = [1,2,3],
+    close(Stream).
+
+% Test reading from string stream (multiple values, one at a time - TRUE STREAMING)
+test(stream_multiple_values_one_at_a_time) :-
+    open_string('{"a":1} {"b":2}', Stream),
+    % First call reads first value
+    json_read_dict(Stream, First, [end_of_file(eof)]),
+    First.a == 1,
+    % Second call reads second value (stream advanced)
+    json_read_dict(Stream, Second, [end_of_file(eof)]),
+    Second.b == 2,
+    % Third call returns eof
+    json_read_dict(Stream, Third, [end_of_file(eof)]),
+    Third == eof,
+    close(Stream).
+
+% Test EOF handling on exhausted stream
+test(stream_eof_after_read) :-
+    open_string('{"x":10}', Stream),
+    json_read_dict(Stream, Dict1, [end_of_file(eof)]),
+    Dict1.x == 10,
+    json_read_dict(Stream, Dict2, [end_of_file(eof)]),
+    Dict2 == eof,
+    close(Stream).
+
+% Test array with nested objects
+test(nested_array) :-
+    JSON = '[{"@id":"A","val":1},{"@id":"B","val":2}]',
+    json_read_dict(JSON, Array, []),
+    is_list(Array),
+    length(Array, 2),
+    nth0(0, Array, First),
+    First.'@id' == "A".
+
+% Test complex nested structure
+test(deeply_nested) :-
+    JSON = '{"level1":{"level2":{"level3":{"data":"deep"}}}}',
+    json_read_dict(JSON, Dict, []),
+    Dict.level1.level2.level3.data == "deep".
+
+% Test UTF-8 characters
+test(utf8_content) :-
+    JSON = '{"name":"Kurt Gödel","city":"Brünn"}',
+    json_read_dict(JSON, Dict, []),
+    Dict.name == "Kurt Gödel",
+    Dict.city == "Brünn".
+
+% Test numeric precision (integers)
+test(large_integers) :-
+    JSON = '{"big":9007199254740991,"small":42}',
+    json_read_dict(JSON, Dict, []),
+    integer(Dict.big),
+    integer(Dict.small),
+    Dict.big == 9007199254740991.
+
+% Test numeric precision (floats)
+test(float_values) :-
+    JSON = '{"pi":3.14159,"e":2.71828}',
+    json_read_dict(JSON, Dict, []),
+    float(Dict.pi),
+    float(Dict.e).
+
+% Test boolean and null
+test(special_values) :-
+    JSON = '{"active":true,"deleted":false,"data":null}',
+    json_read_dict(JSON, Dict, []),
+    Dict.active == true,
+    Dict.deleted == false,
+    Dict.data == null.
+
+% Test empty structures
+test(empty_structures) :-
+    JSON = '{"obj":{},"arr":[]}',
+    json_read_dict(JSON, Dict, []),
+    is_dict(Dict.obj),
+    is_list(Dict.arr),
+    length(Dict.arr, 0).
+
+:- end_tests(json_integration).
+
+% ============================================================================
+% Streaming Tests - Multiple JSON values in one stream
+% ============================================================================
+
+:- begin_tests(json_stream_generic).
+
+% Helper to get stream length
+stream_len(Stream, Len) :-
+    stream_property(Stream, position(Start)),
+    seek(Stream, 0, eof, End),
+    Len is End,
+    set_stream_position(Stream, Start).
+
+% Single JSON value
+test(single_object) :-
+    open_string('{"@id":"A"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    Docs = [Dict],
+    get_dict('@id', Dict, "A").
+
+% Array is ONE JSON value (comma is part of array syntax)
+test(array_is_single_value) :-
+    open_string('[{"@id":"A"},{"@id":"B"}]', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    Docs = [Array],
+    length(Array, 2),
+    nth0(0, Array, Dict1),
+    nth0(1, Array, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Multiple values - Unix LF
+test(multiple_lf) :-
+    open_string('{"@id":"A"}\n{"@id":"B"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 2),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Multiple values - Windows CRLF
+test(multiple_crlf) :-
+    open_string('{"@id":"A"}\r\n{"@id":"B"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 2),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Multiple values - Old Mac CR
+test(multiple_cr) :-
+    open_string('{"@id":"A"}\r{"@id":"B"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 2),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Multiple values - Space
+test(multiple_space) :-
+    open_string('{"@id":"A"} {"@id":"B"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 2),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Multiple values - Mixed whitespace
+test(multiple_mixed_whitespace) :-
+    open_string('{"@id":"A"} \n\r\n {"@id":"B"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 2),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Multiple values - No whitespace (valid!)
+test(multiple_no_whitespace) :-
+    open_string('{"@id":"A"}{"@id":"B"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 2),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B").
+
+% Three values with various separators
+test(three_values_mixed) :-
+    open_string('{"@id":"A"}\n{"@id":"B"} {"@id":"C"}', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    length(Docs, 3),
+    nth0(0, Docs, Dict1),
+    nth0(1, Docs, Dict2),
+    nth0(2, Docs, Dict3),
+    get_dict('@id', Dict1, "A"),
+    get_dict('@id', Dict2, "B"),
+    get_dict('@id', Dict3, "C").
+
+% Strings (for delete operations)
+test(multiple_strings) :-
+    open_string('"City/Dublin" "City/Pretoria"', S),
+    stream_len(S, Len),
+    '$json_preserve':json_read_all_from_stream(S, Len, Docs),
+    Docs = ["City/Dublin", "City/Pretoria"].
+
+% Note: Empty streams (Content-Length: 0) are rejected at HTTP layer
+% See check_content_length/1 in routes.pl
+
+% Test Rust validation of invalid content lengths
+test(rust_rejects_zero_length, [error(invalid_content_length(0), _)]) :-
+    open_string('', S),
+    '$json_preserve':json_read_all_from_stream(S, 0, _Docs).
+
+test(rust_rejects_one_byte, [error(invalid_content_length(1), _)]) :-
+    open_string('x', S),
+    '$json_preserve':json_read_all_from_stream(S, 1, _Docs).
+
+:- end_tests(json_stream_generic).

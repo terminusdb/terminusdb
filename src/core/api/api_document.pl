@@ -334,6 +334,11 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     ),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    % Transaction replay for conflict resolution:
+    % Save stream position before transaction, reset it on retry.
+    % REQUIRES: Stream must be seekable (string stream, not raw HTTP socket).
+    % See routes.pl where HTTP body is buffered into string stream for this reason.
+    % Reset stream to beginning for each transaction attempt (retry on conflict)
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
