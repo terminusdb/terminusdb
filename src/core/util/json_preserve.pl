@@ -1,5 +1,7 @@
 :- module(json_preserve, [
-    json_read_dict/3
+    json_read_dict/3,
+    json_read_dict_stream/3,
+    sys_json_parse_value/2
 ]).
 
 :- use_module(library(option)).
@@ -76,6 +78,22 @@ handle_eof(Options, Dict) :-
     ;   fail  % No eof option - fail on empty stream
     ).
 
+%! sys_json_parse_value(+JSONString, -Value) is det.
+%
+% Parse a JSON value string using Rust parser with rational support.
+% This is specifically for sys:JSON fields that need arbitrary precision.
+%
+% Numbers with decimal points become Prolog rationals for precision.
+% Integers remain as integers.
+%
+% Example:
+%   sys_json_parse_value('123.456', X)  => X = 15432r125 (rational)
+%   sys_json_parse_value('42', X)        => X = 42 (integer)
+%
+sys_json_parse_value(JSONString, Value) :-
+    atom_string(JSONString, JSONText),
+    '$json_preserve':json_read_string(JSONText, Value).
+
 % ============================================================================
 % Unit Tests - Verify compatibility with library(http/json)
 % ============================================================================
@@ -102,11 +120,17 @@ test(integer_values) :-
 
 test(float_values) :-
     JSON = '{"x": 3.14, "y": -2.5, "z": 0.0}',
-    atom_json_dict(JSON, DictStd, [default_tag(json)]),
     json_read_dict(JSON, DictRust, []),
-    assertion(DictStd == DictRust),
+    % Rust parser converts decimals to rationals for precision
     get_dict(x, DictRust, X),
-    assertion(float(X)).
+    get_dict(y, DictRust, Y),
+    get_dict(z, DictRust, Z),
+    % Decimals become rationals
+    assertion(rational(X)),
+    assertion(rational(Y)),
+    % 0.0 becomes integer 0
+    assertion(integer(Z)),
+    assertion(Z == 0).
 
 test(large_integer) :-
     JSON = '{"big": 9007199254740991}',
@@ -154,11 +178,12 @@ test(empty_structures) :-
 
 test(scientific_notation) :-
     JSON = '{"sci": 1.23e10, "neg": 1.5e-5}',
-    atom_json_dict(JSON, DictStd, [default_tag(json)]),
     json_read_dict(JSON, DictRust, []),
-    assertion(DictStd == DictRust),
     get_dict(sci, DictRust, Sci),
-    assertion(float(Sci)).
+    get_dict(neg, DictRust, Neg),
+    % Scientific notation produces rationals after expansion
+    assertion((rational(Sci) ; float(Sci))),
+    assertion((rational(Neg) ; float(Neg))).
 
 test(dict_tag) :-
     JSON = '{"test": 1}',
@@ -252,8 +277,11 @@ test(mixed_types_in_nested_arrays) :-
     assertion(integer(Item0Rust.value)),
     nth0(1, ItemsRust, Item1Rust),
     nth0(1, ItemsStd, Item1Std),
-    assertion(Item1Rust.value == Item1Std.value),
-    assertion(float(Item1Rust.value)),
+    % Rust converts 2.5 to rational 5r2
+    assertion(rational(Item1Rust.value)),
+    assertion(float(Item1Std.value)),
+    % Verify they're numerically equal
+    assertion(Item1Rust.value =:= Item1Std.value),
     nth0(2, ItemsRust, Item2Rust),
     nth0(2, ItemsStd, Item2Std),
     assertion(Item2Rust.value == Item2Std.value),
@@ -352,8 +380,9 @@ test(large_integers) :-
 test(float_values) :-
     JSON = '{"pi":3.14159,"e":2.71828}',
     json_read_dict(JSON, Dict, []),
-    float(Dict.pi),
-    float(Dict.e).
+    % Rust parser converts decimals to rationals for precision
+    rational(Dict.pi),
+    rational(Dict.e).
 
 % Test boolean and null
 test(special_values) :-

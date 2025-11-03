@@ -135,13 +135,21 @@ This significantly reduces build time but should **only be used for development*
 For local development on macOS, use the development build target which avoids code signing issues:
 
 ```bash
-rm ./src/rust/librust.dylib
 make dev
 ```
 
+**When changing Rust code**, you must clean the Rust library first:
+
+```bash
+rm src/rust/librust.{dylib,so}
+make dev
+```
+
+**Why?** The Rust library is cached and `make dev` won't automatically rebuild it if source files change. Removing the library forces a clean rebuild.
+
 This creates a `terminusdb` binary that:
 - Works immediately without Gatekeeper/code signing issues
-  Dynamically links to SWI-Prolog libraries (no stripping)
+- Dynamically links to SWI-Prolog libraries (no stripping)
 - Faster to rebuild during development
 - Requires SWI-Prolog to be installed (via Homebrew recommended)
 
@@ -236,8 +244,13 @@ Typical development cycle:
 
 ```bash
 # 1. Make code changes
-# 2. Rebuild
+
+# 2. Rebuild (clean Rust library if you changed Rust code)
+# For Prolog-only changes:
 make dev
+
+# For Rust changes:
+rm src/rust/librust.{dylib,so}; make dev
 
 # 3. Restart test server
 ./tests/terminusdb-test-server.sh restart
