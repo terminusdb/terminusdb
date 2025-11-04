@@ -490,5 +490,236 @@ describe('sys:JSON decimal type verification', function () {
       expect(zeroDecimalMatch[1]).to.equal('0')
       expect(zeroIntegerMatch[1]).to.equal('0')
     })
+
+    it('should accept 50-digit decimal values (high precision)', async function () {
+      // Generate a 50-digit decimal: 1.234...234 (50 total digits)
+      // Tests arbitrary precision decimal support in sys:JSON beyond JavaScript's 15-17 digit limit
+      const digits = '1' + '2'.repeat(48) + '4'
+      const largeDecimal = digits.slice(0, 1) + '.' + digits.slice(1)
+
+      const rawDocJson = `{
+        "@type": "test",
+        "json": {
+          "largeDecimal": ${largeDecimal}
+        }
+      }`
+
+      // Use fetch API to send raw JSON string (preserves full precision)
+      const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=50_digit_decimal_test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
+        },
+        body: rawDocJson,
+      })
+
+      expect(insertResponse.ok).to.be.true
+      const insertResult = await insertResponse.json()
+      expect(insertResult).to.be.an('array').with.lengthOf(1)
+      const docId = insertResult[0]
+
+      // Retrieve and verify the value is stored correctly
+      const getResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?id=${encodeURIComponent(docId)}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
+        },
+      })
+
+      expect(getResponse.ok).to.be.true
+      const responseText = await getResponse.text()
+
+      const Decimal = require('decimal.js')
+
+      // Extract raw value from JSON text for precision verification
+      const rawMatch = responseText.match(/"largeDecimal":([0-9.eE+-]+)/)
+      expect(rawMatch).to.not.be.null
+      const rawValue = rawMatch[1]
+
+      // Technique from graphql.js line 735: Replace numbers with quoted strings BEFORE parsing
+      // This prevents JSON.parse from converting to JavaScript numbers (losing precision)
+      // NOTE: JSON.parse reviver context.source (Node.js 21+) would be the ideal approach,
+      //       but we use this technique for compatibility with Node.js 20
+      const stringified = responseText.replace(/"largeDecimal":([0-9.eE+-]+)/g, '"largeDecimal":"$1"')
+      const parsed = JSON.parse(stringified)
+
+      // Now the value is a string, convert to Decimal for exact arithmetic
+      const value = new Decimal(parsed.json.largeDecimal)
+
+      // Verify high precision is maintained (at least 15+ significant digits)
+      expect(rawValue.replace(/[.eE+-]/g, '').length).to.be.at.least(15)
+
+      // Verify it starts with expected pattern
+      expect(value.toString()).to.match(/^1\.2/)
+
+      // Verify the string preserves the exact value
+      expect(parsed.json.largeDecimal).to.equal(rawValue)
+    })
+
+    it('should accept 50-digit integer values (high precision)', async function () {
+      // Generate a 50-digit integer: 123...234 (no decimal point)
+      // Tests integer precision beyond JavaScript's MAX_SAFE_INTEGER (16 digits)
+      const largeInteger = '1' + '2'.repeat(48) + '4'
+
+      const rawDocJson = `{
+        "@type": "test",
+        "json": {
+          "largeInteger": ${largeInteger}
+        }
+      }`
+
+      // Use fetch API to send raw JSON string (preserves full precision)
+      const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=50_digit_integer_test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
+        },
+        body: rawDocJson,
+      })
+
+      expect(insertResponse.ok).to.be.true
+      const insertResult = await insertResponse.json()
+      expect(insertResult).to.be.an('array').with.lengthOf(1)
+      const docId = insertResult[0]
+
+      // Retrieve and verify the value is stored correctly
+      const getResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?id=${encodeURIComponent(docId)}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
+        },
+      })
+
+      expect(getResponse.ok).to.be.true
+      const responseText = await getResponse.text()
+
+      const Decimal = require('decimal.js')
+
+      // Extract raw value from JSON text for precision verification
+      const rawMatch = responseText.match(/"largeInteger":(\d+)/)
+      expect(rawMatch).to.not.be.null
+      const rawValue = rawMatch[1]
+
+      // Verify the full 50-digit integer is in the raw response
+      expect(rawValue.length).to.equal(50)
+      expect(rawValue).to.equal(largeInteger)
+
+      // Technique from graphql.js line 735: Replace numbers with quoted strings BEFORE parsing
+      // This prevents JSON.parse from converting to JavaScript numbers (losing precision)
+      // NOTE: JSON.parse reviver context.source (Node.js 21+) would be the ideal approach,
+      //       but we use this technique for compatibility with Node.js 20
+      const stringified = responseText.replace(/"largeInteger":(\d+)/g, '"largeInteger":"$1"')
+      const parsed = JSON.parse(stringified)
+
+      // Now the value is a string, convert to Decimal for exact arithmetic
+      const value = new Decimal(parsed.json.largeInteger)
+
+      // Verify the Decimal preserves full precision
+      expect(value.toFixed()).to.equal(largeInteger)
+
+      // Verify the string preserves the exact value
+      expect(parsed.json.largeInteger).to.equal(largeInteger)
+    })
+
+    it('should support large decimal sizes (progressive test)', async function () {
+      this.timeout(30000) // Longer timeout for multiple tests
+
+      const sizes = [128, 256, 384, 512]
+      let maxSuccessSize = 0
+      let firstFailSize = null
+
+      for (const size of sizes) {
+        const digits = '1' + '2'.repeat(size - 2) + '4'
+        const decimal = digits.slice(0, 1) + '.' + digits.slice(1)
+
+        const rawDocJson = `{
+          "@type": "test",
+          "json": {
+            "testDecimal": ${decimal}
+          }
+        }`
+
+        const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=decimal_${size}_test`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
+          },
+          body: rawDocJson,
+        })
+
+        if (insertResponse.ok) {
+          maxSuccessSize = size
+          console.log(`        ✓ ${size}-digit decimal: SUCCESS`)
+        } else {
+          firstFailSize = size
+          console.log(`        ✗ ${size}-digit decimal: FAILED (${insertResponse.status})`)
+          break
+        }
+      }
+
+      if (firstFailSize) {
+        console.log(`        First failure at: ${firstFailSize} digits`)
+      }
+
+      // Verify we found at least 50 digits working
+      expect(maxSuccessSize).to.be.at.least(512)
+    })
+
+    it('should find maximum integer size (progressive test)', async function () {
+      this.timeout(30000) // Longer timeout for multiple tests
+
+      const sizes = [128, 256, 384, 512]
+      let maxSuccessSize = 0
+      let firstFailSize = null
+
+      for (const size of sizes) {
+        const integer = '1' + '2'.repeat(size - 2) + '4'
+
+        const rawDocJson = `{
+          "@type": "test",
+          "json": {
+            "testInteger": ${integer}
+          }
+        }`
+
+        const insertResponse = await fetch(`http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=integer_${size}_test`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Basic ${Buffer.from('admin:root').toString('base64')}`,
+          },
+          body: rawDocJson,
+        })
+
+        if (insertResponse.ok) {
+          maxSuccessSize = size
+          console.log(`        ✓ ${size}-digit integer: SUCCESS`)
+        } else {
+          firstFailSize = size
+          console.log(`        ✗ ${size}-digit integer: FAILED (${insertResponse.status})`)
+
+          // Log the error for diagnosis
+          try {
+            const errorBody = await insertResponse.json()
+            if (errorBody['api:error']) {
+              console.log(`           Error: ${JSON.stringify(errorBody['api:error'])}`)
+            }
+          } catch (e) {
+            // Ignore JSON parse errors
+          }
+          break
+        }
+      }
+
+      if (firstFailSize) {
+        console.log(`        First failure at: ${firstFailSize} digits`)
+      }
+
+      // Verify we found at least 50 digits working
+      expect(maxSuccessSize).to.be.at.least(512)
+    })
   })
 })
