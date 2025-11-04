@@ -4,7 +4,7 @@
 * Free form JSON support with deduplication is back, using the sys:JSON type
 * Arbitrary top level JSON values supported too, except for null; workaround: use Optional
 * sys:JSON numbers are processed as capped BigDecimal/BigInt precision (beyond float/double)
-* sys:JSON stores arbitrary precision decimals and integers up 512 digits each
+* sys:JSON stores arbitrary precision decimals and integers up 256 digits each
 
 ## Other
 * 5x faster internal Rust serde JSON parsing, instead of previous JSON parser
