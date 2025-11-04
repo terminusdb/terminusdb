@@ -9,6 +9,7 @@ mod consts;
 mod doc;
 mod embedding;
 mod graphql;
+mod json_preserve;
 mod path;
 mod prefix;
 mod schema;
@@ -116,6 +117,7 @@ pub fn install() {
     register_random_base64();
     doc::register();
     graphql::register();
+    json_preserve::register();
     template::register();
     changes::register();
     embedding::register();

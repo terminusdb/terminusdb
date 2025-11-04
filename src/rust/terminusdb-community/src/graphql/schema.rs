@@ -1092,8 +1092,19 @@ fn extract_json_fragment(
     // TODO this should really not just recreate a context, but it's cheap enough since it is schema independent.
     let context = DocumentContext::new_json(Some(instance.clone()));
     let doc = context.get_id_document(object_id, true, true)?;
-    if let Some(doc) = doc {
-        let json = serde_json::Value::Object(doc);
+    if let Some(mut doc) = doc {
+        // Check if this is a sys:JSON primitive/array with @value wrapper
+        // Primitives and arrays have @value key (and possibly only @value)
+        // Objects have actual field keys without @value wrapper
+        let is_primitive_or_array = doc.contains_key("@value") && doc.len() <= 2;
+        
+        let json = if is_primitive_or_array {
+            // For primitives and arrays, extract just the @value content
+            doc.remove("@value").unwrap()
+        } else {
+            // For objects, serialize the whole document
+            serde_json::Value::Object(doc)
+        };
         Ok(juniper::Value::Scalar(DefaultScalarValue::String(
             json.to_string(),
         )))

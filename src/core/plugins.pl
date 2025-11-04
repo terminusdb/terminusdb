@@ -23,5 +23,5 @@ load_plugins :-
             file_name_extension(_, '.pl', File)),
 
            (   directory_file_path(Path, File, Full_Path),
-               [Full_Path])).
+               load_files(Full_Path, [if(not_loaded), must_be_module(false)]))).
 load_plugins.

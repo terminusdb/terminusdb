@@ -641,10 +641,24 @@ Type = 'http://terminusdb.com/schema/sys#Unit',
 is_list(Value) =>
     no_captures(Captures),
     Annotated = success([]).
+check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+Type = 'http://terminusdb.com/schema/sys#JSON',
+is_list(Value) =>
+    % Arrays are valid JSON values for sys:JSON
+    no_captures(Captures),
+    Annotated = success(json{ '@type' : Type,
+                              '@value' : Value }).
 check_value_type(_Database,_Prefixes,Value,Type,_Annotated,_Captures),
 is_list(Value) =>
     throw(error(schema_check_failure([witness{ '@type' : unexpected_list,
                                                value: Value, type : Type }]), _)).
+check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+Type = 'http://terminusdb.com/schema/sys#JSON',
+(Value = _Val^^_ValType ; string(Value) ; number(Value) ; memberchk(Value, [true, false, null])) =>
+    % Accept primitive types (typed or untyped) for sys:JSON
+    no_captures(Captures),
+    Annotated = success(json{'@type' : Type,
+                             '@value' : Value }).
 check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
@@ -747,6 +761,13 @@ text(Id) =>
     prefix_expand(Id, Prefixes, Id_Ex),
     Annotated = success(json{ '@type' : "@id",
                               '@id' : Id_Ex }).
+infer_type_or_check(_Database, _Prefixes, Super, Value, _Inferred_Type, Annotated, Captures),
+Super = 'http://terminusdb.com/schema/sys#JSON',
+\+ is_dict(Value) =>
+    % Handle primitive JSON types: strings, numbers, booleans, null
+    no_captures(Captures),
+    Annotated = success(json{ '@type' : Super,
+                              '@value' : Value }).
 infer_type_or_check(_Database, _Prefixes, Super, Dictionary, _Inferred_Type, Annotated, Captures),
 memberchk(Super, ['http://terminusdb.com/schema/sys#JSON',
                   'http://terminusdb.com/schema/sys#JSONDocument']) =>

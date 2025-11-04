@@ -527,7 +527,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         insert_documents,
         Request,
-        (   http_read_json_required(stream(Stream), Request),
+        (   http_read_json_stream_for_documents(Stream, Request),
 
             (   memberchk(search(Search), Request)
             ->  true
@@ -609,7 +609,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
     api_report_errors(
         replace_documents,
         Request,
-        (   http_read_json_required(stream(Stream), Request),
+        (   http_read_json_stream_for_documents(Stream, Request),
 
             (   memberchk(search(Search), Request)
             ->  true
@@ -3280,7 +3280,9 @@ cors_handler(Method, Goal, Options, R) :-
                   error(authentication_incorrect(Reason),_),
 
                   (   write_cors_headers(Request),
-                      json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [Reason]),
+                      % SECURITY: Sanitize reason to avoid leaking credentials in logs
+                      sanitize_auth_reason(Reason, SafeReason),
+                      json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [SafeReason]),
                       reply_json(_{'@type' : 'api:ErrorResponse',
                                    'api:status' : 'api:failure',
                                    'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
@@ -3490,21 +3492,38 @@ fetch_authorization_data(Request, Username, KS) :-
 fetch_jwt_data(Token, Username) :-
     atom_string(TokenAtom, Token),
 
+    % SECURITY: Don't include token in error (will be sanitized in logs)
     do_or_die(jwt_decode(TokenAtom, Payload, []),
-              error(authentication_incorrect(jwt_decode_failed(TokenAtom)), _)),
+              error(authentication_incorrect(jwt_decode_failed), _)),
 
+    % SECURITY: Wrap in authentication_incorrect to ensure sanitization
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, []),
             jwt_subject_claim_name(ClaimName),
             % replace with dict key get (or whatever it is called)
             get_dict(ClaimName, PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
-        error(malformed_jwt_payload(Payload))).
+        error(authentication_incorrect(malformed_jwt_payload), _)).
 :- else.
 fetch_jwt_data(_Token, _Username) :-
     throw(error(authentication_incorrect(jwt_authentication_requested_but_no_key_configured),_)).
 :- endif.
 
+/*
+ * sanitize_auth_reason(+Reason, -SafeReason) is det.
+ *
+ * Sanitize authentication failure reasons to prevent credential leakage in logs.
+ * Replaces sensitive data with redacted placeholders.
+ */
+sanitize_auth_reason(basic_auth(_), basic_auth('***')) :- !.
+sanitize_auth_reason(jwt_no_user_with_name(_), jwt_no_user_with_name('***')) :- !.
+sanitize_auth_reason(insecure_user_header_no_user_with_name(_), insecure_user_header_no_user_with_name('***')) :- !.
+sanitize_auth_reason(jwt_decode_failed(_), jwt_decode_failed) :- !.  % Remove token
+sanitize_auth_reason(malformed_jwt_payload(_), malformed_jwt_payload) :- !.  % Remove payload
+% These already have no parameters but included for completeness:
+sanitize_auth_reason(jwt_decode_failed, jwt_decode_failed) :- !.
+sanitize_auth_reason(malformed_jwt_payload, malformed_jwt_payload) :- !.
+sanitize_auth_reason(Reason, Reason).  % Other reasons are safe to log
 
 /*
  * authenticate(+Database, +Request, -Auth_Obj) is det.
@@ -3713,9 +3732,30 @@ json_mime_type(Mime) :-
     re_match('^application/json', CT, []).
 
 check_content_length(Request) :-
+    % Only check that Content-Length header is present
+    % Empty bodies (Content-Length: 0) are allowed for legitimate operations
+    % like full replace with no documents
+    % Rust parser will validate minimum length when actually parsing JSON
     do_or_die(
-        memberchk(content_length(_), Request),
+        memberchk(content_length(_Length), Request),
         error(missing_content_length, _)).
+
+:- begin_tests(content_length_validation).
+
+test(reject_missing_content_length, [error(missing_content_length, _)]) :-
+    % Request without Content-Length header should fail
+    check_content_length([method(post), path('/api/test')]).
+
+test(accept_zero_content_length) :-
+    % Request with Content-Length: 0 should succeed
+    % (empty bodies are legitimate for some operations)
+    check_content_length([content_length(0), method(post)]).
+
+test(accept_nonzero_content_length) :-
+    % Request with Content-Length > 0 should succeed
+    check_content_length([content_length(100), method(post)]).
+
+:- end_tests(content_length_validation).
 
 content_encoded(Request, Encoding) :-
     memberchk(content_encoding(Encoding), Request),
@@ -3787,6 +3827,36 @@ read_woql_json_dict(AtomOrText, JSON) :-
         error(syntax_error(json(_Kind)), _),
         throw(error(malformed_json_payload(AtomOrText), _))
     ).
+
+/*
+ * http_read_json_stream_for_documents(-Stream, +Request) is det.
+ *
+ * Read JSON request body into a seekable string stream for document operations.
+ * 
+ * IMPORTANT: Transaction replay (with_transaction) requires seekable streams
+ * to reset position via set_stream_position when retrying on conflicts.
+ * Raw HTTP input streams are NOT seekable, so we buffer once into memory.
+ *
+ * Handles:
+ * - Compressed requests (gzip, deflate) - decompresses automatically
+ * - UTF-8 encoding - preserves correctly for Rust parser
+ * - Content-Type validation - ensures application/json
+ *
+ * Future: When true streaming without transaction replay is available,
+ * this buffering could be eliminated.
+ */
+http_read_json_stream_for_documents(Stream, Request) :-
+    check_content_type_json(Request),
+    (   content_encoded(Request, Encoding)
+    ->  % Compressed request - decompress first
+        memberchk(input(Input_Stream), Request),
+        zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
+        read_string(Uncompressed_Stream, _, BufferedString),
+        close(Uncompressed_Stream)
+    ;   % Uncompressed request - read directly
+        http_read_data(Request, BufferedString, [to(string)])
+    ),
+    open_string(BufferedString, Stream).
 
 /*
  * http_read_utf8(-Output, Request) is det.

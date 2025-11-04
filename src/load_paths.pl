@@ -5,7 +5,6 @@
 
 :- set_prolog_flag(terminusdb_monolithic_module, true).
 
-
 % The top-level directory of the repository.
 top_level_directory(Path) :-
     prolog_load_context(file, File),

@@ -19,11 +19,12 @@ describe('cli-doc', function () {
     const rootDir = path.join(testDir, '..')
     const terminusdbExec = path.join(rootDir, 'terminusdb')
 
-    dbPath = './storage/' + util.randomString()
+    dbPath = util.testDbPath(testDir)
     envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,
-      TERMINUSDB_EXEC_PATH: terminusdbExec,
+      // Use existing TERMINUSDB_EXEC_PATH if set (e.g., snap), otherwise default to local binary
+      TERMINUSDB_EXEC_PATH: process.env.TERMINUSDB_EXEC_PATH || terminusdbExec,
     }
     {
       const r = await execEnv(`${util.terminusdbScript()} store init --force`)

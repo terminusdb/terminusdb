@@ -1,4 +1,5 @@
 const fs = require('fs/promises')
+const path = require('path')
 const exec = require('util').promisify(require('child_process').exec)
 const { expect } = require('chai')
 const { util } = require('../lib')
@@ -13,7 +14,8 @@ describe('cli-db', function () {
 
   before(async function () {
     this.timeout(200000)
-    dbPath = './storage/' + util.randomString()
+    const testDir = path.join(__dirname, '..')
+    dbPath = util.testDbPath(testDir)
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
     {
       const r = await execEnv(`${util.terminusdbScript()} store init --force`)
