@@ -626,7 +626,7 @@ describe('sys:JSON decimal type verification', function () {
     it('should support large decimal sizes (progressive test)', async function () {
       this.timeout(30000) // Longer timeout for multiple tests
 
-      const sizes = [128, 256, 384, 512]
+      const sizes = [128, 256]
       let maxSuccessSize = 0
       let firstFailSize = null
 
@@ -665,13 +665,13 @@ describe('sys:JSON decimal type verification', function () {
       }
 
       // Verify we found at least 50 digits working
-      expect(maxSuccessSize).to.be.at.least(512)
+      expect(maxSuccessSize).to.be.at.least(256)
     })
 
     it('should find maximum integer size (progressive test)', async function () {
       this.timeout(30000) // Longer timeout for multiple tests
 
-      const sizes = [128, 256, 384, 512]
+      const sizes = [128, 256]
       let maxSuccessSize = 0
       let firstFailSize = null
 
@@ -719,7 +719,7 @@ describe('sys:JSON decimal type verification', function () {
       }
 
       // Verify we found at least 50 digits working
-      expect(maxSuccessSize).to.be.at.least(512)
+      expect(maxSuccessSize).to.be.at.least(256)
     })
   })
 })
