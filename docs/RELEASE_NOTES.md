@@ -1,14 +1,13 @@
 # TerminusDB Server v11.2-rc4 Release Notes
 
 ## Enhancements
-* Vanilla JSON support with deduplication is back, with sys:JSON type!
-* Top level sys:JSON values are now possible, except for null
-* sys:JSON numbers are processed as xsd:decimal precision (beyond float/double)
-* sys:JSON handles arbitrary precision JSON accurately up to a max of 2048 bytes of storage
+* Free form JSON support with deduplication is back, using the sys:JSON type
+* Arbitrary top level JSON values supported too, except for null; workaround: use Optional
+* sys:JSON numbers are processed as capped BigDecimal/BigInt precision (beyond float/double)
+* sys:JSON stores arbitrary precision decimals and integers up 512 digits each
 
 ## Other
-* 5x faster Rust serde JSON parsing, instead of Prolog built in JSON parser
-  * From ~80,000 parses/sec to ~402,000 parses/sec on a 2023 M3 Max MacBook Pro
+* 5x faster internal Rust serde JSON parsing, instead of previous JSON parser
 
 # TerminusDB Server v11.2-rc3 Release Notes
 
