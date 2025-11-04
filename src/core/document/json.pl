@@ -19,6 +19,7 @@
               get_document_uri_by_type/3,
               get_schema_document_uri_by_type/3,
               delete_document/2,
+              delete_documents_bulk/2,
               delete_documents_by_type/3,
               delete_subdocument/3,
               insert_document/3,
@@ -537,8 +538,11 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     !,
     prefix_expand(Id, Context, Id_Ex),
     prefix_expand(Generated_Id, Context, Generated_Id_Ex),
+    % Normalize to strings for comparison (handle atom vs string)
+    atom_string(Id_Ex, Id_String),
+    atom_string(Generated_Id_Ex, Generated_String),
     do_or_die(
-        Id_Ex = Generated_Id_Ex,
+        Id_String = Generated_String,
         error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
@@ -2073,7 +2077,14 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,DB,Prefixes,_Options,V) :-
     % NOTE: This has to treat each variety of JSON value as natively
     % as possible.
     (   C = 'http://terminusdb.com/schema/sys#JSON'
-    ->  get_json_object(DB, Elt, V)
+    ->  get_json_object(DB, Elt, V0),
+        % Unwrap @value for primitives and arrays (they were wrapped during storage)
+        % Objects don't have @value wrapper, so return as-is
+        % NOTE: This code path is not used for document GET - that goes through Rust
+        (   get_dict('@value', V0, Unwrapped)
+        ->  V = Unwrapped
+        ;   V = V0
+        )
     ;   Elt = X^^T
     ->  (   C = T % The type is not just subsumed but identical - no ambiguity.
         ->  value_type_json_type(X,T,V,_)
@@ -2699,7 +2710,9 @@ json_to_database_type(D^^T, OC) :-
 json_to_database_type(O, O).
 
 %% Document insert / delete / update
-:- table tabled_get_document_context/2 as private.
+% NOTE: Removed tabling to fix layer stacking bug where cached context 
+% contains stale layer from before previous transaction's commit.
+% tabled_get_document_context must fetch fresh layer state for each transaction.
 tabled_get_document_context(Transaction, Context) :-
     '$doc':get_document_context(Transaction, Context).
 
@@ -2741,6 +2754,55 @@ delete_document(Query_Context, Unlink, Id) :-
 
 delete_document(DB, Id) :-
     delete_document(DB, true, Id).
+
+% Helper: Find all document root IDs of given types in the database
+% Uses id_triple/4 which properly filters removed triples from previous transactions
+find_all_document_root_ids(Transaction, Root_Ids) :-
+    % Get the instance and schema objects
+    database_instance(Transaction, Instance),
+    database_schema(Transaction, Schema),
+    
+    % Extract the instance layer properly using read_write_obj_reader
+    [Instance_Object] = Instance,
+    read_write_obj_reader(Instance_Object, Instance_Layer),
+    
+    % Get all document types from schema (xrdf expects the schema list)
+    global_prefix_expand(rdf:type, Rdf_Type),
+    findall(Type_Id,
+            (   xrdf(Schema, Class, rdf:type, sys:'Class'),
+                terminus_store:object_id(Instance_Layer, node(Class), Type_Id)
+            ),
+            Doc_Type_Ids),
+    
+    % Get rdf:type predicate ID
+    terminus_store:predicate_id(Instance_Layer, Rdf_Type, Rdf_Type_Id),
+    
+    % Find all subjects that have rdf:type pointing to document types
+    % Using id_triple/4 which respects layer removals (not triples_o)
+    findall(Subject_Id,
+            (   member(Type_Id, Doc_Type_Ids),
+                terminus_store:id_triple(Instance_Layer, Subject_Id, Rdf_Type_Id, Type_Id)
+            ),
+            Root_Ids).
+
+% Bulk deletion with proper reference counting for content-addressed JSON
+delete_documents_bulk(DB, Ids) :-
+    is_transaction(DB),
+    !,
+    database_prefixes(DB,Prefixes),
+    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id,Prefixes,Id_Ex), Ids, Ids_Ex),
+    ensure_transaction_has_builder(instance, DB),
+    tabled_get_document_context(DB, Context),
+    
+    % Find all document roots using Prolog (respects layer removals)
+    find_all_document_root_ids(DB, All_Root_Ids),
+    
+    '$doc':delete_documents_bulk_with_roots(Context, DB, Ids_Ex, All_Root_Ids).
+delete_documents_bulk(Query_Context, Ids) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    delete_documents_bulk(TO, Ids).
 
 nuke_documents(Transaction) :-
     is_transaction(Transaction),

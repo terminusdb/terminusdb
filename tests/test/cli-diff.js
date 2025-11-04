@@ -15,7 +15,7 @@ describe('cli-diff', function () {
   before(async function () {
     this.timeout(200000)
     const testDir = path.join(__dirname, '..')
-    dbPath = path.resolve(testDir, 'storage', util.randomString())
+    dbPath = util.testDbPath(testDir)
     envs = { ...process.env, TERMINUSDB_SERVER_DB_PATH: dbPath }
     {
       const r = await execEnv(`${util.terminusdbScript()} store init --force`)
@@ -60,9 +60,20 @@ describe('cli-diff', function () {
     const db = util.randomString()
     await execEnv(`${util.terminusdbScript()} db create admin/${db}`)
     const r1 = await execEnv(`${util.terminusdbScript()} doc insert -j admin/${db}/local/branch/main -d '{ "name": "test" }'`)
-    const documentId = r1.stdout.split('1: ')[1]
+    const documentId = r1.stdout.split('1: ')[1].trim()
     await execEnv(`${util.terminusdbScript()} branch create admin/${db}/local/branch/test --origin=admin/${db}/local/branch/main`)
+
+    // Verify document exists before deletion
+    const beforeDelete = await execEnv(`${util.terminusdbScript()} doc get admin/${db}/local/branch/test --id=${documentId}`)
+    expect(beforeDelete.stdout).to.include('"name"')
+    expect(beforeDelete.stdout).to.include('"test"')
+
     await execEnv(`${util.terminusdbScript()} doc delete admin/${db}/local/branch/test --id=${documentId}`)
+
+    // Verify document no longer exists after deletion
+    const afterDelete = await execEnv(`${util.terminusdbScript()} doc get admin/${db}/local/branch/test --id=${documentId} || true`)
+    expect(afterDelete.stderr || afterDelete.stdout, 'Document should not exist after deletion').to.match(/not found|does not exist/i)
+
     const r2 = await execEnv(`${util.terminusdbScript()} diff admin/${db} --before-commit=main --after-commit=test`)
     const parsedJson = JSON.parse(r2.stdout)
     expect(parsedJson).to.have.lengthOf(1)
