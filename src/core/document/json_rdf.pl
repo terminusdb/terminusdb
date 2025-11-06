@@ -43,6 +43,13 @@ string(X) =>
     global_prefix_expand(xsd:string, T),
     R = X^^T.
 json_type_rdf_type(X,R),
+rational(X) =>
+    % Prolog rational from Rust parser (e.g., r(123456, 1000) for 123.456)
+    % Evaluate to decimal value and store as xsd:decimal with full precision
+    Val is X,  % Evaluates r(123456, 1000) to 123.456
+    global_prefix_expand(xsd:decimal, T),
+    R = Val^^T.
+json_type_rdf_type(X,R),
 float(X) =>
     global_prefix_expand(xsd:double, T),
     R = X^^T.

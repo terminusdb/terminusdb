@@ -12,6 +12,7 @@
 :- use_module(core(query)).
 :- use_module(core(account)).
 
+:- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
 

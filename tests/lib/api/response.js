@@ -55,6 +55,16 @@ function verifyDocInsertSuccess (r) {
       data = data.slice(1)
     }
 
+    // Debug logging for mismatches
+    if (r.body.length !== data.length) {
+      console.error('❌ UNVERIFIED: Response body length mismatch')
+      console.error('   Expected:', data.length, 'documents')
+      console.error('   Received:', r.body.length, 'documents')
+      console.error('   Request data:', JSON.stringify(data, null, 2))
+      console.error('   Response body:', JSON.stringify(r.body, null, 2))
+      console.error('   Response status:', r.status)
+      console.error('   Response headers:', r.headers)
+    }
     expect(r.body.length).to.equal(data.length)
 
     for (let i = 0; i < r.body.length; i++) {

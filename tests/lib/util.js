@@ -179,6 +179,26 @@ function servedPath (filename) {
   throw new Error(`Could not find served directory. Tried: ./served, ./tests/served, and ${servedDir}`)
 }
 
+/**
+ * Creates a test database storage path that works in both Docker and snap environments.
+ * Docker requires relative paths (resolved inside container), snap requires absolute paths
+ * to avoid working directory ambiguity.
+ * @param {string} [testDir] - Optional test directory path. Defaults to __dirname/..
+ * @returns {string} Database path - relative for Docker, absolute for snap/native
+ */
+function testDbPath (testDir) {
+  const isDocker = !!process.env.TERMINUSDB_DOCKER_CONTAINER
+  const dir = testDir || path.join(__dirname, '..')
+
+  if (isDocker) {
+    // Docker: use relative path (resolves inside container's /app/terminusdb/tests workdir)
+    return `./storage/${randomString()}`
+  } else {
+    // Snap/Native: use absolute path to avoid working directory ambiguity
+    return path.resolve(dir, 'storage', randomString())
+  }
+}
+
 module.exports = {
   assertArrayOrObject,
   assertBoolean,
@@ -205,5 +225,6 @@ module.exports = {
   randomString,
   servedPath,
   terminusdbScript,
+  testDbPath,
   typeString,
 }

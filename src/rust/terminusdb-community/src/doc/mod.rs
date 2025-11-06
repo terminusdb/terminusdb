@@ -696,7 +696,26 @@ impl<'a, L: Layer + Clone> StackEntry<'a, L> {
 
     fn into_value(self) -> Value {
         match self {
-            Self::Document { doc, .. } => Value::Object(doc),
+            Self::Document { doc, json, .. } => {
+                // Unwrap @value for sys:JSON primitives and arrays
+                // (same logic as in graphql/schema.rs extract_json_fragment)
+                if json {
+                    // Check if this is a sys:JSON primitive/array with @value wrapper
+                    // Primitives and arrays have @value key (and possibly only @value and @id)
+                    let is_primitive_or_array = doc.contains_key("@value") && doc.len() <= 2;
+                    
+                    if is_primitive_or_array {
+                        // For primitives and arrays, extract just the @value content
+                        let mut doc = doc;
+                        doc.remove("@value").unwrap_or(Value::Null)
+                    } else {
+                        // For objects, return the whole document
+                        Value::Object(doc)
+                    }
+                } else {
+                    Value::Object(doc)
+                }
+            },
             Self::List { collect, .. } => Value::Array(collect),
             Self::Array { .. } => panic!("cannot directly turn array into a value"),
         }

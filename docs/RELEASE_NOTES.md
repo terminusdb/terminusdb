@@ -1,3 +1,14 @@
+# TerminusDB Server v11.2-rc4 Release Notes
+
+## Enhancements
+* Free form JSON support with deduplication is back, using the sys:JSON type
+* Arbitrary top level JSON values supported too, except for null; workaround: use Optional
+* sys:JSON numbers are processed as capped BigDecimal/BigInt precision (beyond float/double)
+* sys:JSON stores arbitrary precision decimals and integers up 256 digits each
+
+## Other
+* 5x faster internal Rust serde JSON parsing, instead of previous JSON parser
+
 # TerminusDB Server v11.2-rc3 Release Notes
 
 Release Candidate 3 brings improved error handling and observability, makes it possible again to run the dashboard component (or other static webapp dashboards), and further strengthens the core of TerminusDB with additional bug fixes.
