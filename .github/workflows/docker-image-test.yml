@@ -107,6 +107,19 @@ jobs:
             cd tests        
             npm install-ci-test
 
+      - name: Capture TerminusDB logs
+        if: always()
+        run: |
+          docker logs terminusdb > terminusdb-server.log 2>&1 || echo "Failed to capture logs"
+
+      - name: Upload TerminusDB server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminusdb-server-logs-${{ inputs.image_artifact }}
+          path: terminusdb-server.log
+          retention-days: 7
+
 
   # integration_tests_non_parallel:
   #   name: Integration tests (non-parallel)

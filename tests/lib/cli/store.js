@@ -26,7 +26,7 @@ class Init {
   then (resolve) {
     resolve(this.cli.exec().then((r) => {
       expect(r.stderr).to.equal('')
-      expect(r.stdout).to.equal('Successfully initialised database!!!\n')
+      expect(r.stdout).to.equal('Successfully initialised database.\n')
       this.cli.registerFileForCleanup(this.cli.dbPath)
       return r
     }))

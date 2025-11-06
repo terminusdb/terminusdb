@@ -5,6 +5,8 @@
 
 set -e
 
+export TERMINUSDB_LOG_LEVEL=${TERMINUSDB_LOG_LEVEL:-DEBUG}
+export TERMINUSDB_LOG_FORMAT=${TERMINUSDB_LOG_FORMAT:-text}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PID_FILE="$SCRIPT_DIR/.terminusdb-test.pid"
