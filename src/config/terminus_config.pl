@@ -50,7 +50,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('11.2.0-rc3').
+terminusdb_version('11.2.0-rc4').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -103,9 +103,15 @@ dashboard_enabled :-
     getenv_default('TERMINUSDB_ENABLE_DASHBOARD', true, Value),
     Value = true.
 
+:- table plugin_path/1 as shared.
 plugin_path(Path) :-
-    getenv_default('TERMINUSDB_PLUGINS_PATH', './storage/plugins', Value),
-    absolute_file_name(Value, Path).
+    (   getenv('TERMINUSDB_PLUGINS_PATH', Value)
+    ->  absolute_file_name(Value, Path)
+    ;   % Resolve relative to db_path to avoid compile-time resolution with autoload
+        db_path(Db_Path),
+        file_directory_name(Db_Path, Storage_Dir),  % Get parent dir: ./storage/db -> ./storage
+        atomic_list_concat([Storage_Dir, 'plugins'], '/', Path)
+    ).
 
 jwt_enabled_env_var :-
     getenv_default('TERMINUSDB_JWT_ENABLED', false, true).

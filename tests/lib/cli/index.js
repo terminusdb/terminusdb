@@ -15,15 +15,16 @@ class Cli {
   constructor (params) {
     this.params = params
     this.filesToDelete = []
-    const dbPath = `./storage/${util.randomString()}`
     const testDir = path.join(__dirname, '..', '..')
     const rootDir = path.join(testDir, '..')
+    const dbPath = util.testDbPath(testDir)
     const terminusdbExec = path.join(rootDir, 'terminusdb')
     this.terminusdbSh = path.join(testDir, 'terminusdb.sh')
     this.envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,
-      TERMINUSDB_EXEC_PATH: terminusdbExec,
+      // Use existing TERMINUSDB_EXEC_PATH if set (e.g., snap), otherwise default to local binary
+      TERMINUSDB_EXEC_PATH: process.env.TERMINUSDB_EXEC_PATH || terminusdbExec,
     }
   }
 
@@ -86,11 +87,24 @@ class CommandBuilder {
     if (this.debugCommand) {
       console.error('>>>', command)
     }
-    const r = await exec(command, { env: this.envs })
-    if (this.debugOutput) {
-      console.error(r)
+    try {
+      const r = await exec(command, { env: this.envs })
+      if (this.debugOutput) {
+        console.error(r)
+      }
+      return r
+    } catch (error) {
+      // Always log stdout/stderr on command failure for debugging
+      console.error('❌ Command failed:', command)
+      console.error('Exit code:', error.code)
+      console.error('STDOUT:', error.stdout || '(empty)')
+      console.error('STDERR:', error.stderr || '(empty)')
+      console.error('Environment:', {
+        TERMINUSDB_EXEC_PATH: this.envs.TERMINUSDB_EXEC_PATH,
+        TERMINUSDB_SERVER_DB_PATH: this.envs.TERMINUSDB_SERVER_DB_PATH,
+      })
+      throw error
     }
-    return r
   }
 }
 

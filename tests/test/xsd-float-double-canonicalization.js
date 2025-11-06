@@ -169,9 +169,6 @@ describe('xsd-double-canonicalization', function () {
       const resultValue = r.body.bindings[0].Result['@value']
       const resultType = r.body.bindings[0].Result['@type']
 
-      console.log('0.1 + 0.2 (xsd:double) result value:', resultValue)
-      console.log('0.1 + 0.2 (xsd:double) result type:', resultType)
-
       // xsd:double uses IEEE 754, so floating point "error" is expected and correct
       expect(resultValue).to.be.closeTo(0.30000000000000004, 0.0000000000000001)
 
@@ -640,9 +637,6 @@ describe('xsd-double-canonicalization', function () {
 
       const r2 = await woql.post(agent, query2)
       const result2 = r2.body.bindings.length > 0 ? 'is_equal' : 'not_equal'
-
-      console.log('literal(33, xsd:double) == 33:', result1)
-      console.log('literal(33.0, xsd:double) == 33:', result2)
 
       // Both should be is_equal
       expect(result1).to.equal('is_equal', 'literal(33) should equal 33')

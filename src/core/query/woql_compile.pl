@@ -1514,9 +1514,16 @@ compile_wf(dot(Dict,Key,Value), dot_field(DictE, KeyAtom, ValueE)) -->
         atom_string(KeyAtom, FieldName)
     },
     resolve(Value,ValueE).
-compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
+compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,UnwrappedTemplate,Query,Acc)) -->
     resolve(WGroup,Group),
     resolve(WTemplate,Template),
+    % Unwrap single-element lists to avoid extra nesting in results
+    % group_by/4 from library(solution_sequences) wraps each result if Template is a list
+    { (   is_list(Template),
+          Template = [SingleElement],
+          \+ is_list(SingleElement)  % Don't unwrap if element is also a list
+      ->  UnwrappedTemplate = SingleElement
+      ;   UnwrappedTemplate = Template) },
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
 compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
@@ -2006,6 +2013,36 @@ any_arg_float_or_double([Arg|_]) :-
 any_arg_float_or_double([_|Rest]) :-
     any_arg_float_or_double(Rest).
 
+/*
+ * all_args_rational(+Args) is semidet.
+ *
+ * True if ALL args are provably rational (xsd:decimal or xsd:integer).
+ * Returns FALSE for unknown types (variables, etc.) - safer to assume non-rational.
+ */
+all_args_rational([]).
+all_args_rational([_Val^^Type|Rest]) :-
+    % Check if type is xsd:decimal or xsd:integer (rational types)
+    member(Type, ['http://www.w3.org/2001/XMLSchema#decimal',
+                  'http://www.w3.org/2001/XMLSchema#integer',
+                  'xsd:decimal',
+                  'xsd:integer']),
+    !,
+    all_args_rational(Rest).
+all_args_rational([Arg|Rest]) :-
+    % Check if it's a Prolog rational
+    rational(Arg),
+    !,
+    all_args_rational(Rest).
+all_args_rational([Arg|Rest]) :-
+    % Check if it's a Prolog integer (also rational)
+    integer(Arg),
+    !,
+    all_args_rational(Rest).
+all_args_rational([_|_]) :-
+    % Unknown type or not rational - fail (safer to use / in this case)
+    !,
+    fail.
+
 compile_arith(Exp,Pre_Term,ExpE) -->
     {
         Exp =.. [Functor|Args],
@@ -2017,13 +2054,13 @@ compile_arith(Exp,Pre_Term,ExpE) -->
     !,
     mapm(compile_arith,Args,Pre_Terms,ArgsE),
     {
-        % Replace / with rdiv for decimal precision (rational division)
-        % BUT: If ANY arg is xsd:float/double, must use / (not rdiv)
-        % Reason: xsd:double/float are already floats in Prolog, rdiv only works with rationals
+        % Division operator selection: Conservative with rdiv
+        % Use rdiv ONLY when we're certain both args are rational (xsd:decimal/integer)
+        % Otherwise use / (works with floats AND rationals, safer default for unknowns)
         (   Functor = '/'
-        ->  (   any_arg_float_or_double(Args)
-            ->  ActualFunctor = '/'    % ANY float/double: use / (works with floats)
-            ;   ActualFunctor = rdiv   % Pure decimals: use rdiv (rational division)
+        ->  (   all_args_rational(Args)
+            ->  ActualFunctor = rdiv   % BOTH provably rational: use rdiv (exact)
+            ;   ActualFunctor = '/'    % Otherwise (floats/unknowns): use / (safe default)
             )
         ;   ActualFunctor = Functor
         ),
@@ -3200,6 +3237,57 @@ test(group_by_simple_template, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(Descriptor, Query_Out, JSON),
 
+    [_{'Grouped': ['@schema:p','@schema:p','@schema:p'],
+       'Object':null,'Predicate':null,'Subject':x},
+     _{'Grouped': ['@schema:p','@schema:p'],
+       'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
+
+test(group_by_single_element_list_template, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    % This test demonstrates the fix for issue #2283
+    % When template is a single-element list like ["Predicate"],
+    % group_by should produce a flat array, not nested arrays
+    
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w),
+                      insert(x,p,q),
+                      insert(y,p,z),
+                      insert(y,p,w))),
+        _Meta),
+
+    % Query with single-element LIST template: list with one Variable
+    % BEFORE FIX: Results in nested arrays [["@schema:p"], ["@schema:p"], ["@schema:p"]]
+    % AFTER FIX: Should result in flat array ["@schema:p", "@schema:p", "@schema:p"]
+    Query = _{'@type' : "GroupBy",
+              group_by : ["Subject"],
+              template: _{ '@type' : 'Value',
+                           list : [_{ '@type' : 'Value',
+                                      'variable' : "Predicate"}]},  % Single-element list
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
+                       },
+              grouped: _{'@type' : "Value",
+                         variable : "Grouped"}},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+
+    % After the fix, these should be flat arrays, not nested
     [_{'Grouped': ['@schema:p','@schema:p','@schema:p'],
        'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': ['@schema:p','@schema:p'],
