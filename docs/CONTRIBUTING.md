@@ -547,6 +547,21 @@ make clean && make dev && tests/terminusdb-test-server.sh restart --clean && mak
 
 We have a house style for prolog, especially for conditionals. Try to copy what you see.
 
+### Defensive Coding
+
+When handling input from external sources (client libraries, user queries, API requests), use explicit type checking rather than wildcards or permissive pattern matching. This prevents type confusion bugs and potential security vulnerabilities.
+
+For example, when matching typed literals, be explicit about the expected type:
+```prolog
+% Good - explicit type checking
+Key = Value^^'xsd:string'
+
+% Bad - accepts any type, potential security issue
+Key = Value^^_
+```
+
+Always validate assumptions about data types and provide clear error messages when validation fails. This makes bugs easier to diagnose and prevents silent failures that can lead to incorrect results or security issues downstream.
+
 ### Veterans of the Tabs / Spaces War
 
 No tabs please! 4 spaces for indentation. This is non-negotiable.

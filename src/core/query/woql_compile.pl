@@ -1499,9 +1499,20 @@ compile_wf(X is Arith, (Pre_Term,
                         XE = XA^^Result_Type)) -->
     resolve(X,XE),
     compile_arith(Arith,Pre_Term,ArithE).
-compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
+compile_wf(dot(Dict,Key,Value), dot_field(DictE, KeyAtom, ValueE)) -->
     resolve(Dict,DictE),
-    {atom_string(KeyE,Key)},
+    {
+        % Extract the field name as a string
+        (   Key = KeyString^^'http://www.w3.org/2001/XMLSchema#string'
+        ->  FieldName = KeyString
+        ;   atom(Key)
+        ->  atom_string(Key, FieldName)
+        ;   throw(error(type_error(string, Key),
+                       context(dot/3, 'field parameter must be a string')))
+        ),
+        % Convert to atom for get_dict
+        atom_string(KeyAtom, FieldName)
+    },
     resolve(Value,ValueE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,UnwrappedTemplate,Query,Acc)) -->
     resolve(WGroup,Group),
@@ -1613,6 +1624,41 @@ compile_wf(call(Name, Arguments), trampoline(Pred, ArgumentsE)) -->
     { atom_string(Pred, Name),
       late_bind_trampoline(Pred, Context)
     }.
+
+% Helper predicate for generic dot operator field access
+% Supports dictionaries, Edge objects (woql:subject/predicate/object), and RDF objects
+% Accepts both short names ("subject") and prefixed names ("woql:subject")
+dot_field(Dict, FieldAtom, Value) :-
+    atom_string(FieldAtom, FieldString),
+    % Try each expansion strategy - simple disjunction allows backtracking
+    (   % 1. Try literal key first
+        get_dict(FieldAtom, Dict, Value)
+    ;   % 2. Try explicit prefix expansion (e.g., "woql:subject" → full URI)
+        split_string(FieldString, ":", "", [PrefixStr, LocalStr]),
+        PrefixStr \= "",
+        LocalStr \= "",
+        atom_string(Prefix, PrefixStr),
+        atom_string(Local, LocalStr),
+        prefix_uri(Prefix, URI),
+        atom_concat(URI, Local, ExpandedKey),
+        get_dict(ExpandedKey, Dict, Value)
+    ;   % 3. Try prefixed form for short names (e.g., "subject" → "woql:subject")
+        \+ sub_string(FieldString, _, _, _, ":"),  % No colon = short name
+        prefix_uri(Prefix, _),
+        atom_concat(Prefix, ':', PrefixColon),
+        atom_concat(PrefixColon, FieldAtom, PrefixedKey),
+        get_dict(PrefixedKey, Dict, Value)
+    ;   % 4. Try auto-expansion to full URI (e.g., "subject" → full URI)
+        \+ sub_string(FieldString, _, _, _, ":"),  % No colon = short name
+        prefix_uri(_, URI),
+        atom_concat(URI, FieldAtom, ExpandedKey),
+        get_dict(ExpandedKey, Dict, Value)
+    ),
+    !.  % Cut after first success to prevent backtracking
+
+% Prefix to URI mappings - easily extensible
+prefix_uri(woql, 'http://terminusdb.com/schema/woql#').
+prefix_uri(rdf, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#').
 
 get_woql_named_query(Descriptor, Name, Query) :-
     ask(Descriptor,
