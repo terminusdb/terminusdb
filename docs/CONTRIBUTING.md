@@ -176,6 +176,17 @@ Alternatively, use the shell wrapper for development:
 
 This bypasses binary compilation entirely and runs via `swipl` directly.
 
+## Suggested development workflow for altering existing code
+
+1. Understand in detail what the issue or enhancement is about
+2. If needed, build a small throw-away demo code to understand the logic clearly
+3. Create new PLUnit tests in the same file for swipl unit tests
+4. Run make dev to rebuild the binary and include the autoloaded modules
+5. Run the swipl unit tests using commands below as they load correctly
+6. Create integration tests once the plunit tests runs for the parts that now work
+7. Run the integration tests with the mocha commands below
+8. Run the full test suite and fix lint errors
+
 ## Running Tests
 
 ### JavaScript/Mocha Tests
@@ -198,7 +209,7 @@ npm run test:coverage
 
 Always run `npx mocha` from the repository root directory, not from within the `tests/` directory. Using `cd tests &&` in commands can cause terminal hanging issues in some workflows.
 
-### Prolog Tests
+### Running Prolog PLUnit Unit Tests
 
 ```bash
 # Run all Prolog tests
@@ -206,6 +217,9 @@ swipl -g run_tests -t halt src/interactive.pl
 
 # Run specific Prolog test module
 swipl -g "run_tests(graphql_numeric_serialization)" -t halt src/interactive.pl
+
+# Run a specific test, in a specific module
+swipl -g "run_tests(woql:group_by_single_element_list_template)" -t halt src/interactive.pl
 ```
 
 ### Test Server Management
