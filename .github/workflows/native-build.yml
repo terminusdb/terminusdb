@@ -31,9 +31,8 @@ jobs:
       - name: Check for file changes
         id: check_changes
         run: |
-          git fetch --deepen=10
-
           if [ "${{ github.event_name }}" == "push" ]; then
+            git fetch --deepen=10
             # Check that HEAD~1 exists
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
               CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
@@ -42,7 +41,8 @@ jobs:
               CHANGED_FILES=$(git diff --name-only HEAD)
             fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            # For pull requests, compare the base commit and the head commit
+            # For pull requests, fetch the base commit and compare to head
+            git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
           fi
 
@@ -112,7 +112,7 @@ jobs:
       - name: Check for file changes
         id: check_changes
         run: |
-          git fetch --depth=2
+          git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
           RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
           if [ -n "$RELEVANT_CHANGED" ]; then
