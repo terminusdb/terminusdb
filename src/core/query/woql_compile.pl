@@ -1503,9 +1503,16 @@ compile_wf(dot(Dict,Key,Value), get_dict(KeyE,DictE,ValueE)) -->
     resolve(Dict,DictE),
     {atom_string(KeyE,Key)},
     resolve(Value,ValueE).
-compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,Template,Query,Acc)) -->
+compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,UnwrappedTemplate,Query,Acc)) -->
     resolve(WGroup,Group),
     resolve(WTemplate,Template),
+    % Unwrap single-element lists to avoid extra nesting in results
+    % group_by/4 from library(solution_sequences) wraps each result if Template is a list
+    { (   is_list(Template),
+          Template = [SingleElement],
+          \+ is_list(SingleElement)  % Don't unwrap if element is also a list
+      ->  UnwrappedTemplate = SingleElement
+      ;   UnwrappedTemplate = Template) },
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
 compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
@@ -3184,6 +3191,57 @@ test(group_by_simple_template, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(Descriptor, Query_Out, JSON),
 
+    [_{'Grouped': ['@schema:p','@schema:p','@schema:p'],
+       'Object':null,'Predicate':null,'Subject':x},
+     _{'Grouped': ['@schema:p','@schema:p'],
+       'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
+
+test(group_by_single_element_list_template, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    % This test demonstrates the fix for issue #2283
+    % When template is a single-element list like ["Predicate"],
+    % group_by should produce a flat array, not nested arrays
+    
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w),
+                      insert(x,p,q),
+                      insert(y,p,z),
+                      insert(y,p,w))),
+        _Meta),
+
+    % Query with single-element LIST template: list with one Variable
+    % BEFORE FIX: Results in nested arrays [["@schema:p"], ["@schema:p"], ["@schema:p"]]
+    % AFTER FIX: Should result in flat array ["@schema:p", "@schema:p", "@schema:p"]
+    Query = _{'@type' : "GroupBy",
+              group_by : ["Subject"],
+              template: _{ '@type' : 'Value',
+                           list : [_{ '@type' : 'Value',
+                                      'variable' : "Predicate"}]},  % Single-element list
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
+                       },
+              grouped: _{'@type' : "Value",
+                         variable : "Grouped"}},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+
+    % After the fix, these should be flat arrays, not nested
     [_{'Grouped': ['@schema:p','@schema:p','@schema:p'],
        'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': ['@schema:p','@schema:p'],
