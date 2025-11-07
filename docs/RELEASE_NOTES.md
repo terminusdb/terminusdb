@@ -1,4 +1,10 @@
-# TerminusDB Server v11.2-rc4 Release Notes
+# TerminusDB Server v11.2.0-rc5 Release Notes
+
+## Maintenance and bug fixes
+* `WOQL.dot()` works correctly again for addressing fields in documents
+* `WOQL.group_by()` now automatically unwraps single-element templates
+
+# TerminusDB Server v11.2.0-rc4 Release Notes
 
 ## Enhancements
 * Free form JSON support with deduplication is back, using the sys:JSON type
@@ -9,7 +15,7 @@
 ## Other
 * 5x faster internal Rust serde JSON parsing, instead of previous JSON parser
 
-# TerminusDB Server v11.2-rc3 Release Notes
+# TerminusDB Server v11.2.0-rc3 Release Notes
 
 Release Candidate 3 brings improved error handling and observability, makes it possible again to run the dashboard component (or other static webapp dashboards), and further strengthens the core of TerminusDB with additional bug fixes.
 
@@ -28,7 +34,7 @@ Release Candidate 3 brings improved error handling and observability, makes it p
 * Add specific error handling for common git-for-data error "api:RemoteDiverged"
 * Fix string vs atom comparisons when patching enum values (#2141)
 
-# TerminusDB Server v11.2-rc2 Release Notes
+# TerminusDB Server v11.2.0-rc2 Release Notes
 
 This marks a substantial release of TerminusDB with support for high precision calculations in the WOQL core, and with alignment to JSON, letting clients handling native JSON with high precision.
 
@@ -42,7 +48,7 @@ This marks a substantial release of TerminusDB with support for high precision c
 * Further improvements to the build system
 * group_by with decimals works as intended again (#2094)
 
-# TerminusDB Server v11.2-rc1 Release Notes
+# TerminusDB Server v11.2.0-rc1 Release Notes
 
 ## Enhancements
 * Rationals are now used by default for all calculations (#128)
