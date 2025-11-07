@@ -9,6 +9,7 @@ TerminusDB uses an automated release workflow with GitHub Actions that handles:
 - Multi-architecture Docker images (AMD64, ARM64) with noroot variants
 - Snap package publishing
 - Automated artifact management
+- The repository is normally in vX.X.X-dev (and then in either no suffic or -rcX)
 
 <!-- [[[cog
 import cog
@@ -54,11 +55,11 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 Use the **Bump Version** GitHub Action to update the `VERSION` file and related references:
 
-#### Option A: Manual Version (Normally not needed)
+#### Option A: Manual Version (what is uese)
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0`, `11.2.0-rc3`, or `11.2.0-dev`
+- **New version:** e.g., `11.2.0`, or like `11.2.0-rc3`
 
 The workflow accepts any suffix after the version number: `-rc1`, `-rc2`, `-alpha`, `-beta`, `-dev`, or no suffix etc.
 
@@ -69,7 +70,9 @@ This will:
 - Update `distribution/snap/snapcraft.yaml`
 - Create a PR with the changes
 
-#### Option B: Automatic Patch Bump
+You may need to close and reopen the PR if the version bump verification build is stuck.
+
+#### Option B: Automatic Patch Bump (not used yet)
 
 When called as `workflow_call` (from other workflows), the action automatically bumps the patch version while preserving any suffix (e.g., `11.1.5-dev` → `11.1.6`, `11.1.6` → `11.2.0-rc1`, `11.2.0-rc1` → `11.2.0`).
 
@@ -144,7 +147,15 @@ Confirm successful publication:
   - Verify version in appropriate channel
 - **GitHub Release:** Verify release notes are correct
 
-### 7. Post-Release (Optional)
+### 7. Bump to development version again
+
+Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
+- **Branch:** `main`
+- **New version:** e.g., `11.2.0-dev`
+
+Then merge the new development version PR (to ensure build images are correctly produced). You may need to close and reopen the PR if the version bump verification build is stuck.
+
+### 8. Post-Release (Optional)
 
 For major releases, consider:
 - Announcement blog post
