@@ -23,17 +23,17 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Last released version:** <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v11.2.0-rc4`](https://github.com/terminusdb/terminusdb/releases/tag/v11.2.0-rc4)
+[`v11.2.0-rc5`](https://github.com/terminusdb/terminusdb/releases/tag/v11.2.0-rc5)
 <!-- [[[end]]] -->
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v11.2.0-rc5`
+`v11.2.0-dev`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`11.2.0-rc4...main`](https://github.com/terminusdb/terminusdb/compare/v11.2.0-rc4...main)
+[`11.2.0-rc5...main`](https://github.com/terminusdb/terminusdb/compare/v11.2.0-rc5...main)
 <!-- [[[end]]] -->
 
 ---
