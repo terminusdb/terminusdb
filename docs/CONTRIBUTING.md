@@ -4,10 +4,7 @@ Thanks for taking the time to contribute to TerminusDB!
 
 ## Testing
 
-Before submitting a change, please run `make ; ./terminusdb test` to make sure
-that all tests pass.  Failure should result in a big fail message, and
-success with a final `true`. API tests will require that the admin
-password is `root` or that the environment variable
+Before submitting a change, please run both plunit and integration tests (see end) to make sure all tests pass.  Failure should result in a big fail message, and success with a final `true`. API tests will require that the admin password is `root` or that the environment variable
 `TERMINUS_ADMIN_PASSWD` is set prior to invocation of `terminusdb`.
 It is preferred that the integration tests are run with the test server
 script `./tests/terminusdb-test-server.sh start`. Starting the server
@@ -546,6 +543,15 @@ make clean && make dev && tests/terminusdb-test-server.sh restart --clean && mak
 ## Coding Conventions
 
 We have a house style for prolog, especially for conditionals. Try to copy what you see.
+
+### Quick sanity tests
+
+```
+make test
+make test-int
+make lint
+make lint-mocha
+```
 
 ### Defensive Coding
 
