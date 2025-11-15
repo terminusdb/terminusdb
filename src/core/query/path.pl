@@ -190,13 +190,16 @@ run_pattern_(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_
 
 run_pattern_n_m_(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     !,
-    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+    copy_term(P, P_Fresh),  % Fresh copy needed even for single match
+    run_pattern_(P_Fresh,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
 run_pattern_n_m_(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
-    run_pattern_(P,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+    copy_term(P, P_Fresh),  % Fresh copy needed to avoid binding across backtracking
+    run_pattern_(P_Fresh,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
 run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     Np is max(1,N-1),
     Mp is M-1,
-    run_pattern_(P,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object,Save_Path),
+    copy_term(P, P_Fresh),  % Create fresh copy to avoid binding predicate variables across iterations
+    run_pattern_(P_Fresh,X,Z,Open_Set,Path-Path_IM,Filter,Transaction_Object,Save_Path),
     run_pattern_n_m_(P,Np,Mp,Z,Y,Open_Set,Path_IM-Tail,Filter,Transaction_Object,Save_Path).
 
 /*
@@ -538,5 +541,69 @@ test(chained_data, [
     get_dict(bindings,Result4,Bindings4),
 
     Bindings4 = [_{x:c},_{x:b},_{x:a}].
+
+test(star_any_predicate_two_levels, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing star operator with ANY predicate - two levels with different predicates"},
+
+    % Create a simple chain with TWO different predicates: a -p1-> b -p2-> c
+    AST = (insert(a, p1, b),
+           insert(b, p2, c)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    % Test: Use star(p) where p = ANY predicate
+    % Should traverse: a -p1-> b -p2-> c
+    AST2 = path(a, star(p), v(x)),
+
+    create_context(Descriptor, Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings, Result, Bindings),
+
+    % Should find: a (0 hops), b (1 hop via p1), c (2 hops: p1 then p2)
+    % If predicate variable gets bound on first hop, we won't find c
+    length(Bindings, 3),
+    memberchk(_{x:a}, Bindings),
+    memberchk(_{x:b}, Bindings),
+    memberchk(_{x:c}, Bindings).
+
+test(star_any_predicate_four_nodes, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing star operator with ANY predicate - four nodes"},
+
+    % Create chain: a -p1-> b -p2-> c -p3-> d (like integration test)
+    AST = (insert(a, p1, b),
+           insert(b, p2, c),
+           insert(c, p3, d)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    % Test: Use star(p) where p = ANY predicate
+    AST2 = path(a, star(p), v(x)),
+
+    create_context(Descriptor, Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings, Result, Bindings),
+
+    % Should find: a (0 hops), b (1 hop), c (2 hops), d (3 hops)
+    length(Bindings, 4),
+    memberchk(_{x:a}, Bindings),
+    memberchk(_{x:b}, Bindings),
+    memberchk(_{x:c}, Bindings),
+    memberchk(_{x:d}, Bindings).
 
 :- end_tests(path).
