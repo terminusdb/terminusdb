@@ -1,3 +1,10 @@
+# TerminusDB Server v11.2.0-rc6 Release Notes
+
+## Breaking change for consistent behaviour
+* Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency)
+* Added `idgen_random()` to JavaScript WOQL client
+* Replaced `random_idgen()` with `idgen_random()` in Python WOQL client
+
 # TerminusDB Server v11.2.0-rc5 Release Notes
 
 ## Maintenance and bug fixes

@@ -1,5 +1,6 @@
 :- module('document/json', [
               idgen_random/2,
+              idgen_random/3,
               idgen_hash/3,
               idgen_lexical/3,
               context_triple/2,
@@ -450,7 +451,13 @@ idgen_random(Base,ID) :-
     Length = 16,
     idgen_random(Base, Length, ID).
 
+idgen_random(Base,[],ID) :-
+    % Empty list signature matches idgen_lexical/3 and idgen_hash/3 calling convention
+    % Used by RandomKey WOQL predicate
+    idgen_random(Base,ID).
+
 idgen_random(Base,Length, ID) :-
+    integer(Length),
     utils:random_base64(Length, Hash),
     format(string(ID),'~w~w',[Base,Hash]).
 

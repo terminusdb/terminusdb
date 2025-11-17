@@ -446,6 +446,13 @@ definition(
         mode: [+, +, ?],
         types: [string, list(string), node]
     }).
+definition(
+    idgen_random{
+        name: 'RandomKey',
+        fields: [base, key_list, uri],
+        mode: [+, +, ?],
+        types: [string, list(string), node]
+    }).
 
 /* types */
 definition(
@@ -570,6 +577,7 @@ operator(join(_,_,_)).
 operator(timestamp_now(_)).
 operator(idgen(_,_,_)).
 operator(hash(_,_,_)).
+operator(idgen_random(_,_,_)).
 operator(triple_count(_,_)).
 operator(size(_,_)).
 

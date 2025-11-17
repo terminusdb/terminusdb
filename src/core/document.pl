@@ -5,6 +5,7 @@
 
               % json.pl
               idgen_random/2,
+              idgen_random/3,
               idgen_hash/3,
               idgen_lexical/3,
 

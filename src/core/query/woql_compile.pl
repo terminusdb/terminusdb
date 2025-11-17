@@ -983,7 +983,7 @@ find_resources(not(P), Collection, DRG, DWG, Read, Write) :-
 find_resources(get(_,_,_), _, _, _, [], []).
 find_resources(typecast(_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
-find_resources(random_idgen(_,_,_), _, _, _, [], []).
+find_resources(idgen_random(_,_,_), _, _, _, [], []).
 find_resources(idgen(_,_,_), _, _, _, [], []).
 find_resources(asc(_), _, _, _, [], []).
 find_resources(desc(_), _, _, _, [], []).
@@ -1385,7 +1385,7 @@ compile_wf(hash(Base,Args,Id),(
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(random_idgen(Base,Args,Id),(
+compile_wf(idgen_random(Base,Args,Id),(
                literally(BaseE,BaseL),
                literally(ArgsE,ArgsL),
                idgen_random(BaseL,ArgsL,IdS),
