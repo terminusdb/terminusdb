@@ -13,7 +13,7 @@ default:
 
 # Build the development binary (macOS-friendly, no library stripping).
 .PHONY: dev
-dev:
+dev: clean-rust
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Build the Docker image for development and testing. To use the TerminusDB

@@ -307,7 +307,14 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     collect_commit_metadata(Committed, Commit_Meta_Data),
     put_dict(Validation_Meta_Data, Commit_Meta_Data, Meta_Data0),
     put_dict(Inference_Metadata, Meta_Data0, Meta_Data),
-    ignore(forall(post_commit_hook(Validations0, Meta_Data), true)).
+    ignore(forall(post_commit_hook(Validations0, Meta_Data), true)),
+    
+    % Periodically run atom garbage collection (10% probability)
+    % to prevent unbounded atom table growth from long-running transactions
+    (   random(1.0) < 0.1
+    ->  garbage_collect_atoms,
+        trim_stacks  % Release collected memory resources
+    ;   true).
 
 no_schema_changes_for_validation(Validation) :-
     member(Schema_Object,(Validation.schema_objects)),
