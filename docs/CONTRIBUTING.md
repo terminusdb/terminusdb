@@ -268,9 +268,12 @@ rm src/rust/librust.{dylib,so}; make dev
 
 # 4. Run relevant tests (from repo root!)
 npx mocha tests/test/graphql.js --timeout 10000
-```
 
-## Debugging and Logging
+### Debugging and Logging
+
+#### GitHub Actions integration-test logs
+
+When CI integration tests fail (Docker image tests and the native-build workflow), the job streams the TerminusDB server logs into the GitHub Actions step output and also uploads them as artifacts (`terminusdb-server-logs-<artifact>` for Docker jobs, `terminusdb-server-logs-native-<os>` for native jobs). Download the relevant artifact or expand the "Capture TerminusDB logs" step to inspect crashes or panics that occur before the Mocha tests report their failure.
 
 ### Prolog Logging
 

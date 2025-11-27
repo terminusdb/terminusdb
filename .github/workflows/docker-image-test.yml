@@ -110,7 +110,9 @@ jobs:
       - name: Capture TerminusDB logs
         if: always()
         run: |
-          docker logs terminusdb > terminusdb-server.log 2>&1 || echo "Failed to capture logs"
+          {
+            docker logs terminusdb && echo "--- End of TerminusDB server log ---"
+          } | tee terminusdb-server.log || echo "Failed to capture logs"
 
       - name: Upload TerminusDB server logs
         if: always()

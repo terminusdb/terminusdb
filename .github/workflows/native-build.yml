@@ -160,9 +160,11 @@ jobs:
       - name: Start TerminusDB
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        
         run: |
-          ./terminusdb serve &
+          LOG_FILE=terminusdb-native.log
+          ( ./terminusdb serve 2>&1 | tee "$LOG_FILE" ) &
           echo $! > terminusdb.pid
           sleep 5  # wait for server to start
+          echo "TERMINUSDB_NATIVE_LOG=$LOG_FILE" >> "$GITHUB_ENV"
 
       - name: Install NodeJS
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        
@@ -176,8 +178,26 @@ jobs:
             cd tests        
             npm install-ci-test
   
+      - name: Capture TerminusDB logs
+        if: ${{ always() && steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: |
+          LOG_FILE="${TERMINUSDB_NATIVE_LOG:-terminusdb-native.log}"
+          if [ -f "$LOG_FILE" ]; then
+            tee terminusdb-server.log < "$LOG_FILE"
+            echo "--- End of TerminusDB server log ---" | tee -a terminusdb-server.log
+          else
+            echo "Failed to capture logs (missing $LOG_FILE)"
+          fi
+
+      - name: Upload TerminusDB server logs
+        if: ${{ always() && steps.check_changes.outputs.relevant_changed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminusdb-server-logs-native-${{ runner.os }}
+          path: terminusdb-server.log
+          retention-days: 7
+
       - name: Stop TerminusDB
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        
         run: |
-            kill $(cat terminusdb.pid)      
-        
+            kill $(cat terminusdb.pid)
