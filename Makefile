@@ -14,6 +14,7 @@ default:
 # Build the development binary (macOS-friendly, no library stripping).
 .PHONY: dev
 dev:
+	rm src/rust/librust.* || true
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Build the Docker image for development and testing. To use the TerminusDB
