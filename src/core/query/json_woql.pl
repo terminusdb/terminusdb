@@ -798,6 +798,15 @@ json_type_to_woql_ast('HashKey',JSON,WOQL,Path) :-
     json_value_to_woql_ast(URI,WURI,[uri
                                      |Path]),
     WOQL = hash(WBase,WKey,WURI).
+json_type_to_woql_ast('RandomKey',JSON,WOQL,Path) :-
+    _{base : Base,
+      uri : URI
+     } :< JSON,
+    json_value_to_woql_ast(Base,WBase,[base
+                                       |Path]),
+    json_value_to_woql_ast(URI,WURI,[uri
+                                     |Path]),
+    WOQL = idgen_random(WBase,[],WURI).
 json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
     _{mixed :  S,
       upper : V

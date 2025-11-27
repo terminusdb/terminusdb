@@ -162,10 +162,14 @@ typecast(Val, Type, Hint, Cast) :-
         ),
         (   \+ (   base_type(Expanded_Type)
                ;   Expanded_Type = 'http://www.w3.org/2002/07/owl#Thing'
-               ;   Expanded_Type = 'http://terminusdb.com/schema/sys#Top')
+               ;   Expanded_Type = 'http://terminusdb.com/schema/sys#Top'
+               ;   Expanded_Type = 'http://terminusdb.com/schema/sys#Dictionary')
         ->  throw(error(unknown_type_casting_error(Val, Expanded_Type), _))
         ;   Val = Bare_Literal^^Source_Type,
-            (   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#string')
+            (   % Try explicit typecast rule FIRST (e.g., xdd:json → xsd:string)
+                catch(typecast_switch(Expanded_Type,Source_Type,Bare_Literal,Hint,Cast), _, fail)
+            ->  true
+            ;   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#string')
                 % Upcast to xsd:string for downcast
             ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
             ;   basetype_subsumption_of(Source_Type,'http://www.w3.org/2001/XMLSchema#decimal')
@@ -181,6 +185,8 @@ typecast(Val, Type, Hint, Cast) :-
         ->  typecast_switch(Expanded_Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
         ;   string(Val)
         ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Val,Hint,Cast)
+        ;   is_dict(Val)
+        ->  typecast_switch(Expanded_Type,'http://terminusdb.com/schema/sys#Dictionary',Val,Hint,Cast)
         ;   throw(error(casting_error(Val, Type), _))
         )
     ).
@@ -190,12 +196,41 @@ typecast(Val, Type, Hint, Cast) :-
  *
  * Casts from source type to target type.
  */
-%%% xsd:string Self Cast
+%%% xsd:string Self Cast (handles atoms)
 %%% NOTE: Should not be necessary as we shouldn't be able to have an atom in the first place
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val_String^^'http://www.w3.org/2001/XMLSchema#string') :-
     atom(Val),
     !,
     atom_string(Val,Val_String).
+%%% xsd:string Self Cast (handles dicts from xdd:json subsumption)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#string', Dict, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
+    is_dict(Dict),
+    !,
+    (   (catch(atom_json_dict(Val,Dict,[]),_,fail))
+    ->  true
+    ;   throw(error(casting_error(Dict,'http://www.w3.org/2001/XMLSchema#string'),_))).
+%%% xsd:string Self Cast (handles lists/arrays from xdd:json subsumption)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#string', List, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
+    is_list(List),
+    !,
+    (   (catch(atom_json_dict(Val,List,[]),_,fail))
+    ->  true
+    ;   throw(error(casting_error(List,'http://www.w3.org/2001/XMLSchema#string'),_))).
+%%% xsd:string Self Cast (handles primitives from xdd:json subsumption - atoms for strings, booleans, null)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#string', Atom, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
+    atom(Atom),
+    Atom \= '',  % Not the empty atom case (handled elsewhere)
+    !,
+    (   (catch(atom_json_dict(Val,Atom,[]),_,fail))
+    ->  true
+    ;   throw(error(casting_error(Atom,'http://www.w3.org/2001/XMLSchema#string'),_))).
+%%% xsd:string Self Cast (handles numbers from xdd:json subsumption)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#string', Num, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
+    number(Num),
+    !,
+    (   (catch(atom_json_dict(Val,Num,[]),_,fail))
+    ->  true
+    ;   throw(error(casting_error(Num,'http://www.w3.org/2001/XMLSchema#string'),_))).
 %%% Self Cast
 typecast_switch(Type, Type, Val, _, Val^^Type) :-
     !.
@@ -350,6 +385,31 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
     (   (catch(atom_json_dict(Val,JSON,[]),_,fail))
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#string'),_))).
+%%% xsd:string => sys:Dictionary (parse JSON string to dict, or pass through if already dict)
+typecast_switch('http://terminusdb.com/schema/sys#Dictionary', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Dict) :-
+    !,
+    (   is_dict(Val)
+    ->  Dict = Val  % Already a dict (from xdd:json subsumption), just pass through
+    ;   (catch(atom_json_dict(Val,Parsed,[]),_,fail), is_dict(Parsed))  % Parse string and validate it's a dict
+    ->  Dict = Parsed
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/sys#Dictionary'),_))).
+%%% xdd:json => sys:Dictionary (unwrap typed dict to plain dict, MUST be a dict)
+typecast_switch('http://terminusdb.com/schema/sys#Dictionary', 'http://terminusdb.com/schema/xdd#json', Dict, _, Dict) :-
+    !,
+    (   is_dict(Dict)
+    ->  true
+    ;   throw(error(casting_error(Dict,'http://terminusdb.com/schema/sys#Dictionary'),_))).
+%%% sys:Dictionary => xdd:json (wrap plain dict with type)
+typecast_switch('http://terminusdb.com/schema/xdd#json', 'http://terminusdb.com/schema/sys#Dictionary', Dict, _, Dict^^'http://terminusdb.com/schema/xdd#json') :-
+    is_dict(Dict),
+    !.
+%%% sys:Dictionary => xsd:string (serialize dict to JSON string)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/sys#Dictionary', Dict, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
+    is_dict(Dict),
+    !,
+    (   (catch(atom_json_dict(Val,Dict,[]),_,fail))
+    ->  true
+    ;   throw(error(casting_error(Dict,'http://www.w3.org/2001/XMLSchema#string'),_))).
 %%% xsd:string => xsd:boolean
 typecast_switch('http://www.w3.org/2001/XMLSchema#boolean', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Casted^^'http://www.w3.org/2001/XMLSchema#boolean') :-
     !,
