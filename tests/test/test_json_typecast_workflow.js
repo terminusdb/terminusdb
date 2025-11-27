@@ -25,25 +25,25 @@ describe('JSON typecast workflow tests', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Alice","age":30}'
-              }
-            }
+                '@value': '{"name":"Alice","age":30}',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_dict' }
+            result: { '@type': 'Value', variable: 'json_dict' },
           },
           {
             '@type': 'TypeOf',
             value: { '@type': 'Value', variable: 'json_dict' },
-            type: { '@type': 'Value', variable: 'json_type' }
-          }
-        ]
+            type: { '@type': 'Value', variable: 'json_type' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -62,38 +62,38 @@ describe('JSON typecast workflow tests', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Bob","age":25}'
-              }
-            }
+                '@value': '{"name":"Bob","age":25}',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_typed' }
+            result: { '@type': 'Value', variable: 'json_typed' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_typed' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'json_dict' }
+            result: { '@type': 'Value', variable: 'json_dict' },
           },
           {
             '@type': 'Dot',
             document: { '@type': 'Value', variable: 'json_dict' },
             field: {
               '@type': 'Value',
-              data: { '@type': 'xsd:string', '@value': 'name' }
+              data: { '@type': 'xsd:string', '@value': 'name' },
             },
-            value: { '@type': 'Value', variable: 'extracted_name' }
-          }
-        ]
+            value: { '@type': 'Value', variable: 'extracted_name' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -114,34 +114,34 @@ describe('JSON typecast workflow tests', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Charlie","age":35}'
-              }
-            }
+                '@value': '{"name":"Charlie","age":35}',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_dict' }
+            result: { '@type': 'Value', variable: 'json_dict' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_dict' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'plain_dict' }
+            result: { '@type': 'Value', variable: 'plain_dict' },
           },
           {
             '@type': 'TypeOf',
             value: { '@type': 'Value', variable: 'plain_dict' },
-            type: { '@type': 'Value', variable: 'dict_type' }
-          }
-        ]
+            type: { '@type': 'Value', variable: 'dict_type' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -161,38 +161,38 @@ describe('JSON typecast workflow tests', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Dave","age":40}'
-              }
-            }
+                '@value': '{"name":"Dave","age":40}',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_dict' }
+            result: { '@type': 'Value', variable: 'json_dict' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_dict' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'plain_dict' }
+            result: { '@type': 'Value', variable: 'plain_dict' },
           },
           {
             '@type': 'Dot',
             document: { '@type': 'Value', variable: 'plain_dict' },
             field: {
               '@type': 'Value',
-              data: { '@type': 'xsd:string', '@value': 'name' }
+              data: { '@type': 'xsd:string', '@value': 'name' },
             },
-            value: { '@type': 'Value', variable: 'extracted_name' }
-          }
-        ]
+            value: { '@type': 'Value', variable: 'extracted_name' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -221,9 +221,9 @@ describe('JSON typecast workflow tests', function () {
                       '@type': 'Value',
                       data: {
                         '@type': 'xsd:string',
-                        '@value': 'Eve'
-                      }
-                    }
+                        '@value': 'Eve',
+                      },
+                    },
                   },
                   {
                     '@type': 'FieldValuePair',
@@ -232,29 +232,29 @@ describe('JSON typecast workflow tests', function () {
                       '@type': 'Value',
                       data: {
                         '@type': 'xsd:integer',
-                        '@value': 45
-                      }
-                    }
-                  }
-                ]
-              }
-            }
+                        '@value': 45,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'doc' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_value' }
+            result: { '@type': 'Value', variable: 'json_value' },
           },
           {
             '@type': 'TypeOf',
             value: { '@type': 'Value', variable: 'json_value' },
-            type: { '@type': 'Value', variable: 'json_type' }
-          }
-        ]
+            type: { '@type': 'Value', variable: 'json_type' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -273,29 +273,29 @@ describe('JSON typecast workflow tests', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Frank","age":50}'
-              }
-            }
+                '@value': '{"name":"Frank","age":50}',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'original_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_dict' }
+            result: { '@type': 'Value', variable: 'json_dict' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_dict' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'back_to_str' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'back_to_str' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -325,20 +325,20 @@ describe('JSON typecast workflow tests', function () {
                       '@type': 'Value',
                       data: {
                         '@type': 'xsd:string',
-                        '@value': 'George'
-                      }
-                    }
-                  }
-                ]
-              }
-            }
+                        '@value': 'George',
+                      },
+                    },
+                  },
+                ],
+              },
+            },
           },
           {
             '@type': 'TypeOf',
             value: { '@type': 'Value', variable: 'doc' },
-            type: { '@type': 'Value', variable: 'doc_type' }
-          }
-        ]
+            type: { '@type': 'Value', variable: 'doc_type' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -366,9 +366,9 @@ describe('JSON typecast workflow tests', function () {
                       '@type': 'Value',
                       data: {
                         '@type': 'xsd:string',
-                        '@value': 'Hannah'
-                      }
-                    }
+                        '@value': 'Hannah',
+                      },
+                    },
                   },
                   {
                     '@type': 'FieldValuePair',
@@ -377,24 +377,24 @@ describe('JSON typecast workflow tests', function () {
                       '@type': 'Value',
                       data: {
                         '@type': 'xsd:integer',
-                        '@value': 55
-                      }
-                    }
-                  }
-                ]
-              }
-            }
+                        '@value': 55,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
           },
           {
             '@type': 'Dot',
             document: { '@type': 'Value', variable: 'doc' },
             field: {
               '@type': 'Value',
-              data: { '@type': 'xsd:string', '@value': 'name' }
+              data: { '@type': 'xsd:string', '@value': 'name' },
             },
-            value: { '@type': 'Value', variable: 'extracted_name' }
-          }
-        ]
+            value: { '@type': 'Value', variable: 'extracted_name' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -416,9 +416,9 @@ describe('JSON typecast workflow tests', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Ian","age":60}'
-              }
-            }
+                '@value': '{"name":"Ian","age":60}',
+              },
+            },
           },
           // string → xdd:json
           {
@@ -426,9 +426,9 @@ describe('JSON typecast workflow tests', function () {
             value: { '@type': 'Value', variable: 'str1' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json1' }
+            result: { '@type': 'Value', variable: 'json1' },
           },
           // xdd:json → dict
           {
@@ -436,9 +436,9 @@ describe('JSON typecast workflow tests', function () {
             value: { '@type': 'Value', variable: 'json1' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'dict' }
+            result: { '@type': 'Value', variable: 'dict' },
           },
           // Extract field from dict
           {
@@ -446,9 +446,9 @@ describe('JSON typecast workflow tests', function () {
             document: { '@type': 'Value', variable: 'dict' },
             field: {
               '@type': 'Value',
-              data: { '@type': 'xsd:string', '@value': 'name' }
+              data: { '@type': 'xsd:string', '@value': 'name' },
             },
-            value: { '@type': 'Value', variable: 'name' }
+            value: { '@type': 'Value', variable: 'name' },
           },
           // dict → xdd:json
           {
@@ -456,9 +456,9 @@ describe('JSON typecast workflow tests', function () {
             value: { '@type': 'Value', variable: 'dict' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json2' }
+            result: { '@type': 'Value', variable: 'json2' },
           },
           // xdd:json → string
           {
@@ -466,11 +466,11 @@ describe('JSON typecast workflow tests', function () {
             value: { '@type': 'Value', variable: 'json2' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str2' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str2' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)

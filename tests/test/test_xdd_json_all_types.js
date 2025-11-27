@@ -25,29 +25,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '{"name":"Alice","age":30}'
-              }
-            }
+                '@value': '{"name":"Alice","age":30}',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -70,34 +70,34 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '[1,2,3,"hello",true]'
-              }
-            }
+                '@value': '[1,2,3,"hello",true]',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'TypeOf',
             value: { '@type': 'Value', variable: 'json' },
-            type: { '@type': 'Value', variable: 'json_type' }
+            type: { '@type': 'Value', variable: 'json_type' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -119,29 +119,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '[[1,2],[3,4],{"nested":"object"}]'
-              }
-            }
+                '@value': '[[1,2],[3,4],{"nested":"object"}]',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -164,29 +164,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '"hello world"'
-              }
-            }
+                '@value': '"hello world"',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -206,29 +206,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '42.5'
-              }
-            }
+                '@value': '42.5',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -247,29 +247,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': 'true'
-              }
-            }
+                '@value': 'true',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -291,29 +291,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': 'false'
-              }
-            }
+                '@value': 'false',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -335,29 +335,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': 'null'
-              }
-            }
+                '@value': 'null',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://www.w3.org/2001/XMLSchema#string'
+              node: 'http://www.w3.org/2001/XMLSchema#string',
             },
-            result: { '@type': 'Value', variable: 'str_out' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'str_out' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -381,29 +381,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '[1,2,3]'
-              }
-            }
+                '@value': '[1,2,3]',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'dict' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'dict' },
+          },
+        ],
       }
 
       try {
@@ -427,29 +427,29 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '"hello"'
-              }
-            }
+                '@value': '"hello"',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json' }
+            result: { '@type': 'Value', variable: 'json' },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'dict' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'dict' },
+          },
+        ],
       }
 
       try {
@@ -473,20 +473,20 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '[{"false":"false"}]'
-              }
-            }
+                '@value': '[{"false":"false"}]',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/sys#Dictionary'
+              node: 'http://terminusdb.com/schema/sys#Dictionary',
             },
-            result: { '@type': 'Value', variable: 'dict' }
-          }
-        ]
+            result: { '@type': 'Value', variable: 'dict' },
+          },
+        ],
       }
 
       try {
@@ -512,25 +512,25 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '[{"key":"value"}]'
-              }
-            }
+                '@value': '[{"key":"value"}]',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_array' }
+            result: { '@type': 'Value', variable: 'json_array' },
           },
           {
             '@type': 'Member',
             member: { '@type': 'Value', variable: 'output' },
-            list: { '@type': 'Value', variable: 'json_array' }
-          }
-        ]
+            list: { '@type': 'Value', variable: 'json_array' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -549,25 +549,25 @@ describe('xdd:json support for all JSON types', function () {
               '@type': 'Value',
               data: {
                 '@type': 'xsd:string',
-                '@value': '[1, 2, 3]'
-              }
-            }
+                '@value': '[1, 2, 3]',
+              },
+            },
           },
           {
             '@type': 'Typecast',
             value: { '@type': 'Value', variable: 'json_str' },
             type: {
               '@type': 'NodeValue',
-              node: 'http://terminusdb.com/schema/xdd#json'
+              node: 'http://terminusdb.com/schema/xdd#json',
             },
-            result: { '@type': 'Value', variable: 'json_array' }
+            result: { '@type': 'Value', variable: 'json_array' },
           },
           {
             '@type': 'Member',
             member: { '@type': 'Value', variable: 'item' },
-            list: { '@type': 'Value', variable: 'json_array' }
-          }
-        ]
+            list: { '@type': 'Value', variable: 'json_array' },
+          },
+        ],
       }
 
       const r = await woql.post(agent, query)
@@ -584,7 +584,7 @@ describe('xdd:json support for all JSON types', function () {
         group_by: [],
         template: {
           '@type': 'Value',
-          list: [{ '@type': 'Value', variable: 'output' }]
+          list: [{ '@type': 'Value', variable: 'output' }],
         },
         grouped: { '@type': 'Value', variable: 'out2' },
         query: {
@@ -597,26 +597,26 @@ describe('xdd:json support for all JSON types', function () {
                 '@type': 'Value',
                 data: {
                   '@type': 'xsd:string',
-                  '@value': '[{"key":"value"}]'
-                }
-              }
+                  '@value': '[{"key":"value"}]',
+                },
+              },
             },
             {
               '@type': 'Typecast',
               value: { '@type': 'Value', variable: 'json_str' },
               type: {
                 '@type': 'NodeValue',
-                node: 'http://terminusdb.com/schema/xdd#json'
+                node: 'http://terminusdb.com/schema/xdd#json',
               },
-              result: { '@type': 'Value', variable: 'dict' }
+              result: { '@type': 'Value', variable: 'dict' },
             },
             {
               '@type': 'Member',
               member: { '@type': 'Value', variable: 'output' },
-              list: { '@type': 'Value', variable: 'dict' }
-            }
-          ]
-        }
+              list: { '@type': 'Value', variable: 'dict' },
+            },
+          ],
+        },
       }
 
       const r = await woql.post(agent, query)
@@ -632,7 +632,7 @@ describe('xdd:json support for all JSON types', function () {
         group_by: [],
         template: {
           '@type': 'Value',
-          list: [{ '@type': 'Value', variable: 'item' }]
+          list: [{ '@type': 'Value', variable: 'item' }],
         },
         grouped: { '@type': 'Value', variable: 'collected' },
         query: {
@@ -645,26 +645,26 @@ describe('xdd:json support for all JSON types', function () {
                 '@type': 'Value',
                 data: {
                   '@type': 'xsd:string',
-                  '@value': '[1, 2, 3]'
-                }
-              }
+                  '@value': '[1, 2, 3]',
+                },
+              },
             },
             {
               '@type': 'Typecast',
               value: { '@type': 'Value', variable: 'json_str' },
               type: {
                 '@type': 'NodeValue',
-                node: 'http://terminusdb.com/schema/xdd#json'
+                node: 'http://terminusdb.com/schema/xdd#json',
               },
-              result: { '@type': 'Value', variable: 'json_array' }
+              result: { '@type': 'Value', variable: 'json_array' },
             },
             {
               '@type': 'Member',
               member: { '@type': 'Value', variable: 'item' },
-              list: { '@type': 'Value', variable: 'json_array' }
-            }
-          ]
-        }
+              list: { '@type': 'Value', variable: 'json_array' },
+            },
+          ],
+        },
       }
 
       const r = await woql.post(agent, query)
