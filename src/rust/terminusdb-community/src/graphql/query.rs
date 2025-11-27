@@ -27,11 +27,12 @@ use super::frame::{
 };
 use super::schema::{
     id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
-    TerminusContext, TerminusOrderBy, TerminusOrdering,
+    PathOrderInput, TerminusContext, TerminusOrderBy, TerminusOrdering,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
 
+use std::borrow::Cow;
 use std::cmp::*;
 use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
@@ -1294,7 +1295,7 @@ pub fn run_filter_query<'a>(
         .map(|filter_input| compile_filter_object(class_name, all_frames, &filter_input));
     let includes_children = include_children(arguments);
     let it: ClonableIterator<'a, u64> =
-        if let Some(TerminusOrderBy { fields }) = arguments.get::<TerminusOrderBy>("orderBy") {
+        if let Some(TerminusOrderBy { fields, path_order }) = arguments.get::<TerminusOrderBy>("orderBy") {
             let mut results: Vec<u64> = lookup_by_filter(
                 context,
                 g,
@@ -1306,9 +1307,38 @@ pub fn run_filter_query<'a>(
             )
             .unique()
             .collect();
-            results.sort_by_cached_key(|id| {
-                create_query_order_key(g, all_frames, class_name, *id, &fields)
+
+            // Sort with combined key including path ordering
+            results.sort_by(|a, b| {
+                // First: handle path-based ordering if present
+                if let Some(ref path_input) = path_order {
+                    let key_a = create_path_order_value(g, all_frames, class_name, *a, &path_input.path);
+                    let key_b = create_path_order_value(g, all_frames, class_name, *b, &path_input.path);
+
+                    // Handle nulls last
+                    let cmp = match (&key_a, &key_b) {
+                        (None, None) => Ordering::Equal,
+                        (None, Some(_)) => Ordering::Greater,  // a is null, goes last
+                        (Some(_), None) => Ordering::Less,     // b is null, goes last
+                        (Some(a_val), Some(b_val)) => a_val.cmp(b_val),
+                    };
+
+                    let cmp = match path_input.order {
+                        TerminusOrdering::Asc => cmp,
+                        TerminusOrdering::Desc => cmp.reverse(),
+                    };
+
+                    if cmp != Ordering::Equal {
+                        return cmp;
+                    }
+                }
+
+                // Then: existing field-based ordering
+                let key_a = create_query_order_key(g, all_frames, class_name, *a, &fields);
+                let key_b = create_query_order_key(g, all_frames, class_name, *b, &fields);
+                key_a.cmp(&key_b)
             });
+
             // Probs should not be into_iter(), done to satisfy both arms of let symmetry
             // better to borrow in the other branch?
             ClonableIterator::new(
@@ -1456,4 +1486,65 @@ impl PartialOrd for QueryOrderKey {
     fn partial_cmp(&self, other: &QueryOrderKey) -> Option<Ordering> {
         Some(self.cmp(other))
     }
+}
+
+/// Traverse a comma-separated path and return the value for sorting.
+/// Returns None if any intermediate relationship is missing (nulls last).
+fn create_path_order_value(
+    g: &SyncStoreLayer,
+    all_frames: &AllFrames,
+    start_class: &GraphQLName,
+    id: u64,
+    path: &str,
+) -> Option<TypedDictEntry> {
+    let segments: Vec<&str> = path.split(',').map(|s| s.trim()).collect();
+    let mut current_id = id;
+    let mut current_class = start_class.clone();
+
+    for (i, segment) in segments.iter().enumerate() {
+        let is_last = i == segments.len() - 1;
+        let property_name = GraphQLName(Cow::Borrowed(*segment));
+
+        // Get the class definition - return None if class doesn't exist
+        let class_def = match all_frames.frames.get(&current_class) {
+            Some(TypeDefinition::Class(def)) => def,
+            _ => return None,
+        };
+
+        // Check if the property exists in the class - return None if not
+        let field_def = class_def.fields.get(&property_name)?;
+
+        // Get the predicate IRI using the existing method (safe now that we verified property exists)
+        let predicate_iri = all_frames.graphql_property_to_iri(&current_class, &property_name)?;
+        let predicate_id = g.predicate_id(predicate_iri.as_str())?;
+
+        // Find the triple for this property
+        let triple = g.single_triple_sp(current_id, predicate_id)?;
+        let object_id = triple.object;
+
+        if is_last {
+            // Last segment: extract the sortable value
+            let object = g.id_object(object_id)?;
+            // Try to get value - could be literal or node (for enums)
+            if let Some(entry) = object.clone().value() {
+                return Some(entry);
+            } else if let Some(node) = object.node() {
+                // For enums/nodes, use string representation for sorting
+                return Some(String::make_entry(&node));
+            }
+            return None;
+        } else {
+            // Intermediate segment: navigate to linked document
+            // Get the target class from the field's range
+            if let BaseOrDerived::Derived(target_class) = field_def.range() {
+                current_class = target_class.clone();
+            } else {
+                // Base type in the middle of a path - shouldn't happen
+                return None;
+            }
+            current_id = object_id;
+        }
+    }
+
+    None
 }

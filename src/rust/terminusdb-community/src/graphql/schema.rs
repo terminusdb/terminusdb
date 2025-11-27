@@ -1351,6 +1351,72 @@ fn collect_into_graphql_list<'a>(
     }
 }
 
+/// Input type for path-based ordering: { path: "workflow,status", order: Desc }
+pub struct PathOrderInput {
+    pub path: String,
+    pub order: TerminusOrdering,
+}
+
+impl FromInputValue for PathOrderInput {
+    fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
+        if let InputValue::Object(fields) = v {
+            let mut path: Option<String> = None;
+            let mut order = TerminusOrdering::Asc; // Default
+
+            for (key, value) in fields {
+                match key.item.as_str() {
+                    "path" => {
+                        if let InputValue::Scalar(DefaultScalarValue::String(s)) = &value.item {
+                            path = Some(s.clone());
+                        }
+                    }
+                    "order" => {
+                        if let Some(o) = TerminusOrdering::from_input_value(&value.item) {
+                            order = o;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            path.map(|p| Self { path: p, order })
+        } else {
+            None
+        }
+    }
+}
+
+impl GraphQLType for PathOrderInput {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("_PathOrderInput")
+    }
+
+    fn meta<'r>(
+        _info: &Self::TypeInfo,
+        registry: &mut Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let args = vec![
+            registry.arg::<String>("path", &()),
+            registry.arg::<Option<TerminusOrdering>>("order", &()),
+        ];
+        registry
+            .build_input_object_type::<PathOrderInput>(_info, &args)
+            .into_meta()
+    }
+}
+
+impl GraphQLValue for PathOrderInput {
+    type Context = ();
+    type TypeInfo = ();
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("_PathOrderInput")
+    }
+}
+
 #[derive(GraphQLEnum, Clone, Copy)]
 pub enum TerminusOrdering {
     Asc,
@@ -1359,22 +1425,32 @@ pub enum TerminusOrdering {
 
 pub struct TerminusOrderBy {
     pub fields: Vec<(GraphQLName<'static>, TerminusOrdering)>,
+    pub path_order: Option<PathOrderInput>,
 }
 
 impl FromInputValue for TerminusOrderBy {
     fn from_input_value(v: &InputValue<DefaultScalarValue>) -> Option<Self> {
         if let InputValue::Object(o) = v {
-            let fields: Vec<_> = o
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        GraphQLName(Cow::Owned(k.item.to_owned())),
-                        TerminusOrdering::from_input_value(&v.item).unwrap(),
-                    )
-                })
-                .collect();
+            let mut fields = Vec::new();
+            let mut path_order = None;
 
-            Some(Self { fields })
+            for (k, v) in o.iter() {
+                let key_str = k.item.as_str();
+                if key_str == "_path" {
+                    // Parse the nested path order input
+                    path_order = PathOrderInput::from_input_value(&v.item);
+                } else {
+                    // Regular field ordering
+                    if let Some(order) = TerminusOrdering::from_input_value(&v.item) {
+                        fields.push((
+                            GraphQLName(Cow::Owned(key_str.to_owned())),
+                            order,
+                        ));
+                    }
+                }
+            }
+
+            Some(Self { fields, path_order })
         } else {
             None
         }
@@ -1395,7 +1471,7 @@ impl GraphQLType for TerminusOrderBy {
     {
         let frames = &info.allframes;
         if let TypeDefinition::Class(d) = &frames.frames[&info.type_name] {
-            let arguments: Vec<_> = d
+            let mut arguments: Vec<_> = d
                 .fields
                 .iter()
                 .filter_map(|(field_name, field_definition)| {
@@ -1406,6 +1482,9 @@ impl GraphQLType for TerminusOrderBy {
                     }
                 })
                 .collect();
+
+            // Add _path argument for path-based ordering
+            arguments.push(registry.arg::<Option<PathOrderInput>>("_path", &()));
 
             registry
                 .build_input_object_type::<TerminusOrderBy>(info, &arguments)
