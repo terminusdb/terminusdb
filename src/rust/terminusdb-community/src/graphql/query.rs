@@ -1359,7 +1359,6 @@ pub fn run_count_query<'a>(
         None,  // no zero_iter
         true,  // include_children (matches default query behavior)
     )
-    .unique()
     .count();
 
     count as i32
