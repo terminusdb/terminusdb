@@ -2935,8 +2935,9 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
          )).
 
 extract_return_ids(Id_Pairs, Ids) :-
-    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Top_Ids),
-    % We can't return nothing, even if we're only a value hash...
+    % Filter out subdocuments - we only want top-level documents (normal or value_hash)
+    convlist([Id-Value,Id]>>(Value\=subdocument), Id_Pairs, Top_Ids),
+    % We can't return nothing, even if we're only subdocuments...
     (   Top_Ids = []
     ->  Id_Pairs = [Id0-_|_],
         Ids = [Id0]
@@ -11097,6 +11098,72 @@ test(document_valuehash,
            baz: 42},
 
         'Thing/78b07792a224ec58ac4b7688707482a1f42a7a695a907f5780d11dc634739aae').
+
+test(document_valuehash_with_subdocument_list,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    % Test for bug: When inserting a document with ValueHash key and subdocuments
+    % nested in Lists, the returned ID should be the top-level document ID,
+    % not the nested subdocument ID.
+    Commit_Info = commit_info{author:"test",message:"test"},
+    
+    % Create schema with subdocument
+    create_context(Desc, Commit_Info, Context1),
+    with_transaction(Context1,
+                     (   insert_schema_document(
+                             Context1,
+                             _{ '@type': "Class",
+                                '@id': "StringDoc",
+                                '@subdocument': [],
+                                '@key': _{'@type': "Random"},
+                                string: _{'@type': "Optional",
+                                         '@class': "xsd:string"}
+                              }),
+                         insert_schema_document(
+                             Context1,
+                             _{ '@type': "Class",
+                                '@id': "Entity",
+                                '@key': _{'@type': "ValueHash"},
+                                'string-list': _{'@type': "List",
+                                                '@class': "StringDoc"},
+                                label: _{'@type': "Optional",
+                                        '@class': "xsd:string"}
+                              })
+                     ),
+                     _),
+
+    % Insert document with subdocuments in list
+    create_context(Desc, Commit_Info, Context2),
+    with_transaction(Context2,
+                     insert_document(
+                         Context2,
+                         _{ '@type': "Entity",
+                            label: "asdf",
+                            'string-list': [
+                                _{ '@type': "StringDoc",
+                                   string: "1"
+                                 },
+                                _{ '@type': "StringDoc",
+                                   string: "2"
+                                 }
+                            ]
+                          },
+                         ID_Ex),
+                     _),
+
+    % The returned ID should be the Entity ID, not the StringDoc subdocument ID
+    database_prefixes(Desc, Prefixes),
+    compress_dict_uri(ID_Ex, Prefixes, Found_ID),
+    
+    % Assert that the ID starts with Entity/ (not StringDoc/)
+    atom_concat('Entity/', _, Found_ID),
+    
+    % Verify the document exists at this ID
+    get_document(Desc, Found_ID, Doc),
+    get_dict('@type', Doc, 'Entity').
 
 test(document_invalid_id_submitted,
      [setup((setup_temp_store(State),
