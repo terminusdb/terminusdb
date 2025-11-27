@@ -68,13 +68,13 @@ For rapid iteration during development, use the test server script:
 ```
 
 **Benefits:**
-- ✅ **Fast rebuild cycle**: Only rebuilds Rust if sources changed with `make dev`
-- ✅ **Safe by default**: Preserves storage unless `--clean` flag is used
-- ✅ **Port conflict detection**: Checks for existing processes on port 6363
-- ✅ **Quick readiness check**: Server ready in < 10s
-- ✅ **Consistent**: Same setup across all developers
-- ✅ **Background process**: Runs in background with PID tracking
-- ✅ **Default credentials**: admin/root (configurable with `TERMINUSDB_ADMIN_PASS`)
+- **Fast rebuild cycle**: Only rebuilds Rust if sources changed with `make dev`
+- **Safe by default**: Preserves storage unless `--clean` flag is used
+- **Port conflict detection**: Checks for existing processes on port 6363
+- **Quick readiness check**: Server ready in < 10s
+- **Consistent**: Same setup across all developers
+- **Background process**: Runs in background with PID tracking
+- **Default credentials**: admin/root (configurable with `TERMINUSDB_ADMIN_PASS`)
 
 **Server Details:**
 - URL: `http://127.0.0.1:6363`
@@ -427,11 +427,11 @@ if let Ok(mut f) = std::fs::OpenOptions::new()
 
 **Best Practices:**
 
-- ✅ **Always use built-in logging** when you have a `context` parameter
-- ✅ **Use appropriate severity levels** - avoid `log_error!` for non-errors
-- ✅ **Include context in messages** - function name, key identifiers
-- ✅ **Remove debug logging** before committing (or use INFO+ level for permanent logs)
-- ⚠️  **File-based logging** should only be used when context isn't available
+- **Always use built-in logging** when you have a `context` parameter
+- **Use appropriate severity levels** - avoid `log_error!` for non-errors
+- **Include context in messages** - function name, key identifiers
+- **Remove debug logging** before committing (or use INFO+ level for permanent logs)
+- **File-based logging** should only be used when context isn't available
 
 ### Debugging GraphQL Queries
 
@@ -516,7 +516,7 @@ Please send a [GitHub Pull Request](https://github.com/terminusdb/terminusdb/pul
 
 Please write clear log messages with your commits. Small changes can be a one line message, but big changes should have a descriptive paragraph with a newline after the title in the message.
 
-It should look something like this: 
+It should preferably look something like this: 
 
 ```bash
 $ git commit -m "My change title
@@ -567,6 +567,22 @@ Key = Value^^_
 ```
 
 Always validate assumptions about data types and provide clear error messages when validation fails. This makes bugs easier to diagnose and prevents silent failures that can lead to incorrect results or security issues downstream.
+
+### The perfect PR checklist
+
+1. Leverage TDD where relevant: add failing unit and integration tests first to verify assumptions of how the thing should work
+2. Fix the failing tests, and ensure no regressions in other tests 
+3. Complete the PR, write an informative PR summary to help the reviewer
+4. Run the full unit test suites
+5. Run the integration test suites
+6. Run the lint tool
+
+```bash
+rm src/rust/librust.*
+make dev
+./tests/terminusdb-test-server.sh restart
+make lint && make lint-mocha && make test && make test-int
+```
 
 ### Veterans of the Tabs / Spaces War
 
