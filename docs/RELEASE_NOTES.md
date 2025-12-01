@@ -1,6 +1,7 @@
 # TerminusDB Server v11.2.0-rc6 Release Notes
 
-## Breaking change for consistent behaviour
+## Enhancements
+* Add support for new `slice()` operator for WOQL list manipulation 
 * Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency)
 * Added `idgen_random()` to JavaScript WOQL client
 * Replaced `random_idgen()` with `idgen_random()` in Python WOQL client
@@ -9,6 +10,8 @@
 
 ## Maintenance and bug fixes
 * `WOQL.dot()` works correctly again for addressing fields in documents
+
+## Breaking changes, may break code relying on old behaviour
 * `WOQL.group_by()` now automatically unwraps single-element templates
 
 # TerminusDB Server v11.2.0-rc4 Release Notes
