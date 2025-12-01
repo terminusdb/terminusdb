@@ -12,6 +12,9 @@ TerminusDB is now nearing a new significant release, with a significant set of i
 * New `sys:Dictionary` can be typecast to and from `xdd:json`
 * Added `idgen_random()` to JavaScript WOQL client
 
+## Bugfixes
+* Fix `path()` times{0,N} operator in path spec to correctly handle zero hops
+
 ## Consistency changes according to how TerminusDB should work
 * Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency reasons)
 * Replaced `random_idgen()` with `idgen_random()` in Python WOQL client
