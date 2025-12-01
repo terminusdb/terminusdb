@@ -426,6 +426,20 @@ definition(
         types: [list(any),decimal]
     }).
 definition(
+    slice{
+        name: 'Slice',
+        fields: [list, result, start, end],
+        mode: [+, ?, +, +],
+        types: [list(any), list(any), integer, integer]
+    }).
+definition(
+    slice_no_end{
+        name: 'Slice',
+        fields: [list, result, start],
+        mode: [+, ?, +],
+        types: [list(any), list(any), integer]
+    }).
+definition(
     timestamp_now{
         name: 'Now',
         fields: [result],
@@ -1044,6 +1058,12 @@ cost_(sum(_,_), Cost, _Polarity) =>
     Cost = 10.
 
 cost_(member(_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(slice(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(slice(_,_,_,_), Cost, _Polarity) =>
     Cost = 10.
 
 cost_(X=Y, Cost, Polarity),

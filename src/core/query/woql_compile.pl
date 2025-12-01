@@ -1008,6 +1008,8 @@ find_resources(length(_,_),_, _, _, [], []).
 find_resources(member(_,_),_, _, _, [], []).
 find_resources(join(_,_,_),_, _, _, [], []).
 find_resources(sum(_,_),_, _, _, [], []).
+find_resources(slice(_,_,_),_, _, _, [], []).
+find_resources(slice(_,_,_,_),_, _, _, [], []).
 find_resources(timestamp_now(_),_, _, _, [], []).
 find_resources(false,_, _, _, [], []).
 find_resources(true,_, _, _, [], []).
@@ -1561,6 +1563,23 @@ compile_wf(sum(X,Y),Sum) -->
         marshall_args(sum_list(XE,YE), Goal),
         Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
+% slice/4 - with explicit end
+compile_wf(slice(List,Result,Start,End),Slice) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE),
+    resolve(Start,StartE),
+    resolve(End,EndE),
+    {
+        Slice = woql_compile:slice_list(ListE,ResultE,StartE,EndE)
+    }.
+% slice/3 - without end (slice to end of list)
+compile_wf(slice(List,Result,Start),Slice) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE),
+    resolve(Start,StartE),
+    {
+        Slice = woql_compile:slice_list_no_end(ListE,ResultE,StartE)
+    }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
     resolve(X,XE),
@@ -1640,6 +1659,85 @@ member_unwrap(Member, List^^'http://terminusdb.com/schema/xdd#json') :-
 member_unwrap(Member, List) :-
     % Not an xdd:json typed literal, call member directly  
     member(Member, List).
+
+% slice_list/4 - Extract a contiguous subsequence from a list with JavaScript slice semantics
+% Supports negative indices: -1 = last element, -2 = second to last, etc.
+% Out-of-bounds indices are clamped to valid range.
+% Start is inclusive, End is exclusive.
+slice_list(ListE, ResultE, StartE, EndE) :-
+    % Extract the actual list (handle typed literals)
+    unwrap_list(ListE, List),
+    % Extract start and end indices from typed literals
+    unwrap_integer(StartE, Start),
+    unwrap_integer(EndE, End),
+    length(List, Len),
+    % Normalize indices (handle negative values)
+    normalize_index(Start, Len, NormStart),
+    normalize_index(End, Len, NormEnd),
+    % Clamp indices to valid range
+    clamp_index(NormStart, 0, Len, ClampedStart),
+    clamp_index(NormEnd, 0, Len, ClampedEnd),
+    % Extract the slice if start < end, otherwise empty list
+    (   ClampedStart < ClampedEnd
+    ->  SliceLen is ClampedEnd - ClampedStart,
+        drop_n(ClampedStart, List, AfterDrop),
+        take_n(SliceLen, AfterDrop, Sliced)
+    ;   Sliced = []
+    ),
+    % Unify with result
+    ResultE = Sliced.
+
+% slice_list_no_end/3 - Slice from start to end of list
+slice_list_no_end(ListE, ResultE, StartE) :-
+    unwrap_list(ListE, List),
+    unwrap_integer(StartE, Start),
+    length(List, Len),
+    normalize_index(Start, Len, NormStart),
+    clamp_index(NormStart, 0, Len, ClampedStart),
+    drop_n(ClampedStart, List, Sliced),
+    ResultE = Sliced.
+
+% Helper: Unwrap list from typed literal if needed
+unwrap_list(List^^'http://terminusdb.com/schema/xdd#json', List) :- !.
+unwrap_list(List, List) :- is_list(List), !.
+unwrap_list(Var, Var) :- var(Var).
+
+% Helper: Unwrap integer from typed literal
+unwrap_integer(N^^_, N) :- !.
+unwrap_integer(N, N) :- integer(N).
+
+% Helper: Normalize negative index to positive
+% negative indices count from end: -1 = last element
+normalize_index(Index, Len, Normalized) :-
+    (   Index < 0
+    ->  Normalized is Len + Index
+    ;   Normalized = Index
+    ).
+
+% Helper: Clamp index to valid range [Min, Max]
+clamp_index(Index, Min, Max, Clamped) :-
+    (   Index < Min
+    ->  Clamped = Min
+    ;   Index > Max
+    ->  Clamped = Max
+    ;   Clamped = Index
+    ).
+
+% Helper: Drop first N elements from list
+drop_n(0, List, List) :- !.
+drop_n(N, [_|T], Result) :-
+    N > 0,
+    N1 is N - 1,
+    drop_n(N1, T, Result).
+drop_n(_, [], []).
+
+% Helper: Take first N elements from list
+take_n(0, _, []) :- !.
+take_n(N, [H|T], [H|Result]) :-
+    N > 0,
+    N1 is N - 1,
+    take_n(N1, T, Result).
+take_n(_, [], []).
 
 % Helper predicate for dot operator that unwraps xdd:json typed literals
 % ONLY handles xdd:json - does not unwrap other typed literals
