@@ -1,19 +1,21 @@
-# TerminusDB Server v11.2.0-rc6 Release Notes
+# TerminusDB Server v11.2.0 Release Notes
+
+TerminusDB is now nearing a new significant release, with a significant set of improvements across the board, tested out via release candidates.
 
 ## Enhancements
-* Add support for new `slice()` operator for WOQL list manipulation 
-
+* Add support for new `slice()` operator for WOQL list item handling
 * Enabled `dot()` to address parts of `path()` edge variable bindings
+* New datatype introduced, `sys:Dictionary` for Document/DictionaryTemplate
 * Document templates now have the internal `type_of()` name of `sys:Dictionary`
-* New `sys:Dictionary` can be typecast from `xdd:json`
-* JSON strings can now be typecast to `xdd:json`
+* Strings with JSON can now be typecast/transformed into `xdd:json` and back
 * Addressing fields in `xdd:json` is now possible using `dot()`
-
-## Breaking change to ensure consistent behaviour
-* Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency)
+* New `sys:Dictionary` can be typecast to and from `xdd:json`
 * Added `idgen_random()` to JavaScript WOQL client
+
+## Consistency changes according to how TerminusDB should work
+* Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency reasons)
 * Replaced `random_idgen()` with `idgen_random()` in Python WOQL client
-* Ensured accurate wildcard `path()` matching (such as .*), code relying on old behaviour will break, potentially returning duplicates
+* Ensured accurate wildcard `path()` matching (such as .*), code relying on old incorrect behaviour may break, potentially returning duplicates
 
 # TerminusDB Server v11.2.0-rc5 Release Notes
 
