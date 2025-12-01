@@ -2,6 +2,7 @@
 
 ## Enhancements
 * Add support for new `slice()` operator for WOQL list manipulation 
+
 * Enabled `dot()` to address parts of `path()` edge variable bindings
 * Document templates now have the internal `type_of()` name of `sys:Dictionary`
 * New `sys:Dictionary` can be typecast from `xdd:json`
@@ -18,6 +19,8 @@
 
 ## Maintenance and bug fixes
 * `WOQL.dot()` works correctly again for addressing fields in documents
+
+## Breaking changes, may break code relying on old behaviour
 * `WOQL.group_by()` now automatically unwraps single-element templates
 
 # TerminusDB Server v11.2.0-rc4 Release Notes
