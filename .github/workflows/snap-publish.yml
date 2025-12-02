@@ -34,8 +34,14 @@ jobs:
         id: channel
         run: |
           version="${{ steps.version.outputs.version }}"
+          # Determine snap channel based on version suffix
+          # -dev versions go to edge channel
+          # -rc, -beta, -alpha versions go to candidate channel  
+          # stable versions go to stable channel
           if [[ "$version" == *-dev ]]; then
             echo "release=edge" >> "$GITHUB_OUTPUT"
+          elif [[ "$version" =~ -(rc|beta|alpha) ]]; then
+            echo "release=candidate" >> "$GITHUB_OUTPUT"
           else
             echo "release=stable" >> "$GITHUB_OUTPUT"
           fi          
