@@ -54,3 +54,10 @@ jobs:
           snap: ${{ steps.snap_path.outputs.snap_path }}
           release: ${{ steps.channel.outputs.release }}
 
+      - name: Upload Snapcraft Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapcraft-logs
+          path: ~/.local/state/snapcraft/log/
+          if-no-files-found: warn
