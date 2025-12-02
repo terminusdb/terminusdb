@@ -1,14 +1,44 @@
-# TerminusDB Server v11.2.0-rc6 Release Notes
+# TerminusDB Server v12.0.0 Release Notes
 
-## Breaking change for consistent behaviour
-* Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency)
-* Added `idgen_random()` to JavaScript WOQL client
+A major release of TerminusDB. It forges a new path forward for this open source project. The on-disk storage format remains unchanged since the version 11 release and the changes are in stringency, precision and clarity of the graph database interfaces.
+
+TerminusDB is maintained by our friends over at [dfrnt.com](https://dfrnt.com?utm_source=terminusdb) since 2025. They build the DFRNT Platform for Justified Trust.
+
+Major changes overall in v12.0.0 since v11.1.17:
+* High precision decimals capped at 20 decimal places, using rationals
+* Auto-optimizer for continuous roll-ups now enabled by default
+* JSON numbers are now used across interfaces, also for high precision
+* Significantly enhanced dictionary and list support in WOQL
+* Numerous bugs and issues fixed, for higher precision logic processing
+* Unstructured JSON support, with high precision decimals support
+* Security improvements (no-root docker image, fixed error handling)
+* Dashboard component deprecated, yet possible to re-enable
+* Significantly improved test coverage across the product and clients.
+
+## Enhancements since 11.2-rc5
+* Add support for new `slice()` operator for WOQL list item handling
+* Enabled `dot()` to address parts of `path()` edge variable bindings
+* New datatype introduced, `sys:Dictionary` for Document/DictionaryTemplate
+* Document templates now have the internal `type_of()` name of `sys:Dictionary`
+* Strings with JSON can now be typecast/transformed into `xdd:json` and back
+* Addressing fields in `xdd:json` is now possible using `dot()`
+* New `sys:Dictionary` can be typecast to and from `xdd:json`
+* Added `idgen_random()` to JavaScript WOQL client.
+
+## Bugfixes since 11.2-rc5
+* Fix `path()` times{0,N} operator in path spec to correctly handle zero hops too.
+
+## Consistency changes according to how TerminusDB should work since 11.2-rc5
+* Added `RandomKey` type to WOQL (replaces `RandomIdgen` for consistency reasons)
 * Replaced `random_idgen()` with `idgen_random()` in Python WOQL client
+* Ensured accurate wildcard `path()` matching (such as .*), code relying on old incorrect behaviour may break, potentially returning duplicates.
 
 # TerminusDB Server v11.2.0-rc5 Release Notes
 
 ## Maintenance and bug fixes
 * `WOQL.dot()` works correctly again for addressing fields in documents
+
+## Breaking changes, may break code relying on old behaviour
 * `WOQL.group_by()` now automatically unwraps single-element templates
 
 # TerminusDB Server v11.2.0-rc4 Release Notes
