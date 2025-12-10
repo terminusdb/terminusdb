@@ -14,6 +14,8 @@ default:
 # Build the development binary (macOS-friendly, no library stripping).
 .PHONY: dev
 dev:
+	rm src/rust/target/release/libterminusdb_dylib.dylib || true
+	rm src/rust/librust.* || true
 	rm src/rust/librust.* || true
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
