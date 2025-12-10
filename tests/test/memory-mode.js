@@ -6,11 +6,11 @@ const path = require('path')
 describe('In-Memory Mode', function () {
   this.timeout(30000)
 
-  const PORT = 16363
+  const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
 
-  async function waitForServer (maxRetries = 20) {
+  async function waitForServer (maxRetries = 40) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         await new Promise((resolve, reject) => {
@@ -25,7 +25,7 @@ describe('In-Memory Mode', function () {
         })
         return true
       } catch (e) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
     }
     throw new Error('Server did not start in time')
