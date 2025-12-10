@@ -9,7 +9,7 @@ describe('In-Memory Mode', function () {
   const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
-  async function waitForServer(maxRetries = 40) {
+  async function waitForServer (maxRetries = 40) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         await new Promise((resolve, reject) => {
@@ -30,7 +30,7 @@ describe('In-Memory Mode', function () {
     throw new Error('Server did not start in time')
   }
 
-  async function httpRequest(options, body = null) {
+  async function httpRequest (options, body = null) {
     return new Promise((resolve, reject) => {
       const req = http.request(options, (res) => {
         let data = ''
@@ -43,7 +43,7 @@ describe('In-Memory Mode', function () {
     })
   }
 
-  function stopServer(done) {
+  function stopServer (done) {
     if (serverProcess) {
       serverProcess.kill('SIGTERM')
       serverProcess = null
