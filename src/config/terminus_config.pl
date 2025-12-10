@@ -37,7 +37,9 @@
               crypto_password_cost/1,
               lru_cache_size/1,
               trust_migrations/0,
-              expose_stack_traces/0
+              expose_stack_traces/0,
+              is_memory_mode/0,
+              set_memory_mode/0
 ]).
 
 :- use_module(library(pcre)).
@@ -363,3 +365,22 @@ semantic_indexer_endpoint(Endpoint) :-
 doc_work_limit(Limit) :-
     % This env var is actually read from rust so this default is ignored
     getenv_default('TERMINUSDB_DOC_WORK_LIMIT', Limit, 500_000).
+
+/**
+ * is_memory_mode is semidet.
+ *
+ * Succeeds if the server was started in in-memory mode (--memory flag).
+ * This is set by set_memory_mode/0 during server initialization.
+ */
+:- dynamic memory_mode_enabled/0.
+
+is_memory_mode :-
+    memory_mode_enabled.
+
+/**
+ * set_memory_mode is det.
+ *
+ * Sets the memory mode flag. Called during server startup when --memory is used.
+ */
+set_memory_mode :-
+    assertz(memory_mode_enabled).

@@ -23,7 +23,8 @@
                                        log_format/1,
                                        worker_amount/1,
                                        is_enterprise/0,
-                                       terminusdb_version/1]).
+                                       terminusdb_version/1,
+                                       set_memory_mode/0]).
 
 % Sockets
 :- use_module(library(socket)).
@@ -88,7 +89,8 @@ terminus_server(Argv,Wait) :-
         ->  Password = root
         ;   Password = Memory_Password),
         initialize_database_with_store(Password, Store),
-        global_triple_store(Store)
+        global_triple_store(Store),
+        set_memory_mode
     ;   true),
 
     (   triple_store(_Store), % ensure triple store has been set up by retrieving it once

@@ -1729,6 +1729,7 @@ error_type_(role, 'api:RoleErrorResponse').
 error_type_(capability, 'api:CapabilityErrorResponse').
 error_type_(log, 'api:LogErrorResponse').
 error_type_(history, 'api:HistoryErrorResponse').
+error_type_(info, 'api:InfoErrorResponse').
 error_type_(update_db, 'api:DbUpdateErrorResponse').
 error_type_(branch, 'api:BranchErrorResponse').
 error_type_(triples, 'api:TriplesErrorResponse').
@@ -1739,6 +1740,13 @@ error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
 error_type_(concat, 'api:ConcatErrorResponse').
 error_type_(index, 'api:IndexErrorResponse').
+
+% Info endpoint errors
+api_error_jsonld_(info, error(no_database_store_version, _), JSON) :-
+    JSON = _{'@type' : 'api:InfoErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:StorageVersionNotFound'},
+             'api:message' : 'Storage version file not found. The database store may be uninitialized or corrupted. Try running \'terminusdb store init\' or check TERMINUSDB_SERVER_DB_PATH.'}.
 
 % Graph <Type>
 api_error_jsonld(graph,error(invalid_absolute_graph_descriptor(Path),_), Type, JSON) :-
