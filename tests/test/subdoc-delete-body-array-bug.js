@@ -57,7 +57,7 @@ describe('subdoc-delete-body-array-bug', function () {
     return result.body.bindings
   }
 
-  describe('DELETE with query.id parameter (WORKS)', function () {
+  describe('delete with query.id parameter', function () {
     const dbName = 'delete_query_id_works'
 
     before(async function () {
@@ -82,11 +82,11 @@ describe('subdoc-delete-body-array-bug', function () {
       const triplesAfter = await countTriples(agent)
 
       expect(triplesAfter).to.have.lengthOf(0,
-        'DELETE with query.id should leave 0 orphaned triples')
+        'delete with query.id should leave 0 orphaned triples')
     })
   })
 
-  describe('DELETE with body array', function () {
+  describe('delete with body array', function () {
     const dbName = 'delete_body_array_bug'
 
     before(async function () {
@@ -111,7 +111,7 @@ describe('subdoc-delete-body-array-bug', function () {
       const triplesAfter = await countTriples(agent)
 
       expect(triplesAfter).to.have.lengthOf(0,
-        `DELETE with body array left ${triplesAfter.length} orphaned triples`)
+        `delete with body array left ${triplesAfter.length} orphaned triples`)
     })
   })
 
