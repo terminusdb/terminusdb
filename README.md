@@ -37,7 +37,7 @@ TerminusDB allows you to link JSON documents in a semantic knowledge graph throu
 
 - **[REST API](https://terminusdb.org/docs/rest-api)**: Use REST API as a proper graph query language with deep link discovery, path queries and linked data
 - **[GraphQL Support](https://terminusdb.org/docs/graphql-basics)**: Use GraphQL as a proper graph query language with deep link discovery and path queries
-- **[WOQL Datalog](https://terminusdb.org/docs/datalog-explanation)**: Use WOQL as a goal-seeking problem-solving toolbox, complete with triples across and within documents, path queries and variables unification
+- **[WOQL Datalog](https://terminusdb.org/docs/what-is-datalog)**: Use WOQL as a goal-seeking problem-solving toolbox, complete with triples across and within documents, path queries and variables unification
 - **[Schema Constraints](https://terminusdb.org/docs/schema-reference-guide/)**: Use schema constraints to enforce data quality and consistency, including for advanced typing
 - **`@unfoldable` Documents**: Unfold subdocuments within a frame to add all relevant data in one place
 - **`@metadata` Support**: Include additional metadata in document frames, including Markdown-formatted data
@@ -107,7 +107,7 @@ Full documentation is available at **[terminusdb.org/docs](https://terminusdb.or
 - **[Getting Started Guide](https://terminusdb.org/docs/get-started-with-terminusdb/)**: Complete onboarding tutorial
 - **[Document API](https://terminusdb.org/docs/document-insertion)**: Working with JSON documents
 - **[GraphQL Guide](https://terminusdb.org/docs/graphql-basics)**: Query your knowledge graph with GraphQL
-- **[WOQL](https://terminusdb.org/docs/datalog-explanation/)**: Web Object Query Language fundamentals
+- **[WOQL](https://terminusdb.org/docs/what-is-datalog/)**: Web Object Query Language fundamentals
 - **[Release Notes](docs/RELEASE_NOTES.md)**: Latest changes and version history
 
 Found an issue in the docs? Please [open an issue or pull request](https://github.com/dfrnt-labs/terminusdb-docs-static) in our documentation repo or here.
