@@ -68,7 +68,7 @@ jobs:
           name: ${{ inputs.image_artifact }}
 
       - name: Set up QEMU
-        if: ${{ inputs.image_platform == 'linux/arm64' }}
+        if: ${{ inputs.image_platform == 'linux/arm64' && runner.arch != 'ARM64' }}
         uses: docker/setup-qemu-action@v3
         with:
           platforms: 'arm64'

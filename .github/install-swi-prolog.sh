@@ -25,6 +25,8 @@ do_install() {
   case "$release" in
     stable | devel)
       # Install swipl from PPA: https://www.swi-prolog.org/build/PPA.html
+      sudo apt-get update
+      sudo apt-get install -y software-properties-common
       sudo apt-add-repository "ppa:swi-prolog/$release"
       sudo apt-get update
       sudo apt-get install -y swi-prolog

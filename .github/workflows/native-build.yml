@@ -98,6 +98,8 @@ jobs:
         include:
           - os: ubuntu-latest
             swipl_release: stable
+          - os: buildjet-4vcpu-ubuntu-2204-arm
+            swipl_release: stable
           - os: macos-latest
             swipl_release: homebrew
 #            - os: ubuntu-latest
@@ -143,6 +145,10 @@ jobs:
       - name: Install Protobuf Compiler (Linux)
         if: ${{ runner.os == 'Linux' && steps.check_changes.outputs.relevant_changed == 'true' }}                        
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust toolchain (Linux)
+        if: ${{ runner.os == 'Linux' && steps.check_changes.outputs.relevant_changed == 'true' }}
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install Protobuf Compiler (macOS)
         if: ${{ runner.os == 'macOS' && steps.check_changes.outputs.relevant_changed == 'true' }}                        
