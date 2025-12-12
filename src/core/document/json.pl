@@ -2079,7 +2079,10 @@ type_id_predicate_iri_value(cardinality(C,_,_),Id,P,_,DB,Prefixes,Options,L) :-
 type_id_predicate_iri_value(class(_),ParentId,P,Id,DB,Prefixes,Options,Value) :-
     (   instance_of(DB, Id, C),
         option(unfold(true), Options),
-        should_unfold_property(DB, ParentId, P, C)
+        should_unfold_property(DB, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
     ->  get_document(DB, Prefixes, Id, Value, Options)
     ;   option(compress_ids(true), Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
@@ -2088,7 +2091,10 @@ type_id_predicate_iri_value(class(_),ParentId,P,Id,DB,Prefixes,Options,Value) :-
 type_id_predicate_iri_value(tagged_union(C,_),ParentId,P,Id,DB,Prefixes,Options,Value) :-
     (   instance_of(DB, Id, C),
         option(unfold(true), Options),
-        should_unfold_property(DB, ParentId, P, C)
+        should_unfold_property(DB, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
     ->  get_document(DB, Prefixes, Id, Value, Options)
     ;   option(compress_ids(true),Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
@@ -2248,6 +2254,12 @@ get_document(DB, Id, Document, Options) :-
 get_document(DB, Prefixes, Id, Document, Options) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
+    % Initialize visited ancestors list if not present, add current doc
+    (   option(visited(Visited), Options)
+    ->  NewVisited = [Id_Ex|Visited]
+    ;   NewVisited = [Id_Ex]
+    ),
+    merge_options([visited(NewVisited)], Options, NewOptions),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
     ->  get_json_object(DB, Id_Ex, JSON0),
@@ -2266,7 +2278,7 @@ get_document(DB, Prefixes, Id, Document, Options) :-
                 \+ is_built_in(P),
 
                 once(class_predicate_type(DB,Class,P,Type)),
-                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Options,Value),
+                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,NewOptions,Value),
                 compress_schema_uri(P, Prefixes, Prop, Options)
             ),
             Data),
@@ -6909,7 +6921,7 @@ test(field_level_unfold_document_retrieval,
      get_dict(NoUnfoldKey, RetrievedUnfold, NoUnfoldValue),
      NoUnfoldValue = CustomerIdEx.
 
-test(field_level_unfold_cycle_detection,
+test(field_level_unfold_cycle_allowed,
      [
          setup(
              (   setup_temp_store(State),
@@ -6918,9 +6930,10 @@ test(field_level_unfold_cycle_detection,
              )),
          cleanup(
              teardown_temp_store(State)
-         ),
-         error(schema_check_failure(_))
+         )
      ]) :-
+     % Cycles with @unfold are allowed (consistent with @unfoldable)
+     % Runtime visited-node tracking prevents infinite loops during retrieval
      DocumentA =
      _{ '@id' : "CycleA",
         '@type' : "Class",
@@ -6945,6 +6958,78 @@ test(field_level_unfold_cycle_detection,
          ),
          _
      ).
+
+test(prolog_get_document_cycle_protection,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     % Test that Prolog get_document handles cycles without infinite recursion
+     % Uses @unfoldable class with cyclic data
+     Schema =
+     _{ '@id' : "CyclicNode",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        name : "xsd:string",
+        next : _{ '@type' : "Optional",
+                  '@class' : "CyclicNode" }
+      },
+
+     with_test_transaction(
+         Desc,
+         Context1,
+         insert_schema_document(Context1, Schema),
+         _
+     ),
+
+     % Create cyclic data: A -> B -> A
+     NodeA = _{ '@type' : "CyclicNode",
+                '@id' : "CyclicNode/A",
+                name : "Node A",
+                next : "CyclicNode/B" },
+     NodeB = _{ '@type' : "CyclicNode",
+                '@id' : "CyclicNode/B",
+                name : "Node B",
+                next : "CyclicNode/A" },
+
+     with_test_transaction(
+         Desc,
+         Context2,
+         (   insert_document(Context2, NodeA, _),
+             insert_document(Context2, NodeB, _)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     database_prefixes(DB, Prefixes),
+
+     % This should NOT cause infinite recursion - cycle should be detected
+     get_document(DB, Prefixes, 'CyclicNode/A', Document, [unfold(true)]),
+
+     % Verify we got a document back (didn't hang)
+     get_dict('@id', Document, _),
+
+     % Get the expanded URI for 'next' property
+     prefix_expand_schema(next, Prefixes, NextKey),
+
+     % The 'next' field should contain the unfolded NodeB
+     get_dict(NextKey, Document, NextDoc),
+     is_dict(NextDoc),
+
+     % NodeB was unfolded - check its back-reference
+     get_dict(NextKey, NextDoc, BackRef),
+
+     % BackRef should be just an ID atom (cycle detected), not a dict
+     atom(BackRef),
+     atom_string(BackRef, BackRefStr),
+     sub_string(BackRefStr, _, _, _, "CyclicNode/A").
 
 test(subdocument_hash_key,
      [

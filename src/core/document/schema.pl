@@ -793,31 +793,6 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     Witness = witness{ '@type' : bad_unfoldable_value,
                        class: Class,
                        value: Result }.
-refute_class_meta(Validation_Object,Class,Witness) :-
-    database_schema(Validation_Object,Schema),
-    transitive_reachable_field_unfold(Schema, Class, [Class], Path),
-    Witness = witness{ '@type' : unfoldable_cycle,
-                       class: Class,
-                       path: Path }.
-
-% Only detect cycles involving field-level @unfold edges.
-% Class-level @unfoldable cycles are allowed (original behavior).
-transitive_reachable_field_unfold(Schema, Class, Visited, Path) :-
-    reachable_via_field_unfold(Schema, Class, _, Next),
-    (   memberchk(Next, Visited)
-    ->  reverse([Next|Visited], Path)
-    ;   transitive_reachable_field_unfold(Schema, Next, [Next|Visited], Path)
-    ).
-
-% Reachable only via field-level @unfold (not class-level @unfoldable)
-reachable_via_field_unfold(Schema,A,P,B) :-
-    distinct(B,
-             (   schema_class_subsumed(Schema,A,C),
-                 schema_class_predicate_type(Schema,C,P,TypeDesc),
-                 type_descriptor_class(TypeDesc, B),
-                 schema_property_is_unfold(Schema, C, P, true)
-             )).
-
 refute_class_oneof(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:oneOf, Choice),

@@ -298,7 +298,7 @@ describe('Field-Level Unfold', function () {
     })
   })
 
-  describe('Cycle Detection with @unfold', function () {
+  describe('Cycle Handling with @unfold', function () {
     before(async function () {
       agent.dbName = 'field_unfold_cycle_test'
       await db.create(agent, { label: 'Field Unfold Cycle Test' })
@@ -308,11 +308,13 @@ describe('Field-Level Unfold', function () {
       await db.delete(agent)
     })
 
-    it('should reject schema with @unfold cycle', async function () {
+    it('should accept schema with @unfold cycle (consistent with @unfoldable)', async function () {
+      // Schema cycles are allowed - runtime visited-node tracking prevents infinite loops
       const schema = [
         {
           '@type': 'Class',
           '@id': 'CycleA',
+          name: 'xsd:string',
           toB: {
             '@type': 'Optional',
             '@class': 'CycleB',
@@ -322,6 +324,7 @@ describe('Field-Level Unfold', function () {
         {
           '@type': 'Class',
           '@id': 'CycleB',
+          name: 'xsd:string',
           toA: {
             '@type': 'Optional',
             '@class': 'CycleA',
@@ -330,8 +333,22 @@ describe('Field-Level Unfold', function () {
         },
       ]
 
-      const r = await document.insert(agent, { schema }).unverified()
-      expect(r.status).to.equal(400)
+      await document.insert(agent, { schema })
+
+      // Insert cyclic data
+      const instances = [
+        { '@type': 'CycleA', '@id': 'CycleA/a1', name: 'A1', toB: 'CycleB/b1' },
+        { '@type': 'CycleB', '@id': 'CycleB/b1', name: 'B1', toA: 'CycleA/a1' },
+      ]
+      await document.insert(agent, { instance: instances })
+
+      // Retrieve with unfold - should return @id for visited nodes (not infinite loop)
+      const r = await document.get(agent, { queryString: 'id=CycleA/a1&unfold=true' })
+      expect(r.status).to.equal(200)
+      expect(r.body.toB).to.be.an('object')
+      expect(r.body.toB.name).to.equal('B1')
+      // The back-reference should be just an @id (already visited)
+      expect(r.body.toB.toA).to.equal('CycleA/a1')
     })
   })
 })
