@@ -187,6 +187,8 @@ typecast(Val, Type, Hint, Cast) :-
         ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Val,Hint,Cast)
         ;   is_dict(Val)
         ->  typecast_switch(Expanded_Type,'http://terminusdb.com/schema/sys#Dictionary',Val,Hint,Cast)
+        ;   number(Val)  % Handle raw numbers (including rationals from sys:JSON)
+        ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#decimal',Val,Hint,Cast)
         ;   throw(error(casting_error(Val, Type), _))
         )
     ).

@@ -18,7 +18,6 @@ describe('In-Memory Mode', function () {
   const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
-
   async function waitForServer (maxRetries = 40) {
     for (let i = 0; i < maxRetries; i++) {
       try {

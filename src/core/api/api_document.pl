@@ -401,7 +401,7 @@ api_delete_document_(schema, Transaction, Id) :-
 api_delete_document_(instance, Transaction, Id) :-
     delete_document(Transaction, Id).
 
-% Bulk deletion with reference counting support
+% Bulk deletion with reference counting support for sys:JSON
 api_delete_documents_bulk_(schema, Transaction, Ids) :-
     forall(member(Id, Ids),
            delete_schema_document(Transaction, Id)).
