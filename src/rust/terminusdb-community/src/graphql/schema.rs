@@ -35,6 +35,7 @@ pub enum NodeOrValue {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SystemInfo {
     pub user: Atom,
     pub system: SyncStoreLayer,

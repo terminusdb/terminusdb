@@ -5,6 +5,8 @@ trait InnerClonableIterator<'a> {
     type Item;
 
     fn clone_boxed(&self) -> Box<dyn InnerClonableIterator<'a, Item = Self::Item> + 'a>;
+    /// TODO: Iterator view for cloning without consuming - not yet used in production.
+    #[allow(dead_code)]
     fn iter(&self) -> Box<dyn Iterator<Item = Self::Item> + 'a>;
     fn next_impl(&mut self) -> Option<Self::Item>;
 }

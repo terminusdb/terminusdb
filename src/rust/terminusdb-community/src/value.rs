@@ -436,6 +436,8 @@ pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> String {
     enum_value.to_string()
 }
 
+/// TODO: Generic scalar input value type for future GraphQL input handling.
+#[allow(dead_code)]
 pub enum ScalarInputValue {
     Boolean(bool),
     Int(i32),
