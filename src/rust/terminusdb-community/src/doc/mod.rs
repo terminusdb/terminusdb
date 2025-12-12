@@ -297,7 +297,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         }
     }
 
-    fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<L>> {
+    fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<'_, L>> {
         RdfListIterator {
             layer: self.layer(),
             cur: id,
@@ -308,7 +308,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         .peekable()
     }
 
-    fn get_array_iter(&self, stack_entry: &mut StackEntry<L>) -> ArrayIterator<L> {
+    fn get_array_iter(&self, stack_entry: &mut StackEntry<L>) -> ArrayIterator<'_, L> {
         if let StackEntry::Document { fields, .. } = stack_entry {
             let mut it = None;
             std::mem::swap(&mut it, fields);

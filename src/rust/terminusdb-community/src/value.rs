@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
-pub fn value_to_string(tde: &TypedDictEntry) -> Cow<str> {
+pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
     let result = match tde.datatype() {
         Datatype::String => tde.as_val::<String, String>(),
         Datatype::Token => tde.as_val::<Token, String>(),
