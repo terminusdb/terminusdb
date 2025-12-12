@@ -14,8 +14,14 @@ default:
 # Build the development binary (macOS-friendly, no library stripping).
 .PHONY: dev
 dev:
+	rm src/rust/target/release/libterminusdb_dylib.dylib || true
+	rm src/rust/librust.* || true
 	rm src/rust/librust.* || true
 	@$(MAKE) -f distribution/Makefile.prolog $@
+
+.PHONY: restart
+restart:
+	tests/terminusdb-test-server.sh restart
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
@@ -125,3 +131,6 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 # Create a man page from using `ronn`.
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
+
+.PHONY: pr
+pr: clean-rust dev restart lint lint-mocha test test-int

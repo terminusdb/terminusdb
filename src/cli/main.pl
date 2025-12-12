@@ -1523,6 +1523,9 @@ run(Argv) :-
     check_all_env_vars,
     (   Argv = [Cmd|_],
         member(Cmd, ['--version', help, store, test])
+    % Skip db check for in-memory mode - the store will be created on the fly
+    ;   member(MemFlag, ['--memory', '-m']),
+        member(MemFlag, Argv)
     ;   assert_system_db_is_accessible),
     run_(Argv).
 

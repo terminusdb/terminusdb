@@ -2,7 +2,8 @@
 
 :- use_module(core(util)).
 :- use_module(core(triple)).
-:- use_module(config(terminus_config), [terminusdb_version/1]).
+:- use_module(config(terminus_config), [terminusdb_version/1,
+                                        is_memory_mode/0]).
 
 :- use_module(library(terminus_store), [terminus_store_version/1]).
 
@@ -15,7 +16,11 @@ info(_System_DB, Auth, Info) :-
     terminusdb_version(TerminusDB_Version),
     terminus_store_version(TerminusDB_Store_Version),
     current_prolog_flag(terminusdb_git_hash, Git_Hash),
-    get_db_version(Storage_Version),
+    % In memory mode, there's no storage version file - use current database_version
+    (   is_memory_mode
+    ->  database_version(Storage_Version)
+    ;   get_db_version(Storage_Version)
+    ),
     number_string(Storage_Version, Storage_Version_String),
 
     Info = _{
