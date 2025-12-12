@@ -216,15 +216,19 @@ pub fn delete_all_triples<L: Layer + Clone>(layer: &L, builder: &mut dyn LayerBu
     }
 }
 
-/// Delete multiple JSON documents with pre-computed root IDs from Prolog.
-/// This properly handles layer stacking by using root IDs that were found
-/// using Prolog's id_triple/4 (which respects layer removals), rather than
-/// Rust's triples_o() (which returns all triples from all layers).
+/// Delete multiple documents with pre-computed root IDs from Prolog.
+/// This properly handles:
+/// 1. Regular typed subdocuments (recurse into non-document, non-value-hash types)
+/// 2. sys:JSON content-addressed structures (reference counting for shared content)
+/// 
+/// Uses the same logic as delete_id_document but with bulk-aware reference counting.
+/// For content-addressed JSON, uses backward traversal (like has_other_link) to check
+/// if other documents (not being deleted) still reference the node.
 pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
     context: &DocumentContext<L>,
     builder: &mut dyn LayerBuilder,
     document_ids: &HashSet<u64>,
-    all_document_roots: &HashSet<u64>,
+    _all_document_roots: &HashSet<u64>, // Kept for API compatibility, not used in optimized impl
 ) {
     let layer = context.layer();
     let rdf_type = context.rdf.type_();
@@ -233,61 +237,67 @@ pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
     }
     let rdf_type = rdf_type.unwrap();
     let rdf_list = context.rdf.list();
-    let sys_json_document = context.sys.json_document();
     let sys_json = context.sys.json();
 
-    // Pass 1: Traverse all document roots to build node_to_documents mapping
-    let mut node_to_documents: HashMap<u64, HashSet<u64>> = HashMap::new();
+    // Helper: Check if object should be recursed into (subdocument or sys:JSON)
+    // Same logic as delete_id_document
+    let should_traverse = |object_id: u64| -> bool {
+        let type_triple = layer.single_triple_sp(object_id, rdf_type);
+        if let Some(type_triple) = type_triple {
+            // Recurse if type is NOT a document type and NOT a value hash
+            !context.document_types.contains(&type_triple.object)
+                && !context.value_hashes.contains(&type_triple.object)
+        } else {
+            false
+        }
+    };
 
-    for &root_id in all_document_roots {
-        let mut visit_next = vec![root_id];
-        let mut visited: HashSet<u64> = HashSet::new();
-
-        while let Some(current_id) = visit_next.pop() {
-            if visited.contains(&current_id) {
-                continue;
-            }
-            visited.insert(current_id);
-
-            // Track that this root uses this node
-            node_to_documents
-                .entry(current_id)
-                .or_insert_with(HashSet::new)
-                .insert(root_id);
-
-            // Traverse outgoing edges
-            for triple in layer.triples_s(current_id) {
-                if let Some(true) = layer.id_object_is_node(triple.object) {
-                    if !visited.contains(&triple.object) {
-                        let json_exists = json_document_exists(
-                            layer,
-                            triple.object,
-                            rdf_type,
-                            rdf_list,
-                            sys_json_document,
-                            sys_json,
-                        )
-                        .unwrap_or(false);
-
-                        if json_exists {
-                            visit_next.push(triple.object);
-                        }
-                    }
-                }
+    // Helper: Check if object is content-addressed sys:JSON (needs reference counting)
+    let is_content_addressed_json = |object_id: u64| -> bool {
+        let object_iri = layer.id_subject(object_id).unwrap_or_default();
+        let is_content_addressed = object_iri.starts_with("terminusdb:///json/Cons/SHA1/")
+            || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
+        
+        if is_content_addressed {
+            // Verify it's actually a JSON type
+            if let Some(type_triple) = layer.single_triple_sp(object_id, rdf_type) {
+                return Some(type_triple.object) == sys_json 
+                    || Some(type_triple.object) == rdf_list;
             }
         }
-    }
+        false
+    };
 
-    // Pass 2: Delete documents and their content if no other live documents reference them
-    for &doc_id in document_ids {
-        let mut visit_next = vec![doc_id];
-        let mut visited: HashSet<u64> = HashSet::new();
-
-        while let Some(current_id) = visit_next.pop() {
-            if visited.contains(&current_id) {
+    // Helper: Check if a content-addressed node has references from documents NOT being deleted
+    // Similar to has_other_link but checks against document_ids set
+    let has_external_reference = |node_id: u64, visited: &HashSet<u64>| -> bool {
+        for triple in layer.triples_o(node_id) {
+            // Skip references from nodes we're currently deleting in this traversal
+            if visited.contains(&triple.subject) {
                 continue;
             }
-            visited.insert(current_id);
+            // Skip references from documents we're deleting
+            if document_ids.contains(&triple.subject) {
+                continue;
+            }
+            // Found a reference from something NOT being deleted
+            return true;
+        }
+        false
+    };
+
+    // Single pass: Delete documents and their content
+    // Track all visited nodes across all document deletions for proper reference counting
+    let mut global_visited: HashSet<u64> = HashSet::new();
+
+    for &doc_id in document_ids {
+        let mut visit_next = vec![doc_id];
+
+        while let Some(current_id) = visit_next.pop() {
+            if global_visited.contains(&current_id) {
+                continue;
+            }
+            global_visited.insert(current_id);
 
             // Remove all triples with this subject
             for triple in layer.triples_s(current_id) {
@@ -295,41 +305,18 @@ pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
 
                 // Check if the object node should be recursively deleted
                 if let Some(true) = layer.id_object_is_node(triple.object) {
-                    if !visited.contains(&triple.object) {
-                        let json_exists = json_document_exists(
-                            layer,
-                            triple.object,
-                            rdf_type,
-                            rdf_list,
-                            sys_json_document,
-                            sys_json,
-                        )
-                        .unwrap_or(false);
+                    if !global_visited.contains(&triple.object) && should_traverse(triple.object) {
+                        // For content-addressed sys:JSON, check for external references
+                        let should_recurse = if is_content_addressed_json(triple.object) {
+                            // Only delete if no external documents reference this node
+                            !has_external_reference(triple.object, &global_visited)
+                        } else {
+                            // Non-content-addressed: always recurse (regular subdocuments)
+                            true
+                        };
 
-                        if json_exists {
-                            // Check if this node is content-addressed (shared)
-                            let object_iri = layer.id_subject(triple.object).unwrap_or_default();
-                            let is_content_addressed =
-                                object_iri.starts_with("terminusdb:///json/Cons/SHA1/")
-                                    || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
-
-                            let should_recurse = if is_content_addressed {
-                                // Content-addressed: check if any non-deleted document still uses it
-                                if let Some(using_docs) = node_to_documents.get(&triple.object) {
-                                    // Should recurse only if ALL documents using this node are being deleted
-                                    using_docs.iter().all(|d| document_ids.contains(d))
-                                } else {
-                                    // No mapping means safe to delete
-                                    true
-                                }
-                            } else {
-                                // Non-content-addressed: always recurse
-                                true
-                            };
-
-                            if should_recurse {
-                                visit_next.push(triple.object);
-                            }
+                        if should_recurse {
+                            visit_next.push(triple.object);
                         }
                     }
                 }
