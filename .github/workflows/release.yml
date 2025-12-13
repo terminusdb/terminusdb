@@ -1,0 +1,99 @@
+# Release Workflow - Orchestrates publishing Docker and Snap images on new versions
+#
+# Triggers:
+# - When a version tag is pushed (v*)
+# - Manual dispatch with optional specific tag
+#
+# This workflow coordinates:
+# 1. Docker image build and publish (AMD64 + ARM64)
+# 2. Snap build and publish
+#
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_docker:
+        description: 'Publish Docker images'
+        required: false
+        default: true
+        type: boolean
+      publish_snap:
+        description: 'Publish Snap package'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  # ============================================================================
+  # Docker: Build and Publish multi-arch images
+  # ============================================================================
+  docker-publish:
+    name: Docker Publish
+    if: ${{ github.event_name == 'push' || github.event.inputs.publish_docker == 'true' }}
+    uses: ./.github/workflows/docker-images-publish.yml
+    secrets: inherit
+
+  # ============================================================================
+  # Snap: Build first, then publish
+  # ============================================================================
+  snap-build:
+    name: Snap Build
+    if: ${{ github.event_name == 'push' || github.event.inputs.publish_snap == 'true' }}
+    uses: ./.github/workflows/snap-build.yml
+    secrets: inherit
+
+  snap-publish:
+    name: Snap Publish
+    needs: snap-build
+    if: ${{ github.event_name == 'push' || github.event.inputs.publish_snap == 'true' }}
+    uses: ./.github/workflows/snap-publish.yml
+    secrets: inherit
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  release-summary:
+    name: Release Summary
+    runs-on: ubuntu-latest
+    needs: [docker-publish, snap-publish]
+    if: always()
+
+    steps:
+      - name: Check Results
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Get the version from the tag
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Version:** Manual dispatch" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Docker status
+          if [[ "${{ needs.docker-publish.result }}" == "success" ]]; then
+            echo "- ✅ Docker images published" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.docker-publish.result }}" == "skipped" ]]; then
+            echo "- ⏭️ Docker publish skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Docker publish failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Snap status
+          if [[ "${{ needs.snap-publish.result }}" == "success" ]]; then
+            echo "- ✅ Snap package published" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.snap-publish.result }}" == "skipped" ]]; then
+            echo "- ⏭️ Snap publish skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Snap publish failed" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -130,6 +130,7 @@ base_type('http://terminusdb.com/schema/xdd#email').
 base_type('http://terminusdb.com/schema/xdd#html').
 base_type('http://terminusdb.com/schema/sys#JSONDocument').
 base_type('http://terminusdb.com/schema/sys#JSON').
+base_type('http://terminusdb.com/schema/sys#Dictionary').
 
 /**
  * base_type_parent(+ChildXSDURI:uri,+ParentXSDURI:uri) is det.
@@ -139,7 +140,7 @@ base_type('http://terminusdb.com/schema/sys#JSON').
  *
  * Implements the child parent relationship between basetypes.
  *
- * We visually represent the heirarchy with whitespace - please maintain!
+ * We visually represent the hierarchy with whitespace - please maintain!
  */
 base_type_parent('http://www.w3.org/1999/02/22-rdf-syntax-ns#langString','http://www.w3.org/2000/01/rdf-schema#Literal').
 base_type_parent('http://www.w3.org/2000/01/rdf-schema#XMLLiteral','http://www.w3.org/2000/01/rdf-schema#Literal').

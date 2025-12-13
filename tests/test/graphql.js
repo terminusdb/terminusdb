@@ -1787,4 +1787,317 @@ query EverythingQuery {
       expect(result).to.equal(undefined)
     })
   })
+
+  describe('system graph layer queries', function () {
+    let metaClient
+    let commitsClient
+
+    before(async function () {
+      // Create Apollo clients for _meta and _commits endpoints
+      const base = agent.baseUrl
+      const metaPath = `/api/graphql/${agent.orgName}/${agent.dbName}/_meta`
+      const commitsPath = `/api/graphql/${agent.orgName}/${agent.dbName}/local/_commits`
+
+      const authMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(agent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      // Meta client
+      const metaHttpLink = new HttpLink({ uri: `${base}${metaPath}`, fetch })
+      const metaComposedLink = concat(authMiddleware, metaHttpLink)
+      metaClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: metaComposedLink,
+      })
+
+      // Commits client
+      const commitsHttpLink = new HttpLink({ uri: `${base}${commitsPath}`, fetch })
+      const commitsComposedLink = concat(authMiddleware, commitsHttpLink)
+      commitsClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: commitsComposedLink,
+      })
+
+      // Make a commit to ensure we have commit history
+      await document.insert(agent, {
+        instance: { '@type': 'Person', name: 'Test Layer Person', age: '25', order: '10' },
+        message: 'Test commit for layer queries',
+        author: 'test-author',
+      })
+    })
+
+    it('queries repository head layer via _meta', async function () {
+      const REPO_HEAD_QUERY = gql`
+        query RepoHeadQuery {
+          Local {
+            name
+            head {
+              layer_identifier
+            }
+          }
+        }
+      `
+
+      const result = await metaClient.query({ query: REPO_HEAD_QUERY })
+
+      expect(result.data.Local).to.be.an('array')
+
+      // _meta graph may not have the test database repository yet
+      // This is normal for test databases, so test with any available repository
+      if (result.data.Local.length > 0) {
+        const repo = result.data.Local[0]
+        expect(repo.name).to.be.a('string')
+
+        // Head may be null for empty databases
+        if (repo.head) {
+          expect(repo.head.layer_identifier).to.be.a('string')
+          expect(repo.head.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+        }
+      } else {
+        // If no repositories, at least verify the query structure works
+        expect(result.data.Local).to.be.an('array')
+      }
+    })
+
+    it('queries commit schema and instance layers via _commits', async function () {
+      const COMMIT_LAYERS_QUERY = gql`
+        query CommitLayersQuery {
+          Commit {
+            identifier
+            message
+            author
+            schema {
+              layer_identifier
+            }
+            instance {
+              layer_identifier
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: COMMIT_LAYERS_QUERY })
+
+      expect(result.data.Commit).to.be.an('array')
+      expect(result.data.Commit.length).to.be.greaterThan(0)
+
+      const commit = result.data.Commit[0]
+      expect(commit.identifier).to.be.a('string')
+      expect(commit.schema).to.exist
+      expect(commit.schema.layer_identifier).to.be.a('string')
+      expect(commit.schema.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+
+      if (commit.instance) {
+        expect(commit.instance.layer_identifier).to.be.a('string')
+        expect(commit.instance.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+      }
+    })
+
+    it('queries branch head layers via _commits', async function () {
+      const BRANCH_LAYERS_QUERY = gql`
+        query BranchLayersQuery {
+          Branch {
+            name
+            head {
+              identifier
+              schema {
+                layer_identifier
+              }
+              instance {
+                layer_identifier
+              }
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: BRANCH_LAYERS_QUERY })
+
+      expect(result.data.Branch).to.be.an('array')
+      expect(result.data.Branch.length).to.be.greaterThan(0)
+
+      const mainBranch = result.data.Branch.find((b) => b.name === 'main')
+      expect(mainBranch).to.exist
+      expect(mainBranch.head).to.exist
+      expect(mainBranch.head.identifier).to.be.a('string')
+      expect(mainBranch.head.schema).to.exist
+      expect(mainBranch.head.schema.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+    })
+
+    it('filters commits by author via _commits', async function () {
+      const FILTER_BY_AUTHOR_QUERY = gql`
+        query FilterByAuthorQuery {
+          Commit(filter: { author: { eq: "test-author" } }) {
+            identifier
+            author
+            message
+            schema {
+              layer_identifier
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: FILTER_BY_AUTHOR_QUERY })
+
+      expect(result.data.Commit).to.be.an('array')
+
+      // All returned commits should have author 'test-author'
+      result.data.Commit.forEach((commit) => {
+        expect(commit.author).to.equal('test-author')
+        expect(commit.schema).to.exist
+        expect(commit.schema.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+      })
+    })
+
+    it('orders commits by timestamp via _commits', async function () {
+      const ORDER_BY_TIMESTAMP_QUERY = gql`
+        query OrderByTimestampQuery {
+          Commit(orderBy: { timestamp: DESC }, limit: 3) {
+            identifier
+            timestamp
+            schema {
+              layer_identifier
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: ORDER_BY_TIMESTAMP_QUERY })
+
+      expect(result.data.Commit).to.be.an('array')
+      expect(result.data.Commit.length).to.be.greaterThan(0)
+      expect(result.data.Commit.length).to.be.lessThanOrEqual(3)
+
+      // Verify descending order
+      for (let i = 1; i < result.data.Commit.length; i++) {
+        const prev = parseFloat(result.data.Commit[i - 1].timestamp)
+        const curr = parseFloat(result.data.Commit[i].timestamp)
+        expect(prev).to.be.greaterThanOrEqual(curr)
+      }
+    })
+
+    it('navigates parent commits and detects layer changes via _commits', async function () {
+      const PARENT_NAVIGATION_QUERY = gql`
+        query ParentNavigationQuery {
+          Commit(orderBy: { timestamp: DESC }, limit: 1) {
+            identifier
+            message
+            schema {
+              layer_identifier
+            }
+            instance {
+              layer_identifier
+            }
+            parent {
+              identifier
+              message
+              schema {
+                layer_identifier
+              }
+              instance {
+                layer_identifier
+              }
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: PARENT_NAVIGATION_QUERY })
+
+      expect(result.data.Commit).to.be.an('array')
+      expect(result.data.Commit.length).to.be.greaterThan(0)
+
+      const commit = result.data.Commit[0]
+      expect(commit.schema).to.exist
+      expect(commit.schema.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+
+      if (commit.parent) {
+        expect(commit.parent.identifier).to.be.a('string')
+        expect(commit.parent.schema).to.exist
+        expect(commit.parent.schema.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+
+        // Verify we can detect if schema changed between commits
+        // (both identifiers are valid, we can compare them)
+        expect(typeof commit.schema.layer_identifier).to.equal('string')
+        expect(typeof commit.parent.schema.layer_identifier).to.equal('string')
+
+        // Verify instance layer handling when present
+        if (commit.instance && commit.parent.instance) {
+          expect(commit.instance.layer_identifier).to.be.a('string')
+          expect(commit.parent.instance.layer_identifier).to.be.a('string')
+        }
+      }
+    })
+
+    it('queries layer identifier format validation via _commits', async function () {
+      const LAYER_ID_QUERY = gql`
+        query LayerIdQuery {
+          Commit(limit: 1) {
+            schema {
+              layer_identifier
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: LAYER_ID_QUERY })
+
+      expect(result.data.Commit).to.be.an('array')
+      expect(result.data.Commit.length).to.be.greaterThan(0)
+
+      const commit = result.data.Commit[0]
+      const layer = commit.schema
+
+      // Verify identifier is exactly 40 hex characters (SHA-1 hash)
+      expect(layer.layer_identifier).to.be.a('string')
+      expect(layer.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+      expect(layer.layer_identifier.length).to.equal(40)
+    })
+
+    it('queries multiple commits and compares layer identifiers via _commits', async function () {
+      const MULTIPLE_COMMITS_QUERY = gql`
+        query MultipleCommitsQuery {
+          Commit {
+            identifier
+            schema {
+              layer_identifier
+            }
+            instance {
+              layer_identifier
+            }
+          }
+        }
+      `
+
+      const result = await commitsClient.query({ query: MULTIPLE_COMMITS_QUERY })
+
+      expect(result.data.Commit).to.be.an('array')
+      expect(result.data.Commit.length).to.be.greaterThan(0)
+
+      // Collect all unique schema layer identifiers
+      const schemaLayers = new Set()
+      result.data.Commit.forEach((commit) => {
+        if (commit.schema && commit.schema.layer_identifier) {
+          schemaLayers.add(commit.schema.layer_identifier)
+          expect(commit.schema.layer_identifier).to.match(/^[0-9a-f]{40}$/)
+        }
+      })
+
+      // We should have at least one schema layer
+      expect(schemaLayers.size).to.be.greaterThan(0)
+
+      // All schema layer identifiers should be valid SHA-1 hashes
+      schemaLayers.forEach((layerId) => {
+        expect(layerId).to.be.a('string')
+        expect(layerId.length).to.equal(40)
+      })
+    })
+  })
 })

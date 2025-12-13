@@ -983,7 +983,7 @@ find_resources(not(P), Collection, DRG, DWG, Read, Write) :-
 find_resources(get(_,_,_), _, _, _, [], []).
 find_resources(typecast(_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
-find_resources(random_idgen(_,_,_), _, _, _, [], []).
+find_resources(idgen_random(_,_,_), _, _, _, [], []).
 find_resources(idgen(_,_,_), _, _, _, [], []).
 find_resources(asc(_), _, _, _, [], []).
 find_resources(desc(_), _, _, _, [], []).
@@ -1008,6 +1008,8 @@ find_resources(length(_,_),_, _, _, [], []).
 find_resources(member(_,_),_, _, _, [], []).
 find_resources(join(_,_,_),_, _, _, [], []).
 find_resources(sum(_,_),_, _, _, [], []).
+find_resources(slice(_,_,_),_, _, _, [], []).
+find_resources(slice(_,_,_,_),_, _, _, [], []).
 find_resources(timestamp_now(_),_, _, _, [], []).
 find_resources(false,_, _, _, [], []).
 find_resources(true,_, _, _, [], []).
@@ -1385,7 +1387,7 @@ compile_wf(hash(Base,Args,Id),(
     resolve(Base, BaseE),
     mapm(resolve,Args,ArgsE),
     resolve(Id,IdE).
-compile_wf(random_idgen(Base,Args,Id),(
+compile_wf(idgen_random(Base,Args,Id),(
                literally(BaseE,BaseL),
                literally(ArgsE,ArgsL),
                idgen_random(BaseL,ArgsL,IdS),
@@ -1499,7 +1501,7 @@ compile_wf(X is Arith, (Pre_Term,
                         XE = XA^^Result_Type)) -->
     resolve(X,XE),
     compile_arith(Arith,Pre_Term,ArithE).
-compile_wf(dot(Dict,Key,Value), dot_field(DictE, KeyAtom, ValueE)) -->
+compile_wf(dot(Dict,Key,Value), Goal) -->
     resolve(Dict,DictE),
     {
         % Extract the field name as a string
@@ -1511,7 +1513,9 @@ compile_wf(dot(Dict,Key,Value), dot_field(DictE, KeyAtom, ValueE)) -->
                        context(dot/3, 'field parameter must be a string')))
         ),
         % Convert to atom for get_dict
-        atom_string(KeyAtom, FieldName)
+        atom_string(KeyAtom, FieldName),
+        % Unwrap typed literals (e.g., xdd:json) at runtime
+        Goal = woql_compile:dot_field_unwrap(DictE, KeyAtom, ValueE)
     },
     resolve(Value,ValueE).
 compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,UnwrappedTemplate,Query,Acc)) -->
@@ -1537,9 +1541,13 @@ compile_wf(length(L,N),Length) -->
     { marshall_args(length(LE,NE), Length_1),
       Length = (ensure_static_mode(length/2, [LE, NE], [L, N]),
                 Length_1)}.
-compile_wf(member(X,Y),member(XE,YE)) -->
+compile_wf(member(X,Y),Member) -->
     resolve(X,XE),
-    resolve(Y,YE).
+    resolve(Y,YE),
+    {
+        % Use helper that handles typed literals at runtime
+        Member = woql_compile:member_unwrap(XE,YE)
+    }.
 compile_wf(join(X,S,Y),Join) -->
     resolve(X,XE),
     resolve(S,SE),
@@ -1554,6 +1562,23 @@ compile_wf(sum(X,Y),Sum) -->
     {
         marshall_args(sum_list(XE,YE), Goal),
         Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
+    }.
+% slice/4 - with explicit end
+compile_wf(slice(List,Result,Start,End),Slice) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE),
+    resolve(Start,StartE),
+    resolve(End,EndE),
+    {
+        Slice = woql_compile:slice_list(ListE,ResultE,StartE,EndE)
+    }.
+% slice/3 - without end (slice to end of list)
+compile_wf(slice(List,Result,Start),Slice) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE),
+    resolve(Start,StartE),
+    {
+        Slice = woql_compile:slice_list_no_end(ListE,ResultE,StartE)
     }.
 compile_wf(timestamp_now(X), (get_time(Timestamp)))
 -->
@@ -1624,6 +1649,105 @@ compile_wf(call(Name, Arguments), trampoline(Pred, ArgumentsE)) -->
     { atom_string(Pred, Name),
       late_bind_trampoline(Pred, Context)
     }.
+
+% Helper predicate for member/2 that unwraps xdd:json typed literals
+% ONLY handles xdd:json - does not unwrap other typed literals
+member_unwrap(Member, List^^'http://terminusdb.com/schema/xdd#json') :-
+    !,
+    % Unwrap xdd:json typed literal and call member
+    member(Member, List).
+member_unwrap(Member, List) :-
+    % Not an xdd:json typed literal, call member directly  
+    member(Member, List).
+
+% slice_list/4 - Extract a contiguous subsequence from a list with JavaScript slice semantics
+% Supports negative indices: -1 = last element, -2 = second to last, etc.
+% Out-of-bounds indices are clamped to valid range.
+% Start is inclusive, End is exclusive.
+slice_list(ListE, ResultE, StartE, EndE) :-
+    % Extract the actual list (handle typed literals)
+    unwrap_list(ListE, List),
+    % Extract start and end indices from typed literals
+    unwrap_integer(StartE, Start),
+    unwrap_integer(EndE, End),
+    length(List, Len),
+    % Normalize indices (handle negative values)
+    normalize_index(Start, Len, NormStart),
+    normalize_index(End, Len, NormEnd),
+    % Clamp indices to valid range
+    clamp_index(NormStart, 0, Len, ClampedStart),
+    clamp_index(NormEnd, 0, Len, ClampedEnd),
+    % Extract the slice if start < end, otherwise empty list
+    (   ClampedStart < ClampedEnd
+    ->  SliceLen is ClampedEnd - ClampedStart,
+        drop_n(ClampedStart, List, AfterDrop),
+        take_n(SliceLen, AfterDrop, Sliced)
+    ;   Sliced = []
+    ),
+    % Unify with result
+    ResultE = Sliced.
+
+% slice_list_no_end/3 - Slice from start to end of list
+slice_list_no_end(ListE, ResultE, StartE) :-
+    unwrap_list(ListE, List),
+    unwrap_integer(StartE, Start),
+    length(List, Len),
+    normalize_index(Start, Len, NormStart),
+    clamp_index(NormStart, 0, Len, ClampedStart),
+    drop_n(ClampedStart, List, Sliced),
+    ResultE = Sliced.
+
+% Helper: Unwrap list from typed literal if needed
+unwrap_list(List^^'http://terminusdb.com/schema/xdd#json', List) :- !.
+unwrap_list(List, List) :- is_list(List), !.
+unwrap_list(Var, Var) :- var(Var).
+
+% Helper: Unwrap integer from typed literal
+unwrap_integer(N^^_, N) :- !.
+unwrap_integer(N, N) :- integer(N).
+
+% Helper: Normalize negative index to positive
+% negative indices count from end: -1 = last element
+normalize_index(Index, Len, Normalized) :-
+    (   Index < 0
+    ->  Normalized is Len + Index
+    ;   Normalized = Index
+    ).
+
+% Helper: Clamp index to valid range [Min, Max]
+clamp_index(Index, Min, Max, Clamped) :-
+    (   Index < Min
+    ->  Clamped = Min
+    ;   Index > Max
+    ->  Clamped = Max
+    ;   Clamped = Index
+    ).
+
+% Helper: Drop first N elements from list
+drop_n(0, List, List) :- !.
+drop_n(N, [_|T], Result) :-
+    N > 0,
+    N1 is N - 1,
+    drop_n(N1, T, Result).
+drop_n(_, [], []).
+
+% Helper: Take first N elements from list
+take_n(0, _, []) :- !.
+take_n(N, [H|T], [H|Result]) :-
+    N > 0,
+    N1 is N - 1,
+    take_n(N1, T, Result).
+take_n(_, [], []).
+
+% Helper predicate for dot operator that unwraps xdd:json typed literals
+% ONLY handles xdd:json - does not unwrap other typed literals
+dot_field_unwrap(Dict^^'http://terminusdb.com/schema/xdd#json', Field, Value) :-
+    !,
+    % Unwrap xdd:json typed literal and call dot_field
+    dot_field(Dict, Field, Value).
+dot_field_unwrap(Dict, Field, Value) :-
+    % Not an xdd:json typed literal, call dot_field directly
+    dot_field(Dict, Field, Value).
 
 % Helper predicate for generic dot operator field access
 % Supports dictionaries, Edge objects (woql:subject/predicate/object), and RDF objects
@@ -1719,6 +1843,9 @@ typeof(_@T,S^^'http://www.w3.org/2001/XMLSchema#string') :-
     atom_string(T,S),
     !.
 typeof(_^^T,T) :-
+    !.
+typeof(Dict,'http://terminusdb.com/schema/sys#Dictionary') :-
+    is_dict(Dict),
     !.
 typeof(A,T) :-
     atom(A),

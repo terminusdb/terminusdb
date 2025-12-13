@@ -152,4 +152,84 @@ describe('sys:JSON Bug - Subdocument Sharing Example', function () {
       expect(docB.body.name).to.equal('documentB')
     })
   })
+
+  describe('ValueHash document with subdocuments in List returns correct ID', function () {
+    const schema = [
+      {
+        '@type': 'Class',
+        '@id': 'StringDoc',
+        '@subdocument': [],
+        '@key': {
+          '@type': 'Random',
+        },
+        string: {
+          '@type': 'Optional',
+          '@class': 'xsd:string',
+        },
+      },
+      {
+        '@type': 'Class',
+        '@id': 'Entity',
+        '@key': {
+          '@type': 'ValueHash',
+        },
+        'string-list': {
+          '@type': 'List',
+          '@class': 'StringDoc',
+        },
+        label: {
+          '@type': 'Optional',
+          '@class': 'xsd:string',
+        },
+      },
+    ]
+
+    before(async function () {
+      await db.create(agent, { label: 'ValueHash subdocument test', schema: true })
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('should return top-level document ID, not subdocument ID (issue #2298)', async function () {
+      // This test verifies that insert_document returns the ID of the top-level document
+      // rather than a nested subdocument when using ValueHash keys with List containers.
+      const instance = {
+        '@type': 'Entity',
+        label: 'test entity',
+        'string-list': [
+          {
+            '@type': 'StringDoc',
+            string: '1',
+          },
+          {
+            '@type': 'StringDoc',
+            string: '2',
+          },
+        ],
+      }
+
+      const response = await document.insert(agent, { instance })
+
+      expect(response.body).to.be.an('array').with.lengthOf(1)
+      const returnedId = response.body[0]
+
+      // The ID should end with "Entity/<hash>", not "StringDoc/<id>" or contain nested path
+      expect(returnedId).to.be.a('string')
+      expect(returnedId).to.match(/Entity\/[a-f0-9]+$/,
+        'Expected ID to end with Entity/<hash>, but got: ' + returnedId)
+
+      // The ID should NOT contain subdocument paths like "string-list/0/StringDoc"
+      expect(returnedId).to.not.include('string-list')
+      expect(returnedId).to.not.include('StringDoc')
+
+      // Verify we can retrieve the document using the returned ID
+      const retrieved = await document.get(agent, { query: { id: returnedId } })
+      expect(retrieved.body).to.be.an('object')
+      expect(retrieved.body['@type']).to.equal('Entity')
+      expect(retrieved.body['@id']).to.match(/^Entity\/[a-f0-9]+$/)
+    })
+  })
 })

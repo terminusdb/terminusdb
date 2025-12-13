@@ -1100,6 +1100,13 @@
   "@id":"RandomKey",
   "@inherits":"Query",
   "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["base", "uri" ],
+      "mode": ["+", "?" ],
+      "types": ["string", "node" ]
+    }
+  },
   "@type":"Class",
   "base":"DataValue",
   "uri":"NodeValue"

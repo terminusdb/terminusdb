@@ -96,7 +96,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
     })
 
-    it('fails with equal values (33 > 33) - REGRESSION TEST Issue #2225', async function () {
+    it('fails with equal values (33 > 33) - (issue #2225)', async function () {
       // This is the core regression test for Issue #2225
       // Before fix: 33 > 33 would incorrectly return true due to structural comparison
       // After fix: correctly returns false (empty bindings)
@@ -139,7 +139,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
     })
 
-    it('fails with cross-type equal values: 33.0 > 33 - REGRESSION TEST', async function () {
+    it('fails with cross-type equal values: 33.0 > 33', async function () {
       // Tests that float vs integer comparison works correctly for equal values
       const query = {
         '@type': 'Greater',

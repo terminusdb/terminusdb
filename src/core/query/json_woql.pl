@@ -798,6 +798,15 @@ json_type_to_woql_ast('HashKey',JSON,WOQL,Path) :-
     json_value_to_woql_ast(URI,WURI,[uri
                                      |Path]),
     WOQL = hash(WBase,WKey,WURI).
+json_type_to_woql_ast('RandomKey',JSON,WOQL,Path) :-
+    _{base : Base,
+      uri : URI
+     } :< JSON,
+    json_value_to_woql_ast(Base,WBase,[base
+                                       |Path]),
+    json_value_to_woql_ast(URI,WURI,[uri
+                                     |Path]),
+    WOQL = idgen_random(WBase,[],WURI).
 json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
     _{mixed :  S,
       upper : V
@@ -882,6 +891,19 @@ json_type_to_woql_ast('Sum',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Value,WValue,[result
                                          |Path]),
     WOQL = sum(WList,WValue).
+json_type_to_woql_ast('Slice',JSON,WOQL,Path) :-
+    _{list : List,
+      result : Result,
+      start : Start
+     } :< JSON,
+    json_value_to_woql_ast(List,WList,[list|Path]),
+    json_value_to_woql_ast(Result,WResult,[result|Path]),
+    json_value_to_woql_ast(Start,WStart,[start|Path]),
+    (   get_dict(end, JSON, End)
+    ->  json_value_to_woql_ast(End,WEnd,[end|Path]),
+        WOQL = slice(WList,WResult,WStart,WEnd)
+    ;   WOQL = slice(WList,WResult,WStart)
+    ).
 json_type_to_woql_ast('Count',JSON,WOQL,Path) :-
     _{query : Query,
       count : Count

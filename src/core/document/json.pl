@@ -1,5 +1,6 @@
 :- module('document/json', [
               idgen_random/2,
+              idgen_random/3,
               idgen_hash/3,
               idgen_lexical/3,
               context_triple/2,
@@ -450,7 +451,13 @@ idgen_random(Base,ID) :-
     Length = 16,
     idgen_random(Base, Length, ID).
 
+idgen_random(Base,[],ID) :-
+    % Empty list signature matches idgen_lexical/3 and idgen_hash/3 calling convention
+    % Used by RandomKey WOQL predicate
+    idgen_random(Base,ID).
+
 idgen_random(Base,Length, ID) :-
+    integer(Length),
     utils:random_base64(Length, Hash),
     format(string(ID),'~w~w',[Base,Hash]).
 
@@ -898,9 +905,12 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
 
     % Finally, we can descend into the other children, giving it a
     % path that contains the ID of this document.
+    % Note: We pass [property(Property),node(Id)] without Next_Path because
+    % the node(Id) already contains the full path - appending Next_Path would
+    % cause duplicate path segments in deeply nested subdocuments.
 
-    maplist({DB, Context, Id, Next_Path}/[Property-Value,Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)|Next_Path])
+    maplist({DB, Context, Id}/[Property-Value,Ids]>>(
+                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)])
             ),
             Normal_Fields,
             New_Id_Lists_2),
@@ -2935,8 +2945,9 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
          )).
 
 extract_return_ids(Id_Pairs, Ids) :-
-    convlist([Id-Value,Id]>>(Value\=value_hash), Id_Pairs, Top_Ids),
-    % We can't return nothing, even if we're only a value hash...
+    % Filter out subdocuments - we only want top-level documents (normal or value_hash)
+    convlist([Id-Value,Id]>>(Value\=subdocument), Id_Pairs, Top_Ids),
+    % We can't return nothing, even if we're only subdocuments...
     (   Top_Ids = []
     ->  Id_Pairs = [Id0-_|_],
         Ids = [Id0]
@@ -11098,6 +11109,72 @@ test(document_valuehash,
 
         'Thing/78b07792a224ec58ac4b7688707482a1f42a7a695a907f5780d11dc634739aae').
 
+test(document_valuehash_with_subdocument_list,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    % Test for bug: When inserting a document with ValueHash key and subdocuments
+    % nested in Lists, the returned ID should be the top-level document ID,
+    % not the nested subdocument ID.
+    Commit_Info = commit_info{author:"test",message:"test"},
+    
+    % Create schema with subdocument
+    create_context(Desc, Commit_Info, Context1),
+    with_transaction(Context1,
+                     (   insert_schema_document(
+                             Context1,
+                             _{ '@type': "Class",
+                                '@id': "StringDoc",
+                                '@subdocument': [],
+                                '@key': _{'@type': "Random"},
+                                string: _{'@type': "Optional",
+                                         '@class': "xsd:string"}
+                              }),
+                         insert_schema_document(
+                             Context1,
+                             _{ '@type': "Class",
+                                '@id': "Entity",
+                                '@key': _{'@type': "ValueHash"},
+                                'string-list': _{'@type': "List",
+                                                '@class': "StringDoc"},
+                                label: _{'@type': "Optional",
+                                        '@class': "xsd:string"}
+                              })
+                     ),
+                     _),
+
+    % Insert document with subdocuments in list
+    create_context(Desc, Commit_Info, Context2),
+    with_transaction(Context2,
+                     insert_document(
+                         Context2,
+                         _{ '@type': "Entity",
+                            label: "asdf",
+                            'string-list': [
+                                _{ '@type': "StringDoc",
+                                   string: "1"
+                                 },
+                                _{ '@type': "StringDoc",
+                                   string: "2"
+                                 }
+                            ]
+                          },
+                         ID_Ex),
+                     _),
+
+    % The returned ID should be the Entity ID, not the StringDoc subdocument ID
+    database_prefixes(Desc, Prefixes),
+    compress_dict_uri(ID_Ex, Prefixes, Found_ID),
+    
+    % Assert that the ID starts with Entity/ (not StringDoc/)
+    atom_concat('Entity/', _, Found_ID),
+    
+    % Verify the document exists at this ID
+    get_document(Desc, Found_ID, Doc),
+    get_dict('@type', Doc, 'Entity').
+
 test(document_invalid_id_submitted,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin","foo"),
@@ -11215,6 +11292,313 @@ test(insert_nested_document_with_key_dependency,
     Bar_Id = (Inserted.bar),
     do_or_die(Bar_Id == Expected_Bar_Id,
               error(bar_id_mismatch(Bar_Id, Expected_Bar_Id), _)).
+
+% Helper to count occurrences of a substring in a string
+count_occurrences(String, SubString, Count) :-
+    count_occurrences_(String, SubString, 0, Count).
+
+count_occurrences_(String, SubString, Acc, Count) :-
+    (   sub_string(String, Before, Len, After, SubString)
+    ->  Acc1 is Acc + 1,
+        SkipLen is Before + Len,
+        sub_string(String, SkipLen, After, 0, Rest),
+        count_occurrences_(Rest, SubString, Acc1, Count)
+    ;   Count = Acc
+    ).
+
+nested_subdoc_schema_two_levels('
+{ "@type" : "@context",
+  "@base" : "http://example.org/data/",
+  "@schema" : "http://example.org/schema#" }
+
+{ "@id" : "Level1",
+  "@type" : "Class",
+  "@base" : "Level1/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "child" : "Level2" }
+
+{ "@id" : "Level2",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "Level2/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string" }
+').
+
+nested_subdoc_schema_three_levels('
+{ "@type" : "@context",
+  "@base" : "http://example.org/data/",
+  "@schema" : "http://example.org/schema#" }
+
+{ "@id" : "Root",
+  "@type" : "Class",
+  "@base" : "Root/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "level1" : "Nested1" }
+
+{ "@id" : "Nested1",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "Nested1/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "level2" : "Nested2" }
+
+{ "@id" : "Nested2",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "Nested2/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string" }
+').
+
+nested_subdoc_schema_four_levels('
+{ "@type" : "@context",
+  "@base" : "http://example.org/data/",
+  "@schema" : "http://example.org/schema#" }
+
+{ "@id" : "TopLevel",
+  "@type" : "Class",
+  "@base" : "TopLevel/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "sub1" : "Sub1" }
+
+{ "@id" : "Sub1",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "sub2" : "Sub2" }
+
+{ "@id" : "Sub2",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "Sub2/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "sub3" : "Sub3" }
+
+{ "@id" : "Sub3",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "Sub3-different-base/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string" }
+').
+
+nested_subdoc_schema_empty_base('
+{ "@type" : "@context",
+  "@base" : "http://example.org/data/",
+  "@schema" : "http://example.org/schema#" }
+
+{ "@id" : "Parent",
+  "@type" : "Class",
+  "@base" : "Parent/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "child" : "ChildNoBase" }
+
+{ "@id" : "ChildNoBase",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string" }
+').
+
+nested_subdoc_schema_empty_base_deep('
+{ "@type" : "@context",
+  "@base" : "http://example.org/data/",
+  "@schema" : "http://example.org/schema#" }
+
+{ "@id" : "TopDoc",
+  "@type" : "Class",
+  "@base" : "TopDoc/",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "level1" : "Level1NoBase" }
+
+{ "@id" : "Level1NoBase",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string",
+  "level2" : "Level2NoBase" }
+
+{ "@id" : "Level2NoBase",
+  "@type" : "Class",
+  "@subdocument" : [],
+  "@base" : "",
+  "@key" : { "@type" : "Lexical", "@fields" : ["name"] },
+  "name" : "xsd:string" }
+').
+
+test(nested_subdocument_id_two_levels,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    nested_subdoc_schema_two_levels(Schema),
+    write_schema_string(Schema, Desc),
+    Document =
+    _{ '@type' : "Level1",
+       name : "parent",
+       child : _{ '@type' : "Level2",
+                  name : "child1" }},
+    create_context(Desc, _{ author : "test", message : "Adding doc" }, Context),
+    with_transaction(Context, insert_document(Context, Document, Id), _),
+    get_document(Desc, Id, Result),
+    get_dict('@id', Result, ParentId),
+    get_dict(child, Result, Child),
+    get_dict('@id', Child, ChildId),
+    atom_string(ParentId, ParentIdStr),
+    atom_string(ChildId, ChildIdStr),
+    assertion(sub_string(ChildIdStr, 0, _, _, ParentIdStr)),
+    count_occurrences(ChildIdStr, "Level1", Level1Count),
+    assertion(Level1Count =:= 1),
+    % Verify exact IDs
+    assertion(ParentIdStr = "Level1/parent"),
+    assertion(ChildIdStr = "Level1/parent/child/Level2/child1").
+
+test(nested_subdocument_id_three_levels,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    nested_subdoc_schema_three_levels(Schema),
+    write_schema_string(Schema, Desc),
+    Document =
+    _{ '@type' : "Root",
+       name : "root",
+       level1 : _{ '@type' : "Nested1",
+                   name : "nested1",
+                   level2 : _{ '@type' : "Nested2",
+                               name : "nested2" }}},
+    create_context(Desc, _{ author : "test", message : "Adding doc" }, Context),
+    with_transaction(Context, insert_document(Context, Document, Id), _),
+    get_document(Desc, Id, Result),
+    get_dict('@id', Result, RootId),
+    get_dict(level1, Result, Level1),
+    get_dict('@id', Level1, Level1Id),
+    get_dict(level2, Level1, Level2),
+    get_dict('@id', Level2, Level2Id),
+    atom_string(RootId, RootIdStr),
+    atom_string(Level1Id, Level1IdStr),
+    atom_string(Level2Id, Level2IdStr),
+    assertion(sub_string(Level1IdStr, 0, _, _, RootIdStr)),
+    assertion(sub_string(Level2IdStr, 0, _, _, Level1IdStr)),
+    count_occurrences(Level2IdStr, "Root/", RootCount),
+    assertion(RootCount =:= 1),
+    % Verify exact IDs
+    assertion(RootIdStr = "Root/root"),
+    assertion(Level1IdStr = "Root/root/level1/Nested1/nested1"),
+    assertion(Level2IdStr = "Root/root/level1/Nested1/nested1/level2/Nested2/nested2").
+
+test(nested_subdocument_id_four_levels,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    nested_subdoc_schema_four_levels(Schema),
+    write_schema_string(Schema, Desc),
+    Document =
+    _{ '@type' : "TopLevel",
+       name : "top",
+       sub1 : _{ '@type' : "Sub1",
+                 name : "s1",
+                 sub2 : _{ '@type' : "Sub2",
+                           name : "s2",
+                           sub3 : _{ '@type' : "Sub3",
+                                     name : "s3" }}}},
+    create_context(Desc, _{ author : "test", message : "Adding doc" }, Context),
+    with_transaction(Context, insert_document(Context, Document, Id), _),
+    get_document(Desc, Id, Result),
+    get_dict('@id', Result, TopId),
+    get_dict(sub1, Result, Sub1Doc),
+    get_dict('@id', Sub1Doc, Sub1Id),
+    get_dict(sub2, Sub1Doc, Sub2Doc),
+    get_dict('@id', Sub2Doc, Sub2Id),
+    get_dict(sub3, Sub2Doc, Sub3Doc),
+    get_dict('@id', Sub3Doc, Sub3Id),
+    atom_string(TopId, TopIdStr),
+    atom_string(Sub1Id, Sub1IdStr),
+    atom_string(Sub2Id, Sub2IdStr),
+    atom_string(Sub3Id, Sub3IdStr),
+    assertion(sub_string(Sub1IdStr, 0, _, _, TopIdStr)),
+    assertion(sub_string(Sub2IdStr, 0, _, _, Sub1IdStr)),
+    assertion(sub_string(Sub3IdStr, 0, _, _, Sub2IdStr)),
+    count_occurrences(Sub3IdStr, "TopLevel/", TopLevelCount),
+    assertion(TopLevelCount =:= 1),
+    % Verify exact IDs (Sub1 has no @base, Sub2 has @base, Sub3 has different @base)
+    assertion(TopIdStr = "TopLevel/top"),
+    assertion(Sub1IdStr = "TopLevel/top/sub1/Sub1/s1"),
+    assertion(Sub2IdStr = "TopLevel/top/sub1/Sub1/s1/sub2/Sub2/s2"),
+    assertion(Sub3IdStr = "TopLevel/top/sub1/Sub1/s1/sub2/Sub2/s2/sub3/Sub3-different-base/s3").
+
+test(nested_subdocument_empty_base,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    nested_subdoc_schema_empty_base(Schema),
+    write_schema_string(Schema, Desc),
+    Document =
+    _{ '@type' : "Parent",
+       name : "myparent",
+       child : _{ '@type' : "ChildNoBase",
+                  name : "mychild" }},
+    create_context(Desc, _{ author : "test", message : "Adding doc" }, Context),
+    with_transaction(Context, insert_document(Context, Document, Id), _),
+    get_document(Desc, Id, Result),
+    get_dict('@id', Result, ParentId),
+    get_dict(child, Result, Child),
+    get_dict('@id', Child, ChildId),
+    atom_string(ParentId, ParentIdStr),
+    atom_string(ChildId, ChildIdStr),
+    assertion(sub_string(ChildIdStr, 0, _, _, ParentIdStr)),
+    count_occurrences(ChildIdStr, "Parent/", ParentCount),
+    assertion(ParentCount =:= 1),
+    % Verify exact IDs (no @base on child, so uses ChildNoBase type directly)
+    assertion(ParentIdStr = "Parent/myparent"),
+    assertion(ChildIdStr = "Parent/myparent/child/mychild").
+
+test(nested_subdocument_empty_base_deep,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb"),
+             resolve_absolute_string_descriptor("admin/testdb", Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    nested_subdoc_schema_empty_base_deep(Schema),
+    write_schema_string(Schema, Desc),
+    Document =
+    _{ '@type' : "TopDoc",
+       name : "top",
+       level1 : _{ '@type' : "Level1NoBase",
+                   name : "l1",
+                   level2 : _{ '@type' : "Level2NoBase",
+                               name : "l2" }}},
+    create_context(Desc, _{ author : "test", message : "Adding doc" }, Context),
+    with_transaction(Context, insert_document(Context, Document, Id), _),
+    get_document(Desc, Id, Result),
+    get_dict('@id', Result, TopId),
+    get_dict(level1, Result, Level1),
+    get_dict('@id', Level1, Level1Id),
+    get_dict(level2, Level1, Level2),
+    get_dict('@id', Level2, Level2Id),
+    atom_string(TopId, TopIdStr),
+    atom_string(Level1Id, Level1IdStr),
+    atom_string(Level2Id, Level2IdStr),
+    assertion(sub_string(Level1IdStr, 0, _, _, TopIdStr)),
+    assertion(sub_string(Level2IdStr, 0, _, _, Level1IdStr)),
+    count_occurrences(Level2IdStr, "TopDoc/", TopDocCount),
+    assertion(TopDocCount =:= 1),
+    % Verify exact IDs (empty @base on subdocuments, so no type prefix added)
+    assertion(TopIdStr = "TopDoc/top"),
+    assertion(Level1IdStr = "TopDoc/top/level1/l1"),
+    assertion(Level2IdStr = "TopDoc/top/level1/l1/level2/l2").
 
 :- end_tests(document_id_generation).
 

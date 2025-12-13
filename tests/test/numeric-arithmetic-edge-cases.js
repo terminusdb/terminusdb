@@ -568,8 +568,8 @@ describe('numeric-arithmetic-edge-cases', function () {
     })
   })
 
-  describe('Classic Floating Point Problems - SOLVED', function () {
-    it('0.1 + 0.2 === 0.3 (NOT 0.30000000000000004)', async function () {
+  describe('Classic Floating Point Problems', function () {
+    it('0.1 + 0.2 === 0.3 (not 0.30000000000000004)', async function () {
       const query = {
         '@type': 'Eval',
         expression: {

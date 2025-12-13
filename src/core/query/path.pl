@@ -188,14 +188,27 @@ run_pattern_(plus(P),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path)
 run_pattern_(times(P,N,M),X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
 
+% Case: {0,0} - exactly zero hops, just unify X and Y
+run_pattern_n_m_(_P, 0, 0, X, X, _Open_Set, Tail-Tail, _Filter, _Transaction_Object, _Save_Path) :-
+    !.
+% Case: {0,M} where M>0 - zero OR 1 to M hops
+run_pattern_n_m_(_P, 0, M, X, X, _Open_Set, Tail-Tail, _Filter, _Transaction_Object, _Save_Path) :-
+    M > 0.
+run_pattern_n_m_(P, 0, M, X, Y, Open_Set, Path-Tail, Filter, Transaction_Object, Save_Path) :-
+    M > 0,
+    run_pattern_n_m_(P, 1, M, X, Y, Open_Set, Path-Tail, Filter, Transaction_Object, Save_Path).
+% Case: {1,1} - exactly one hop
 run_pattern_n_m_(P,1,1,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     !,
     copy_term(P, P_Fresh),  % Fresh copy needed even for single match
     run_pattern_(P_Fresh,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+% Case: {1,M} - one or more hops
 run_pattern_n_m_(P,1,_,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
     copy_term(P, P_Fresh),  % Fresh copy needed to avoid binding across backtracking
     run_pattern_(P_Fresh,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path).
+% Case: {N,M} where N>=1 - recursive case for N>1
 run_pattern_n_m_(P,N,M,X,Y,Open_Set,Path-Tail,Filter,Transaction_Object,Save_Path) :-
+    N >= 1,
     Np is max(1,N-1),
     Mp is M-1,
     copy_term(P, P_Fresh),  % Create fresh copy to avoid binding predicate variables across iterations
@@ -605,5 +618,97 @@ test(star_any_predicate_four_nodes, [
     memberchk(_{x:b}, Bindings),
     memberchk(_{x:c}, Bindings),
     memberchk(_{x:d}, Bindings).
+
+% BUG: times{0,0} should return only the starting node (follow edge 0 times)
+test(times_0_0_returns_start_only, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing times{0,0} - zero hops"},
+
+    % Create chain: a -b-> c -d-> e
+    AST = (insert(a, b, c),
+           insert(c, d, e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    % Test: times(p(b), 0, 0) should return only the starting node
+    AST2 = path(a, times(p(b), 0, 0), v(x)),
+
+    create_context(Descriptor, Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings, Result, Bindings),
+
+    % Should find only: a (0 hops)
+    length(Bindings, 1),
+    memberchk(_{x:a}, Bindings).
+
+% BUG: times{0,1} should return starting node and one hop
+test(times_0_1_returns_start_and_one_hop, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing times{0,1} - zero or one hops"},
+
+    % Create chain: a -b-> c -b-> e
+    AST = (insert(a, b, c),
+           insert(c, b, e)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    % Test: times(p(b), 0, 1) should return starting node and one hop
+    AST2 = path(a, times(p(b), 0, 1), v(x)),
+
+    create_context(Descriptor, Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings, Result, Bindings),
+
+    % Should find: a (0 hops), c (1 hop)
+    length(Bindings, 2),
+    memberchk(_{x:a}, Bindings),
+    memberchk(_{x:c}, Bindings).
+
+% BUG: times{0,2} should return starting node and up to two hops
+test(times_0_2_returns_start_and_up_to_two_hops, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing times{0,2} - zero, one, or two hops"},
+
+    % Create chain: a -b-> c -b-> e -b-> g
+    AST = (insert(a, b, c),
+           insert(c, b, e),
+           insert(e, b, g)),
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    create_context(Descriptor, Commit_Info, Context),
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, _),
+
+    % Test: times(p(b), 0, 2) should return starting node and up to two hops
+    AST2 = path(a, times(p(b), 0, 2), v(x)),
+
+    create_context(Descriptor, Commit_Info, Context2),
+    run_context_ast_jsonld_response(Context2, AST2, no_data_version, _, Result),
+    get_dict(bindings, Result, Bindings),
+
+    % Should find: a (0 hops), c (1 hop), e (2 hops) - NOT g (3 hops)
+    length(Bindings, 3),
+    memberchk(_{x:a}, Bindings),
+    memberchk(_{x:c}, Bindings),
+    memberchk(_{x:e}, Bindings),
+    \+ memberchk(_{x:g}, Bindings).
 
 :- end_tests(path).

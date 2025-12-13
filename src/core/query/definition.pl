@@ -426,6 +426,20 @@ definition(
         types: [list(any),decimal]
     }).
 definition(
+    slice{
+        name: 'Slice',
+        fields: [list, result, start, end],
+        mode: [+, ?, +, +],
+        types: [list(any), list(any), integer, integer]
+    }).
+definition(
+    slice_no_end{
+        name: 'Slice',
+        fields: [list, result, start],
+        mode: [+, ?, +],
+        types: [list(any), list(any), integer]
+    }).
+definition(
     timestamp_now{
         name: 'Now',
         fields: [result],
@@ -442,6 +456,13 @@ definition(
 definition(
     hash{
         name: 'HashKey',
+        fields: [base, key_list, uri],
+        mode: [+, +, ?],
+        types: [string, list(string), node]
+    }).
+definition(
+    idgen_random{
+        name: 'RandomKey',
         fields: [base, key_list, uri],
         mode: [+, +, ?],
         types: [string, list(string), node]
@@ -570,6 +591,7 @@ operator(join(_,_,_)).
 operator(timestamp_now(_)).
 operator(idgen(_,_,_)).
 operator(hash(_,_,_)).
+operator(idgen_random(_,_,_)).
 operator(triple_count(_,_)).
 operator(size(_,_)).
 
@@ -1036,6 +1058,12 @@ cost_(sum(_,_), Cost, _Polarity) =>
     Cost = 10.
 
 cost_(member(_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(slice(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(slice(_,_,_,_), Cost, _Polarity) =>
     Cost = 10.
 
 cost_(X=Y, Cost, Polarity),
