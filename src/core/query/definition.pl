@@ -426,6 +426,41 @@ definition(
         types: [list(any),decimal]
     }).
 definition(
+    set_difference{
+        name: 'SetDifference',
+        fields: [list_a, list_b, result],
+        mode: [+, +, ?],
+        types: [list(any), list(any), list(any)]
+    }).
+definition(
+    set_intersection{
+        name: 'SetIntersection',
+        fields: [list_a, list_b, result],
+        mode: [+, +, ?],
+        types: [list(any), list(any), list(any)]
+    }).
+definition(
+    set_union{
+        name: 'SetUnion',
+        fields: [list_a, list_b, result],
+        mode: [+, +, ?],
+        types: [list(any), list(any), list(any)]
+    }).
+definition(
+    set_member{
+        name: 'SetMember',
+        fields: [element, set],
+        mode: [+, +],
+        types: [any, list(any)]
+    }).
+definition(
+    list_to_set{
+        name: 'ListToSet',
+        fields: [list, set],
+        mode: [+, ?],
+        types: [list(any), list(any)]
+    }).
+definition(
     slice{
         name: 'Slice',
         fields: [list, result, start, end],
@@ -1064,6 +1099,21 @@ cost_(slice(_,_,_), Cost, _Polarity) =>
     Cost = 10.
 
 cost_(slice(_,_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_difference(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_intersection(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_union(_,_,_), Cost, _Polarity) =>
+    Cost = 10.
+
+cost_(set_member(_,_), Cost, _Polarity) =>
+    Cost = 5.
+
+cost_(list_to_set(_,_), Cost, _Polarity) =>
     Cost = 10.
 
 cost_(X=Y, Cost, Polarity),
