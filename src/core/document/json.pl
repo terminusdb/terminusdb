@@ -15546,4 +15546,114 @@ test(foreign_card,
 				     foreign_card:[id]
 				   }.
 
+test(foreign_optional_schema_change_after_instance,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Option = _{ foreign_option : "http://example.com/person/1" },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, _Id)
+    ),
+    NewClass = _{ '@type' : "Class",
+                  '@id' : "NewClass",
+                  name : "xsd:string" },
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(C2, NewClass)
+    ).
+
+test(foreign_set_schema_change_after_instance,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Option = _{ foreign_set : ["http://example.com/person/1", "http://example.com/person/2"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, _Id)
+    ),
+    NewClass = _{ '@type' : "Class",
+                  '@id' : "AnotherClass",
+                  name : "xsd:string" },
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(C2, NewClass)
+    ).
+
+test(foreign_array_schema_change_after_instance,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Option = _{ foreign_array : ["http://example.com/person/1"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, _Id)
+    ),
+    NewClass = _{ '@type' : "Class",
+                  '@id' : "ArrayTestClass",
+                  name : "xsd:string" },
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(C2, NewClass)
+    ).
+
+test(foreign_list_schema_change_after_instance,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Option = _{ foreign_list : ["http://example.com/person/1"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, _Id)
+    ),
+    NewClass = _{ '@type' : "Class",
+                  '@id' : "ListTestClass",
+                  name : "xsd:string" },
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(C2, NewClass)
+    ).
+
+test(foreign_card_schema_change_after_instance,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(foreign_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Option = _{ foreign_card : ["http://example.com/person/1"] },
+    with_test_transaction(
+        Desc,
+        C,
+        insert_document(C, Option, _Id)
+    ),
+    NewClass = _{ '@type' : "Class",
+                  '@id' : "CardTestClass",
+                  name : "xsd:string" },
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(C2, NewClass)
+    ).
+
 :- end_tests(foreign_families).

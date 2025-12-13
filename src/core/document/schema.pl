@@ -8,6 +8,7 @@
               is_frame_class/2,
               is_json_class/2,
               is_tagged_union/2,
+              is_foreign/2,
               is_base_type/1,
               is_built_in/1,
               is_list_type/1,
