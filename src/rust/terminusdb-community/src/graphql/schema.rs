@@ -26,7 +26,7 @@ use crate::value::{
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
-use super::query::run_filter_query;
+use super::query::{run_count_query, run_filter_query};
 
 pub enum NodeOrValue {
     Node(IriName),
@@ -238,6 +238,19 @@ impl GraphQLType for TerminusTypeCollection {
 
         fields.extend(standard_collection_operators(registry));
 
+        // Add _count field with dynamic model arguments
+        // Each model name becomes an argument that accepts its filter type
+        let mut count_field = registry.field::<i32>("_count", &());
+        for (name, typedef) in info.allframes.frames.iter() {
+            if let TypeDefinition::Class(_) = typedef {
+                count_field = count_field.argument(registry.arg::<Option<FilterInputObject>>(
+                    name.as_str(),
+                    &FilterInputObjectTypeInfo::new(name, &info.allframes),
+                ));
+            }
+        }
+        fields.push(count_field);
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
@@ -396,6 +409,31 @@ impl GraphQLValue for TerminusTypeCollection {
                     }
                     None => Err("No such document".into()),
                 }
+            }
+            "_count" => {
+                let context = executor.context();
+                let instance = match context.instance.as_ref() {
+                    Some(i) => i,
+                    None => return Ok(Value::scalar(0)),
+                };
+
+                // Find which model filter was provided
+                for (name, typedef) in info.allframes.frames.iter() {
+                    if let TypeDefinition::Class(_) = typedef {
+                        if let Some(filter) = arguments.get::<FilterInputObject>(name.as_str()) {
+                            let count = run_count_query(
+                                context,
+                                instance,
+                                &filter,
+                                name,
+                                &info.allframes,
+                            );
+                            return Ok(Value::scalar(count));
+                        }
+                    }
+                }
+
+                Err("_count requires exactly one model filter argument".into())
             }
             _ => {
                 let zero_iter;
