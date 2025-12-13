@@ -2481,6 +2481,8 @@ get_schema_document_uri(Desc, ID) :-
 get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
     is_frame_class(DB, Uri).
+get_schema_document_uri(DB, Uri) :-
+    is_foreign(DB, Uri).
 
 get_schema_document(Query_Context, Id, Document) :-
     is_query_context(Query_Context),
