@@ -7,6 +7,8 @@
  */
 
 :- begin_tests(set_operations, []).
+:- use_module(library(apply), [maplist/3]).
+:- use_module(library(yall)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(query)).
