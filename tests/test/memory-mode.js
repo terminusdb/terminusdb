@@ -3,7 +3,16 @@ const { spawn } = require('child_process')
 const http = require('http')
 const path = require('path')
 
+// Skip these tests when no local binary is available (e.g., Docker-based CI)
+// These tests spawn the local terminusdb binary directly
+const SKIP_MEMORY_MODE_TESTS = process.env.SKIP_MEMORY_MODE_TESTS === 'true'
+
 describe('In-Memory Mode', function () {
+  if (SKIP_MEMORY_MODE_TESTS) {
+    // eslint-disable-next-line mocha/no-skipped-tests
+    it.skip('skipped: requires local terminusdb binary (set SKIP_MEMORY_MODE_TESTS=true)', function () {})
+    return
+  }
   this.timeout(30000)
 
   const PORT = 9393
