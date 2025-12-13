@@ -162,7 +162,8 @@ system_frame_class(Class) :-
         [
             sys:'Class',
             sys:'TaggedUnion',
-            sys:'Enum'
+            sys:'Enum',
+            sys:'Foreign'
         ], List),
     member(Class,List).
 

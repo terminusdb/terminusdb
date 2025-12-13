@@ -527,4 +527,48 @@ describe('foreign-field-multiplicity', function () {
       await document.insert(agent, { instance })
     })
   })
+
+  describe('Foreign type returned from schema endpoint', function () {
+    before(async function () {
+      await db.create(agent)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('inserts Foreign type into schema', async function () {
+      const foreignSchema = {
+        '@type': 'Foreign',
+        '@id': 'ExternalPerson',
+      }
+      await document.insert(agent, { schema: foreignSchema })
+    })
+
+    it('retrieves Foreign type from schema', async function () {
+      const result = await document.get(agent, { query: { id: 'ExternalPerson', graph_type: 'schema' } }).unverified()
+      expect(result.status).to.equal(200)
+      const schema = JSON.parse(result.text)
+      expect(schema['@type']).to.equal('Foreign')
+      expect(schema['@id']).to.equal('ExternalPerson')
+    })
+
+    it('lists Foreign type in schema document list', async function () {
+      const result = await document.get(agent, { query: { graph_type: 'schema', as_list: true } }).unverified()
+      expect(result.status).to.equal(200)
+      const schemas = JSON.parse(result.text)
+      const foreignTypes = schemas.filter(s => s['@type'] === 'Foreign')
+      expect(foreignTypes).to.have.lengthOf(1)
+      expect(foreignTypes[0]['@id']).to.equal('ExternalPerson')
+    })
+
+    it('cannot insert same Foreign type twice', async function () {
+      const foreignSchema = {
+        '@type': 'Foreign',
+        '@id': 'ExternalPerson',
+      }
+      const result = await document.insert(agent, { schema: foreignSchema }).unverified()
+      expect(result.status).to.equal(400)
+    })
+  })
 })
