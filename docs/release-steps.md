@@ -59,7 +59,7 @@ Use the **Bump Version** GitHub Action to update the `VERSION` file and related 
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0`, or like `11.2.0-rc3`
+- **New version:** e.g., `12.0.0`, or for upcoming release `12.0.1-dev`
 
 The workflow accepts any suffix after the version number: `-rc1`, `-rc2`, `-alpha`, `-beta`, `-dev`, or no suffix etc.
 
@@ -127,7 +127,7 @@ After automated builds complete (monitor in Actions tab):
 
 1. Go to [Releases](https://github.com/terminusdb/terminusdb/releases)
 2. Click **Draft a new release**
-3. Select the tag you created
+3. Select the tag you created (or create a new tag)
 4. **Release title:** `TerminusDB v<VERSION>`
 5. **Description:** Copy relevant section from `RELEASE_NOTES.md`
 6. **Set as a pre-release:** Check this for versions with `-rc`, `-beta`, `-alpha` suffixes
@@ -151,7 +151,7 @@ Confirm successful publication:
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `11.2.0-dev`
+- **New version:** e.g., `12.0.1-dev` (when bumping from `12.0.0`)
 
 Then merge the new development version PR (to ensure build images are correctly produced). You may need to close and reopen the PR if the version bump verification build is stuck.
 
