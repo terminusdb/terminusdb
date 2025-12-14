@@ -1,6 +1,8 @@
 use juniper::graphql_object;
 use swipl::prelude::GenericQueryableContext;
 
+/// TODO: Context for main graph queries - not yet integrated into the query pipeline.
+#[allow(dead_code)]
 struct MainContext {
     _prolog: GenericQueryableContext<'static>,
 }
@@ -19,6 +21,8 @@ impl MainRoot {
 }
 */
 
+/// TODO: User type for main graph queries - not yet integrated.
+#[allow(dead_code)]
 #[derive(Default)]
 struct User;
 

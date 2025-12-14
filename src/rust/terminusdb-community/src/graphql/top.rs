@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::terminus_store::store::sync::*;
 use crate::terminus_store::Layer as TSLayer;
 use crate::value::*;

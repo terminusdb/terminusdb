@@ -36,6 +36,8 @@
               is_abstract/2,
               is_subdocument/2,
               is_unfoldable/2,
+              property_is_unfold/4,
+              schema_property_is_unfold/4,
               schema_is_subdocument/2,
               schema_class_predicate_conjunctive_type/4,
               class_super/3,
@@ -480,9 +482,21 @@ is_circular_hasse_diagram(Validation_Object,Witness) :-
 reachable_unfoldable(Schema,A,P,B) :-
     distinct(B,
              (   schema_class_subsumed(Schema,A,C),
-                 schema_class_predicate_type(Schema,C,P,class(B)),
-                 schema_is_unfoldable(Schema,B)
+                 schema_class_predicate_type(Schema,C,P,TypeDesc),
+                 type_descriptor_class(TypeDesc, B),
+                 (   schema_is_unfoldable(Schema,B)
+                 ;   schema_property_is_unfold(Schema, C, P, true)
+                 )
              )).
+
+type_descriptor_class(class(B), B).
+type_descriptor_class(optional(B), B).
+type_descriptor_class(set(B), B).
+type_descriptor_class(list(B), B).
+type_descriptor_class(array(B,_), B).
+type_descriptor_class(cardinality(B,_,_), B).
+type_descriptor_class(foreign(B), B).
+type_descriptor_class(tagged_union(B,_), B).
 
 refute_class_inherits(DB,Class,Witness) :-
     database_schema(DB,Schema),
@@ -545,6 +559,7 @@ is_built_in(P) :-
             sys:abstract,
             sys:subdocument,
             sys:unfoldable,
+            sys:unfold,
             sys:metadata
         ],
         List),
@@ -577,6 +592,19 @@ is_unfoldable(Validation_Object, C) :-
 schema_is_unfoldable(Schema, C) :-
     schema_class_subsumed(Schema, C, D),
     is_direct_unfoldable(Schema, D).
+
+property_is_unfold(Validation_Object, Class, Predicate, Unfold) :-
+    database_schema(Validation_Object, Schema),
+    schema_property_is_unfold(Schema, Class, Predicate, Unfold).
+
+schema_property_is_unfold(Schema, Class, Predicate, true) :-
+    schema_class_subsumed(Schema, Class, Super),
+    xrdf(Schema, Super, Predicate, TypeNode),
+    global_prefix_expand(sys:unfold, UnfoldPred),
+    global_prefix_expand(rdf:nil, RdfNil),
+    xrdf(Schema, TypeNode, UnfoldPred, RdfNil),
+    !.
+schema_property_is_unfold(_, _, _, false).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -765,7 +793,6 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     Witness = witness{ '@type' : bad_unfoldable_value,
                        class: Class,
                        value: Result }.
-
 refute_class_oneof(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:oneOf, Choice),

@@ -21,6 +21,7 @@ pub const SYS_ENUM: &str = "http://terminusdb.com/schema/sys#Enum";
 pub const SYS_SET: &str = "http://terminusdb.com/schema/sys#Set";
 pub const SYS_SUBDOCUMENT: &str = "http://terminusdb.com/schema/sys#subdocument";
 pub const SYS_UNFOLDABLE: &str = "http://terminusdb.com/schema/sys#unfoldable";
+pub const SYS_UNFOLD: &str = "http://terminusdb.com/schema/sys#unfold";
 pub const SYS_INHERITS: &str = "http://terminusdb.com/schema/sys#inherits";
 pub const SYS_BASE: &str = "http://terminusdb.com/schema/sys#base";
 pub const SYS_SCHEMA: &str = "http://terminusdb.com/schema/sys#schema";
@@ -44,6 +45,7 @@ generate_lookup_type! {
         set: node SYS_SET,
         subdocument: pred SYS_SUBDOCUMENT,
         unfoldable: pred SYS_UNFOLDABLE,
+        unfold: pred SYS_UNFOLD,
         inherits: pred SYS_INHERITS,
         base: pred SYS_BASE,
         schema: pred SYS_SCHEMA,

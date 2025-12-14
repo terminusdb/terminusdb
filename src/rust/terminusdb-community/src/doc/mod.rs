@@ -32,6 +32,7 @@ pub struct DocumentContext<L: Layer + Clone> {
     subtypes: HashMap<String, HashSet<u64>>,
     document_types: HashSet<u64>,
     unfoldables: HashSet<u64>,
+    unfold_pairs: HashSet<(u64, u64)>,
     enums: HashMap<u64, String>,
     set_pairs: HashSet<(u64, u64)>,
     value_hashes: HashSet<u64>,
@@ -52,6 +53,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
         let unfoldables: HashSet<u64>;
+        let mut unfold_pairs: HashSet<(u64, u64)>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
         let mut value_hashes: HashSet<u64>;
@@ -77,6 +79,21 @@ impl<L: Layer + Clone> DocumentContext<L> {
             unfoldables = schema_query_context
                 .schema_to_instance_types(instance, schema_unfoldable_ids)
                 .collect();
+
+            // Extract field-level @unfold pairs and translate to instance IDs
+            let schema_unfold_pairs = schema_query_context.get_unfold_pairs_from_schema();
+            unfold_pairs = HashSet::new();
+            for (schema_type_id, schema_predicate_id) in schema_unfold_pairs {
+                if let Some(type_id) =
+                    schema_query_context.translate_subject_id(instance, schema_type_id)
+                {
+                    if let Some(predicate_id) =
+                        schema_query_context.translate_predicate_id(instance, schema_predicate_id)
+                    {
+                        unfold_pairs.insert((type_id, predicate_id));
+                    }
+                }
+            }
 
             subtypes = HashMap::new();
             for (schema_sup, schema_subs) in schema_subtype_ids {
@@ -139,6 +156,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             subtypes = HashMap::with_capacity(0);
             document_types = HashSet::with_capacity(0);
             unfoldables = HashSet::with_capacity(0);
+            unfold_pairs = HashSet::with_capacity(0);
             enums = HashMap::with_capacity(0);
             set_pairs = HashSet::with_capacity(0);
             value_hashes = HashSet::with_capacity(0);
@@ -155,6 +173,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             subtypes,
             document_types,
             unfoldables,
+            unfold_pairs,
             enums,
             set_pairs,
             value_hashes,
@@ -177,6 +196,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             subtypes: HashMap::with_capacity(0),
             document_types: HashSet::with_capacity(0),
             unfoldables: HashSet::with_capacity(0),
+            unfold_pairs: HashSet::with_capacity(0),
             enums: HashMap::with_capacity(0),
             set_pairs: HashSet::with_capacity(0),
             value_hashes: HashSet::with_capacity(0),
@@ -226,13 +246,15 @@ impl<L: Layer + Clone> DocumentContext<L> {
         object: u64,
         compress: bool,
         unfold: bool,
+        parent_type_id: Option<u64>,
+        predicate_id: Option<u64>,
     ) -> Result<Value, StackEntry<'a, L>> {
         if let Some(val) = self.enums.get(&object) {
             Ok(Value::String(val.clone()))
         } else if Some(object) == self.rdf.nil() {
             Ok(Value::Array(vec![]))
         } else {
-            match self.get_doc_stub(object, true, compress, unfold) {
+            match self.get_doc_stub(object, true, compress, unfold, parent_type_id, predicate_id) {
                 // it's not a terminator so we will need to descend into it. That is, we would need to descend into it if there were any children, so let's check.
                 Ok((doc, type_id, fields, json)) => Err(StackEntry::Document {
                     id: object,
@@ -275,7 +297,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         }
     }
 
-    fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<L>> {
+    fn get_list_iter(&self, id: u64) -> Peekable<RdfListIterator<'_, L>> {
         RdfListIterator {
             layer: self.layer(),
             cur: id,
@@ -286,7 +308,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         .peekable()
     }
 
-    fn get_array_iter(&self, stack_entry: &mut StackEntry<L>) -> ArrayIterator<L> {
+    fn get_array_iter(&self, stack_entry: &mut StackEntry<L>) -> ArrayIterator<'_, L> {
         if let StackEntry::Document { fields, .. } = stack_entry {
             let mut it = None;
             std::mem::swap(&mut it, fields);
@@ -314,6 +336,8 @@ impl<L: Layer + Clone> DocumentContext<L> {
         terminate: bool,
         compress: bool,
         unfold: bool,
+        parent_type_id: Option<u64>,
+        predicate_id: Option<u64>,
     ) -> Result<
         (
             Map<String, Value>,
@@ -349,10 +373,19 @@ impl<L: Layer + Clone> DocumentContext<L> {
         let mut json = false;
         if let Some(rdf_type_id) = rdf_type_id {
             if let Some(t) = self.layer().single_triple_sp(id, rdf_type_id) {
+                // Check if we should unfold this document:
+                // 1. Class-level @unfoldable: unfoldables.contains(type_id)
+                // 2. Field-level @unfold: unfold_pairs.contains((parent_type_id, predicate_id))
+                let field_level_unfold = match (parent_type_id, predicate_id) {
+                    (Some(pt), Some(pr)) => self.unfold_pairs.contains(&(pt, pr)),
+                    _ => false,
+                };
+                let should_unfold = self.unfoldables.contains(&t.object) || field_level_unfold;
+
                 if terminate
                     && (!unfold
                         || (self.document_types.contains(&t.object)
-                            && !self.unfoldables.contains(&t.object)))
+                            && !should_unfold))
                 {
                     return Err(Value::String(id_name_contracted));
                 }
@@ -409,7 +442,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
 
         let mut stack = Vec::new();
 
-        if let Ok((doc, type_id, fields, json)) = self.get_doc_stub(id, false, compress, unfold) {
+        if let Ok((doc, type_id, fields, json)) = self.get_doc_stub(id, false, compress, unfold, None, None) {
             stack.push(StackEntry::Document {
                 id,
                 doc,
@@ -468,7 +501,9 @@ impl<L: Layer + Clone> DocumentContext<L> {
                 }
 
                 // it's not one of the special types, treat it as an ordinary field.
-                match self.get_field(next_obj, compress, unfold) {
+                let parent_type_id = cur.document_type_id();
+                let predicate_id = cur.current_predicate();
+                match self.get_field(next_obj, compress, unfold, parent_type_id, predicate_id) {
                     Ok(val) => {
                         cur.integrate_value(self, val, compress);
                     }
@@ -629,6 +664,22 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     fn document_iri(&self) -> Option<&Value> {
         match self {
             Self::Document { doc, .. } => doc.get("@id"),
+            _ => None,
+        }
+    }
+
+    fn document_type_id(&self) -> Option<u64> {
+        match self {
+            Self::Document { type_id, .. } => *type_id,
+            _ => None,
+        }
+    }
+
+    fn current_predicate(&mut self) -> Option<u64> {
+        match self {
+            Self::Document { fields, .. } => {
+                fields.as_mut().and_then(|f| f.peek().map(|t| t.predicate))
+            }
             _ => None,
         }
     }

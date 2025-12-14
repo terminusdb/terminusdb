@@ -911,7 +911,7 @@ fn collection_kind_iterator(
     kind: CollectionKind,
     subject: u64,
     property_id: u64,
-) -> ClonableIterator<u64> {
+) -> ClonableIterator<'_, u64> {
     match kind {
         CollectionKind::Property => ClonableIterator::new(CachedClonableIterator::new(
             g.triples_sp(subject, property_id).map(|t| t.object),
