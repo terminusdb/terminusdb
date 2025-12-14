@@ -583,6 +583,8 @@ refute_object_type_(foreign(_),_,_,_) :-
 refute_object_type_(class(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_foreign(Validation_Object, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
@@ -590,6 +592,8 @@ refute_object_type_(class(C),Validation_Object,Object,Witness) :-
 refute_object_type_(set(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_foreign(Validation_Object, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
@@ -597,6 +601,8 @@ refute_object_type_(set(C),Validation_Object,Object,Witness) :-
 refute_object_type_(cardinality(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_foreign(Validation_Object, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
@@ -604,11 +610,15 @@ refute_object_type_(cardinality(C),Validation_Object,Object,Witness) :-
 refute_object_type_(optional(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
+    % Skip validation for Foreign types - they reference external data
+    \+ is_foreign(Validation_Object, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
 refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
+    % Skip validation for Foreign types - they reference external data
+    \+ is_foreign(Validation_Object, C),
     database_instance(Validation_Object, Instance),
     xrdf_added(Instance,Object,sys:value,O),
     \+ is_instance(Validation_Object,O,C),
@@ -619,6 +629,8 @@ refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
                   array: Object
               }.
 refute_object_type_(list(C),Validation_Object,Object,Witness) :-
+    % Skip validation for Foreign types - they reference external data
+    \+ is_foreign(Validation_Object, C),
     (   \+ is_rdf_list(Validation_Object, Object)
     ->  Witness = witness{'@type':not_a_valid_list,
                           class:C,

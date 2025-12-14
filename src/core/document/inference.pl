@@ -124,8 +124,20 @@ foreign_class(Type,Class) =>
                  '@class' : Class_Ex}.
 
 % DB, Prefixes |- Value <= Type
+check_type(Database,_Prefixes,Value,Type,_Annotated,_Captures) :-
+    is_abstract(Database, Type),
+    !,
+    (   is_dict(Value),
+        get_dict('@id', Value, Id)
+    ->  true
+    ;   Id = unknown
+    ),
+    throw(error(schema_check_failure([witness{
+        '@type': reifying_abstract_class,
+        class: Type,
+        subject: Id
+    }]), _)).
 check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
-    \+ is_abstract(Database, Type),
     update_document_links(Value, ValueOut, Database, Prefixes, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
     NextCaptures = captures(Mid, DepMid-DepT, SubMid-SubT, Out),
     class_frame(Database, Type, Frame, [expand_abstract(false),
