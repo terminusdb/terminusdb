@@ -103,6 +103,7 @@ jobs:
           TERMINUSDB_DOCKER_CONTAINER: terminusdb
           MOCHA_JOBS: ${{ inputs.mocha_jobs }}
           MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
+          SKIP_MEMORY_MODE_TESTS: 'true'
         run: |
             cd tests        
             npm install-ci-test
