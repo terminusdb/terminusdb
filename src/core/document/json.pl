@@ -1539,6 +1539,9 @@ json_schema_predicate_value('@metadata',V,_,_,P,Value) :-
 json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfoldable, P).
+json_schema_predicate_value('@unfold',true,_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:unfold, P).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -2036,6 +2039,17 @@ array_type_id_predicate_value([O|T],D,C,Id,P,DB,Prefixes,Options,[V|L]) :-
     array_type_id_predicate_value(O,E,C,Id,P,DB,Prefixes,Options,V),
     array_type_id_predicate_value(T,D,C,Id,P,DB,Prefixes,Options,L).
 
+should_unfold_property(DB, _ParentId, _P, TargetClass) :-
+    is_subdocument(DB, TargetClass),
+    !.
+should_unfold_property(DB, _ParentId, _P, TargetClass) :-
+    is_unfoldable(DB, TargetClass),
+    !.
+should_unfold_property(DB, ParentId, P, _TargetClass) :-
+    instance_of(DB, ParentId, ParentClass),
+    property_is_unfold(DB, ParentClass, P, true),
+    !.
+
 type_id_predicate_iri_value(unit,_,_,_,_,_,_,[]).
 type_id_predicate_iri_value(enum(C,_),_,_,V,_,_,_,O) :-
     enum_value(C, O, V).
@@ -2062,19 +2076,25 @@ type_id_predicate_iri_value(cardinality(C,_,_),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
-type_id_predicate_iri_value(class(_),_,_,Id,DB,Prefixes,Options,Value) :-
+type_id_predicate_iri_value(class(_),ParentId,P,Id,DB,Prefixes,Options,Value) :-
     (   instance_of(DB, Id, C),
-        is_subdocument(DB, C),
-        option(unfold(true), Options)
+        option(unfold(true), Options),
+        should_unfold_property(DB, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
     ->  get_document(DB, Prefixes, Id, Value, Options)
     ;   option(compress_ids(true), Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
     ;   Value = Id
     ).
-type_id_predicate_iri_value(tagged_union(C,_),_,_,Id,DB,Prefixes,Options,Value) :-
+type_id_predicate_iri_value(tagged_union(C,_),ParentId,P,Id,DB,Prefixes,Options,Value) :-
     (   instance_of(DB, Id, C),
-        is_subdocument(DB, C),
-        option(unfold(true), Options)
+        option(unfold(true), Options),
+        should_unfold_property(DB, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
     ->  get_document(DB, Prefixes, Id, Value, Options)
     ;   option(compress_ids(true),Options)
     ->  compress_dict_uri(Id, Prefixes, Value)
@@ -2234,6 +2254,12 @@ get_document(DB, Id, Document, Options) :-
 get_document(DB, Prefixes, Id, Document, Options) :-
     database_instance(DB,Instance),
     prefix_expand(Id,Prefixes,Id_Ex),
+    % Initialize visited ancestors list if not present, add current doc
+    (   option(visited(Visited), Options)
+    ->  NewVisited = [Id_Ex|Visited]
+    ;   NewVisited = [Id_Ex]
+    ),
+    merge_options([visited(NewVisited)], Options, NewOptions),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
     ->  get_json_object(DB, Id_Ex, JSON0),
@@ -2252,7 +2278,7 @@ get_document(DB, Prefixes, Id, Document, Options) :-
                 \+ is_built_in(P),
 
                 once(class_predicate_type(DB,Class,P,Type)),
-                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,Options,Value),
+                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,NewOptions,Value),
                 compress_schema_uri(P, Prefixes, Prop, Options)
             ),
             Data),
@@ -2466,7 +2492,14 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@oneOf',V) :-
 schema_subject_predicate_object_key_value(Schema,Prefixes,_Id,P,O,K,JSON) :-
     compress_schema_uri(P, Prefixes, K),
     schema_type_descriptor(Schema, O, Descriptor),
-    type_descriptor_json(Descriptor,Prefixes,JSON).
+    type_descriptor_json(Descriptor,Prefixes,JSON0),
+    (   xrdf(Schema, O, sys:unfold, rdf:nil)
+    ->  (   is_dict(JSON0)
+        ->  JSON = JSON0.put('@unfold', true)
+        ;   JSON = json{ '@class': JSON0, '@unfold': true }
+        )
+    ;   JSON = JSON0
+    ).
 
 get_schema_document_uri(Query_Context, ID) :-
     is_query_context(Query_Context),
@@ -3309,9 +3342,19 @@ frame_matches_class_dictionary(DB,Prefixes,Frame,Class) :-
             \+ has_at(Property)
         ),
         do_or_die(
-            get_dict(Property, Frame, Type),
+            (   get_dict(Property, Frame, FrameType),
+                normalize_type_for_comparison(Type, NormalizedType),
+                normalize_type_for_comparison(FrameType, NormalizedType)
+            ),
             error(violation_of_diamond_property(Class,Property),_)
         )
+    ).
+
+normalize_type_for_comparison(Type, Normalized) :-
+    (   is_dict(Type),
+        del_dict('@unfold', Type, _, Normalized)
+    ->  true
+    ;   Normalized = Type
     ).
 
 dictionary_satisfying_diamond_property(Transaction,Class,Pairs,Dictionary) :-
@@ -6716,6 +6759,279 @@ test(always_smaller_unfoldable,
          ),
          _
      ).
+
+test(field_level_unfold_schema_roundtrip,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     DocumentOrder =
+     _{ '@id' : "Order",
+        '@type' : "Class",
+        customer : _{ '@type' : "Optional",
+                      '@class' : "Customer",
+                      '@unfold' : true },
+        items : _{ '@type' : "Set",
+                   '@class' : "Product",
+                   '@unfold' : true }
+      },
+
+     DocumentCustomer =
+     _{ '@id' : "Customer",
+        '@type' : "Class",
+        name : "xsd:string"
+      },
+
+     DocumentProduct =
+     _{ '@id' : "Product",
+        '@type' : "Class",
+        name : "xsd:string"
+      },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentOrder),
+             insert_schema_document(Context, DocumentCustomer),
+             insert_schema_document(Context, DocumentProduct)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     get_schema_document(DB, 'Order', Retrieved),
+     get_dict(customer, Retrieved, CustomerField),
+     get_dict('@unfold', CustomerField, true),
+     get_dict(items, Retrieved, ItemsField),
+     get_dict('@unfold', ItemsField, true).
+
+test(field_level_unfold_property_lookup,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     DocumentOrder =
+     _{ '@id' : "Order",
+        '@type' : "Class",
+        customer : _{ '@type' : "Optional",
+                      '@class' : "Customer",
+                      '@unfold' : true },
+        noUnfold : _{ '@type' : "Optional",
+                      '@class' : "Customer" }
+      },
+
+     DocumentCustomer =
+     _{ '@id' : "Customer",
+        '@type' : "Class",
+        name : "xsd:string"
+      },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentOrder),
+             insert_schema_document(Context, DocumentCustomer)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     database_prefixes(DB, Prefixes),
+     prefix_expand_schema('Order', Prefixes, OrderClass),
+     prefix_expand_schema('customer', Prefixes, CustomerPred),
+     prefix_expand_schema('noUnfold', Prefixes, NoUnfoldPred),
+
+     property_is_unfold(DB, OrderClass, CustomerPred, true),
+     property_is_unfold(DB, OrderClass, NoUnfoldPred, false).
+
+test(field_level_unfold_document_retrieval,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     DocumentOrder =
+     _{ '@id' : "Order",
+        '@type' : "Class",
+        customer : _{ '@type' : "Optional",
+                      '@class' : "Customer",
+                      '@unfold' : true },
+        noUnfold : _{ '@type' : "Optional",
+                      '@class' : "Customer" }
+      },
+
+     DocumentCustomer =
+     _{ '@id' : "Customer",
+        '@type' : "Class",
+        name : "xsd:string"
+      },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentOrder),
+             insert_schema_document(Context, DocumentCustomer)
+         ),
+         _
+     ),
+
+     CustomerInstance = _{ '@type' : "Customer",
+                           '@id' : "Customer/c1",
+                           name : "Test Customer" },
+     OrderInstance = _{ '@type' : "Order",
+                        '@id' : "Order/o1",
+                        customer : "Customer/c1",
+                        noUnfold : "Customer/c1" },
+
+     with_test_transaction(
+         Desc,
+         Context2,
+         (   insert_document(Context2, CustomerInstance, _),
+             insert_document(Context2, OrderInstance, _)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     database_prefixes(DB, Prefixes),
+     prefix_expand_schema('customer', Prefixes, CustomerKey),
+     prefix_expand_schema('noUnfold', Prefixes, NoUnfoldKey),
+     prefix_expand('Customer/c1', Prefixes, CustomerIdEx),
+
+     get_document(DB, Prefixes, 'Order/o1', RetrievedUnfold, [unfold(true)]),
+     get_dict(CustomerKey, RetrievedUnfold, CustomerValue),
+     is_dict(CustomerValue),
+     get_dict('@id', CustomerValue, CustomerIdEx),
+
+     get_dict(NoUnfoldKey, RetrievedUnfold, NoUnfoldValue),
+     NoUnfoldValue = CustomerIdEx.
+
+test(field_level_unfold_cycle_allowed,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     % Cycles with @unfold are allowed (consistent with @unfoldable)
+     % Runtime visited-node tracking prevents infinite loops during retrieval
+     DocumentA =
+     _{ '@id' : "CycleA",
+        '@type' : "Class",
+        toB : _{ '@type' : "Optional",
+                 '@class' : "CycleB",
+                 '@unfold' : true }
+      },
+
+     DocumentB =
+     _{ '@id' : "CycleB",
+        '@type' : "Class",
+        toA : _{ '@type' : "Optional",
+                 '@class' : "CycleA",
+                 '@unfold' : true }
+      },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentA),
+             insert_schema_document(Context, DocumentB)
+         ),
+         _
+     ).
+
+test(prolog_get_document_cycle_protection,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     % Test that Prolog get_document handles cycles without infinite recursion
+     % Uses @unfoldable class with cyclic data
+     Schema =
+     _{ '@id' : "CyclicNode",
+        '@type' : "Class",
+        '@unfoldable' : [],
+        name : "xsd:string",
+        next : _{ '@type' : "Optional",
+                  '@class' : "CyclicNode" }
+      },
+
+     with_test_transaction(
+         Desc,
+         Context1,
+         insert_schema_document(Context1, Schema),
+         _
+     ),
+
+     % Create cyclic data: A -> B -> A
+     NodeA = _{ '@type' : "CyclicNode",
+                '@id' : "CyclicNode/A",
+                name : "Node A",
+                next : "CyclicNode/B" },
+     NodeB = _{ '@type' : "CyclicNode",
+                '@id' : "CyclicNode/B",
+                name : "Node B",
+                next : "CyclicNode/A" },
+
+     with_test_transaction(
+         Desc,
+         Context2,
+         (   insert_document(Context2, NodeA, _),
+             insert_document(Context2, NodeB, _)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     database_prefixes(DB, Prefixes),
+
+     % This should NOT cause infinite recursion - cycle should be detected
+     get_document(DB, Prefixes, 'CyclicNode/A', Document, [unfold(true)]),
+
+     % Verify we got a document back (didn't hang)
+     get_dict('@id', Document, _),
+
+     % Get the expanded URI for 'next' property
+     prefix_expand_schema(next, Prefixes, NextKey),
+
+     % The 'next' field should contain the unfolded NodeB
+     get_dict(NextKey, Document, NextDoc),
+     is_dict(NextDoc),
+
+     % NodeB was unfolded - check its back-reference
+     get_dict(NextKey, NextDoc, BackRef),
+
+     % BackRef should be just an ID atom (cycle detected), not a dict
+     atom(BackRef),
+     atom_string(BackRef, BackRefStr),
+     sub_string(BackRefStr, _, _, _, "CyclicNode/A").
 
 test(subdocument_hash_key,
      [

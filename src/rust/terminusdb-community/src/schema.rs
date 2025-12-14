@@ -101,6 +101,35 @@ impl<'a, L: Layer + Clone> SchemaQueryContext<'a, L> {
         result
     }
 
+    /// Returns (class_id, predicate_id) pairs where the property has @unfold: true
+    pub fn get_unfold_pairs_from_schema(&self) -> HashSet<(u64, u64)> {
+        let mut result = HashSet::new();
+        let inheritance = self.get_reverse_inheritance_graph();
+
+        // Find all type nodes that have sys:unfold predicate
+        if let Some(unfold_id) = self.sys.unfold() {
+            for triple in self.layer.triples_p(unfold_id) {
+                let type_node = triple.subject;
+                // Find which class.predicate points to this type node
+                for parent_triple in self.layer.triples_o(type_node) {
+                    let class_id = parent_triple.subject;
+                    let predicate_id = parent_triple.predicate;
+
+                    // Add this pair and all subclass pairs
+                    let mut work = vec![class_id];
+                    while let Some(cur_class) = work.pop() {
+                        result.insert((cur_class, predicate_id));
+                        if let Some(children) = inheritance.get(&cur_class) {
+                            work.extend(children.iter());
+                        }
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
     pub fn get_set_pairs_from_schema(&'_ self) -> impl Iterator<Item = (u64, u64)> + '_ {
         let sys_set_id = self.sys.set();
         if sys_set_id.is_none() {

@@ -57,6 +57,7 @@
 :- use_module(library(yall)).
 :- use_module(library(sort)).
 :- use_module(library(apply_macros)).
+:- use_module(library(ordsets)).
 
 :- use_module(library(when)).
 
@@ -1563,6 +1564,44 @@ compile_wf(sum(X,Y),Sum) -->
         marshall_args(sum_list(XE,YE), Goal),
         Sum = ensure_mode(Goal,[ground,any],[XE,YE],[X,Y])
     }.
+% set_difference/3 - compute set difference (elements in A but not in B)
+compile_wf(set_difference(ListA, ListB, Result), SetDiff) -->
+    resolve(ListA, ListAE),
+    resolve(ListB, ListBE),
+    resolve(Result, ResultE),
+    {
+        SetDiff = woql_compile:set_difference_impl(ListAE, ListBE, ResultE)
+    }.
+% set_intersection/3 - compute set intersection (elements in both A and B)
+compile_wf(set_intersection(ListA, ListB, Result), SetIntersect) -->
+    resolve(ListA, ListAE),
+    resolve(ListB, ListBE),
+    resolve(Result, ResultE),
+    {
+        SetIntersect = woql_compile:set_intersection_impl(ListAE, ListBE, ResultE)
+    }.
+% set_union/3 - compute set union (all unique elements from A and B)
+compile_wf(set_union(ListA, ListB, Result), SetUnion) -->
+    resolve(ListA, ListAE),
+    resolve(ListB, ListBE),
+    resolve(Result, ResultE),
+    {
+        SetUnion = woql_compile:set_union_impl(ListAE, ListBE, ResultE)
+    }.
+% set_member/2 - efficient set membership check using binary search
+compile_wf(set_member(Element, Set), SetMember) -->
+    resolve(Element, ElementE),
+    resolve(Set, SetE),
+    {
+        SetMember = woql_compile:set_member_impl(ElementE, SetE)
+    }.
+% list_to_set/2 - convert list to sorted set (removes duplicates)
+compile_wf(list_to_set(List, Set), ListToSet) -->
+    resolve(List, ListE),
+    resolve(Set, SetE),
+    {
+        ListToSet = woql_compile:list_to_set_impl(ListE, SetE)
+    }.
 % slice/4 - with explicit end
 compile_wf(slice(List,Result,Start,End),Slice) -->
     resolve(List,ListE),
@@ -1696,6 +1735,70 @@ slice_list_no_end(ListE, ResultE, StartE) :-
     clamp_index(NormStart, 0, Len, ClampedStart),
     drop_n(ClampedStart, List, Sliced),
     ResultE = Sliced.
+
+% Set Operations Implementation using ordsets for O(n log n) performance
+
+% Set operations use FULL typed literal comparison (not value-based).
+% This means 2^^xsd:integer and 2^^xsd:decimal are DIFFERENT elements.
+% Types from original lists are preserved in results.
+%
+% Rationale: Consistent with Prolog's term comparison semantics and
+% preserves type information which may be semantically important.
+
+% set_difference_impl/3 - Compute set difference (elements in A but not in B)
+% Uses ordsets:ord_subtract for O(n log n) performance
+% Result preserves types from ListA
+set_difference_impl(ListAE, ListBE, ResultE) :-
+    unwrap_list(ListAE, ListA),
+    unwrap_list(ListBE, ListB),
+    % Convert lists to ordered sets (sorts and removes duplicates)
+    list_to_ord_set(ListA, SetA),
+    list_to_ord_set(ListB, SetB),
+    % Compute set difference
+    ord_subtract(SetA, SetB, Result),
+    ResultE = Result.
+
+% set_intersection_impl/3 - Compute set intersection (elements in both A and B)
+% Uses ordsets:ord_intersection for O(n log n) performance
+% Result preserves types from ListA (first list wins)
+set_intersection_impl(ListAE, ListBE, ResultE) :-
+    unwrap_list(ListAE, ListA),
+    unwrap_list(ListBE, ListB),
+    % Convert lists to ordered sets
+    list_to_ord_set(ListA, SetA),
+    list_to_ord_set(ListB, SetB),
+    % Compute set intersection
+    ord_intersection(SetA, SetB, Result),
+    ResultE = Result.
+
+% set_union_impl/3 - Compute set union (all unique elements from A and B)
+% Uses ordsets:ord_union for O(n log n) performance
+% For duplicates, types from ListA take precedence
+set_union_impl(ListAE, ListBE, ResultE) :-
+    unwrap_list(ListAE, ListA),
+    unwrap_list(ListBE, ListB),
+    % Convert lists to ordered sets
+    list_to_ord_set(ListA, SetA),
+    list_to_ord_set(ListB, SetB),
+    % Compute set union
+    ord_union(SetA, SetB, Result),
+    ResultE = Result.
+
+% set_member_impl/2 - Check if element is member of set
+% Uses FULL typed literal comparison for consistency with other set operations
+% Element must match exactly (including type) to be considered a member
+set_member_impl(ElementE, SetE) :-
+    unwrap_list(SetE, List),
+    member(ElementE, List),
+    !.  % Cut after first match for determinism
+
+% list_to_set_impl/2 - Convert list to sorted set (removes duplicates)
+% Preserves types from original list
+list_to_set_impl(ListE, SetE) :-
+    unwrap_list(ListE, List),
+    % Convert to ordered set (sorts and removes duplicates)
+    list_to_ord_set(List, Set),
+    SetE = Set.
 
 % Helper: Unwrap list from typed literal if needed
 unwrap_list(List^^'http://terminusdb.com/schema/xdd#json', List) :- !.
@@ -6385,4 +6488,7 @@ test(ancestor, [
 
 % Include decimal precision tests from separate file
 :- include('decimal_precision_test.pl').
+
+% Include set operations tests from separate file
+:- include('set_operations_test.pl').
 

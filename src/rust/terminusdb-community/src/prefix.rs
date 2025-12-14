@@ -38,7 +38,7 @@ impl Prefix {
         Prefix::Other(contraction.to_string(), expansion.to_string())
     }
 
-    pub fn contraction(&self) -> PrefixContraction {
+    pub fn contraction(&self) -> PrefixContraction<'_> {
         match self {
             Prefix::Schema(_) => PrefixContraction::Schema,
             Prefix::Base(_) => PrefixContraction::Base,
@@ -208,7 +208,7 @@ impl PrefixContracter {
         }
     }
 
-    pub fn contract<'a>(&self, s: &'a str) -> Option<(PrefixContraction, &'a str)> {
+    pub fn contract<'a>(&self, s: &'a str) -> Option<(PrefixContraction<'_>, &'a str)> {
         let mut cur: &[PrefixContracterTree] = &self.trees;
         let slice = s.as_bytes();
         let mut offset = 0;

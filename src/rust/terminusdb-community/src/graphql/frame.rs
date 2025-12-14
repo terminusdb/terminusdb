@@ -374,30 +374,42 @@ enum ComplexFieldDefinition {
     Optional {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<bool>,
     },
     Set {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<bool>,
     },
     Array {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         #[serde(default = "default_dimensionality")]
         dimensions: usize,
+        #[serde(rename = "@unfold")]
+        unfold: Option<bool>,
     },
     List {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<bool>,
     },
     Cardinality {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         min: Option<usize>,
         max: Option<usize>,
+        #[serde(rename = "@unfold")]
+        unfold: Option<bool>,
     },
     Foreign {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
+        #[serde(rename = "@unfold")]
+        unfold: Option<bool>,
     },
 }
 
@@ -431,27 +443,27 @@ impl From<StructuralFieldDefinition> for UncleanFieldDefinition {
                 UncleanFieldDefinition::Required(base_or_derived(s))
             }
             StructuralFieldDefinition::ContainerField(c) => match c {
-                ComplexFieldDefinition::Optional { class } => {
+                ComplexFieldDefinition::Optional { class, unfold: _ } => {
                     UncleanFieldDefinition::Optional(class.name())
                 }
-                ComplexFieldDefinition::Set { class } => UncleanFieldDefinition::Set(class.name()),
-                ComplexFieldDefinition::List { class } => {
+                ComplexFieldDefinition::Set { class, unfold: _ } => UncleanFieldDefinition::Set(class.name()),
+                ComplexFieldDefinition::List { class, unfold: _ } => {
                     UncleanFieldDefinition::List(class.name())
                 }
-                ComplexFieldDefinition::Array { class, dimensions } => {
+                ComplexFieldDefinition::Array { class, dimensions, unfold: _ } => {
                     UncleanFieldDefinition::Array {
                         class: class.name(),
                         dimensions,
                     }
                 }
-                ComplexFieldDefinition::Cardinality { class, min, max } => {
+                ComplexFieldDefinition::Cardinality { class, min, max, unfold: _ } => {
                     UncleanFieldDefinition::Cardinality {
                         class: class.name(),
                         min,
                         max,
                     }
                 }
-                ComplexFieldDefinition::Foreign { class } => {
+                ComplexFieldDefinition::Foreign { class, unfold: _ } => {
                     UncleanFieldDefinition::Required(class.name())
                 }
             },
@@ -597,7 +609,7 @@ impl FieldDefinition {
         self.base_type().map(type_is_json).unwrap_or(false)
     }
 
-    pub fn range(&self) -> &BaseOrDerived<GraphQLName> {
+    pub fn range(&self) -> &BaseOrDerived<GraphQLName<'_>> {
         match self {
             Self::Required(c) => c,
             Self::Optional(c) => c,
@@ -608,7 +620,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&GraphQLName> {
+    pub fn document_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName<'a>> {
         let range = self.range();
         match range {
             BaseOrDerived::Base(_) => None,
@@ -616,7 +628,7 @@ impl FieldDefinition {
         }
     }
 
-    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&GraphQLName> {
+    pub fn enum_type<'a>(&'a self, allframes: &'a AllFrames) -> Option<&'a GraphQLName<'a>> {
         let range = self.range();
         match range {
             BaseOrDerived::Base(_) => None,
@@ -829,7 +841,7 @@ impl ClassDefinition {
         }
     }
 
-    pub fn fields(&self) -> Vec<(&GraphQLName, &FieldDefinition)> {
+    pub fn fields(&self) -> Vec<(&GraphQLName<'_>, &FieldDefinition)> {
         let mut one_ofs: Vec<(&GraphQLName, &FieldDefinition)> = self
             .one_of
             .as_ref()
@@ -952,7 +964,7 @@ impl EnumDefinition {
         IriName(urlencoding::encode(res.as_str()).into_owned())
     }
 
-    pub fn name_value(&self, name: &IriName) -> &GraphQLName {
+    pub fn name_value(&self, name: &IriName) -> &GraphQLName<'_> {
         let decoded = &*urlencoding::decode(name.as_str())
             .expect("Somehow encoding went terribly wrong in saving");
         self.values_renaming
@@ -1146,7 +1158,7 @@ impl AllFrames {
             .unwrap_or_else(|| panic!("This class name {db_name} *should* exist"))
     }
 
-    pub fn iri_to_graphql_name_opt(&self, iri: &IriName) -> Option<GraphQLName> {
+    pub fn iri_to_graphql_name_opt(&self, iri: &IriName) -> Option<GraphQLName<'_>> {
         self.graphql_to_iri_renaming.get_by_right(iri).cloned()
     }
 

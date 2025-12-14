@@ -911,7 +911,7 @@ fn collection_kind_iterator(
     kind: CollectionKind,
     subject: u64,
     property_id: u64,
-) -> ClonableIterator<u64> {
+) -> ClonableIterator<'_, u64> {
     match kind {
         CollectionKind::Property => ClonableIterator::new(CachedClonableIterator::new(
             g.triples_sp(subject, property_id).map(|t| t.object),
@@ -1336,6 +1336,32 @@ pub fn run_filter_query<'a>(
     } else {
         it.collect()
     }
+}
+
+/// Run a count query - returns count of matching documents without collecting them
+pub fn run_count_query<'a>(
+    context: &'a TerminusContext<'static>,
+    g: &'a SyncStoreLayer,
+    filter_input: &FilterInputObject,
+    class_name: &'a GraphQLName<'a>,
+    all_frames: &'a AllFrames,
+) -> i32 {
+    // Compile filter object from input
+    let filter = compile_filter_object(class_name, all_frames, filter_input);
+
+    // Use existing lookup logic but just count instead of collecting
+    let count = lookup_by_filter(
+        context,
+        g,
+        class_name,
+        all_frames,
+        Some(filter),
+        None,  // no zero_iter
+        true,  // include_children (matches default query behavior)
+    )
+    .count();
+
+    count as i32
 }
 
 fn include_children(arguments: &juniper::Arguments) -> bool {
