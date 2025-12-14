@@ -1,3 +1,27 @@
+# TerminusDB Server v12.0.1 Release Notes
+
+## Enhancements
+* Added `_count` query field to GraphQL for counting filtered results
+* Added field-level `@unfold` schema annotation for controlling document expansion
+* Added high-performance WOQL set operators (union, intersection, difference)
+
+## Bug fixes
+* Fixed sys:JSON numeric values now properly cast to other numeric types
+* Fixed nested subdocument ID generation bug
+* Fixed stray subdocument residue during deletion (v12.0.0 regression)
+* Fixed Foreign type schema validation and inclusion in schema graph
+
+## Maintenance and bug fixes
+* Re-enabled in-memory server for testing
+* Improved `make pr` workflow for accurate PR testing
+* Reduced server startup delay
+* Cleaned up Rust lifetime warnings and dead code
+* Improved schema checker accuracy with additional test coverage
+* Aligned `@unfold` with `@unfoldable` and prevented potential WOQL unfolding issues
+
+## Other
+* Updated release workflows for Docker and Snap coordination
+
 # TerminusDB Server v12.0.0 Release Notes
 
 A major release of TerminusDB. It forges a new path forward for this open source project. The on-disk storage format remains unchanged since the version 11 release and the changes are in stringency, precision and clarity of the graph database interfaces.
