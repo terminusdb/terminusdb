@@ -861,6 +861,47 @@ json_type_to_woql_ast('Member',JSON,WOQL,Path) :-
     json_value_to_woql_ast(L,WL,[list
                                  |Path]),
     WOQL = member(WS,WL).
+json_type_to_woql_ast('SetDifference',JSON,WOQL,Path) :-
+    _{list_a : ListA,
+      list_b : ListB,
+      result : Result
+     } :< JSON,
+    json_value_to_woql_ast(ListA,WListA,[list_a|Path]),
+    json_value_to_woql_ast(ListB,WListB,[list_b|Path]),
+    json_value_to_woql_ast(Result,WResult,[result|Path]),
+    WOQL = set_difference(WListA,WListB,WResult).
+json_type_to_woql_ast('SetIntersection',JSON,WOQL,Path) :-
+    _{list_a : ListA,
+      list_b : ListB,
+      result : Result
+     } :< JSON,
+    json_value_to_woql_ast(ListA,WListA,[list_a|Path]),
+    json_value_to_woql_ast(ListB,WListB,[list_b|Path]),
+    json_value_to_woql_ast(Result,WResult,[result|Path]),
+    WOQL = set_intersection(WListA,WListB,WResult).
+json_type_to_woql_ast('SetUnion',JSON,WOQL,Path) :-
+    _{list_a : ListA,
+      list_b : ListB,
+      result : Result
+     } :< JSON,
+    json_value_to_woql_ast(ListA,WListA,[list_a|Path]),
+    json_value_to_woql_ast(ListB,WListB,[list_b|Path]),
+    json_value_to_woql_ast(Result,WResult,[result|Path]),
+    WOQL = set_union(WListA,WListB,WResult).
+json_type_to_woql_ast('SetMember',JSON,WOQL,Path) :-
+    _{element : Element,
+      set : Set
+     } :< JSON,
+    json_value_to_woql_ast(Element,WElement,[element|Path]),
+    json_value_to_woql_ast(Set,WSet,[set|Path]),
+    WOQL = set_member(WElement,WSet).
+json_type_to_woql_ast('ListToSet',JSON,WOQL,Path) :-
+    _{list : List,
+      set : Set
+     } :< JSON,
+    json_value_to_woql_ast(List,WList,[list|Path]),
+    json_value_to_woql_ast(Set,WSet,[set|Path]),
+    WOQL = list_to_set(WList,WSet).
 json_type_to_woql_ast('Concatenate',JSON,WOQL,Path) :-
     _{list :  List,
       result : Value
