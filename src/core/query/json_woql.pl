@@ -1069,6 +1069,8 @@ json_type_to_woql_ast('Immediately',JSON,WOQL,Path) :-
     json_to_woql_ast(Q,WQ,[query
                            |Path]),
     WOQL = immediately(WQ).
+json_type_to_woql_ast('Comment',_JSON,WOQL,_Path) :-
+    WOQL = true.
 json_type_to_woql_ast('Dot',JSON,WOQL,Path) :-
     _{document : Dictionary,
       field : Key,
@@ -1439,6 +1441,29 @@ test(isa, []) :-
     json_woql(JSON,WOQL),
 
     WOQL = isa(v('X'),xsd:string).
+
+test(comment_with_query, []) :-
+    JSON_Atom = '{
+  "@type": "Comment",
+  "comment": { "@type": "xsd:string", "@value": "This query is commented out" },
+  "query": {
+    "@type": "Equals",
+    "left": { "@type": "DataValue", "variable": "X" },
+    "right": { "@type": "DataValue", "data": { "@value": "test", "@type": "xsd:string" } }
+  }
+}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    json_woql(JSON, WOQL),
+    WOQL = true.
+
+test(comment_without_query, []) :-
+    JSON_Atom = '{
+  "@type": "Comment",
+  "comment": { "@type": "xsd:string", "@value": "Just a simple comment" }
+}',
+    atom_json_dict(JSON_Atom, JSON, []),
+    json_woql(JSON, WOQL),
+    WOQL = true.
 
 :- end_tests(woql_jsonld).
 
