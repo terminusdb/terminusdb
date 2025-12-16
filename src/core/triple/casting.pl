@@ -817,9 +817,10 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#hexBinary', 'http://www.w3.org
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#hexBinary', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
     !.
 %%% xsd:string => xsd:anyURI
+%%% Per XSD 1.1 spec and RFC 3987, xsd:anyURI accepts both absolute and relative URI references
 typecast_switch('http://www.w3.org/2001/XMLSchema#anyURI', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#anyURI') :-
     !,
-    (   is_absolute_url(Val)
+    (   uri_components(Val, _)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#anyURI'),_))).
 %%% xsd:anyURI => xsd:string (downcast)
@@ -1230,5 +1231,96 @@ test(decimal_to_string_cast, []) :-
              'http://www.w3.org/2001/XMLSchema#string',
              [],
              "0.5679"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(anyuri_bare_filename, []) :-
+    % Per XSD 1.1 spec and RFC 3987, xsd:anyURI accepts relative URI references
+    typecast("helloWorld.xsd"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "helloWorld.xsd"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_relative_path, []) :-
+    % Relative path with directory
+    typecast("../schemas/test.xsd"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "../schemas/test.xsd"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_absolute_url, []) :-
+    % Absolute URL should also work
+    typecast("http://example.com/schema.xsd"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "http://example.com/schema.xsd"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_fragment, []) :-
+    % Fragment-only URI reference
+    typecast("#section1"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "#section1"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_to_string, []) :-
+    % Downcast from anyURI to string
+    typecast("helloWorld.xsd"^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#string',
+             [],
+             "helloWorld.xsd"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(anyuri_prefixed_iri, []) :-
+    % Prefixed IRI (CURIE-style) - parsed as scheme:path
+    typecast("schema:Person"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "schema:Person"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_prefixed_iri_with_path, []) :-
+    % Prefixed IRI with path segments
+    typecast("foaf:knows/friend"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "foaf:knows/friend"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_rdf_prefix, []) :-
+    % RDF-style prefixed IRI
+    typecast("rdf:type"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "rdf:type"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_xsd_prefix, []) :-
+    % XSD-style prefixed IRI
+    typecast("xsd:string"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "xsd:string"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_iri_japanese, []) :-
+    % IRI with Japanese characters (per RFC 3987)
+    typecast("http://example.com/日本語"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "http://example.com/日本語"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_iri_cyrillic, []) :-
+    % IRI with Cyrillic characters
+    typecast("файл.txt"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "файл.txt"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_iri_accented, []) :-
+    % IRI with accented Latin characters
+    typecast("données/café.xml"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "données/café.xml"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(anyuri_iri_chinese, []) :-
+    % IRI with Chinese characters
+    typecast("http://例え.jp/文件"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI',
+             [],
+             "http://例え.jp/文件"^^'http://www.w3.org/2001/XMLSchema#anyURI').
 
 :- end_tests(typecast).
