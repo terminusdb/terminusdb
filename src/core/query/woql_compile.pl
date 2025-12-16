@@ -981,6 +981,13 @@ find_resources(opt(P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(not(P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(immediately(P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(prefixes(_,P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(with(_,_,P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(call(_,_), _, _, _, [], []).
 find_resources(get(_,_,_), _, _, _, [], []).
 find_resources(typecast(_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
@@ -1014,6 +1021,15 @@ find_resources(slice(_,_,_,_),_, _, _, [], []).
 find_resources(timestamp_now(_),_, _, _, [], []).
 find_resources(false,_, _, _, [], []).
 find_resources(true,_, _, _, [], []).
+find_resources(list_to_set(_,_),_, _, _, [], []).
+find_resources(set_difference(_,_,_),_, _, _, [], []).
+find_resources(set_intersection(_,_,_),_, _, _, [], []).
+find_resources(set_union(_,_,_),_, _, _, [], []).
+find_resources(set_member(_,_),_, _, _, [], []).
+find_resources(addition(_,_,_), Collection, DRG, _DWG, [resource(Collection,DRG)], []).
+find_resources(addition(_,_,_,_), Collection, DRG, _DWG, [resource(Collection,DRG)], []).
+find_resources(removal(_,_,_), Collection, DRG, _DWG, [resource(Collection,DRG)], []).
+find_resources(removal(_,_,_,_), Collection, DRG, _DWG, [resource(Collection,DRG)], []).
 
 assert_pre_flight_access(Context, _AST) :-
     is_super_user(Context.authorization, Context.prefixes),
@@ -6327,6 +6343,54 @@ test(duration_hour) :-
     test_lit(duration(-1,0,0,0,1,0,0.0)^^xsd:duration, duration(-1,0,0,0,1,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
 
 :- end_tests(store_load_data).
+
+:- begin_tests(predicate_coverage).
+
+/**
+ * Test to automatically detect compile_wf predicates missing find_resources clauses
+ * 
+ * This prevents the bug where new WOQL operations are added but find_resources
+ * is not updated, causing authorization failures for non-super-users.
+ * 
+ * The test automatically introspects all compile_wf/4 clauses and verifies
+ * each has a corresponding find_resources/6 clause.
+ */
+
+test(all_compile_wf_predicates_have_find_resources, []) :-
+    % Get all unique compile_wf functors (compile_wf is a DCG, so it's /4 after expansion)
+    findall(Functor/Arity,
+            (   clause(compile_wf(Head, _, _, _), _),
+                functor(Head, Functor, Arity)
+            ),
+            AllCompileWf),
+    sort(AllCompileWf, CompileWfFunctors),
+    
+    % Get all unique find_resources functors
+    findall(Functor/Arity,
+            (   clause(find_resources(Head, _, _, _, _, _), _),
+                functor(Head, Functor, Arity)
+            ),
+            AllFindResources),
+    sort(AllFindResources, FindResourcesFunctors),
+    
+    % Find missing: in compile_wf but not in find_resources
+    findall(F/A,
+            (   member(F/A, CompileWfFunctors),
+                \+ memberchk(F/A, FindResourcesFunctors)
+            ),
+            Missing),
+    
+    (   Missing = []
+    ->  true
+    ;   format(user_error, 
+               'ERROR: The following compile_wf predicates are missing find_resources clauses:~n  ~w~n', 
+               [Missing]),
+        format(user_error,
+               'Add find_resources/6 clauses for these predicates to fix authorization for non-super-users.~n', []),
+        fail
+    ).
+
+:- end_tests(predicate_coverage).
 
 :- begin_tests(preflight).
 :- use_module(core(util/test_utils)).
