@@ -36,7 +36,8 @@ decimal_precision(20).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
-:- use_module(library(url)).
+:- use_module(library(url), [is_absolute_url/1]).
+:- use_module(library(uri), [uri_components/2]).
 :- use_module(library(http/json), [atom_json_dict/3]).
 
 /*
