@@ -1,3 +1,7 @@
+# TerminusDB Server v12.0.2 Release Notes
+## Bug fixes
+* New set operators also work for non-admin users
+
 # TerminusDB Server v12.0.1 Release Notes
 
 ## Enhancements
