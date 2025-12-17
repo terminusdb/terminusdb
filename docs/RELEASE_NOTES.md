@@ -1,4 +1,13 @@
+# TerminusDB Server v12.0.3-dev Release Notes
+
+## Enhancements
+* Add cardinality functionality to Set
+
+## Deprecation
+* `Cardinality` is deprecated, use `Set` instead.
+
 # TerminusDB Server v12.0.2 Release Notes
+
 ## Bug fixes
 * New set operators also work for non-admin users
 
