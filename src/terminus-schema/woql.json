@@ -1773,3 +1773,167 @@
   "type":"NodeValue",
   "value":"Value"
 }
+{
+  "@documentation": {
+    "@comment":"A comment. The query is disabled (not executed) and the comment serves as documentation.",
+    "@properties": {
+      "comment":"The comment string explaining why the query is disabled.",
+      "query":"The query which is commented out and will not be executed."
+    }
+  },
+  "@id":"Comment",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["comment", "optional(query)" ],
+      "mode": ["+", ":" ],
+      "types": ["string", "query" ]
+    }
+  },
+  "@type":"Class",
+  "comment":"DataValue",
+  "query": {"@class":"Query", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"Extracts a contiguous subsequence from a list.",
+    "@properties": {
+      "list":"The input list to slice.",
+      "result":"The resulting sliced list.",
+      "start":"The start index (0-based).",
+      "end":"The end index (exclusive, optional)."
+    }
+  },
+  "@id":"Slice",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result", "start", "optional(end)" ],
+      "mode": ["+", "?", "+", "+" ],
+      "types": ["list(any)", "list(any)", "integer", "integer" ]
+    }
+  },
+  "@type":"Class",
+  "end": {"@class":"DataValue", "@type":"Optional"},
+  "list":"DataValue",
+  "result":"DataValue",
+  "start":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the set difference of two lists (elements in list_a but not in list_b).",
+    "@properties": {
+      "list_a":"The first list.",
+      "list_b":"The second list.",
+      "result":"The resulting set difference."
+    }
+  },
+  "@id":"SetDifference",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list_a", "list_b", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list_a":"DataValue",
+  "list_b":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the set intersection of two lists (elements in both list_a and list_b).",
+    "@properties": {
+      "list_a":"The first list.",
+      "list_b":"The second list.",
+      "result":"The resulting set intersection."
+    }
+  },
+  "@id":"SetIntersection",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list_a", "list_b", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list_a":"DataValue",
+  "list_b":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the set union of two lists (elements in either list_a or list_b).",
+    "@properties": {
+      "list_a":"The first list.",
+      "list_b":"The second list.",
+      "result":"The resulting set union."
+    }
+  },
+  "@id":"SetUnion",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list_a", "list_b", "result" ],
+      "mode": ["+", "+", "?" ],
+      "types": ["list(any)", "list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list_a":"DataValue",
+  "list_b":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Tests if an element is a member of a set.",
+    "@properties": {
+      "element":"The element to check for membership.",
+      "set":"The set (list) to check membership in."
+    }
+  },
+  "@id":"SetMember",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["element", "set" ],
+      "mode": ["?", "+" ],
+      "types": ["any", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "element":"DataValue",
+  "set":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Converts a list to a set by removing duplicates and sorting.",
+    "@properties": {
+      "list":"The input list.",
+      "set":"The resulting set with duplicates removed."
+    }
+  },
+  "@id":"ListToSet",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "set" ],
+      "mode": ["+", "?" ],
+      "types": ["list(any)", "list(any)" ]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "set":"DataValue"
+}
