@@ -1,3 +1,11 @@
+# TerminusDB Server v12.0.3-dev Release Notes
+
+## Enhancements
+* Added `comment` predicate to WOQL
+
+## Bug fixes
+* The woql.json specification now includes slice, set and comment predicates
+
 # TerminusDB Server v12.0.2 Release Notes
 ## Bug fixes
 * New set operators also work for non-admin users
