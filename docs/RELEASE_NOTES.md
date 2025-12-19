@@ -9,6 +9,7 @@
 # TerminusDB Server v12.0.2 Release Notes
 ## Bug fixes
 * New set operators also work for non-admin users
+* Ensure that xsd:anyURI is RFC3987 compliant for the URI/IRI (#2110)
 
 # TerminusDB Server v12.0.1 Release Notes
 
