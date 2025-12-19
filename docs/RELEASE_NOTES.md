@@ -2,14 +2,19 @@
 
 ## Enhancements
 * Add cardinality functionality to Set
+* Added `comment` predicate to WOQL
 
 ## Deprecation
 * `Cardinality` is deprecated, use `Set` instead.
+
+## Bug fixes
+* The woql.json specification now includes slice, set and comment predicates
 
 # TerminusDB Server v12.0.2 Release Notes
 
 ## Bug fixes
 * New set operators also work for non-admin users
+* Ensure that xsd:anyURI is RFC3987 compliant for the URI/IRI (#2110)
 
 # TerminusDB Server v12.0.1 Release Notes
 
