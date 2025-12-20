@@ -582,6 +582,8 @@ class_descriptor_image(array(C,D),json{ '@container' : "@array",
                                         '@type' : C }).
 class_descriptor_image(set(C),json{ '@container' : "@set",
                                     '@type' : C }).
+class_descriptor_image(set(C,_,_), json{ '@container' : "@set",
+                                         '@type' : C }).
 class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
                                                  '@type' : C }).
 
@@ -1043,6 +1045,26 @@ is_type_family(Dict) :-
 
 type_family_parts(JSON,['Cardinality',Class,Min_Cardinality,Max_Cardinality]) :-
     get_dict('@type',JSON,"Cardinality"),
+    !,
+    get_dict('@class',JSON, Class),
+    (   get_dict('@cardinality',JSON, Cardinality)
+    ->  Min_Cardinality = Cardinality,
+        Max_Cardinality = Cardinality
+    ;   (   get_dict('@min_cardinality',JSON, Min_Cardinality)
+        ->  true
+        ;   Min_Cardinality = 0
+        ),
+        (   get_dict('@max_cardinality',JSON, Max_Cardinality)
+        ->  true
+        ;   Max_Cardinality = inf
+        )
+    ).
+type_family_parts(JSON,['Set',Class,Min_Cardinality,Max_Cardinality]) :-
+    get_dict('@type',JSON,"Set"),
+    (   get_dict('@cardinality',JSON, _)
+    ;   get_dict('@min_cardinality',JSON, _)
+    ;   get_dict('@max_cardinality',JSON, _)
+    ),
     !,
     get_dict('@class',JSON, Class),
     (   get_dict('@cardinality',JSON, Cardinality)
@@ -2072,6 +2094,10 @@ type_id_predicate_iri_value(set(C),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
     list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
+type_id_predicate_iri_value(set(C,_,_),Id,P,_,DB,Prefixes,Options,L) :-
+    set_list(DB,Id,P,V),
+    type_descriptor(DB,C,Desc),
+    list_type_id_predicate_value(V,Desc,Id,P,DB,Prefixes,Options,L).
 type_id_predicate_iri_value(cardinality(C,_,_),Id,P,_,DB,Prefixes,Options,L) :-
     set_list(DB,Id,P,V),
     type_descriptor(DB,C,Desc),
@@ -2405,6 +2431,13 @@ type_descriptor_json(optional(C), Prefixes, json{ '@type' : Optional,
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(set(C), Prefixes, json{ '@type' : Set,
                                              '@class' : Class_Comp }, Options) :-
+    expand_system_uri(sys:'Set', Set, Options),
+    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+type_descriptor_json(set(C,Min,Max), Prefixes, json{ '@type' : Set,
+                                                      '@class' : Class_Comp,
+                                                      '@min_cardinality' : Min,
+                                                      '@max_cardinality' : Max
+                                                    }, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(array(C,D), Prefixes, json{ '@type' : Array,
@@ -3151,6 +3184,14 @@ type_descriptor_sub_frame(optional(C), DB, Prefixes, json{ '@type' : Optional,
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
 type_descriptor_sub_frame(set(C), DB, Prefixes, json{ '@type' : Set,
                                                       '@class' : Frame }, Options) :-
+    expand_system_uri(sys:'Set', Set, Options),
+    type_descriptor(DB, C, Desc),
+    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
+type_descriptor_sub_frame(set(C,Min,Max), DB, Prefixes, json{ '@type' : Set,
+                                                              '@class' : Frame,
+                                                              '@min' : Min,
+                                                              '@max' : Max
+                                                            }, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
     type_descriptor(DB, C, Desc),
     type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).

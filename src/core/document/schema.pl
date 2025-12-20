@@ -493,6 +493,7 @@ reachable_unfoldable(Schema,A,P,B) :-
 type_descriptor_class(class(B), B).
 type_descriptor_class(optional(B), B).
 type_descriptor_class(set(B), B).
+type_descriptor_class(set(B,_,_), B).
 type_descriptor_class(list(B), B).
 type_descriptor_class(array(B,_), B).
 type_descriptor_class(cardinality(B,_,_), B).
@@ -1004,6 +1005,21 @@ schema_type_descriptor(Schema, Class, class(Class)) :-
     % Not sure these should be conflated...
     is_schema_simple_class(Schema, Class),
     !.
+schema_type_descriptor(Schema, Type, set(Class, N, M)) :-
+    xrdf(Schema, Type, rdf:type, sys:'Set'),
+    (   xrdf(Schema, Type, sys:min_cardinality, _)
+    ;   xrdf(Schema, Type, sys:max_cardinality, _)
+    ),
+    !,
+    xrdf(Schema, Type, sys:class, Class),
+    (   xrdf(Schema, Type, sys:min_cardinality, N^^xsd:nonNegativeInteger)
+    ->  true
+    ;   N = 0
+    ),
+    (   xrdf(Schema, Type, sys:max_cardinality, M^^xsd:nonNegativeInteger)
+    ->  true
+    ;   M = inf
+    ).
 schema_type_descriptor(Schema, Type, set(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Set'),
     !,

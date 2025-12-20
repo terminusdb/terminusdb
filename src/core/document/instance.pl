@@ -174,8 +174,10 @@ refute_cardinality_(not_tagged_union(C,_),Validation_Object,S,P,Witness) :-
                        predicate: Predicate
                      }.
 refute_cardinality_(set(_C),_Validation_Object,_S,_P,_Witness) :-
-    % no bad cardinality possible
+    % no bad cardinality possible for unconstrained set
     fail.
+refute_cardinality_(set(C,N,M),Validation_Object,S,P,Witness) :-
+    refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness).
 refute_cardinality_(array(_C,_D),_Validation_Object,_S,_P,_Witness) :-
     % a property whose value is an array
     % No bad cardinality possible - absence means empty array
@@ -248,6 +250,9 @@ refute_cardinality_(optional(C),Validation_Object,S,P,Witness) :-
                          }
     ).
 refute_cardinality_(cardinality(C,N,M),Validation_Object,S,P,Witness) :-
+    refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness).
+
+refute_bounded_cardinality(C,N,M,Validation_Object,S,P,Witness) :-
     card_count(Validation_Object,S,P,Count),
     \+ (   N =< Count,
            Count =< M

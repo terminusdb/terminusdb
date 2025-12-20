@@ -363,69 +363,18 @@ _{ '@unfoldable' : [], '@class' : Type} :< Range =>
                                   document : Dictionary,
                                   field : Key })
     ).
+
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
   '@max':Max,'@min':Min,'@class': Type} :< Range =>
-    % Note: witness here should really have more context given.
-    (   get_dict_not_null(Key,Dictionary,Values)
-    ->  (   is_list(Values),
-            length(Values, N)
-        ->  (   N >= Min, N =< Max
-            ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
-                mapm(
-                    {Database,Prefixes,Type}/
-                    [Value,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
-                        Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
-                        check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
-                    ),
-                    Values,Expanded,DepH-SubH-In,DepT-SubT-Out),
-                promote_result_list(Expanded,Result_List),
-                (   Result_List = witness(Witness_Value)
-                ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-                    Annotated = witness(Witness)
-                ;   Result_List = success(List),
-                    presentation_type(Type, Presentation),
-                    put_dict(Key,Dictionary,
-                             json{ '@container' : "@set",
-                                   '@type' : Presentation,
-                                   '@value' : List },
-                             Annotated_Dict),
-                    success(Annotated_Dict) = Annotated
-                )
-            ;   no_captures(Captures),
-                Annotated = witness(json{ '@type' : field_has_wrong_cardinality,
-                                          min: Min,
-                                          max: Max,
-                                          actual: N,
-                                          document : Dictionary,
-                                          field : Key })
-            )
-        ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result,Captures),
-            (   Result = witness(Witness_Value)
-            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-                Annotated = witness(Witness)
-            ;   Result = success(Term),
-                presentation_type(Type, Presentation),
-                put_dict(Key,Dictionary,
-                         json{ '@container' : "@set",
-                               '@type' : Presentation,
-                               '@value' : [Term] },
-                         Annotated_Dict),
-                success(Annotated_Dict) = Annotated
-            )
-        )
-    ;   Min =< 0
-    ->  no_captures(Captures),
-        drop_key(Key,Dictionary,New),
-        success(New) = Annotated
-    ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
-                                  document : Dictionary,
-                                  field : Key })
-    ).
+    check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,Captures).
+check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+_{'@type':'http://terminusdb.com/schema/sys#Set',
+  '@max':Max,'@min':Min,'@class': Type} :< Range =>
+    check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,Captures).
 check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>
-    % Note: witness here should really have more context given.
+    % Unconstrained Set
     (   get_dict_not_null(Key,Dictionary,Values)
     ->  (   is_list(Values)
         ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
@@ -536,6 +485,64 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#List',
                      Annotated_Dictionary),
             Annotated = success(Annotated_Dictionary)
         )
+    ;   no_captures(Captures),
+        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                  document : Dictionary,
+                                  field : Key })
+    ).
+
+check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,Captures) :-
+    (   get_dict_not_null(Key,Dictionary,Values)
+    ->  (   is_list(Values),
+            length(Values, N)
+        ->  (   N >= Min, N =< Max
+            ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
+                mapm(
+                    {Database,Prefixes,Type}/
+                    [Value,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
+                        Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
+                        check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
+                    ),
+                    Values,Expanded,DepH-SubH-In,DepT-SubT-Out),
+                promote_result_list(Expanded,Result_List),
+                (   Result_List = witness(Witness_Value)
+                ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                    Annotated = witness(Witness)
+                ;   Result_List = success(List),
+                    presentation_type(Type, Presentation),
+                    put_dict(Key,Dictionary,
+                             json{ '@container' : "@set",
+                                   '@type' : Presentation,
+                                   '@value' : List },
+                             Annotated_Dict),
+                    success(Annotated_Dict) = Annotated
+                )
+            ;   no_captures(Captures),
+                Annotated = witness(json{ '@type' : field_has_wrong_cardinality,
+                                          min: Min,
+                                          max: Max,
+                                          actual: N,
+                                          document : Dictionary,
+                                          field : Key })
+            )
+        ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result,Captures),
+            (   Result = witness(Witness_Value)
+            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            ;   Result = success(Term),
+                presentation_type(Type, Presentation),
+                put_dict(Key,Dictionary,
+                         json{ '@container' : "@set",
+                               '@type' : Presentation,
+                               '@value' : [Term] },
+                         Annotated_Dict),
+                success(Annotated_Dict) = Annotated
+            )
+        )
+    ;   Min =< 0
+    ->  no_captures(Captures),
+        drop_key(Key,Dictionary,New),
+        success(New) = Annotated
     ;   no_captures(Captures),
         Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                   document : Dictionary,
