@@ -34,4 +34,13 @@ api_rollup(System_DB, Auth, Path, _Options, Status_List) :-
                 rollup(Layer)
             ),
             Read_Write_Objects,
-            Status_List).
+            Status_List),
+
+    % Clear retained_descriptor_layers cache for all rolled-up descriptors
+    % This forces the next transaction to reload fresh Arc<InternalLayer> objects from disk
+    % with parent chains pointing to the rolled-up layer hierarchy.
+    maplist([Read_Write_Object]>>(
+                get_dict(descriptor, Read_Write_Object, Desc),
+                retractall(descriptor:retained_descriptor_layers(Desc, _))
+            ),
+            Read_Write_Objects).
