@@ -63,9 +63,37 @@ descriptor_optimize(repository_descriptor{
                  },
 
     open_descriptor(Descriptor, Transaction_Object),
+    storage(Store),
+    % Optimize in-memory repository schema layers
+    Schema_Objects = (Transaction_Object.schema_objects),
+    forall(
+        (   member(Schema, Schema_Objects),
+            Layer = (Schema.read),
+            ground(Layer)
+        ),
+        (   rollup(Layer),
+            layer_to_id(Layer, Schema_Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id),
+            store_id_layer(Store, Schema_Layer_Id, Reloaded_Schema_Layer),
+            Schema_Desc = (Schema.descriptor),
+            replace_graph_head_if_named(Store, Schema_Desc, Reloaded_Schema_Layer)
+        )
+    ),
+    % Optimize in-memory commit graph after rollup
     [Instance] = (Transaction_Object.instance_objects),
     Layer = (Instance.read),
-    exponential_rollup_strategy(Layer).
+    (   ground(Layer)
+    ->  exponential_rollup_strategy(Layer),
+        layer_to_id(Layer, Layer_Id),
+        terminus_store:invalidate_layer_cache_entry(Store, Layer_Id),
+        store_id_layer(Store, Layer_Id, Reloaded_Layer),
+        Desc = (Instance.descriptor),
+        replace_graph_head_if_named(Store, Desc, Reloaded_Layer)
+    ;   true
+    ),
+    % Clear caches
+    retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
+    abolish_all_tables.
 descriptor_optimize(branch_descriptor{
                         repository_descriptor : Repository_Descriptor,
                         branch_name : Branch_Name
@@ -76,12 +104,21 @@ descriptor_optimize(branch_descriptor{
                     },
 
     open_descriptor(Descriptor, Transaction_Object),
+    storage(Store),
     Schema_Objects = (Transaction_Object.schema_objects),
     forall(
         (   member(Schema, Schema_Objects),
-            Layer = (Schema.read)
+            Layer = (Schema.read),
+            ground(Layer)
         ),
-        rollup(Layer)
+        (   rollup(Layer),
+            % Apply same invalidate+reload+set_head fix to schema layers
+            layer_to_id(Layer, Schema_Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id),
+            store_id_layer(Store, Schema_Layer_Id, Reloaded_Schema_Layer),
+            Schema_Desc = (Schema.descriptor),
+            replace_graph_head_if_named(Store, Schema_Desc, Reloaded_Schema_Layer)
+        )
     ),
     Instance_Objects = (Transaction_Object.instance_objects),
     forall(
@@ -89,7 +126,67 @@ descriptor_optimize(branch_descriptor{
             Layer = (Instance.read),
             ground(Layer)
         ),
-        exponential_rollup_strategy(Layer)
+        (   exponential_rollup_strategy(Layer),
+            % Invalidate the ENTIRE parent chain cache by triggering register_rollup.
+            % imprecise_rollup_upto(Layer, Layer) is a no-op for rollup creation,
+            % but register_rollup still runs and invalidates the full parent chain.
+            % This is necessary because exponential_rollup_strategy only invalidates
+            % chains for layers it rolls up, not the full chain of the topmost layer.
+            imprecise_rollup_upto(Layer, Layer),
+            % Reload to get the layer with rolled-up parents
+            layer_to_id(Layer, Layer_Id),
+            store_id_layer(Store, Layer_Id, Reloaded_Layer),
+            % Replace the head with the reloaded (flattened) layer
+            Desc = (Instance.descriptor),
+            replace_graph_head_if_named(Store, Desc, Reloaded_Layer)
+        )
+    ),
+    % Clear caches that hold references to old deep-chain layers
+    retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
+    abolish_all_tables,
+    % Also roll up the repository layer (commit graph) to prevent O(n) traversal.
+    % The commit graph accumulates child layers with each commit, and
+    % triple_exists() traverses the ENTIRE parent chain on each query.
+    open_descriptor(Repository_Descriptor, Repo_Transaction),
+    [Repo_Instance] = (Repo_Transaction.instance_objects),
+    Repo_Layer = (Repo_Instance.read),
+    (   ground(Repo_Layer)
+    ->  rollup(Repo_Layer),
+        % Invalidate cache and reload from disk to get flattened version
+        layer_to_id(Repo_Layer, Repo_Layer_Id),
+        storage(Store),
+        terminus_store:invalidate_layer_cache_entry(Store, Repo_Layer_Id),
+        store_id_layer(Store, Repo_Layer_Id, Reloaded_Repo_Layer),
+        % Replace the repo head with the reloaded flattened layer
+        Repo_Desc = (Repo_Instance.descriptor),
+        replace_graph_head_if_named(Store, Repo_Desc, Reloaded_Repo_Layer),
+        % Clear retained layers for all descriptors in the chain
+        retractall(descriptor:retained_descriptor_layers(Repository_Descriptor, _)),
+        retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
+        % Also clear tables that cache predicate results keyed by layers
+        abolish_all_tables
+    ;   true).
+
+% Helper predicate: Replace named graph head with reloaded layer
+% Handles different descriptor types that map to named graphs
+replace_graph_head_if_named(Store, Desc, Layer) :-
+    (   get_dict(name, Desc, Graph_Name)
+    ->  % labelled_graph, system_graph with name
+        safe_open_named_graph(Store, Graph_Name, Graph),
+        nb_set_head(Graph, Layer)
+    ;   repo_graph{organization_name: Org, database_name: DB, type: instance} :< Desc
+    ->  % repo_graph instance uses composite name
+        organization_database_name(Org, DB, Composite),
+        safe_open_named_graph(Store, Composite, Graph),
+        nb_set_head(Graph, Layer)
+    ;   commit_graph{type: schema} :< Desc
+    ->  % commit_graph schema uses ref_ontology
+        ref_ontology(Ref_Name),
+        safe_open_named_graph(Store, Ref_Name, Graph),
+        nb_set_head(Graph, Layer)
+    ;   % branch_graph, commit_graph instance - no direct named graph head replacement
+        % Layer is referenced via commit objects, cache invalidation handles this
+        true
     ).
 
 
@@ -150,7 +247,7 @@ positions(Length, Base, Start, End) :-
         Start is Shifted_Start + Offset,
         End is Shifted_End + Offset).
 
-rollup_base(3).
+rollup_base(3).  % Standard base
 
 exponential_rollup_strategy(Layer) :-
     triple_store(Store),
