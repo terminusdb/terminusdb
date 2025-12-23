@@ -60,8 +60,18 @@ jobs:
 
       - name: Determine image tags to push
         run: |
-          # Extract version from GITHUB_REF (e.g., refs/heads/main or refs/tags/v1.2.3)        
-          VERSION=$(echo "$GITHUB_REF" | sed -e 's,.*/\(.*\),\1,')
+          # Extract version from GITHUB_REF (e.g., refs/heads/main or refs/tags/v1.2.3)
+          # For branches: refs/heads/issue/foo -> issue/foo -> issue-foo
+          # For tags: refs/tags/v1.2.3 -> v1.2.3
+          if [[ "$GITHUB_REF" == refs/heads/* ]]; then
+            VERSION="${GITHUB_REF#refs/heads/}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION=$(echo "$GITHUB_REF" | sed -e 's,.*/\(.*\),\1,')
+          fi
+          # Replace / with - for Docker tag compatibility
+          VERSION=$(echo "$VERSION" | tr '/' '-')
 
           # Use Docker `dev` tag convention for the main branch
           if [ "$VERSION" == "main" ]; then
