@@ -1,4 +1,4 @@
-:- module(api_optimize, [api_optimize/3, exponential_rollup_strategy/1]).
+:- module(api_optimize, [api_optimize/3]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).

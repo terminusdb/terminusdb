@@ -4,7 +4,6 @@
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(account)).
-:- use_module(core(api/api_optimize), [exponential_rollup_strategy/1]).
 :- use_module(library(terminus_store)).
 :- use_module(library(yall)).
 :- use_module(library(lists)).
@@ -20,10 +19,8 @@ rollup_repository_for_branch(Descriptor) :-
         [Instance] = (Repo_Transaction.instance_objects),
         Layer = (Instance.read),
         (   ground(Layer)
-        ->  % Use exponential rollup for better performance on large commit graphs
-            exponential_rollup_strategy(Layer),
-            % Trigger full parent chain cache invalidation
-            imprecise_rollup_upto(Layer, Layer),
+        ->  % Roll up and reload from disk to get flattened version
+            rollup(Layer),
             layer_to_id(Layer, LayerId),
             storage(Store),
             store_id_layer(Store, LayerId, _ReloadedLayer),
