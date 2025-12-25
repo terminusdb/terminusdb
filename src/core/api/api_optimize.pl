@@ -79,7 +79,7 @@ descriptor_optimize(repository_descriptor{
             replace_graph_head_if_named(Store, Schema_Desc, Reloaded_Schema_Layer)
         )
     ),
-    % Optimize in-memory commit graph after rollup
+    % Optimize in-memory instance graph after rollup
     [Instance] = (Transaction_Object.instance_objects),
     Layer = (Instance.read),
     (   ground(Layer)
