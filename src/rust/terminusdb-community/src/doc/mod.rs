@@ -269,9 +269,10 @@ impl<L: Layer + Clone> DocumentContext<L> {
     }
 
     fn add_field(&self, obj: &mut Map<String, Value>, key: &str, value: Value, is_set: bool) {
-        // Unescape _AT_* back to @* for sys:JSON properties (e.g., _AT_id → @id, _AT_type → @type)
-        let actual_key = if key.starts_with("_AT_") {
-            format!("@{}", &key[4..])
+        // Unescape @@-prefixed keys back to @-prefixed keys for sys:JSON properties
+        // E.g., @@id → @id, @@type → @type, @@context → @context
+        let actual_key = if key.starts_with("@@") {
+            key[1..].to_string()
         } else {
             key.to_string()
         };

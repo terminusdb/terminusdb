@@ -22,24 +22,6 @@
 :- use_module(core(util/syntax)).
 :- use_module(core(triple)).
 
-% Helper to recursively escape @-prefixed keys in dictionaries (for sys:JSON storage)
-escape_at_prefixed_keys(Value, EscapedValue) :-
-    is_dict(Value),
-    !,
-    dict_pairs(Value, Tag, Pairs),
-    maplist([Key-Val, EscapedKey-EscapedVal]>>(
-        (   atom_string(Key, KeyStr),
-            sub_string(KeyStr, 0, 1, _, "@"),
-            sub_string(KeyStr, 1, _, 0, Rest)
-        ->  atom_concat('_AT_', Rest, EscapedKey)
-        ;   EscapedKey = Key
-        ),
-        % Recursively escape nested dicts
-        escape_at_prefixed_keys(Val, EscapedVal)
-    ), Pairs, EscapedPairs),
-    dict_pairs(EscapedValue, Tag, EscapedPairs).
-escape_at_prefixed_keys(Value, Value).
-
 /*
 
 Todo:

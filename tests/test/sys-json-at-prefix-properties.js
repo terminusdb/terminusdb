@@ -335,6 +335,11 @@ describe('sys:JSON @id and @type as Data Properties', function () {
         '@container': '@set',
         title: 'Annual Report',
         content: 'This is the content',
+        metadata: {
+          '@id': 'meta1',
+          '@type': 'Metadata',
+          version: '1.0',
+        },
       }
 
       const result = await document.insert(agent, {
