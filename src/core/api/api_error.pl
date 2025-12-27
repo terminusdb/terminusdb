@@ -1805,6 +1805,24 @@ document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
 %document_error_type(patch, 'api:PatchErrorResponse').
 
+api_document_error_jsonld(Type,error(not_a_valid_keyword(Keyword),_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    (   Keyword = '@id'
+    ->  format(string(Msg), "The reserved keyword '@id' cannot be used as a property name in schema definitions. '@id' is reserved for document identifiers.", [])
+    ;   Keyword = '@type'
+    ->  format(string(Msg), "The reserved keyword '@type' cannot be used as a property name in schema definitions. '@type' is reserved for class/type specification.", [])
+    ;   atom_string(Keyword, KW_String),
+        atom_string('@', At_String),
+        sub_string(KW_String, 0, 1, _, At_String)
+    ->  format(string(Msg), "The keyword '~w' is a reserved TerminusDB schema keyword and cannot be used as a property name. All @-prefixed property names are reserved for TerminusDB system use and may be used in future schema versions.", [Keyword])
+    ;   format(string(Msg), "The keyword '~w' is reserved and cannot be used as a property name in schema definitions.", [Keyword])
+    ),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:ReservedKeywordUsed',
+                              'api:keyword' : Keyword },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "The submitted schema document could not be elaborated due to an unknown syntax error.", []),
