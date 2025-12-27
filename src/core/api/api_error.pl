@@ -387,6 +387,23 @@ api_global_error_jsonld(error(unexpected_descriptor_type(Descriptor, Desc_Type),
             }.
 
 :- multifile api_error_jsonld_/3.
+
+% @-prefixed properties not supported in normal types
+api_error_jsonld_(insert_documents, error(at_prefixed_properties_not_supported(Property, Document), _), JSON) :-
+    format(string(Msg), "@-prefixed properties like '~w' are not supported in schema definitions. Only sys:JSON and sys:JSONDocument types support @-prefixed keys.", [Property]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:AtPrefixedPropertiesNotSupported',
+                             'api:property' : Property,
+                             'api:document' : Document},
+             'api:message' : Msg}.
+api_error_jsonld_(insert_documents, error(at_prefixed_properties_not_supported(Property), _), JSON) :-
+    format(string(Msg), "@-prefixed properties like '~w' are not supported in schema definitions. Only sys:JSON and sys:JSONDocument types support @-prefixed keys.", [Property]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:AtPrefixedPropertiesNotSupported',
+                             'api:property' : Property},
+             'api:message' : Msg}.
 %% DB Exists
 api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Value), _), JSON) :-
     format(string(Msg), "Expected parameter '~s' to have '~q' but found: ~q", [Param, Expected_Value, Value]),

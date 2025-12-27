@@ -1584,12 +1584,26 @@ json_schema_predicate_value('@class',V,Context,_,Class,json{'@type' : "@id",
 json_schema_predicate_value(P,V,Context,Path,Prop,Value) :-
     is_dict(V),
     !,
-    prefix_expand_schema(P,Context,Prop),
+    % Reject ALL @-prefixed properties (not supported in normal types)
+    (   atom_string(P, PStr),
+        sub_string(PStr, 0, 1, _, "@")
+    ->  throw(error(at_prefixed_properties_not_supported(P), _))
+    ;   true
+    ),
+    prefix_expand_schema(P,Context,Prop_Ex),
+    Prop = Prop_Ex,
     json_schema_elaborate(V, Context, [property(P)|Path], Value).
 json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
     is_list(List),
     !,
-    prefix_expand_schema(P,Context,Prop),
+    % Reject ALL @-prefixed properties (not supported in normal types)
+    (   atom_string(P, PStr),
+        sub_string(PStr, 0, 1, _, "@")
+    ->  throw(error(at_prefixed_properties_not_supported(P), _))
+    ;   true
+    ),
+    prefix_expand_schema(P,Context,Prop_Ex),
+    Prop = Prop_Ex,
     maplist({Context}/[V,Value]>>prefix_expand_schema(V,Context,Value),
             List, Value_List),
     Set = json{ '@container' : "@set",
@@ -1597,7 +1611,14 @@ json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
                 '@value' : Value_List }.
 json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
                                                     '@id' : VEx }) :-
-    prefix_expand_schema(P,Context,Prop),
+    % Reject ALL @-prefixed properties (not supported in normal types)
+    (   atom_string(P, PStr),
+        sub_string(PStr, 0, 1, _, "@")
+    ->  throw(error(at_prefixed_properties_not_supported(P), _))
+    ;   true
+    ),
+    prefix_expand_schema(P,Context,Prop_Ex),
+    Prop = Prop_Ex,
     prefix_expand_schema(V,Context,VEx),
     die_if(
         global_prefix_expand(sys:'JSONDocument',VEx),
