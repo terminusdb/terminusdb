@@ -2998,9 +2998,29 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T
     ),
     !,
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  prefix_expand(Id_Short,Prefixes,Id),
-        valid_json_id_or_die(Prefixes,Id),
-        insert_json_object(Transaction, JSON, Id)
+    ->  % For sys:JSONDocument, determine how to handle @id
+        atom_string(Id_Short_Atom, Id_Short),
+        (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+            (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
+        ->  prefix_expand(Id_Short, Prefixes, Id)
+        ;   % Plain string without scheme/prefix - prepend @base directly
+            % User has full control over IRI construction
+            get_dict('@base', Prefixes, Base),
+            atom_concat(Base, Id_Short_Atom, Id)
+        ),
+        % Check if document already exists
+        check_existing_document_status(Transaction, Id, normal, Status),
+        (   Status = present
+        ->  (   Overwrite = true
+            ->  % Delete existing document then insert new one
+                delete_json_object(Transaction, false, Id),
+                insert_json_object(Transaction, JSON, Id)
+            ;   % Reject duplicate when overwrite=false
+                throw(error(can_not_insert_existing_object_with_id(Id), _))
+            )
+        ;   % Document doesn't exist, insert normally
+            insert_json_object(Transaction, JSON, Id)
+        )
     ;   insert_json_object(Transaction, Document, Id)
     ).
 insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST, Captures_Out) :-
