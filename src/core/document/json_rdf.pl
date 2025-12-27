@@ -232,6 +232,7 @@ graph_get_json_object(Graph, Id, [Head|Tail]) :-
     ),
     xrdf(Graph, Id, rdf:rest, Rest),
     graph_get_json_object(Graph, Rest, Tail).
+
 graph_get_json_object(Graph, Id, Document) :-
     (   xrdf(Graph, Id, rdf:type, sys:'JSONDocument')
     ;   xrdf(Graph, Id, rdf:type, sys:'JSON')),
@@ -247,7 +248,27 @@ graph_get_json_object(Graph, Id, Document) :-
                 compress_json_field(Key,Prop)
             ),
             Pairs),
-    dict_pairs(Document, json, Pairs).
+    dict_pairs(EscapedDocument, json, Pairs),
+    % Unescape @@-prefixed keys back to @-prefixed keys for sys:JSON
+    unescape_at_prefixed_keys(EscapedDocument, Document).
+
+% Helper to recursively unescape @@-prefixed keys back to @-prefixed keys (for sys:JSON retrieval)
+unescape_at_prefixed_keys(Value, UnescapedValue) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist([Key-Val, UnescapedKey-UnescapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 2, _, "@@")
+        ->  sub_string(KeyStr, 1, _, 0, Rest),
+            atom_string(UnescapedKey, Rest)
+        ;   UnescapedKey = Key
+        ),
+        % Recursively unescape nested dicts
+        unescape_at_prefixed_keys(Val, UnescapedVal)
+    ), Pairs, UnescapedPairs),
+    dict_pairs(UnescapedValue, Tag, UnescapedPairs).
+unescape_at_prefixed_keys(Value, Value).
 
 insert_json_object(Query_Context, JSON, Id) :-
     is_query_context(Query_Context),
