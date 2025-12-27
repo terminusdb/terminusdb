@@ -2717,6 +2717,15 @@ generic_exception_jsonld(origin_cannot_be_branched(Descriptor),JSON) :-
 generic_exception_jsonld(transaction_retry_exceeded, JSON) :-
     JSON = _{'api:status' : 'api:server_error',
              'api:message': "Transaction retry count exceeded in internal operation"}.
+generic_exception_jsonld(Error, JSON) :-
+    % Catch-all for unhandled errors - log the full error but return sanitized message
+    % This prevents information leakage in 500 errors
+    format(user_error, '[ERROR] Unhandled exception: ~q~n', [Error]),
+    JSON = _{'@type' : 'api:UnhandledErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:message' : 'An internal server error occurred. Please contact the administrator.',
+             'api:error' : _{'@type' : 'api:InternalServerError'}
+            }.
 
 json_http_code(JSON,Code) :-
     Status = (JSON.'api:status'),
