@@ -25,6 +25,7 @@
               delete_subdocument/3,
               insert_document/3,
               insert_document/7,
+              insert_document/8,
               insert_document_unsafe/8,
               replace_document/2,
               replace_document/3,
@@ -2974,8 +2975,12 @@ insert_document(Transaction, Document, Raw_JSON, ID) :-
     insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, _Dependencies, _Captures_Out),
     Ids = [ID|_].
 
-% insert_document/7
-insert_document(Query_Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
+% insert_document/7 - backward compatibility wrapper (default overwrite=false)
+insert_document(Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
+    insert_document(Context, Document, Raw_JSON, false, Captures_In, IDs, Dependencies, Captures_Out).
+
+% insert_document/8 - with Overwrite parameter
+insert_document(Query_Context, Document, Raw_JSON, Overwrite, Captures_In, IDs, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
