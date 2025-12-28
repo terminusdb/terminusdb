@@ -3004,7 +3004,11 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T
     !,
     (   del_dict('@id', Document, Id_Short, JSON)
     ->  % For sys:JSONDocument, determine how to handle @id
-        atom_string(Id_Short_Atom, Id_Short),
+        % Handle both atom and string types from JSON dicts
+        (   atom(Id_Short)
+        ->  Id_Short_Atom = Id_Short
+        ;   atom_string(Id_Short_Atom, Id_Short)
+        ),
         (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
             (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
         ->  prefix_expand(Id_Short, Prefixes, Id)
@@ -3069,8 +3073,19 @@ extract_return_ids(Id_Pairs, Ids) :-
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  prefix_expand(Id_Short,Prefixes,Id),
-        valid_json_id_or_die(Prefixes,Id),
+    ->  % For sys:JSONDocument, determine how to handle @id
+        % Handle both atom and string types from JSON dicts
+        (   atom(Id_Short)
+        ->  Id_Short_Atom = Id_Short
+        ;   atom_string(Id_Short_Atom, Id_Short)
+        ),
+        (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+            (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
+        ->  prefix_expand(Id_Short, Prefixes, Id)
+        ;   % Plain string without scheme/prefix - prepend JSONDocument prefix
+            get_dict('@base', Prefixes, Base),
+            atomic_list_concat([Base, 'JSONDocument/', Id_Short_Atom], Id)
+        ),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
@@ -13787,33 +13802,6 @@ test(replace_hash_document,
         replace_document(C2,Document2,false,true,_)
     ),
     atom_concat('terminusdb:///data/JSONDocument/', _, Id).
-
-test(replace_named_document,
-     [setup((setup_temp_store(State),
-             test_document_label_descriptor(Desc),
-             write_schema(json_schema,Desc)
-            )),
-      cleanup(teardown_temp_store(State)),
-      error(
-          not_a_valid_json_object_id('terminusdb:///data/named'),
-          _)
-     ]) :-
-
-    Document =
-    json{
-        '@id' : named,
-        name : "testing",
-        json : json{ some :
-                     json{ random : "stuff",
-                           that : 2.0
-                         }}
-    },
-
-    with_test_transaction(
-        Desc,
-        C1,
-        insert_document(C1,Document,true,_)
-    ).
 
 test(insert_json_set,
      [setup((setup_temp_store(State),
