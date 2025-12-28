@@ -115,6 +115,9 @@ json_subdocument_triple(Id, Property, Dict, Triple) :-
 
 json_subdocument_triple(Dict, Triple_Or_Hash),
 is_dict(Dict) =>
+    % sys:JSON nested dicts: pure JSON storage with no special treatment
+    % @@id and @@type are stored as-is like any other JSON values
+    dict_pairs(Dict, _, Pairs),
     json_hash_init("Dict(", Init_Hash),
     State = state(Init_Hash,[]),
     dict_pairs(Dict, _, Pairs),
