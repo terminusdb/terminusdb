@@ -366,9 +366,9 @@ api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replac
                error(same_ids_in_one_transaction(Duplicates), _))
     ).
 
-api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
     open_string(String, Stream),
-    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids_Atoms),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
