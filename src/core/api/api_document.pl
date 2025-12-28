@@ -286,7 +286,11 @@ api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON,
     api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
 api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-T, []).
 
-api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+% /8 wrapper - backward compatibility (default overwrite=false)
+api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
     api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
     api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
