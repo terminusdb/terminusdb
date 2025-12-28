@@ -2319,7 +2319,8 @@ get_document(DB, Prefixes, Id, Document, Options) :-
             put_dict(_{'@type': Class_Ex}, JSON0, JSON)
         ;   JSON = JSON0
         ),
-        put_dict(_{'@id' : Id}, JSON, Document)
+        % JSONDocument @id is xsd:anyURI - always use full IRI, never compressed
+        put_dict(_{'@id' : Id_Ex}, JSON, Document)
     ;   findall(
             Prop-Value,
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
@@ -2962,6 +2963,29 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
+%% expand_json_document_id(+Id_Short, +Prefixes, +UseJSONDocumentPrefix, -Id)
+%
+% Expands a JSONDocument @id value to a full IRI.
+% - Handles both atom and string types from JSON dicts
+% - If Id_Short has a scheme (http://, https://, etc.) or prefix (foo:bar), expand using prefix_expand
+% - Otherwise, prepend @base (with optional 'JSONDocument/' infix if UseJSONDocumentPrefix=true)
+expand_json_document_id(Id_Short, Prefixes, UseJSONDocumentPrefix, Id) :-
+    % Handle both atom and string types from JSON dicts
+    (   atom(Id_Short)
+    ->  Id_Short_Atom = Id_Short
+    ;   atom_string(Id_Short_Atom, Id_Short)
+    ),
+    (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+        (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
+    ->  prefix_expand(Id_Short, Prefixes, Id)
+    ;   % Plain string without scheme/prefix - prepend @base
+        get_dict('@base', Prefixes, Base),
+        (   UseJSONDocumentPrefix = true
+        ->  atomic_list_concat([Base, 'JSONDocument/', Id_Short_Atom], Id)
+        ;   atom_concat(Base, Id_Short_Atom, Id)
+        )
+    ).
+
 %% insert_document arity 3 and 4 return only a single ID
 %% as these predicates are internal, and not API predicates.
 %%
@@ -3003,31 +3027,15 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T
     ),
     !,
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  % For sys:JSONDocument, determine how to handle @id
-        % Handle both atom and string types from JSON dicts
-        (   atom(Id_Short)
-        ->  Id_Short_Atom = Id_Short
-        ;   atom_string(Id_Short_Atom, Id_Short)
-        ),
-        (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
-            (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
-        ->  prefix_expand(Id_Short, Prefixes, Id)
-        ;   % Plain string without scheme/prefix - prepend @base directly
-            % User has full control over IRI construction
-            get_dict('@base', Prefixes, Base),
-            atom_concat(Base, Id_Short_Atom, Id)
-        ),
-        % Check if document already exists
-        check_existing_document_status(Transaction, Id, normal, Status),
-        (   Status = present
-        ->  (   Overwrite = true
-            ->  % Delete existing document then insert new one
-                delete_json_object(Transaction, false, Id),
-                insert_json_object(Transaction, JSON, Id)
-            ;   % Reject duplicate when overwrite=false
-                throw(error(can_not_insert_existing_object_with_id(Id), _))
+    ->  expand_json_document_id(Id_Short, Prefixes, false, Id),
+        % Only check existence when overwrite=false (performance optimization)
+        (   Overwrite = false
+        ->  check_existing_document_status(Transaction, Id, normal, Status),
+            (   Status = present
+            ->  throw(error(can_not_insert_existing_object_with_id(Id), _))
+            ;   insert_json_object(Transaction, JSON, Id)
             )
-        ;   % Document doesn't exist, insert normally
+        ;   % overwrite=true: just insert (no check, no delete)
             insert_json_object(Transaction, JSON, Id)
         )
     ;   insert_json_object(Transaction, Document, Id)
@@ -3052,12 +3060,17 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
     extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
          (
-             forall(
-                 member(Id-Variety, Id_Pairs),
-                 (   check_existing_document_status(Transaction, Id, Variety, Status),
-                     die_if(Status = present,
-                            error(can_not_insert_existing_object_with_id(Id), _))
+             % Only check existence when overwrite=false (performance optimization)
+             (   Overwrite = false
+             ->  forall(
+                     member(Id-Variety, Id_Pairs),
+                     (   check_existing_document_status(Transaction, Id, Variety, Status),
+                         die_if(Status = present,
+                                error(can_not_insert_existing_object_with_id(Id), _))
+                     )
                  )
+             ;   % overwrite=true: skip existence check, insert will handle it
+                 true
              ),
              insert_document_expanded(Transaction, Elaborated, _)
          )).
@@ -3073,19 +3086,7 @@ extract_return_ids(Id_Pairs, Ids) :-
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  % For sys:JSONDocument, determine how to handle @id
-        % Handle both atom and string types from JSON dicts
-        (   atom(Id_Short)
-        ->  Id_Short_Atom = Id_Short
-        ;   atom_string(Id_Short_Atom, Id_Short)
-        ),
-        (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
-            (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
-        ->  prefix_expand(Id_Short, Prefixes, Id)
-        ;   % Plain string without scheme/prefix - prepend JSONDocument prefix
-            get_dict('@base', Prefixes, Base),
-            atomic_list_concat([Base, 'JSONDocument/', Id_Short_Atom], Id)
-        ),
+    ->  expand_json_document_id(Id_Short, Prefixes, true, Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).

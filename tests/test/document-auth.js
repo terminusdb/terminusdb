@@ -635,9 +635,17 @@ describe('document', function () {
         // JSONDocument now allows any IRI (not restricted to JSONDocument/* pattern)
         const instance = { '@id': util.randomString(), a: [42, 23, 12] }
         const id = `terminusdb:///data/${instance['@id']}`
-        await document.insert(agent, { instance, raw_json: true }).ok()
-        const r2 = await document.get(agent, { id, raw_json: true }).ok()
-        expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
+
+        // First insert
+        await document.insert(agent, { instance, raw_json: true })
+
+        const r1 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
+        expect(r1.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
+
+        // Second insert with same ID - with overwrite=false (default), this should now fail
+        const instance2 = { '@id': instance['@id'], a: [100, 200, 300] }
+        const r2 = await document.insert(agent, { instance: instance2, raw_json: true }).unverified()
+        expect(r2.status).to.equal(400)
       })
 
       it('fails gracefully with bad key prefix', async function () {
