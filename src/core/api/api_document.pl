@@ -16,7 +16,7 @@
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
 
-              api_insert_documents_core_string/7,
+              api_insert_documents_core_string/8,
               api_replace_documents_core_string/6,
               api_delete_documents_by_ids/3
           ]).
