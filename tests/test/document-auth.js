@@ -631,10 +631,13 @@ describe('document', function () {
         expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
       })
 
-      it('fails insert with invalid JSONDocument @id', async function () {
+      it('accepts any IRI for JSONDocument @id', async function () {
+        // JSONDocument now allows any IRI (not restricted to JSONDocument/* pattern)
         const instance = { '@id': util.randomString(), a: [42, 23, 12] }
         const id = `terminusdb:///data/${instance['@id']}`
-        await document.insert(agent, { instance, raw_json: true }).fails(api.error.invalidJSONDocumentId(id))
+        await document.insert(agent, { instance, raw_json: true }).ok()
+        const r2 = await document.get(agent, { id, raw_json: true }).ok()
+        expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
       })
 
       it('fails gracefully with bad key prefix', async function () {
