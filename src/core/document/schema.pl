@@ -423,6 +423,7 @@ refute_schema_context(Validation_Object, Witness) :-
             sys:schema,
             sys:prefix_pair,
             sys:documentation,
+            sys:context,
             sys:metadata,
             rdf:type
         ], List),

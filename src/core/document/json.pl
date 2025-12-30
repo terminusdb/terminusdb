@@ -594,6 +594,10 @@ get_context_metadata(DB, ID, Metadata) :-
 get_schema_context_metadata(Schema, ID, Metadata) :-
     schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
 
+get_schema_context_context(Schema, ID, Context) :-
+    xrdf(Schema, ID, sys:context, Context_Object),
+    graph_get_json_object(Schema, Context_Object, Context).
+
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
     get_schema_context_documentation(Schema, ID, Doc).
@@ -644,9 +648,13 @@ database_schema_context_object(Schema, Context) :-
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
+    (   get_schema_context_context(Schema, ID, ContextField)
+    ->  put_dict(_{'@context' : ContextField}, Context0, Context1)
+    ;   Context1 = Context0
+    ),
     (   get_schema_context_metadata(Schema, ID, Metadata)
-    ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
-    ;   Context = Context0
+    ->  put_dict(_{'@metadata' : Metadata}, Context1, Context)
+    ;   Context = Context1
     ).
 
 database_context_object(DB,Prefixes) :-
@@ -1169,6 +1177,8 @@ context_triple(JSON,Triple) :-
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
+context_keyword_value_map('@context',JSON,'sys:context',Value) :-
+    Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
     Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
@@ -1213,13 +1223,13 @@ context_elaborate(JSON,Elaborated) :-
     !,
     dict_pairs(JSON,json,Pairs),
     partition([P-_]>>(member(P, ['@type', '@base', '@schema',
-                                 '@documentation', '@metadata'])),
+                                 '@documentation', '@context', '@metadata'])),
               Pairs, Keyword_Values, Prop_Values),
     findall(
         P-V,
         (   member(Keyword-Value,Keyword_Values),
-            % Special handling for @metadata: escape @-prefixed keys BEFORE processing
-            (   Keyword = '@metadata'
+            % Special handling for @context and @metadata: escape @-prefixed keys BEFORE processing
+            (   member(Keyword, ['@context', '@metadata'])
             ->  escape_at_prefixed_keys(Value, EscapedValue),
                 context_keyword_value_map(Keyword,EscapedValue,P,V)
             ;   context_keyword_value_map(Keyword,Value,P,V)
