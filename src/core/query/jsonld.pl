@@ -86,6 +86,15 @@ expand(json{'@language' : Lang, '@value' : Value}, _Context, JSON) :-
     !,
     JSON = json{'@language' : Lang, '@value' : Value}.
 expand(JSON_LD, Context, JSON) :-
+    % Skip recursive expansion for sys:JSON objects - they contain arbitrary JSON data
+    is_dict(JSON_LD),
+    get_dict('@type', JSON_LD, Type),
+    (Type = "sys:JSON" ; Type = 'http://terminusdb.com/schema/sys#JSON'),
+    !,
+    % Just expand the @type key, leave the rest as-is
+    prefix_expand(Type, Context, TypeX),
+    put_dict('@type', JSON_LD, TypeX, JSON).
+expand(JSON_LD, Context, JSON) :-
     is_dict(JSON_LD),
     !,
     dict_keys(JSON_LD,Keys),

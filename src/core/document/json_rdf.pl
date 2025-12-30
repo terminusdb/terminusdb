@@ -242,8 +242,11 @@ graph_get_json_object(Graph, Id, Document) :-
     !,
     findall(Prop-Value,
             (   xrdf(Graph, Id, Key, Val_or_Uri),
-                (   Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
-                ->  fail % ignore type field
+                (   % Only skip the document's type declaration, not @@type data fields
+                    Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                    (   Val_or_Uri = 'http://terminusdb.com/schema/sys#JSON'
+                    ;   Val_or_Uri = 'http://terminusdb.com/schema/sys#JSONDocument')
+                ->  fail % Skip document type
                 ;   marshall_value(Val_or_Uri,Value)
                 ->  true % strip type from value
                 ;   graph_get_json_object(Graph, Val_or_Uri, Value) % subdocument or list

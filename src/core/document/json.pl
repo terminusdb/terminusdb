@@ -1218,7 +1218,12 @@ context_elaborate(JSON,Elaborated) :-
     findall(
         P-V,
         (   member(Keyword-Value,Keyword_Values),
-            context_keyword_value_map(Keyword,Value,P,V)
+            % Special handling for @metadata: escape @-prefixed keys BEFORE processing
+            (   Keyword = '@metadata'
+            ->  escape_at_prefixed_keys(Value, EscapedValue),
+                context_keyword_value_map(Keyword,EscapedValue,P,V)
+            ;   context_keyword_value_map(Keyword,Value,P,V)
+            )
         ),
         PVs),
 
@@ -1558,7 +1563,9 @@ json_schema_predicate_value('@metadata',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:metadata, P),
     global_prefix_expand(sys:'JSON', Type),
-    Value = (V.put('@type', Type)).
+    % Escape @-prefixed keys before marking as sys:JSON to preserve @id/@type/@context as data
+    escape_at_prefixed_keys(V, EscapedV),
+    Value = (EscapedV.put('@type', Type)).
 json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfoldable, P).
@@ -3850,6 +3857,150 @@ test(expand_context_with_documentation, []) :-
 		'http://terminusdb.com/schema/sys#schema',
 		"http://s/" ^^ 'http://www.w3.org/2001/XMLSchema#string')
 	].
+
+test(metadata_at_prefixed_keys_escaped, []) :-
+    % Test that @id, @type, @context within @metadata are escaped to @@id, @@type, @@context
+    Context = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "my_id_value",
+            '@type': "my_type_value",
+            '@context': json{custom: "http://example.com"},
+            regular: "normal_value"
+        }
+    },
+    context_elaborate(Context, Elaborated),
+    % Check that @metadata was elaborated
+    get_dict('sys:metadata', Elaborated, Metadata),
+    % Verify the @type is sys:JSON
+    get_dict('@type', Metadata, "sys:JSON"),
+    % Verify escaped keys exist (@@id, @@type, @@context)
+    get_dict('@@id', Metadata, "my_id_value"),
+    get_dict('@@type', Metadata, "my_type_value"),
+    get_dict('@@context', Metadata, _),
+    % Verify regular keys still work
+    get_dict(regular, Metadata, "normal_value").
+
+test(metadata_survives_expand, []) :-
+    % Test that escaped @@ keys survive the expand() call
+    Context = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "my_id_value",
+            '@type': "my_type_value",
+            regular: "normal_value"
+        }
+    },
+    context_elaborate(Context, Elaborated),
+    % Now call expand like context_triple does
+    expand(Elaborated, json{
+        sys:'http://terminusdb.com/schema/sys#',
+        xsd:'http://www.w3.org/2001/XMLSchema#',
+        xdd:'http://terminusdb.com/schema/xdd#'
+    }, Expanded),
+    % Check if metadata still has escaped keys
+    get_dict('http://terminusdb.com/schema/sys#metadata', Expanded, ExpandedMetadata),
+    get_dict('@@id', ExpandedMetadata, _).
+
+test(metadata_triples_contain_escaped_keys, []) :-
+    % Test the full context_triple flow to see what triples are generated
+    Context = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "my_id_value",
+            '@type': "my_type_value",
+            regular: "normal_value"
+        }
+    },
+    findall(Triple, context_triple(Context, Triple), Triples),
+    % Check if any triple contains the @id value
+    member(t(_, _, "my_id_value" ^^ _), Triples).
+
+test(metadata_round_trip,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Test full round-trip: insert context with @metadata containing @id/@type, retrieve it
+    Prefixes = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "test_id_value",
+            '@type': "test_type_value",
+            regular: "normal_value"
+        }
+    },
+    % Insert the context
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+        insert_context_document(Context, Prefixes),
+        _),
+    % Retrieve the context
+    open_descriptor(Desc, Trans),
+    database_schema(Trans, Schema),
+    database_schema_context_object(Schema, Retrieved),
+    % Check if @metadata has @id and @type (unescaped)
+    get_dict('@metadata', Retrieved, RetrievedMetadata),
+    get_dict('@id', RetrievedMetadata, "test_id_value"),
+    get_dict('@type', RetrievedMetadata, "test_type_value").
+
+test(metadata_get_schema_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Test what get_schema_document returns (API path)
+    Prefixes = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "test_id_value",
+            '@type': "test_type_value",
+            regular: "normal_value"
+        }
+    },
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+        insert_context_document(Context, Prefixes),
+        _),
+    open_descriptor(Desc, Trans),
+    % Use get_schema_document like the API does
+    get_schema_document(Trans, '@context', Document),
+    get_dict('@metadata', Document, DocMetadata),
+    % Check for @id and @type
+    get_dict('@id', DocMetadata, "test_id_value"),
+    get_dict('@type', DocMetadata, "test_type_value").
+
+test(metadata_api_path_simulation,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Simulate the exact API path: JSON string → stream → parse → insert → retrieve
+    JsonString = '{"@type": "@context", "@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#", "@metadata": {"@id": "api_test_id", "@type": "api_test_type", "regular": "normal"}}',
+    % Parse JSON like the API does (using json_preserve)
+    open_string(JsonString, Stream),
+    'util/lazy_docs':stream_to_lazy_docs(Stream, LazyDocs),
+    LazyDocs = [Prefixes|_],
+    % Check if @metadata has @id before insertion
+    get_dict('@metadata', Prefixes, ParsedMetadata),
+    get_dict('@id', ParsedMetadata, "api_test_id"),
+    % Now insert via insert_context_document (not replace, since no context exists yet)
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+        insert_context_document(Context, Prefixes),
+        _),
+    % Retrieve and check
+    open_descriptor(Desc, Trans),
+    get_schema_document(Trans, '@context', Retrieved),
+    get_dict('@metadata', Retrieved, RetrievedMetadata),
+    get_dict('@id', RetrievedMetadata, "api_test_id").
 
 context_schema('
 { "@type" : "@context",
