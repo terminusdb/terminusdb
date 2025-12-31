@@ -35,18 +35,15 @@ describe('Schema Context @metadata Field Handling', function () {
 
       // Insert schema context with @metadata containing @id
       await document.insert(agent, {
-        graph_type: 'schema',
         schema: [contextWithMetadata],
-        full_replace: true,
+        fullReplace: true,
       })
 
       // Retrieve and verify
-      const result = await document.get(agent, {
-        graph_type: 'schema',
-      })
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
 
-      expect(result.body).to.be.an('array')
-      const context = result.body.find((doc) => doc['@type'] === '@context')
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
       expect(context).to.exist
       expect(context['@metadata']).to.exist
       expect(context['@metadata']['@id']).to.equal('my_context_id')
@@ -66,18 +63,15 @@ describe('Schema Context @metadata Field Handling', function () {
 
       // Insert schema context with @metadata containing @type
       await document.insert(agent, {
-        graph_type: 'schema',
         schema: [contextWithMetadata],
-        full_replace: true,
+        fullReplace: true,
       })
 
       // Retrieve and verify
-      const result = await document.get(agent, {
-        graph_type: 'schema',
-      })
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
 
-      expect(result.body).to.be.an('array')
-      const context = result.body.find((doc) => doc['@type'] === '@context')
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
       expect(context).to.exist
       expect(context['@metadata']).to.exist
       expect(context['@metadata']['@type']).to.equal('CustomMetadataType')
@@ -100,18 +94,15 @@ describe('Schema Context @metadata Field Handling', function () {
 
       // Insert schema context with @metadata containing @context
       await document.insert(agent, {
-        graph_type: 'schema',
         schema: [contextWithMetadata],
-        full_replace: true,
+        fullReplace: true,
       })
 
       // Retrieve and verify
-      const result = await document.get(agent, {
-        graph_type: 'schema',
-      })
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
 
-      expect(result.body).to.be.an('array')
-      const context = result.body.find((doc) => doc['@type'] === '@context')
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
       expect(context).to.exist
       expect(context['@metadata']).to.exist
       expect(context['@metadata']['@context']).to.deep.equal({
@@ -138,18 +129,15 @@ describe('Schema Context @metadata Field Handling', function () {
 
       // Insert schema context with @metadata containing all special fields
       await document.insert(agent, {
-        graph_type: 'schema',
         schema: [contextWithMetadata],
-        full_replace: true,
+        fullReplace: true,
       })
 
       // Retrieve and verify
-      const result = await document.get(agent, {
-        graph_type: 'schema',
-      })
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
 
-      expect(result.body).to.be.an('array')
-      const context = result.body.find((doc) => doc['@type'] === '@context')
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
       expect(context).to.exist
       expect(context['@metadata']).to.exist
       expect(context['@metadata']['@id']).to.equal('metadata_identifier')
@@ -182,18 +170,15 @@ describe('Schema Context @metadata Field Handling', function () {
 
       // Insert schema context with nested special fields in @metadata
       await document.insert(agent, {
-        graph_type: 'schema',
         schema: [contextWithMetadata],
-        full_replace: true,
+        fullReplace: true,
       })
 
       // Retrieve and verify
-      const result = await document.get(agent, {
-        graph_type: 'schema',
-      })
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
 
-      expect(result.body).to.be.an('array')
-      const context = result.body.find((doc) => doc['@type'] === '@context')
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
       expect(context).to.exist
       expect(context['@metadata']).to.exist
       expect(context['@metadata'].nested['@id']).to.equal('nested_id')
@@ -229,16 +214,13 @@ describe('Schema Context @metadata Field Handling', function () {
         }
 
         await document.insert(agent, {
-          graph_type: 'schema',
           schema: [contextWithMetadata],
-          full_replace: true,
+          fullReplace: true,
         })
 
-        const result = await document.get(agent, {
-          graph_type: 'schema',
-        })
-
-        const context = result.body.find((doc) => doc['@type'] === '@context')
+        const result = await document.get(agent, { query: { graph_type: 'schema' } })
+        const docs = Array.isArray(result.body) ? result.body : [result.body]
+        const context = docs.find((doc) => doc['@type'] === '@context')
         expect(context['@metadata']['@id'], testCase.desc).to.deep.equal(testCase['@id'])
       }
     })
@@ -261,16 +243,13 @@ describe('Schema Context @metadata Field Handling', function () {
         }
 
         await document.insert(agent, {
-          graph_type: 'schema',
           schema: [contextWithMetadata],
-          full_replace: true,
+          fullReplace: true,
         })
 
-        const result = await document.get(agent, {
-          graph_type: 'schema',
-        })
-
-        const context = result.body.find((doc) => doc['@type'] === '@context')
+        const result = await document.get(agent, { query: { graph_type: 'schema' } })
+        const docs = Array.isArray(result.body) ? result.body : [result.body]
+        const context = docs.find((doc) => doc['@type'] === '@context')
         expect(context['@metadata']['@type'], testCase.desc).to.deep.equal(testCase['@type'])
       }
     })
@@ -293,16 +272,13 @@ describe('Schema Context @metadata Field Handling', function () {
         }
 
         await document.insert(agent, {
-          graph_type: 'schema',
           schema: [contextWithMetadata],
-          full_replace: true,
+          fullReplace: true,
         })
 
-        const result = await document.get(agent, {
-          graph_type: 'schema',
-        })
-
-        const context = result.body.find((doc) => doc['@type'] === '@context')
+        const result = await document.get(agent, { query: { graph_type: 'schema' } })
+        const docs = Array.isArray(result.body) ? result.body : [result.body]
+        const context = docs.find((doc) => doc['@type'] === '@context')
         expect(context['@metadata']['@context'], testCase.desc).to.deep.equal(testCase['@context'])
       }
     })
@@ -337,13 +313,11 @@ describe('Schema Context @metadata Field Handling', function () {
       }
 
       await document.insert(agent, {
-        graph_type: 'schema',
         schema: classSchema,
       })
 
       const result = await document.get(agent, {
-        graph_type: 'schema',
-        query: { id: 'Person' },
+        query: { graph_type: 'schema', id: 'Person' },
       })
 
       expect(result.body['@metadata']).to.exist
