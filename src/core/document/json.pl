@@ -3949,8 +3949,8 @@ test(metadata_triples_contain_escaped_keys, []) :-
         }
     },
     findall(Triple, context_triple(Context, Triple), Triples),
-    % Check if any triple contains the @id value
-    member(t(_, _, "my_id_value" ^^ _), Triples).
+    % Check if any triple contains the @id value (use memberchk for determinism)
+    memberchk(t(_, _, "my_id_value" ^^ _), Triples).
 
 test(metadata_round_trip,
      [setup((setup_temp_store(State),

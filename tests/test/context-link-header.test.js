@@ -2,7 +2,7 @@ const { expect } = require('chai')
 const { Agent, db, document, util } = require('../lib')
 const axios = require('axios')
 
-describe('HTTP Link Header for @context', function () {
+describe('HTTP Link Header for processing JSON documents as JSON-LD via @context', function () {
   let agent
 
   before(function () {
