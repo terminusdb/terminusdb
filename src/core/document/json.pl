@@ -593,29 +593,16 @@ get_context_metadata(DB, ID, Metadata) :-
 
 get_schema_context_metadata(Schema, ID, Metadata) :-
     xrdf(Schema, ID, sys:metadata, Metadata_ID),
-    graph_get_json_object(Schema, Metadata_ID, JSON_Object),
-    % Remove @type from the sys:JSON wrapper
-    (   del_dict('@type', JSON_Object, _, JSON_Without_Type)
-    ->  true
-    ;   JSON_Without_Type = JSON_Object
-    ),
-    % Unescape @@-prefixed keys back to @-prefixed keys
-    unescape_at_keys(JSON_Without_Type, Metadata).
+    graph_get_json_object(Schema, Metadata_ID, Metadata).
 
 get_schema_context_context(Schema, ID, Context) :-
     xrdf(Schema, ID, sys:context, Context_ID),
     graph_get_json_object(Schema, Context_ID, JSON_Object),
-    % Remove @type from the sys:JSON wrapper
-    (   del_dict('@type', JSON_Object, _, JSON_Without_Type)
-    ->  true
-    ;   JSON_Without_Type = JSON_Object
-    ),
-    % If it's a string wrapper (has only @value key), extract the string
-    (   JSON_Without_Type = json{'@value': Value}
+    % If it's a string wrapper (has @value key), extract the string
+    (   get_dict('@value', JSON_Object, Value)
     ->  Context = Value
-    ;   % Otherwise it's a full context dict - manually unescape any remaining @@-prefixed keys
-        % (needed because unescape_at_prefixed_keys can't handle @@type -> @type when @type marker exists)
-        unescape_at_keys(JSON_Without_Type, Context)
+    ;   % Otherwise it's a full context dict - graph_get_json_object already unescapes
+        Context = JSON_Object
     ).
 
 % Helper to unescape @@-prefixed keys back to @-prefixed keys (for @context retrieval)
@@ -1246,13 +1233,11 @@ context_keyword_value_map('@context',String,'sys:context',Value) :-
 context_keyword_value_map('@context',JSON,'sys:context',Value) :-
     is_dict(JSON),
     !,
-    % Escape @-prefixed keys before adding sys:JSON type marker
-    escape_at_keys(JSON, EscapedJSON),
-    Value = (EscapedJSON.put('@type', "sys:JSON")).
+    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
+    Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
-    % Escape @-prefixed keys before adding sys:JSON type marker
-    escape_at_keys(JSON, EscapedJSON),
-    Value = (EscapedJSON.put('@type', "sys:JSON")).
+    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
+    Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
     (   is_list(Documentation) % multilingual
     ->  DocSet = Documentation
