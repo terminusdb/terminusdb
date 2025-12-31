@@ -592,7 +592,15 @@ get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
 get_schema_context_metadata(Schema, ID, Metadata) :-
-    schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
+    xrdf(Schema, ID, sys:metadata, Metadata_ID),
+    graph_get_json_object(Schema, Metadata_ID, JSON_Object),
+    % Remove @type from the sys:JSON wrapper
+    (   del_dict('@type', JSON_Object, _, JSON_Without_Type)
+    ->  true
+    ;   JSON_Without_Type = JSON_Object
+    ),
+    % Unescape @@-prefixed keys back to @-prefixed keys
+    unescape_at_keys(JSON_Without_Type, Metadata).
 
 get_schema_context_context(Schema, ID, Context) :-
     xrdf(Schema, ID, sys:context, Context_ID),
@@ -1242,7 +1250,9 @@ context_keyword_value_map('@context',JSON,'sys:context',Value) :-
     escape_at_keys(JSON, EscapedJSON),
     Value = (EscapedJSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
-    Value = (JSON.put('@type', "sys:JSON")).
+    % Escape @-prefixed keys before adding sys:JSON type marker
+    escape_at_keys(JSON, EscapedJSON),
+    Value = (EscapedJSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
     (   is_list(Documentation) % multilingual
     ->  DocSet = Documentation
@@ -2614,7 +2624,7 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@documentation
 schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@metadata',V) :-
     global_prefix_expand(sys:metadata,P),
     !,
-    schema_metadata_descriptor(Schema,Id,metadata(V)).
+    get_schema_context_metadata(Schema,Id,V).
 schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@context',V) :-
     global_prefix_expand(sys:context,P),
     !,
