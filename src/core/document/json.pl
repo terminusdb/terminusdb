@@ -595,8 +595,19 @@ get_schema_context_metadata(Schema, ID, Metadata) :-
     schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
 
 get_schema_context_context(Schema, ID, Context) :-
-    xrdf(Schema, ID, sys:context, Context_Object),
-    graph_get_json_object(Schema, Context_Object, Context).
+    xrdf(Schema, ID, sys:context, Context_ID),
+    graph_get_json_object(Schema, Context_ID, JSON_Object),
+    % Remove @type if present
+    (   del_dict('@type', JSON_Object, _, JSON_Without_Type)
+    ->  true
+    ;   JSON_Without_Type = JSON_Object
+    ),
+    % If it's a wrapper with just @value, unwrap it to get the string URI
+    (   JSON_Without_Type = json{'@value': Value}
+    ->  Context = Value
+    ;   % Otherwise it's a full context dict
+        Context = JSON_Without_Type
+    ).
 
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
@@ -1177,7 +1188,14 @@ context_triple(JSON,Triple) :-
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
+context_keyword_value_map('@context',String,'sys:context',Value) :-
+    (atom(String) ; string(String)),
+    !,
+    % Wrap string URIs in a minimal sys:JSON object with @value
+    Value = json{'@type' : "sys:JSON", '@value' : String}.
 context_keyword_value_map('@context',JSON,'sys:context',Value) :-
+    is_dict(JSON),
+    !,
     Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
     Value = (JSON.put('@type', "sys:JSON")).
@@ -1229,7 +1247,9 @@ context_elaborate(JSON,Elaborated) :-
         P-V,
         (   member(Keyword-Value,Keyword_Values),
             % Special handling for @context and @metadata: escape @-prefixed keys BEFORE processing
-            (   member(Keyword, ['@context', '@metadata'])
+            % But only for dicts - strings don't need escaping
+            (   member(Keyword, ['@context', '@metadata']),
+                is_dict(Value)
             ->  escape_at_prefixed_keys(Value, EscapedValue),
                 context_keyword_value_map(Keyword,EscapedValue,P,V)
             ;   context_keyword_value_map(Keyword,Value,P,V)

@@ -3623,6 +3623,27 @@ write_cors_headers(Request) :-
         format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
     ;   true).
 
+write_json_ld_context_link_header(none) :- !.
+write_json_ld_context_link_header(some(ContextURI)) :-
+    atom(ContextURI),
+    !,
+    current_output(Out),
+    format(Out,'Link: <~w>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"~n',[ContextURI]).
+write_json_ld_context_link_header(some(ContextURI)) :-
+    string(ContextURI),
+    !,
+    current_output(Out),
+    format(Out,'Link: <~s>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"~n',[ContextURI]).
+
+cors_json_stream_write_headers_with_link(Request, Data_Version, As_List, Context_Link) :-
+    write_cors_headers(Request),
+    write_data_version_header(Data_Version),
+    write_json_ld_context_link_header(Context_Link),
+    format("Transfer-Encoding: chunked~n"),
+    (   As_List = true
+    ->  format("Content-type: application/json; charset=UTF-8~n~n")
+    ;   format("Content-type: application/json; stream=true; charset=UTF-8~n~n")).
+
 cors_reply_json(Request, JSON) :-
     write_cors_headers(Request),
     reply_json(JSON, [json_object(dict), width(0)]).

@@ -598,6 +598,18 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     do_or_die(api_document_exists(Graph_Type, Transaction, Id),
               error(document_not_found(Id), _)),
+    % Write Link header if schema @context has a string URI (for any document retrieval)
+    (   catch(
+            (   get_schema_document(Transaction, '@context', ContextDoc),
+                get_dict('@context', ContextDoc, ContextURI),
+                (atom(ContextURI) ; string(ContextURI))
+            ),
+            _,
+            fail
+        )
+    ->  routes:write_json_ld_context_link_header(some(ContextURI))
+    ;   true
+    ),
     get_dict(as_list, Config, As_List),
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
