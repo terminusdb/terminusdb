@@ -597,17 +597,39 @@ get_schema_context_metadata(Schema, ID, Metadata) :-
 get_schema_context_context(Schema, ID, Context) :-
     xrdf(Schema, ID, sys:context, Context_ID),
     graph_get_json_object(Schema, Context_ID, JSON_Object),
-    % Remove @type if present
+    % Remove @type from the sys:JSON wrapper
     (   del_dict('@type', JSON_Object, _, JSON_Without_Type)
     ->  true
     ;   JSON_Without_Type = JSON_Object
     ),
-    % If it's a wrapper with just @value, unwrap it to get the string URI
+    % If it's a string wrapper (has only @value key), extract the string
     (   JSON_Without_Type = json{'@value': Value}
     ->  Context = Value
-    ;   % Otherwise it's a full context dict
-        Context = JSON_Without_Type
+    ;   % Otherwise it's a full context dict - manually unescape any remaining @@-prefixed keys
+        % (needed because unescape_at_prefixed_keys can't handle @@type -> @type when @type marker exists)
+        unescape_at_keys(JSON_Without_Type, Context)
     ).
+
+% Helper to unescape @@-prefixed keys back to @-prefixed keys (for @context retrieval)
+unescape_at_keys(Dict, UnescapedDict) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, Tag, Pairs),
+    maplist([Key-Val, UnescapedKey-UnescapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 2, _, "@@")
+        ->  sub_string(KeyStr, 1, _, 0, Rest),
+            atom_string(UnescapedKey, Rest)
+        ;   UnescapedKey = Key
+        ),
+        unescape_at_keys(Val, UnescapedVal)
+    ), Pairs, UnescapedPairs),
+    dict_pairs(UnescapedDict, Tag, UnescapedPairs).
+unescape_at_keys(List, UnescapedList) :-
+    is_list(List),
+    !,
+    maplist(unescape_at_keys, List, UnescapedList).
+unescape_at_keys(Value, Value).
 
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
@@ -1185,18 +1207,40 @@ context_triple(JSON,Triple) :-
                 }]), _)),
     json_triple_(Expanded,_{'@base' : Base},Triple).
 
+% Helper to escape @-prefixed keys to @@-prefixed keys (for sys:JSON storage)
+escape_at_keys(Dict, EscapedDict) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, Tag, Pairs),
+    maplist([Key-Val, EscapedKey-EscapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 1, _, "@")
+        ->  atom_concat('@', Key, EscapedKey)
+        ;   EscapedKey = Key
+        ),
+        escape_at_keys(Val, EscapedVal)
+    ), Pairs, EscapedPairs),
+    dict_pairs(EscapedDict, Tag, EscapedPairs).
+escape_at_keys(List, EscapedList) :-
+    is_list(List),
+    !,
+    maplist(escape_at_keys, List, EscapedList).
+escape_at_keys(Value, Value).
+
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@context',String,'sys:context',Value) :-
     (atom(String) ; string(String)),
     !,
-    % Wrap string URIs in a minimal sys:JSON object with @value
-    Value = json{'@type' : "sys:JSON", '@value' : String}.
+    % Wrap string URIs in sys:JSON - use @@value to avoid typed literal interpretation
+    Value = json{'@type' : "sys:JSON", '@@value' : String}.
 context_keyword_value_map('@context',JSON,'sys:context',Value) :-
     is_dict(JSON),
     !,
-    Value = (JSON.put('@type', "sys:JSON")).
+    % Escape @-prefixed keys before adding sys:JSON type marker
+    escape_at_keys(JSON, EscapedJSON),
+    Value = (EscapedJSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
     Value = (JSON.put('@type', "sys:JSON")).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
@@ -2571,6 +2615,10 @@ schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@metadata',V)
     global_prefix_expand(sys:metadata,P),
     !,
     schema_metadata_descriptor(Schema,Id,metadata(V)).
+schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@context',V) :-
+    global_prefix_expand(sys:context,P),
+    !,
+    get_schema_context_context(Schema,Id,V).
 schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@oneOf',V) :-
     global_prefix_expand(sys:oneOf,P),
     !,

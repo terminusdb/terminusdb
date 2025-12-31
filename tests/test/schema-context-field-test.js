@@ -96,6 +96,8 @@ describe('@context Property in Schema Context', function () {
       const context = docs.find((doc) => doc['@type'] === '@context')
 
       expect(context).to.exist
+      // Verify sys:context no longer leaks
+      expect(context['sys:context']).to.be.undefined
       expect(context['@context']['@id']).to.equal('some_id')
       expect(context['@context']['@type']).to.equal('SomeType')
       expect(context['@context'].nested['@value']).to.equal('nested_value')
