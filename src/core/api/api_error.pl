@@ -2704,6 +2704,14 @@ generic_exception_jsonld(malformed_json_payload(JSON_String),JSON) :-
     JSON = _{'api:status' : 'api:failure',
              'api:message' : MSG,
              'system:object' : JSON_String}.
+generic_exception_jsonld(invalid_schema_context_field(Field, Value),JSON) :-
+    format(atom(MSG), 'Invalid value for ~w in schema context. Expected string, dict, or array. Got: ~w', [Field, Value]),
+    format(atom(ValueStr), '~w', [Value]),
+    JSON = _{'@type' : 'api:InvalidSchemaContextFieldErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : MSG,
+             'api:field' : Field,
+             'api:value' : ValueStr}.
 generic_exception_jsonld(no_document_for_key(Key),JSON) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
     JSON = _{'api:status' : 'api:failure',

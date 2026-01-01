@@ -593,12 +593,18 @@ get_context_metadata(DB, ID, Metadata) :-
 
 get_schema_context_metadata(Schema, ID, Metadata) :-
     xrdf(Schema, ID, sys:metadata, Metadata_ID),
-    graph_get_json_object(Schema, Metadata_ID, Metadata).
+    graph_get_json_object(Schema, Metadata_ID, JSON_Object),
+    % Extract string or array from @value wrapper, or return dict directly
+    (   get_dict('@value', JSON_Object, Value)
+    ->  Metadata = Value
+    ;   % Otherwise it's a full metadata dict - graph_get_json_object already unescapes
+        Metadata = JSON_Object
+    ).
 
 get_schema_context_context(Schema, ID, Context) :-
     xrdf(Schema, ID, sys:context, Context_ID),
     graph_get_json_object(Schema, Context_ID, JSON_Object),
-    % If it's a string wrapper (has @value key), extract the string
+    % Extract string or array from @value wrapper, or return dict directly
     (   get_dict('@value', JSON_Object, Value)
     ->  Context = Value
     ;   % Otherwise it's a full context dict - graph_get_json_object already unescapes
@@ -1227,6 +1233,7 @@ context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", 
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@context',String,'sys:context',Value) :-
     (atom(String) ; string(String)),
+    \+ memberchk(String, [true, false, null]),  % Exclude booleans and null
     !,
     % Wrap string URIs in sys:JSON - use @@value to avoid typed literal interpretation
     Value = json{'@type' : "sys:JSON", '@@value' : String}.
@@ -1235,9 +1242,49 @@ context_keyword_value_map('@context',JSON,'sys:context',Value) :-
     !,
     % Note: @-prefixed keys are already escaped by context_elaborate before calling this
     Value = (JSON.put('@type', "sys:JSON")).
+context_keyword_value_map('@context',List,'sys:context',Value) :-
+    is_list(List),
+    !,
+    % Arrays are stored as sys:JSON with the array as value
+    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
+    Value = json{'@type' : "sys:JSON", '@@value' : List}.
+context_keyword_value_map('@metadata',String,'sys:metadata',Value) :-
+    (atom(String) ; string(String)),
+    \+ memberchk(String, [true, false, null]),  % Exclude booleans and null
+    !,
+    % Wrap string URIs in sys:JSON - use @@value to avoid typed literal interpretation
+    Value = json{'@type' : "sys:JSON", '@@value' : String}.
 context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
+    is_dict(JSON),
+    !,
     % Note: @-prefixed keys are already escaped by context_elaborate before calling this
     Value = (JSON.put('@type', "sys:JSON")).
+context_keyword_value_map('@metadata',List,'sys:metadata',Value) :-
+    is_list(List),
+    !,
+    % Arrays are stored as sys:JSON with the array as value
+    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
+    Value = json{'@type' : "sys:JSON", '@@value' : List}.
+% Validation: reject invalid types for @context (must be string, dict, or array)
+% Booleans (true/false), null, and numbers are not allowed
+context_keyword_value_map('@context',Value,_,_) :-
+    (   Value == true
+    ;   Value == false
+    ;   Value == null
+    ;   number(Value)
+    ),
+    !,
+    throw(error(invalid_context_value(Value), _)).
+% Validation: reject invalid types for @metadata (must be string, dict, or array)
+% Booleans (true/false), null, and numbers are not allowed
+context_keyword_value_map('@metadata',Value,_,_) :-
+    (   Value == true
+    ;   Value == false
+    ;   Value == null
+    ;   number(Value)
+    ),
+    !,
+    throw(error(invalid_metadata_value(Value), _)).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
     (   is_list(Documentation) % multilingual
     ->  DocSet = Documentation
@@ -1282,15 +1329,33 @@ context_elaborate(JSON,Elaborated) :-
     partition([P-_]>>(member(P, ['@type', '@base', '@schema',
                                  '@documentation', '@context', '@metadata'])),
               Pairs, Keyword_Values, Prop_Values),
+    % Validate @context and @metadata values before processing
+    forall(
+        (   member(Keyword-Value, Keyword_Values),
+            member(Keyword, ['@context', '@metadata'])
+        ),
+        (   (   is_dict(Value)
+            ;   is_list(Value)
+            ;   atom(Value), \+ memberchk(Value, [true, false, null])
+            ;   string(Value)
+            )
+        ->  true
+        ;   throw(error(invalid_schema_context_field(Keyword, Value), _))
+        )
+    ),
     findall(
         P-V,
         (   member(Keyword-Value,Keyword_Values),
             % Special handling for @context and @metadata: escape @-prefixed keys BEFORE processing
-            % But only for dicts - strings don't need escaping
+            % Applies to dicts and arrays (strings don't need escaping)
             (   member(Keyword, ['@context', '@metadata']),
                 is_dict(Value)
             ->  escape_at_prefixed_keys(Value, EscapedValue),
                 context_keyword_value_map(Keyword,EscapedValue,P,V)
+            ;   member(Keyword, ['@context', '@metadata']),
+                is_list(Value)
+            ->  maplist(escape_at_prefixed_keys, Value, EscapedList),
+                context_keyword_value_map(Keyword,EscapedList,P,V)
             ;   context_keyword_value_map(Keyword,Value,P,V)
             )
         ),
