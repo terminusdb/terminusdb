@@ -3972,8 +3972,8 @@ test(metadata_at_prefixed_keys_escaped, []) :-
     context_elaborate(Context, Elaborated),
     % Check that @metadata was elaborated
     get_dict('sys:metadata', Elaborated, Metadata),
-    % Verify the @type is sys:JSON
-    get_dict('@type', Metadata, "sys:JSON"),
+    % Verify the @type is the expanded sys:JSON URI
+    get_dict('@type', Metadata, 'http://terminusdb.com/schema/sys#JSON'),
     % Verify escaped keys exist (@@id, @@type, @@context)
     get_dict('@@id', Metadata, "my_id_value"),
     get_dict('@@type', Metadata, "my_type_value"),
@@ -15120,7 +15120,7 @@ test(elaborate_schema_metadata,
                                            '@value':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content."},
                     'sys:title':
                     json{'@type':"xsd:string",'@value':"Example Schema"}}]},
-         'sys:metadata':_{'@type':"sys:JSON",
+         'sys:metadata':_{'@type':'http://terminusdb.com/schema/sys#JSON',
                           remain:_{value:true},some:[1,2,3],things:null},
          'sys:prefix_pair':json{'@container':"@set",'@type':"sys:Prefix",'@value':[]},
          'sys:schema':json{'@type':"xsd:string",'@value':"terminusdb:///schema#"}}.
