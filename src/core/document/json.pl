@@ -1696,24 +1696,12 @@ json_schema_predicate_value('@class',V,Context,_,Class,json{'@type' : "@id",
 json_schema_predicate_value(P,V,Context,Path,Prop,Value) :-
     is_dict(V),
     !,
-    % Reject ALL @-prefixed properties (not supported in normal types)
-    (   atom_string(P, PStr),
-        sub_string(PStr, 0, 1, _, "@")
-    ->  throw(error(at_prefixed_properties_not_supported(P), _))
-    ;   true
-    ),
     prefix_expand_schema(P,Context,Prop_Ex),
     Prop = Prop_Ex,
     json_schema_elaborate(V, Context, [property(P)|Path], Value).
 json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
     is_list(List),
     !,
-    % Reject ALL @-prefixed properties (not supported in normal types)
-    (   atom_string(P, PStr),
-        sub_string(PStr, 0, 1, _, "@")
-    ->  throw(error(at_prefixed_properties_not_supported(P), _))
-    ;   true
-    ),
     prefix_expand_schema(P,Context,Prop_Ex),
     Prop = Prop_Ex,
     maplist({Context}/[V,Value]>>prefix_expand_schema(V,Context,Value),
@@ -1723,19 +1711,21 @@ json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
                 '@value' : Value_List }.
 json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
                                                     '@id' : VEx }) :-
-    % Reject ALL @-prefixed properties (not supported in normal types)
-    (   atom_string(P, PStr),
-        sub_string(PStr, 0, 1, _, "@")
-    ->  throw(error(at_prefixed_properties_not_supported(P), _))
-    ;   true
-    ),
     prefix_expand_schema(P,Context,Prop_Ex),
     Prop = Prop_Ex,
     prefix_expand_schema(V,Context,VEx),
     die_if(
         global_prefix_expand(sys:'JSONDocument',VEx),
         error(json_document_as_range(P,V),_)).
-
+% Catch-all: reject unrecognized @-prefixed properties
+% Note: @ like @inherits is processed by later schema elaboration stages
+json_schema_predicate_value(P,_,_,_,_,_) :-
+    atom_string(P, PStr),
+    sub_string(PStr, 0, 1, _, "@"),
+    % Allow only @inherits - it's a valid keyword processed elsewhere
+    P \= '@inherits',
+    !,
+    throw(error(at_prefixed_properties_not_supported(P), _)).
 
 json_schema_elaborate(JSON,Context,Path,Elaborated) :-
     do_or_die(
@@ -3111,7 +3101,7 @@ insert_document(Transaction, Document, ID) :-
 % insert_document/4
 insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, _Dependencies, _Captures_Out),
+    insert_document(Transaction, Document, Raw_JSON, false, Captures_In, Ids, _Dependencies, _Captures_Out),
     Ids = [ID|_].
 
 % insert_document/7 - backward compatibility wrapper (default overwrite=false)
@@ -3123,15 +3113,15 @@ insert_document(Query_Context, Document, Raw_JSON, Overwrite, Captures_In, IDs, 
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out).
-insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
+    insert_document(TO, Document, Raw_JSON, Overwrite, Captures_In, IDs, Dependencies, Captures_Out).
+insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_and_default_prefixes(Transaction, Prefixes),
-    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out).
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out).
 
-% insert_document/8
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T-T, Captures) :-
+% insert_document/9 - with Overwrite parameter
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, Captures, [Id], T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -3155,7 +3145,7 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T
         )
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST, Captures_Out) :-
+insert_document(Transaction, Document, Prefixes, false, Overwrite, Captures_In, Ids, SH-ST, Captures_Out) :-
     json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(

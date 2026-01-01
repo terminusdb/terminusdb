@@ -248,6 +248,7 @@ schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type) :-
     is_schema_simple_class(Schema,Class),
     xrdf(Schema,Class,Predicate,Range),
     \+ is_built_in(Predicate),
+    % All @-prefixed keywords are reserved by JSON-LD
     do_or_die(
         \+ has_at(Predicate),
         throw(error(not_a_valid_keyword(Predicate), _))),
@@ -268,6 +269,7 @@ schema_class_predicate_oneof_step(Schema,Class,Predicate,Type) :-
     is_schema_tagged_union(Schema,Class),
     xrdf(Schema,Class,Predicate,Range),
     \+ is_built_in(Predicate),
+    % All @-prefixed keywords are reserved by JSON-LD
     do_or_die(
         \+ has_at(Predicate),
         throw(error(not_a_valid_keyword(Predicate), _))),

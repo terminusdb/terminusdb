@@ -404,6 +404,13 @@ api_error_jsonld_(insert_documents, error(at_prefixed_properties_not_supported(P
              'api:error' : _{'@type' : 'api:AtPrefixedPropertiesNotSupported',
                              'api:property' : Property},
              'api:message' : Msg}.
+api_error_jsonld_(insert_documents, error(invalid_jsondocument_at_id_must_be_iri(Value), _), JSON) :-
+    format(string(Msg), "sys:JSONDocument @id field must be a string IRI (xsd:anyURI). Got: ~w", [Value]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:InvalidJSONDocumentAtId',
+                             'api:value' : Value},
+             'api:message' : Msg}.
 %% DB Exists
 api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Value), _), JSON) :-
     format(string(Msg), "Expected parameter '~s' to have '~q' but found: ~q", [Param, Expected_Value, Value]),

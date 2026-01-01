@@ -40,6 +40,8 @@ json_data_prefix('terminusdb:///json/').
 
 json_type_rdf_type(X,R),
 string(X) =>
+    % Strings are stored as xsd:string by default
+    % Note: @@id and @@type values should be treated as xsd:anyURI when validated at dict level
     global_prefix_expand(xsd:string, T),
     R = X^^T.
 json_type_rdf_type(X,R),
@@ -94,6 +96,17 @@ is_dict(Dict) =>
     global_prefix_expand(sys:'JSONDocument', Sys_JSON_Document),
     global_prefix_expand(rdf:type, Rdf_Type),
 
+    % Validate sys:JSONDocument top-level @id field
+    % @id: MUST be string IRI (xsd:anyURI) - strict validation
+    % @type: Treated like sys:JSON - permissive (any JSON value), escaped to @@type
+    dict_pairs(Dict, _, Pairs),
+    (   member('@id'-Doc_Id_Value, Pairs)
+    ->  do_or_die(
+            string(Doc_Id_Value),
+            error(invalid_jsondocument_at_id_must_be_iri(Doc_Id_Value), _))
+    ;   true
+    ),
+
     (   Triple = t(Id, Rdf_Type, Sys_JSON_Document)
     ;   dict_pairs(Dict, _, Pairs),
         member(Property-Value, Pairs),
@@ -120,7 +133,6 @@ is_dict(Dict) =>
     dict_pairs(Dict, _, Pairs),
     json_hash_init("Dict(", Init_Hash),
     State = state(Init_Hash,[]),
-    dict_pairs(Dict, _, Pairs),
     (   member(Property-Value, Pairs),
         json_subdocument_triple(Value, X),
         (   X = t(_,_,_)
@@ -284,9 +296,11 @@ insert_json_object(Query_Context, JSON, Id) :-
 insert_json_object(Transaction, JSON, Id) :-
     database_instance(Transaction, [Instance]),
     database_prefixes(Transaction,Prefixes),
+    % If no ID was provided by caller, generate one
     (   var(Id)
     ->  assign_json_document_id(Prefixes,Id)
-    ;   true),
+    ;   true
+    ),
     % insert
     forall(
         json_document_triple(JSON, Id, t(S,P,O)),

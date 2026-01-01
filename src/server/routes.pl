@@ -541,6 +541,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
+            param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -552,7 +553,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           raw_json : Raw_JSON,
                           require_migration: Require_Migration,
                           allow_destructive_migration: Allow_Destructive_Migration,
-                          merge_repeats: Merge_Repeats
+                          merge_repeats: Merge_Repeats,
+                          overwrite: Overwrite
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
