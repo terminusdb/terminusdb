@@ -1,6 +1,14 @@
 const { expect } = require('chai')
 const { Agent, db, document } = require('../lib')
 
+/**
+ * @metadata supports being a string (example URI), JSON array OR a JSON object.
+ * The @metadata field, within these constraints, is handled as sys:JSON
+ * All @-prefixed keys are converted to @@-prefixed predicates in the triples
+ * This enables a consistent handling of JSON-LD keywords, as @id and @type are
+ * required by the sys:JSON triple-based representation.
+ */
+
 describe('schema-context-metadata', function () {
   let agent
 
@@ -280,6 +288,297 @@ describe('schema-context-metadata', function () {
         const docs = Array.isArray(result.body) ? result.body : [result.body]
         const context = docs.find((doc) => doc['@type'] === '@context')
         expect(context['@metadata']['@context'], testCase.desc).to.deep.equal(testCase['@context'])
+      }
+    })
+  })
+
+  describe('@metadata string support', function () {
+    beforeEach(async function () {
+      agent.dbName = `test_metadata_string_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+      await db.create(agent, { label: 'Test Metadata String', schema: true })
+    })
+
+    afterEach(async function () {
+      try {
+        await db.delete(agent)
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    })
+
+    it('should store and retrieve @metadata as string URI', async function () {
+      const contextWithStringMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': 'http://example.com/metadata.json',
+      }
+
+      await document.insert(agent, {
+        schema: [contextWithStringMetadata],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
+
+      expect(context).to.exist
+      expect(context['@metadata']).to.equal('http://example.com/metadata.json')
+    })
+  })
+
+  describe('@metadata array support', function () {
+    beforeEach(async function () {
+      agent.dbName = `test_metadata_array_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+      await db.create(agent, { label: 'Test Metadata Array', schema: true })
+    })
+
+    afterEach(async function () {
+      try {
+        await db.delete(agent)
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    })
+
+    it('should store and retrieve @metadata as empty array', async function () {
+      const contextWithEmptyArray = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': [],
+      }
+
+      await document.insert(agent, {
+        schema: [contextWithEmptyArray],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
+
+      expect(context).to.exist
+      expect(context['@metadata']).to.deep.equal([])
+    })
+
+    it('should store and retrieve @metadata as array of strings', async function () {
+      const contextWithArrayMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': [
+          'http://example.com/metadata1.json',
+          'http://example.com/metadata2.json',
+        ],
+      }
+
+      await document.insert(agent, {
+        schema: [contextWithArrayMetadata],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
+
+      expect(context).to.exist
+      expect(context['@metadata']).to.deep.equal([
+        'http://example.com/metadata1.json',
+        'http://example.com/metadata2.json',
+      ])
+    })
+
+    it('should store and retrieve @metadata as array of dicts', async function () {
+      const contextWithArrayMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': [
+          { version: '1.0', author: 'Alice' },
+          { version: '2.0', author: 'Bob' },
+        ],
+      }
+
+      await document.insert(agent, {
+        schema: [contextWithArrayMetadata],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
+
+      expect(context).to.exist
+      expect(context['@metadata']).to.deep.equal([
+        { version: '1.0', author: 'Alice' },
+        { version: '2.0', author: 'Bob' },
+      ])
+    })
+
+    it('should store and retrieve @metadata as mixed array (strings and dicts)', async function () {
+      const contextWithMixedArray = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': [
+          'http://example.com/base-metadata.json',
+          {
+            version: '1.0',
+            '@id': 'local_metadata',
+            '@type': 'MetadataEntry',
+          },
+          'http://example.com/additional.json',
+        ],
+      }
+
+      await document.insert(agent, {
+        schema: [contextWithMixedArray],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
+
+      expect(context).to.exist
+      expect(context['@metadata']).to.deep.equal([
+        'http://example.com/base-metadata.json',
+        {
+          version: '1.0',
+          '@id': 'local_metadata',
+          '@type': 'MetadataEntry',
+        },
+        'http://example.com/additional.json',
+      ])
+    })
+
+    it('should store and retrieve @metadata array with nested @id and @type', async function () {
+      const contextWithNestedSpecialKeys = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': [
+          {
+            '@id': 'metadata_entry_1',
+            '@type': ['PrimaryMetadata', 'VersionedMetadata'],
+            data: { key: 'value' },
+          },
+        ],
+      }
+
+      await document.insert(agent, {
+        schema: [contextWithNestedSpecialKeys],
+        fullReplace: true,
+      })
+
+      const result = await document.get(agent, { query: { graph_type: 'schema' } })
+      const docs = Array.isArray(result.body) ? result.body : [result.body]
+      const context = docs.find((doc) => doc['@type'] === '@context')
+
+      expect(context).to.exist
+      expect(context['@metadata']).to.be.an('array').with.lengthOf(1)
+      expect(context['@metadata'][0]['@id']).to.equal('metadata_entry_1')
+      expect(context['@metadata'][0]['@type']).to.deep.equal([
+        'PrimaryMetadata',
+        'VersionedMetadata',
+      ])
+      expect(context['@metadata'][0].data).to.deep.equal({ key: 'value' })
+    })
+  })
+
+  describe('@metadata validation - reject invalid types', function () {
+    beforeEach(async function () {
+      agent.dbName = `test_metadata_validation_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+      await db.create(agent, { label: 'Test Metadata Validation', schema: true })
+    })
+
+    afterEach(async function () {
+      try {
+        await db.delete(agent)
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    })
+
+    it('should reject @metadata as boolean', async function () {
+      const contextWithBooleanMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': true,
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: [contextWithBooleanMetadata],
+          fullReplace: true,
+        })
+        expect.fail('Should have rejected boolean @metadata')
+      } catch (e) {
+        // The test library wraps HTTP errors in Chai assertions
+        expect(e.message).to.include('400')
+      }
+    })
+
+    it('should reject @metadata as null', async function () {
+      const contextWithNullMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': null,
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: [contextWithNullMetadata],
+          fullReplace: true,
+        })
+        expect.fail('Should have rejected null @metadata')
+      } catch (e) {
+        // The test library wraps HTTP errors in Chai assertions
+        expect(e.message).to.include('400')
+      }
+    })
+
+    it('should reject @metadata as integer number', async function () {
+      const contextWithNumberMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': 42,
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: [contextWithNumberMetadata],
+          fullReplace: true,
+        })
+        expect.fail('Should have rejected number @metadata')
+      } catch (e) {
+        // The test library wraps HTTP errors in Chai assertions
+        expect(e.message).to.include('400')
+      }
+    })
+
+    it('should reject @metadata as float number', async function () {
+      const contextWithFloatMetadata = {
+        '@type': '@context',
+        '@base': 'terminusdb:///data/',
+        '@schema': 'terminusdb:///schema#',
+        '@metadata': 2.0,
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: [contextWithFloatMetadata],
+          fullReplace: true,
+        })
+        expect.fail('Should have rejected float @metadata')
+      } catch (e) {
+        // The test library wraps HTTP errors in Chai assertions
+        expect(e.message).to.include('400')
       }
     })
   })
