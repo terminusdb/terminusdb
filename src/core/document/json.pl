@@ -72,7 +72,8 @@
               compress_dict_uri/4,
               pairs_satisfying_diamond_property/4,
               tabled_get_document_context/2,
-              json_write_options/1
+              json_write_options/1,
+              extract_sys_json_value/2
           ]).
 
 :- use_module(instance).
@@ -591,25 +592,23 @@ class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
 get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
+% Shared helper: extract value from sys:JSON wrapper
+% Handles strings/arrays stored under @value, or dicts stored directly
+extract_sys_json_value(JSON_Object, Result) :-
+    (   get_dict('@value', JSON_Object, Value)
+    ->  Result = Value
+    ;   Result = JSON_Object
+    ).
+
 get_schema_context_metadata(Schema, ID, Metadata) :-
     xrdf(Schema, ID, sys:metadata, Metadata_ID),
     graph_get_json_object(Schema, Metadata_ID, JSON_Object),
-    % Extract string or array from @value wrapper, or return dict directly
-    (   get_dict('@value', JSON_Object, Value)
-    ->  Metadata = Value
-    ;   % Otherwise it's a full metadata dict - graph_get_json_object already unescapes
-        Metadata = JSON_Object
-    ).
+    extract_sys_json_value(JSON_Object, Metadata).
 
 get_schema_context_context(Schema, ID, Context) :-
     xrdf(Schema, ID, sys:context, Context_ID),
     graph_get_json_object(Schema, Context_ID, JSON_Object),
-    % Extract string or array from @value wrapper, or return dict directly
-    (   get_dict('@value', JSON_Object, Value)
-    ->  Context = Value
-    ;   % Otherwise it's a full context dict - graph_get_json_object already unescapes
-        Context = JSON_Object
-    ).
+    extract_sys_json_value(JSON_Object, Context).
 
 % Helper to unescape @@-prefixed keys back to @-prefixed keys (for @context retrieval)
 unescape_at_keys(Dict, UnescapedDict) :-
@@ -1228,63 +1227,35 @@ escape_at_keys(List, EscapedList) :-
     maplist(escape_at_keys, List, EscapedList).
 escape_at_keys(Value, Value).
 
+% Shared helper: wrap JSON value (string, dict, or array) as sys:JSON
+% Used by @context/@metadata in both schema context and class definitions
+% Always uses expanded URI for consistency
+json_value_to_sys_json(V, Value) :-
+    global_prefix_expand(sys:'JSON', Type),
+    is_dict(V),
+    !,
+    Value = (V.put('@type', Type)).
+json_value_to_sys_json(V, Value) :-
+    global_prefix_expand(sys:'JSON', Type),
+    is_list(V),
+    !,
+    Value = json{'@type' : Type, '@@value' : V}.
+json_value_to_sys_json(V, Value) :-
+    global_prefix_expand(sys:'JSON', Type),
+    (atom(V) ; string(V)),
+    \+ memberchk(V, [true, false, null]),
+    !,
+    Value = json{'@type' : Type, '@@value' : V}.
+json_value_to_sys_json(V, _) :-
+    throw(error(invalid_json_metadata_value(V), _)).
+
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
-context_keyword_value_map('@context',String,'sys:context',Value) :-
-    (atom(String) ; string(String)),
-    \+ memberchk(String, [true, false, null]),  % Exclude booleans and null
-    !,
-    % Wrap string URIs in sys:JSON - use @@value to avoid typed literal interpretation
-    Value = json{'@type' : "sys:JSON", '@@value' : String}.
-context_keyword_value_map('@context',JSON,'sys:context',Value) :-
-    is_dict(JSON),
-    !,
-    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
-    Value = (JSON.put('@type', "sys:JSON")).
-context_keyword_value_map('@context',List,'sys:context',Value) :-
-    is_list(List),
-    !,
-    % Arrays are stored as sys:JSON with the array as value
-    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
-    Value = json{'@type' : "sys:JSON", '@@value' : List}.
-context_keyword_value_map('@metadata',String,'sys:metadata',Value) :-
-    (atom(String) ; string(String)),
-    \+ memberchk(String, [true, false, null]),  % Exclude booleans and null
-    !,
-    % Wrap string URIs in sys:JSON - use @@value to avoid typed literal interpretation
-    Value = json{'@type' : "sys:JSON", '@@value' : String}.
-context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
-    is_dict(JSON),
-    !,
-    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
-    Value = (JSON.put('@type', "sys:JSON")).
-context_keyword_value_map('@metadata',List,'sys:metadata',Value) :-
-    is_list(List),
-    !,
-    % Arrays are stored as sys:JSON with the array as value
-    % Note: @-prefixed keys are already escaped by context_elaborate before calling this
-    Value = json{'@type' : "sys:JSON", '@@value' : List}.
-% Validation: reject invalid types for @context (must be string, dict, or array)
-% Booleans (true/false), null, and numbers are not allowed
-context_keyword_value_map('@context',Value,_,_) :-
-    (   Value == true
-    ;   Value == false
-    ;   Value == null
-    ;   number(Value)
-    ),
-    !,
-    throw(error(invalid_context_value(Value), _)).
-% Validation: reject invalid types for @metadata (must be string, dict, or array)
-% Booleans (true/false), null, and numbers are not allowed
-context_keyword_value_map('@metadata',Value,_,_) :-
-    (   Value == true
-    ;   Value == false
-    ;   Value == null
-    ;   number(Value)
-    ),
-    !,
-    throw(error(invalid_metadata_value(Value), _)).
+context_keyword_value_map('@context',V,'sys:context',Value) :-
+    json_value_to_sys_json(V, Value).
+context_keyword_value_map('@metadata',V,'sys:metadata',Value) :-
+    json_value_to_sys_json(V, Value).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
     (   is_list(Documentation) % multilingual
     ->  DocSet = Documentation
@@ -1696,10 +1667,9 @@ json_schema_predicate_value('@subdocument',[],_,_,P,[]) :-
 json_schema_predicate_value('@metadata',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:metadata, P),
-    global_prefix_expand(sys:'JSON', Type),
-    % Escape @-prefixed keys before marking as sys:JSON to preserve @id/@type/@context as data
+    % Escape @-prefixed keys, then use shared helper
     escape_at_prefixed_keys(V, EscapedV),
-    Value = (EscapedV.put('@type', Type)).
+    json_value_to_sys_json(EscapedV, Value).
 json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfoldable, P).

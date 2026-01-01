@@ -1238,9 +1238,14 @@ metadata_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_metadata_descriptor(Schema, Type, Descriptor).
 
-schema_metadata_descriptor(Schema, Type, metadata(JSON)) :-
+schema_metadata_descriptor(Schema, Type, metadata(Result)) :-
     xrdf(Schema, Type, sys:metadata, Metadata),
-    graph_get_json_object(Schema, Metadata, JSON).
+    graph_get_json_object(Schema, Metadata, JSON),
+    % Extract string/array from @value wrapper, or return dict directly
+    (   get_dict('@value', JSON, Value)
+    ->  Result = Value
+    ;   Result = JSON
+    ).
 
 schema_oneof_descriptor(Schema, Class, tagged_union(Class, Map)) :-
     is_schema_tagged_union(Schema, Class),

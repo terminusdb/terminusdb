@@ -625,5 +625,104 @@ describe('schema-context-metadata', function () {
       expect(result.body['@metadata']['@context']).to.deep.equal({ schema: 'http://schema.org/' })
       expect(result.body['@metadata'].version).to.equal('1.0')
     })
+
+    it('should store and retrieve @metadata as string in Class definitions', async function () {
+      const classSchema = {
+        '@type': 'Class',
+        '@id': 'Animal',
+        '@metadata': 'http://example.org/animal-metadata',
+        species: 'xsd:string',
+      }
+
+      await document.insert(agent, {
+        schema: classSchema,
+      })
+
+      const result = await document.get(agent, {
+        query: { graph_type: 'schema', id: 'Animal' },
+      })
+
+      expect(result.body['@metadata']).to.equal('http://example.org/animal-metadata')
+    })
+
+    it('should store and retrieve @metadata as array in Class definitions', async function () {
+      const classSchema = {
+        '@type': 'Class',
+        '@id': 'Vehicle',
+        '@metadata': [
+          'http://example.org/v1',
+          { '@type': 'VehicleMeta', key: 'value' },
+        ],
+        model: 'xsd:string',
+      }
+
+      await document.insert(agent, {
+        schema: classSchema,
+      })
+
+      const result = await document.get(agent, {
+        query: { graph_type: 'schema', id: 'Vehicle' },
+      })
+
+      expect(result.body['@metadata']).to.be.an('array')
+      expect(result.body['@metadata']).to.have.lengthOf(2)
+      expect(result.body['@metadata'][0]).to.equal('http://example.org/v1')
+      expect(result.body['@metadata'][1]['@type']).to.equal('VehicleMeta')
+      expect(result.body['@metadata'][1].key).to.equal('value')
+    })
+
+    it('should reject @metadata as boolean in Class definitions', async function () {
+      const classSchema = {
+        '@type': 'Class',
+        '@id': 'BadClass1',
+        '@metadata': true,
+        x: 'xsd:string',
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: classSchema,
+        })
+        expect.fail('Should have rejected boolean @metadata')
+      } catch (e) {
+        expect(e.message).to.include('400')
+      }
+    })
+
+    it('should reject @metadata as null in Class definitions', async function () {
+      const classSchema = {
+        '@type': 'Class',
+        '@id': 'BadClass2',
+        '@metadata': null,
+        x: 'xsd:string',
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: classSchema,
+        })
+        expect.fail('Should have rejected null @metadata')
+      } catch (e) {
+        expect(e.message).to.include('400')
+      }
+    })
+
+    it('should reject @metadata as number in Class definitions', async function () {
+      const classSchema = {
+        '@type': 'Class',
+        '@id': 'BadClass3',
+        '@metadata': 42,
+        x: 'xsd:string',
+      }
+
+      try {
+        await document.insert(agent, {
+          schema: classSchema,
+        })
+        expect.fail('Should have rejected number @metadata')
+      } catch (e) {
+        expect(e.message).to.include('400')
+      }
+    })
   })
 })

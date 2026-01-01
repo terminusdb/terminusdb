@@ -2712,6 +2712,14 @@ generic_exception_jsonld(invalid_schema_context_field(Field, Value),JSON) :-
              'api:message' : MSG,
              'api:field' : Field,
              'api:value' : ValueStr}.
+% Unified error for @context/@metadata in both schema context and class definitions
+generic_exception_jsonld(invalid_json_metadata_value(Value),JSON) :-
+    format(atom(MSG), 'Invalid value for @context or @metadata. Expected string, dict, or array. Got: ~w', [Value]),
+    format(atom(ValueStr), '~w', [Value]),
+    JSON = _{'@type' : 'api:InvalidJsonMetadataErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : MSG,
+             'api:value' : ValueStr}.
 generic_exception_jsonld(no_document_for_key(Key),JSON) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
     JSON = _{'api:status' : 'api:failure',
