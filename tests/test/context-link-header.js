@@ -2,14 +2,16 @@ const { expect } = require('chai')
 const { Agent, db, document, util } = require('../lib')
 const axios = require('axios')
 
-describe('HTTP Link Header for processing JSON documents as JSON-LD via @context', function () {
+// HTTP Link Header for processing JSON documents as JSON-LD via @context
+
+describe('context-link-header', function () {
   let agent
 
   before(function () {
     agent = new Agent().auth()
   })
 
-  describe('Schema Context @context Link Header', function () {
+  describe('schema context @context link header', function () {
     beforeEach(async function () {
       agent.dbName = `test_link_header_${Date.now()}_${Math.floor(Math.random() * 10000)}`
       await db.create(agent)

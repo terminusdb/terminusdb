@@ -1,7 +1,7 @@
 const { expect } = require('chai')
 const { Agent, db, document } = require('../lib')
 
-describe('Schema Context @metadata Field Handling', function () {
+describe('schema-context-metadata', function () {
   let agent
 
   before(function () {
