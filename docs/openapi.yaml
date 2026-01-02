@@ -2140,6 +2140,21 @@ paths:
       tags:
         - Account management
       summary: Grant or remove capabilities over a resource to a user
+      description: |
+        Grant or revoke roles for a user on a resource (organization or database).
+        
+        **Quick Start (recommended):**
+        ```json
+        {
+          "operation": "grant",
+          "scope_type": "organization",
+          "scope": "myorg",
+          "user": "alice",
+          "roles": ["Admin Role"]
+        }
+        ```
+        
+        When `scope_type` is provided, use human-readable names. When omitted, use full system document IDs instead.
       requestBody:
         required: true
         content:
@@ -2154,26 +2169,43 @@ paths:
               properties:
                 "operation":
                   type: string
+                  description: Whether to grant or revoke the specified roles.
                   enum:
-                    - "revoke"
                     - "grant"
-                "scope":
-                  type: string
-                  example: "UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"
+                    - "revoke"
                 "scope_type":
                   type: string
+                  description: |
+                    Optional. Set this to enable name-based lookups for scope, user, and roles.
+                    - "organization": scope is an organization name
+                    - "database": scope is "org/database" format
                   enum:
                     - "organization"
                     - "database"
+                "scope":
+                  type: string
+                  description: |
+                    The target resource. Format depends on scope_type:
+                    - With scope_type "organization": org name, e.g. "admin" or "myorg"
+                    - With scope_type "database": "org/db" format, e.g. "admin/mydatabase"
+                    - Without scope_type: full ID, e.g. "Organization/abc123...", or "UserDatabase/abc123..."
+                  example: "admin"
                 "user":
                   type: string
-                  example: "User/admin"
+                  description: |
+                    The target user.
+                    - With scope_type: user name, e.g. "alice"
+                    - Without scope_type: full ID, e.g. "User/alice"
+                  example: "admin"
                 "roles":
                   type: array
+                  description: |
+                    Roles to grant or revoke.
+                    - With scope_type: role names, e.g. ["Admin Role", "Consumer Role"]
+                    - Without scope_type: full IDs, e.g. ["Role/abc123..."]
                   items:
                     type: string
-                    example: "Role/consumer"
-                  example: ["Role/consumer", "Role/admin"]
+                  example: ["Consumer Role", "Admin Role"]
       responses:
         200:
           description: "Successfully granted or revoked roles"
