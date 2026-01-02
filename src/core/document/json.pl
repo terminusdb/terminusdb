@@ -25,6 +25,7 @@
               delete_subdocument/3,
               insert_document/3,
               insert_document/7,
+              insert_document/8,
               insert_document_unsafe/8,
               replace_document/2,
               replace_document/3,
@@ -71,7 +72,8 @@
               compress_dict_uri/4,
               pairs_satisfying_diamond_property/4,
               tabled_get_document_context/2,
-              json_write_options/1
+              json_write_options/1,
+              extract_sys_json_value/2
           ]).
 
 :- use_module(instance).
@@ -590,8 +592,44 @@ class_descriptor_image(cardinality(C,_,_), json{ '@container' : "@set",
 get_context_metadata(DB, ID, Metadata) :-
     metadata_descriptor(DB, ID, metadata(Metadata)).
 
+% Shared helper: extract value from sys:JSON wrapper
+% Handles strings/arrays stored under @value, or dicts stored directly
+extract_sys_json_value(JSON_Object, Result) :-
+    (   get_dict('@value', JSON_Object, Value)
+    ->  Result = Value
+    ;   Result = JSON_Object
+    ).
+
 get_schema_context_metadata(Schema, ID, Metadata) :-
-    schema_metadata_descriptor(Schema, ID, metadata(Metadata)).
+    xrdf(Schema, ID, sys:metadata, Metadata_ID),
+    graph_get_json_object(Schema, Metadata_ID, JSON_Object),
+    extract_sys_json_value(JSON_Object, Metadata).
+
+get_schema_context_context(Schema, ID, Context) :-
+    xrdf(Schema, ID, sys:context, Context_ID),
+    graph_get_json_object(Schema, Context_ID, JSON_Object),
+    extract_sys_json_value(JSON_Object, Context).
+
+% Helper to unescape @@-prefixed keys back to @-prefixed keys (for @context retrieval)
+unescape_at_keys(Dict, UnescapedDict) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, Tag, Pairs),
+    maplist([Key-Val, UnescapedKey-UnescapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 2, _, "@@")
+        ->  sub_string(KeyStr, 1, _, 0, Rest),
+            atom_string(UnescapedKey, Rest)
+        ;   UnescapedKey = Key
+        ),
+        unescape_at_keys(Val, UnescapedVal)
+    ), Pairs, UnescapedPairs),
+    dict_pairs(UnescapedDict, Tag, UnescapedPairs).
+unescape_at_keys(List, UnescapedList) :-
+    is_list(List),
+    !,
+    maplist(unescape_at_keys, List, UnescapedList).
+unescape_at_keys(Value, Value).
 
 get_context_documentation(DB, ID, Doc) :-
     database_schema(DB, Schema),
@@ -643,9 +681,13 @@ database_schema_context_object(Schema, Context) :-
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
+    (   get_schema_context_context(Schema, ID, ContextField)
+    ->  put_dict(_{'@context' : ContextField}, Context0, Context1)
+    ;   Context1 = Context0
+    ),
     (   get_schema_context_metadata(Schema, ID, Metadata)
-    ->  put_dict(_{'@metadata' : Metadata}, Context0, Context)
-    ;   Context = Context0
+    ->  put_dict(_{'@metadata' : Metadata}, Context1, Context)
+    ;   Context = Context1
     ).
 
 database_context_object(DB,Prefixes) :-
@@ -1165,11 +1207,55 @@ context_triple(JSON,Triple) :-
                 }]), _)),
     json_triple_(Expanded,_{'@base' : Base},Triple).
 
+% Helper to escape @-prefixed keys to @@-prefixed keys (for sys:JSON storage)
+escape_at_keys(Dict, EscapedDict) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, Tag, Pairs),
+    maplist([Key-Val, EscapedKey-EscapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 1, _, "@")
+        ->  atom_concat('@', Key, EscapedKey)
+        ;   EscapedKey = Key
+        ),
+        escape_at_keys(Val, EscapedVal)
+    ), Pairs, EscapedPairs),
+    dict_pairs(EscapedDict, Tag, EscapedPairs).
+escape_at_keys(List, EscapedList) :-
+    is_list(List),
+    !,
+    maplist(escape_at_keys, List, EscapedList).
+escape_at_keys(Value, Value).
+
+% Shared helper: wrap JSON value (string, dict, or array) as sys:JSON
+% Used by @context/@metadata in both schema context and class definitions
+% Always uses expanded URI for consistency
+json_value_to_sys_json(V, Value) :-
+    global_prefix_expand(sys:'JSON', Type),
+    is_dict(V),
+    !,
+    Value = (V.put('@type', Type)).
+json_value_to_sys_json(V, Value) :-
+    global_prefix_expand(sys:'JSON', Type),
+    is_list(V),
+    !,
+    Value = json{'@type' : Type, '@@value' : V}.
+json_value_to_sys_json(V, Value) :-
+    global_prefix_expand(sys:'JSON', Type),
+    (atom(V) ; string(V)),
+    \+ memberchk(V, [true, false, null]),
+    !,
+    Value = json{'@type' : Type, '@@value' : V}.
+json_value_to_sys_json(V, _) :-
+    throw(error(invalid_json_metadata_value(V), _)).
+
 context_keyword_value_map('@type',"@context",'@type','sys:Context').
 context_keyword_value_map('@base',Value,'sys:base',json{'@type' : "xsd:string", '@value' : Value}).
 context_keyword_value_map('@schema',Value,'sys:schema',json{'@type' : "xsd:string", '@value' : Value}).
-context_keyword_value_map('@metadata',JSON,'sys:metadata',Value) :-
-    Value = (JSON.put('@type', "sys:JSON")).
+context_keyword_value_map('@context',V,'sys:context',Value) :-
+    json_value_to_sys_json(V, Value).
+context_keyword_value_map('@metadata',V,'sys:metadata',Value) :-
+    json_value_to_sys_json(V, Value).
 context_keyword_value_map('@documentation',Documentation,'sys:documentation',Result) :-
     (   is_list(Documentation) % multilingual
     ->  DocSet = Documentation
@@ -1212,12 +1298,37 @@ context_elaborate(JSON,Elaborated) :-
     !,
     dict_pairs(JSON,json,Pairs),
     partition([P-_]>>(member(P, ['@type', '@base', '@schema',
-                                 '@documentation', '@metadata'])),
+                                 '@documentation', '@context', '@metadata'])),
               Pairs, Keyword_Values, Prop_Values),
+    % Validate @context and @metadata values before processing
+    forall(
+        (   member(Keyword-Value, Keyword_Values),
+            member(Keyword, ['@context', '@metadata'])
+        ),
+        (   (   is_dict(Value)
+            ;   is_list(Value)
+            ;   atom(Value), \+ memberchk(Value, [true, false, null])
+            ;   string(Value)
+            )
+        ->  true
+        ;   throw(error(invalid_schema_context_field(Keyword, Value), _))
+        )
+    ),
     findall(
         P-V,
         (   member(Keyword-Value,Keyword_Values),
-            context_keyword_value_map(Keyword,Value,P,V)
+            % Special handling for @context and @metadata: escape @-prefixed keys BEFORE processing
+            % Applies to dicts and arrays (strings don't need escaping)
+            (   member(Keyword, ['@context', '@metadata']),
+                is_dict(Value)
+            ->  escape_at_prefixed_keys(Value, EscapedValue),
+                context_keyword_value_map(Keyword,EscapedValue,P,V)
+            ;   member(Keyword, ['@context', '@metadata']),
+                is_list(Value)
+            ->  maplist(escape_at_prefixed_keys, Value, EscapedList),
+                context_keyword_value_map(Keyword,EscapedList,P,V)
+            ;   context_keyword_value_map(Keyword,Value,P,V)
+            )
         ),
         PVs),
 
@@ -1556,8 +1667,9 @@ json_schema_predicate_value('@subdocument',[],_,_,P,[]) :-
 json_schema_predicate_value('@metadata',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:metadata, P),
-    global_prefix_expand(sys:'JSON', Type),
-    Value = (V.put('@type', Type)).
+    % Escape @-prefixed keys, then use shared helper
+    escape_at_prefixed_keys(V, EscapedV),
+    json_value_to_sys_json(EscapedV, Value).
 json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfoldable, P).
@@ -1584,12 +1696,14 @@ json_schema_predicate_value('@class',V,Context,_,Class,json{'@type' : "@id",
 json_schema_predicate_value(P,V,Context,Path,Prop,Value) :-
     is_dict(V),
     !,
-    prefix_expand_schema(P,Context,Prop),
+    prefix_expand_schema(P,Context,Prop_Ex),
+    Prop = Prop_Ex,
     json_schema_elaborate(V, Context, [property(P)|Path], Value).
 json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
     is_list(List),
     !,
-    prefix_expand_schema(P,Context,Prop),
+    prefix_expand_schema(P,Context,Prop_Ex),
+    Prop = Prop_Ex,
     maplist({Context}/[V,Value]>>prefix_expand_schema(V,Context,Value),
             List, Value_List),
     Set = json{ '@container' : "@set",
@@ -1597,12 +1711,21 @@ json_schema_predicate_value(P,List,Context,_,Prop,Set) :-
                 '@value' : Value_List }.
 json_schema_predicate_value(P,V,Context,_,Prop,json{'@type' : "@id",
                                                     '@id' : VEx }) :-
-    prefix_expand_schema(P,Context,Prop),
+    prefix_expand_schema(P,Context,Prop_Ex),
+    Prop = Prop_Ex,
     prefix_expand_schema(V,Context,VEx),
     die_if(
         global_prefix_expand(sys:'JSONDocument',VEx),
         error(json_document_as_range(P,V),_)).
-
+% Catch-all: reject unrecognized @-prefixed properties
+% Note: @ like @inherits is processed by later schema elaboration stages
+json_schema_predicate_value(P,_,_,_,_,_) :-
+    atom_string(P, PStr),
+    sub_string(PStr, 0, 1, _, "@"),
+    % Allow only @inherits - it's a valid keyword processed elsewhere
+    P \= '@inherits',
+    !,
+    throw(error(at_prefixed_properties_not_supported(P), _)).
 
 json_schema_elaborate(JSON,Context,Path,Elaborated) :-
     do_or_die(
@@ -2297,7 +2420,8 @@ get_document(DB, Prefixes, Id, Document, Options) :-
             put_dict(_{'@type': Class_Ex}, JSON0, JSON)
         ;   JSON = JSON0
         ),
-        put_dict(_{'@id' : Id}, JSON, Document)
+        % JSONDocument @id is xsd:anyURI - always use full IRI, never compressed
+        put_dict(_{'@id' : Id_Ex}, JSON, Document)
     ;   findall(
             Prop-Value,
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
@@ -2510,7 +2634,11 @@ schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@documentation
 schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@metadata',V) :-
     global_prefix_expand(sys:metadata,P),
     !,
-    schema_metadata_descriptor(Schema,Id,metadata(V)).
+    get_schema_context_metadata(Schema,Id,V).
+schema_subject_predicate_object_key_value(Schema,_Prefixes,Id,P,_,'@context',V) :-
+    global_prefix_expand(sys:context,P),
+    !,
+    get_schema_context_context(Schema,Id,V).
 schema_subject_predicate_object_key_value(Schema,Prefixes,Id,P,_,'@oneOf',V) :-
     global_prefix_expand(sys:oneOf,P),
     !,
@@ -2940,6 +3068,29 @@ valid_json_id_or_die(Prefixes,Id) :-
             re_match(Re,Id)),
         error(not_a_valid_json_object_id(Id),_)).
 
+%% expand_json_document_id(+Id_Short, +Prefixes, +UseJSONDocumentPrefix, -Id)
+%
+% Expands a JSONDocument @id value to a full IRI.
+% - Handles both atom and string types from JSON dicts
+% - If Id_Short has a scheme (http://, https://, etc.) or prefix (foo:bar), expand using prefix_expand
+% - Otherwise, prepend @base (with optional 'JSONDocument/' infix if UseJSONDocumentPrefix=true)
+expand_json_document_id(Id_Short, Prefixes, UseJSONDocumentPrefix, Id) :-
+    % Handle both atom and string types from JSON dicts
+    (   atom(Id_Short)
+    ->  Id_Short_Atom = Id_Short
+    ;   atom_string(Id_Short_Atom, Id_Short)
+    ),
+    (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+        (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
+    ->  prefix_expand(Id_Short, Prefixes, Id)
+    ;   % Plain string without scheme/prefix - prepend @base
+        get_dict('@base', Prefixes, Base),
+        (   UseJSONDocumentPrefix = true
+        ->  atomic_list_concat([Base, 'JSONDocument/', Id_Short_Atom], Id)
+        ;   atom_concat(Base, Id_Short_Atom, Id)
+        )
+    ).
+
 %% insert_document arity 3 and 4 return only a single ID
 %% as these predicates are internal, and not API predicates.
 %%
@@ -2950,23 +3101,27 @@ insert_document(Transaction, Document, ID) :-
 % insert_document/4
 insert_document(Transaction, Document, Raw_JSON, ID) :-
     empty_assoc(Captures_In),
-    insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, _Dependencies, _Captures_Out),
+    insert_document(Transaction, Document, Raw_JSON, false, Captures_In, Ids, _Dependencies, _Captures_Out),
     Ids = [ID|_].
 
-% insert_document/7
-insert_document(Query_Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
+% insert_document/7 - backward compatibility wrapper (default overwrite=false)
+insert_document(Context, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out) :-
+    insert_document(Context, Document, Raw_JSON, false, Captures_In, IDs, Dependencies, Captures_Out).
+
+% insert_document/8 - with Overwrite parameter
+insert_document(Query_Context, Document, Raw_JSON, Overwrite, Captures_In, IDs, Dependencies, Captures_Out) :-
     is_query_context(Query_Context),
     !,
     query_default_collection(Query_Context, TO),
-    insert_document(TO, Document, Raw_JSON, Captures_In, IDs, Dependencies, Captures_Out).
-insert_document(Transaction, Document, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out) :-
+    insert_document(TO, Document, Raw_JSON, Overwrite, Captures_In, IDs, Dependencies, Captures_Out).
+insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out) :-
     is_transaction(Transaction),
     !,
     database_and_default_prefixes(Transaction, Prefixes),
-    insert_document(Transaction, Document, Prefixes, Raw_JSON, Captures_In, Ids, Dependencies, Captures_Out).
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out).
 
-% insert_document/8
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T-T, Captures) :-
+% insert_document/9 - with Overwrite parameter
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, Captures, [Id], T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -2977,12 +3132,20 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Captures, [Id], T
     ),
     !,
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  prefix_expand(Id_Short,Prefixes,Id),
-        valid_json_id_or_die(Prefixes,Id),
-        insert_json_object(Transaction, JSON, Id)
+    ->  expand_json_document_id(Id_Short, Prefixes, false, Id),
+        % Only check existence when overwrite=false (performance optimization)
+        (   Overwrite = false
+        ->  check_existing_document_status(Transaction, Id, normal, Status),
+            (   Status = present
+            ->  throw(error(can_not_insert_existing_object_with_id(Id), _))
+            ;   insert_json_object(Transaction, JSON, Id)
+            )
+        ;   % overwrite=true: just insert (no check, no delete)
+            insert_json_object(Transaction, JSON, Id)
+        )
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST, Captures_Out) :-
+insert_document(Transaction, Document, Prefixes, false, Overwrite, Captures_In, Ids, SH-ST, Captures_Out) :-
     json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -3002,12 +3165,17 @@ insert_document(Transaction, Document, Prefixes, false, Captures_In, Ids, SH-ST,
     extract_return_ids(Id_Pairs, Ids),
     when(ground(Dependencies),
          (
-             forall(
-                 member(Id-Variety, Id_Pairs),
-                 (   check_existing_document_status(Transaction, Id, Variety, Status),
-                     die_if(Status = present,
-                            error(can_not_insert_existing_object_with_id(Id), _))
+             % Only check existence when overwrite=false (performance optimization)
+             (   Overwrite = false
+             ->  forall(
+                     member(Id-Variety, Id_Pairs),
+                     (   check_existing_document_status(Transaction, Id, Variety, Status),
+                         die_if(Status = present,
+                                error(can_not_insert_existing_object_with_id(Id), _))
+                     )
                  )
+             ;   % overwrite=true: skip existence check, insert will handle it
+                 true
              ),
              insert_document_expanded(Transaction, Elaborated, _)
          )).
@@ -3023,8 +3191,7 @@ extract_return_ids(Id_Pairs, Ids) :-
 
 insert_document_unsafe(Transaction, Prefixes, Document, true, Captures, Id, T-T, Captures) :-
     (   del_dict('@id', Document, Id_Short, JSON)
-    ->  prefix_expand(Id_Short,Prefixes,Id),
-        valid_json_id_or_die(Prefixes,Id),
+    ->  expand_json_document_id(Id_Short, Prefixes, true, Id),
         insert_json_object(Transaction, JSON, Id)
     ;   insert_json_object(Transaction, Document, Id)
     ).
@@ -3788,6 +3955,150 @@ test(expand_context_with_documentation, []) :-
 		'http://terminusdb.com/schema/sys#schema',
 		"http://s/" ^^ 'http://www.w3.org/2001/XMLSchema#string')
 	].
+
+test(metadata_at_prefixed_keys_escaped, []) :-
+    % Test that @id, @type, @context within @metadata are escaped to @@id, @@type, @@context
+    Context = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "my_id_value",
+            '@type': "my_type_value",
+            '@context': json{custom: "http://example.com"},
+            regular: "normal_value"
+        }
+    },
+    context_elaborate(Context, Elaborated),
+    % Check that @metadata was elaborated
+    get_dict('sys:metadata', Elaborated, Metadata),
+    % Verify the @type is the expanded sys:JSON URI
+    get_dict('@type', Metadata, 'http://terminusdb.com/schema/sys#JSON'),
+    % Verify escaped keys exist (@@id, @@type, @@context)
+    get_dict('@@id', Metadata, "my_id_value"),
+    get_dict('@@type', Metadata, "my_type_value"),
+    get_dict('@@context', Metadata, _),
+    % Verify regular keys still work
+    get_dict(regular, Metadata, "normal_value").
+
+test(metadata_survives_expand, []) :-
+    % Test that escaped @@ keys survive the expand() call
+    Context = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "my_id_value",
+            '@type': "my_type_value",
+            regular: "normal_value"
+        }
+    },
+    context_elaborate(Context, Elaborated),
+    % Now call expand like context_triple does
+    expand(Elaborated, json{
+        sys:'http://terminusdb.com/schema/sys#',
+        xsd:'http://www.w3.org/2001/XMLSchema#',
+        xdd:'http://terminusdb.com/schema/xdd#'
+    }, Expanded),
+    % Check if metadata still has escaped keys
+    get_dict('http://terminusdb.com/schema/sys#metadata', Expanded, ExpandedMetadata),
+    get_dict('@@id', ExpandedMetadata, _).
+
+test(metadata_triples_contain_escaped_keys, []) :-
+    % Test the full context_triple flow to see what triples are generated
+    Context = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "my_id_value",
+            '@type': "my_type_value",
+            regular: "normal_value"
+        }
+    },
+    findall(Triple, context_triple(Context, Triple), Triples),
+    % Check if any triple contains the @id value (use memberchk for determinism)
+    memberchk(t(_, _, "my_id_value" ^^ _), Triples).
+
+test(metadata_round_trip,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Test full round-trip: insert context with @metadata containing @id/@type, retrieve it
+    Prefixes = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "test_id_value",
+            '@type': "test_type_value",
+            regular: "normal_value"
+        }
+    },
+    % Insert the context
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+        insert_context_document(Context, Prefixes),
+        _),
+    % Retrieve the context
+    open_descriptor(Desc, Trans),
+    database_schema(Trans, Schema),
+    database_schema_context_object(Schema, Retrieved),
+    % Check if @metadata has @id and @type (unescaped)
+    get_dict('@metadata', Retrieved, RetrievedMetadata),
+    get_dict('@id', RetrievedMetadata, "test_id_value"),
+    get_dict('@type', RetrievedMetadata, "test_type_value").
+
+test(metadata_get_schema_document,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Test what get_schema_document returns (API path)
+    Prefixes = json{
+        '@type': "@context",
+        '@base': "terminusdb:///data/",
+        '@schema': "terminusdb:///schema#",
+        '@metadata': json{
+            '@id': "test_id_value",
+            '@type': "test_type_value",
+            regular: "normal_value"
+        }
+    },
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+        insert_context_document(Context, Prefixes),
+        _),
+    open_descriptor(Desc, Trans),
+    % Use get_schema_document like the API does
+    get_schema_document(Trans, '@context', Document),
+    get_dict('@metadata', Document, DocMetadata),
+    % Check for @id and @type
+    get_dict('@id', DocMetadata, "test_id_value"),
+    get_dict('@type', DocMetadata, "test_type_value").
+
+test(metadata_api_path_simulation,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Simulate the exact API path: JSON string → stream → parse → insert → retrieve
+    JsonString = '{"@type": "@context", "@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#", "@metadata": {"@id": "api_test_id", "@type": "api_test_type", "regular": "normal"}}',
+    % Parse JSON like the API does (using json_preserve)
+    open_string(JsonString, Stream),
+    'util/lazy_docs':stream_to_lazy_docs(Stream, LazyDocs),
+    LazyDocs = [Prefixes|_],
+    % Check if @metadata has @id before insertion
+    get_dict('@metadata', Prefixes, ParsedMetadata),
+    get_dict('@id', ParsedMetadata, "api_test_id"),
+    % Now insert via insert_context_document (not replace, since no context exists yet)
+    create_context(Desc, commit_info{author: "test", message: "test"}, Context),
+    with_transaction(Context,
+        insert_context_document(Context, Prefixes),
+        _),
+    % Retrieve and check
+    open_descriptor(Desc, Trans),
+    get_schema_document(Trans, '@context', Retrieved),
+    get_dict('@metadata', Retrieved, RetrievedMetadata),
+    get_dict('@id', RetrievedMetadata, "api_test_id").
 
 context_schema('
 { "@type" : "@context",
@@ -13742,33 +14053,6 @@ test(replace_hash_document,
     ),
     atom_concat('terminusdb:///data/JSONDocument/', _, Id).
 
-test(replace_named_document,
-     [setup((setup_temp_store(State),
-             test_document_label_descriptor(Desc),
-             write_schema(json_schema,Desc)
-            )),
-      cleanup(teardown_temp_store(State)),
-      error(
-          not_a_valid_json_object_id('terminusdb:///data/named'),
-          _)
-     ]) :-
-
-    Document =
-    json{
-        '@id' : named,
-        name : "testing",
-        json : json{ some :
-                     json{ random : "stuff",
-                           that : 2.0
-                         }}
-    },
-
-    with_test_transaction(
-        Desc,
-        C1,
-        insert_document(C1,Document,true,_)
-    ).
-
 test(insert_json_set,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc),
@@ -14836,7 +15120,7 @@ test(elaborate_schema_metadata,
                                            '@value':"This is an example schema. We are using it to demonstrate the ability to display information in multiple languages about the same semantic content."},
                     'sys:title':
                     json{'@type':"xsd:string",'@value':"Example Schema"}}]},
-         'sys:metadata':_{'@type':"sys:JSON",
+         'sys:metadata':_{'@type':'http://terminusdb.com/schema/sys#JSON',
                           remain:_{value:true},some:[1,2,3],things:null},
          'sys:prefix_pair':json{'@container':"@set",'@type':"sys:Prefix",'@value':[]},
          'sys:schema':json{'@type':"xsd:string",'@value':"terminusdb:///schema#"}}.

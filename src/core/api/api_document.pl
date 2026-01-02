@@ -16,7 +16,7 @@
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
 
-              api_insert_documents_core_string/7,
+              api_insert_documents_core_string/8,
               api_replace_documents_core_string/6,
               api_delete_documents_by_ids/3
           ]).
@@ -212,6 +212,10 @@ known_document_error(embedded_subdocument_has_linked_by).
 known_document_error(back_links_not_supported_in_replace).
 known_document_error(prefix_does_not_resolve(_)).
 known_document_error(stored_document_is_not_a_json(_)).
+known_document_error(at_prefixed_properties_not_supported(_)).
+known_document_error(at_prefixed_properties_not_supported(_,_)).
+known_document_error(invalid_jsondocument_at_id_must_be_iri(_)).
+known_document_error(unable_to_elaborate_schema_document(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 call_catch_document_mutation(Document, Goal) :-
@@ -222,17 +226,17 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, Transaction, Document, Captures, [Id], Captures, T-T) :-
+api_insert_document_(schema, _Raw_JSON, _Overwrite, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Raw_JSON, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
+api_insert_document_(instance, Raw_JSON, Overwrite, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Raw_JSON, Captures_In, Id, BLH-BLT, Captures_Out),
+        do_or_die(insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
@@ -253,7 +257,7 @@ api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document,
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -273,9 +277,9 @@ insert_documents_(true, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, 
         stream_to_lazy_docs(Stream, Lazy_List)
     ),
     api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
-insert_documents_(false, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
     stream_to_lazy_docs(Stream, Lazy_List),
-    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
 
 api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
@@ -283,11 +287,15 @@ api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON,
     api_insert_document_from_lazy_list_unsafe(Rest, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
 api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-T, []).
 
-api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+% /8 wrapper - backward compatibility (default overwrite=false)
+api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
-    api_insert_document_(Graph_Type, Raw_JSON, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
-    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
-api_insert_document_from_lazy_list([], _, _, _, Captures, Captures, T-T, []).
+    api_insert_document_(Graph_Type, Raw_JSON, Overwrite, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
+api_insert_document_from_lazy_list([], _, _, _, _, Captures, Captures, T-T, []).
 
 api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
                                     Captures_In, Captures_Out, [Ids|New_Ids]) :-
@@ -314,7 +322,8 @@ insert_documents_default_options(
         graph_type: instance,
         full_replace: false,
         raw_json: false,
-        merge_repeats: false
+        merge_repeats: false,
+        overwrite: false
     }).
 
 api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
@@ -326,6 +335,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(full_replace(Full_Replace), Options),
     option(raw_json(Raw_JSON), Options),
     option(merge_repeats(Doc_Merge), Options),
+    option(overwrite(Overwrite), Options),
     die_if(
         (   Graph_Type = schema,
             Raw_JSON = true
@@ -342,16 +352,16 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids)
+                         api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     database_instance(Transaction, [Instance]),
@@ -363,9 +373,9 @@ api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replac
                error(same_ids_in_one_transaction(Duplicates), _))
     ).
 
-api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids) :-
+api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
     open_string(String, Stream),
-    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Ids_Atoms),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
@@ -591,6 +601,18 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, _Ids, _Type, _
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
     do_or_die(api_document_exists(Graph_Type, Transaction, Id),
               error(document_not_found(Id), _)),
+    % Write Link header if schema @context has a string URI (for any document retrieval)
+    (   catch(
+            (   get_schema_document(Transaction, '@context', ContextDoc),
+                get_dict('@context', ContextDoc, ContextURI),
+                (atom(ContextURI) ; string(ContextURI))
+            ),
+            _,
+            fail
+        )
+    ->  routes:write_json_ld_context_link_header(some(ContextURI))
+    ;   true
+    ),
     get_dict(as_list, Config, As_List),
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),

@@ -4,8 +4,8 @@ Thanks for taking the time to contribute to TerminusDB!
 
 ## Testing
 
-Before submitting a change, please run `make ; ./terminusdb test` to make sure
-that all tests pass.  Failure should result in a big fail message, and
+Before submitting a PR, please run `make pr` to make sure
+linting and all tests pass.  Failure should result in a big fail message, and
 success with a final `true`. API tests will require that the admin
 password is `root` or that the environment variable
 `TERMINUS_ADMIN_PASSWD` is set prior to invocation of `terminusdb`.
@@ -13,14 +13,17 @@ It is preferred that the integration tests are run with the test server
 script `./tests/terminusdb-test-server.sh start`. Starting the server
 with `--clean` will wipe the storage directory. Run the tests with
 
+**run plunit and mocha integration tests**
+
 ```bash
+make test
 npx mocha tests/test/*.js
 ```
 
-Tools often face issues running directly in folders, getting stuck. Instead, use the below pattern to perform tasks such as running the lint tool for javascript tests:
+**run json plunit test suite only**
 
 ```bash
-sh -c "cd tests && npm run lint"
+make test SUITE='[json]'
 ```
 
 **Note about running tests from different locations:**

@@ -75,7 +75,8 @@ lint-mocha-fix:
 rust:
 	@$(MAKE) -f distribution/Makefile.rust
 
-# Run the unit tests in swipl.
+# Run unit tests in swipl; all, or just one suite.
+# make test OR make test SUITE='[json,terminus_store,tables]'
 .PHONY: test
 test:
 	@$(MAKE) -f distribution/Makefile.prolog $@
@@ -133,4 +134,4 @@ $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
 .PHONY: pr
-pr: clean dev restart lint lint-mocha test test-int
+pr: lint lint-mocha clean dev restart test test-int

@@ -28,7 +28,8 @@ impl GraphQLType for TerminusMutationRoot {
             .field::<Vec<ID>>("_insertDocuments", &())
             .argument(registry.arg::<GraphQLJSON>("json", &()))
             .argument(registry.arg::<Option<GraphType>>("graph_type", &()))
-            .argument(registry.arg::<Option<bool>>("raw_json", &()));
+            .argument(registry.arg::<Option<bool>>("raw_json", &()))
+            .argument(registry.arg::<Option<bool>>("overwrite", &()));
         let replace_documents_field = registry
             .field::<Vec<ID>>("_replaceDocuments", &())
             .argument(registry.arg::<GraphQLJSON>("json", &()))
@@ -105,6 +106,7 @@ impl GraphQLValue for TerminusMutationRoot {
                     .get::<String>("graph_type")
                     .unwrap_or("InstanceGraph".to_string());
                 let raw_json = arguments.get::<bool>("raw_json").unwrap_or(false);
+                let overwrite = arguments.get::<bool>("overwrite").unwrap_or(false);
                 result_to_execution_result(
                     prolog_context,
                     self.call_insert_doc(
@@ -113,6 +115,7 @@ impl GraphQLValue for TerminusMutationRoot {
                         &json,
                         &graph_type,
                         raw_json,
+                        overwrite,
                     ),
                 )
             }
@@ -187,9 +190,10 @@ impl TerminusMutationRoot {
         json: &str,
         graph_type: &str,
         raw_json: bool,
+        overwrite: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
-        let [string_term, graph_type_term, raw_json_term, full_replace_term, doc_merge_term, ids_term] =
+        let [string_term, graph_type_term, raw_json_term, full_replace_term, doc_merge_term, overwrite_term, ids_term] =
             frame.new_term_refs();
         let graph_type_atom = if graph_type == "SchemaGraph" {
             atom!("schema")
@@ -201,8 +205,9 @@ impl TerminusMutationRoot {
         raw_json_term.put(&raw_json)?;
         full_replace_term.put(&false)?;
         doc_merge_term.put(&false)?;
+        overwrite_term.put(&overwrite)?;
 
-        let insert_doc = pred!("api_document:api_insert_documents_core_string/7");
+        let insert_doc = pred!("api_document:api_insert_documents_core_string/8");
         frame.call_once(
             insert_doc,
             [
@@ -212,6 +217,7 @@ impl TerminusMutationRoot {
                 &raw_json_term,
                 &full_replace_term,
                 &doc_merge_term,
+                &overwrite_term,
                 &ids_term,
             ],
         )?;

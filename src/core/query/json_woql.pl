@@ -30,6 +30,8 @@
 
 :- use_module(library(lists)).
 
+:- use_module(core('document/inference')).
+
 :- dynamic woql_context/1.
 initialise_woql_contexts :-
     terminus_schema_path(Path),
@@ -120,6 +122,11 @@ json_data_to_woql_ast(JSON,WOQL) :-
         WOQL = '@'(V,LE)
     ;   true = JSON
     ->  WOQL = true
+    ;   % NOTE: @-prefixed keys in dictionaries destined for sys:JSON fields
+        % should be pre-escaped by users to @@ (e.g., {"@@id": "x", "@@type": "y"})
+        % since we cannot distinguish document structure from data at parse time.
+        % The REST Document API handles this automatically.
+        WOQL = JSON
     ).
 json_data_to_woql_ast(JSON,WOQL) :-
     atom(JSON),

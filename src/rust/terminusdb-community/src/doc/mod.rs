@@ -269,8 +269,16 @@ impl<L: Layer + Clone> DocumentContext<L> {
     }
 
     fn add_field(&self, obj: &mut Map<String, Value>, key: &str, value: Value, is_set: bool) {
+        // Unescape @@-prefixed keys back to @-prefixed keys for sys:JSON properties
+        // E.g., @@id → @id, @@type → @type, @@context → @context
+        let actual_key = if key.starts_with("@@") {
+            key[1..].to_string()
+        } else {
+            key.to_string()
+        };
+        
         // add a field, but if the field is already there, make it a collection
-        match obj.entry(key) {
+        match obj.entry(&actual_key) {
             map::Entry::Vacant(e) => {
                 if is_set {
                     e.insert(Value::Array(vec![value]));
