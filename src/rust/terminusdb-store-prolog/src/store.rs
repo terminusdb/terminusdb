@@ -163,6 +163,34 @@ predicates! {
 
         output_id_term.unify(result_string)
     }
+
+    /// Get layer cache statistics: (total_entries, live_entries, dead_entries)
+    /// Dead entries are stale weak references that should be cleaned up.
+    pub semidet fn layer_cache_stats(_context, store_term, total_term, live_term, dead_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let (total, live, dead) = store.layer_cache_stats();
+        total_term.unify(total as u64)?;
+        live_term.unify(live as u64)?;
+        dead_term.unify(dead as u64)
+    }
+
+    /// Remove stale (dead) weak references from the layer cache.
+    /// Returns the number of entries removed.
+    pub semidet fn cleanup_layer_cache(_context, store_term, removed_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let removed = store.cleanup_layer_cache();
+        removed_term.unify(removed as u64)
+    }
+
+    /// Invalidate a specific layer from the cache, forcing reload from disk on next access.
+    /// This is useful after rollup to ensure the rolled-up version is loaded.
+    pub semidet fn invalidate_layer_cache_entry(context, store_term, layer_id_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let layer_id_string: PrologText = layer_id_term.get_ex()?;
+        let layer_id = context.try_or_die(string_to_name(&layer_id_string))?;
+        store.invalidate_layer(layer_id);
+        Ok(())
+    }
 }
 
 wrapped_clone_blob!("store", pub WrappedStore, SyncStore, defaults);
