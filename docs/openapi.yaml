@@ -592,6 +592,27 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: require_migration
+          in: query
+          required: false
+          description: Require migration if schema changes
+          schema:
+            type: boolean
+            default: false
+        - name: merge_repeats
+          in: query
+          required: false
+          description: Merge repeated values
+          schema:
+            type: boolean
+            default: false
+        - name: allow_destructive_migration
+          in: query
+          required: false
+          description: Allow destructive migrations when schema changes
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: Documents added successfully
@@ -650,6 +671,20 @@ paths:
           in: query
           description: Treat incoming document as raw json (not type checked)
           required: false
+          schema:
+            type: boolean
+            default: false
+        - name: require_migration
+          in: query
+          required: false
+          description: Require migration if schema changes
+          schema:
+            type: boolean
+            default: false
+        - name: allow_destructive_migration
+          in: query
+          required: false
+          description: Allow destructive migrations when schema changes
           schema:
             type: boolean
             default: false
@@ -1727,7 +1762,7 @@ paths:
         - $ref: '#/components/parameters/organization'
         - $ref: '#/components/parameters/database'
         - name: id
-          description: id of document to report histry of
+          description: id of document to report history of
           in: query
           required: true
           schema:
@@ -2332,7 +2367,7 @@ paths:
         }
         ```
         
-        When `scope_type` is provided, use human-readable names. When omitted, use full system document IDs instead.
+        When `scope_type` is provided, use human-readable names. When omitted, use full system document IDs instead. Use of the `scope_type` field requires system administrative privileges (admin user).
       requestBody:
         required: true
         content:
