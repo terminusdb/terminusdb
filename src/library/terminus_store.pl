@@ -69,7 +69,11 @@
               imprecise_rollup_upto/2,
 
               layer_stack_names/2,
-              layer_equals/2
+              layer_equals/2,
+
+              layer_cache_stats/4,
+              cleanup_layer_cache/2,
+              invalidate_layer_cache_entry/2
             ]).
 
 terminus_store_version('0.19.8').

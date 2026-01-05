@@ -39,7 +39,8 @@
               trust_migrations/0,
               expose_stack_traces/0,
               is_memory_mode/0,
-              set_memory_mode/0
+              set_memory_mode/0,
+              cache_eviction_probability/1
 ]).
 
 :- use_module(library(pcre)).
@@ -384,3 +385,30 @@ is_memory_mode :-
  */
 set_memory_mode :-
     assertz(memory_mode_enabled).
+
+/**
+ * cache_eviction_probability(-Probability) is det.
+ *
+ * Returns the probability (0.0 to 1.0) of triggering cache eviction on each operation.
+ * Default is 0.0 (disabled, opt-in behavior).
+ *
+ * Valid values:
+ * - 0.0 (default): Eviction disabled
+ * - 0.001: 0.1% probability (1 in 1000 operations)
+ * - 0.01: 1% probability (1 in 100 operations)
+ * - 0.1: 10% probability (1 in 10 operations)
+ *
+ * Environment variable: TERMINUSDB_CACHE_EVICTION_PROBABILITY
+ */
+:- table cache_eviction_probability/1 as shared.
+cache_eviction_probability(Probability) :-
+    (   getenv('TERMINUSDB_CACHE_EVICTION_PROBABILITY', Value)
+    ->  (   atom_number(Value, Num),
+            Num >= 0.0,
+            Num =< 1.0
+        ->  Probability = Num
+        ;   json_log_warning_formatted('Invalid TERMINUSDB_CACHE_EVICTION_PROBABILITY value: ~w (must be 0.0-1.0), using default 0.0', [Value]),
+            Probability = 0.0
+        )
+    ;   Probability = 0.0  % Default: disabled
+    ).
