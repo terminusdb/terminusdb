@@ -387,6 +387,30 @@ api_global_error_jsonld(error(unexpected_descriptor_type(Descriptor, Desc_Type),
             }.
 
 :- multifile api_error_jsonld_/3.
+
+% @-prefixed properties not supported in normal types
+api_error_jsonld_(insert_documents, error(at_prefixed_properties_not_supported(Property, Document), _), JSON) :-
+    format(string(Msg), "@-prefixed properties like '~w' are not supported in schema definitions. Only sys:JSON and sys:JSONDocument types support @-prefixed keys.", [Property]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:AtPrefixedPropertiesNotSupported',
+                             'api:property' : Property,
+                             'api:document' : Document},
+             'api:message' : Msg}.
+api_error_jsonld_(insert_documents, error(at_prefixed_properties_not_supported(Property), _), JSON) :-
+    format(string(Msg), "@-prefixed properties like '~w' are not supported in schema definitions. Only sys:JSON and sys:JSONDocument types support @-prefixed keys.", [Property]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:AtPrefixedPropertiesNotSupported',
+                             'api:property' : Property},
+             'api:message' : Msg}.
+api_error_jsonld_(insert_documents, error(invalid_jsondocument_at_id_must_be_iri(Value), _), JSON) :-
+    format(string(Msg), "sys:JSONDocument @id field must be a string IRI (xsd:anyURI). Got: ~w", [Value]),
+    JSON = _{'@type' : 'api:InsertDocumentErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:InvalidJSONDocumentAtId',
+                             'api:value' : Value},
+             'api:message' : Msg}.
 %% DB Exists
 api_error_jsonld_(check_db, error(bad_parameter_value(Param, Expected_Value, Value), _), JSON) :-
     format(string(Msg), "Expected parameter '~s' to have '~q' but found: ~q", [Param, Expected_Value, Value]),
@@ -1805,6 +1829,24 @@ document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
 %document_error_type(patch, 'api:PatchErrorResponse').
 
+api_document_error_jsonld(Type,error(not_a_valid_keyword(Keyword),_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    (   Keyword = '@id'
+    ->  format(string(Msg), "The reserved keyword '@id' cannot be used as a property name in schema definitions. '@id' is reserved for document identifiers.", [])
+    ;   Keyword = '@type'
+    ->  format(string(Msg), "The reserved keyword '@type' cannot be used as a property name in schema definitions. '@type' is reserved for class/type specification.", [])
+    ;   atom_string(Keyword, KW_String),
+        atom_string('@', At_String),
+        sub_string(KW_String, 0, 1, _, At_String)
+    ->  format(string(Msg), "The keyword '~w' is a reserved TerminusDB schema keyword and cannot be used as a property name. All @-prefixed property names are reserved for TerminusDB system use and may be used in future schema versions.", [Keyword])
+    ;   format(string(Msg), "The keyword '~w' is reserved and cannot be used as a property name in schema definitions.", [Keyword])
+    ),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:ReservedKeywordUsed',
+                              'api:keyword' : Keyword },
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type,error(unable_to_elaborate_schema_document(Document),_), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "The submitted schema document could not be elaborated due to an unknown syntax error.", []),
@@ -2669,6 +2711,22 @@ generic_exception_jsonld(malformed_json_payload(JSON_String),JSON) :-
     JSON = _{'api:status' : 'api:failure',
              'api:message' : MSG,
              'system:object' : JSON_String}.
+generic_exception_jsonld(invalid_schema_context_field(Field, Value),JSON) :-
+    format(atom(MSG), 'Invalid value for ~w in schema context. Expected string, dict, or array. Got: ~w', [Field, Value]),
+    format(atom(ValueStr), '~w', [Value]),
+    JSON = _{'@type' : 'api:InvalidSchemaContextFieldErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : MSG,
+             'api:field' : Field,
+             'api:value' : ValueStr}.
+% Unified error for @context/@metadata in both schema context and class definitions
+generic_exception_jsonld(invalid_json_metadata_value(Value),JSON) :-
+    format(atom(MSG), 'Invalid value for @context or @metadata. Expected string, dict, or array. Got: ~w', [Value]),
+    format(atom(ValueStr), '~w', [Value]),
+    JSON = _{'@type' : 'api:InvalidJsonMetadataErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : MSG,
+             'api:value' : ValueStr}.
 generic_exception_jsonld(no_document_for_key(Key),JSON) :-
     format(atom(MSG), 'No document in request for key ~q', [Key]),
     JSON = _{'api:status' : 'api:failure',
@@ -2717,6 +2775,15 @@ generic_exception_jsonld(origin_cannot_be_branched(Descriptor),JSON) :-
 generic_exception_jsonld(transaction_retry_exceeded, JSON) :-
     JSON = _{'api:status' : 'api:server_error',
              'api:message': "Transaction retry count exceeded in internal operation"}.
+generic_exception_jsonld(Error, JSON) :-
+    % Catch-all for unhandled errors - log the full error but return sanitized message
+    % This prevents information leakage in 500 errors
+    format(user_error, '[ERROR] Unhandled exception: ~q~n', [Error]),
+    JSON = _{'@type' : 'api:UnhandledErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:message' : 'An internal server error occurred. Please contact the administrator.',
+             'api:error' : _{'@type' : 'api:InternalServerError'}
+            }.
 
 json_http_code(JSON,Code) :-
     Status = (JSON.'api:status'),
