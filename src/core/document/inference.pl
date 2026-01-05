@@ -2,6 +2,8 @@
               infer_type/4,
               infer_type/5,
               infer_type/6,
+              infer_type/7,
+              escape_at_prefixed_keys/2,
               check_type/6
           ]).
 
@@ -17,7 +19,27 @@
 :- use_module(core('document/schema')).
 :- use_module(core('document/json')).
 :- use_module(core(util)).
+:- use_module(core(util/syntax)).
 :- use_module(core(triple)).
+
+% Helper to recursively escape @-prefixed keys in dictionaries (for sys:JSON storage)
+% Escapes by adding an extra @ sign: @id → @@id, @type → @@type, @context → @@context, etc.
+escape_at_prefixed_keys(Value, EscapedValue) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist([Key-Val, EscapedKey-EscapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 1, _, "@")
+        ->  atom_concat('@', Key, EscapedKey)
+        ;   EscapedKey = Key
+        ),
+        % Recursively escape nested dicts
+        escape_at_prefixed_keys(Val, EscapedVal)
+    ), Pairs, EscapedPairs),
+    dict_pairs(EscapedValue, Tag, EscapedPairs).
+escape_at_prefixed_keys(Value, Value).
+
 
 /*
 
@@ -652,6 +674,12 @@ foreign_class(Type,Class) =>
                       value : Value },
         Annotated = witness(Error)
     ).
+check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
+is_dict(Value),
+Type = 'http://terminusdb.com/schema/sys#JSON' =>
+    % For sys:JSON, recursively escape all @-prefixed keys to prevent them being treated as control fields
+    escape_at_prefixed_keys(Value, EscapedValue),
+    infer_type(Database, Prefixes, Type, EscapedValue, _, Annotated, Captures).
 check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
     infer_type(Database, Prefixes, Type, Value, _, Annotated, Captures).

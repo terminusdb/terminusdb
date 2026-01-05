@@ -48,11 +48,15 @@ i: $(RUST_TARGET)
 
 .PHONY: test
 test: $(RUST_TARGET)
+ifdef SUITE
 	$(SWIPL) \
-	  --on-error=halt \
-	  --on-warning=halt \
-	  -g 'run_tests, halt' \
+	  -g '(run_tests($(SUITE)) -> halt(0) ; halt(1))' \
 	  -f src/interactive.pl
+else
+	$(SWIPL) \
+	  -g '(run_tests -> halt(0) ; halt(1))' \
+	  -f src/interactive.pl
+endif
 
 .PHONY: download-lint
 download-lint: $(SWIPL_LINT_PATH)
