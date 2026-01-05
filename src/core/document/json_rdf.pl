@@ -40,6 +40,8 @@ json_data_prefix('terminusdb:///json/').
 
 json_type_rdf_type(X,R),
 string(X) =>
+    % Strings are stored as xsd:string by default
+    % Note: @@id and @@type values should be treated as xsd:anyURI when validated at dict level
     global_prefix_expand(xsd:string, T),
     R = X^^T.
 json_type_rdf_type(X,R),
@@ -94,6 +96,17 @@ is_dict(Dict) =>
     global_prefix_expand(sys:'JSONDocument', Sys_JSON_Document),
     global_prefix_expand(rdf:type, Rdf_Type),
 
+    % Validate sys:JSONDocument top-level @id field
+    % @id: MUST be string IRI (xsd:anyURI) - strict validation
+    % @type: Treated like sys:JSON - permissive (any JSON value), escaped to @@type
+    dict_pairs(Dict, _, Pairs),
+    (   member('@id'-Doc_Id_Value, Pairs)
+    ->  do_or_die(
+            string(Doc_Id_Value),
+            error(invalid_jsondocument_at_id_must_be_iri(Doc_Id_Value), _))
+    ;   true
+    ),
+
     (   Triple = t(Id, Rdf_Type, Sys_JSON_Document)
     ;   dict_pairs(Dict, _, Pairs),
         member(Property-Value, Pairs),
@@ -115,9 +128,11 @@ json_subdocument_triple(Id, Property, Dict, Triple) :-
 
 json_subdocument_triple(Dict, Triple_Or_Hash),
 is_dict(Dict) =>
+    % sys:JSON nested dicts: pure JSON storage with no special treatment
+    % @@id and @@type are stored as-is like any other JSON values
+    dict_pairs(Dict, _, Pairs),
     json_hash_init("Dict(", Init_Hash),
     State = state(Init_Hash,[]),
-    dict_pairs(Dict, _, Pairs),
     (   member(Property-Value, Pairs),
         json_subdocument_triple(Value, X),
         (   X = t(_,_,_)
@@ -232,14 +247,18 @@ graph_get_json_object(Graph, Id, [Head|Tail]) :-
     ),
     xrdf(Graph, Id, rdf:rest, Rest),
     graph_get_json_object(Graph, Rest, Tail).
+
 graph_get_json_object(Graph, Id, Document) :-
     (   xrdf(Graph, Id, rdf:type, sys:'JSONDocument')
     ;   xrdf(Graph, Id, rdf:type, sys:'JSON')),
     !,
     findall(Prop-Value,
             (   xrdf(Graph, Id, Key, Val_or_Uri),
-                (   Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
-                ->  fail % ignore type field
+                (   % Only skip the document's type declaration, not @@type data fields
+                    Key = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                    (   Val_or_Uri = 'http://terminusdb.com/schema/sys#JSON'
+                    ;   Val_or_Uri = 'http://terminusdb.com/schema/sys#JSONDocument')
+                ->  fail % Skip document type
                 ;   marshall_value(Val_or_Uri,Value)
                 ->  true % strip type from value
                 ;   graph_get_json_object(Graph, Val_or_Uri, Value) % subdocument or list
@@ -247,7 +266,27 @@ graph_get_json_object(Graph, Id, Document) :-
                 compress_json_field(Key,Prop)
             ),
             Pairs),
-    dict_pairs(Document, json, Pairs).
+    dict_pairs(EscapedDocument, json, Pairs),
+    % Unescape @@-prefixed keys back to @-prefixed keys for sys:JSON
+    unescape_at_prefixed_keys(EscapedDocument, Document).
+
+% Helper to recursively unescape @@-prefixed keys back to @-prefixed keys (for sys:JSON retrieval)
+unescape_at_prefixed_keys(Value, UnescapedValue) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist([Key-Val, UnescapedKey-UnescapedVal]>>(
+        (   atom_string(Key, KeyStr),
+            sub_string(KeyStr, 0, 2, _, "@@")
+        ->  sub_string(KeyStr, 1, _, 0, Rest),
+            atom_string(UnescapedKey, Rest)
+        ;   UnescapedKey = Key
+        ),
+        % Recursively unescape nested dicts
+        unescape_at_prefixed_keys(Val, UnescapedVal)
+    ), Pairs, UnescapedPairs),
+    dict_pairs(UnescapedValue, Tag, UnescapedPairs).
+unescape_at_prefixed_keys(Value, Value).
 
 insert_json_object(Query_Context, JSON, Id) :-
     is_query_context(Query_Context),
@@ -257,9 +296,11 @@ insert_json_object(Query_Context, JSON, Id) :-
 insert_json_object(Transaction, JSON, Id) :-
     database_instance(Transaction, [Instance]),
     database_prefixes(Transaction,Prefixes),
+    % If no ID was provided by caller, generate one
     (   var(Id)
     ->  assign_json_document_id(Prefixes,Id)
-    ;   true),
+    ;   true
+    ),
     % insert
     forall(
         json_document_triple(JSON, Id, t(S,P,O)),
