@@ -70,6 +70,10 @@ lint-mocha:
 lint-mocha-fix:
 	sh -c "cd tests; npx npm run lint"
 
+.PHONY: lint-openapi
+lint-openapi:
+	sh -c "npx @redocly/cli lint docs/openapi.yaml --skip-rule no-server-example.com"
+
 # Build the dylib.
 .PHONY: rust
 rust:

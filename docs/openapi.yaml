@@ -62,6 +62,7 @@ tags:
 paths:
   /:
     get:
+      operationId: getDatabaseList
       x-python-client: Client::get_databases
       x-js-client: Client.getDatabases
       tags:
@@ -80,6 +81,7 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
   /info:
     get:
+      operationId: getServerInfo
       x-python-client: not_implemented
       x-js-client: Client.info
       tags:
@@ -123,8 +125,11 @@ paths:
                   "api:status":
                     type: string
                     example: api:success
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
   /ok:
     get:
+      operationId: getStatus
       x-python-client: not_implemented
       x-js-client: not_implemented
       tags:
@@ -133,8 +138,13 @@ paths:
       responses:
         200:
           description: Succeeded
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
   /db:
     get:
+      operationId: listDatabases
       x-python-client: Client::get_databases
       x-js-client: Client.getDatabases
       tags:
@@ -171,6 +181,7 @@ paths:
 
   /db/{organization}/{database}:
     get:
+      operationId: getDatabase
       x-python-client: Client::get_database
       x-js-client: not_implemented
       tags:
@@ -210,6 +221,7 @@ paths:
               schema:
                 type: object
     head:
+      operationId: checkDatabaseExists
       x-python-client: Client::has_database
       x-js-client: Client.hasDatabase
       tags:
@@ -233,6 +245,7 @@ paths:
                 type: object
 
     post:
+      operationId: createDatabase
       x-python-client: Client::create_database
       x-js-client: Client.createDatabase
       tags:
@@ -320,6 +333,7 @@ paths:
         401:
           $ref: '#/components/responses/UnauthorizedError'
     delete:
+      operationId: deleteDatabase
       x-python-client: Client::delete_database
       x-js-client: Client.deleteDatabase
       tags:
@@ -374,6 +388,7 @@ paths:
                         type: string
                         example: admin
     put:
+      operationId: updateDatabase
       x-python-client: not_implemented
       x-js-client: Client.updateDatabase
       tags:
@@ -450,9 +465,7 @@ paths:
                     example: api:not_found
         401:
           $ref: '#/components/responses/UnauthorizedError'
-        403:
-          description: Forbidden
-
+          
   /prefix/{organization}/{database}/{prefix_name}:
     get:
       operationId: getPrefix
@@ -792,11 +805,12 @@ paths:
 
   /document/{path}:
     get:
-      x-python-client: Client::get_document
-      x-js-client: Client.getDocument
+      operationId: getDocuments
+      x-python-client: Client::get_documents
+      x-js-client: Client.getDocuments
       tags:
         - Document
-      summary: Get a document
+      summary: Retrieve documents from the database
       description: |
         Retrieve documents from the database. Supports filtering, pagination, and result formatting.
         
@@ -894,8 +908,16 @@ paths:
                 type: object
                 description: Concatenated list of JSON documents
                 example: {"@id":"Organization/admin", "@type":"Organization", "database": ["SystemDatabase/system", "UserDatabase/60c35164e937174bbf4dd814c78153d660edc55b3d799c534c1e2d872a3d2dd6" ], "name":"admin"}
-
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
     post:
+      operationId: insertDocument
       x-python-client: Client::insert_document
       x-js-client: Client.addDocument
       tags:
@@ -958,8 +980,17 @@ paths:
               schema:
                 type: object
                 description: Added documents
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
 
     delete:
+      operationId: deleteDocument
       x-python-client: Client::delete_document
       x-js-client: Client.deleteDocument
       tags:
@@ -986,7 +1017,16 @@ paths:
         200:
           description: Document(s) deleted successfully
           # TODO: Need the proper JSON response!
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
     put:
+      operationId: replaceDocument
       x-python-client: Client::replace_document
       x-js-client: Client.updateDocument
       tags:
@@ -1028,8 +1068,17 @@ paths:
       responses:
         200:
           description: Documents replaced successfully
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /schema/{path}:
     get:
+      operationId: getSchemaFrame
       x-python-client: Client::get_class_frame
       x-js-client: Client.getSchemaFrame
       tags:
@@ -1074,8 +1123,11 @@ paths:
                   value: { "@documentation": { "@comment":"A normal user database.","@properties": { "comment":"A comment associated with the database.", "creation_date":"The time of creation of the database.", "label":"The label name of the database.", "state":"The system transaction state of the database."} }, "@key": {"@type":"Random"}, "@type":"Class", "comment":"xsd:string", "creation_date":"xsd:dateTime","label":"xsd:string","name":"xsd:string","state": {"@id":"DatabaseState","@type":"Enum","@values": ["creating", "deleting", "finalized" ]}}
                 AllClasses:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
+        404:
+          description: Database not found
   /woql:
     post:
+      operationId: executeWoqlQuery
       summary: Execute a WOQL query
       description: |
         Run Web Object Query Language (WOQL) queries for complex data operations including on triples. Use SDK in Javascript, Python or Rust to make it easy to construct the queries.
@@ -1116,9 +1168,16 @@ paths:
       responses:
         200:
           description: Query result
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
   /woql/{path}:
     post:
-      summary: Execute a WOQL query on a specific path
+      operationId: executeWoqlQueryForDatabase
+      summary: Execute a WOQL query for a specific database
       x-python-client: Client::query
       x-js-client: Client.query
       tags:
@@ -1140,8 +1199,17 @@ paths:
       responses:
         200:
           description: Query result
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /clone/{organization}/{database}:
     post:
+      operationId: cloneDatabase
       summary: Clone a database
       description: |
         Create a copy of an existing database. Useful for creating development environments or backups.
@@ -1193,8 +1261,17 @@ paths:
             application/json:
               schema:
                 type: object
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /fetch/{path}:
     post:
+      operationId: fetchRemote
       x-python-client: Client::fetch
       x-js-client: Client.fetch
       tags:
@@ -1230,8 +1307,17 @@ paths:
                   "api:head":
                     type: string
                     example: 194822f8942286517e151817d38acca4c9ac7d01
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /push/{path}:
     post:
+      operationId: pushBranch
       x-python-client: Client::push
       x-js-client: Client.push
       summary: Push the branch to the remote
@@ -1305,6 +1391,7 @@ paths:
 
   /pull/{path}:
     post:
+      operationId: pullBranch
       x-python-client: Client::pull
       x-js-client: Client.pull
       summary: Pull to a branch from a remote
@@ -1346,8 +1433,17 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /remote/{path}:
     post:
+      operationId: createRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Create a new remote
@@ -1389,7 +1485,12 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        404:
+          description: Database not found
     delete:
+      operationId: deleteRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Delete a remote
@@ -1419,7 +1520,12 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        404:
+          description: Database not found
     put:
+      operationId: updateRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Update a remote with a new location
@@ -1461,7 +1567,12 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        404:
+          description: Database not found
     get:
+      operationId: getRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Get the url for a given remote
@@ -1496,8 +1607,19 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        404:
+          description: Database not found
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden
+        409:
+          description: Conflict
   /branch/{path}:
     post:
+      operationId: createBranch
       summary: Create a new branch
       x-python-client: Client::create_branch
       x-js-client: Client.branch
@@ -1527,7 +1649,12 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        404:
+          description: Database not found
     delete:
+      operationId: deleteBranch
       summary: Delete a branch
       x-python-client: Client::delete_branch
       x-js-client: Client.deleteBranch
@@ -1551,6 +1678,10 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        404:
+          description: Branch not found
 
   /squash/{path}:
     x-python-client: Client::squash
@@ -1558,6 +1689,7 @@ paths:
     parameters:
         - $ref: '#/components/parameters/commit_path'
     post:
+      operationId: squashCommits
       summary: Squash a commit history into a new commit
       description: This squashes a commit history into a single commit. The commit will not be attached to any particular branch.
       tags:
@@ -1611,10 +1743,19 @@ paths:
                     type: string
                     enum:
                     - api:success
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /reset/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: resetBranch
       summary: Reset branch to a specific commit
       description: This will set the branch to the submitted commit. The commit is specified as a resource path to either a specific commit, or to a branch, in which case the commit this branch will be set to is going to be the head of that branch.
       x-python-client: Client::reset
@@ -1648,10 +1789,17 @@ paths:
                     type: string
                     enum:
                       - api:success
+        400:
+          description: Bad Request
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /rebase/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: rebaseBranch
       summary: Rebase all commits from a source onto this branch
       description: |
           Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
@@ -1746,8 +1894,15 @@ paths:
                     type: string
                     enum:
                       - api:success
+        400:
+          description: Bad Request
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /optimize/{path}:
     post:
+      operationId: optimizeGraph
       summary: Optimize a specific graph
       x-python-client: Client::optimize
       x-js-client: Client.optimizeBranch
@@ -1784,6 +1939,12 @@ paths:
                     type: string
                     enum:
                       - api:success
+        400:
+          description: Bad Request
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /prefixes/{path}:
     get:
       operationId: getPrefixes
@@ -1807,8 +1968,13 @@ paths:
             application/json:
               schema:
                 type: object
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /diff:
     post:
+      operationId: diffVersions
       summary: Diff a specific object or two data versions
       x-python-client: Client::diff
       x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
@@ -1871,6 +2037,7 @@ paths:
 
   /patch:
     post:
+      operationId: applyPatch
       summary: Apply a patch object to another object (diff result)
       x-python-client: Client::patch
       x-js-client: Client.patch
@@ -1920,6 +2087,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: patchResource
       summary: Apply a patch object to a resource
       description: |
           Apply a patch object to a resource in the database. Can be used to modify schema elements, documents, or prefixes.
@@ -1949,7 +2117,9 @@ paths:
                 - "message"
               properties:
                 "patch":
-                  type: object
+                  type: array
+                  items:
+                    type: object
                   example:
                     - '@id': Obj/id1
                       name:
@@ -1988,6 +2158,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: applyDiff
       summary: Apply a specific diff
       x-python-client: Client::apply
       x-js-client: Client.apply
@@ -2035,6 +2206,7 @@ paths:
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /log/{organization}/{database}:
     get:
+      operationId: getCommitLog
       x-python-client: Client::log
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
@@ -2089,8 +2261,11 @@ paths:
                       type: number
                       example: 1660919664.9129035
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        403:
+          description: Forbidden
   /history/{organization}/{database}:
     get:
+      operationId: getDocumentHistory
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
@@ -2154,9 +2329,15 @@ paths:
                     "timestamp":
                       type: number
                       example: 1660919664.9129035
-                  example: [{"author":"admin","identifier":"tbn15yq6rw1l4e9bgboyu3vwcoxgri5","message":"cli: document replace","timestamp":1680808874.324928},{"author":"admin","identifier":"3v3naa8jrt8612dg5zryu4vjqwa2w9s","message":"cli: document insert","timestamp":1680808847.4063878}]
+        400:
+          description: Bad Request
+        403:
+          description: Forbidden
+        404:
+          description: Database not found
   /roles:
     post:
+      operationId: createRole
       x-python-client: Client::add_role
       x-js-client: AccessControl.createRole
       tags:
@@ -2194,6 +2375,7 @@ paths:
         400:
           description: Bad Request
     put:
+      operationId: updateRole
       x-python-client: Client::change_role
       x-js-client: not_implemented
       tags:
@@ -2233,6 +2415,7 @@ paths:
         400:
           description: Bad Request
     get:
+      operationId: getRoles
       x-python-client: Client::get_available_roles
       x-js-client: AccessControl.getAccessRoles
       tags:
@@ -2244,10 +2427,15 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                type: array
+                items:
+                  type: object
                 example: [{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"Admin Role"},{"@id":"Role/consumer","@type":"Role","action":["class_frame","instance_read_access","schema_read_access"],"name":"ConsumerRole"}]
+        403:
+          description: Forbidden
   /roles/{roleName}:
     delete:
+      operationId: deleteRole
       x-python-client: not_implemented
       x-js-client: AccessControl.deleteRole
       summary: Delete a role
@@ -2276,6 +2464,7 @@ paths:
                 type: object
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
     get:
+      operationId: getRole
       x-python-client: not_implemented
       x-js-client: not_implemented
       tags:
@@ -2305,6 +2494,7 @@ paths:
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
   /organizations:
     get:
+      operationId: getOrganizations
       x-python-client: Client::get_organizations
       x-js-client: AccessControl.getAllOrganizations
       tags:
@@ -2320,6 +2510,8 @@ paths:
                 items:
                   type: object
                 example: [{"@id":"Organization/admin","@type":"Organization","database": ["SystemDatabase/system",  "UserDatabase/326f41af8c9499b0eea69b67fdced3efbd31663ca601dee8c50d3ad3393b367d","UserDatabase/462333349c1a8271aca185a3bd2d601057fdf2584a88687ad55e43cab635da48","UserDatabase/b4e01001e90bd368f8f19640426f346970f5ceb8eb02acaa42c759f3758e1901","UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"],"name":"admin"}]
+        403:
+          description: Forbidden
   /organizations/{organizationName}:
     parameters:
       - name: organizationName
@@ -2329,6 +2521,7 @@ paths:
           type: string
           example: admin
     get:
+      operationId: getOrganization
       x-python-client: Client::get_organization
       x-js-client: not_implemented
       tags:
@@ -2354,6 +2547,7 @@ paths:
         403:
           description: Forbidden
     post:
+      operationId: createOrganization
       x-python-client: Client::create_organization
       x-js-client: AccessControl.createOrganization
       tags:
@@ -2384,6 +2578,7 @@ paths:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
     delete:
+      operationId: deleteOrganization
       x-python-client: Client::delete_organization
       x-js-client: AccessControl.deleteOrganization
       tags:
@@ -2413,6 +2608,7 @@ paths:
           type: string
           example: admin
     get:
+      operationId: getOrganizationUsers
       x-python-client: Client::get_organization_users
       x-js-client: AccessControl.getOrgUsers
       tags:
@@ -2435,6 +2631,7 @@ paths:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}:
     get:
+      operationId: getOrganizationUser
       x-python-client: Client::get_organization_user
       x-js-client: not_implemented
       tags:
@@ -2467,6 +2664,7 @@ paths:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}/databases:
     get:
+      operationId: getOrganizationUserDatabases
       x-python-client: Client::get_organization_user_databases
       x-js-client: not_implemented
       tags:
@@ -2502,11 +2700,12 @@ paths:
           description: Bad Request
   /users:
     get:
+      operationId: getUsers
       x-python-client: Client::get_users
       x-js-client: AccessControl.getAllUsers
       tags:
-        - Account Management
-      summary: Get all users
+        - Account management
+      summary: Get all users according to capabilities of the authenticated user
       parameters:
         - name: capability
           in: query
@@ -2527,6 +2726,7 @@ paths:
         403:
           description: Forbidden
     put:
+      operationId: changeUserPassword
       x-python-client: Client::change_user_password
       x-js-client: not_implemented
       tags:
@@ -2563,6 +2763,7 @@ paths:
               schema:
                 type: object
     post:
+      operationId: createUser
       x-python-client: Client::add_user
       x-js-client: AccessControl.createUser
       tags:
@@ -2606,6 +2807,7 @@ paths:
           type: string
           example: Bob
     get:
+      operationId: getUser
       x-python-client: Client::get_user
       x-js-client: not_implemented
       tags:
@@ -2629,6 +2831,7 @@ paths:
         403:
           description: Forbidden
     delete:
+      operationId: deleteUser
       x-python-client: Client::delete_user
       x-js-client: AccessControl.deleteUser
       tags:
@@ -2653,6 +2856,7 @@ paths:
           type: string
           example: admin/MyDB
     post:
+      operationId: migrateSchema
       tags:
         - Change management
       summary: Schema migration either by explicit operation, or implicit schema targetting
@@ -2670,7 +2874,9 @@ paths:
                   type: string
                   example: "updating schema"
                 "operations":
-                  type: object
+                  type: array
+                  items:
+                    type: object
                   example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
                 "dry_run":
                   type: boolean
@@ -2697,6 +2903,7 @@ paths:
                 type: object
   /capabilities:
     post:
+      operationId: manageCapabilities
       x-python-client: Client::change_capabilities
       x-js-client: AccessControl.manageCapability
       tags:
