@@ -455,6 +455,7 @@ paths:
 
   /prefix/{organization}/{database}/{prefix_name}:
     get:
+      operationId: getPrefix
       x-python-client: Client::get_prefix
       x-js-client: Client.getPrefix
       tags:
@@ -549,6 +550,7 @@ paths:
           description: Forbidden - user lacks instance_read_access permission
           
     post:
+      operationId: addPrefix
       x-python-client: Client::add_prefix
       x-js-client: Client.addPrefix
       tags:
@@ -643,6 +645,7 @@ paths:
           description: Forbidden - user lacks instance_write_access permission
           
     put:
+      operationId: updatePrefix
       x-python-client: Client::update_prefix
       x-js-client: Client.updatePrefix
       tags:
@@ -731,6 +734,7 @@ paths:
           description: Forbidden - user lacks instance_write_access permission
           
     delete:
+      operationId: deletePrefix
       x-python-client: Client::delete_prefix
       x-js-client: Client.deletePrefix
       tags:
@@ -1782,6 +1786,7 @@ paths:
                       - api:success
   /prefixes/{path}:
     get:
+      operationId: getPrefixes
       summary: Get prefixes
       x-python-client: Client::_get_prefixes
       x-js-client: Client.getPrefixes
