@@ -70,8 +70,7 @@ valid_prefix_name(Prefix_Name) :-
 % Validate that a string is a valid IRI (must have a scheme like http://)
 valid_iri(IRI) :-
     (   atom(IRI) -> atom_string(IRI, IRI_String) ; IRI_String = IRI ),
-    uri_components(IRI_String, Components),
-    uri_data(scheme, Components, Scheme),
+    uri_components(IRI_String, uri_components(Scheme, _Authority, _Path, _Search, _Fragment)),
     nonvar(Scheme),
     Scheme \= ''.
 
