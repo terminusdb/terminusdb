@@ -572,7 +572,8 @@ paths:
         - URIs must include a scheme (http://, https://, etc.)
         - Use POST for adding, PUT for updating
       parameters:
-        - $ref: '#/components/parameters/resource_path'
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
         - name: prefix_name
           in: path
           required: true
@@ -671,7 +672,8 @@ paths:
           -d '{"uri": "http://example.net/"}'
         ```
       parameters:
-        - $ref: '#/components/parameters/resource_path'
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
         - name: prefix_name
           in: path
           required: true
@@ -749,7 +751,8 @@ paths:
         
         **Note:** Cannot delete reserved prefixes (@base, @schema, etc.)
       parameters:
-        - $ref: '#/components/parameters/resource_path'
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
         - name: prefix_name
           in: path
           required: true
