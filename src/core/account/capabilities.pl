@@ -503,7 +503,8 @@ authorisation_object(DB, Auth_ID, Capabilities) :-
 user_accessible_database(DB, User_ID, Database) :-
     ask(DB,
         (   t(User_ID, capability, Capability_ID),
-            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            t(Capability_ID, scope, Resource_ID),
+            path(Resource_ID, star(p(child);p(database)), Database_ID),
             isa(Database_ID, 'UserDatabase'),
             get_document(Database_ID, Database)
         )).
@@ -516,7 +517,8 @@ user_accessible_database(DB, User_ID, Database) :-
 user_accessible_database_id(DB, User_ID, Database_ID) :-
     ask(DB,
         (   t(User_ID, capability, Capability_ID),
-            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            t(Capability_ID, scope, Resource_ID),
+            path(Resource_ID, star(p(child);p(database)), Database_ID),
             isa(Database_ID, 'UserDatabase')
         )).
 
@@ -534,7 +536,8 @@ user_accessible_database(DB, User_ID, Org, Name, Database) :-
     ;   true),
     ask(DB,
         (   t(User_ID, capability, Capability_ID),
-            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            t(Capability_ID, scope, Resource_ID),
+            path(Resource_ID, star(p(child);p(database)), Database_ID),
             isa(Database_ID, 'UserDatabase'),
             t(Database_ID, name, Name_S^^xsd:string),
             t(Org_Id, database, Database_ID),
@@ -563,7 +566,8 @@ user_accessible_database_id(DB, User_ID, Org, Name, Database_ID) :-
     ;   true),
     ask(DB,
         (   t(User_ID, capability, Capability_ID),
-            path(Capability_ID, (star(p(scope)),p(database)), Database_ID),
+            t(Capability_ID, scope, Resource_ID),
+            path(Resource_ID, star(p(child);p(database)), Database_ID),
             isa(Database_ID, 'UserDatabase'),
             t(Database_ID, name, Name_S^^xsd:string),
             t(Org_Id, database, Database_ID),
