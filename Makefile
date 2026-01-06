@@ -70,6 +70,10 @@ lint-mocha:
 lint-mocha-fix:
 	sh -c "cd tests; npx npm run lint"
 
+.PHONY: lint-openapi
+lint-openapi:
+	sh -c "npx @redocly/cli lint docs/openapi.yaml"
+
 # Build the dylib.
 .PHONY: rust
 rust:
@@ -134,4 +138,4 @@ $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
 .PHONY: pr
-pr: lint lint-mocha clean dev restart test test-int
+pr: lint lint-mocha lint-openapi clean dev restart test test-int
