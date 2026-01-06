@@ -1077,6 +1077,168 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
+  /triples/{path}:
+    get:
+      operationId: getTriples
+      summary: Get RDF triples from a graph
+      description: |
+        Retrieves RDF triples from the specified graph in Turtle format.
+        
+        This is a low-level API that provides direct access to the RDF triple layer.
+        The entire graph content is returned as raw Turtle RDF data.
+
+        This endpoint is currently experimental. The document API should be used instead. It can be useful for downloading the raw triples for processing though.
+        
+        **Note:** This endpoint bypasses the JSON-LD document layer and works directly with RDF triples.
+      tags:
+        - Triples
+      parameters:
+        - $ref: '#/components/parameters/graph_path'
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [turtle]
+            default: turtle
+          description: Output format (currently only turtle is supported)
+      responses:
+        200:
+          description: RDF triples in Turtle format
+          content:
+            text/turtle:
+              schema:
+                type: string
+              example: |
+                @prefix ex: <http://example.org/> .
+                ex:person1 a ex:Person .
+                ex:person1 ex:name "John" .
+            application/json:
+              schema:
+                type: string
+              example: "ex:person1 a ex:Person .\nex:person1 ex:name \"John\" ."
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+    post:
+      operationId: updateTriples
+      summary: Update/Replace RDF triples in a graph
+      description: |
+        Replaces the entire graph content with the provided RDF triples.
+        
+        This is a low-level API that operates directly on RDF triples. The operation
+        performs a diff between existing and new triples:
+        - Deletes all triples that exist in the database but not in the new data
+        - Keeps the triples that exist in both the database and the new data
+        - Inserts all triples that exist in the new data but not in the database
+        
+        **Important notes:**
+        - The entire graph is processed in one atomic operation
+        - Schema validation will be performed if enabled for the database
+        - This API cannot correctly create documents with subdocuments
+        - Bypasses the JSON document layer and works directly with RDF (warning!)
+
+        **Note:** This endpoint is experimental, here be dragons, use the document API instead.
+        It can be useful for loading RDF data into the graph and for pre-processing though.
+      tags:
+        - Triples
+      parameters:
+        - $ref: '#/components/parameters/graph_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - turtle
+                - commit_info
+              properties:
+                turtle:
+                  type: string
+                  description: RDF triples in Turtle format
+                  example: |
+                    @prefix ex: <http://example.org/> .
+                    ex:person1 a ex:Person .
+                    ex:person1 ex:name "John" .
+                    ex:person1 ex:age 30 .
+                commit_info:
+                  $ref: '#/components/schemas/CommitInfo'
+      responses:
+        200:
+          description: Triples updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriplesUpdateResponse'
+        400:
+          description: Bad Request or schema validation failed
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+    put:
+      operationId: insertTriples
+      summary: Insert RDF triples into a graph
+      description: |
+        Inserts additional RDF triples into the graph without deleting existing ones.
+        
+        This is a low-level API that adds triples to the existing graph content.
+        
+        **Important notes:**
+        - Inserts the provided triples without removing existing data
+        - Does not check for duplicates - may insert the same triple multiple times
+        - Schema validation will be performed if enabled for the database
+        - This API can't correctly create documents with subdocuments
+        - Bypasses the JSON document layer and works directly with RDF
+
+        **Note:** This endpoint is experimental, here be dragons, use the document API instead.
+        It can be useful for loading RDF data into the graph and for pre-processing though.
+      tags:
+        - Triples
+      parameters:
+        - $ref: '#/components/parameters/graph_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - turtle
+                - commit_info
+              properties:
+                turtle:
+                  type: string
+                  description: RDF triples to insert in Turtle format
+                  example: |
+                    @prefix ex: <http://example.org/> .
+                    ex:person2 a ex:Person .
+                    ex:person2 ex:name "Jane" .
+                    ex:person2 ex:age 25 .
+                commit_info:
+                  $ref: '#/components/schemas/CommitInfo'
+      responses:
+        200:
+          description: Triples inserted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriplesInsertResponse'
+        400:
+          description: Bad Request or schema validation failed
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /schema/{path}:
     get:
       operationId: getSchemaFrame
@@ -3134,6 +3296,29 @@ components:
       schema:
         type: string
         example: admin/test/local/branch/foo
+    graph_path:
+      name: path
+      in: path
+      description: Path for a specific graph (schema or instance) within a branch
+      required: true
+      schema:
+        type: string
+      examples:
+        instance_graph:
+          value: admin/test/local/branch/main/instance
+          summary: Instance data graph of branch 'main'
+        schema_graph:
+          value: admin/test/local/branch/main/schema
+          summary: Schema graph of branch 'main'
+        commit_instance:
+          value: admin/test/local/commit/q0r08e1hjy123tkf0urzjiov7rrnmp7/instance
+          summary: Instance data graph at specific commit
+        meta_graph:
+          value: admin/test/_meta
+          summary: Repository metadata graph
+        system_graph:
+          value: _system
+          summary: System graph
     commit_path:
       name: path
       in: path
@@ -3245,6 +3430,30 @@ components:
         state:
           type: string
           example: finalized
+    TriplesUpdateResponse:
+      type: object
+      properties:
+        '@type':
+          type: string
+          example: api:TriplesUpdateResponse
+        'api:status':
+          type: string
+          example: api:success
+      required:
+        - '@type'
+        - 'api:status'
+    TriplesInsertResponse:
+      type: object
+      properties:
+        '@type':
+          type: string
+          example: api:TriplesInsertResponse
+        'api:status':
+          type: string
+          example: api:success
+      required:
+        - '@type'
+        - 'api:status'
   responses:
     IncorrectAuthenticationError:
       description: Authentication information is missing or invalid
