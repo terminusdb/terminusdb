@@ -804,6 +804,343 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
 
+  /prefix/{organization}/{database}/{prefix_name}:
+    get:
+      operationId: getPrefix
+      x-python-client: Client::get_prefix
+      x-js-client: Client.getPrefix
+      tags:
+        - Database
+      summary: Get a single prefix mapping
+      description: |
+        Retrieve the IRI (namespace URL) for a specific prefix name.
+        
+        **When to use:** Check what a prefix expands to, or verify a prefix exists before using it in documents.
+        
+        **Example:**
+        ```bash
+        # Get the 'ex' prefix mapping
+        curl -u admin:root http://localhost:6363/api/prefix/admin/mydb/ex
+        ```
+        
+        **Response:**
+        ```json
+        {
+          "@type": "api:PrefixResponse",
+          "api:prefix_name": "ex",
+          "api:prefix_uri": "http://example.org/",
+          "api:status": "api:success"
+        }
+        ```
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: prefix_name
+          in: path
+          required: true
+          description: |
+            The prefix name following XML NCName rules (same as used throughout TerminusDB):
+            - Must start with letter (A-Z, a-z) or underscore (_)
+            - Can contain letters, digits (0-9), hyphen (-), dot (.), underscore (_)
+            - Cannot contain colon (:)
+            - Cannot start with @ (reserved) or digit
+            
+            Examples: 'ex', 'schema', 'v1.0', 'my-api_v2', '_internal'
+          schema:
+            type: string
+            pattern: '^[A-Za-z_][A-Za-z0-9_.-]*$'
+            example: ex
+      responses:
+        200:
+          description: Prefix retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:PrefixResponse
+                  'api:prefix_name':
+                    type: string
+                    example: ex
+                  'api:prefix_uri':
+                    type: string
+                    example: http://example.org/
+                  'api:status':
+                    type: string
+                    example: api:success
+        404:
+          description: Prefix not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:PrefixErrorResponse
+                  'api:status':
+                    type: string
+                    example: api:not_found
+                  'api:error':
+                    type: object
+                    properties:
+                      '@type':
+                        type: string
+                        example: api:PrefixNotFound
+                      'api:prefix_name':
+                        type: string
+                        example: ex
+                  'api:message':
+                    type: string
+                    example: "Prefix 'ex' not found"
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden - user lacks instance_read_access permission
+          
+    post:
+      operationId: addPrefix
+      x-python-client: Client::add_prefix
+      x-js-client: Client.addPrefix
+      tags:
+        - Database
+      summary: Add a new prefix mapping
+      description: |
+        Create a new prefix-to-IRI mapping. Fails if the prefix already exists.
+        
+        **When to use:** Define a new namespace prefix for your documents. For example, add 'schema' → 'http://schema.org/' to use 'schema:Person' in your documents.
+        
+        **Example:**
+        ```bash
+        curl -u admin:root -X POST \
+          http://localhost:6363/api/prefix/admin/mydb/ex \
+          -H "Content-Type: application/json" \
+          -d '{"uri": "http://example.org/"}'
+        ```
+        
+        **Tips:**
+        - Prefix names must NOT start with '@' (reserved for @base, @schema, etc.)
+        - URIs must include a scheme (http://, https://, etc.)
+        - Use POST for adding, PUT for updating
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: prefix_name
+          in: path
+          required: true
+          description: The prefix name to create
+          schema:
+            type: string
+            example: ex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - uri
+              properties:
+                uri:
+                  type: string
+                  description: The IRI (namespace URL) this prefix expands to
+                  example: http://example.org/
+      responses:
+        201:
+          description: Prefix created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:PrefixAddResponse
+                  'api:prefix_name':
+                    type: string
+                    example: ex
+                  'api:prefix_uri':
+                    type: string
+                    example: http://example.org/
+                  'api:status':
+                    type: string
+                    example: api:success
+        400:
+          description: Bad request - prefix already exists, invalid IRI, or reserved name
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:PrefixErrorResponse
+                  'api:status':
+                    type: string
+                    example: api:failure
+                  'api:error':
+                    type: object
+                    properties:
+                      '@type':
+                        type: string
+                        enum: [api:PrefixAlreadyExists, api:InvalidIRI, api:ReservedPrefix]
+                        example: api:PrefixAlreadyExists
+                  'api:message':
+                    type: string
+                    example: "Prefix 'ex' already exists"
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden - user lacks instance_write_access permission
+          
+    put:
+      operationId: updatePrefix
+      x-python-client: Client::update_prefix
+      x-js-client: Client.updatePrefix
+      tags:
+        - Database
+      summary: Update or upsert a prefix mapping
+      description: |
+        Update an existing prefix to point to a different IRI.
+        
+        **When to use:** Change where a prefix points. For example, switch 'api' from 'http://v1.api/' to 'http://v2.api/'.
+        
+        **Update vs Upsert:**
+        - **Without `?create=true`**: Updates existing prefix (fails if prefix doesn't exist)
+        - **With `?create=true`**: Creates OR updates (upsert - always succeeds)
+        
+        **Examples:**
+        ```bash
+        # Update existing prefix (fails if not exists)
+        curl -u admin:root -X PUT \
+          http://localhost:6363/api/prefix/admin/mydb/ex \
+          -H "Content-Type: application/json" \
+          -d '{"uri": "http://example.com/"}'
+        
+        # Upsert (create or update)
+        curl -u admin:root -X PUT \
+          "http://localhost:6363/api/prefix/admin/mydb/ex?create=true" \
+          -H "Content-Type: application/json" \
+          -d '{"uri": "http://example.net/"}'
+        ```
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: prefix_name
+          in: path
+          required: true
+          description: The prefix name to update
+          schema:
+            type: string
+            example: ex
+        - name: create
+          in: query
+          required: false
+          description: If true, create the prefix if it doesn't exist (upsert behavior)
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - uri
+              properties:
+                uri:
+                  type: string
+                  description: The new IRI for this prefix
+                  example: http://example.com/
+      responses:
+        200:
+          description: Prefix updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:PrefixUpdateResponse
+                  'api:prefix_name':
+                    type: string
+                    example: ex
+                  'api:prefix_uri':
+                    type: string
+                    example: http://example.com/
+                  'api:status':
+                    type: string
+                    example: api:success
+        400:
+          description: Bad request - invalid IRI or reserved prefix name
+        404:
+          description: Prefix not found (only when create=false)
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden - user lacks instance_write_access permission
+          
+    delete:
+      operationId: deletePrefix
+      x-python-client: Client::delete_prefix
+      x-js-client: Client.deletePrefix
+      tags:
+        - Database
+      summary: Delete a prefix mapping
+      description: |
+        Remove a prefix from the database.
+        
+        **When to use:** Clean up unused prefixes or remove deprecated namespace mappings.
+        
+        **Warning:** Deleting a prefix does NOT delete documents using that prefix. Documents will still reference the full IRI.
+        
+        **Example:**
+        ```bash
+        curl -u admin:root -X DELETE \
+          http://localhost:6363/api/prefix/admin/mydb/ex
+        ```
+        
+        **Note:** Cannot delete reserved prefixes (@base, @schema, etc.)
+      parameters:
+        - $ref: '#/components/parameters/organization'
+        - $ref: '#/components/parameters/database'
+        - name: prefix_name
+          in: path
+          required: true
+          description: The prefix name to delete
+          schema:
+            type: string
+            example: ex
+      responses:
+        200:
+          description: Prefix deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:PrefixDeleteResponse
+                  'api:prefix_name':
+                    type: string
+                    example: ex
+                  'api:status':
+                    type: string
+                    example: api:success
+        400:
+          description: Bad request - reserved prefix cannot be deleted
+        404:
+          description: Prefix not found
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          description: Forbidden - user lacks instance_write_access permission
+
   /document/{path}:
     get:
       operationId: getDocuments
