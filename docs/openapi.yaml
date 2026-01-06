@@ -1996,6 +1996,8 @@ paths:
       tags:
         - Account management
       summary: Get the organization object by name
+      description: |
+        Retrieves the organization object and the databases of the organization.
       responses:
         200:
           description: "Successfully aquired organization"
@@ -2019,6 +2021,15 @@ paths:
       tags:
         - Account management
       summary: Add an organization with the given name
+      description: |
+        Creates a new organization with the specified name. The organization name is provided in the URL path parameter.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
       responses:
         200:
           description: "Successfully added organization"
