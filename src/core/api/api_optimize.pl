@@ -169,23 +169,38 @@ descriptor_optimize(branch_descriptor{
 
 % Helper predicate: Replace named graph head with reloaded layer
 % Handles different descriptor types that map to named graphs
+% Uses nb_force_set_head/3 with version checking to prevent race conditions
+% when concurrent transactions are modifying the same graph.
 replace_graph_head_if_named(Store, Desc, Layer) :-
     (   get_dict(name, Desc, Graph_Name)
     ->  % labelled_graph, system_graph with name
         safe_open_named_graph(Store, Graph_Name, Graph),
-        nb_set_head(Graph, Layer)
+        replace_head_with_version_check(Graph, Layer)
     ;   repo_graph{organization_name: Org, database_name: DB, type: instance} :< Desc
     ->  % repo_graph instance uses composite name
         organization_database_name(Org, DB, Composite),
         safe_open_named_graph(Store, Composite, Graph),
-        nb_set_head(Graph, Layer)
+        replace_head_with_version_check(Graph, Layer)
     ;   commit_graph{type: schema} :< Desc
     ->  % commit_graph schema uses ref_ontology
         ref_ontology(Ref_Name),
         safe_open_named_graph(Store, Ref_Name, Graph),
-        nb_set_head(Graph, Layer)
+        replace_head_with_version_check(Graph, Layer)
     ;   % branch_graph, commit_graph instance - no direct named graph head replacement
         % Layer is referenced via commit objects, cache invalidation handles this
+        true
+    ).
+
+% Helper to set head with version-based CAS to prevent race conditions.
+% If version has changed (concurrent transaction committed), silently skip
+% the head update - the concurrent transaction's result takes precedence.
+% If no head exists, do nothing - optimize should only update existing heads,
+% not create new ones.
+replace_head_with_version_check(Graph, Layer) :-
+    (   head(Graph, _CurrentLayer, Version)
+    ->  % Try to set head with version check; ignore failure if version changed
+        ignore(nb_force_set_head(Graph, Layer, Version))
+    ;   % No head exists - nothing to optimize, just succeed
         true
     ).
 
