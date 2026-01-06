@@ -54,16 +54,18 @@
 :- use_module(core(document)).
 :- use_module(library(uri), [uri_components/2]).
 :- use_module(library(apply), [exclude/3]).
+:- use_module(core(util/xsd_parser), [ncname//0]).
 
 :- use_module(library(plunit)).
 
-% Check if a prefix name is reserved (starts with @)
-is_reserved_prefix(Prefix_Name) :-
-    atom(Prefix_Name),
-    atom_codes(Prefix_Name, [0'@|_]).
-is_reserved_prefix(Prefix_Name) :-
-    string(Prefix_Name),
-    string_codes(Prefix_Name, [0'@|_]).
+% Validate prefix name follows ASCII-only XML NCName rules (from xsd_parser)
+% Pattern: [A-Za-z_][A-Za-z0-9_.-]* (can start with underscore, cannot contain colon)
+% Rejects any prefix starting with '@' - reserved for JSON-LD keywords (@context, @id, @type, @base, etc.)
+% NOTE: Currently ASCII-only. URL decoding in routes.pl allows future Unicode support.
+valid_prefix_name(Prefix_Name) :-
+    (atom(Prefix_Name) -> atom_codes(Prefix_Name, Codes) ; string_codes(Prefix_Name, Codes)),
+    phrase(ncname, Codes, []),
+    !.  % Commit once validated - no backtracking needed
 
 % Validate that a string is a valid IRI (must have a scheme like http://)
 valid_iri(IRI) :-
@@ -72,11 +74,6 @@ valid_iri(IRI) :-
     uri_data(scheme, Components, Scheme),
     nonvar(Scheme),
     Scheme \= ''.
-
-% Validate prefix name (not reserved, valid atom/string)
-valid_prefix_name(Prefix_Name) :-
-    (atom(Prefix_Name) ; string(Prefix_Name)),
-    \+ is_reserved_prefix(Prefix_Name).
 
 get_prefixes(Path, System_DB, Auth, JSON) :-
     do_or_die(
@@ -448,6 +445,107 @@ test(add_prefix_invalid_iri,
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add prefix"},
     add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "not a valid iri", _).
+
+test(valid_prefix_name_basic,
+     []) :-
+    valid_prefix_name(schema),
+    valid_prefix_name("ex"),
+    valid_prefix_name('v1'),
+    valid_prefix_name("my_prefix"),
+    valid_prefix_name('foo-bar').
+
+test(valid_prefix_name_with_dot,
+     []) :-
+    valid_prefix_name('v1.0'),
+    valid_prefix_name("schema.org"),
+    valid_prefix_name('a.b.c').
+
+test(invalid_prefix_name_start_digit,
+     [fail]) :-
+    valid_prefix_name('1bad').
+
+test(invalid_prefix_name_start_hyphen,
+     [fail]) :-
+    valid_prefix_name('-bad').
+
+test(valid_prefix_name_start_underscore,
+     []) :-
+    valid_prefix_name('_prefix').
+
+test(valid_prefix_name_end_dot,
+     []) :-
+    valid_prefix_name('valid.').
+
+test(invalid_prefix_name_colon,
+     [fail]) :-
+    valid_prefix_name('bad:name').
+
+test(invalid_prefix_name_slash,
+     [fail]) :-
+    valid_prefix_name('bad/name').
+
+test(invalid_prefix_name_space,
+     [fail]) :-
+    valid_prefix_name('bad name').
+
+test(invalid_prefix_name_empty,
+     [fail]) :-
+    valid_prefix_name('').
+
+test(invalid_prefix_name_reserved,
+     [fail]) :-
+    valid_prefix_name('@base').
+
+% Edge case tests: Unicode boundaries
+test(invalid_unicode_latin_extended,
+     [fail]) :-
+    valid_prefix_name('café').  % Latin-1 Supplement U+00E9
+
+test(invalid_unicode_cyrillic,
+     [fail]) :-
+    valid_prefix_name('имя').  % Cyrillic
+
+test(invalid_unicode_cjk,
+     [fail]) :-
+    valid_prefix_name('名前').  % Japanese
+
+test(invalid_unicode_emoji,
+     [fail]) :-
+    valid_prefix_name('🚀').  % Emoji
+
+% Edge case tests: Special ASCII characters
+test(valid_ascii_all_letters,
+     []) :-
+    valid_prefix_name('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz').
+
+test(valid_ascii_all_allowed_chars,
+     []) :-
+    valid_prefix_name('aZ09_.-').
+
+test(invalid_start_period,
+     [fail]) :-
+    valid_prefix_name('.bad').
+
+test(invalid_multiple_colons,
+     [fail]) :-
+    valid_prefix_name('a:b:c').
+
+test(invalid_unicode_combining_mark,
+     [fail]) :-
+    valid_prefix_name('a\x0301\').  % Combining acute accent U+0301
+
+% Edge case: Single underscore is valid in NCName
+test(valid_single_underscore,
+     []) :-
+    valid_prefix_name('_').
+
+% Edge case: Maximum length reasonable prefix
+test(valid_very_long_name,
+     []) :-
+    atom_chars(LongName, [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,
+                          a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,
+                          a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z]),
+    valid_prefix_name(LongName).
 
 test(update_prefix,
      [setup((setup_temp_store(State),

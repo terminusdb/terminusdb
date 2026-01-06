@@ -75,6 +75,41 @@ describe('prefix-management', function () {
         .send({ uri: 'http://example.org/custom/' })
       expect(res.status).to.equal(400)
     })
+
+    it('adds prefix with dots (no URL encoding needed)', async function () {
+      const res = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/v1.0`)
+        .send({ uri: 'http://example.org/v1/' })
+      expect(res.status).to.equal(201)
+      expect(res.body['api:prefix_name']).to.equal('v1.0')
+    })
+
+    it('adds prefix with hyphens and underscores', async function () {
+      const res = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/my-api_v2`)
+        .send({ uri: 'http://api.example.org/v2/' })
+      expect(res.status).to.equal(201)
+      expect(res.body['api:prefix_name']).to.equal('my-api_v2')
+    })
+
+    it('adds prefix starting with underscore (NCName allows this)', async function () {
+      const res = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/_internal`)
+        .send({ uri: 'http://example.org/internal/' })
+      expect(res.status).to.equal(201)
+      expect(res.body['api:prefix_name']).to.equal('_internal')
+    })
+
+    it('adds prefix ending with dot (NCName allows this)', async function () {
+      const res = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/v1.`)
+        .send({ uri: 'http://example.org/v1/' })
+      expect(res.status).to.equal(201)
+      expect(res.body['api:prefix_name']).to.equal('v1.')
+    })
+
+    it('fails with invalid prefix name starting with digit', async function () {
+      const res = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/1invalid`)
+        .send({ uri: 'http://example.org/' })
+      expect(res.status).to.equal(400)
+      expect(res.body['api:error']['@type']).to.equal('api:ReservedPrefix')
+    })
   })
 
   describe('PUT /api/prefix (update)', function () {

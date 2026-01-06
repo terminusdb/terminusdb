@@ -2309,15 +2309,18 @@ individual_prefix_handler(delete, Path, Request, System_DB, Auth) :-
                             [status(200)]))).
 
 % Helper to parse path like "admin/mydb/myprefix" into DB_Path and Prefix_Name
+% Performs URL decoding on prefix name to support Unicode (e.g., %C3%A9 → é)
 resolve_prefix_path(Path, DB_Path, Prefix_Name) :-
     atom_string(Path, Path_String),
     split_string(Path_String, "/", "", Parts),
     length(Parts, Len),
     Len >= 3,
-    % Last part is prefix name
-    append(DB_Parts, [Prefix_Name_Str], Parts),
+    % Last part is prefix name (URL-encoded)
+    append(DB_Parts, [Prefix_Name_Encoded], Parts),
     atomics_to_string(DB_Parts, "/", DB_Path),
-    atom_string(Prefix_Name, Prefix_Name_Str).
+    % URL-decode the prefix name to support Unicode
+    uri_encoded(path, Prefix_Name_Decoded, Prefix_Name_Encoded),
+    atom_string(Prefix_Name, Prefix_Name_Decoded).
 
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
