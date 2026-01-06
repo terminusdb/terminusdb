@@ -2234,6 +2234,98 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
                             Prefixes,
                             [status(200)]))).
 
+%%%%%%%%%%%%%%%%%%%% Individual Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
+
+:- http_handler(api(prefix/Path), cors_handler(Method, individual_prefix_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,get,post,put,delete])]).
+
+% GET /api/prefix/{db_path}/{prefix_name} - get individual prefix
+individual_prefix_handler(get, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        prefix,
+        Request,
+        (   resolve_prefix_path(Path, DB_Path, Prefix_Name),
+            get_prefix(DB_Path, System_DB, Auth, Prefix_Name, Prefix_URI),
+            cors_reply_json(Request,
+                            _{'@type': "api:PrefixResponse",
+                              'api:prefix_name': Prefix_Name,
+                              'api:prefix_uri': Prefix_URI,
+                              'api:status': "api:success"},
+                            [status(200)]))).
+
+% POST /api/prefix/{db_path}/{prefix_name} - add new prefix
+individual_prefix_handler(post, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    api_report_errors(
+        prefix,
+        Request,
+        (   resolve_prefix_path(Path, DB_Path, Prefix_Name),
+            do_or_die(
+                get_dict(uri, Document, Prefix_URI),
+                error(missing_parameter(uri), _)),
+            Commit_Info = commit_info{author: "api", message: "Add prefix via API"},
+            add_prefix(DB_Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, _),
+            cors_reply_json(Request,
+                            _{'@type': "api:PrefixAddResponse",
+                              'api:prefix_name': Prefix_Name,
+                              'api:prefix_uri': Prefix_URI,
+                              'api:status': "api:success"},
+                            [status(201)]))).
+
+% PUT /api/prefix/{db_path}/{prefix_name} - update or upsert prefix
+individual_prefix_handler(put, Path, Request, System_DB, Auth) :-
+    get_payload(Document, Request),
+    http_parameters(Request, [], [form_data(Params)]),
+    api_report_errors(
+        prefix,
+        Request,
+        (   resolve_prefix_path(Path, DB_Path, Prefix_Name),
+            do_or_die(
+                get_dict(uri, Document, Prefix_URI),
+                error(missing_parameter(uri), _)),
+            Commit_Info = commit_info{author: "api", message: "Update prefix via API"},
+            % Check if create=true for upsert behavior
+            (   memberchk(create=true, Params)
+            ->  upsert_prefix(DB_Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, _)
+            ;   update_prefix(DB_Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, _)
+            ),
+            cors_reply_json(Request,
+                            _{'@type': "api:PrefixUpdateResponse",
+                              'api:prefix_name': Prefix_Name,
+                              'api:prefix_uri': Prefix_URI,
+                              'api:status': "api:success"},
+                            [status(200)]))).
+
+% DELETE /api/prefix/{db_path}/{prefix_name} - delete prefix
+individual_prefix_handler(delete, Path, Request, System_DB, Auth) :-
+    api_report_errors(
+        prefix,
+        Request,
+        (   resolve_prefix_path(Path, DB_Path, Prefix_Name),
+            Commit_Info = commit_info{author: "api", message: "Delete prefix via API"},
+            delete_prefix(DB_Path, System_DB, Auth, Commit_Info, Prefix_Name, _),
+            cors_reply_json(Request,
+                            _{'@type': "api:PrefixDeleteResponse",
+                              'api:prefix_name': Prefix_Name,
+                              'api:status': "api:success"},
+                            [status(200)]))).
+
+% Helper to parse path like "admin/mydb/myprefix" into DB_Path and Prefix_Name
+% Performs URL decoding on prefix name to support Unicode (e.g., %C3%A9 → é)
+resolve_prefix_path(Path, DB_Path, Prefix_Name) :-
+    atom_string(Path, Path_String),
+    split_string(Path_String, "/", "", Parts),
+    length(Parts, Len),
+    Len >= 3,
+    % Last part is prefix name (URL-encoded)
+    append(DB_Parts, [Prefix_Name_Encoded], Parts),
+    atomics_to_string(DB_Parts, "/", DB_Path),
+    % URL-decode the prefix name to support Unicode
+    uri_encoded(path, Prefix_Name_Decoded, Prefix_Name_Encoded),
+    atom_string(Prefix_Name, Prefix_Name_Decoded).
+
 %%%%%%%%%%%%%%%%%%%% User handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!

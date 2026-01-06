@@ -388,6 +388,41 @@ api_global_error_jsonld(error(unexpected_descriptor_type(Descriptor, Desc_Type),
 
 :- multifile api_error_jsonld_/3.
 
+% Prefix management errors
+api_error_jsonld_(prefix, error(prefix_not_found(Prefix_Name), _), JSON) :-
+    format(string(Msg), "Prefix '~w' not found", [Prefix_Name]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:not_found',
+             'api:error' : _{'@type' : 'api:PrefixNotFound',
+                             'api:prefix_name' : Prefix_Name},
+             'api:message' : Msg}.
+api_error_jsonld_(prefix, error(prefix_already_exists(Prefix_Name), _), JSON) :-
+    format(string(Msg), "Prefix '~w' already exists", [Prefix_Name]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:PrefixAlreadyExists',
+                             'api:prefix_name' : Prefix_Name},
+             'api:message' : Msg}.
+api_error_jsonld_(prefix, error(reserved_prefix(Prefix_Name), _), JSON) :-
+    format(string(Msg), "Cannot modify reserved prefix '~w'. Prefixes starting with '@' are reserved.", [Prefix_Name]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:ReservedPrefix',
+                             'api:prefix_name' : Prefix_Name},
+             'api:message' : Msg}.
+api_error_jsonld_(prefix, error(invalid_iri(IRI), _), JSON) :-
+    format(string(Msg), "Invalid IRI: '~w'. IRIs must have a valid scheme (e.g., http://, https://)", [IRI]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:InvalidIRI',
+                             'api:iri' : IRI},
+             'api:message' : Msg}.
+api_error_jsonld_(prefix, error(schema_not_initialized, _), JSON) :-
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:SchemaNotInitialized'},
+             'api:message' : "Schema not initialized. Cannot manage prefixes without an initialized schema."}.
+
 % @-prefixed properties not supported in normal types
 api_error_jsonld_(insert_documents, error(at_prefixed_properties_not_supported(Property, Document), _), JSON) :-
     format(string(Msg), "@-prefixed properties like '~w' are not supported in schema definitions. Only sys:JSON and sys:JSONDocument types support @-prefixed keys.", [Property]),
