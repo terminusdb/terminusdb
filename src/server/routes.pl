@@ -541,6 +541,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
+            param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -552,7 +553,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           raw_json : Raw_JSON,
                           require_migration: Require_Migration,
                           allow_destructive_migration: Allow_Destructive_Migration,
-                          merge_repeats: Merge_Repeats
+                          merge_repeats: Merge_Repeats,
+                          overwrite: Overwrite
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -3622,6 +3624,27 @@ write_cors_headers(Request) :-
         format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description, X-HTTP-METHOD-OVERRIDE\n',[]),
         format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
     ;   true).
+
+write_json_ld_context_link_header(none) :- !.
+write_json_ld_context_link_header(some(ContextURI)) :-
+    atom(ContextURI),
+    !,
+    current_output(Out),
+    format(Out,'Link: <~w>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"~n',[ContextURI]).
+write_json_ld_context_link_header(some(ContextURI)) :-
+    string(ContextURI),
+    !,
+    current_output(Out),
+    format(Out,'Link: <~s>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"~n',[ContextURI]).
+
+cors_json_stream_write_headers_with_link(Request, Data_Version, As_List, Context_Link) :-
+    write_cors_headers(Request),
+    write_data_version_header(Data_Version),
+    write_json_ld_context_link_header(Context_Link),
+    format("Transfer-Encoding: chunked~n"),
+    (   As_List = true
+    ->  format("Content-type: application/json; charset=UTF-8~n~n")
+    ;   format("Content-type: application/json; stream=true; charset=UTF-8~n~n")).
 
 cors_reply_json(Request, JSON) :-
     write_cors_headers(Request),

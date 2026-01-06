@@ -1,13 +1,42 @@
 openapi: 3.0.1
 info:
   title: TerminusDB API
-  description: API for TerminusDB
+  description: |
+    API for the TerminusDB document graph database. Manage databases, documents, schemas, system, and queries.
+    
+    # Quick Start
+    ```bash
+    # List databases
+    curl -u admin:root http://localhost:6363/api/
+    
+    # Create database
+    curl -u admin:root -X POST http://localhost:6363/api/db/admin/mydb \
+         -H "Content-Type: application/json" \
+         -d '{"label": "My Database", "comment": "Description"}'
+    
+    # Insert unstructured JSON document into RDF database
+    curl -u admin:root -X POST "http://localhost:6363/api/document/admin/mydb?raw_json=true&author=admin&message=new+document" \
+         -H "Content-Type: application/json" \
+         -d '{"name": "Alice", "age": 30}'
+
+    # Insert schema for structured JSON documents
+    curl -u admin:root -X POST "http://localhost:6363/api/document/admin/mydb?graph_type=schema&author=admin&message=new+schema" \
+         -H "Content-Type: application/json" \
+         -d '{"@type": "Class", "@id": "Person", "age": "xsd:integer", "name": "xsd:string"}'
+
+    # Insert structured JSON-LD document
+    curl -u admin:root -X POST "http://localhost:6363/api/document/admin/mydb?author=admin&message=new+document" \
+         -H "Content-Type: application/json" \
+         -d '{"@type": "Person", "age": 30, "name": "Alice"}'
+    ```
+
+    All structured and unstructured documents are stored as triples in an RDF database, with immutable history with git-for-data, and a powerful datalog query language with unification.
   contact:
-    email: team@terminusdb.com
+    email: support@dfrnt.com
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 10.0.3
+  version: 12.0.2
 externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.org
@@ -16,11 +45,20 @@ servers:
 security:
 - basicAuth: []
 tags:
-- name: TerminusDB
-  description: Everything about TerminusDB
-  externalDocs:
-    description: Find out more
-    url: https://terminusdb.org
+- name: Connection
+  description: API connection and server information
+- name: Database
+  description: Database management operations
+- name: Document
+  description: Document CRUD operations
+- name: Schema
+  description: Schema management and validation
+- name: WOQL
+  description: Web Object Query Language
+- name: Collaboration
+  description: Remote operations and synchronization
+- name: Account management
+  description: User roles and capabilities
 paths:
   /:
     get:
@@ -31,7 +69,7 @@ paths:
       summary: Get a list of databases for the authenticated user
       responses:
         200:
-          description: successful operation
+          description: List of databases retrieved successfully
           content:
             application/json:
               schema:
@@ -46,10 +84,10 @@ paths:
       x-js-client: Client.info
       tags:
         - Connection
-      summary: Get information about the TerminusDB version
+      summary: Get information about the TerminusDB server
       responses:
         200:
-          description: succesful operation
+          description: Server information retrieved successfully
           content:
             application/json:
               schema:
@@ -75,7 +113,7 @@ paths:
                         properties:
                           "version":
                             type: string
-                            example: "10.0.13"
+                            example: "12.0.2"
                       "terminusdb_store":
                         type: object
                         properties:
@@ -200,10 +238,19 @@ paths:
       tags:
         - Database
       summary: Create a database
+      description: |
+        Create a new database in the specified organization. Use the request body to set metadata.
+        
+        **Example:**
+        ```bash
+        curl -u admin:root -X POST http://localhost:6363/api/db/myorg/mydb \
+             -H "Content-Type: application/json" \
+             -d '{"label": "My Database", "comment": "Description"}'
+        ```
       parameters:
         - $ref: '#/components/parameters/organization'
         - $ref: '#/components/parameters/database'
-      requestBody: # TODO: Missing prefixes
+      requestBody: # TODO: Add prefixes property to schema
         required: true
         content:
           application/json:
@@ -290,7 +337,7 @@ paths:
             default: false
       responses:
         200:
-          description: Succesfully deleted DB
+          description: Database deleted successfully
           content:
             application/json:
               schema:
@@ -335,7 +382,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/organization'
         - $ref: '#/components/parameters/database'
-      requestBody: # TODO: Missing prefixes
+      requestBody: # TODO: Add prefixes property to schema
         required: true
         content:
           application/json:
@@ -413,7 +460,28 @@ paths:
       tags:
         - Document
       summary: Get a document
-      description: 'This endpoint is also usable through a POST with the header `X-HTTP-Method-Override: GET` submitted. This allows you to submit a JSON query document as post data instead of as query parameters. This can be useful for cases where your query parameters would be too long otherwise, or if you already have your data as JSON. In particular, this is useful for the `ids` field, which in the POST-ed query document can be submitted as a JSON list directly.'
+      description: |
+        Retrieve documents from the database. Supports filtering, pagination, and result formatting.
+        
+        **Examples:**
+        ```bash
+        # Get all documents
+        curl -u admin:root http://localhost:6363/api/document/myorg/mydb
+        
+        # Get specific document by ID
+        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?ids=Document/abc123"
+        
+        # Pagination
+        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?skip=10&count=5"
+
+        # Use POST to submit complex queries as JSON instead of URL parameters
+        curl -u admin:root -X POST "http://localhost:6363/api/document/myorg/mydb" \
+             -H "Content-Type: application/json" \
+             -H "X-HTTP-Method-Override: GET" \
+             -d '{"ids": ["Document/abc123", "Document/def456"]}'
+        ```
+        
+        **POST Alternative:** Use `X-HTTP-Method-Override: GET` to submit complex queries as JSON instead of URL parameters.
       parameters:
         - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
@@ -496,6 +564,15 @@ paths:
       tags:
         - Document
       summary: Insert a new document
+      description: |
+        Add one or more documents to the database. Documents are JSON objects that follow your schema.
+        
+        **Example:**
+        ```bash
+        curl -u admin:root -X POST "http://localhost:6363/api/document/admin/mydb?author=admin&message=new+doc" \
+             -H "Content-Type: application/json" \
+             -d '{"name": "Alice", "age": 30, "@type": "Person"}'
+        ```
       parameters:
         - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/author'
@@ -515,9 +592,30 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: require_migration
+          in: query
+          required: false
+          description: Require migration if schema changes
+          schema:
+            type: boolean
+            default: false
+        - name: merge_repeats
+          in: query
+          required: false
+          description: Merge repeated values
+          schema:
+            type: boolean
+            default: false
+        - name: allow_destructive_migration
+          in: query
+          required: false
+          description: Allow destructive migrations when schema changes
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
-          description: Succesfully added documents
+          description: Documents added successfully
           content:
             application/json:
               schema:
@@ -549,8 +647,8 @@ paths:
             example: Person/Bert
       responses:
         200:
-          description: Succesfully deleted document(s)
-          # TODO: Need the proper JSON resposne!
+          description: Document(s) deleted successfully
+          # TODO: Need the proper JSON response!
     put:
       x-python-client: Client::replace_document
       x-js-client: Client.updateDocument
@@ -576,9 +674,23 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: require_migration
+          in: query
+          required: false
+          description: Require migration if schema changes
+          schema:
+            type: boolean
+            default: false
+        - name: allow_destructive_migration
+          in: query
+          required: false
+          description: Allow destructive migrations when schema changes
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
-          description: Succesfully replaced documents
+          description: Documents replaced successfully
   /schema/{path}:
     get:
       x-python-client: Client::get_class_frame
@@ -628,8 +740,34 @@ paths:
   /woql:
     post:
       summary: Execute a WOQL query
-      x-python-client: not_implemented
-      x-js-client: not_implemented
+      description: |
+        Run Web Object Query Language (WOQL) queries for complex data operations including on triples. Use SDK in Javascript, Python or Rust to make it easy to construct the queries.
+        
+        **Example:**
+        ```json
+        {
+          "@type": "Query",
+          "@query": {
+            "@type": "And",
+            "@graph": [
+              {
+                "@type": "Triple",
+                "subject": { "@type": "Variable", "variable_name": "person" },
+                "predicate": "rdf:type",
+                "object": "schema:Person"
+              },
+              {
+                "@type": "Triple",
+                "subject": { "@type": "Variable", "variable_name": "person" },
+                "predicate": "schema:name",
+                "object": { "@type": "Variable", "variable_name": "name" }
+              }
+            ]
+          }
+        }
+        ```
+      x-python-client: Client::woql_query
+      x-js-client: Client.woqlQuery
       tags:
         - WOQL
       requestBody:
@@ -668,6 +806,16 @@ paths:
   /clone/{organization}/{database}:
     post:
       summary: Clone a database
+      description: |
+        Create a copy of an existing database. Useful for creating development environments or backups.
+        
+        **Example:**
+        ```bash
+        curl -u admin:root -X POST http://localhost:6363/api/clone/admin/mydb_clonedx \
+             -H "Content-Type: application/json" \
+             -H "Authorization-Remote: Basic YWRtaW46cm9vdA==" \
+             -d '{"remote_url": "http://localhost:6363/admin/mydb", "comment": "Clone for testing", "label": "Cloned DB"}'
+        ```
       x-python-client: Client::clonedb
       x-js-client: Client.clonedb
       tags:
@@ -703,7 +851,7 @@ paths:
                   description: Whether to make the newly cloned database public
       responses:
         200:
-          description: Database cloned succesfully
+          description: Database cloned successfully
           content:
             application/json:
               schema:
@@ -1028,13 +1176,13 @@ paths:
               type: object
       responses:
         200:
-          description: "Branch succesfully added"
+          description: "Branch created successfully"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  "@type:":
+                  "@type":
                     type: string
                     enum:
                       - "api:BranchResponse"
@@ -1052,13 +1200,13 @@ paths:
         - $ref: '#/components/parameters/branch_path'
       responses:
         200:
-          description: "Branch succesfully deleted"
+          description: "Branch deleted successfully"
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  "@type:":
+                  "@type":
                     type: string
                     enum:
                       - "api:BranchResponse"
@@ -1090,7 +1238,21 @@ paths:
                   $ref: "#/components/schemas/CommitInfo"
       responses:
         200:
-          description: "Succesfully created a new unattached commit containing the squashed data. This commit can be queried directly, or be assigned to a particular branch using the reset endpoint."
+          description: |
+            Successfully created a new unattached commit containing the squashed data. This commit can be queried directly, or be assigned to a particular branch using the reset endpoint.
+            
+            **Workflow Example:**
+            ```bash
+            # 1. Squash multiple commits into one
+            curl -u admin:root -X POST "http://localhost:6363/api/squash/admin/mydb" \
+                 -H "Content-Type: application/json" \
+                 -d '{"commit_info": {"author": "admin", "message": "Squashed feature branch"}}'
+            
+            # 2. Reset branch to the new squashed commit (drops commit history, replaced by squashed commit)
+            curl -u admin:root -X POST "http://localhost:6363/api/reset/admin/mydb" \
+                 -H "Content-Type: application/json" \
+                 -d '{"commit_info": {"author": "admin", "message": "Reset to squashed commit"}, "commit_descriptor": "admin/mydb/local/commit/c0dmv6t9nn3zbg2n7lbi4ynpaz42jfd"}'
+            ```
           content:
             application/json:
               schema:
@@ -1135,7 +1297,7 @@ paths:
                   example: admin/test/local/commit/5jndjh9lexe62q9u1q2vofyjemfnmyt
       responses:
         200:
-          description: "Succesfully reset branch HEAD to commit_descriptor"
+          description: "Successfully reset branch HEAD to commit_descriptor"
           content:
             application/json:
               schema:
@@ -1154,9 +1316,17 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       summary: Rebase all commits from a source onto this branch
-      description: Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
+      description: |
+          Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
 
-        If there is no common history, the rebase will take all commits into account.
+          If there is no common history, the rebase will take all commits into account.
+          
+          **Example:**
+          ```bash
+          curl -u admin:root -X POST "http://localhost:6363/api/rebase/admin/mydb" \
+               -H "Content-Type: application/json" \
+               -d '{"author": "admin", "rebase_from": "admin/feature_branch"}'
+          ```
       x-python-client: Client::rebase
       x-js-client: Client.rebase
       tags:
@@ -1176,7 +1346,7 @@ paths:
                   example: admin/test/local/branch/bar
       responses:
         200:
-          description: "Succesfully rebased commits"
+          description: "Successfully rebased commits"
           content:
             application/json:
               schema:
@@ -1244,6 +1414,13 @@ paths:
       summary: Optimize a specific graph
       x-python-client: Client::optimize
       x-js-client: Client.optimizeBranch
+      description: |
+          Optimize the database graph structure for improved query performance. This operation merges layers to reduce historical layers traversal costs and compacts the storage to reduce fragmentation.
+          
+          **Example:**
+          ```bash
+          curl -u admin:root -X POST "http://localhost:6363/api/optimize/admin/mydb"
+          ```
       tags:
         - Optimize
       parameters:
@@ -1256,7 +1433,7 @@ paths:
             example: _system
       responses:
         200:
-          description: Succesfully optimized resource
+          description: Successfully optimized resource
           content:
             application/json:
               schema:
@@ -1287,16 +1464,28 @@ paths:
             example: _system
       responses:
         200:
-          description: "Succesfully fetched prefixes of graph"
+          description: "Successfully fetched prefixes of graph"
           content:
             application/json:
               schema:
                 type: object
   /diff:
     post:
-      summary: Diff a specific object or data version
+      summary: Diff a specific object or two data versions
       x-python-client: Client::diff
       x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
+      description: |
+          Diff a specific object or two data versions in the commit history.
+          
+          **Example:**
+          ```bash
+          curl -u admin:root -X POST "http://localhost:6363/api/diff" \
+               -H "Content-Type: application/json" \
+               -d '{
+                 "before": {"@id": "Person/Jane", "@type": "Person", "name": "Jane"},
+                 "after": {"@id": "Person/Jane", "@type": "Person", "name": "Jannet"}
+               }'
+          ```
       tags:
         - Change management
       requestBody:
@@ -1344,9 +1533,21 @@ paths:
 
   /patch:
     post:
-      summary: Apply a patch object to another object
+      summary: Apply a patch object to another object (diff result)
       x-python-client: Client::patch
       x-js-client: Client.patch
+      description: |
+          Apply a patch object to another object. Typically used with the result from the diff endpoint to apply changes.
+          
+          **Example:**
+          ```bash
+          curl -u admin:root -X POST "http://localhost:6363/api/patch" \
+               -H "Content-Type: application/json" \
+               -d '{
+                 "before": {"@id": "Person/Jane", "@type": "Person", "name": "Jane"},
+                 "patch": {"name": {"@op": "SwapValue", "@before": "Jane", "@after": "Jannet"}}
+               }'
+          ```
       tags:
         - Change management
       requestBody:
@@ -1382,6 +1583,18 @@ paths:
       - $ref: '#/components/parameters/branch_path'
     post:
       summary: Apply a patch object to a resource
+      description: |
+          Apply a patch object to a resource in the database. Can be used to modify schema elements, documents, or prefixes.
+          
+          **Example:**
+          ```bash
+          curl -u admin:root -X POST "http://localhost:6363/api/patch" \
+               -H "Content-Type: application/json" \
+               -d '{
+                 "before": {"@id": "Person/Jane", "@type": "Person", "name": "Jane"},
+                 "patch": {"name": {"@op": "SwapValue", "@before": "Jane", "@after": "Jannet"}}
+               }'
+          ```
       x-python-client: Client::patch_resource
       x-js-client: Client.patchResource
       tags:
@@ -1549,7 +1762,7 @@ paths:
         - $ref: '#/components/parameters/organization'
         - $ref: '#/components/parameters/database'
         - name: id
-          description: id of document to report histry of
+          description: id of document to report history of
           in: query
           required: true
           schema:
@@ -2151,6 +2364,21 @@ paths:
       tags:
         - Account management
       summary: Grant or remove capabilities over a resource to a user
+      description: |
+        Grant or revoke roles for a user on a resource (organization or database).
+        
+        **Quick Start (recommended):**
+        ```json
+        {
+          "operation": "grant",
+          "scope_type": "organization",
+          "scope": "myorg",
+          "user": "alice",
+          "roles": ["Admin Role"]
+        }
+        ```
+        
+        When `scope_type` is provided, use human-readable names. When omitted, use full system document IDs instead. Use of the `scope_type` field requires system administrative privileges (admin user).
       requestBody:
         required: true
         content:
@@ -2165,26 +2393,43 @@ paths:
               properties:
                 "operation":
                   type: string
+                  description: Whether to grant or revoke the specified roles.
                   enum:
-                    - "revoke"
                     - "grant"
-                "scope":
-                  type: string
-                  example: "UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"
+                    - "revoke"
                 "scope_type":
                   type: string
+                  description: |
+                    Optional. Set this to enable name-based lookups for scope, user, and roles.
+                    - "organization": scope is an organization name
+                    - "database": scope is "org/database" format
                   enum:
                     - "organization"
                     - "database"
+                "scope":
+                  type: string
+                  description: |
+                    The target resource. Format depends on scope_type:
+                    - With scope_type "organization": org name, e.g. "admin" or "myorg"
+                    - With scope_type "database": "org/db" format, e.g. "admin/mydatabase"
+                    - Without scope_type: full ID, e.g. "Organization/abc123...", or "UserDatabase/abc123..."
+                  example: "admin"
                 "user":
                   type: string
-                  example: "User/admin"
+                  description: |
+                    The target user.
+                    - With scope_type: user name, e.g. "alice"
+                    - Without scope_type: full ID, e.g. "User/alice"
+                  example: "admin"
                 "roles":
                   type: array
+                  description: |
+                    Roles to grant or revoke.
+                    - With scope_type: role names, e.g. ["Admin Role", "Consumer Role"]
+                    - Without scope_type: full IDs, e.g. ["Role/abc123..."]
                   items:
                     type: string
-                    example: "Role/consumer"
-                  example: ["Role/consumer", "Role/admin"]
+                  example: ["Consumer Role", "Admin Role"]
       responses:
         200:
           description: "Successfully granted or revoked roles"
@@ -2304,7 +2549,7 @@ components:
       properties:
         "query":
           type: object
-          # TODO: Nice example of a WOQL Query
+          # TODO: Add comprehensive WOQL query example
           description: WOQL Query
         "commit_info":
           $ref: "#/components/schemas/CommitInfo"

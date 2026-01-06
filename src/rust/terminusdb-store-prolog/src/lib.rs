@@ -62,4 +62,7 @@ pub fn install(module: Option<&str>) {
     layer::register_id_triple_removal_in_module(module);
     layer::register_sp_card_in_module(module);
     layer::register_op_card_in_module(module);
+    store::register_layer_cache_stats_in_module(module);
+    store::register_cleanup_layer_cache_in_module(module);
+    store::register_invalidate_layer_cache_entry_in_module(module);
 }
