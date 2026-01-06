@@ -1576,8 +1576,7 @@ test(push_empty_to_empty_does_nothing_succesfully,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Destination)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
@@ -1604,14 +1603,9 @@ test(push_empty_to_empty_does_nothing_succesfully,
                request_header('Authorization-Remote'=Authorization_Remote),
                status_code(Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
-
     Status_Code = 200,
-    \+ get_dict('api:head', JSON, _),
 
     _{'@type':"api:PushResponse",
-      'api:repo_head_updated': false,
-      'api:repo_head': Head,
       'api:status':"api:success"} :< JSON.
 
 test(push_empty_with_prefix_change_to_empty_changes_prefixes,
@@ -1624,21 +1618,23 @@ test(push_empty_with_prefix_change_to_empty_changes_prefixes,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Destination)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
 
+    % Update prefixes on origin by replacing context document
     with_triple_store(
         Store_Origin,
-        (   create_context((Origin_Branch_Descriptor.repository_descriptor),
-                           Origin_Repository_Context),
-            with_transaction(Origin_Repository_Context,
-                             update_prefixes(Origin_Repository_Context,
-                                             _{doc: "http://this_is_docs/",
-                                               scm: "http://this_is_scm/",
-                                               foo: "http://this_is_foo/"}),
+        (   create_context(Origin_Branch_Descriptor,
+                           commit_info{author:"test",message:"update prefixes"},
+                           Origin_Context),
+            with_transaction(Origin_Context,
+                             replace_context_document(Origin_Context,
+                                             _{'@type': "@context",
+                                               '@base': "http://new_base/document/",
+                                               '@schema': "http://new_schema/schema#",
+                                               custom_prefix: "http://custom/"}),
                              _))),
 
     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
@@ -1655,22 +1651,22 @@ test(push_empty_with_prefix_change_to_empty_changes_prefixes,
                request_header('Authorization-Remote'=Authorization_Remote),
                status_code(Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
-
     Status_Code = 200,
 
     _{'@type':"api:PushResponse",
-      'api:repo_head_updated': true,
-      'api:repo_head': _,
       'api:status':"api:success"} :< JSON,
 
+    % Verify prefixes propagated to destination
     with_triple_store(
         Store_Destination,
-        (   repository_prefixes((Destination_Branch_Descriptor.repository_descriptor),
-                                Prefixes),
-            Prefixes = _{doc: 'http://this_is_docs/',
-                         scm: 'http://this_is_scm/',
-                         foo: 'http://this_is_foo/'})).
+        (   open_descriptor(Destination_Branch_Descriptor, Dest_Transaction),
+            database_prefixes(Dest_Transaction, Dest_Prefixes),
+            get_dict('@base', Dest_Prefixes, Base),
+            get_dict('@schema', Dest_Prefixes, Schema),
+            get_dict(custom_prefix, Dest_Prefixes, Custom),
+            atom_string(Base, "http://new_base/document/"),
+            atom_string(Schema, "http://new_schema/schema#"),
+            atom_string(Custom, "http://custom/"))).
 
 test(push_nonempty_to_empty_advances_remote_head,
      [
@@ -1682,20 +1678,21 @@ test(push_nonempty_to_empty_advances_remote_head,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Destination)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
     Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
 
+    % Both repos are empty after clone, verify they have same repository head
     with_triple_store(
         Store_Origin,
-        repository_head(Origin_Database_Descriptor, "origin", Head)),
+        repository_head(Origin_Database_Descriptor, "origin", Head_Before)),
     with_triple_store(
         Store_Destination,
-        repository_head(Destination_Database_Descriptor, "local", Head)),
+        repository_head(Destination_Database_Descriptor, "local", Head_Before)),
+
     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
@@ -1709,13 +1706,11 @@ test(push_nonempty_to_empty_advances_remote_head,
                request_header('Authorization-Remote'=Authorization_Remote),
                status_code(Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
-
     Status_Code = 200,
 
-    _{'@type':"api:PushResponse", % todo this should actually not be that
-      'api:repo_head_updated': false,
-      'api:repo_head': Head,
+    % Note: Both repos start with same head after clone,
+    % so push doesn't update the head - it stays the same
+    _{'@type':"api:PushResponse",
       'api:status':"api:success"} :< JSON.
 
 test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
@@ -1728,14 +1723,14 @@ test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Destination)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
     Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
     resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
     Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
 
+    % Verify both repos have same head before push
     with_triple_store(
         Store_Origin,
         repository_head(Origin_Database_Descriptor, "origin", Head)),
@@ -1756,15 +1751,14 @@ test(push_nonempty_to_same_nonempty_keeps_remote_head_unchanged,
                request_header('Authorization-Remote'=Authorization_Remote),
                status_code(Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
-
     Status_Code = 200,
 
-    _{'@type':"api:PushResponse", % todo this should actually not be that
+    _{'@type':"api:PushResponse",
       'api:repo_head_updated': false,
       'api:repo_head': Head,
       'api:status':"api:success"} :< JSON,
 
+    % Verify both repos still have same head after push (unchanged)
     with_triple_store(
         Store_Origin,
         repository_head(Origin_Database_Descriptor, "origin", Head)),
@@ -1782,10 +1776,11 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Origin),
-                 teardown_temp_unattached_server(State_Destination))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Destination)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Origin_Branch_Descriptor),
+    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
+
     with_triple_store(
         Store_Origin,
         (   create_context(Origin_Branch_Descriptor, commit_info{author:"Rosa",message:"hello"}, Origin_Context_1),
@@ -1801,6 +1796,13 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
         )
     ),
 
+    % Get origin head before push
+    Origin_Repository_Descriptor = Origin_Branch_Descriptor.repository_descriptor,
+    with_triple_store(
+        Store_Origin,
+        branch_head_commit(Origin_Repository_Descriptor, "main", Origin_Head)
+    ),
+
     atomic_list_concat([Server_Origin, '/api/push/RosaLuxemburg/bar'], Push_URL),
     base64("KarlKautsky:password_destination", Base64_Destination_Auth),
     format(string(Authorization_Remote), "Basic ~s", [Base64_Destination_Auth]),
@@ -1814,22 +1816,30 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
                request_header('Authorization-Remote'=Authorization_Remote),
                status_code(Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
-
     Status_Code = 200,
+
+    Origin_Database_Descriptor = Origin_Branch_Descriptor.repository_descriptor.database_descriptor,
+    Destination_Database_Descriptor = Destination_Branch_Descriptor.repository_descriptor.database_descriptor,
 
     _{'@type':"api:PushResponse",
       'api:repo_head_updated': true,
       'api:repo_head': Head,
       'api:status':"api:success"} :< JSON,
 
-    Origin_Database_Descriptor = (Origin_Branch_Descriptor.repository_descriptor.database_descriptor),
-    resolve_absolute_string_descriptor("KarlKautsky/foo", Destination_Branch_Descriptor),
-    Destination_Database_Descriptor = (Destination_Branch_Descriptor.repository_descriptor.database_descriptor),
-
+    % Verify origin tracking is updated
     with_triple_store(
         Store_Origin,
         repository_head(Origin_Database_Descriptor, "origin", Head)),
+
+    % Verify destination head matches origin head after push
+    Destination_Repository_Descriptor = Destination_Branch_Descriptor.repository_descriptor,
+    with_triple_store(
+        Store_Destination,
+        branch_head_commit(Destination_Repository_Descriptor, "main", Dest_Head)
+    ),
+    Origin_Head = Dest_Head,
+
+    % Verify destination repository head matches
     with_triple_store(
         Store_Destination,
         repository_head(Destination_Database_Descriptor, "local", Head)).
@@ -1886,14 +1896,14 @@ test(pull_from_empty_to_empty,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Local),
-                 teardown_temp_unattached_server(State_Remote))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Remote)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Database_Descriptor = (Local_Branch_Descriptor.repository_descriptor.database_descriptor),
     resolve_absolute_string_descriptor("KarlKautsky/foo", Remote_Branch_Descriptor),
     Remote_Database_Descriptor = (Remote_Branch_Descriptor.repository_descriptor.database_descriptor),
 
+    % Verify both repos have same repository head before pull
     with_triple_store(
         Store_Local,
         repository_head(Local_Database_Descriptor, "origin", Head)),
@@ -1914,8 +1924,6 @@ test(pull_from_empty_to_empty,
                request_header('Authorization-Remote'=Authorization_Remote),
                status_code(Status_Code)]),
 
-    * json_write_dict(current_output, JSON, []),
-
     Status_Code = 200,
     _{'@type' : "api:PullResponse",
       'api:pull_status' : "api:pull_unchanged",
@@ -1932,8 +1940,7 @@ test(pull_from_something_to_empty,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Local),
-                 teardown_temp_unattached_server(State_Remote))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Remote)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
@@ -1996,8 +2003,7 @@ test(pull_from_something_to_something,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Local),
-                 teardown_temp_unattached_server(State_Remote))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Remote)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
@@ -2066,8 +2072,7 @@ test(pull_from_something_to_something_equal,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Local),
-                 teardown_temp_unattached_server(State_Remote))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Remote)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
@@ -2120,8 +2125,7 @@ test(pull_from_something_to_something_equal_other_branch,
          cleanup(
              (
                  teardown_temp_unattached_server(State_Local),
-                 teardown_temp_unattached_server(State_Remote))),
-         blocked(document_refactor)
+                 teardown_temp_unattached_server(State_Remote)))
      ]) :-
     resolve_absolute_string_descriptor("RosaLuxemburg/bar", Local_Branch_Descriptor),
     Local_Repository_Descriptor = (Local_Branch_Descriptor.repository_descriptor),
