@@ -78,7 +78,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Database'
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
   /info:
     get:
       operationId: getServerInfo
@@ -126,7 +126,7 @@ paths:
                     type: string
                     example: api:success
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
   /ok:
     get:
       operationId: getStatus
@@ -135,13 +135,14 @@ paths:
       tags:
         - Connection
       summary: Simple status update
+      description: |
+        Simple health check endpoint that always returns 200 OK.
+        This endpoint does not require authentication and can be used for basic connectivity checks.
       responses:
         200:
           description: Succeeded
-        401:
-          $ref: '#/components/responses/UnauthorizedError'
-        403:
-          description: Forbidden
+        400:
+          description: Bad Request
   /db:
     get:
       operationId: listDatabases
@@ -331,7 +332,7 @@ paths:
                     example: api:failure
 
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
     delete:
       operationId: deleteDatabase
       x-python-client: Client::delete_database
@@ -364,7 +365,7 @@ paths:
                     type: string
                     example: api:success
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Can't find DB
           content:
@@ -464,7 +465,7 @@ paths:
                     type: string
                     example: api:not_found
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
           
   /prefix/{organization}/{database}/{prefix_name}:
     get:
@@ -558,9 +559,9 @@ paths:
                     type: string
                     example: "Prefix 'ex' not found"
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_read_access permission
+          $ref: '#/components/responses/ForbiddenError'
           
     post:
       operationId: addPrefix
@@ -653,9 +654,9 @@ paths:
                     type: string
                     example: "Prefix 'ex' already exists"
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_write_access permission
+          $ref: '#/components/responses/ForbiddenError'
           
     put:
       operationId: updatePrefix
@@ -742,9 +743,9 @@ paths:
         404:
           description: Prefix not found (only when create=false)
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_write_access permission
+          $ref: '#/components/responses/ForbiddenError'
           
     delete:
       operationId: deletePrefix
@@ -799,9 +800,9 @@ paths:
         404:
           description: Prefix not found
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_write_access permission
+          $ref: '#/components/responses/ForbiddenError'
 
   /document/{path}:
     get:
@@ -911,9 +912,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
     post:
@@ -983,9 +984,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
 
@@ -1020,9 +1021,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
     put:
@@ -1071,9 +1072,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /schema/{path}:
@@ -1123,6 +1124,12 @@ paths:
                   value: { "@documentation": { "@comment":"A normal user database.","@properties": { "comment":"A comment associated with the database.", "creation_date":"The time of creation of the database.", "label":"The label name of the database.", "state":"The system transaction state of the database."} }, "@key": {"@type":"Random"}, "@type":"Class", "comment":"xsd:string", "creation_date":"xsd:dateTime","label":"xsd:string","name":"xsd:string","state": {"@id":"DatabaseState","@type":"Enum","@values": ["creating", "deleting", "finalized" ]}}
                 AllClasses:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /woql:
@@ -1171,9 +1178,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
   /woql/{path}:
     post:
       operationId: executeWoqlQueryForDatabase
@@ -1202,9 +1209,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /clone/{organization}/{database}:
@@ -1264,9 +1271,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /fetch/{path}:
@@ -1310,9 +1317,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /push/{path}:
@@ -1436,9 +1443,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /remote/{path}:
@@ -1487,6 +1494,10 @@ paths:
                       - "api:success"
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
     delete:
@@ -1522,6 +1533,10 @@ paths:
                       - "api:success"
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
     put:
@@ -1569,6 +1584,10 @@ paths:
                       - "api:success"
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
     get:
@@ -1609,12 +1628,12 @@ paths:
                       - "api:success"
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
-        401:
-          description: Unauthorized
-        403:
-          description: Forbidden
         409:
           description: Conflict
   /branch/{path}:
@@ -1651,6 +1670,10 @@ paths:
                       - "api:success"
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
     delete:
@@ -1680,6 +1703,10 @@ paths:
                       - "api:success"
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Branch not found
 
@@ -1746,9 +1773,9 @@ paths:
         400:
           description: Bad Request
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /reset/{path}:
@@ -1791,8 +1818,10 @@ paths:
                       - api:success
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /rebase/{path}:
@@ -1896,8 +1925,10 @@ paths:
                       - api:success
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /optimize/{path}:
@@ -1941,8 +1972,10 @@ paths:
                       - api:success
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /prefixes/{path}:
@@ -1968,8 +2001,10 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /diff:
@@ -2031,7 +2066,10 @@ paths:
               schema:
                 type: object
                 example: { "name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}
-
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: "Failed to find diff"
 
@@ -2076,6 +2114,10 @@ paths:
               schema:
                 type: object
                 example: { "@id" : "Person/Jane", "@type" : "Person", "name" : "Jannet"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: "Failed to apply patch: returning conflict patch"
           content:
@@ -2147,6 +2189,12 @@ paths:
                 items: 
                   type: string
                 example: ["Obj/id1", "Obj/id2"]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
         409:
           description: "Failed to apply patch: returning conflict patch"
           content:
@@ -2197,6 +2245,12 @@ paths:
               schema:
                 type: object
                 example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
         409:
           description: "Failed to apply patch: returning conflict patch"
           content:
@@ -2261,8 +2315,12 @@ paths:
                       type: number
                       example: 1660919664.9129035
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /history/{organization}/{database}:
     get:
       operationId: getDocumentHistory
@@ -2331,8 +2389,10 @@ paths:
                       example: 1660919664.9129035
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
   /roles:
@@ -2370,8 +2430,10 @@ paths:
               schema:
                 type: string
                 example: "Role/Grand%20Pubah"
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
     put:
@@ -2410,8 +2472,10 @@ paths:
                 example: {"@type" : "api:RolesResponse", "api:status" : "api:success"}
         404:
           description: Not Found
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
     get:
@@ -2431,8 +2495,10 @@ paths:
                 items:
                   type: object
                 example: [{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"Admin Role"},{"@id":"Role/consumer","@type":"Role","action":["class_frame","instance_read_access","schema_read_access"],"name":"ConsumerRole"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
   /roles/{roleName}:
     delete:
       operationId: deleteRole
@@ -2456,6 +2522,10 @@ paths:
               schema:
                 type: object
                 example: {"@type" : "api:RolesResponse", "api:status" : "api:success"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Not Found
           content:
@@ -2485,6 +2555,10 @@ paths:
               schema:
                 type: object
                 example: {"@id":"Role/consumer","@type":"Role","action": ["class_frame", "instance_read_access", "schema_read_access" ],"name":"Consumer Role"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Not Found
           content:
@@ -2510,8 +2584,10 @@ paths:
                 items:
                   type: object
                 example: [{"@id":"Organization/admin","@type":"Organization","database": ["SystemDatabase/system",  "UserDatabase/326f41af8c9499b0eea69b67fdced3efbd31663ca601dee8c50d3ad3393b367d","UserDatabase/462333349c1a8271aca185a3bd2d601057fdf2584a88687ad55e43cab635da48","UserDatabase/b4e01001e90bd368f8f19640426f346970f5ceb8eb02acaa42c759f3758e1901","UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"],"name":"admin"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
   /organizations/{organizationName}:
     parameters:
       - name: organizationName
@@ -2544,8 +2620,10 @@ paths:
               schema:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error":{"@type":"api:NoIdForOrganizationName","api:organization_name":"Garbage"},"api:message":"There is no organization with the name adsdfmin.","api:status":"api:not_found"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
     post:
       operationId: createOrganization
       x-python-client: Client::create_organization
@@ -2577,6 +2655,10 @@ paths:
               schema:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
     delete:
       operationId: deleteOrganization
       x-python-client: Client::delete_organization
@@ -2625,8 +2707,10 @@ paths:
                   type: object
                   description: Users with their capabilities
                 example: [{"@id":"User/admin","capability":[{"@id":"Capability/server_access","@type":"Capability","role":[{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"AdminRole"}],"scope":"Organization/admin"}],"name":"admin"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}:
@@ -2658,8 +2742,10 @@ paths:
               schema:
                 type: object
                 example: {"@id":"User/admin","capability":[{"@id":"Capability/server_access","@type":"Capability","role":[{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"AdminRole"}],"scope":"Organization/admin"}],"name":"admin"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}/databases:
@@ -2694,8 +2780,10 @@ paths:
                   type: object
                   example: {"@id":"SystemDatabase/system","@type":"SystemDatabase","name":"_system"}
                 example: [{"@id":"SystemDatabase/system","@type":"SystemDatabase","name":"_system"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
   /users:
@@ -2723,8 +2811,10 @@ paths:
                 items:
                   type: object
                   example: {"@id":"User/admin","@type":"User","capability":["Capability/server_access"],"name":"admin"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
     put:
       operationId: changeUserPassword
       x-python-client: Client::change_user_password
@@ -2762,6 +2852,11 @@ paths:
             application/json:
               schema:
                 type: object
+                example: {"@type":"api:UsersResponse","api:status":"api:success"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
     post:
       operationId: createUser
       x-python-client: Client::add_user
@@ -2798,6 +2893,10 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /users/{userName}:
     parameters:
       - name: userName
@@ -2828,8 +2927,10 @@ paths:
               schema:
                 type: object
                 example: {"@id":"User/admin","@type":"User","capability":["Capability/server_access"],"name":"admin"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
     delete:
       operationId: deleteUser
       x-python-client: Client::delete_user
@@ -2838,15 +2939,12 @@ paths:
         - Account Management
       summary: Delete a user
       responses:
-        200:
+        204:
           description: Success at deleting a user
-          content:
-            application/json:
-              schema:
-                type: object
-                example: {'@type':"api:UsersResponse",'api:status' :"api:success"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
   /migration/{path}:
     parameters:
       - name: path
@@ -2901,6 +2999,10 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /capabilities:
     post:
       operationId: manageCapabilities
@@ -2989,6 +3091,10 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
 
 components:
 
@@ -3140,7 +3246,7 @@ components:
           type: string
           example: finalized
   responses:
-    UnauthorizedError:
+    IncorrectAuthenticationError:
       description: Authentication information is missing or invalid
       content:
         application/json:
@@ -3151,13 +3257,39 @@ components:
                 type: string
                 example: api:ErrorResponse
               api:error:
-                type: string
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:IncorrectAuthenticationError
               api:message:
                 type: string
                 example: Incorrect authentication information
               api:status:
                 type: string
                 example: api:failure
+    ForbiddenError:
+      description: User is authenticated but lacks permission for the requested action
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              api:status:
+                type: string
+                example: api:forbidden
+              api:message:
+                type: string
+                example: Access to resource is not authorised with action read and auth User/anonymous
+              auth:
+                type: string
+                example: User/anonymous
+              action:
+                type: string
+                example: read
+              scope:
+                type: string
+                example: Database/admin/test
   securitySchemes:
     basicAuth:
       type: http
