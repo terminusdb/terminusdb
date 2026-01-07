@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document } = require('../../../tests/lib')
+const { Agent, db, document } = require('../../lib')
 
 describe('accumulation-measurement', function () {
   let agent

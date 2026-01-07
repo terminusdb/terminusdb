@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document } = require('../lib')
+const { Agent, db, document } = require('../../lib')
 
 describe('rollup-performance-test', function () {
   let agent

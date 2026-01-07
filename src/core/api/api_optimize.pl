@@ -71,24 +71,22 @@ descriptor_optimize(repository_descriptor{
             Layer = (Schema.read),
             ground(Layer)
         ),
-        (   rollup(Layer),
+        (   % Rollup creates parallel files. No need to call replace_graph_head_if_named.
+            rollup(Layer),
             layer_to_id(Layer, Schema_Layer_Id),
-            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id),
-            store_id_layer(Store, Schema_Layer_Id, Reloaded_Schema_Layer),
-            Schema_Desc = (Schema.descriptor),
-            replace_graph_head_if_named(Store, Schema_Desc, Reloaded_Schema_Layer)
+            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id)
         )
     ),
     % Optimize in-memory instance graph after rollup
     [Instance] = (Transaction_Object.instance_objects),
     Layer = (Instance.read),
     (   ground(Layer)
-    ->  exponential_rollup_strategy(Layer),
+    ->  % Rollup creates parallel files. No need to call replace_graph_head_if_named.
+        exponential_rollup_strategy(Layer),
+        % Invalidate the full parent chain cache
+        imprecise_rollup_upto(Layer, Layer),
         layer_to_id(Layer, Layer_Id),
-        terminus_store:invalidate_layer_cache_entry(Store, Layer_Id),
-        store_id_layer(Store, Layer_Id, Reloaded_Layer),
-        Desc = (Instance.descriptor),
-        replace_graph_head_if_named(Store, Desc, Reloaded_Layer)
+        terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
     ;   true
     ),
     % Clear caches
@@ -111,13 +109,13 @@ descriptor_optimize(branch_descriptor{
             Layer = (Schema.read),
             ground(Layer)
         ),
-        (   rollup(Layer),
-            % Apply same invalidate+reload+set_head fix to schema layers
+        (   % Rollup creates a parallel file and registers it via register_rollup.
+            % No need to call replace_graph_head_if_named - it's unnecessary and
+            % can cause race conditions by reverting the label to an old layer.
+            rollup(Layer),
+            % Invalidate cache so next load uses the rollup
             layer_to_id(Layer, Schema_Layer_Id),
-            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id),
-            store_id_layer(Store, Schema_Layer_Id, Reloaded_Schema_Layer),
-            Schema_Desc = (Schema.descriptor),
-            replace_graph_head_if_named(Store, Schema_Desc, Reloaded_Schema_Layer)
+            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id)
         )
     ),
     Instance_Objects = (Transaction_Object.instance_objects),
@@ -126,84 +124,41 @@ descriptor_optimize(branch_descriptor{
             Layer = (Instance.read),
             ground(Layer)
         ),
-        (   exponential_rollup_strategy(Layer),
+        (   % Rollup creates parallel files. No need to update label file.
+            exponential_rollup_strategy(Layer),
             % Invalidate the ENTIRE parent chain cache by triggering register_rollup.
             % imprecise_rollup_upto(Layer, Layer) is a no-op for rollup creation,
             % but register_rollup still runs and invalidates the full parent chain.
-            % This is necessary because exponential_rollup_strategy only invalidates
-            % chains for layers it rolls up, not the full chain of the topmost layer.
             imprecise_rollup_upto(Layer, Layer),
-            % Reload to get the layer with rolled-up parents
+            % Invalidate cache so next load uses the rollup
             layer_to_id(Layer, Layer_Id),
-            store_id_layer(Store, Layer_Id, Reloaded_Layer),
-            % Replace the head with the reloaded (flattened) layer
-            Desc = (Instance.descriptor),
-            replace_graph_head_if_named(Store, Desc, Reloaded_Layer)
+            terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
         )
     ),
     % Clear caches that hold references to old deep-chain layers
     retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
     abolish_all_tables,
     % Also roll up the repository layer (commit graph) to prevent O(n) traversal.
-    % The commit graph accumulates child layers with each commit, and
-    % triple_exists() traverses the ENTIRE parent chain on each query.
+    % The commit graph accumulates child layers with each commit.
+    % Rollup is safe here because it only creates parallel files - it does NOT
+    % modify the label file, so there's no race condition with concurrent transactions.
     open_descriptor(Repository_Descriptor, Repo_Transaction),
     [Repo_Instance] = (Repo_Transaction.instance_objects),
     Repo_Layer = (Repo_Instance.read),
     (   ground(Repo_Layer)
-    ->  rollup(Repo_Layer),
-        % Invalidate cache and reload from disk to get flattened version
+    ->  exponential_rollup_strategy(Repo_Layer),
+        % Invalidate the full parent chain cache
+        imprecise_rollup_upto(Repo_Layer, Repo_Layer),
+        % Invalidate cache so next load uses the rolled up layer
         layer_to_id(Repo_Layer, Repo_Layer_Id),
         storage(Store),
         terminus_store:invalidate_layer_cache_entry(Store, Repo_Layer_Id),
-        store_id_layer(Store, Repo_Layer_Id, Reloaded_Repo_Layer),
-        % Replace the repo head with the reloaded flattened layer
-        Repo_Desc = (Repo_Instance.descriptor),
-        replace_graph_head_if_named(Store, Repo_Desc, Reloaded_Repo_Layer),
         % Clear retained layers for all descriptors in the chain
         retractall(descriptor:retained_descriptor_layers(Repository_Descriptor, _)),
         retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
         % Also clear tables that cache predicate results keyed by layers
         abolish_all_tables
     ;   true).
-
-% Helper predicate: Replace named graph head with reloaded layer
-% Handles different descriptor types that map to named graphs
-% Uses nb_force_set_head/3 with version checking to prevent race conditions
-% when concurrent transactions are modifying the same graph.
-replace_graph_head_if_named(Store, Desc, Layer) :-
-    (   get_dict(name, Desc, Graph_Name)
-    ->  % labelled_graph, system_graph with name
-        safe_open_named_graph(Store, Graph_Name, Graph),
-        replace_head_with_version_check(Graph, Layer)
-    ;   repo_graph{organization_name: Org, database_name: DB, type: instance} :< Desc
-    ->  % repo_graph instance uses composite name
-        organization_database_name(Org, DB, Composite),
-        safe_open_named_graph(Store, Composite, Graph),
-        replace_head_with_version_check(Graph, Layer)
-    ;   commit_graph{type: schema} :< Desc
-    ->  % commit_graph schema uses ref_ontology
-        ref_ontology(Ref_Name),
-        safe_open_named_graph(Store, Ref_Name, Graph),
-        replace_head_with_version_check(Graph, Layer)
-    ;   % branch_graph, commit_graph instance - no direct named graph head replacement
-        % Layer is referenced via commit objects, cache invalidation handles this
-        true
-    ).
-
-% Helper to set head with version-based CAS to prevent race conditions.
-% If version has changed (concurrent transaction committed), silently skip
-% the head update - the concurrent transaction's result takes precedence.
-% If no head exists, do nothing - optimize should only update existing heads,
-% not create new ones.
-replace_head_with_version_check(Graph, Layer) :-
-    (   head(Graph, _CurrentLayer, Version)
-    ->  % Try to set head with version check; ignore failure if version changed
-        ignore(nb_force_set_head(Graph, Layer, Version))
-    ;   % No head exists - nothing to optimize, just succeed
-        true
-    ).
-
 
 % Write a generator that gives us back Start and Stop positions as commit_ids
 % based on a heuristic of exponential rollup
