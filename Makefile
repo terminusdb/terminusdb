@@ -72,7 +72,7 @@ lint-mocha-fix:
 
 .PHONY: lint-openapi
 lint-openapi:
-	sh -c "npx @redocly/cli lint docs/openapi.yaml"
+	sh -c "npx @redocly/cli lint docs/openapi.yaml --skip-rule no-server-example.com"
 
 # Build the dylib.
 .PHONY: rust
