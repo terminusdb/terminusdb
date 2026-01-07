@@ -62,6 +62,7 @@ tags:
 paths:
   /:
     get:
+      operationId: getDatabaseList
       x-python-client: Client::get_databases
       x-js-client: Client.getDatabases
       tags:
@@ -77,9 +78,10 @@ paths:
                 items:
                   $ref: '#/components/schemas/Database'
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
   /info:
     get:
+      operationId: getServerInfo
       x-python-client: not_implemented
       x-js-client: Client.info
       tags:
@@ -123,18 +125,27 @@ paths:
                   "api:status":
                     type: string
                     example: api:success
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
   /ok:
     get:
+      operationId: getStatus
       x-python-client: not_implemented
       x-js-client: not_implemented
       tags:
         - Connection
       summary: Simple status update
+      description: |
+        Simple health check endpoint that always returns 200 OK.
+        This endpoint does not require authentication and can be used for basic connectivity checks.
       responses:
         200:
           description: Succeeded
+        400:
+          description: Bad Request
   /db:
     get:
+      operationId: listDatabases
       x-python-client: Client::get_databases
       x-js-client: Client.getDatabases
       tags:
@@ -171,6 +182,7 @@ paths:
 
   /db/{organization}/{database}:
     get:
+      operationId: getDatabase
       x-python-client: Client::get_database
       x-js-client: not_implemented
       tags:
@@ -210,6 +222,7 @@ paths:
               schema:
                 type: object
     head:
+      operationId: checkDatabaseExists
       x-python-client: Client::has_database
       x-js-client: Client.hasDatabase
       tags:
@@ -233,6 +246,7 @@ paths:
                 type: object
 
     post:
+      operationId: createDatabase
       x-python-client: Client::create_database
       x-js-client: Client.createDatabase
       tags:
@@ -318,8 +332,9 @@ paths:
                     example: api:failure
 
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
     delete:
+      operationId: deleteDatabase
       x-python-client: Client::delete_database
       x-js-client: Client.deleteDatabase
       tags:
@@ -350,7 +365,7 @@ paths:
                     type: string
                     example: api:success
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Can't find DB
           content:
@@ -374,6 +389,7 @@ paths:
                         type: string
                         example: admin
     put:
+      operationId: updateDatabase
       x-python-client: not_implemented
       x-js-client: Client.updateDatabase
       tags:
@@ -449,10 +465,8 @@ paths:
                     type: string
                     example: api:not_found
         401:
-          $ref: '#/components/responses/UnauthorizedError'
-        403:
-          description: Forbidden
-
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+          
   /prefix/{organization}/{database}/{prefix_name}:
     get:
       operationId: getPrefix
@@ -545,9 +559,9 @@ paths:
                     type: string
                     example: "Prefix 'ex' not found"
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_read_access permission
+          $ref: '#/components/responses/ForbiddenError'
           
     post:
       operationId: addPrefix
@@ -640,9 +654,9 @@ paths:
                     type: string
                     example: "Prefix 'ex' already exists"
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_write_access permission
+          $ref: '#/components/responses/ForbiddenError'
           
     put:
       operationId: updatePrefix
@@ -729,9 +743,9 @@ paths:
         404:
           description: Prefix not found (only when create=false)
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_write_access permission
+          $ref: '#/components/responses/ForbiddenError'
           
     delete:
       operationId: deletePrefix
@@ -786,17 +800,17 @@ paths:
         404:
           description: Prefix not found
         401:
-          $ref: '#/components/responses/UnauthorizedError'
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden - user lacks instance_write_access permission
-
+          $ref: '#/components/responses/ForbiddenError'
   /document/{path}:
     get:
-      x-python-client: Client::get_document
-      x-js-client: Client.getDocument
+      operationId: getDocuments
+      x-python-client: Client::get_documents
+      x-js-client: Client.getDocuments
       tags:
         - Document
-      summary: Get a document
+      summary: Retrieve documents from the database
       description: |
         Retrieve documents from the database. Supports filtering, pagination, and result formatting.
         
@@ -894,8 +908,16 @@ paths:
                 type: object
                 description: Concatenated list of JSON documents
                 example: {"@id":"Organization/admin", "@type":"Organization", "database": ["SystemDatabase/system", "UserDatabase/60c35164e937174bbf4dd814c78153d660edc55b3d799c534c1e2d872a3d2dd6" ], "name":"admin"}
-
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
     post:
+      operationId: insertDocument
       x-python-client: Client::insert_document
       x-js-client: Client.addDocument
       tags:
@@ -958,8 +980,17 @@ paths:
               schema:
                 type: object
                 description: Added documents
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
 
     delete:
+      operationId: deleteDocument
       x-python-client: Client::delete_document
       x-js-client: Client.deleteDocument
       tags:
@@ -986,7 +1017,16 @@ paths:
         200:
           description: Document(s) deleted successfully
           # TODO: Need the proper JSON response!
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
     put:
+      operationId: replaceDocument
       x-python-client: Client::replace_document
       x-js-client: Client.updateDocument
       tags:
@@ -1028,8 +1068,179 @@ paths:
       responses:
         200:
           description: Documents replaced successfully
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+  /triples/{path}:
+    get:
+      operationId: getTriples
+      summary: Get RDF triples from a graph
+      description: |
+        Retrieves RDF triples from the specified graph in Turtle format.
+        
+        This is a low-level API that provides direct access to the RDF triple layer.
+        The entire graph content is returned as raw Turtle RDF data.
+
+        This endpoint is currently experimental. The document API should be used instead. It can be useful for downloading the raw triples for processing though.
+        
+        **Note:** This endpoint bypasses the JSON-LD document layer and works directly with RDF triples.
+      tags:
+        - Triples
+      parameters:
+        - $ref: '#/components/parameters/graph_path'
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [turtle]
+            default: turtle
+          description: Output format (currently only turtle is supported)
+      responses:
+        200:
+          description: RDF triples in Turtle format
+          content:
+            text/turtle:
+              schema:
+                type: string
+              example: |
+                @prefix ex: <http://example.org/> .
+                ex:person1 a ex:Person .
+                ex:person1 ex:name "John" .
+            application/json:
+              schema:
+                type: string
+              example: "ex:person1 a ex:Person .\nex:person1 ex:name \"John\" ."
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+    post:
+      operationId: updateTriples
+      summary: Update/Replace RDF triples in a graph
+      description: |
+        Replaces the entire graph content with the provided RDF triples.
+        
+        This is a low-level API that operates directly on RDF triples. The operation
+        performs a diff between existing and new triples:
+        - Deletes all triples that exist in the database but not in the new data
+        - Keeps the triples that exist in both the database and the new data
+        - Inserts all triples that exist in the new data but not in the database
+        
+        **Important notes:**
+        - The entire graph is processed in one atomic operation
+        - Schema validation will be performed if enabled for the database
+        - This API cannot correctly create documents with subdocuments
+        - Bypasses the JSON document layer and works directly with RDF (warning!)
+
+        **Note:** This endpoint is experimental, here be dragons, use the document API instead.
+        It can be useful for loading RDF data into the graph and for pre-processing though.
+      tags:
+        - Triples
+      parameters:
+        - $ref: '#/components/parameters/graph_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - turtle
+                - commit_info
+              properties:
+                turtle:
+                  type: string
+                  description: RDF triples in Turtle format
+                  example: |
+                    @prefix ex: <http://example.org/> .
+                    ex:person1 a ex:Person .
+                    ex:person1 ex:name "John" .
+                    ex:person1 ex:age 30 .
+                commit_info:
+                  $ref: '#/components/schemas/CommitInfo'
+      responses:
+        200:
+          description: Triples updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriplesUpdateResponse'
+        400:
+          description: Bad Request or schema validation failed
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+    put:
+      operationId: insertTriples
+      summary: Insert RDF triples into a graph
+      description: |
+        Inserts additional RDF triples into the graph without deleting existing ones.
+        
+        This is a low-level API that adds triples to the existing graph content.
+        
+        **Important notes:**
+        - Inserts the provided triples without removing existing data
+        - Does not check for duplicates - may insert the same triple multiple times
+        - Schema validation will be performed if enabled for the database
+        - This API can't correctly create documents with subdocuments
+        - Bypasses the JSON document layer and works directly with RDF
+
+        **Note:** This endpoint is experimental, here be dragons, use the document API instead.
+        It can be useful for loading RDF data into the graph and for pre-processing though.
+      tags:
+        - Triples
+      parameters:
+        - $ref: '#/components/parameters/graph_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - turtle
+                - commit_info
+              properties:
+                turtle:
+                  type: string
+                  description: RDF triples to insert in Turtle format
+                  example: |
+                    @prefix ex: <http://example.org/> .
+                    ex:person2 a ex:Person .
+                    ex:person2 ex:name "Jane" .
+                    ex:person2 ex:age 25 .
+                commit_info:
+                  $ref: '#/components/schemas/CommitInfo'
+      responses:
+        200:
+          description: Triples inserted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriplesInsertResponse'
+        400:
+          description: Bad Request or schema validation failed
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /schema/{path}:
     get:
+      operationId: getSchemaFrame
       x-python-client: Client::get_class_frame
       x-js-client: Client.getSchemaFrame
       tags:
@@ -1074,8 +1285,17 @@ paths:
                   value: { "@documentation": { "@comment":"A normal user database.","@properties": { "comment":"A comment associated with the database.", "creation_date":"The time of creation of the database.", "label":"The label name of the database.", "state":"The system transaction state of the database."} }, "@key": {"@type":"Random"}, "@type":"Class", "comment":"xsd:string", "creation_date":"xsd:dateTime","label":"xsd:string","name":"xsd:string","state": {"@id":"DatabaseState","@type":"Enum","@values": ["creating", "deleting", "finalized" ]}}
                 AllClasses:
                   value: { "@context": { "@base":"terminusdb:///data/", "@schema":"terminusdb:///schema#", "@type":"Context" }, "Person": {"@type":"Class", "name":"xsd:string"}, "Room": {"@type":"Class", "room_number":"xsd:integer"} }
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /woql:
     post:
+      operationId: executeWoqlQuery
       summary: Execute a WOQL query
       description: |
         Run Web Object Query Language (WOQL) queries for complex data operations including on triples. Use SDK in Javascript, Python or Rust to make it easy to construct the queries.
@@ -1116,9 +1336,16 @@ paths:
       responses:
         200:
           description: Query result
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /woql/{path}:
     post:
-      summary: Execute a WOQL query on a specific path
+      operationId: executeWoqlQueryForDatabase
+      summary: Execute a WOQL query for a specific database
       x-python-client: Client::query
       x-js-client: Client.query
       tags:
@@ -1140,8 +1367,17 @@ paths:
       responses:
         200:
           description: Query result
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /clone/{organization}/{database}:
     post:
+      operationId: cloneDatabase
       summary: Clone a database
       description: |
         Create a copy of an existing database. Useful for creating development environments or backups.
@@ -1193,8 +1429,17 @@ paths:
             application/json:
               schema:
                 type: object
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /fetch/{path}:
     post:
+      operationId: fetchRemote
       x-python-client: Client::fetch
       x-js-client: Client.fetch
       tags:
@@ -1230,8 +1475,17 @@ paths:
                   "api:head":
                     type: string
                     example: 194822f8942286517e151817d38acca4c9ac7d01
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /push/{path}:
     post:
+      operationId: pushBranch
       x-python-client: Client::push
       x-js-client: Client.push
       summary: Push the branch to the remote
@@ -1305,6 +1559,7 @@ paths:
 
   /pull/{path}:
     post:
+      operationId: pullBranch
       x-python-client: Client::pull
       x-js-client: Client.pull
       summary: Pull to a branch from a remote
@@ -1346,8 +1601,17 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /remote/{path}:
     post:
+      operationId: createRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Create a new remote
@@ -1389,7 +1653,16 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
     delete:
+      operationId: deleteRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Delete a remote
@@ -1419,7 +1692,16 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
     put:
+      operationId: updateRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Update a remote with a new location
@@ -1461,7 +1743,16 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
     get:
+      operationId: getRemote
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: Get the url for a given remote
@@ -1496,8 +1787,19 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+        409:
+          description: Conflict
   /branch/{path}:
     post:
+      operationId: createBranch
       summary: Create a new branch
       x-python-client: Client::create_branch
       x-js-client: Client.branch
@@ -1527,7 +1829,16 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
     delete:
+      operationId: deleteBranch
       summary: Delete a branch
       x-python-client: Client::delete_branch
       x-js-client: Client.deleteBranch
@@ -1551,6 +1862,14 @@ paths:
                     type: string
                     enum:
                       - "api:success"
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Branch not found
 
   /squash/{path}:
     x-python-client: Client::squash
@@ -1558,6 +1877,7 @@ paths:
     parameters:
         - $ref: '#/components/parameters/commit_path'
     post:
+      operationId: squashCommits
       summary: Squash a commit history into a new commit
       description: This squashes a commit history into a single commit. The commit will not be attached to any particular branch.
       tags:
@@ -1611,10 +1931,19 @@ paths:
                     type: string
                     enum:
                     - api:success
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /reset/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: resetBranch
       summary: Reset branch to a specific commit
       description: This will set the branch to the submitted commit. The commit is specified as a resource path to either a specific commit, or to a branch, in which case the commit this branch will be set to is going to be the head of that branch.
       x-python-client: Client::reset
@@ -1648,10 +1977,19 @@ paths:
                     type: string
                     enum:
                       - api:success
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /rebase/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: rebaseBranch
       summary: Rebase all commits from a source onto this branch
       description: |
           Given a submitted commit ref (either a branch path or a commit path), this will find out the most recent common commit, and starting at that common commit, reapply commits from the source, followed by the commits from this branch. The end result is a history where all changes unique to this branch are now at the top of the history.
@@ -1746,8 +2084,17 @@ paths:
                     type: string
                     enum:
                       - api:success
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /optimize/{path}:
     post:
+      operationId: optimizeGraph
       summary: Optimize a specific graph
       x-python-client: Client::optimize
       x-js-client: Client.optimizeBranch
@@ -1784,6 +2131,14 @@ paths:
                     type: string
                     enum:
                       - api:success
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /prefixes/{path}:
     get:
       operationId: getPrefixes
@@ -1807,8 +2162,15 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /diff:
     post:
+      operationId: diffVersions
       summary: Diff a specific object or two data versions
       x-python-client: Client::diff
       x-js-client: Client.getVersionDiff, Client.getVersionObjectDiff
@@ -1865,12 +2227,16 @@ paths:
               schema:
                 type: object
                 example: { "name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}
-
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: "Failed to find diff"
 
   /patch:
     post:
+      operationId: applyPatch
       summary: Apply a patch object to another object (diff result)
       x-python-client: Client::patch
       x-js-client: Client.patch
@@ -1909,6 +2275,10 @@ paths:
               schema:
                 type: object
                 example: { "@id" : "Person/Jane", "@type" : "Person", "name" : "Jannet"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: "Failed to apply patch: returning conflict patch"
           content:
@@ -1920,6 +2290,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: patchResource
       summary: Apply a patch object to a resource
       description: |
           Apply a patch object to a resource in the database. Can be used to modify schema elements, documents, or prefixes.
@@ -1949,7 +2320,9 @@ paths:
                 - "message"
               properties:
                 "patch":
-                  type: object
+                  type: array
+                  items:
+                    type: object
                   example:
                     - '@id': Obj/id1
                       name:
@@ -1977,6 +2350,12 @@ paths:
                 items: 
                   type: string
                 example: ["Obj/id1", "Obj/id2"]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
         409:
           description: "Failed to apply patch: returning conflict patch"
           content:
@@ -1988,6 +2367,7 @@ paths:
     parameters:
       - $ref: '#/components/parameters/branch_path'
     post:
+      operationId: applyDiff
       summary: Apply a specific diff
       x-python-client: Client::apply
       x-js-client: Client.apply
@@ -2026,6 +2406,12 @@ paths:
               schema:
                 type: object
                 example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
         409:
           description: "Failed to apply patch: returning conflict patch"
           content:
@@ -2035,6 +2421,7 @@ paths:
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
   /log/{organization}/{database}:
     get:
+      operationId: getCommitLog
       x-python-client: Client::log
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
@@ -2089,8 +2476,15 @@ paths:
                       type: number
                       example: 1660919664.9129035
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /history/{organization}/{database}:
     get:
+      operationId: getDocumentHistory
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
@@ -2154,9 +2548,17 @@ paths:
                     "timestamp":
                       type: number
                       example: 1660919664.9129035
-                  example: [{"author":"admin","identifier":"tbn15yq6rw1l4e9bgboyu3vwcoxgri5","message":"cli: document replace","timestamp":1680808874.324928},{"author":"admin","identifier":"3v3naa8jrt8612dg5zryu4vjqwa2w9s","message":"cli: document insert","timestamp":1680808847.4063878}]
+        400:
+          description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
   /roles:
     post:
+      operationId: createRole
       x-python-client: Client::add_role
       x-js-client: AccessControl.createRole
       tags:
@@ -2189,11 +2591,14 @@ paths:
               schema:
                 type: string
                 example: "Role/Grand%20Pubah"
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
     put:
+      operationId: updateRole
       x-python-client: Client::change_role
       x-js-client: not_implemented
       tags:
@@ -2228,11 +2633,14 @@ paths:
                 example: {"@type" : "api:RolesResponse", "api:status" : "api:success"}
         404:
           description: Not Found
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
     get:
+      operationId: getRoles
       x-python-client: Client::get_available_roles
       x-js-client: AccessControl.getAccessRoles
       tags:
@@ -2244,10 +2652,17 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                type: array
+                items:
+                  type: object
                 example: [{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"Admin Role"},{"@id":"Role/consumer","@type":"Role","action":["class_frame","instance_read_access","schema_read_access"],"name":"ConsumerRole"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /roles/{roleName}:
     delete:
+      operationId: deleteRole
       x-python-client: not_implemented
       x-js-client: AccessControl.deleteRole
       summary: Delete a role
@@ -2268,6 +2683,10 @@ paths:
               schema:
                 type: object
                 example: {"@type" : "api:RolesResponse", "api:status" : "api:success"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Not Found
           content:
@@ -2276,6 +2695,7 @@ paths:
                 type: object
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
     get:
+      operationId: getRole
       x-python-client: not_implemented
       x-js-client: not_implemented
       tags:
@@ -2296,6 +2716,10 @@ paths:
               schema:
                 type: object
                 example: {"@id":"Role/consumer","@type":"Role","action": ["class_frame", "instance_read_access", "schema_read_access" ],"name":"Consumer Role"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
         404:
           description: Not Found
           content:
@@ -2305,6 +2729,7 @@ paths:
                 example: {"@type":"api:RoleErrorResponse","api:error": {"@type":"api:DocumentNotFound", "api:document_id":"Role/Garbage"},"api:message":"Document not found: 'Role/Editor'","api:status":"api:not_found"}
   /organizations:
     get:
+      operationId: getOrganizations
       x-python-client: Client::get_organizations
       x-js-client: AccessControl.getAllOrganizations
       tags:
@@ -2320,6 +2745,10 @@ paths:
                 items:
                   type: object
                 example: [{"@id":"Organization/admin","@type":"Organization","database": ["SystemDatabase/system",  "UserDatabase/326f41af8c9499b0eea69b67fdced3efbd31663ca601dee8c50d3ad3393b367d","UserDatabase/462333349c1a8271aca185a3bd2d601057fdf2584a88687ad55e43cab635da48","UserDatabase/b4e01001e90bd368f8f19640426f346970f5ceb8eb02acaa42c759f3758e1901","UserDatabase/f5a0ef94469b32e1aee321678436c7dfd5a96d9c476672b3282ae89a45b5200e"],"name":"admin"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /organizations/{organizationName}:
     parameters:
       - name: organizationName
@@ -2329,6 +2758,7 @@ paths:
           type: string
           example: admin
     get:
+      operationId: getOrganization
       x-python-client: Client::get_organization
       x-js-client: not_implemented
       tags:
@@ -2351,9 +2781,12 @@ paths:
               schema:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error":{"@type":"api:NoIdForOrganizationName","api:organization_name":"Garbage"},"api:message":"There is no organization with the name adsdfmin.","api:status":"api:not_found"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
     post:
+      operationId: createOrganization
       x-python-client: Client::create_organization
       x-js-client: AccessControl.createOrganization
       tags:
@@ -2383,7 +2816,12 @@ paths:
               schema:
                 type: object
                 example: {"@type":"api:OrganizationErrorResponse","api:error": {"@type":"api:NoUniqueIdForOrganizationName","api:organization_id":"terminusdb://system/data/Organization/admin"},"api:message":"An organization with the id 'terminusdb://system/data/Organization/admin' already exists.  Consider renaming, deleting the old role, or updating the old role.","api:status":"api:failure"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
     delete:
+      operationId: deleteOrganization
       x-python-client: Client::delete_organization
       x-js-client: AccessControl.deleteOrganization
       tags:
@@ -2413,6 +2851,7 @@ paths:
           type: string
           example: admin
     get:
+      operationId: getOrganizationUsers
       x-python-client: Client::get_organization_users
       x-js-client: AccessControl.getOrgUsers
       tags:
@@ -2429,12 +2868,15 @@ paths:
                   type: object
                   description: Users with their capabilities
                 example: [{"@id":"User/admin","capability":[{"@id":"Capability/server_access","@type":"Capability","role":[{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"AdminRole"}],"scope":"Organization/admin"}],"name":"admin"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}:
     get:
+      operationId: getOrganizationUser
       x-python-client: Client::get_organization_user
       x-js-client: not_implemented
       tags:
@@ -2461,12 +2903,15 @@ paths:
               schema:
                 type: object
                 example: {"@id":"User/admin","capability":[{"@id":"Capability/server_access","@type":"Capability","role":[{"@id":"Role/admin","@type":"Role","action":["branch","class_frame","clone","commit_read_access","commit_write_access","create_database","delete_database","fetch","instance_read_access","instance_write_access","manage_capabilities","meta_read_access","meta_write_access","push","rebase","schema_read_access","schema_write_access"],"name":"AdminRole"}],"scope":"Organization/admin"}],"name":"admin"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
   /organizations/{organizationName}/users/{userName}/databases:
     get:
+      operationId: getOrganizationUserDatabases
       x-python-client: Client::get_organization_user_databases
       x-js-client: not_implemented
       tags:
@@ -2496,17 +2941,20 @@ paths:
                   type: object
                   example: {"@id":"SystemDatabase/system","@type":"SystemDatabase","name":"_system"}
                 example: [{"@id":"SystemDatabase/system","@type":"SystemDatabase","name":"_system"}]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
         400:
           description: Bad Request
   /users:
     get:
+      operationId: getUsers
       x-python-client: Client::get_users
       x-js-client: AccessControl.getAllUsers
       tags:
-        - Account Management
-      summary: Get all users
+        - Account management
+      summary: Get all users according to capabilities of the authenticated user
       parameters:
         - name: capability
           in: query
@@ -2524,9 +2972,12 @@ paths:
                 items:
                   type: object
                   example: {"@id":"User/admin","@type":"User","capability":["Capability/server_access"],"name":"admin"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
     put:
+      operationId: changeUserPassword
       x-python-client: Client::change_user_password
       x-js-client: not_implemented
       tags:
@@ -2562,7 +3013,13 @@ paths:
             application/json:
               schema:
                 type: object
+                example: {"@type":"api:UsersResponse","api:status":"api:success"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
     post:
+      operationId: createUser
       x-python-client: Client::add_user
       x-js-client: AccessControl.createUser
       tags:
@@ -2597,6 +3054,10 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /users/{userName}:
     parameters:
       - name: userName
@@ -2606,6 +3067,7 @@ paths:
           type: string
           example: Bob
     get:
+      operationId: getUser
       x-python-client: Client::get_user
       x-js-client: not_implemented
       tags:
@@ -2626,24 +3088,24 @@ paths:
               schema:
                 type: object
                 example: {"@id":"User/admin","@type":"User","capability":["Capability/server_access"],"name":"admin"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
     delete:
+      operationId: deleteUser
       x-python-client: Client::delete_user
       x-js-client: AccessControl.deleteUser
       tags:
         - Account Management
       summary: Delete a user
       responses:
-        200:
+        204:
           description: Success at deleting a user
-          content:
-            application/json:
-              schema:
-                type: object
-                example: {'@type':"api:UsersResponse",'api:status' :"api:success"}
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
-          description: Forbidden
+          $ref: '#/components/responses/ForbiddenError'
   /migration/{path}:
     parameters:
       - name: path
@@ -2653,6 +3115,7 @@ paths:
           type: string
           example: admin/MyDB
     post:
+      operationId: migrateSchema
       tags:
         - Change management
       summary: Schema migration either by explicit operation, or implicit schema targetting
@@ -2670,7 +3133,9 @@ paths:
                   type: string
                   example: "updating schema"
                 "operations":
-                  type: object
+                  type: array
+                  items:
+                    type: object
                   example: [{"@type" : "DeleteClassProperty", "class" : "MyClass", "property" : "my_property"}]
                 "dry_run":
                   type: boolean
@@ -2695,8 +3160,13 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
   /capabilities:
     post:
+      operationId: manageCapabilities
       x-python-client: Client::change_capabilities
       x-js-client: AccessControl.manageCapability
       tags:
@@ -2782,6 +3252,10 @@ paths:
             application/json:
               schema:
                 type: object
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
 
 components:
 
@@ -2821,6 +3295,29 @@ components:
       schema:
         type: string
         example: admin/test/local/branch/foo
+    graph_path:
+      name: path
+      in: path
+      description: Path for a specific graph (schema or instance) within a branch
+      required: true
+      schema:
+        type: string
+      examples:
+        instance_graph:
+          value: admin/test/local/branch/main/instance
+          summary: Instance data graph of branch 'main'
+        schema_graph:
+          value: admin/test/local/branch/main/schema
+          summary: Schema graph of branch 'main'
+        commit_instance:
+          value: admin/test/local/commit/q0r08e1hjy123tkf0urzjiov7rrnmp7/instance
+          summary: Instance data graph at specific commit
+        meta_graph:
+          value: admin/test/_meta
+          summary: Repository metadata graph
+        system_graph:
+          value: _system
+          summary: System graph
     commit_path:
       name: path
       in: path
@@ -2932,8 +3429,32 @@ components:
         state:
           type: string
           example: finalized
+    TriplesUpdateResponse:
+      type: object
+      properties:
+        '@type':
+          type: string
+          example: api:TriplesUpdateResponse
+        'api:status':
+          type: string
+          example: api:success
+      required:
+        - '@type'
+        - 'api:status'
+    TriplesInsertResponse:
+      type: object
+      properties:
+        '@type':
+          type: string
+          example: api:TriplesInsertResponse
+        'api:status':
+          type: string
+          example: api:success
+      required:
+        - '@type'
+        - 'api:status'
   responses:
-    UnauthorizedError:
+    IncorrectAuthenticationError:
       description: Authentication information is missing or invalid
       content:
         application/json:
@@ -2944,13 +3465,39 @@ components:
                 type: string
                 example: api:ErrorResponse
               api:error:
-                type: string
+                type: object
+                properties:
+                  '@type':
+                    type: string
+                    example: api:IncorrectAuthenticationError
               api:message:
                 type: string
                 example: Incorrect authentication information
               api:status:
                 type: string
                 example: api:failure
+    ForbiddenError:
+      description: User is authenticated but lacks permission for the requested action
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              api:status:
+                type: string
+                example: api:forbidden
+              api:message:
+                type: string
+                example: Access to resource is not authorised with action read and auth User/anonymous
+              auth:
+                type: string
+                example: User/anonymous
+              action:
+                type: string
+                example: read
+              scope:
+                type: string
+                example: Database/admin/test
   securitySchemes:
     basicAuth:
       type: http
