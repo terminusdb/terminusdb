@@ -40,7 +40,7 @@
               get_prefixes/4,
               update_prefixes/5,
               get_prefix/5,
-              add_prefix/7,
+              add_prefix/8,
               update_prefix/7,
               upsert_prefix/7,
               delete_prefix/6
@@ -129,6 +129,19 @@ find_prefix_by_name(Schema, Prefix_Name, Prefix_Id, Prefix_URI) :-
     xrdf(Schema, Prefix_Id, URL_Pred, URI_Str^^XSD_String),
     Prefix_URI = URI_Str.
 
+% Find existing prefix by URI in schema (returns Prefix_Id and Name if found)
+find_prefix_by_uri(Schema, Prefix_URI, Prefix_Id, Prefix_Name) :-
+    % Normalize prefix URI to string for comparison
+    (   atom(Prefix_URI) -> atom_string(Prefix_URI, URI_Str) ; URI_Str = Prefix_URI ),
+    global_prefix_expand(sys:prefix_pair, Prefix_Pair_Pred),
+    global_prefix_expand(sys:prefix, Prefix_Pred),
+    global_prefix_expand(sys:url, URL_Pred),
+    global_prefix_expand(xsd:string, XSD_String),
+    xrdf(Schema, 'terminusdb://context', Prefix_Pair_Pred, Prefix_Id),
+    xrdf(Schema, Prefix_Id, URL_Pred, URI_Str^^XSD_String),
+    xrdf(Schema, Prefix_Id, Prefix_Pred, Name_Str^^XSD_String),
+    Prefix_Name = Name_Str.
+
 % Insert prefix triples atomically
 insert_prefix_triples(Schema, Prefix_Name, Prefix_URI) :-
     (   atom(Prefix_Name) -> atom_string(Name_Str, Prefix_Name) ; Name_Str = Prefix_Name ),
@@ -173,8 +186,14 @@ check_context_exists_in_schema(Schema) :-
         xrdf(Schema, 'terminusdb://context', Rdf_Type, Context_Type),
         error(schema_not_initialized, _)).
 
-% Add a new prefix (fails if prefix already exists) - ATOMIC
-add_prefix(Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, Result_Prefixes) :-
+% Add a new prefix - ATOMIC
+% Returns Result = created | existed
+% - created: new prefix was inserted (201)
+% - existed: prefix with same name and IRI already exists (204, idempotent no-op)
+% Fails with error if:
+% - prefix name exists with different IRI (prefix_already_exists)
+% - IRI already used by another prefix (prefix_uri_already_in_use)
+add_prefix(Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, Result, Result_Prefixes) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_absolute_path(Path),_)),
@@ -191,6 +210,10 @@ add_prefix(Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, Result_P
         valid_iri(Prefix_URI),
         error(invalid_iri(Prefix_URI), _)),
 
+    % Normalize strings for comparison
+    (   atom(Prefix_Name) -> atom_string(Prefix_Name, Name_Str) ; Name_Str = Prefix_Name ),
+    (   atom(Prefix_URI) -> atom_string(Prefix_URI, URI_Str) ; URI_Str = Prefix_URI ),
+
     create_context(Descriptor, Commit_Info, Context),
     with_transaction(
         Context,
@@ -198,12 +221,24 @@ add_prefix(Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, Result_P
             query_default_collection(Context, Transaction),
             database_schema(Transaction, [Schema]),
             check_context_exists_in_schema([Schema]),
-            % Check prefix doesn't already exist
-            do_or_die(
-                \+ find_prefix_by_name([Schema], Prefix_Name, _, _),
-                error(prefix_already_exists(Prefix_Name), _)),
-            % Insert new prefix triples
-            insert_prefix_triples(Schema, Prefix_Name, Prefix_URI)
+            % Check if prefix name already exists
+            (   find_prefix_by_name([Schema], Name_Str, _, Existing_URI)
+            ->  % Prefix name exists - check if IRI matches
+                (   Existing_URI = URI_Str
+                ->  % Same name AND same IRI - idempotent, no-op
+                    Result = existed
+                ;   % Same name but different IRI - error
+                    throw(error(prefix_already_exists(Prefix_Name), _))
+                )
+            ;   % Prefix name doesn't exist - check if IRI is already in use
+                (   find_prefix_by_uri([Schema], URI_Str, _, Other_Prefix_Name)
+                ->  % IRI already used by another prefix
+                    throw(error(prefix_uri_already_in_use(Prefix_URI, Other_Prefix_Name), _))
+                ;   % All clear - insert new prefix
+                    insert_prefix_triples(Schema, Name_Str, URI_Str),
+                    Result = created
+                )
+            )
         ),
         _),
     % Return updated prefixes
@@ -403,11 +438,11 @@ test(add_prefix,
     Path = "admin/testdb",
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add prefix"},
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/myprefix/", Result),
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/myprefix/", created, Result),
     get_dict(myprefix, Result, URI),
     atom_string(URI, "http://example.org/myprefix/").
 
-test(add_prefix_already_exists,
+test(add_prefix_already_exists_different_iri,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin", "testdb")
             )),
@@ -417,9 +452,38 @@ test(add_prefix_already_exists,
     Path = "admin/testdb",
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add prefix"},
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/myprefix/", _),
-    % Try to add the same prefix again
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/other/", _).
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/myprefix/", _, _),
+    % Try to add the same prefix again with different IRI - should fail
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/other/", _, _).
+
+test(add_prefix_idempotent_same_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    Path = "admin/testdb",
+    super_user_authority(Auth),
+    Commit_Info = commit_info{author: "test", message: "add prefix"},
+    % First add returns created
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/myprefix/", created, _),
+    % Second add with same name AND same IRI returns existed (idempotent)
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/myprefix/", existed, _).
+
+test(add_prefix_iri_already_in_use,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(prefix_uri_already_in_use(_, _), _)
+     ]) :-
+    Path = "admin/testdb",
+    super_user_authority(Auth),
+    Commit_Info = commit_info{author: "test", message: "add prefix"},
+    % First add a prefix with an IRI
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, first_prefix, "http://example.org/shared/", _, _),
+    % Try to add a different prefix with the same IRI - should fail
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, second_prefix, "http://example.org/shared/", _, _).
 
 test(add_prefix_reserved,
      [setup((setup_temp_store(State),
@@ -431,7 +495,7 @@ test(add_prefix_reserved,
     Path = "admin/testdb",
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add prefix"},
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, '@custom', "http://example.org/", _).
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, '@custom', "http://example.org/", _, _).
 
 test(add_prefix_invalid_iri,
      [setup((setup_temp_store(State),
@@ -443,7 +507,7 @@ test(add_prefix_invalid_iri,
     Path = "admin/testdb",
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add prefix"},
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "not a valid iri", _).
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "not a valid iri", _, _).
 
 test(valid_prefix_name_basic,
      []) :-
@@ -556,7 +620,7 @@ test(update_prefix,
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "update prefix"},
     % First add a prefix
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/old/", _),
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/old/", _, _),
     % Then update it
     update_prefix(Path, system_descriptor{}, Auth, Commit_Info, myprefix, "http://example.org/new/", Result),
     get_dict(myprefix, Result, URI),
@@ -614,7 +678,7 @@ test(delete_prefix,
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "delete prefix"},
     % First add a prefix
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, todelete, "http://example.org/delete/", _),
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, todelete, "http://example.org/delete/", _, _),
     % Then delete it
     delete_prefix(Path, system_descriptor{}, Auth, Commit_Info, todelete, Result),
     \+ get_dict(todelete, Result, _).
@@ -653,7 +717,7 @@ test(add_prefix_with_emoji_iri,
     super_user_authority(Auth),
     Commit_Info = commit_info{author: "test", message: "add emoji prefix"},
     % IRI with emoji - valid UTF-8 in IRI
-    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, emoji, "http://example.org/🚀/", Result),
+    add_prefix(Path, system_descriptor{}, Auth, Commit_Info, emoji, "http://example.org/🚀/", created, Result),
     get_dict(emoji, Result, URI),
     atom_string(URI, "http://example.org/🚀/").
 

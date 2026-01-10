@@ -84,7 +84,7 @@
               get_prefixes/4,
               update_prefixes/5,
               get_prefix/5,
-              add_prefix/7,
+              add_prefix/8,
               update_prefix/7,
               upsert_prefix/7,
               delete_prefix/6,

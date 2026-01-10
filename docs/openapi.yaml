@@ -571,7 +571,7 @@ paths:
         - Database
       summary: Add a new prefix mapping
       description: |
-        Create a new prefix-to-IRI mapping. Fails if the prefix already exists.
+        Create a new prefix-to-IRI mapping. This operation is idempotent for the same name+IRI combination.
         
         **When to use:** Define a new namespace prefix for your documents. For example, add 'schema' → 'http://schema.org/' to use 'schema:Person' in your documents.
         
@@ -582,6 +582,11 @@ paths:
           -H "Content-Type: application/json" \
           -d '{"uri": "http://example.org/"}'
         ```
+        
+        **Response codes:**
+        - **201**: Prefix created successfully
+        - **204**: Prefix already exists with same IRI (idempotent no-op)
+        - **400**: Prefix exists with different IRI, or IRI already used by another prefix
         
         **Tips:**
         - Prefix names must NOT start with '@' (reserved for @base, @schema, etc.)
@@ -630,8 +635,10 @@ paths:
                   'api:status':
                     type: string
                     example: api:success
+        204:
+          description: Prefix already exists with same name and IRI (idempotent no-op)
         400:
-          description: Bad request - prefix already exists, invalid IRI, or reserved name
+          description: Bad request - prefix exists with different IRI, IRI already used by another prefix, invalid IRI, or reserved name
           content:
             application/json:
               schema:
@@ -648,7 +655,7 @@ paths:
                     properties:
                       '@type':
                         type: string
-                        enum: [api:PrefixAlreadyExists, api:InvalidIRI, api:ReservedPrefix]
+                        enum: [api:PrefixAlreadyExists, api:PrefixUriAlreadyInUse, api:InvalidIRI, api:ReservedPrefix]
                         example: api:PrefixAlreadyExists
                   'api:message':
                     type: string
