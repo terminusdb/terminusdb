@@ -2275,8 +2275,9 @@ individual_prefix_handler(post, Path, Request, System_DB, Auth) :-
                                   'api:prefix_uri': Prefix_URI,
                                   'api:status': "api:success"},
                                 [status(201)])
-            ;   % Result = existed - idempotent no-op
-                cors_reply_json(Request, _{'api:status': "api:success"}, [status(204)])
+            ;   % Result = existed - idempotent no-op (204 No Content must have no body)
+                write_cors_headers(Request),
+                format("Status: 204~n~n")
             ))).
 
 % PUT /api/prefix/{db_path}/{prefix_name} - update or upsert prefix
