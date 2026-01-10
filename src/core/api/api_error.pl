@@ -397,11 +397,19 @@ api_error_jsonld_(prefix, error(prefix_not_found(Prefix_Name), _), JSON) :-
                              'api:prefix_name' : Prefix_Name},
              'api:message' : Msg}.
 api_error_jsonld_(prefix, error(prefix_already_exists(Prefix_Name), _), JSON) :-
-    format(string(Msg), "Prefix '~w' already exists", [Prefix_Name]),
+    format(string(Msg), "Prefix '~w' already exists with a different IRI", [Prefix_Name]),
     JSON = _{'@type' : 'api:PrefixErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:PrefixAlreadyExists',
                              'api:prefix_name' : Prefix_Name},
+             'api:message' : Msg}.
+api_error_jsonld_(prefix, error(prefix_uri_already_in_use(Prefix_URI, Other_Prefix_Name), _), JSON) :-
+    format(string(Msg), "IRI '~w' is already in use by prefix '~w'", [Prefix_URI, Other_Prefix_Name]),
+    JSON = _{'@type' : 'api:PrefixErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:PrefixUriAlreadyInUse',
+                             'api:prefix_uri' : Prefix_URI,
+                             'api:other_prefix_name' : Other_Prefix_Name},
              'api:message' : Msg}.
 api_error_jsonld_(prefix, error(reserved_prefix(Prefix_Name), _), JSON) :-
     format(string(Msg), "Cannot modify reserved prefix '~w'. Prefixes starting with '@' are reserved.", [Prefix_Name]),
