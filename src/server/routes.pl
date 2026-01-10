@@ -2256,6 +2256,7 @@ individual_prefix_handler(get, Path, Request, System_DB, Auth) :-
                             [status(200)]))).
 
 % POST /api/prefix/{db_path}/{prefix_name} - add new prefix
+% Returns 201 for newly created prefix, 204 for idempotent no-op (same name + same IRI)
 individual_prefix_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
     api_report_errors(
@@ -2266,13 +2267,17 @@ individual_prefix_handler(post, Path, Request, System_DB, Auth) :-
                 get_dict(uri, Document, Prefix_URI),
                 error(missing_parameter(uri), _)),
             Commit_Info = commit_info{author: "api", message: "Add prefix via API"},
-            add_prefix(DB_Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, _),
-            cors_reply_json(Request,
-                            _{'@type': "api:PrefixAddResponse",
-                              'api:prefix_name': Prefix_Name,
-                              'api:prefix_uri': Prefix_URI,
-                              'api:status': "api:success"},
-                            [status(201)]))).
+            add_prefix(DB_Path, System_DB, Auth, Commit_Info, Prefix_Name, Prefix_URI, Result, _),
+            (   Result = created
+            ->  cors_reply_json(Request,
+                                _{'@type': "api:PrefixAddResponse",
+                                  'api:prefix_name': Prefix_Name,
+                                  'api:prefix_uri': Prefix_URI,
+                                  'api:status': "api:success"},
+                                [status(201)])
+            ;   % Result = existed - idempotent no-op
+                cors_reply_json(Request, _{'api:status': "api:success"}, [status(204)])
+            ))).
 
 % PUT /api/prefix/{db_path}/{prefix_name} - update or upsert prefix
 individual_prefix_handler(put, Path, Request, System_DB, Auth) :-

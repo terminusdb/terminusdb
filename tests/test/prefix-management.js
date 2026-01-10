@@ -48,13 +48,43 @@ describe('prefix-management', function () {
       expect(res.body['api:status']).to.equal('api:success')
     })
 
-    it('fails when adding duplicate prefix', async function () {
+    it('fails when adding duplicate prefix with different IRI', async function () {
       await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/dupprefix`)
         .send({ uri: 'http://example.org/first/' })
 
       const res = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/dupprefix`)
         .send({ uri: 'http://example.org/second/' })
       expect(res.status).to.equal(400)
+      expect(res.body['api:error']['@type']).to.equal('api:PrefixAlreadyExists')
+    })
+
+    it('returns 204 when adding prefix with same name and same IRI (idempotent)', async function () {
+      const prefixUri = 'http://example.org/idempotent/'
+
+      // First creation should return 201
+      const firstRes = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/idempotent`)
+        .send({ uri: prefixUri })
+      expect(firstRes.status).to.equal(201)
+
+      // Second creation with same name AND same IRI should return 204 (no-op)
+      const secondRes = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/idempotent`)
+        .send({ uri: prefixUri })
+      expect(secondRes.status).to.equal(204)
+    })
+
+    it('fails when adding prefix with IRI already used by another prefix', async function () {
+      const sharedUri = 'http://example.org/shared/'
+
+      // First prefix with this IRI
+      const firstRes = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/first_prefix`)
+        .send({ uri: sharedUri })
+      expect(firstRes.status).to.equal(201)
+
+      // Second prefix with different name but same IRI should fail
+      const secondRes = await agent.post(`/api/prefix/${agent.orgName}/${agent.dbName}/second_prefix`)
+        .send({ uri: sharedUri })
+      expect(secondRes.status).to.equal(400)
+      expect(secondRes.body['api:error']['@type']).to.equal('api:PrefixUriAlreadyInUse')
     })
 
     it('adds prefix with emoji in IRI', async function () {
