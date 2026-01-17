@@ -116,7 +116,7 @@ predicates! {
             match parent {
                 Some(parent) => {
                     let parent_term = context.new_term_ref();
-                    parent_term.unify(some_functor)?;
+                    parent_term.unify(&some_functor)?;
                     parent_term.unify_arg(1, &name_to_string(parent))?;
                     term.unify_arg(2, &parent_term)?;
                 },
