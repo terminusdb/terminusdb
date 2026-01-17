@@ -115,13 +115,10 @@ predicates! {
             term.unify_arg(1, name_to_string(layer))?;
             match parent {
                 Some(parent) => {
-                    // Use frame for intermediate parent_term to avoid accumulating term refs
-                    let f = context.open_frame();
-                    let parent_term = f.new_term_ref();
+                    let parent_term = context.new_term_ref();
                     parent_term.unify(some_functor)?;
                     parent_term.unify_arg(1, name_to_string(parent))?;
                     term.unify_arg(2, &parent_term)?;
-                    f.close();
                 },
                 None => {
                     term.unify_arg(2, &none_atom)?;
