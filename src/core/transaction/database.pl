@@ -213,7 +213,11 @@ pre_transaction_tabling :-
 
 post_transaction_tabling :-
     abolish_trampoline,
-    abolish_private_tables.
+    abolish_private_tables,
+    % Clear all tabled predicate results to prevent stale cache entries
+    % after layer changes. This runs sequentially after each transaction
+    % to avoid race conditions with concurrent optimizer threads.
+    abolish_all_tables.
 
 abolish_trampoline :-
     retractall(woql_compile:defined_predicate(_)),

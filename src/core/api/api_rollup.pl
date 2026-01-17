@@ -81,8 +81,6 @@ api_rollup(System_DB, Auth, Path, _Options, Status_List) :-
             ),
             Read_Write_Objects),
 
-    % Clear all tabled predicates that cache results based on schema/instance layers.
-    % Many predicates like schema_type_descriptor/3, is_schema_simple_class/2, etc.
-    % cache results keyed by layer objects. When layers change after rollup,
-    % these stale table entries accumulate and cause performance degradation.
-    abolish_all_tables.
+    % Note: abolish_all_tables now called in post_transaction_tabling (database.pl)
+    % This ensures sequential execution and avoids race conditions.
+    true.

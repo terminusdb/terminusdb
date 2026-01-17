@@ -90,8 +90,8 @@ descriptor_optimize(repository_descriptor{
     ;   true
     ),
     % Clear caches
-    retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
-    abolish_all_tables.
+    retractall(descriptor:retained_descriptor_layers(Descriptor, _)).
+    % Note: abolish_all_tables now called in post_transaction_tabling (database.pl)
 descriptor_optimize(branch_descriptor{
                         repository_descriptor : Repository_Descriptor,
                         branch_name : Branch_Name
@@ -137,7 +137,7 @@ descriptor_optimize(branch_descriptor{
     ),
     % Clear caches that hold references to old deep-chain layers
     retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
-    abolish_all_tables,
+    % Note: abolish_all_tables now called in post_transaction_tabling (database.pl)
     % Also roll up the repository layer (commit graph) to prevent O(n) traversal.
     % The commit graph accumulates child layers with each commit.
     % Rollup is safe here because it only creates parallel files - it does NOT
@@ -155,9 +155,8 @@ descriptor_optimize(branch_descriptor{
         terminus_store:invalidate_layer_cache_entry(Store, Repo_Layer_Id),
         % Clear retained layers for all descriptors in the chain
         retractall(descriptor:retained_descriptor_layers(Repository_Descriptor, _)),
-        retractall(descriptor:retained_descriptor_layers(Descriptor, _)),
-        % Also clear tables that cache predicate results keyed by layers
-        abolish_all_tables
+        retractall(descriptor:retained_descriptor_layers(Descriptor, _))
+        % Note: abolish_all_tables now called in post_transaction_tabling (database.pl)
     ;   true).
 
 % Write a generator that gives us back Start and Stop positions as commit_ids
