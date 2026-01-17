@@ -2,22 +2,36 @@
 //!
 //! Provides json_read_string/2 which works like json_read_dict/3
 //! Numbers are converted to Prolog rationals for arbitrary precision.
+//!
+//! OPTIMIZATION NOTE: This module minimizes term reference creation to avoid
+//! GC pressure during massive JSON processing. The key optimizations are:
+//! 1. Fast path for small integers (direct i64 unification)
+//! 2. Reuse static atoms via atom!() macro
+//! 3. Only create term refs when needed for return value
 
 use swipl::prelude::*;
 use serde_json::{Value, Deserializer};
 
 /// Convert serde_json::Value to Prolog term
+/// 
+/// OPTIMIZED: Fast path for integers and cached atoms reduce term ref creation.
 fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'a, C>, value: &Value) -> PrologResult<Term<'a>> {
     match value {
         Value::Number(n) => {
+            // Fast path: Small integers that fit in i64 - direct unification
+            // This avoids atom_number entirely for common cases
+            if let Some(i) = n.as_i64() {
+                let term = context.new_term_ref();
+                term.unify(i)?;
+                return Ok(term);
+            }
+            
             let num_str = n.to_string();
             
-            // Check for scientific notation - keep as standard number
+            // Scientific notation - use f64 directly
             if num_str.contains('e') || num_str.contains('E') {
                 let term = context.new_term_ref();
-                if let Some(i) = n.as_i64() {
-                    term.unify(i)?;
-                } else if let Some(f) = n.as_f64() {
+                if let Some(f) = n.as_f64() {
                     term.unify(f)?;
                 } else {
                     return Err(PrologError::Failure);
@@ -25,83 +39,55 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(term);
             }
             
-            // Only create rationals for decimals; keep integers as integers
+            // Check for decimal point
             if let Some(dot_pos) = num_str.find('.') {
-                // Has decimal point - create rational for precision
                 let (integer_part, frac_part_with_dot) = num_str.split_at(dot_pos);
-                let frac_part = &frac_part_with_dot[1..]; // Skip the '.'
-                
-                // Strip trailing zeros from fractional part
+                let frac_part = &frac_part_with_dot[1..];
                 let frac_trimmed = frac_part.trim_end_matches('0');
                 
                 // If only zeros after decimal, treat as integer
                 if frac_trimmed.is_empty() {
-                    let int_atom_term = context.new_term_ref();
-                    int_atom_term.unify(Atom::new(integer_part))?;
-                    let int_term = context.new_term_ref();
-                    context.call_once(pred!(atom_number/2), [&int_atom_term, &int_term])?;
-                    return Ok(int_term);
+                    let result = context.new_term_ref();
+                    let atom_term = context.new_term_ref();
+                    atom_term.unify(Atom::new(integer_part))?;
+                    context.call_once(pred!(atom_number/2), [&atom_term, &result])?;
+                    return Ok(result);
                 }
                 
-                // numerator = integer_part + frac_part (concatenated as one number)
+                // Build rational: numerator rdiv denominator
                 let numerator = format!("{}{}", integer_part, frac_trimmed);
-                // denominator = 10^(frac_part.len())
                 let denominator = format!("1{}", "0".repeat(frac_trimmed.len()));
                 
-                // Try to create rational - if it fails, fall back to standard float
-                let num_atom_term = context.new_term_ref();
-                num_atom_term.unify(Atom::new(&numerator))?;
+                // Parse numerator
+                let num_atom = context.new_term_ref();
+                num_atom.unify(Atom::new(&numerator))?;
                 let num_term = context.new_term_ref();
+                context.call_once(pred!(atom_number/2), [&num_atom, &num_term])?;
                 
-                // Check if atom_number succeeds and returns integers (not floats)
-                if context.call_once(pred!(atom_number/2), [&num_atom_term, &num_term]).is_err() {
-                    // Failed to parse - fall back to standard number
-                    let term = context.new_term_ref();
-                    if let Some(f) = n.as_f64() {
-                        term.unify(f)?;
-                    } else {
-                        return Err(PrologError::Failure);
-                    }
-                    return Ok(term);
-                }
-                
-                let den_atom_term = context.new_term_ref();
-                den_atom_term.unify(Atom::new(&denominator))?;
+                // Parse denominator
+                let den_atom = context.new_term_ref();
+                den_atom.unify(Atom::new(&denominator))?;
                 let den_term = context.new_term_ref();
-                context.call_once(pred!(atom_number/2), [&den_atom_term, &den_term])?;
+                context.call_once(pred!(atom_number/2), [&den_atom, &den_term])?;
                 
-                // Build rational using rdiv operator: numerator rdiv denominator
-                let rational_term = context.new_term_ref();
+                // Build and evaluate rdiv expression
                 let rdiv_functor = Functor::new(Atom::new("rdiv"), 2);
+                let rdiv_term = context.new_term_ref();
+                rdiv_term.unify(rdiv_functor)?;
+                rdiv_term.unify_arg(1, &num_term)?;
+                rdiv_term.unify_arg(2, &den_term)?;
                 
-                // Create rdiv expression
-                rational_term.unify(rdiv_functor)?;
-                rational_term.unify_arg(1, &num_term)?;
-                rational_term.unify_arg(2, &den_term)?;
-                
-                // Evaluate the rdiv expression - if it fails, fall back to float
+                // Evaluate rdiv
                 let result = context.new_term_ref();
-                match context.call_once(pred!(is/2), [&result, &rational_term]) {
-                    Ok(_) => Ok(result),
-                    Err(_) => {
-                        // rdiv evaluation failed (probably float args) - return as float
-                        let term = context.new_term_ref();
-                        if let Some(f) = n.as_f64() {
-                            term.unify(f)?;
-                        } else {
-                            return Err(PrologError::Failure);
-                        }
-                        Ok(term)
-                    }
-                }
+                context.call_once(pred!(is/2), [&result, &rdiv_term])?;
+                Ok(result)
             } else {
-                // Integer - parse directly as integer (no rational needed)
-                let int_atom_term = context.new_term_ref();
-                int_atom_term.unify(Atom::new(&num_str))?;
-                let int_term = context.new_term_ref();
-                context.call_once(pred!(atom_number/2), [&int_atom_term, &int_term])?;
-                
-                Ok(int_term)
+                // Integer without decimal - parse via atom_number
+                let atom_term = context.new_term_ref();
+                atom_term.unify(Atom::new(&num_str))?;
+                let result = context.new_term_ref();
+                context.call_once(pred!(atom_number/2), [&atom_term, &result])?;
+                Ok(result)
             }
         }
         Value::String(s) => {
@@ -110,15 +96,14 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
             Ok(term)
         }
         Value::Bool(b) => {
-            let atom = if *b { Atom::new("true") } else { Atom::new("false") };
+            // Use cached atoms via atom!() macro
             let term = context.new_term_ref();
-            term.unify(atom)?;
+            term.unify(if *b { atom!("true") } else { atom!("false") })?;
             Ok(term)
         }
         Value::Null => {
-            let atom = Atom::new("null");
             let term = context.new_term_ref();
-            term.unify(atom)?;
+            term.unify(atom!("null"))?;
             Ok(term)
         }
         Value::Array(arr) => {
@@ -131,7 +116,6 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
             Ok(list_term)
         }
         Value::Object(map) => {
-            // Build Prolog dict using DictBuilder
             let mut builder = DictBuilder::new().tag("json");
             
             for (key, val) in map.iter() {
