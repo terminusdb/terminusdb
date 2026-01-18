@@ -116,15 +116,26 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(list_term);
             }
             
-            // Build list by collecting terms then unifying
-            let list_term = context.new_term_ref();
-            let mut terms = Vec::with_capacity(arr.len());
-            for item in arr.iter() {
-                let term = json_value_to_prolog_term(context, item)?;
-                terms.push(term);
+            // Build list in a frame to clean up element term refs.
+            // The terms Vec holds refs that would otherwise accumulate on context.
+            // Frame ensures these are cleaned up; list value survives via unification.
+            let result = context.new_term_ref();
+            {
+                let f = context.open_frame();
+                let list_term = f.new_term_ref();
+                let mut terms = Vec::with_capacity(arr.len());
+                for item in arr.iter() {
+                    let term = json_value_to_prolog_term(&f, item)?;
+                    terms.push(term);
+                }
+                list_term.unify(terms.as_slice())?;
+                // Copy list structure to result (outside frame) via unification
+                result.unify(&list_term)?;
+                // Drop terms Vec before closing frame to release borrows
+                drop(terms);
+                f.close();
             }
-            list_term.unify(terms.as_slice())?;
-            Ok(list_term)
+            Ok(result)
         }
         Value::Object(map) => {
             // Fast path for empty objects
