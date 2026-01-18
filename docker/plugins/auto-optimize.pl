@@ -65,7 +65,7 @@ thread_pool:create_pool(terminusdb_optimizer) :-
     thread_pool_create(terminusdb_optimizer, Count, []).
 
 plugins:post_commit_hook(Validation_Objects, _Meta_Data) :-
-    % Probabilistic garbage collection (every ~1000 commits)
+    % Probabilistic garbage collection
     (   should_garbage_collect
     ->  do_garbage_collect
     ;   true

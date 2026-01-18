@@ -60,6 +60,7 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 }
                 
                 // Build rational: numerator rdiv denominator
+                // e.g. "123.456" -> 123456 rdiv 1000 (shift decimal right, divide by 10^frac_len)
                 let numerator = format!("{}{}", integer_part, frac_trimmed);
                 let denominator = format!("1{}", "0".repeat(frac_trimmed.len()));
                 
