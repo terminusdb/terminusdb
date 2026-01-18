@@ -153,4 +153,4 @@ $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
 .PHONY: pr
-pr: lint lint-mocha lint-openapi clean dev restart test test-rust test-int
+pr: lint lint-mocha lint-openapi clean test-rust dev restart test test-int
