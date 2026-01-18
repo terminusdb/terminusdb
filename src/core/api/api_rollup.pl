@@ -79,6 +79,4 @@ api_rollup(System_DB, Auth, Path, _Options, Status_List) :-
                 get_dict(descriptor, Read_Write_Object, Desc),
                 retractall(descriptor:retained_descriptor_layers(Desc, _))
             ),
-            Read_Write_Objects),
-
-    true.
+            Read_Write_Objects).
