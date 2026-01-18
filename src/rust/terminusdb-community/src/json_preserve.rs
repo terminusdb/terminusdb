@@ -8,14 +8,13 @@
 //! 1. Fast path for small integers (direct i64 unification)
 //! 2. Reuse static atoms via atom!() macro
 //! 3. Only create term refs when needed for return value
+//! 4. Garbage collection handles the term ref accumulation
 
 use swipl::prelude::*;
 use serde_json::{Value, Deserializer};
 
 /// Convert serde_json::Value to Prolog term
 /// 
-/// OPTIMIZED: Uses frames for intermediate terms to avoid GC pressure.
-/// Result term is created outside the frame so it survives.
 fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'a, C>, value: &Value) -> PrologResult<Term<'a>> {
     match value {
         Value::Number(n) => {
@@ -130,17 +129,12 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(list_term);
             }
             
-            // Process each element in its own frame to release intermediate term refs
+            // Process each element - terms accumulate in context
+            // Framing is handled at predicate entry points, not here
             let list_term = context.new_term_ref();
             let mut terms = Vec::with_capacity(arr.len());
             for item in arr.iter() {
-                let term = context.new_term_ref();
-                {
-                    let f = context.open_frame();
-                    let inner_term = json_value_to_prolog_term(&f, item)?;
-                    term.unify(&inner_term)?;
-                    f.close();
-                }
+                let term = json_value_to_prolog_term(context, item)?;
                 terms.push(term);
             }
             list_term.unify(terms.as_slice())?;
@@ -155,17 +149,12 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(term);
             }
             
-            // Process each value in its own frame to release intermediate term refs
+            // Process each value - terms accumulate in context
+            // Framing is handled at predicate entry points, not here
             let term = context.new_term_ref();
             let mut builder = DictBuilder::new().tag("json");
             for (key, val) in map.iter() {
-                let val_term = context.new_term_ref();
-                {
-                    let f = context.open_frame();
-                    let inner_term = json_value_to_prolog_term(&f, val)?;
-                    val_term.unify(&inner_term)?;
-                    f.close();
-                }
+                let val_term = json_value_to_prolog_term(context, val)?;
                 builder = builder.entry(key.as_str(), val_term);
             }
             term.put(&builder)?;
@@ -315,20 +304,12 @@ predicates! {
             return result_term.unify(&list_term);
         }
         
-        // Build Prolog list - process each value in its own frame
-        // to release intermediate term refs and reduce GC pressure
+        // Build Prolog list - terms accumulate in context
+        // GC is triggered periodically by auto_optimize plugin
         let list_term = context.new_term_ref();
         let mut terms = Vec::with_capacity(values.len());
         for value in values.iter() {
-            // Each value gets its own frame - intermediate terms are released
-            // but the final term survives because it's created outside the frame
-            let term = context.new_term_ref();
-            {
-                let f = context.open_frame();
-                let inner_term = json_value_to_prolog_term(&f, value)?;
-                term.unify(&inner_term)?;
-                f.close();
-            }
+            let term = json_value_to_prolog_term(context, value)?;
             terms.push(term);
         }
         list_term.unify(terms.as_slice())?;
