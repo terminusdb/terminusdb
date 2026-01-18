@@ -398,12 +398,8 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::AnySimpleType => {
             let anysimpletype = entry.as_val::<AnySimpleType, String>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&anysimpletype)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&anysimpletype)?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#anySimpleType"))
         }
         Datatype::UInt8 => {
@@ -464,22 +460,14 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::BigInt => {
             let val: Integer = entry.as_val::<Integer, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#integer"))
         }
         Datatype::NonPositiveInteger => {
             let val: Integer = entry.as_val::<NonPositiveInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#nonPositiveInteger"),
@@ -487,12 +475,8 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::NonNegativeInteger => {
             let val: Integer = entry.as_val::<NonNegativeInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#nonNegativeInteger"),
@@ -500,22 +484,14 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::PositiveInteger => {
             let val: Integer = entry.as_val::<PositiveInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#positiveInteger"))
         }
         Datatype::NegativeInteger => {
             let val: Integer = entry.as_val::<NegativeInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#negativeInteger"))
         }
         Datatype::Token => {
@@ -525,243 +501,185 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::GYear => {
             let val = entry.as_val::<GYear, GYear>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gyear/2"))?;
-                f_term.unify_arg(1, val.year)?;
-                f_term.unify_arg(2, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gyear/2"))?;
+            g_term.unify_arg(1, val.year)?;
+            g_term.unify_arg(2, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gYear"))
         }
         Datatype::GMonth => {
             let val = entry.as_val::<GMonth, GMonth>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gmonth/2"))?;
-                f_term.unify_arg(1, val.month as i64)?;
-                f_term.unify_arg(2, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gmonth/2"))?;
+            g_term.unify_arg(1, val.month as i64)?;
+            g_term.unify_arg(2, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gMonth"))
         }
         Datatype::GDay => {
             let val = entry.as_val::<GDay, GDay>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gday/2"))?;
-                f_term.unify_arg(1, val.day as i64)?;
-                f_term.unify_arg(2, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gday/2"))?;
+            g_term.unify_arg(1, val.day as i64)?;
+            g_term.unify_arg(2, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gDay"))
         }
         Datatype::GYearMonth => {
             let val = entry.as_val::<GYearMonth, GYearMonth>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gyear_month/3"))?;
-                f_term.unify_arg(1, val.year)?;
-                f_term.unify_arg(2, val.month as u64)?;
-                f_term.unify_arg(3, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gyear_month/3"))?;
+            g_term.unify_arg(1, val.year)?;
+            g_term.unify_arg(2, val.month as u64)?;
+            g_term.unify_arg(3, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gYearMonth"))
         }
         Datatype::GMonthDay => {
             let val = entry.as_val::<GMonthDay, GMonthDay>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gmonth_day/3"))?;
-                f_term.unify_arg(1, val.month as u64)?;
-                f_term.unify_arg(2, val.day as u64)?;
-                f_term.unify_arg(3, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gmonth_day/3"))?;
+            g_term.unify_arg(1, val.month as u64)?;
+            g_term.unify_arg(2, val.day as u64)?;
+            g_term.unify_arg(3, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gMonthDay"))
         }
         Datatype::Duration => {
+            let duration_term = context.new_term_ref();
+            duration_term.unify(functor!("duration/7"))?;
             let duration = entry.as_val::<Duration, Duration>();
-            {
-                let f = context.open_frame();
-                let duration_term = f.new_term_ref();
-                duration_term.unify(functor!("duration/7"))?;
-                let sign = duration.sign as i64;
-                let year = duration.year;
-                let month = duration.month as i64;
-                let day = duration.day as i64;
-                let hour = duration.hour as i64;
-                let minute = duration.minute as i64;
-                let second = duration.second;
-                duration_term.unify_arg(1, sign)?;
-                duration_term.unify_arg(2, year)?;
-                duration_term.unify_arg(3, month)?;
-                duration_term.unify_arg(4, day)?;
-                duration_term.unify_arg(5, hour)?;
-                duration_term.unify_arg(6, minute)?;
-                duration_term.unify_arg(7, second)?;
-                object_term.unify_arg(1, &duration_term)?;
-                f.close();
-            }
+            let sign = duration.sign as i64;
+            let year = duration.year;
+            let month = duration.month as i64;
+            let day = duration.day as i64;
+            let hour = duration.hour as i64;
+            let minute = duration.minute as i64;
+            let second = duration.second;
+            duration_term.unify_arg(1, sign)?;
+            duration_term.unify_arg(2, year)?;
+            duration_term.unify_arg(3, month)?;
+            duration_term.unify_arg(4, day)?;
+            duration_term.unify_arg(5, hour)?;
+            duration_term.unify_arg(6, minute)?;
+            duration_term.unify_arg(7, second)?;
+            object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#duration"))
         }
         Datatype::YearMonthDuration => {
+            let duration_term = context.new_term_ref();
+            duration_term.unify(functor!("duration/7"))?;
             let duration = entry.as_val::<YearMonthDuration, YearMonthDuration>().0;
-            {
-                let f = context.open_frame();
-                let duration_term = f.new_term_ref();
-                duration_term.unify(functor!("duration/7"))?;
-                let sign = duration.sign as i64;
-                let year = duration.year;
-                let month = duration.month as i64;
-                let day = duration.day as i64;
-                let hour = duration.hour as i64;
-                let minute = duration.minute as i64;
-                let second = duration.second;
-                duration_term.unify_arg(1, sign)?;
-                duration_term.unify_arg(2, year)?;
-                duration_term.unify_arg(3, month)?;
-                duration_term.unify_arg(4, day)?;
-                duration_term.unify_arg(5, hour)?;
-                duration_term.unify_arg(6, minute)?;
-                duration_term.unify_arg(7, second)?;
-                object_term.unify_arg(1, &duration_term)?;
-                f.close();
-            }
+            let sign = duration.sign as i64;
+            let year = duration.year;
+            let month = duration.month as i64;
+            let day = duration.day as i64;
+            let hour = duration.hour as i64;
+            let minute = duration.minute as i64;
+            let second = duration.second;
+            duration_term.unify_arg(1, sign)?;
+            duration_term.unify_arg(2, year)?;
+            duration_term.unify_arg(3, month)?;
+            duration_term.unify_arg(4, day)?;
+            duration_term.unify_arg(5, hour)?;
+            duration_term.unify_arg(6, minute)?;
+            duration_term.unify_arg(7, second)?;
+            object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration"),
             )
         }
         Datatype::DayTimeDuration => {
+            let duration_term = context.new_term_ref();
+            duration_term.unify(functor!("duration/7"))?;
             let duration = entry.as_val::<DayTimeDuration, DayTimeDuration>().0;
-            {
-                let f = context.open_frame();
-                let duration_term = f.new_term_ref();
-                duration_term.unify(functor!("duration/7"))?;
-                let sign = duration.sign as i64;
-                let year = duration.year;
-                let month = duration.month as i64;
-                let day = duration.day as i64;
-                let hour = duration.hour as i64;
-                let minute = duration.minute as i64;
-                let second = duration.second;
-                duration_term.unify_arg(1, sign)?;
-                duration_term.unify_arg(2, year)?;
-                duration_term.unify_arg(3, month)?;
-                duration_term.unify_arg(4, day)?;
-                duration_term.unify_arg(5, hour)?;
-                duration_term.unify_arg(6, minute)?;
-                duration_term.unify_arg(7, second)?;
-                object_term.unify_arg(1, &duration_term)?;
-                f.close();
-            }
+            let sign = duration.sign as i64;
+            let year = duration.year;
+            let month = duration.month as i64;
+            let day = duration.day as i64;
+            let hour = duration.hour as i64;
+            let minute = duration.minute as i64;
+            let second = duration.second;
+            duration_term.unify_arg(1, sign)?;
+            duration_term.unify_arg(2, year)?;
+            duration_term.unify_arg(3, month)?;
+            duration_term.unify_arg(4, day)?;
+            duration_term.unify_arg(5, hour)?;
+            duration_term.unify_arg(6, minute)?;
+            duration_term.unify_arg(7, second)?;
+            object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration"))
         }
         Datatype::Date => {
+            let date_term = context.new_term_ref();
+            date_term.unify(functor!("date/4"))?;
             let dt = entry.as_val::<Date, Date>();
-            {
-                let f = context.open_frame();
-                let date_term = f.new_term_ref();
-                date_term.unify(functor!("date/4"))?;
-                let year = dt.year;
-                let month = dt.month as i64;
-                let day = dt.day as i64;
-                let offset = dt.offset as i64;
-                date_term.unify_arg(1, year)?;
-                date_term.unify_arg(2, month)?;
-                date_term.unify_arg(3, day)?;
-                date_term.unify_arg(4, offset)?;
-                object_term.unify_arg(1, &date_term)?;
-                f.close();
-            }
+            let year = dt.year;
+            let month = dt.month as i64;
+            let day = dt.day as i64;
+            let offset = dt.offset as i64;
+            date_term.unify_arg(1, year)?;
+            date_term.unify_arg(2, month)?;
+            date_term.unify_arg(3, day)?;
+            date_term.unify_arg(4, offset)?;
+            object_term.unify_arg(1, date_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#date"))
         }
         Datatype::DateTime => {
+            let datetime_term = context.new_term_ref();
+            datetime_term.unify(functor!("date_time/7"))?;
             let dt = entry.as_val::<NaiveDateTime, NaiveDateTime>();
-            {
-                let f = context.open_frame();
-                let datetime_term = f.new_term_ref();
-                datetime_term.unify(functor!("date_time/7"))?;
-                let year = dt.year() as i64;
-                let month = dt.month() as i64;
-                let day = dt.day() as i64;
-                let hour = dt.hour() as i64;
-                let minute = dt.minute() as i64;
-                let second = dt.second() as i64;
-                let nanosecond = dt.nanosecond() as i64;
-                datetime_term.unify_arg(1, year)?;
-                datetime_term.unify_arg(2, month)?;
-                datetime_term.unify_arg(3, day)?;
-                datetime_term.unify_arg(4, hour)?;
-                datetime_term.unify_arg(5, minute)?;
-                datetime_term.unify_arg(6, second)?;
-                datetime_term.unify_arg(7, nanosecond)?;
-                object_term.unify_arg(1, &datetime_term)?;
-                f.close();
-            }
+            let year = dt.year() as i64;
+            let month = dt.month() as i64;
+            let day = dt.day() as i64;
+            let hour = dt.hour() as i64;
+            let minute = dt.minute() as i64;
+            let second = dt.second() as i64;
+            let nanosecond = dt.nanosecond() as i64;
+            datetime_term.unify_arg(1, year)?;
+            datetime_term.unify_arg(2, month)?;
+            datetime_term.unify_arg(3, day)?;
+            datetime_term.unify_arg(4, hour)?;
+            datetime_term.unify_arg(5, minute)?;
+            datetime_term.unify_arg(6, second)?;
+            datetime_term.unify_arg(7, nanosecond)?;
+            object_term.unify_arg(1, datetime_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dateTime"))
         }
         Datatype::Time => {
+            let time_term = context.new_term_ref();
+            time_term.unify(functor!("time/3"))?;
             let t = entry.as_val::<NaiveTime, NaiveTime>();
-            {
-                let f = context.open_frame();
-                let time_term = f.new_term_ref();
-                time_term.unify(functor!("time/3"))?;
-                let hour = t.hour() as i64;
-                let minute = t.minute() as i64;
-                let second = t.second() as i64;
-                time_term.unify_arg(1, hour)?;
-                time_term.unify_arg(2, minute)?;
-                time_term.unify_arg(3, second)?;
-                object_term.unify_arg(1, &time_term)?;
-                f.close();
-            }
+            let hour = t.hour() as i64;
+            let minute = t.minute() as i64;
+            let second = t.second() as i64;
+            time_term.unify_arg(1, hour)?;
+            time_term.unify_arg(2, minute)?;
+            time_term.unify_arg(3, second)?;
+            object_term.unify_arg(1, time_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#time"))
         }
         Datatype::DateTimeStamp => {
+            let datetime_term = context.new_term_ref();
+            datetime_term.unify(functor!("date_time/7"))?;
             let dt = entry.as_val::<DateTimeStamp, DateTimeStamp>().0;
-            {
-                let f = context.open_frame();
-                let datetime_term = f.new_term_ref();
-                datetime_term.unify(functor!("date_time/7"))?;
-                let year = dt.year() as i64;
-                let month = dt.month() as i64;
-                let day = dt.day() as i64;
-                let hour = dt.hour() as i64;
-                let minute = dt.minute() as i64;
-                let second = dt.second() as i64;
-                let nanosecond = dt.nanosecond() as i64;
-                datetime_term.unify_arg(1, year)?;
-                datetime_term.unify_arg(2, month)?;
-                datetime_term.unify_arg(3, day)?;
-                datetime_term.unify_arg(4, hour)?;
-                datetime_term.unify_arg(5, minute)?;
-                datetime_term.unify_arg(6, second)?;
-                datetime_term.unify_arg(7, nanosecond)?;
-                object_term.unify_arg(1, &datetime_term)?;
-                f.close();
-            }
+            let year = dt.year() as i64;
+            let month = dt.month() as i64;
+            let day = dt.day() as i64;
+            let hour = dt.hour() as i64;
+            let minute = dt.minute() as i64;
+            let second = dt.second() as i64;
+            let nanosecond = dt.nanosecond() as i64;
+            datetime_term.unify_arg(1, year)?;
+            datetime_term.unify_arg(2, month)?;
+            datetime_term.unify_arg(3, day)?;
+            datetime_term.unify_arg(4, hour)?;
+            datetime_term.unify_arg(5, minute)?;
+            datetime_term.unify_arg(6, second)?;
+            datetime_term.unify_arg(7, nanosecond)?;
+            object_term.unify_arg(1, datetime_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dateTimeStamp"))
         }
         Datatype::Base64Binary => {
