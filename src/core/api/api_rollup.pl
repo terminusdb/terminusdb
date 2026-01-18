@@ -81,6 +81,4 @@ api_rollup(System_DB, Auth, Path, _Options, Status_List) :-
             ),
             Read_Write_Objects),
 
-    % Note: abolish_all_tables now called in post_transaction_tabling (database.pl)
-    % This ensures sequential execution and avoids race conditions.
     true.
