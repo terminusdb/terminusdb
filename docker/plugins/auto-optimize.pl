@@ -28,6 +28,18 @@ should_optimize(Descriptor) :-
     random(X),
     X < Chance.
 
+% GC runs on average every 100 commits (1% chance)
+gc_chance(0.01).
+
+should_garbage_collect :-
+    gc_chance(Chance),
+    random(X),
+    X < Chance.
+
+do_garbage_collect :-
+    garbage_collect,
+    json_log_debug_formatted("Garbage collection triggered by auto-optimize plugin", []).
+
 optimize(Descriptor) :-
     api_optimize:descriptor_optimize(Descriptor),
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -53,6 +65,12 @@ thread_pool:create_pool(terminusdb_optimizer) :-
     thread_pool_create(terminusdb_optimizer, Count, []).
 
 plugins:post_commit_hook(Validation_Objects, _Meta_Data) :-
+    % Probabilistic garbage collection (every ~1000 commits)
+    (   should_garbage_collect
+    ->  do_garbage_collect
+    ;   true
+    ),
+    % Probabilistic optimization (every ~10 commits)
     (   http_server_property(_, _)
     ->  catch(thread_create_in_pool(terminusdb_optimizer,
                                     optimize_all(Validation_Objects),
