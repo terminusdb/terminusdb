@@ -47,15 +47,10 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 
                 // If only zeros after decimal, treat as integer
                 if frac_trimmed.is_empty() {
-                    // Result term outside frame so it survives
                     let result = context.new_term_ref();
-                    {
-                        let f = context.open_frame();
-                        let atom_term = f.new_term_ref();
-                        atom_term.unify(Atom::new(integer_part))?;
-                        f.call_once(pred!(atom_number/2), [&atom_term, &result])?;
-                        f.close();
-                    }
+                    let atom_term = context.new_term_ref();
+                    atom_term.unify(Atom::new(integer_part))?;
+                    context.call_once(pred!(atom_number/2), [&atom_term, &result])?;
                     return Ok(result);
                 }
                 
@@ -64,45 +59,36 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 let numerator = format!("{}{}", integer_part, frac_trimmed);
                 let denominator = format!("1{}", "0".repeat(frac_trimmed.len()));
                 
-                // Result term outside frame so it survives
                 let result = context.new_term_ref();
-                {
-                    let f = context.open_frame();
-                    // Parse numerator
-                    let num_atom = f.new_term_ref();
-                    num_atom.unify(Atom::new(&numerator))?;
-                    let num_term = f.new_term_ref();
-                    f.call_once(pred!(atom_number/2), [&num_atom, &num_term])?;
-                    
-                    // Parse denominator
-                    let den_atom = f.new_term_ref();
-                    den_atom.unify(Atom::new(&denominator))?;
-                    let den_term = f.new_term_ref();
-                    f.call_once(pred!(atom_number/2), [&den_atom, &den_term])?;
-                    
-                    // Build and evaluate rdiv expression
-                    let rdiv_functor = Functor::new(Atom::new("rdiv"), 2);
-                    let rdiv_term = f.new_term_ref();
-                    rdiv_term.unify(rdiv_functor)?;
-                    rdiv_term.unify_arg(1, &num_term)?;
-                    rdiv_term.unify_arg(2, &den_term)?;
-                    
-                    // Evaluate rdiv into result (which is outside the frame)
-                    f.call_once(pred!(is/2), [&result, &rdiv_term])?;
-                    f.close();
-                }
+                
+                // Parse numerator
+                let num_atom = context.new_term_ref();
+                num_atom.unify(Atom::new(&numerator))?;
+                let num_term = context.new_term_ref();
+                context.call_once(pred!(atom_number/2), [&num_atom, &num_term])?;
+                
+                // Parse denominator
+                let den_atom = context.new_term_ref();
+                den_atom.unify(Atom::new(&denominator))?;
+                let den_term = context.new_term_ref();
+                context.call_once(pred!(atom_number/2), [&den_atom, &den_term])?;
+                
+                // Build and evaluate rdiv expression
+                let rdiv_functor = Functor::new(Atom::new("rdiv"), 2);
+                let rdiv_term = context.new_term_ref();
+                rdiv_term.unify(rdiv_functor)?;
+                rdiv_term.unify_arg(1, &num_term)?;
+                rdiv_term.unify_arg(2, &den_term)?;
+                
+                // Evaluate rdiv into result
+                context.call_once(pred!(is/2), [&result, &rdiv_term])?;
                 Ok(result)
             } else {
                 // Integer without decimal - parse via atom_number
-                // Result term outside frame so it survives
                 let result = context.new_term_ref();
-                {
-                    let f = context.open_frame();
-                    let atom_term = f.new_term_ref();
-                    atom_term.unify(Atom::new(&num_str))?;
-                    f.call_once(pred!(atom_number/2), [&atom_term, &result])?;
-                    f.close();
-                }
+                let atom_term = context.new_term_ref();
+                atom_term.unify(Atom::new(&num_str))?;
+                context.call_once(pred!(atom_number/2), [&atom_term, &result])?;
                 Ok(result)
             }
         }
@@ -123,15 +109,14 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
             Ok(term)
         }
         Value::Array(arr) => {
-            // Fast path for empty arrays - no term refs needed
+            // Fast path for empty arrays
             if arr.is_empty() {
                 let list_term = context.new_term_ref();
                 list_term.unify(&[] as &[Term])?;
                 return Ok(list_term);
             }
             
-            // Process each element - terms accumulate in context
-            // Framing is handled at predicate entry points, not here
+            // Build list by collecting terms then unifying
             let list_term = context.new_term_ref();
             let mut terms = Vec::with_capacity(arr.len());
             for item in arr.iter() {
@@ -142,7 +127,7 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
             Ok(list_term)
         }
         Value::Object(map) => {
-            // Fast path for empty objects - no term refs needed
+            // Fast path for empty objects
             if map.is_empty() {
                 let term = context.new_term_ref();
                 let builder = DictBuilder::new().tag("json");
@@ -150,16 +135,26 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(term);
             }
             
-            // Process each value - terms accumulate in context
-            // Framing is handled at predicate entry points, not here
-            let term = context.new_term_ref();
-            let mut builder = DictBuilder::new().tag("json");
-            for (key, val) in map.iter() {
-                let val_term = json_value_to_prolog_term(context, val)?;
-                builder = builder.entry(key.as_str(), val_term);
+            // Build dict in a frame to clean up term refs leaked by DictBuilder::put().
+            // DictBuilder internally creates refs via PL_new_term_refs but doesn't release them.
+            // The frame ensures these are cleaned up when it closes.
+            let result = context.new_term_ref();
+            {
+                let f = context.open_frame();
+                let term = f.new_term_ref();
+                let mut builder = DictBuilder::new().tag("json");
+                for (key, val) in map.iter() {
+                    let val_term = json_value_to_prolog_term(&f, val)?;
+                    builder = builder.entry(key.as_str(), val_term);
+                }
+                term.put(&builder)?;
+                // Copy dict structure to result (outside frame) via unification
+                result.unify(&term)?;
+                // Drop builder before closing frame to satisfy borrow checker
+                drop(builder);
+                f.close();
             }
-            term.put(&builder)?;
-            Ok(term)
+            Ok(result)
         }
     }
 }
@@ -305,8 +300,8 @@ predicates! {
             return result_term.unify(&list_term);
         }
         
-        // Build Prolog list - terms accumulate in context
-        // GC is triggered periodically by auto_optimize plugin
+        // Build Prolog list using straightforward accumulation.
+        // Term refs accumulate on context - GC handles cleanup.
         let list_term = context.new_term_ref();
         let mut terms = Vec::with_capacity(values.len());
         for value in values.iter() {
