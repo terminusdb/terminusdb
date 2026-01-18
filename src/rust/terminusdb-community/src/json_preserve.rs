@@ -130,22 +130,20 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(list_term);
             }
             
-            // For populated arrays: Create result term outside the scope
-            // so it survives, then process elements in a tighter scope
+            // Process each element in its own frame to release intermediate term refs
             let list_term = context.new_term_ref();
-            {
-                // Scope the terms Vec - this ensures term refs are released
-                // after unification, reducing GC pressure for large arrays
-                let terms: Vec<Term> = arr.iter()
-                    .map(|item| json_value_to_prolog_term(context, item))
-                    .collect::<Result<Vec<_>, _>>()?;
-                
-                // Unify builds a proper Prolog list structure
-                // After this, the individual term refs in `terms` are no longer
-                // needed - the data is now in the list_term structure
-                list_term.unify(terms.as_slice())?;
-                // terms Vec dropped here, releasing the intermediate term refs
+            let mut terms = Vec::with_capacity(arr.len());
+            for item in arr.iter() {
+                let term = context.new_term_ref();
+                {
+                    let f = context.open_frame();
+                    let inner_term = json_value_to_prolog_term(&f, item)?;
+                    term.unify(&inner_term)?;
+                    f.close();
+                }
+                terms.push(term);
             }
+            list_term.unify(terms.as_slice())?;
             Ok(list_term)
         }
         Value::Object(map) => {
@@ -157,21 +155,20 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(context: &'a Context<'
                 return Ok(term);
             }
             
-            // For populated objects: Create result term outside the scope
+            // Process each value in its own frame to release intermediate term refs
             let term = context.new_term_ref();
-            {
-                // Scope the builder and value terms - reduces GC pressure
-                let mut builder = DictBuilder::new().tag("json");
-                
-                for (key, val) in map.iter() {
-                    let val_term = json_value_to_prolog_term(context, val)?;
-                    builder = builder.entry(key.as_str(), val_term);
+            let mut builder = DictBuilder::new().tag("json");
+            for (key, val) in map.iter() {
+                let val_term = context.new_term_ref();
+                {
+                    let f = context.open_frame();
+                    let inner_term = json_value_to_prolog_term(&f, val)?;
+                    val_term.unify(&inner_term)?;
+                    f.close();
                 }
-                
-                // Build the dict structure
-                term.put(&builder)?;
-                // builder and intermediate val_terms released here
+                builder = builder.entry(key.as_str(), val_term);
             }
+            term.put(&builder)?;
             Ok(term)
         }
     }
@@ -318,18 +315,23 @@ predicates! {
             return result_term.unify(&list_term);
         }
         
-        // Build Prolog list (same pattern as Array case in json_value_to_prolog_term)
-        // Convert all values to Prolog terms with explicit scoping
-        // to reduce GC pressure for large document batches
+        // Build Prolog list - process each value in its own frame
+        // to release intermediate term refs and reduce GC pressure
         let list_term = context.new_term_ref();
-        {
-            let terms: Vec<Term> = values.iter()
-                .map(|value| json_value_to_prolog_term(context, value))
-                .collect::<Result<Vec<_>, _>>()?;
-            
-            list_term.unify(terms.as_slice())?;
-            // terms Vec dropped here, releasing intermediate term refs
+        let mut terms = Vec::with_capacity(values.len());
+        for value in values.iter() {
+            // Each value gets its own frame - intermediate terms are released
+            // but the final term survives because it's created outside the frame
+            let term = context.new_term_ref();
+            {
+                let f = context.open_frame();
+                let inner_term = json_value_to_prolog_term(&f, value)?;
+                term.unify(&inner_term)?;
+                f.close();
+            }
+            terms.push(term);
         }
+        list_term.unify(terms.as_slice())?;
         result_term.unify(&list_term)
     }
 }
