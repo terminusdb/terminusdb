@@ -35,6 +35,17 @@ docker-fast:
 	  --build-arg SKIP_TESTS=true \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
+# Build Docker image with debug + chk_secure SWI-Prolog for diagnostics
+.PHONY: docker-debug
+docker-debug: export DOCKER_BUILDKIT=1
+docker-debug:
+	docker build . \
+	  --file docker/debug/Dockerfile \
+	  --tag terminusdb/terminusdb-server:local \
+	  --build-arg DIST="$(DIST)" \
+	  --build-arg SKIP_TESTS=true \
+	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
+
 .PHONY: docker
 docker: export DOCKER_BUILDKIT=1
 docker:
