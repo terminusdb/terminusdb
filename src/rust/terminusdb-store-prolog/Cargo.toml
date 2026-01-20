@@ -17,6 +17,7 @@ chardetng = "0.1.9"
 urlencoding = "1.1.1"
 chrono = "0.4"
 rug = {version="1.16", default-features=false, features=["integer","rational"]}
+gmp-mpfr-sys = {version="~1.5", default-features=false, features=["use-system-libs"]}
 base64 = "0.13"
 
 terminusdb-grpc-labelstore-client = { git="https://github.com/terminusdb-labs/terminusdb-grpc-labelstore", rev="cb8cf29" }
