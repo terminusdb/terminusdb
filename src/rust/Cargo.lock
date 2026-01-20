@@ -2170,6 +2170,7 @@ dependencies = [
  "lcs",
  "lru 0.16.3",
  "nom",
+ "once_cell",
  "ordered-float",
  "rand 0.8.5",
  "rayon",

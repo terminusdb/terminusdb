@@ -17,6 +17,7 @@ terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
 itertools = "0.10.3"
 serde_json = {version="1", features=["preserve_order", "arbitrary_precision"]}
 lazy_static = "1.4"
+once_cell = "1.19"
 urlencoding = "2.1"
 rayon = "1.5"
 lazy-init = "0.5"

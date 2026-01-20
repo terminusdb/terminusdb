@@ -8,10 +8,11 @@
 //! 1. Fast path for small integers (direct i64 unification)
 //! 2. Reuse static atoms via atom!() macro
 //! 3. Only create term refs when needed for return value
-//! 4. Garbage collection handles the term ref accumulation
+//! 4. GC synchronization via gc_sync module
 
 use swipl::prelude::*;
 use serde_json::{Value, Deserializer};
+use crate::gc_sync::TermCreationGuard;
 
 /// Convert serde_json::Value to Prolog term
 /// 
@@ -175,6 +176,9 @@ predicates! {
     /// Original string-based parser kept for backward compatibility
     #[module("$json_preserve")]
     semidet fn json_read_string(context, json_string_term, result_term) {
+        // Acquire read lock - allows concurrent Rust, blocks during GC
+        let _guard = TermCreationGuard::new();
+        
         let json_str: String = json_string_term.get()?;
         
         // Parse JSON with serde
@@ -194,6 +198,9 @@ predicates! {
     #[module("$json_preserve")]
     semidet fn json_read_stream(context, stream_term, result_term) {
         use std::io::Read;
+        
+        // Acquire read lock - allows concurrent Rust, blocks during GC
+        let _guard = TermCreationGuard::new();
         
         // Get readable stream from term
         let mut stream: ReadablePrologStream = stream_term.get_ex()?;
@@ -227,6 +234,9 @@ predicates! {
     /// @param result_term - Unified with the parsed JSON value, or atom 'eof' if no more data
     #[module("$json_preserve")]
     semidet fn json_read_one_from_stream(context, stream_term, result_term) {
+        // Acquire read lock - allows concurrent Rust, blocks during GC
+        let _guard = TermCreationGuard::new();
+        
         // Get readable stream from term
         let stream: ReadablePrologStream = stream_term.get_ex()?;
         
@@ -269,6 +279,9 @@ predicates! {
     #[module("$json_preserve")]
     semidet fn json_read_all_from_stream(context, stream_term, length_term, result_term) {
         use std::io::{Read, Cursor};
+        
+        // Acquire read lock - allows concurrent Rust, blocks during GC
+        let _guard = TermCreationGuard::new();
         
         // Get stream and length
         let mut stream: ReadablePrologStream = stream_term.get_ex()?;
