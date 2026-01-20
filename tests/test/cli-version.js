@@ -22,7 +22,7 @@ describe('cli-version', function () {
     const terminusdbVersion = await info.terminusdbVersion()
     const gitHash = await info.gitHash()
     const r = await exec(`${terminusdbSh} --version`, {
-      env: { ...process.env, TERMINUSDB_EXEC_PATH: terminusdbExec },
+      env: { ...process.env, TERMINUSDB_EXEC_PATH: process.env.TERMINUSDB_EXEC_PATH || terminusdbExec },
     })
     expect(r.stdout).to.match(new RegExp(
       `^TerminusDB v${terminusdbVersion} \\(${gitHash}\\)\nterminusdb-store v.*`,
