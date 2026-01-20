@@ -25,6 +25,27 @@ restart:
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
+.PHONY: docker-fast
+docker-fast: export DOCKER_BUILDKIT=1
+docker-fast:
+	docker build . \
+	  --file Dockerfile \
+	  --tag terminusdb/terminusdb-server:local \
+	  --build-arg DIST="$(DIST)" \
+	  --build-arg SKIP_TESTS=true \
+	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
+
+# Build Docker image with debug + chk_secure SWI-Prolog for diagnostics
+.PHONY: docker-debug
+docker-debug: export DOCKER_BUILDKIT=1
+docker-debug:
+	docker build . \
+	  --file docker/debug/Dockerfile \
+	  --tag terminusdb/terminusdb-server:local \
+	  --build-arg DIST="$(DIST)" \
+	  --build-arg SKIP_TESTS=true \
+	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
+
 .PHONY: docker
 docker: export DOCKER_BUILDKIT=1
 docker:
@@ -61,6 +82,11 @@ lint:
 .PHONY: clippy
 clippy:
 	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
+
+# Run Rust unit tests.
+.PHONY: test-rust
+test-rust:
+	cargo test --manifest-path=src/rust/Cargo.toml
 
 .PHONY: lint-mocha
 lint-mocha:
@@ -138,4 +164,4 @@ $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
 .PHONY: pr
-pr: lint lint-mocha lint-openapi clean dev restart test test-int
+pr: lint lint-mocha lint-openapi clean test-rust dev restart test test-int

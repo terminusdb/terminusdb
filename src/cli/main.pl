@@ -41,8 +41,26 @@
 :- use_module(library(terminus_store), [terminus_store_version/1]).
 
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
+:- use_module(library(debug)).
+
+% Enable chk_secure at runtime if TERMINUSDB_CHK_SECURE=true
+% Thus runs as early as possible to catch any error
+maybe_enable_chk_secure :-
+    (   getenv('TERMINUSDB_CHK_SECURE', Value)
+    ->  format(user_error, '% TERMINUSDB_CHK_SECURE=~w~n', [Value]),
+        flush_output(user_error),
+        (   Value == true
+        ->  prolog_debug(chk_secure),
+            format(user_error, '% chk_secure enabled for term reference debugging~n', []),
+            flush_output(user_error)
+        ;   format(user_error, '% chk_secure not enabled (value=~q, expected atom true)~n', [Value]),
+            flush_output(user_error)
+        )
+    ;   true  % Silently skip if not set
+    ).
 
 cli_toplevel :-
+    maybe_enable_chk_secure,
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
     update_system_graphs,

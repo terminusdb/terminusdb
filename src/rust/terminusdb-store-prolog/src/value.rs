@@ -398,12 +398,8 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::AnySimpleType => {
             let anysimpletype = entry.as_val::<AnySimpleType, String>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&anysimpletype)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&anysimpletype)?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#anySimpleType"))
         }
         Datatype::UInt8 => {
@@ -464,22 +460,14 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::BigInt => {
             let val: Integer = entry.as_val::<Integer, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#integer"))
         }
         Datatype::NonPositiveInteger => {
             let val: Integer = entry.as_val::<NonPositiveInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#nonPositiveInteger"),
@@ -487,12 +475,8 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::NonNegativeInteger => {
             let val: Integer = entry.as_val::<NonNegativeInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(
                 2,
                 atom!("http://www.w3.org/2001/XMLSchema#nonNegativeInteger"),
@@ -500,22 +484,14 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::PositiveInteger => {
             let val: Integer = entry.as_val::<PositiveInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#positiveInteger"))
         }
         Datatype::NegativeInteger => {
             let val: Integer = entry.as_val::<NegativeInteger, Integer>();
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&val.to_string())?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            let term = context.term_from_string(&val.to_string())?;
+            object_term.unify_arg(1, term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#negativeInteger"))
         }
         Datatype::Token => {
@@ -525,79 +501,49 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::GYear => {
             let val = entry.as_val::<GYear, GYear>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gyear/2"))?;
-                f_term.unify_arg(1, val.year)?;
-                f_term.unify_arg(2, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gyear/2"))?;
+            g_term.unify_arg(1, val.year)?;
+            g_term.unify_arg(2, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gYear"))
         }
         Datatype::GMonth => {
             let val = entry.as_val::<GMonth, GMonth>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gmonth/2"))?;
-                f_term.unify_arg(1, val.month as i64)?;
-                f_term.unify_arg(2, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gmonth/2"))?;
+            g_term.unify_arg(1, val.month as i64)?;
+            g_term.unify_arg(2, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gMonth"))
         }
         Datatype::GDay => {
             let val = entry.as_val::<GDay, GDay>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gday/2"))?;
-                f_term.unify_arg(1, val.day as i64)?;
-                f_term.unify_arg(2, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gday/2"))?;
+            g_term.unify_arg(1, val.day as i64)?;
+            g_term.unify_arg(2, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gDay"))
         }
         Datatype::GYearMonth => {
             let val = entry.as_val::<GYearMonth, GYearMonth>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gyear_month/3"))?;
-                f_term.unify_arg(1, val.year)?;
-                f_term.unify_arg(2, val.month as u64)?;
-                f_term.unify_arg(3, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gyear_month/3"))?;
+            g_term.unify_arg(1, val.year)?;
+            g_term.unify_arg(2, val.month as u64)?;
+            g_term.unify_arg(3, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gYearMonth"))
         }
         Datatype::GMonthDay => {
             let val = entry.as_val::<GMonthDay, GMonthDay>();
-            {
-                let f = context.open_frame();
-                let f_term = f.new_term_ref();
-                f_term.unify(functor!("gmonth_day/3"))?;
-                f_term.unify_arg(1, val.month as u64)?;
-                f_term.unify_arg(2, val.day as u64)?;
-                f_term.unify_arg(3, val.offset as i64)?;
-
-                object_term.unify_arg(1, &f_term)?;
-                f.close();
-            }
-
+            let g_term = context.new_term_ref();
+            g_term.unify(functor!("gmonth_day/3"))?;
+            g_term.unify_arg(1, val.month as u64)?;
+            g_term.unify_arg(2, val.day as u64)?;
+            g_term.unify_arg(3, val.offset as i64)?;
+            object_term.unify_arg(1, g_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#gMonthDay"))
         }
         Datatype::Duration => {

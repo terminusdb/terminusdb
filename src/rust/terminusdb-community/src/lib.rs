@@ -8,6 +8,7 @@ mod changes;
 mod consts;
 mod doc;
 mod embedding;
+mod gc_sync;
 mod graphql;
 mod json_preserve;
 mod path;
@@ -116,6 +117,7 @@ pub fn install() {
     register_random_string();
     register_random_base64();
     doc::register();
+    gc_sync::register();
     graphql::register();
     json_preserve::register();
     template::register();

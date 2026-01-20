@@ -413,15 +413,25 @@ inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
     inherit_env_var(Env_List_In, Var, Env_List_Out),
     inherit_env_vars(Env_List_Out, Vars, Env_List).
 
+% Wait for server startup message with retry and timeout
+% MaxRetries: number of retries before giving up (each retry waits 0.5s)
 read_line_until_start_line(Error) :-
+    read_line_until_start_line(Error, 20). % 20 retries * 0.5s = 10s max wait
+
+read_line_until_start_line(Error, RetriesLeft) :-
     read_line_to_string(Error, Line),
     (   Line = end_of_file
-    ->  throw(error(server_has_no_output, _))
+    ->  (   RetriesLeft > 0
+        ->  sleep(0.5),
+            NewRetries is RetriesLeft - 1,
+            read_line_until_start_line(Error, NewRetries)
+        ;   throw(error(server_has_no_output, _))
+        )
     ;   re_match("% You can view your server in a browser at ",Line)
     ),
     !.
-read_line_until_start_line(Error) :-
-    read_line_until_start_line(Error).
+read_line_until_start_line(Error, RetriesLeft) :-
+    read_line_until_start_line(Error, RetriesLeft).
 
 % spawn_server(+Path, -URL, -PID, +Options) is det.
 spawn_server_1(Path, URL, PID, Options) :-
