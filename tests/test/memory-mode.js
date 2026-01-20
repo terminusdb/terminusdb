@@ -69,7 +69,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should start server in memory mode with custom password', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
+      const terminusdbPath = process.env.TERMINUSDB_EXEC_PATH || path.join(__dirname, '../../terminusdb')
 
       serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
@@ -92,7 +92,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should start server in memory mode with default password', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
+      const terminusdbPath = process.env.TERMINUSDB_EXEC_PATH || path.join(__dirname, '../../terminusdb')
 
       serverProcess = spawn(terminusdbPath, ['serve', '-m'], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
@@ -115,7 +115,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should allow database creation in memory mode', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
+      const terminusdbPath = process.env.TERMINUSDB_EXEC_PATH || path.join(__dirname, '../../terminusdb')
 
       serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
@@ -146,7 +146,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should return info endpoint with version information', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
+      const terminusdbPath = process.env.TERMINUSDB_EXEC_PATH || path.join(__dirname, '../../terminusdb')
 
       serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
@@ -196,7 +196,7 @@ describe('In-Memory Mode', function () {
     let auth
 
     before(async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
+      const terminusdbPath = process.env.TERMINUSDB_EXEC_PATH || path.join(__dirname, '../../terminusdb')
 
       serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
