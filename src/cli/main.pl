@@ -55,7 +55,9 @@ cli_toplevel :-
             halt(0)
         ),
         Exception,
-        (   Exception = error(io_error(write,user_output),_)
+        (   Exception = unwind(halt(Code))
+        ->  halt(Code)
+        ;   Exception = error(io_error(write,user_output),_)
         ->  halt(0)
         ;   Exception = error(rust_io_error('WriteZero',_),_)
         ->  halt(0)
