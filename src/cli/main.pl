@@ -2101,7 +2101,7 @@ run_command(db,create,[DB_Path],Opts) :-
     option(schema_prefix(Schema_Prefix), Opts),
     option(prefixes(Prefixes_Atom), Opts),
 
-    atom_json_dict(Prefixes_Atom, Prefixes, []),
+    atom_json_dict(Prefixes_Atom, Prefixes, [default_tag(json)]),
     put_dict(Prefixes, _{'@base' : Data_Prefix, '@schema' : Schema_Prefix}, Merged),
     api_report_errors(
         create_db,
@@ -2138,7 +2138,7 @@ run_command(db,update,[DB_Path],Opts) :-
         (   get_dict(Key,Dict,Pre),
             ground(Pre),
             (   Key = 'prefixes'
-            ->  atom_json_dict(Pre,Val, [])
+            ->  atom_json_dict(Pre,Val, [default_tag(json)])
             ;   Val = Pre)
         ),
         Pairs),

@@ -3602,7 +3602,7 @@ fetch_jwt_data(Token, Username) :-
 
     % SECURITY: Wrap in authentication_incorrect to ensure sanitization
     do_or_die(
-        (   atom_json_dict(Payload, PayloadDict, []),
+        (   atom_json_dict(Payload, PayloadDict, [default_tag(json)]),
             jwt_subject_claim_name(ClaimName),
             % replace with dict key get (or whatever it is called)
             get_dict(ClaimName, PayloadDict, UsernameString),
