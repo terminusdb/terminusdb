@@ -15,7 +15,7 @@
 :- use_module(core(api/api_init), [update_system_graphs/0]).
 :- use_module(core(triple)).
 :- use_module(server(main), [terminus_server/2]).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2, organization_database_name_uri/4]).
 :- use_module(core(document), [get_document/3]).

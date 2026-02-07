@@ -6,7 +6,7 @@
 :- use_module(core(api/api_error)).
 
 :- use_module(library(option)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_Data_Version, Options) :-
     option(commit_info(Commit_Info), Options),

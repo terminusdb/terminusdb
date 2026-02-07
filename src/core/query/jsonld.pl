@@ -37,7 +37,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(pcre), [re_match/2]).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).

@@ -7,7 +7,7 @@
 :- use_module(core(transaction)).
 
 :- use_module(library(lists)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(option)).
 
 descriptor_type_has_history(branch_descriptor).

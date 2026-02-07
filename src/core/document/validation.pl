@@ -12,7 +12,7 @@
 :- use_module(schema).
 
 :- use_module(library(lists)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 validation_triple_update(Object) :-
     get_dict(triple_update, Object, true).

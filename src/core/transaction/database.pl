@@ -264,7 +264,7 @@ with_transaction_(_,
     throw(error(transaction_retry_exceeded, _)).
 
 :- use_module(core(util/test_utils)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 /*
  * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
  *

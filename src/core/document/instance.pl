@@ -28,7 +28,7 @@
 
 :- use_module(schema).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(aggregate)).
 :- use_module(library(lists)).
 :- use_module(library(dicts)).
