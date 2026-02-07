@@ -2550,9 +2550,8 @@ test(substring, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Length':_{'@type':'xsd:decimal','@value':2},
-      'Substring':_{'@type':'xsd:string','@value':"es"}
-     } :< Res.
+    Res = json{'Length':json{'@type':'xsd:decimal','@value':2},
+               'Substring':json{'@type':'xsd:string','@value':"es"}}.
 
 test(typecast_string_integer, [
          setup((setup_temp_store(State),
@@ -2572,8 +2571,7 @@ test(typecast_string_integer, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Casted':_{'@type':'xsd:integer',
-                 '@value':202}} :< Res.
+    Res = json{'Casted':json{'@type':'xsd:integer','@value':202}}.
 
 test(eval, [
          setup((setup_temp_store(State),
@@ -2597,8 +2595,7 @@ test(eval, [
     query_test_response_test_branch(Query_Out, JSON),
 
     [Res] = JSON.bindings,
-    _{'Sum':_{'@type':'xsd:decimal',
-              '@value':4}} :< Res.
+    Res = json{'Sum':json{'@type':'xsd:decimal','@value':4}}.
 
 
 test(add_triple, [
@@ -2718,8 +2715,7 @@ test(upper, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Upcased':_{'@type':'xsd:string',
-                  '@value': "AAAA"}} :< Res.
+    Res = json{'Upcased':json{'@type':'xsd:string','@value':"AAAA"}}.
 
 
 test(unique, [
@@ -2747,7 +2743,7 @@ test(unique, [
     query_test_response_test_branch(Query_Out, JSON),
 
     [Res] = JSON.bindings,
-    _{ 'URI':'http://foo.com/ff02308b1ff78b66ab564140c91419e94e47644d3e94addcc8b0864058ca4028'} :< Res.
+    Res = json{'URI':'http://foo.com/ff02308b1ff78b66ab564140c91419e94e47644d3e94addcc8b0864058ca4028'}.
 
 test(split, [
          setup((setup_temp_store(State),
@@ -2767,11 +2763,10 @@ test(split, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Split': [_{'@type':'xsd:string','@value':"you"},
-                _{'@type':'xsd:string','@value':"should"},
-                _{'@type':'xsd:string','@value':"be"},
-                _{'@type':'xsd:string','@value':"split"}]}
-                 :< Res.
+    Res = json{'Split': [json{'@type':'xsd:string','@value':"you"},
+                         json{'@type':'xsd:string','@value':"should"},
+                         json{'@type':'xsd:string','@value':"be"},
+                         json{'@type':'xsd:string','@value':"split"}]}.
 
 test(datavalue_frame, [
          setup(setup_temp_store(State)),
@@ -2833,8 +2828,7 @@ test(join, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Join': _{'@type':'xsd:string',
-                '@value':"you_should_be_joined"}} :< Res.
+    Res = json{'Join':json{'@type':'xsd:string','@value':"you_should_be_joined"}}.
 
 test(like, [
          setup((setup_temp_store(State),
@@ -2854,8 +2848,7 @@ test(like, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Similarity':_{'@type':'xsd:decimal',
-                     '@value':1}} :< Res.
+    Res = json{'Similarity':json{'@type':'xsd:decimal','@value':1}}.
 
 test(exp, [
          setup((setup_temp_store(State),
@@ -2878,8 +2871,7 @@ test(exp, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Exp':_{'@type':'xsd:decimal',
-              '@value':4}} :< Res.
+    Res = json{'Exp':json{'@type':'xsd:decimal','@value':4}}.
 
 test(limit, [
          setup((setup_temp_store(State),
@@ -2946,8 +2938,8 @@ test(indexed_get,
     query_test_response_test_branch(Query_Out, JSON),
     [Res|_] = JSON.bindings,
     % Should this really be without a header?
-    _{'First':_{'@type':'xsd:string','@value':"Duration"},
-      'Second':_{'@type':'xsd:string','@value':"Start date"}} :< Res.
+    Res = json{'First':json{'@type':'xsd:string','@value':"Duration"},
+               'Second':json{'@type':'xsd:string','@value':"Start date"}}.
 
 test(named_get, [
          setup((setup_temp_store(State),
@@ -3054,24 +3046,15 @@ test(named_get_two, [
     query_test_response_test_branch(Query_Out, JSON),
 
     [Res|_] = JSON.bindings,
-    _{'Bike':_{'@type':'xsd:string',
-               '@value':"W00247"},
-      'Duration':_{'@type':'xsd:string',
-                   '@value':"3548"},
-      'End_ID':_{'@type':'xsd:string',
-                 '@value':"31620"},
-      'End_Station':_{'@type':'xsd:string',
-                      '@value':"5th & F St NW"},
-      'End_Time':_{'@type':'xsd:string',
-                   '@value':"2011-01-01 01:00:37"},
-      'Member_Type':_{'@type':'xsd:string',
-                      '@value':"Member"},
-      'Start_ID':_{'@type':'xsd:string',
-                   '@value':"31620"},
-      'Start_Station':_{'@type':'xsd:string',
-                        '@value':"5th & F St NW"},
-      'Start_Time':_{'@type':'xsd:string',
-                     '@value':"2011-01-01 00:01:29"}} :< Res.
+    Res = json{'Bike':json{'@type':'xsd:string','@value':"W00247"},
+               'Duration':json{'@type':'xsd:string','@value':"3548"},
+               'End_ID':json{'@type':'xsd:string','@value':"31620"},
+               'End_Station':json{'@type':'xsd:string','@value':"5th & F St NW"},
+               'End_Time':json{'@type':'xsd:string','@value':"2011-01-01 01:00:37"},
+               'Member_Type':json{'@type':'xsd:string','@value':"Member"},
+               'Start_ID':json{'@type':'xsd:string','@value':"31620"},
+               'Start_Station':json{'@type':'xsd:string','@value':"5th & F St NW"},
+               'Start_Time':json{'@type':'xsd:string','@value':"2011-01-01 00:01:29"}}.
 
 test(concat, [
          setup((setup_temp_store(State),
@@ -3098,8 +3081,7 @@ test(concat, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Concatenated':_{'@type':'xsd:string',
-                       '@value':"FirstSecond"}} :< Res.
+    Res = json{'Concatenated':json{'@type':'xsd:string','@value':"FirstSecond"}}.
 
 test(sum, [
          setup((setup_temp_store(State),
@@ -3126,8 +3108,7 @@ test(sum, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Sum':_{'@type':'xsd:decimal',
-              '@value': 3}} :< Res.
+    Res = json{'Sum':json{'@type':'xsd:decimal','@value':3}}.
 
 test(length, [
          setup((setup_temp_store(State),
@@ -3151,8 +3132,7 @@ test(length, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = JSON.bindings,
-    _{'Length':_{'@type':'xsd:decimal',
-                 '@value': 2}} :< Res.
+    Res = json{'Length':json{'@type':'xsd:decimal','@value':2}}.
 
 
 test(length_of_var, [
@@ -5070,12 +5050,12 @@ test(gyear_cast, [
   }
 }',
 
-    atom_json_dict(Typecast, Query, []),
+    atom_json_dict(Typecast, Query, [default_tag(json)]),
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response(system_descriptor{}, Query_Out, JSON),
     [Binding] = (JSON.bindings),
-    Binding = _{'V':_{'@type':'xsd:gYear',
-                      '@value':"1999"}}.
+    Binding = json{'V':json{'@type':'xsd:gYear',
+                            '@value':"1999"}}.
 
 test(schema_prefix, [
          setup((setup_temp_store(State),
@@ -5783,10 +5763,11 @@ test(json_unbound_capture, [
        "right" : { "@type" : "Value",
                    "variable" : "Y" }}',
 
-    atom_json_dict(Query_Atom, Query, []),
+    atom_json_dict(Query_Atom, Query, [default_tag(json)]),
     resolve_absolute_string_descriptor("TERMINUSQA/test", Descriptor),
     query_test_response(Descriptor, Query, Response),
-    (Response.bindings) = [_{'Y':_{a:1,b:null},asdf:null}].
+    [Binding] = (Response.bindings),
+    Binding = json{'Y':json{a:1,b:null},asdf:null}.
 
 
 test(insert_read_document, [
@@ -5814,7 +5795,7 @@ test(insert_read_document, [
                                                ]}},
        "identifier" : { "@type" : "NodeValue", "variable" : "id" }
      }',
-    atom_json_dict(Insert_Atom, Query, []),
+    atom_json_dict(Insert_Atom, Query, [default_tag(json)]),
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [Res] = (JSON.bindings),
@@ -5825,9 +5806,8 @@ test(insert_read_document, [
     Read_AST = get_document(ID,v('Doc')),
     run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
     [Res2] = (Response.bindings),
-    _{'@id':_,
-      '@type':'City',
-      name:"Dublin"} = Res2.'Doc'.
+    Doc = Res2.'Doc',
+    json{'@type':'City', name:"Dublin"} :< Doc.
 
 test(insert_document_forget_uri, [
          setup((setup_temp_store(State),
@@ -5853,7 +5833,7 @@ test(insert_document_forget_uri, [
                                                               "data" : "Dublin"}}
                                                ]}}
      }',
-    atom_json_dict(Insert_Atom, Query, []),
+    atom_json_dict(Insert_Atom, Query, [default_tag(json)]),
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, _JSON),
 
@@ -5862,9 +5842,8 @@ test(insert_document_forget_uri, [
     Read_AST = get_document('City/Dublin',v('Doc')),
     run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
     [Res2] = (Response.bindings),
-    _{'@id':_,
-      '@type':'City',
-      name:"Dublin"} = Res2.'Doc'.
+    Doc = Res2.'Doc',
+    Doc = json{'@id':'City/Dublin', '@type':'City', name:"Dublin"}.
 
 
 test(operator_clash, [

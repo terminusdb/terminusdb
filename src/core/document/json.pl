@@ -333,7 +333,7 @@ get_path_value(Elaborated,Path,Value) :-
     is_dict(Elaborated),
     get_dict('@type',Elaborated,_),
     !,
-    dict_pairs(Elaborated,json,Pairs),
+    dict_pairs(Elaborated,_,Pairs),
     % Remove ID if it exists
     (   select('@id'-_,Pairs,Pairs1)
     ->  true
@@ -725,8 +725,11 @@ database_schema_prefixes(Schema,Context) :-
             dict_pairs(Prefixes, context, Pairs),
             !,
             Context_With_ID = (Pre_Context.put(Prefixes)),
-            select_dict(json{'@id' : _ }, Context_With_ID, Context)
-        ;   Context = _{})
+            select_dict(json{'@id' : _ }, Context_With_ID, Context0),
+            % Normalize dict tag to json for SWI-Prolog 10 compatibility
+            dict_pairs(Context0, _, ContextPairs),
+            dict_pairs(Context, json, ContextPairs)
+        ;   Context = json{})
     ).
 
 database_prefixes(DB,Context) :-
@@ -1296,7 +1299,7 @@ context_documentation_value_map('@authors',Value,'sys:authors',json{ '@container
 context_elaborate(JSON,Elaborated) :-
     is_context(JSON),
     !,
-    dict_pairs(JSON,json,Pairs),
+    dict_pairs(JSON,_,Pairs),
     partition([P-_]>>(member(P, ['@type', '@base', '@schema',
                                  '@documentation', '@context', '@metadata'])),
               Pairs, Keyword_Values, Prop_Values),
@@ -1781,7 +1784,7 @@ json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
                     'Set','List','Optional','Array', 'Cardinality',
                     'Table','Foreign']),
     is_dict(JSON),
-    dict_pairs(JSON,json,Pre_Pairs),
+    dict_pairs(JSON,_,Pre_Pairs),
     !,
     (   is_type_family(JSON)
     ->  type_family_id(JSON,Context,Old_Path,ID),
@@ -5957,7 +5960,8 @@ test(binary_tree_elaborate,
              )),
          cleanup(
              teardown_temp_store(State)
-         )
+         ),
+         nondet
      ]) :-
 
     JSON = json{'@type':'BinaryTree',
@@ -7918,7 +7922,7 @@ test(round_trip_float,
       "longitude" : "xsd:double"
     }',
 
-    atom_json_dict(Geo_Schema_Atom, Geo_Schema, []),
+    atom_json_dict(Geo_Schema_Atom, Geo_Schema, [default_tag(json)]),
 
     Geo_Atom = '{
         "@type": "GeoCoordinate",
@@ -7926,7 +7930,7 @@ test(round_trip_float,
         "longitude": "0.5679"
     }',
 
-    atom_json_dict(Geo_Atom, Geo, []),
+    atom_json_dict(Geo_Atom, Geo, [default_tag(json)]),
 
 
     with_test_transaction(Desc,
@@ -7947,7 +7951,7 @@ test(round_trip_float,
     Doc = json{'@id':'GeoCoordinate/41.2008+0.5679',
                '@type':'GeoCoordinate',
                latitude:41.2008,
-                           longitude:0.5679}.
+               longitude:0.5679}.
 
 :- use_module(core(query)).
 test(status_update,
@@ -7984,8 +7988,8 @@ test(status_update,
         "status" : "Status"
       }',
 
-    atom_json_dict(Enum_Atom, Enum, []),
-    atom_json_dict(Object_Atom, Object, []),
+    atom_json_dict(Enum_Atom, Enum, [default_tag(json)]),
+    atom_json_dict(Object_Atom, Object, [default_tag(json)]),
 
     with_test_transaction(Desc,
                           C1,
@@ -8004,7 +8008,7 @@ test(status_update,
         "status": "active"
     }',
 
-    atom_json_dict(Doc_Atom, Doc, []),
+    atom_json_dict(Doc_Atom, Doc, [default_tag(json)]),
 
 
     with_test_transaction(Desc,
@@ -8112,7 +8116,7 @@ test(status_update2,
         "creation_date":"xsd:dateTime"
     }]',
 
-    atom_json_dict(Schema_Atom, Docs, []),
+    atom_json_dict(Schema_Atom, Docs, [default_tag(json)]),
 
     with_test_transaction(
         Desc,
@@ -8133,7 +8137,7 @@ test(status_update2,
         "status": "active",
         "user_id": "auth0|615462f8ab33f4006a6bee0c"
     }',
-    atom_json_dict(User_Atom, User, []),
+    atom_json_dict(User_Atom, User, [default_tag(json)]),
 
     with_test_transaction(
         Desc,
@@ -8168,7 +8172,7 @@ test(status_update2,
         },
         "creation_date":"xsd:dateTime"
     }',
-    atom_json_dict(Invitation_Atom, Invitation, []),
+    atom_json_dict(Invitation_Atom, Invitation, [default_tag(json)]),
 
     with_test_transaction(
         Desc,
@@ -8230,7 +8234,7 @@ test(property_documentation_mismatch,
         "user_id": "xsd:string"
     }',
 
-    atom_json_dict(Schema_Atom, Doc, []),
+    atom_json_dict(Schema_Atom, Doc, [default_tag(json)]),
 
     with_test_transaction(
         Desc,
@@ -8348,8 +8352,8 @@ test(inherits_documentation_multi,
         }
     }',
 
-    atom_json_dict(Schema_Atom1, Schema1, []),
-    atom_json_dict(Schema_Atom2, Schema2, []),
+    atom_json_dict(Schema_Atom1, Schema1, [default_tag(json)]),
+    atom_json_dict(Schema_Atom2, Schema2, [default_tag(json)]),
 
     with_test_transaction(
         Desc,
@@ -15097,7 +15101,7 @@ metadata_schema('
 test(elaborate_schema_metadata,
      []) :-
     metadata_schema(Schema),
-    atom_json_dict(Schema, Context, []),
+    atom_json_dict(Schema, Context, [default_tag(json)]),
     context_elaborate(
         Context,
         Elaborated),

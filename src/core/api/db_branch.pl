@@ -349,7 +349,7 @@ test(create_branch_from_nothing_half_configured,
     open_descriptor(Descriptor, Transaction),
     is_schemaless(Transaction),
     database_prefixes(Transaction, Prefixes),
-    _{'@base':"http://alternative.instance/",'@schema':"http://alternative.schema/"} :< Prefixes.
+    Prefixes = json{'@base':"http://alternative.instance/",'@schema':"http://alternative.schema/",'@type':'Context'}.
 
 test(create_branch_from_nothing_configured,
      [setup((setup_temp_store(State),
@@ -371,7 +371,7 @@ test(create_branch_from_nothing_configured,
     open_descriptor(Descriptor, Transaction),
     \+ is_schemaless(Transaction),
     database_prefixes(Transaction, Prefixes),
-    _{'@base':"http://alternative.instance/",'@schema':"http://alternative.schema/"} :< Prefixes.
+    Prefixes = json{'@base':"http://alternative.instance/",'@schema':"http://alternative.schema/",'@type':'Context'}.
 
 test(create_branch_from_local_branch_with_commits,
      [setup((setup_temp_store(State),

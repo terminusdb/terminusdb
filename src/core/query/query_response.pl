@@ -54,15 +54,15 @@ run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_V
     ),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     context_variable_names(Output_Context, Names),
-    Binding_JSON = _{'@type' : 'api:WoqlResponse',
-                     'api:status' : 'api:success',
-                     'api:variable_names' : Names,
-                     'bindings' : Binding_Set,
-                     % These are whitelisted metadata fields for serialization.
-                     % Other fields (e.g. data_versions) cannot be serialized.
-                     inserts : Meta_Data.inserts,
-                     deletes : Meta_Data.deletes,
-                     transaction_retry_count : Meta_Data.transaction_retry_count }.
+    Binding_JSON = json{'@type' : 'api:WoqlResponse',
+                        'api:status' : 'api:success',
+                        'api:variable_names' : Names,
+                        'bindings' : Binding_Set,
+                        % These are whitelisted metadata fields for serialization.
+                        % Other fields (e.g. data_versions) cannot be serialized.
+                        inserts : Meta_Data.inserts,
+                        deletes : Meta_Data.deletes,
+                        transaction_retry_count : Meta_Data.transaction_retry_count }.
 
 
 run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, Options) :-
@@ -133,7 +133,7 @@ json_transform_binding_set(Context, Binding, JSON) :-
                 ;   term_jsonld(Prolog_Var, Prefixes, Term))),
             Binding,
             Data),
-    dict_create(JSON, _, Data).
+    dict_create(JSON, json, Data).
 
 field_separator(true,"",_Size).
 field_separator(false,Sep,Size) :-

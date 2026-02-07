@@ -542,7 +542,7 @@ term_jsonld(Term,JSON) :-
     maplist([A=B,A-JSON_B]>>term_jsonld(B,JSON_B), Term, JSON_List),
     % We are a dictionary not a list.
     !,
-    dict_pairs(JSON, _, JSON_List).
+    dict_pairs(JSON, json, JSON_List).
 term_jsonld(Term,JSON) :-
     is_list(Term),
     !,
@@ -649,7 +649,7 @@ term_jsonld(JSON,Prefixes,JSON_Compressed) :-
                 term_jsonld(Key,Prefixes,Compressed_Key),
                 term_jsonld(Value,Prefixes,Compressed_Value)
             ), Pairs, New_Pairs),
-    dict_create(JSON_Compressed, _, New_Pairs).
+    dict_create(JSON_Compressed, json, New_Pairs).
 term_jsonld(URI,Prefixes,URI_Compressed) :-
     compress_dict_uri(URI, Prefixes, URI_Compressed).
 

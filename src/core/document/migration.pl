@@ -1625,9 +1625,9 @@ test(add_remove_classes,
 
     Ops = [
         delete_class("A"),
-        create_class(_{ '@type' : "Class",
-                        '@id' : "C",
-                        c : "xsd:string" })
+        create_class(json{ '@type' : "Class",
+                           '@id' : "C",
+                           c : "xsd:string" })
     ],
     open_descriptor(Before, Transaction),
     create_class_dictionary(Transaction, Dictionary),
