@@ -12,7 +12,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(util)).
 :- use_module(core(account)).
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 :- use_module(library(http/http_client)).
 :- use_module(core(api/api_graphql)).
 :- use_module(core(triple), [super_user_authority/1]).

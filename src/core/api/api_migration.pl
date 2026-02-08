@@ -14,7 +14,7 @@
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 :- use_module(library(option)).
 
 api_migrate_resource(System, Auth, Path, Commit_Info0, Operations, Result, Options) :-

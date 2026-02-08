@@ -4,7 +4,7 @@
               json_stream_write_dict/3
           ]).
 
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 
 /**
  * json_stream_start(+Config) is det.

@@ -240,7 +240,7 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
 :- use_module(core(document)).
 :- use_module(core(triple)).
 :- use_module(core(api/api_document)).
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 
 test(delete_missing,
      [setup((setup_temp_store(State),

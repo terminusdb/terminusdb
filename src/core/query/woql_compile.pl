@@ -41,8 +41,8 @@
 :- use_module(core(query/partition)).
 :- use_module(core(query/ask)).
 
-:- use_module(library(json)).
-:- use_module(library(json_convert)).
+:- use_module(library(http/json)).
+:- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(option)).
 :- use_module(library(csv)).

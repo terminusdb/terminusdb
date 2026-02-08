@@ -31,7 +31,7 @@
 :- use_module(library(uuid)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 :- use_module(library(http/http_stream)).
 
 json_log_raw_text_error(E, Dict) :-

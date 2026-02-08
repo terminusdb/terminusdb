@@ -22,7 +22,7 @@
 :- use_module(global_prefixes).
 :- reexport(core(util/syntax)).
 
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).

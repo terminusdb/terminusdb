@@ -50,8 +50,8 @@
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_header)).
 :- use_module(library(http/http_cors)).
-:- use_module(library(json)).
-:- use_module(library(json_convert)).
+:- use_module(library(http/json)).
+:- use_module(library(http/json_convert)).
 :- use_module(library(http/http_stream)).
 :- use_module(library(url)).
 :- use_module(library(uri)).

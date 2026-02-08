@@ -16,7 +16,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(api)).
 :- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2]).
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 :- use_module(library(http/http_open)).
 
 % Define assertion/1 locally to satisfy linter (plunit provides it at runtime)

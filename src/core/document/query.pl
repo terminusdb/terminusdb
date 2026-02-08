@@ -13,7 +13,7 @@
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(terminus_store)).
-:- use_module(library(json)).
+:- use_module(library(http/json)).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 
