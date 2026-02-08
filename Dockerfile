@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1.3
 
+# Set the swipl version by argument (see Makefile)
+ARG SWIPL_VERSION=9.2.9
 ARG DIST=community
 ARG SKIP_TESTS=false
 
 # Minimal SWI-Prolog
-FROM swipl:9.2.9 AS swipl_minimal
+FROM swipl:${SWIPL_VERSION} AS swipl_minimal
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libjwt0
 

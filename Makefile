@@ -1,4 +1,5 @@
 DIST ?= community
+SWIPL_VERSION ?= 9.2.9
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
@@ -25,12 +26,14 @@ restart:
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
+# To make with swipl 10, use: make docker SWIPL_VERSION=10.0.0
 .PHONY: docker
 docker: export DOCKER_BUILDKIT=1
 docker:
 	docker build . \
 	  --file Dockerfile \
 	  --tag terminusdb/terminusdb-server:local \
+	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
 	  --build-arg DIST="$(DIST)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
