@@ -1429,7 +1429,7 @@ test(post_marshalling, []) :-
     json_woql(JSON,WOQL),
 
     WOQL = get(['Start station' as v('Start_Station')],
-               resource(post(bike_csv), csv, _{}), true).
+               resource(post(bike_csv), csv, []), true).
 
 test(isa, []) :-
     JSON_Atom = '{
