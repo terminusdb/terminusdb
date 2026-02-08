@@ -37,6 +37,19 @@ docker:
 	  --build-arg DIST="$(DIST)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
+# Build the Docker image for development using local swipl-rs sources.
+.PHONY: docker-debug
+docker-debug: export DOCKER_BUILDKIT=1
+docker-debug:
+	docker build . \
+	  --file docker/debug/Dockerfile \
+	  --tag terminusdb/terminusdb-server:debug \
+	  --build-context swipl-rs=../swipl-rs \
+	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
+	  --build-arg DIST="$(DIST)" \
+	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
+	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
+
 # Install minimal pack dependencies.
 .PHONY: install-deps
 install-deps: install-tus
