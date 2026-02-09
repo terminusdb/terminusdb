@@ -2,6 +2,7 @@
 :- use_module(core(api)).
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(config(terminus_config), [log_level/1]).
 :- use_module(library(http/http_server)).
 :- use_module(library(random)).
 :- use_module(library(lists)).
@@ -144,7 +145,7 @@ do_garbage_collect :-
     json_log_debug("Ran garbage_collect").
 
 maybe_print_stats(Label) :-
-    current_log_level(debug),
+    log_level('DEBUG'),
     !,
     print_stack_statistics_json(Label).
 maybe_print_stats(_).
