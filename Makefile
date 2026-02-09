@@ -40,6 +40,7 @@ docker:
 # Build the Docker image for development using local swipl-rs sources.
 .PHONY: docker-debug
 docker-debug: export DOCKER_BUILDKIT=1
+docker-debug: SKIP_TESTS ?= true
 docker-debug:
 	docker build . \
 	  --file docker/debug/Dockerfile \
