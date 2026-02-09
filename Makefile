@@ -1,5 +1,6 @@
 DIST ?= community
-SWIPL_VERSION ?= 9.2.9
+# Default was 9.2.9
+SWIPL_VERSION ?= 10.0.0
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1

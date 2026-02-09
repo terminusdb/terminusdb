@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
-# Set the swipl version by argument (see Makefile)
-ARG SWIPL_VERSION=9.2.9
+# Set the swipl version by argument (see Makefile for the default!)
+ARG SWIPL_VERSION=10.0.0
 ARG DIST=community
 ARG SKIP_TESTS=false
 

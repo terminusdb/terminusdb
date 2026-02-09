@@ -1982,7 +1982,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "swipl"
 version = "0.3.16"
-source = "git+https://github.com/terminusdb-org/swipl-rs#f548b5a250084b024ea5ead7fa7da0ed482800ef"
+source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
 dependencies = [
  "convert_case",
  "either",
@@ -1997,7 +1997,7 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.6"
-source = "git+https://github.com/terminusdb-org/swipl-rs#f548b5a250084b024ea5ead7fa7da0ed482800ef"
+source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -2006,7 +2006,7 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
-source = "git+https://github.com/terminusdb-org/swipl-rs#f548b5a250084b024ea5ead7fa7da0ed482800ef"
+source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
 dependencies = [
  "regex",
 ]
@@ -2014,7 +2014,7 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.8"
-source = "git+https://github.com/terminusdb-org/swipl-rs#f548b5a250084b024ea5ead7fa7da0ed482800ef"
+source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
