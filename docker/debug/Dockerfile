@@ -38,7 +38,7 @@ WORKDIR /app/rust
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 COPY --from=swipl-rs / /app/swipl-rs
-RUN sed -i 's|^#swipl = {path="../../../swipl-rs/swipl"}|swipl = {path="/app/swipl-rs/swipl"}|' src/rust/Cargo.toml
+RUN sed -i '/^#.*swipl = {/d; s|^swipl = {.*}|swipl = {path="/app/swipl-rs/swipl"}|' src/rust/Cargo.toml
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
