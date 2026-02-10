@@ -21,9 +21,11 @@ describe('In-Memory Mode', function () {
   async function waitForServer (maxRetries = 40) {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        await new Promise((resolve, reject) => {
-          const req = http.get(`http://127.0.0.1:${PORT}/api/`, (res) => {
-            resolve(res)
+        const res = await new Promise((resolve, reject) => {
+          const req = http.get(`http://127.0.0.1:${PORT}/api/ok`, (res) => {
+            let data = ''
+            res.on('data', chunk => { data += chunk })
+            res.on('end', () => { res.body = data; resolve(res) })
           })
           req.on('error', reject)
           req.setTimeout(1000, () => {
@@ -31,10 +33,11 @@ describe('In-Memory Mode', function () {
             reject(new Error('timeout'))
           })
         })
-        return true
+        if (res.statusCode === 200) return true
       } catch (e) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Server not ready yet
       }
+      await new Promise(resolve => setTimeout(resolve, 1000))
     }
     throw new Error('Server did not start in time')
   }
