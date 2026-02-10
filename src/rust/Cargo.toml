@@ -9,4 +9,5 @@ debug = true
 #tdb-succinct = {path="../../../tdb-succinct"}
 #terminus-store = {path="../../../terminusdb-store"}
 terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store"}
+swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 #swipl = {path="../../../swipl-rs/swipl"}

@@ -20,25 +20,15 @@ jobs:
       - name: Checkout repository      
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          version: latest
-
       - name: Docker Build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          tags: terminusdb/terminusdb-server:local
-          outputs: type=docker,dest=terminusdb-server-snapshot-arm64.tar
-          platforms: linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            TERMINUSDB_GIT_HASH=${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg TERMINUSDB_GIT_HASH=${{ github.sha }} \
+            -t terminusdb/terminusdb-server:local \
+            .
 
-      - name: Compress image
-        run: gzip terminusdb-server-snapshot-arm64.tar
+      - name: Save and compress image
+        run: docker save terminusdb/terminusdb-server:local | gzip > terminusdb-server-snapshot-arm64.tar.gz
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
