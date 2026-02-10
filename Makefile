@@ -104,9 +104,38 @@ test:
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Run the unit tests in node.
+# Usage: make test-int                    # run all tests
+#        make test-int SUITE=data-version # run test/data-version.js
+#        make test-int SUITE="cli-*"      # run all cli tests
 .PHONY: test-int
 test-int:
+ifdef SUITE
+	sh -c "cd tests ; npx mocha 'test/$(SUITE).js'"
+else
 	sh -c "cd tests ; npx mocha"
+endif
+
+# Start Docker container for integration testing (no plugins).
+# Rebuilds the docker image and recreates the container.
+.PHONY: docker-test-server
+docker-test-server: docker
+	-docker stop terminusdb-sandbox-test-int 2>/dev/null
+	-docker rm terminusdb-sandbox-test-int 2>/dev/null
+	docker run -d --name terminusdb-sandbox-test-int \
+		-p 6363:6363 \
+		-e TERMINUSDB_ADMIN_PASS=root \
+		-e TERMINUSDB_PLUGINS_PATH=/void \
+		terminusdb/terminusdb-server:local
+	@echo "Waiting for server to be ready..."
+	@sleep 3
+	@curl -sf http://127.0.0.1:6363/api/ok > /dev/null && echo "Docker test server ready at http://127.0.0.1:6363"
+
+# Stop the Docker test server.
+.PHONY: docker-test-server-stop
+docker-test-server-stop:
+	-docker stop terminusdb-sandbox-test-int 2>/dev/null
+	-docker rm terminusdb-sandbox-test-int 2>/dev/null
+	@echo "Docker test server stopped."
 
 # Quick command for interactive
 .PHONY: i
