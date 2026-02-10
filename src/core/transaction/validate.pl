@@ -306,8 +306,9 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     !,
 
     (   exists(validation_object_changed, [Instance_Object, Schema_Object])
-    ->  (   branch_head_commit(Parent_Transaction, Branch_Name, Old_Commit_Uri),
-            commit_type(Parent_Transaction, Old_Commit_Uri, Commit_Type),
+    ->  create_context(Parent_Transaction, Parent_Context),
+        (   branch_head_commit(Parent_Context, Branch_Name, Old_Commit_Uri),
+            commit_type(Parent_Context, Old_Commit_Uri, Commit_Type),
             Commit_Type = 'http://terminusdb.com/schema/ref#InitialCommit'
         ->  replace_initial_commit_on_branch(Parent_Transaction,
                                              (Validation_Object.commit_info),

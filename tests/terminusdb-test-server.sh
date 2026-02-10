@@ -94,8 +94,11 @@ function start_server() {
     export TERMINUSDB_SERVER_PORT=6363
     export TERMINUSDB_ADMIN_PASS="$ADMIN_PASS"
     export TERMINUSDB_SERVER_DB_PATH="$STORAGE_DIR"
-    # Enable auto-optimize plugin
-    export TERMINUSDB_PLUGINS_PATH="$PROJECT_ROOT/docker/plugins"
+    # NOTE: Do NOT enable auto-optimize plugin for tests!
+    # The plugin runs optimization probabilistically after commits, which causes
+    # data-version tests to fail due to race conditions (layer IDs change between requests).
+    # Tests should call the /api/optimize endpoint explicitly when needed.
+    # export TERMINUSDB_PLUGINS_PATH="$PROJECT_ROOT/docker/plugins"
     
     nohup ./terminusdb serve > "$LOG_FILE" 2>&1 &
     local pid=$!
