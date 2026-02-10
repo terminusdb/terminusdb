@@ -42,6 +42,40 @@ describe('In-Memory Mode', function () {
     throw new Error('Server did not start in time')
   }
 
+  async function waitForJsonEndpoint (path, auth, maxRetries = 10) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await new Promise((resolve, reject) => {
+          const req = http.request({
+            hostname: '127.0.0.1',
+            port: PORT,
+            path,
+            method: 'GET',
+            headers: { Authorization: `Basic ${auth}` },
+          }, (res) => {
+            let data = ''
+            res.on('data', chunk => { data += chunk })
+            res.on('end', () => { resolve({ status: res.statusCode, body: data }) })
+          })
+          req.on('error', reject)
+          req.setTimeout(2000, () => {
+            req.destroy()
+            reject(new Error('timeout'))
+          })
+          req.end()
+        })
+        if (res.status === 200) {
+          JSON.parse(res.body)
+          return true
+        }
+      } catch (e) {
+        // Endpoint not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+    throw new Error(`Endpoint ${path} did not return valid JSON in time`)
+  }
+
   async function httpRequest (options, body = null) {
     return new Promise((resolve, reject) => {
       const req = http.request(options, (res) => {
@@ -60,7 +94,7 @@ describe('In-Memory Mode', function () {
       serverProcess.kill('SIGTERM')
       serverProcess = null
       // Wait a bit for the port to be released
-      setTimeout(done, 1000)
+      setTimeout(done, 2000)
     } else {
       done()
     }
@@ -159,6 +193,8 @@ describe('In-Memory Mode', function () {
       await waitForServer()
 
       const auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
+      await waitForJsonEndpoint('/api/info', auth)
+
       const response = await httpRequest({
         hostname: '127.0.0.1',
         port: PORT,
