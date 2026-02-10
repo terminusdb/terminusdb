@@ -76,6 +76,9 @@ jobs:
           username: terminusdb
           password: ${{ secrets.DOCKER_PASS }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: Determine image tags to push
         run: |
           # Extract version from GITHUB_REF (e.g., refs/heads/main or refs/tags/v1.2.3)
@@ -143,20 +146,14 @@ jobs:
           TAGS="${{ env.docker_tags }}"
           for TAG in ${TAGS//,/ }
           do
-              docker manifest create $TAG \
-                terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA \
-                terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
-              docker manifest push $TAG
+              docker buildx imagetools create -t $TAG terminusdb/terminusdb-server:dev-amd64-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-$GITHUB_SHA
           done
           
           # Create manifests for noroot images
           NOROOT_TAGS="${{ env.noroot_tags }}"
           for TAG in ${NOROOT_TAGS//,/ }
           do
-              docker manifest create terminusdb/terminusdb-server:$TAG \
-                terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA \
-                terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
-              docker manifest push terminusdb/terminusdb-server:$TAG
+              docker buildx imagetools create -t terminusdb/terminusdb-server:$TAG terminusdb/terminusdb-server:dev-amd64-noroot-$GITHUB_SHA terminusdb/terminusdb-server:dev-arm64-noroot-$GITHUB_SHA
           done
 
   trigger_enterprise_build:
