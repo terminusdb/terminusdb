@@ -3602,7 +3602,7 @@ fetch_jwt_data(Token, Username) :-
 
     % SECURITY: Wrap in authentication_incorrect to ensure sanitization
     do_or_die(
-        (   atom_json_dict(Payload, PayloadDict, []),
+        (   atom_json_dict(Payload, PayloadDict, [default_tag(json)]),
             jwt_subject_claim_name(ClaimName),
             % replace with dict key get (or whatever it is called)
             get_dict(ClaimName, PayloadDict, UsernameString),
@@ -3795,7 +3795,7 @@ try_get_param(Key,Request,Value) :-
     member(mime(Mime_Header,Encoded_Value,_),Form_Data),
     memberchk(name(Key), Mime_Header),
     (   json_mime_type(Mime_Header)
-    ->  atom_json_dict(Encoded_Value,Value,[])
+    ->  atom_json_dict(Encoded_Value,Value,[default_tag(json)])
     ;   uri_encoded(query_value, Value, Encoded_Value)).
 try_get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)
@@ -3906,7 +3906,7 @@ get_param(Key,Request,Value) :-
     memberchk(mime(Mime_Header,Encoded_Value,_),Form_Data),
     memberchk(name(Key), Mime_Header),
     (   json_mime_type(Mime_Header)
-    ->  atom_json_dict(Encoded_Value,Value,[])
+    ->  atom_json_dict(Encoded_Value,Value,[default_tag(json)])
     ;   uri_encoded(query_value, Value, Encoded_Value)).
 get_param(Key,Request,Value) :-
     % GET or POST (but not application/json)

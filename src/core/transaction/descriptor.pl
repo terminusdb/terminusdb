@@ -322,10 +322,11 @@ open_read_write_obj(Descriptor,
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
-    (   branch_head_commit(Repo, Branch_Name, Commit_Uri)
-    ->  commit_type(Repo, Commit_Uri, Commit_Type),
-        ignore((layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
-                layer_id_uri(Repo, Layer_Id, Layer_Uri),
+    create_context(Repo, Repo_Context),
+    (   branch_head_commit(Repo_Context, Branch_Name, Commit_Uri)
+    ->  commit_type(Repo_Context, Commit_Uri, Commit_Type),
+        ignore((layer_uri_for_commit(Repo_Context, Commit_Uri, Type, Layer_Uri),
+                layer_id_uri(Repo_Context, Layer_Id, Layer_Uri),
                 storage(Store),
                 store_id_layer(Store, Layer_Id, Layer)))
     ;   Layer = _),
@@ -350,10 +351,10 @@ open_read_write_obj(Descriptor,
     open_read_write_obj(Commit_Descriptor, Commit_Read_Write_Obj, Map, New_Map),
     Repo = layer_descriptor{ instance: (Commit_Read_Write_Obj.read),
                              variety: repository_descriptor },
-
-    (   commit_id_uri(Repo, Commit_Id, Commit_Uri),
-        layer_uri_for_commit(Repo, Commit_Uri, Type, Layer_Uri),
-        layer_id_uri(Repo, Layer_Id, Layer_Uri),
+    create_context(Repo, Repo_Context),
+    (   commit_id_uri(Repo_Context, Commit_Id, Commit_Uri),
+        layer_uri_for_commit(Repo_Context, Commit_Uri, Type, Layer_Uri),
+        layer_id_uri(Repo_Context, Layer_Id, Layer_Uri),
         storage(Store),
         store_id_layer(Store, Layer_Id, Layer)
     ->  true
