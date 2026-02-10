@@ -51,7 +51,7 @@ jobs:
   docs:
     name: Generate
     needs: check
-    if: ${{ needs.check.outputs.changed == 'true' }}
+    if: ${{ github.event_name == 'push' && needs.check.outputs.changed == 'true' }}
 
     runs-on: ubuntu-latest
     
