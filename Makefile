@@ -1,4 +1,6 @@
 DIST ?= community
+# Default was 9.2.9
+SWIPL_VERSION ?= 10.0.0
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
@@ -25,13 +27,29 @@ restart:
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
+# To make with swipl 10, use: make docker SWIPL_VERSION=10.0.0
 .PHONY: docker
 docker: export DOCKER_BUILDKIT=1
 docker:
 	docker build . \
 	  --file Dockerfile \
 	  --tag terminusdb/terminusdb-server:local \
+	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
 	  --build-arg DIST="$(DIST)" \
+	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
+
+# Build the Docker image for development using local swipl-rs sources.
+.PHONY: docker-debug
+docker-debug: export DOCKER_BUILDKIT=1
+docker-debug: SKIP_TESTS ?= true
+docker-debug:
+	docker build . \
+	  --file docker/debug/Dockerfile \
+	  --tag terminusdb/terminusdb-server:debug \
+	  --build-context swipl-rs=../swipl-rs \
+	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
+	  --build-arg DIST="$(DIST)" \
+	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
 # Install minimal pack dependencies.
@@ -86,9 +104,38 @@ test:
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
 # Run the unit tests in node.
+# Usage: make test-int                    # run all tests
+#        make test-int SUITE=data-version # run test/data-version.js
+#        make test-int SUITE="cli-*"      # run all cli tests
 .PHONY: test-int
 test-int:
+ifdef SUITE
+	sh -c "cd tests ; npx mocha 'test/$(SUITE).js'"
+else
 	sh -c "cd tests ; npx mocha"
+endif
+
+# Start Docker container for integration testing (no plugins).
+# Rebuilds the docker image and recreates the container.
+.PHONY: docker-test-server
+docker-test-server: docker
+	-docker stop terminusdb-sandbox-test-int 2>/dev/null
+	-docker rm terminusdb-sandbox-test-int 2>/dev/null
+	docker run -d --name terminusdb-sandbox-test-int \
+		-p 6363:6363 \
+		-e TERMINUSDB_ADMIN_PASS=root \
+		-e TERMINUSDB_PLUGINS_PATH=/void \
+		terminusdb/terminusdb-server:local
+	@echo "Waiting for server to be ready..."
+	@sleep 3
+	@curl -sf http://127.0.0.1:6363/api/ok > /dev/null && echo "Docker test server ready at http://127.0.0.1:6363"
+
+# Stop the Docker test server.
+.PHONY: docker-test-server-stop
+docker-test-server-stop:
+	-docker stop terminusdb-sandbox-test-int 2>/dev/null
+	-docker rm terminusdb-sandbox-test-int 2>/dev/null
+	@echo "Docker test server stopped."
 
 # Quick command for interactive
 .PHONY: i

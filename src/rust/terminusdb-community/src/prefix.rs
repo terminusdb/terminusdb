@@ -192,6 +192,8 @@ impl PrefixContracter {
                     } else {
                         offset = 0;
                     }
+                    // Silenced, kept for symmetry, but not needed
+                    let _ = offset; // silence unused warning
 
                     parent.children.push(previous);
                     previous = parent;
