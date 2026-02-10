@@ -3313,78 +3313,78 @@ run_replace_document(Desc, Commit, Document, Id) :-
         _).
 
 % Frames
-type_descriptor_sub_frame(Type,DB,Prefix,Frame) :-
-    type_descriptor_sub_frame(Type,DB,Prefix,true,Frame).
+type_descriptor_sub_frame(Type,Schema,Prefix,Frame) :-
+    type_descriptor_sub_frame(Type,Schema,Prefix,true,Frame).
 
-type_descriptor_sub_frame(unit, _DB, _Prefix, Unit, Options) :-
+type_descriptor_sub_frame(unit, _Schema, _Prefix, Unit, Options) :-
     (   option(compress_ids(true), Options)
     ->  Unit = 'sys:Unit'
     ;   global_prefix_expand(sys:'Unit', Unit)
     ).
-type_descriptor_sub_frame(class(C), DB, Prefixes, Frame, Options) :-
+type_descriptor_sub_frame(class(C), Schema, Prefixes, Frame, Options) :-
     (   option(simple(true),Options)
     ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
         Frame = Class_Comp
-    ;   (   is_abstract(DB, C),
+    ;   (   schema_is_abstract(Schema, C),
             option(expand_abstract(true), Options)
         ->  findall(F,
-                    (   concrete_subclass(DB,C,Class),
-                        type_descriptor(DB, Class, Desc),
-                        type_descriptor_sub_frame(Desc,DB,Prefixes,F,Options)
+                    (   schema_concrete_subclass(Schema,C,Class),
+                        schema_type_descriptor(Schema, Class, Desc),
+                        type_descriptor_sub_frame(Desc,Schema,Prefixes,F,Options)
                     ),
                     Frame)
-        ;   is_subdocument(DB,C)
+        ;   schema_is_subdocument(Schema,C)
         ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
             Frame = json{ '@class' : Class_Comp,
                           '@subdocument' : []}
         ;   compress_schema_uri(C, Prefixes, Frame, Options)
         )
     ).
-type_descriptor_sub_frame(base_class(C), _DB, Prefixes, Class_Comp, Options) :-
+type_descriptor_sub_frame(base_class(C), _Schema, Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_sub_frame(foreign(C), _DB, Prefixes, json{ '@type' : Foreign,
+type_descriptor_sub_frame(foreign(C), _Schema, Prefixes, json{ '@type' : Foreign,
                                                            '@class' : Class_Comp },
                           Options) :-
     expand_system_uri(sys:'Foreign', Foreign, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_sub_frame(optional(C), DB, Prefixes, json{ '@type' : Optional,
+type_descriptor_sub_frame(optional(C), Schema, Prefixes, json{ '@type' : Optional,
                                                            '@class' : Frame }, Options) :-
     expand_system_uri(sys:'Optional', Optional, Options),
-    type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(set(C), DB, Prefixes, json{ '@type' : Set,
+    schema_type_descriptor(Schema, C, Desc),
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+type_descriptor_sub_frame(set(C), Schema, Prefixes, json{ '@type' : Set,
                                                       '@class' : Frame }, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
-    type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(set(C,Min,Max), DB, Prefixes, json{ '@type' : Set,
+    schema_type_descriptor(Schema, C, Desc),
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+type_descriptor_sub_frame(set(C,Min,Max), Schema, Prefixes, json{ '@type' : Set,
                                                               '@class' : Frame,
                                                               '@min' : Min,
                                                               '@max' : Max
                                                             }, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
-    type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(array(C,Dim), DB, Prefixes, json{ '@type' : Array,
+    schema_type_descriptor(Schema, C, Desc),
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+type_descriptor_sub_frame(array(C,Dim), Schema, Prefixes, json{ '@type' : Array,
                                                             '@dimensions' : Dim,
                                                             '@class' : Frame }, Options) :-
     expand_system_uri(sys:'Array', Array, Options),
-    type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(list(C), DB, Prefixes, json{ '@type' : List,
+    schema_type_descriptor(Schema, C, Desc),
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+type_descriptor_sub_frame(list(C), Schema, Prefixes, json{ '@type' : List,
                                                        '@class' : Frame }, Options) :-
     expand_system_uri(sys:'List', List, Options),
-    type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(cardinality(C,Min,Max), DB, Prefixes, json{ '@type' : Card,
+    schema_type_descriptor(Schema, C, Desc),
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+type_descriptor_sub_frame(cardinality(C,Min,Max), Schema, Prefixes, json{ '@type' : Card,
                                                                       '@class' : Frame,
                                                                       '@min' : Min,
                                                                       '@max' : Max
                                                                     }, Options) :-
     expand_system_uri(sys:'Cardinality', Card, Options),
-    type_descriptor(DB, C, Desc),
-    type_descriptor_sub_frame(Desc, DB, Prefixes, Frame, Options).
-type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, SubFrame, Options) :-
+    schema_type_descriptor(Schema, C, Desc),
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+type_descriptor_sub_frame(enum(C,List), _Schema, Prefixes, SubFrame, Options) :-
     (   option(simple(true),Options)
     ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
         SubFrame = Class_Comp
@@ -3401,11 +3401,11 @@ type_descriptor_sub_frame(enum(C,List), _DB, Prefixes, SubFrame, Options) :-
                          '@values' : Enum_List}
     ).
 
-oneof_descriptor_subframe(tagged_union(_, Map), DB, Prefixes, JSON, Options) :-
+oneof_descriptor_subframe(tagged_union(_, Map), Schema, Prefixes, JSON, Options) :-
     dict_pairs(Map, _, Pairs),
-    maplist({DB,Options,Prefixes}/[Prop-Val,Small-Small_Val]>>(
+    maplist({Schema,Options,Prefixes}/[Prop-Val,Small-Small_Val]>>(
                 compress_schema_uri(Prop, Prefixes, Small, Options),
-                type_descriptor_sub_frame(Val, DB, Prefixes, Small_Val, Options)
+                type_descriptor_sub_frame(Val, Schema, Prefixes, Small_Val, Options)
             ),
             Pairs,
             JSON_Pairs),
@@ -3437,59 +3437,76 @@ all_class_frames(Query_Context, Frames, Options) :-
 class_frame(Askable, Class, Frame) :-
     class_frame(Askable, Class, Frame, [compress_ids(true),expand_abstract(true),simple(false)]).
 
-:- table class_frame/4 as private.
 class_frame(Transaction, Class, Frame, Options) :-
     (   is_transaction(Transaction)
     ;   is_validation_object(Transaction)
     ),
     !,
+    database_schema(Transaction, Schema),
     database_prefixes(Transaction, DB_Prefixes),
     default_prefixes(Default_Prefixes),
     Prefixes = (Default_Prefixes.put(DB_Prefixes)),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
+    schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options).
+class_frame(Query_Context, Class, Frame, Options) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    class_frame(TO, Class, Frame, Options).
+class_frame(Desc, Class, Frame, Options) :-
+    is_descriptor(Desc),
+    !,
+    open_descriptor(Desc, Trans),
+    class_frame(Trans, Class, Frame, Options).
+
+:- table schema_class_frame/5 as private.
+schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
         Predicate_Comp-Subframe,
-        (   class_predicate_conjunctive_type(Transaction, Class_Ex, Predicate, Type_Desc),
-            type_descriptor_sub_frame(Type_Desc, Transaction, Prefixes, Subframe, Options),
+        (   schema_class_predicate_conjunctive_type(Schema, Class_Ex, Predicate, Type_Desc),
+            type_descriptor_sub_frame(Type_Desc, Schema, Prefixes, Subframe, Options),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp, Options)
         ),
         Pre_Pairs),
-    supermap(Transaction,Supermap,Options),
-    pairs_satisfying_diamond_property(Pre_Pairs, Class, Supermap, Pairs),
+    schema_supermap(Schema, Prefixes, Supermap, Options),
+    compress_schema_uri(Class_Ex, Prefixes, Class_Comp, Options),
+    pairs_satisfying_diamond_property(Pre_Pairs, Class_Comp, Supermap, Pairs),
     % Subdocument
-    (   is_subdocument(Transaction, Class_Ex)
+    (   schema_is_subdocument(Schema, Class_Ex)
     ->  Pairs2 = ['@subdocument'-[]|Pairs]
     ;   Pairs2 = Pairs),
     % abstract
-    (   is_abstract(Transaction, Class_Ex)
+    (   schema_is_abstract(Schema, Class_Ex)
     ->  Pairs3 = ['@abstract'-[]|Pairs2]
     ;   Pairs3 = Pairs2),
     % key
-    (   key_descriptor(Transaction, Class_Ex, Key_Desc),
+    (   schema_key_descriptor(Schema, Prefixes, Class_Ex, Key_Desc),
         key_descriptor_json(Key_Desc,Prefixes,Key_JSON)
     ->  Pairs4 = ['@key'-Key_JSON|Pairs3]
     ;   Pairs4 = Pairs3),
     % oneOf
     (   findall(JSON,
-                (   oneof_descriptor(Transaction, Class_Ex, OneOf_Desc),
-                    oneof_descriptor_subframe(OneOf_Desc,Transaction,Prefixes,JSON,Options)),
+                (   (   schema_oneof_descriptor(Schema, Class_Ex, OneOf_Desc)
+                    ;   schema_subclass_of(Schema, Class_Ex, Super),
+                        schema_oneof_descriptor(Schema, Super, OneOf_Desc)
+                    ),
+                    oneof_descriptor_subframe(OneOf_Desc,Schema,Prefixes,JSON,Options)),
                 OneOf_JSONs),
         OneOf_JSONs \= []
     ->  Pairs5 = ['@oneOf'-OneOf_JSONs|Pairs4]
     ;   Pairs5 = Pairs4),
     % documentation
-    (   documentation_descriptor(Transaction, Class_Ex, Documentation_Desc),
+    (   schema_documentation_descriptor(Schema, Class_Ex, Documentation_Desc),
 	    documentation_descriptor_json(Documentation_Desc,Prefixes,Documentation_Json, Options)
     ->  Pairs6 = ['@documentation'-Documentation_Json|Pairs5]
     ;   Pairs6 = Pairs5),
     % metadata
-    (   metadata_descriptor(Transaction, Class_Ex, metadata(Metadata))
+    (   schema_metadata_descriptor(Schema, Class_Ex, metadata(Metadata))
     ->  Pairs7 = ['@metadata'-Metadata|Pairs6]
     ;   Pairs7 = Pairs6),
     % enum
-    (   is_enum(Transaction,Class_Ex)
-    ->  database_schema(Transaction, Schema),
-        schema_type_descriptor(Schema, Class, enum(Class,List)),
+    (   is_schema_enum(Schema,Class_Ex)
+    ->  schema_type_descriptor(Schema, Class_Ex, enum(Class_Ex,List)),
         (   option(compress_ids(true), Options)
         ->  maplist({Class_Ex}/[Value,Enum_Value]>>enum_value(Class_Ex,Enum_Value,Value),
                     List, Enum_List)
@@ -3502,7 +3519,7 @@ class_frame(Transaction, Class, Frame, Options) :-
     ),
     % inherits
     (   findall(Subsuming,
-                (   class_super(Transaction,Class_Ex,Subsuming_Ex),
+                (   schema_class_super(Schema,Class_Ex,Subsuming_Ex),
                     compress_schema_uri(Subsuming_Ex, Prefixes, Subsuming, Options)
                 ),
                 Inherits_Unsorted),
@@ -3511,7 +3528,7 @@ class_frame(Transaction, Class, Frame, Options) :-
     ->  Pairs9 = ['@inherits'-Inherits|Pairs8]
     ;   Pairs9 = Pairs8),
     % Unfoldable
-    (   is_unfoldable(Transaction, Class_Ex)
+    (   schema_is_unfoldable(Schema, Class_Ex)
     ->  Pairs10 = ['@unfoldable'-[]|Pairs9]
     ;   Pairs10 = Pairs9),
 
@@ -3519,18 +3536,8 @@ class_frame(Transaction, Class, Frame, Options) :-
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
-        throw(error(violation_of_diamond_property(Class,Predicate),_))
+        throw(error(violation_of_diamond_property(Class_Ex,Predicate),_))
     ).
-class_frame(Query_Context, Class, Frame, Options) :-
-    is_query_context(Query_Context),
-    !,
-    query_default_collection(Query_Context, TO),
-    class_frame(TO, Class, Frame, Options).
-class_frame(Desc, Class, Frame, Options) :-
-    is_descriptor(Desc),
-    !,
-    open_descriptor(Desc, Trans),
-    class_frame(Trans, Class, Frame, Options).
 
 class_property_dictionary(Transaction, Prefixes, Class, Frame) :-
     prefix_expand_schema(Class, Prefixes, Class_Ex),
@@ -15598,6 +15605,21 @@ test(unfoldable_in_frame,
 
     class_frame(Desc, "Unfoldable", Frame),
     Frame = json{'@type':'Class','@unfoldable':[],data:'xsd:string'}.
+
+test(class_frame_with_nested_transaction,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(abstract_choice_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, Transaction),
+    Transaction2 = Transaction.put(parent, Transaction),
+    Transaction3 = Transaction2.put(parent, Transaction2),
+    Transaction4 = Transaction3.put(parent, Transaction3),
+    Transaction5 = Transaction4.put(parent, Transaction4),
+    class_frame(Transaction5, "Concrete", Frame),
+    Frame = json{'@inherits':['Abstract'],'@type':'Class',concrete:'xsd:string',name:'xsd:string'}.
 
 :- end_tests(class_frames).
 
