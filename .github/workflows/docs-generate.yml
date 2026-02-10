@@ -93,5 +93,6 @@ jobs:
             
             This PR was created automatically by the Documentation workflow.
           branch: docs/update-man-page
+          base: main
           delete-branch: true
           add-paths: docs/terminusdb.1          
