@@ -521,7 +521,11 @@ class_weakened(Class, Definition, Weakening, Supermap, Operations) :-
 immediate_class_supers(Class, Schema, Immediate) :-
     get_dict(Class, Schema, Record),
     (   get_dict('@inherits', Record, Immediate_Parents)
-    ->  maplist(atom_string, Immediate, Immediate_Parents)
+    ->  (   is_list(Immediate_Parents)
+        ->  maplist(atom_string, Immediate, Immediate_Parents)
+        ;   atom_string(Parent, Immediate_Parents),
+            Immediate = [Parent]
+        )
     ;   Immediate = []
     ).
 
@@ -2963,6 +2967,86 @@ test(move_class_property_which_doesnt_exist,
             Dict = _{'@type':"MoveClassProperty", class:"A", from:"b", to:"c"}
         )
     ).
+
+before_inheriting_child('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "A",
+  "@abstract" : [] }
+
+{ "@type" : "Class",
+  "@id" : "B",
+  "@inherits" : "A",
+  "b" : "xsd:string" }
+').
+
+test(move_class_property_on_inheriting_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_inheriting_child,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : "B", '@id' : 'B/1', b : "hello" },
+                        _)
+    ),
+
+    Term_Ops = [
+        move_class_property("B", "b", "z")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+
+    Result = metadata{ instance_operations:1,
+                       schema_operations:1
+                     },
+
+    findall(
+        Doc,
+        get_document_by_type(Descriptor, "B", Doc),
+        B_Docs),
+
+    B_Docs = [ json{ '@id':'B/1',
+                     '@type':'B',
+                     z:"hello"
+                   }
+             ].
+
+test(create_class_property_on_inheriting_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_inheriting_child,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Term_Ops = [
+        create_class_property("B", "c", _{ '@type' : "Optional", '@class' : "xsd:string"})
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+
+    Result = metadata{ instance_operations:0,
+                       schema_operations:1
+                     }.
 
 test(change_key,
      [setup((setup_temp_store(State),
