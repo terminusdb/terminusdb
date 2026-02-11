@@ -771,7 +771,7 @@ json_type_to_woql_ast('QueryResource',JSON,WOQL,Path) :-
     atom_string(WFormat,Format),
     (   _{options: Options} :< JSON
     ->  true
-    ;   Options = _{}),
+    ;   Options = []),
     WOQL = resource(WSource,WFormat,Options).
 json_type_to_woql_ast('Source',JSON,WOQL,_Path) :-
     (   _{post: Resource} :< JSON
@@ -1429,7 +1429,7 @@ test(post_marshalling, []) :-
     json_woql(JSON,WOQL),
 
     WOQL = get(['Start station' as v('Start_Station')],
-               resource(post(bike_csv), csv, _{}), true).
+               resource(post(bike_csv), csv, []), true).
 
 test(isa, []) :-
     JSON_Atom = '{

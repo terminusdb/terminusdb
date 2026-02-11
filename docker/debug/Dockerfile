@@ -1,6 +1,5 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1.4
 
-# Set the swipl version by argument (see Makefile for the default!)
 ARG SWIPL_VERSION=10.0.0
 ARG DIST=community
 ARG SKIP_TESTS=false
@@ -13,7 +12,8 @@ RUN apt-get update && \
 # Install the SWI-Prolog pack dependencies.
 FROM swipl_minimal AS pack_installer
 RUN set -eux; \
-    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
+    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config \
+    clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
@@ -25,7 +25,8 @@ RUN make
 FROM swipl_minimal AS rust_builder_base
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
-    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev \
+    protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
@@ -36,6 +37,8 @@ RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swi
 WORKDIR /app/rust
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
+COPY --from=swipl-rs / /app/swipl-rs
+RUN sed -i '/^#.*swipl = {/d; s|^swipl = {.*}|swipl = {path="/app/swipl-rs/swipl"}|' src/rust/Cargo.toml
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder_community
@@ -86,7 +89,7 @@ COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
 RUN set -eux; \
     make DIST=enterprise; \
     [ "$SKIP_TESTS" = "true" ] || make test
-    
+
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
 

@@ -4,6 +4,7 @@
               is_system_class/1,
               refute_schema/2,
               is_enum/2,
+              is_schema_enum/2,
               is_simple_class/2,
               is_frame_class/2,
               is_json_class/2,
@@ -40,7 +41,13 @@
               property_is_unfold/4,
               schema_property_is_unfold/4,
               schema_is_subdocument/2,
+              schema_is_abstract/2,
+              schema_concrete_subclass/3,
+              schema_is_unfoldable/2,
               schema_class_predicate_conjunctive_type/4,
+              schema_class_super/3,
+              schema_supermap/4,
+              schema_subclass_of/3,
               class_super/3,
               supermap/3
           ]).
@@ -188,8 +195,12 @@ is_base_type(Type) :-
     base_type(Type).
 
 concrete_subclass(Validation_Object,Class,Concrete) :-
-    class_super(Validation_Object,Concrete,Class),
-    \+ is_abstract(Validation_Object,Concrete).
+    database_schema(Validation_Object, Schema),
+    schema_concrete_subclass(Schema, Class, Concrete).
+
+schema_concrete_subclass(Schema, Class, Concrete) :-
+    schema_class_super(Schema, Concrete, Class),
+    \+ schema_is_abstract(Schema, Concrete).
 
 class_subsumed(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
@@ -572,6 +583,10 @@ is_built_in(P) :-
 
 is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
+    schema_is_abstract(Schema, C).
+
+:- table schema_is_abstract/2 as private.
+schema_is_abstract(Schema, C) :-
     xrdf(Schema, C, sys:abstract, rdf:nil).
 
 is_direct_subdocument(Schema, C) :-

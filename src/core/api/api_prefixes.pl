@@ -368,10 +368,9 @@ test(get_prefixes,
 
     super_user_authority(Auth),
     get_prefixes(Path,system_descriptor{},Auth,Prefixes),
-
-    _{'@base':"http://somewhere.for.now/document/",
-      '@schema':"http://somewhere.for.now/schema#",
-      '@type':'Context'} :< Prefixes.
+    Prefixes = json{'@base':"http://somewhere.for.now/document/",
+                    '@schema':"http://somewhere.for.now/schema#",
+                    '@type':'Context'}.
 
 
 test(get_prefixes_auth_failure,
