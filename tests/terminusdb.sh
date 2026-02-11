@@ -49,5 +49,5 @@ elif [[ $use_exec -eq 0 ]]; then
   if [ -t 1 ]; then
     set -x
   fi
-  TERMINUSDB_LOG_LEVEL="ERROR" "$TERMINUSDB_EXEC_PATH" "$@"
+  exec env TERMINUSDB_LOG_LEVEL="ERROR" "$TERMINUSDB_EXEC_PATH" "$@"
 fi

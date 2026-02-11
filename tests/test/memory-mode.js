@@ -1,10 +1,8 @@
 const { expect } = require('chai')
 const { spawn } = require('child_process')
 const http = require('http')
-const path = require('path')
-
+const { util } = require('../lib')
 // Skip these tests when no local binary is available (e.g., Docker-based CI)
-// These tests spawn the local terminusdb binary directly
 const SKIP_MEMORY_MODE_TESTS = process.env.SKIP_MEMORY_MODE_TESTS === 'true'
 
 describe('In-Memory Mode', function () {
@@ -106,9 +104,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should start server in memory mode with custom password', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
-
-      serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
+      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -129,9 +125,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should start server in memory mode with default password', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
-
-      serverProcess = spawn(terminusdbPath, ['serve', '-m'], {
+      serverProcess = spawn(util.terminusdbScript(), ['serve', '-m'], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -152,9 +146,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should allow database creation in memory mode', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
-
-      serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
+      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -183,9 +175,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should return info endpoint with version information', async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
-
-      serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
+      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -235,9 +225,7 @@ describe('In-Memory Mode', function () {
     let auth
 
     before(async function () {
-      const terminusdbPath = path.join(__dirname, '../../terminusdb')
-
-      serverProcess = spawn(terminusdbPath, ['serve', '--memory', PASSWORD], {
+      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
         env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
