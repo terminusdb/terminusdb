@@ -1010,7 +1010,7 @@ delete_document_ids_key_value('@id',_,_,_) =>
     fail.
 delete_document_ids_key_value(P,V,Key,Value) =>
     P = Key,
-    rewrite_document_ids(V,Value).
+    delete_document_ids(V,Value).
 
 delete_document_ids(Document, New_Document),
 is_dict(Document) =>
@@ -1026,8 +1026,93 @@ delete_document_ids(Document, New_Document),
 is_list(Document) =>
     maplist([D0,D1]>>delete_document_ids(D0,D1),
             Document, New_Document).
-rewrite_document_ids(Value, New_Value) =>
+delete_document_ids(Value, New_Value) =>
     Value = New_Value.
+
+%% same_key_strategy(+Old_Descriptor, +New_Descriptor, -Same)
+%% Check if two key descriptors have the same strategy (type and fields).
+%% Note: base(_) is the default key which generates random IDs identically
+%% to random(_), so they are treated as equivalent strategies.
+same_key_strategy(random(_), random(_), true) :- !.
+same_key_strategy(base(_), random(_), true) :- !.
+same_key_strategy(random(_), base(_), true) :- !.
+same_key_strategy(base(_), base(_), true) :- !.
+same_key_strategy(lexical(_, F), lexical(_, F), true) :- !.
+same_key_strategy(hash(_, F), hash(_, F), true) :- !.
+same_key_strategy(value_hash(_), value_hash(_), true) :- !.
+same_key_strategy(_, _, false).
+
+%% descriptor_base(+Descriptor, -Base)
+%% Extract the base from a key descriptor.
+descriptor_base(random(Base), Base).
+descriptor_base(lexical(Base, _), Base).
+descriptor_base(hash(Base, _), Base).
+descriptor_base(value_hash(Base), Base).
+descriptor_base(base(Base), Base).
+
+%% find_root_document(+DB, +Uri, -Root_Uri)
+%% Follow back-links from a subdocument URI upward to its root document.
+%% Uses a visited set to detect cycles in corrupt data (analogous to the
+%% open set cycle detection in path.pl's run_pattern_).
+find_root_document(DB, Uri, Root_Uri) :-
+    find_root_document_(DB, Uri, [Uri], Root_Uri).
+
+find_root_document_(DB, Uri, Visited, Root_Uri) :-
+    database_instance(DB, Instance),
+    xrdf(Instance, Parent, _P, Uri),
+    Parent \= Uri,
+    \+ memberchk(Parent, Visited),
+    xrdf(Instance, Parent, rdf:type, Parent_Type),
+    (   is_subdocument(DB, Parent_Type)
+    ->  find_root_document_(DB, Parent, [Parent|Visited], Root_Uri)
+    ;   Root_Uri = Parent
+    ).
+
+%% strip_nonconforming_ids(+DB, +Prefixes, +JSON, -Clean_JSON)
+%% Walk a document tree and selectively strip @id from subdocuments
+%% whose ID prefix doesn't conform to the expected prefix for their type.
+%% Preserves the top-level @id unconditionally.
+strip_nonconforming_ids(DB, Prefixes, JSON, Clean_JSON) :-
+    get_dict('@id', JSON, Id),
+    dict_pairs(JSON, Tag, Pairs),
+    convlist({DB, Prefixes, Id}/[K-V, K-V2]>>(
+                 strip_nonconforming_value(DB, Prefixes, [property(K), node(Id)], V, V2)
+             ), Pairs, Clean_Pairs),
+    dict_pairs(Clean_JSON, Tag, Clean_Pairs).
+
+%% strip_nonconforming_value(+DB, +Prefixes, +Path, +Value, -Clean_Value)
+%% For subdocument dicts: check prefix conformance, strip if non-conforming.
+%% When a parent ID is stripped, all descendants are also stripped (cascading)
+%% since their path prefixes embed the parent's ID.
+strip_nonconforming_value(DB, Prefixes, Path, Value, Clean_Value) :-
+    is_dict(Value),
+    get_dict('@type', Value, SubType_Short),
+    prefix_expand_schema(SubType_Short, Prefixes, SubType),
+    is_subdocument(DB, SubType),
+    !,
+    key_descriptor(DB, Prefixes, SubType, Descriptor),
+    descriptor_base(Descriptor, Base),
+    'document/json':path_component([type(Base)|Path], Prefixes, [Expected_Prefix]),
+    prefix_expand(Expected_Prefix, Prefixes, Expected_Prefix_Ex),
+    (   get_dict('@id', Value, Sub_Id),
+        prefix_expand(Sub_Id, Prefixes, Sub_Id_Ex),
+        atom_concat(Expected_Prefix_Ex, _, Sub_Id_Ex)
+    ->  % ID conforms - keep it, recurse into children with this ID as parent
+        dict_pairs(Value, VTag, VPairs),
+        convlist({DB, Prefixes, Sub_Id}/[K-V0, K-V1]>>(
+                     strip_nonconforming_value(DB, Prefixes, [property(K), node(Sub_Id)], V0, V1)
+                 ), VPairs, Clean_VPairs),
+        dict_pairs(Clean_Value, VTag, Clean_VPairs)
+    ;   % ID doesn't conform - strip it and all descendant IDs (cascading)
+        delete_document_ids(Value, Clean_Value)
+    ).
+strip_nonconforming_value(DB, Prefixes, Path, Value, Clean_Value) :-
+    is_list(Value),
+    !,
+    convlist({DB, Prefixes, Path}/[V0, V1]>>(
+                 strip_nonconforming_value(DB, Prefixes, Path, V0, V1)
+             ), Value, Clean_Value).
+strip_nonconforming_value(_DB, _Prefixes, _Path, Value, Value).
 
 delete_value(base_class(_),_,_) => true.
 delete_value(unit,_,_) => true.
@@ -1226,6 +1311,53 @@ interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, C
 interpret_instance_operation_(change_key(Class, _Type, _Properties), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Class, Prefixes, Class_Ex),
+    is_subdocument(After, Class_Ex),
+    !,
+    % For subdocument classes, we must process via their root parent documents
+    % since subdocuments cannot be inserted as standalone documents.
+    findall(Root_Uri,
+        (   ask(Before, t(SubUri, rdf:type, Class_Ex)),
+            find_root_document(Before, SubUri, Root_Uri)
+        ),
+        Root_Uris_Dup),
+    sort(Root_Uris_Dup, Root_Uris),
+    length(Root_Uris, Count),
+    forall(
+        member(Root_Uri, Root_Uris),
+        (   get_document(Before, Root_Uri, Document),
+            delete_document(Before, Root_Uri),
+            strip_nonconforming_ids(After, Prefixes, Document, Final_Document),
+            insert_document(After, Final_Document, _New_Uri)
+        )
+    ).
+interpret_instance_operation_(change_key(Class, _Type, _Properties), Before, After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    \+ is_subdocument(After, Class_Ex),
+    key_descriptor(Before, Prefixes, Class_Ex, Old_Descriptor),
+    key_descriptor(After, Prefixes, Class_Ex, New_Descriptor),
+    same_key_strategy(Old_Descriptor, New_Descriptor, true),
+    !,
+    % Same strategy: preserve top-level ID, selectively strip non-conforming subdoc IDs.
+    % Use replace_document to handle delete+insert in the same transaction layer.
+    % Since the top-level ID is preserved, no referencing triple updates needed.
+    count_solutions(
+        (   ask(Before,
+                t(Uri, rdf:type, Class_Ex)),
+            once(
+                (   get_document(Before, Uri, Document),
+                    strip_nonconforming_ids(After, Prefixes, Document, Final_Document),
+                    replace_document(After, Final_Document, _New_Uri)
+                )
+            )
+        ),
+        Count
+    ).
+interpret_instance_operation_(change_key(Class, _Type, _Properties), Before, After, Count) :-
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Class, Prefixes, Class_Ex),
+    \+ is_subdocument(After, Class_Ex),
+    % Different strategy: strip all IDs and regenerate (original behavior)
     findall(
         New_Uri,
         (   ask(Before,
@@ -3427,5 +3559,246 @@ test(documentation_weakening_inference,
 										    }
 							 }
 					   ]).
+
+change_key_subdoc_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Parent",
+  "name" : "xsd:string",
+  "child" : "Child" }
+
+{ "@type" : "Class",
+  "@id" : "Child",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Random" },
+  "value" : "xsd:string" }
+').
+
+test(change_key_random_to_random_preserves_top_level_id,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(change_key_subdoc_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : "Parent",
+                           name : "alice",
+                           child : _{ '@type' : "Child",
+                                      value : "hello" }},
+                        _)
+    ),
+
+    findall(Doc, get_document_by_type(Descriptor, "Parent", Doc), [Before_Doc]),
+    get_dict('@id', Before_Doc, Before_Id),
+
+    Term_Ops = [
+        change_key("Parent", "Random", [])
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Random to Random" },
+                               Ops,
+                               _Results,
+                               []),
+
+    findall(Doc2, get_document_by_type(Descriptor, "Parent", Doc2), [After_Doc]),
+    get_dict('@id', After_Doc, After_Id),
+
+    % Top-level ID must be preserved for same-strategy change_key
+    Before_Id = After_Id,
+
+    % Data must be intact
+    get_dict(name, After_Doc, "alice"),
+    get_dict(child, After_Doc, After_Child),
+    get_dict(value, After_Child, "hello").
+
+test(change_key_random_to_lexical_regenerates_all_ids,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(change_key_subdoc_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : "Parent",
+                           name : "bob",
+                           child : _{ '@type' : "Child",
+                                      value : "world" }},
+                        _)
+    ),
+
+    findall(Doc, get_document_by_type(Descriptor, "Parent", Doc), [Before_Doc]),
+    get_dict('@id', Before_Doc, Before_Id),
+
+    Term_Ops = [
+        change_key("Parent", "Lexical", ["name"])
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Random to Lexical" },
+                               Ops,
+                               _Results,
+                               []),
+
+    findall(Doc2, get_document_by_type(Descriptor, "Parent", Doc2), [After_Doc]),
+    get_dict('@id', After_Doc, After_Id),
+
+    % Different strategy: top-level ID must change to lexical-based
+    Before_Id \= After_Id,
+    After_Id = 'Parent/bob',
+
+    % Data must be intact
+    get_dict(name, After_Doc, "bob"),
+    get_dict(child, After_Doc, After_Child),
+    get_dict(value, After_Child, "world").
+
+test(change_key_random_to_random_preserves_conforming_subdoc_ids,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(change_key_subdoc_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : "Parent",
+                           name : "carol",
+                           child : _{ '@type' : "Child",
+                                      value : "test" }},
+                        _)
+    ),
+
+    findall(Doc, get_document_by_type(Descriptor, "Parent", Doc), [Before_Doc]),
+    get_dict(child, Before_Doc, Before_Child),
+    get_dict('@id', Before_Child, Before_Child_Id),
+
+    Term_Ops = [
+        change_key("Parent", "Random", [])
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Random to Random" },
+                               Ops,
+                               _Results,
+                               []),
+
+    findall(Doc2, get_document_by_type(Descriptor, "Parent", Doc2), [After_Doc]),
+    get_dict(child, After_Doc, After_Child),
+    get_dict('@id', After_Child, After_Child_Id),
+
+    % Conforming subdocument IDs must be preserved
+    Before_Child_Id = After_Child_Id.
+
+test(change_key_fixes_nonconforming_subdoc_id,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(change_key_subdoc_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    % Step 1: Insert a conforming document
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : "Parent",
+                           name : "dave",
+                           child : _{ '@type' : "Child",
+                                      value : "original" }},
+                        _)
+    ),
+
+    % Step 2: Get the document and note IDs
+    findall(Doc, get_document_by_type(Descriptor, "Parent", Doc), [Before_Doc]),
+    get_dict('@id', Before_Doc, Parent_Id_Str),
+    get_dict(child, Before_Doc, Before_Child),
+    get_dict('@id', Before_Child, Old_Child_Id_Str),
+
+    % Convert compressed ID strings to atoms so WOQL resolve expands them with @base
+    atom_string(Parent_Id_Atom, Parent_Id_Str),
+    atom_string(Old_Child_Id_Atom, Old_Child_Id_Str),
+
+    % Step 3: Make DB schemaless to allow non-conforming data
+    with_test_transaction(
+        Descriptor,
+        C2,
+        ask(C2, insert('terminusdb://data/Schema', rdf:type, rdf:nil, "schema"))
+    ),
+
+    % Step 4: Create non-conforming child URI (wrong prefix, simulates imported data)
+    Bad_Child_Id = 'terminusdb:///data/wrong_base/Child/abc123',
+
+    % Rename child subdoc URI to non-conforming via triple manipulation
+    with_test_transaction(
+        Descriptor,
+        C3,
+        (   forall(
+                ask(C3, t(Old_Child_Id_Atom, P1, O1)),
+                ask(C3, (delete(Old_Child_Id_Atom, P1, O1),
+                         insert(Bad_Child_Id, P1, O1)))
+            ),
+            forall(
+                ask(C3, t(Parent_Id_Atom, P2, Old_Child_Id_Atom)),
+                ask(C3, (delete(Parent_Id_Atom, P2, Old_Child_Id_Atom),
+                         insert(Parent_Id_Atom, P2, Bad_Child_Id)))
+            )
+        )
+    ),
+
+    % Step 5: Drop schemaless mode
+    with_test_transaction(
+        Descriptor,
+        C4,
+        ask(C4, delete('terminusdb://data/Schema', rdf:type, rdf:nil, "schema"))
+    ),
+
+    % Verify non-conforming data is in place
+    findall(Doc2, get_document_by_type(Descriptor, "Parent", Doc2), [Mid_Doc]),
+    get_dict(child, Mid_Doc, Mid_Child),
+    get_dict('@id', Mid_Child, Mid_Child_Id),
+
+    % Step 6: Run change_key Random->Random migration to fix non-conforming IDs
+    Term_Ops = [
+        change_key("Parent", "Random", [])
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fix non-conforming IDs" },
+                               Ops,
+                               _Results,
+                               []),
+
+    % Step 7: Verify the fix
+    findall(Doc3, get_document_by_type(Descriptor, "Parent", Doc3), [After_Doc]),
+    get_dict('@id', After_Doc, After_Parent_Id),
+    % Parent ID must be preserved (same-strategy)
+    Parent_Id_Str = After_Parent_Id,
+    % Child subdoc ID must have changed from non-conforming to a new conforming one
+    get_dict(child, After_Doc, After_Child),
+    get_dict('@id', After_Child, After_Child_Id),
+    After_Child_Id \= Mid_Child_Id,
+    % Data must be intact
+    get_dict(name, After_Doc, "dave"),
+    get_dict(value, After_Child, "original").
 
 :- end_tests(migration).
