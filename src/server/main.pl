@@ -34,7 +34,7 @@
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_ssl_plugin)).
-:- use_module(library(http/html_write)).
+% html_write no longer needed after busy_loading simplified to CGI-style 503
 :- use_module(library(aggregate)).
 
 :- use_module(library(option)).
@@ -105,19 +105,10 @@ terminus_server(Argv,Wait) :-
     ).
 
 
-% See https://github.com/terminusdb/terminusdb-server/issues/91
-%  TODO replace this with a proper page
-%
 busy_loading(_) :-
-    reply_html_page(
-        title('Still Loading'),
-        \loading_page).
-
-loading_page -->
-    html([
-        h1('Still loading'),
-        p('TerminusDB is still synchronizing backing store')
-    ]).
+    format('Status: 503 Service Unavailable~n'),
+    format('Content-type: text/html~n~n'),
+    format('<html><body><h1>Still loading</h1><p>TerminusDB is preparing to serve requests</p></body></html>~n').
 
 
 print_welcome_banner(Version, Enterprise, Argv, _, _, Server) :-
