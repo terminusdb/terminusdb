@@ -21,10 +21,10 @@ endif
 
 ifeq "$(shell uname)" "Darwin"
   DYLIB_EXT := dylib
-  FEATURES := --no-default-features
+  FEATURES ?= --no-default-features
 else
   DYLIB_EXT := so
-  FEATURES :=
+  FEATURES ?=
 endif
 
 TARGET := $(COMMUNITY_SRC_DIR)/librust.$(DYLIB_EXT)
