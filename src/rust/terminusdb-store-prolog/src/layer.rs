@@ -459,6 +459,12 @@ predicates! {
         layer_stack_term.unify(name_strings.as_slice())
     }
 
+    pub semidet fn layer_stored_size(_context, layer_term, size_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let size = layer.stored_size();
+        size_term.unify(size as u64)
+    }
+
     pub semidet fn layer_equals(_context, layer1_term, layer2_term) {
         let layer1: WrappedLayer = layer1_term.get_ex()?;
         let layer2: WrappedLayer = layer2_term.get_ex()?;
