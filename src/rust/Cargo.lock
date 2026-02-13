@@ -484,7 +484,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1285,17 +1285,6 @@ dependencies = [
 
 [[package]]
 name = "num-derive"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "num-derive"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
@@ -1814,7 +1803,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2094,7 +2083,7 @@ dependencies = [
  "hex",
  "itertools 0.12.1",
  "lazy_static",
- "num-derive 0.4.2",
+ "num-derive",
  "num-traits",
  "regex",
  "rug",
@@ -2113,13 +2102,13 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "terminus-store"
 version = "0.21.6"
-source = "git+https://github.com/terminusdb-org/terminusdb-store#1c44c026028220c22c0ebf41ccc4708a7f38799f"
+source = "git+https://github.com/terminusdb-org/terminusdb-store#ebc6e73792aab9ca4280eb3e73328360237739ee"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -2135,7 +2124,7 @@ dependencies = [
  "itertools 0.10.5",
  "lazy_static",
  "lru 0.10.1",
- "num-derive 0.3.3",
+ "num-derive",
  "num-traits",
  "rand 0.8.5",
  "rayon",
