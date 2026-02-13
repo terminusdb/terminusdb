@@ -1,5 +1,7 @@
 :- module(server, [terminus_server/2]).
 
+:- multifile enterprise_product_name/1.
+
 /** <module> HTTP server module
  *
  * This module implements the database server. It is primarily composed
@@ -111,16 +113,16 @@ busy_loading(_) :-
     format('<html><body><h1>Still loading</h1><p>TerminusDB is preparing to serve requests</p></body></html>~n').
 
 
-print_welcome_banner(Version, Enterprise, Argv, _, _, Server) :-
+print_welcome_banner(Version, ProductName, Argv, _, _, Server) :-
     log_format(json),
     !,
-    format(user_error, '{"message": "Welcome to TerminusDB ~s! You can view your server in a browser at ~s",\c
+    format(user_error, '{"message": "Welcome to ~s server! You can view your server in a browser at ~s",\c
                           "version": "~s", "args": "~w", "severity": "INFO"}~n',
-          [Enterprise, Server, Version, Argv]).
-print_welcome_banner(Version, Enterprise, Argv, StrTime, Now, Server) :-
+          [ProductName, Server, Version, Argv]).
+print_welcome_banner(Version, ProductName, Argv, StrTime, Now, Server) :-
     format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
            [StrTime, Now, Argv]),
-    format(user_error,'% Welcome to TerminusDB\'s~w terminusdb-server, version ~s!~n',[Enterprise, Version]),
+    format(user_error,'% Welcome to ~s, version ~s!~n',[ProductName, Version]),
     format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).
 
 welcome_banner(Server,Argv) :-
@@ -128,7 +130,10 @@ welcome_banner(Server,Argv) :-
     get_time(Now),
     terminusdb_version(Version),
     format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
-    (   is_enterprise
-    ->  Enterprise = ' Enterprise'
-    ;   Enterprise = ''),
-    print_welcome_banner(Version, Enterprise, Argv, StrTime, Now, Server).
+    (   enterprise_product_name(ProductName)
+    ->  true
+    ;   is_enterprise
+    ->  ProductName = "TerminusDB Enterprise"
+    ;   ProductName = "TerminusDB"
+    ),
+    print_welcome_banner(Version, ProductName, Argv, StrTime, Now, Server).
