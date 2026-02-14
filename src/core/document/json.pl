@@ -55,6 +55,7 @@
               replace_json_schema/2,
               class_frame/3,
               class_frame/4,
+              schema_class_frame/5,
               all_class_frames/2,
               all_class_frames/3,
               class_property_dictionary/3,

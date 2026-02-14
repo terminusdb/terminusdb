@@ -162,8 +162,12 @@ check_type(Database,_Prefixes,Value,Type,_Annotated,_Captures) :-
 check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
     update_document_links(Value, ValueOut, Database, Prefixes, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
     NextCaptures = captures(Mid, DepMid-DepT, SubMid-SubT, Out),
-    class_frame(Database, Type, Frame, [expand_abstract(false),
-                                        compress_ids(false)]),
+    database_schema(Database, Schema),
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    prefix_expand_schema(Type, Merged_Prefixes, Type_Ex),
+    schema_class_frame(Schema, Merged_Prefixes, Type_Ex, Frame, [expand_abstract(false),
+                                                                  compress_ids(false)]),
     (   is_dict(Value),
         shape_mismatch(Database,Type,ValueOut,Properties)
     ->  no_captures(NextCaptures),
