@@ -247,7 +247,7 @@ predicates! {
     }
 
     /// Get current LRU archive cache usage in bytes.
-    /// Fails if the value is temporarily unavailable (lock contended).
+    /// Fails if no LRU backend is configured (e.g. memory store).
     pub semidet fn lru_cache_used_bytes(_context, store_term, bytes_term) {
         let store: WrappedStore = store_term.get_ex()?;
         match store.lru_cache_used_bytes() {
