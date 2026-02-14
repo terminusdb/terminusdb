@@ -22,6 +22,8 @@
               type_descriptor/3,
               schema_type_descriptor/3,
               class_subsumed/3,
+              schema_class_subsumed/3,
+              is_schema_simple_class/2,
               key_descriptor/3,
               key_descriptor/4,
               schema_key_descriptor/4,
