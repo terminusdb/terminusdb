@@ -148,7 +148,9 @@ foreign_class(Type,Class) =>
 % DB, Prefixes |- Value <= Type
 check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     database_schema(Database, Schema),
-    check_type_(Schema,Prefixes,Value,Type,Annotated,Captures).
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    check_type_(Schema,Merged_Prefixes,Value,Type,Annotated,Captures).
 
 check_type_(Schema,_Prefixes,Value,Type,_Annotated,_Captures) :-
     schema_is_abstract(Schema, Type),
@@ -166,11 +168,9 @@ check_type_(Schema,_Prefixes,Value,Type,_Annotated,_Captures) :-
 check_type_(Schema,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
     update_document_links(Value, ValueOut, Schema, Prefixes, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
     NextCaptures = captures(Mid, DepMid-DepT, SubMid-SubT, Out),
-    default_prefixes(Default_Prefixes),
-    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
-    prefix_expand_schema(Type, Merged_Prefixes, Type_Ex),
-    schema_class_frame(Schema, Merged_Prefixes, Type_Ex, Frame, [expand_abstract(false),
-                                                                  compress_ids(false)]),
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    schema_class_frame(Schema, Prefixes, Type_Ex, Frame, [expand_abstract(false),
+                                                          compress_ids(false)]),
     (   is_dict(Value),
         shape_mismatch_(Schema,Type,ValueOut,Properties)
     ->  no_captures(NextCaptures),
@@ -806,12 +806,16 @@ infer_type(Database, Prefixes, Dictionary, Type, Annotated) :-
 
 infer_type(Database, Prefixes, Dictionary, Type, Annotated, Captures) :-
     database_schema(Database, Schema),
-    infer_type_(Schema, Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    infer_type_(Schema, Merged_Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
                 Type, Annotated, Captures).
 
 infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, Captures) :-
     database_schema(Database, Schema),
-    infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, Captures).
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    infer_type_(Schema, Merged_Prefixes, Super, Dictionary, Type, Annotated, Captures).
 
 infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, captures(In,DepH-DepT,SubH-SubT,Out)) :-
     infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated0,
