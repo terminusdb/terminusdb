@@ -2042,6 +2042,9 @@ rdf_list_list(Graph, Cons,[H|L]) :-
 
 array_lists(DB,Id,P,Dimension,Lists) :-
     database_instance(DB,Instance),
+    array_lists_(Instance,Id,P,Dimension,Lists).
+
+array_lists_(Instance,Id,P,Dimension,Lists) :-
     findall(
         Idxs-V,
         (   xrdf(Instance,Id,P,ArrayElement),
@@ -2174,10 +2177,19 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
+set_list_(Instance,Id,P,Set) :-
+    setof(V,xrdf(Instance,Id,P,V),Set),
+    !.
+
 list_type_id_predicate_value([],_,_,_,_,_,_,[]).
 list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Options,[V|L]) :-
     type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Options,V),
     list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Options,L).
+
+list_type_id_predicate_value_([],_,_,_,_,_,_,_,[]).
+list_type_id_predicate_value_([O|T],C,Id,P,Schema,Instance,Prefixes,Options,[V|L]) :-
+    type_id_predicate_iri_value_(C,Id,P,O,Schema,Instance,Prefixes,Options,V),
+    list_type_id_predicate_value_(T,C,Id,P,Schema,Instance,Prefixes,Options,L).
 
 array_type_id_predicate_value([],_,_,_,_,_,_,_,[]).
 array_type_id_predicate_value(In,1,C,Id,P,DB,Prefixes,Options,Out) :-
@@ -2188,6 +2200,15 @@ array_type_id_predicate_value([O|T],D,C,Id,P,DB,Prefixes,Options,[V|L]) :-
     array_type_id_predicate_value(O,E,C,Id,P,DB,Prefixes,Options,V),
     array_type_id_predicate_value(T,D,C,Id,P,DB,Prefixes,Options,L).
 
+array_type_id_predicate_value_([],_,_,_,_,_,_,_,_,[]).
+array_type_id_predicate_value_(In,1,C,Id,P,Schema,Instance,Prefixes,Options,Out) :-
+    !,
+    list_type_id_predicate_value_(In,C,Id,P,Schema,Instance,Prefixes,Options,Out).
+array_type_id_predicate_value_([O|T],D,C,Id,P,Schema,Instance,Prefixes,Options,[V|L]) :-
+    E is D - 1,
+    array_type_id_predicate_value_(O,E,C,Id,P,Schema,Instance,Prefixes,Options,V),
+    array_type_id_predicate_value_(T,D,C,Id,P,Schema,Instance,Prefixes,Options,L).
+
 should_unfold_property(DB, _ParentId, _P, TargetClass) :-
     is_subdocument(DB, TargetClass),
     !.
@@ -2197,6 +2218,17 @@ should_unfold_property(DB, _ParentId, _P, TargetClass) :-
 should_unfold_property(DB, ParentId, P, _TargetClass) :-
     instance_of(DB, ParentId, ParentClass),
     property_is_unfold(DB, ParentClass, P, true),
+    !.
+
+should_unfold_property_(Schema, _Instance, _ParentId, _P, TargetClass) :-
+    schema_is_subdocument(Schema, TargetClass),
+    !.
+should_unfold_property_(Schema, _Instance, _ParentId, _P, TargetClass) :-
+    schema_is_unfoldable(Schema, TargetClass),
+    !.
+should_unfold_property_(Schema, Instance, ParentId, P, _TargetClass) :-
+    xrdf(Instance, ParentId, rdf:type, ParentClass),
+    schema_property_is_unfold(Schema, ParentClass, P, true),
     !.
 
 type_id_predicate_iri_value(unit,_,_,_,_,_,_,[]).
@@ -2275,6 +2307,79 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,DB,Prefixes,_Options,V) :-
             % NOTE: We're always compressing, even if Compress_Ids is false
             % The reason here is that this is a datatype property, not a node of our own.
             % We may want to revisit this logic though.
+            compress_dict_uri(T2,Prefixes,T2C),
+            V = json{ '@type' : T2C, '@value' : D}
+        )
+    ;   Elt = X@L
+    ->  V = json{ '@value' : X, '@lang' : L}
+    ).
+
+type_id_predicate_iri_value_(unit,_,_,_,_,_,_,_,[]).
+type_id_predicate_iri_value_(enum(C,_),_,_,V,_,_,_,_,O) :-
+    enum_value(C, O, V).
+type_id_predicate_iri_value_(foreign(_),_,_,Id,_,_,Prefixes,Options,Value) :-
+    (   option(compress_ids(true), Options)
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
+type_id_predicate_iri_value_(list(C),Id,P,O,Schema,Instance,Prefixes,Options,L) :-
+    rdf_list_list(Instance,O,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(array(C,Dim),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    array_lists_(Instance,Id,P,Dim,V),
+    schema_type_descriptor(Schema,C,Desc),
+    array_type_id_predicate_value_(V,Dim,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(set(C),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    set_list_(Instance,Id,P,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(set(C,_,_),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    set_list_(Instance,Id,P,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(cardinality(C,_,_),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    set_list_(Instance,Id,P,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(class(_),ParentId,P,Id,Schema,Instance,Prefixes,Options,Value) :-
+    (   xrdf(Instance, Id, rdf:type, C),
+        option(unfold(true), Options),
+        should_unfold_property_(Schema, Instance, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
+    ->  get_document_(Schema, Instance, Prefixes, Id, Value, Options)
+    ;   option(compress_ids(true), Options)
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
+type_id_predicate_iri_value_(tagged_union(C,_),ParentId,P,Id,Schema,Instance,Prefixes,Options,Value) :-
+    (   xrdf(Instance, Id, rdf:type, C),
+        option(unfold(true), Options),
+        should_unfold_property_(Schema, Instance, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
+    ->  get_document_(Schema, Instance, Prefixes, Id, Value, Options)
+    ;   option(compress_ids(true),Options)
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
+type_id_predicate_iri_value_(optional(C),Id,P,O,Schema,Instance,Prefixes,Options,V) :-
+    schema_type_descriptor(Schema,C,Desc),
+    type_id_predicate_iri_value_(Desc,Id,P,O,Schema,Instance,Prefixes,Options,V).
+type_id_predicate_iri_value_(base_class(C),_,_,Elt,_Schema,Instance,Prefixes,_Options,V) :-
+    (   C = 'http://terminusdb.com/schema/sys#JSON'
+    ->  graph_get_json_object(Instance, Elt, V0),
+        (   get_dict('@value', V0, Unwrapped)
+        ->  V = Unwrapped
+        ;   V = V0
+        )
+    ;   Elt = X^^T
+    ->  (   C = T
+        ->  value_type_json_type(X,T,V,_)
+        ;   value_type_json_type(X,T,D,T2),
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
@@ -2405,7 +2510,11 @@ get_document(DB, Id, Document, Options) :-
     get_document(DB, Prefixes, Id, Document, Options).
 
 get_document(DB, Prefixes, Id, Document, Options) :-
-    database_instance(DB,Instance),
+    database_schema(DB, Schema),
+    database_instance(DB, Instance),
+    get_document_(Schema, Instance, Prefixes, Id, Document, Options).
+
+get_document_(Schema, Instance, Prefixes, Id, Document, Options) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     % Initialize visited ancestors list if not present, add current doc
     (   option(visited(Visited), Options)
@@ -2415,7 +2524,7 @@ get_document(DB, Prefixes, Id, Document, Options) :-
     merge_options([visited(NewVisited)], Options, NewOptions),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
-    ->  get_json_object(DB, Id_Ex, JSON0),
+    ->  graph_get_json_object(Instance, Id_Ex, JSON0),
         (   option(keep_json_type(true), Options)
         ->  (   option(compress_ids(true), Options)
             ->  prefix_expand_schema(Class, Prefixes, Class_Ex)
@@ -2431,8 +2540,8 @@ get_document(DB, Prefixes, Id, Document, Options) :-
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
                 \+ is_built_in(P),
 
-                once(class_predicate_type(DB,Class,P,Type)),
-                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,NewOptions,Value),
+                once(schema_class_predicate_type(Schema,Class,P,Type)),
+                type_id_predicate_iri_value_(Type,Id_Ex,P,O,Schema,Instance,Prefixes,NewOptions,Value),
                 compress_schema_uri(P, Prefixes, Prop, Options)
             ),
             Data),

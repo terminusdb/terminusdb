@@ -18,6 +18,7 @@
               is_documentation/1,
               refute_class/3,
               class_predicate_type/4,
+              schema_class_predicate_type/4,
               class_predicate_conjunctive_type/4,
               type_descriptor/3,
               schema_type_descriptor/3,
