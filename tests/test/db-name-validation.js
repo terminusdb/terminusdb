@@ -1,4 +1,5 @@
 const { Agent, api, db } = require('../lib')
+const { optimizeSystem } = require('../lib/optimize')
 
 const invalidDatabaseNameOperations = [
   { method: 'create', dbName: '' },
@@ -17,6 +18,9 @@ describe('db-name-validation', function () {
 
   before(async function () {
     agent = new Agent().auth()
+    // Optimize system for consistent test performance
+    await optimizeSystem(agent)
+    console.log('🔧 System optimized')
   })
 
   describe('fails with invalid database name', function () {
