@@ -11,3 +11,6 @@ debug = true
 terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store"}
 swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 #swipl = {path="../../../swipl-rs/swipl"}
+
+#[patch."https://github.com/terminusdb-org/terminusdb-store"]
+#terminus-store = {path="../../../terminusdb-store"}

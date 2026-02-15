@@ -11,3 +11,6 @@ crate-type = ["cdylib"]
 [dependencies]
 terminusdb-community = {path="../terminusdb-community"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { version = "0.6", features = ["background_threads", "disable_initial_exec_tls"] }
