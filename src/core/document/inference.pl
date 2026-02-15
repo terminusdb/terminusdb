@@ -749,13 +749,22 @@ check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures) =>
                                   type : Type })
     ).
 
-:- table schema_class_has_property/3 as private.
-schema_class_has_property(Schema, Class,Property) :-
-    xrdf(Schema,Class,Property,_).
 schema_class_has_property(Schema, Class, Property) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_has_property_tabled(Layer, Class, Property)
+    ;   schema_class_has_property_compute(Schema, Class, Property)
+    ).
+
+:- table schema_class_has_property_tabled/3 as private.
+schema_class_has_property_tabled(Layer, Class, Property) :-
+    schema_class_has_property_compute([_{read: Layer}], Class, Property).
+
+schema_class_has_property_compute(Schema, Class,Property) :-
+    xrdf(Schema,Class,Property,_).
+schema_class_has_property_compute(Schema, Class, Property) :-
     xrdf(Schema,Class,sys:inherits,Parent),
     schema_class_has_property(Schema, Parent, Property).
-schema_class_has_property(Schema, Class, Property) :-
+schema_class_has_property_compute(Schema, Class, Property) :-
     xrdf(Schema,Class,sys:oneOf,OneOf),
     xrdf(Schema,OneOf,Property,_).
 

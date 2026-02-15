@@ -750,8 +750,18 @@ database_context_object(Askable,Context) :-
     create_context(Askable, Query_Context),
     database_context_object(Query_Context, Context).
 
-:- table database_schema_prefixes/2 as private.
 database_schema_prefixes(Schema,Context) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  database_schema_prefixes_tabled(Layer, Context)
+    ;   database_schema_prefixes_compute(Schema, Context)
+    ).
+
+:- table database_schema_prefixes_tabled/2 as private.
+database_schema_prefixes_tabled(Layer, Context) :-
+    Schema = [_{read: Layer}],
+    database_schema_prefixes_compute(Schema, Context).
+
+database_schema_prefixes_compute(Schema,Context) :-
     once(
         (   xrdf(Schema, ID, rdf:type, sys:'Context')
         ->  id_schema_json(Schema,ID,Pre_Context),
@@ -3614,7 +3624,6 @@ class_frame(Desc, Class, Frame, Options) :-
     open_descriptor(Desc, Trans),
     class_frame(Trans, Class, Frame, Options).
 
-:- table schema_class_frame/5 as private.
 schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
         Predicate_Comp-Subframe,
