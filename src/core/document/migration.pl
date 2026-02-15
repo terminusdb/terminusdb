@@ -1073,24 +1073,26 @@ find_root_document_(DB, Uri, Visited, Root_Uri) :-
 %% whose ID prefix doesn't conform to the expected prefix for their type.
 %% Preserves the top-level @id unconditionally.
 strip_nonconforming_ids(DB, Prefixes, JSON, Clean_JSON) :-
+    database_schema(DB, Schema),
     get_dict('@id', JSON, Id),
     dict_pairs(JSON, Tag, Pairs),
-    convlist({DB, Prefixes, Id}/[K-V, K-V2]>>(
-                 strip_nonconforming_value(DB, Prefixes, [property(K), node(Id)], V, V2)
+    convlist({Schema, Prefixes, Id}/[K-V, K-V2]>>(
+                 strip_nonconforming_value_(Schema, Prefixes, [property(K), node(Id)], V, V2)
              ), Pairs, Clean_Pairs),
     dict_pairs(Clean_JSON, Tag, Clean_Pairs).
 
-%% strip_nonconforming_value(+DB, +Prefixes, +Path, +Value, -Clean_Value)
+%% strip_nonconforming_value_(+Schema, +Prefixes, +Path, +Value, -Clean_Value)
 %% For subdocument dicts: check prefix conformance, strip if non-conforming.
 %% When a parent ID is stripped, all descendants are also stripped (cascading)
 %% since their path prefixes embed the parent's ID.
-strip_nonconforming_value(DB, Prefixes, Path, Value, Clean_Value) :-
+%% Takes lightweight Schema instead of full transaction_object to reduce stack pressure.
+strip_nonconforming_value_(Schema, Prefixes, Path, Value, Clean_Value) :-
     is_dict(Value),
     get_dict('@type', Value, SubType_Short),
     prefix_expand_schema(SubType_Short, Prefixes, SubType),
-    is_subdocument(DB, SubType),
+    schema_is_subdocument(Schema, SubType),
     !,
-    key_descriptor(DB, Prefixes, SubType, Descriptor),
+    schema_key_descriptor(Schema, Prefixes, SubType, Descriptor),
     descriptor_base(Descriptor, Base),
     'document/json':path_component([type(Base)|Path], Prefixes, [Expected_Prefix]),
     prefix_expand(Expected_Prefix, Prefixes, Expected_Prefix_Ex),
@@ -1099,20 +1101,20 @@ strip_nonconforming_value(DB, Prefixes, Path, Value, Clean_Value) :-
         atom_concat(Expected_Prefix_Ex, _, Sub_Id_Ex)
     ->  % ID conforms - keep it, recurse into children with this ID as parent
         dict_pairs(Value, VTag, VPairs),
-        convlist({DB, Prefixes, Sub_Id}/[K-V0, K-V1]>>(
-                     strip_nonconforming_value(DB, Prefixes, [property(K), node(Sub_Id)], V0, V1)
+        convlist({Schema, Prefixes, Sub_Id}/[K-V0, K-V1]>>(
+                     strip_nonconforming_value_(Schema, Prefixes, [property(K), node(Sub_Id)], V0, V1)
                  ), VPairs, Clean_VPairs),
         dict_pairs(Clean_Value, VTag, Clean_VPairs)
     ;   % ID doesn't conform - strip it and all descendant IDs (cascading)
         delete_document_ids(Value, Clean_Value)
     ).
-strip_nonconforming_value(DB, Prefixes, Path, Value, Clean_Value) :-
+strip_nonconforming_value_(Schema, Prefixes, Path, Value, Clean_Value) :-
     is_list(Value),
     !,
-    convlist({DB, Prefixes, Path}/[V0, V1]>>(
-                 strip_nonconforming_value(DB, Prefixes, Path, V0, V1)
+    convlist({Schema, Prefixes, Path}/[V0, V1]>>(
+                 strip_nonconforming_value_(Schema, Prefixes, Path, V0, V1)
              ), Value, Clean_Value).
-strip_nonconforming_value(_DB, _Prefixes, _Path, Value, Value).
+strip_nonconforming_value_(_Schema, _Prefixes, _Path, Value, Value).
 
 delete_value(base_class(_),_,_) => true.
 delete_value(unit,_,_) => true.

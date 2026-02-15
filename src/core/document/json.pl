@@ -381,6 +381,24 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
         ),
         Values).
 
+get_field_values_(JSON,Schema,Context,Fields,Values) :-
+    findall(
+        Value,
+        (   member(Field,Fields),
+            prefix_expand_schema(Field,Context,Field_Ex),
+            (   get_dict(Field_Ex,JSON,Value)
+            ->  true
+            ;   get_dict('@type',JSON,Type),
+                prefix_expand_schema(Type, Context, Type_Ex),
+                prefix_expand_schema(Field, Context, Field_Ex),
+                schema_class_predicate_type(Schema, Type_Ex, Field_Ex, Field_Type),
+                memberchk(Field_Type, [optional(_), set(_), array(_,_)])
+            ->  Value = optional(none)
+            ;   throw(error(key_missing_required_field(Field),_))
+            )
+        ),
+        Values).
+
 untyped_typecast(V, Type, Val, Val_Type) :-
     (   string(V)
     ->  typecast(V^^xsd:string,
@@ -525,6 +543,28 @@ json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
 json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 json_idgen_(base(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+
+json_idgen_schema(Descriptor, JSON, Schema, Context, Path, Id) :-
+    json_idgen_schema_(Descriptor, JSON, Schema, Context, Path, Id),
+    !.
+json_idgen_schema(Descriptor, _JSON, _Schema, _Context, _Path, _Id) :-
+    throw(error(unexpected_argument_instantiation(json_idgen, Descriptor), _)).
+
+json_idgen_schema_(lexical(Base, Fields), JSON, Schema, Context, Path, Id) :-
+    get_field_values_(JSON, Schema, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_lexical(Path_Base, Values, Id).
+json_idgen_schema_(hash(Base, Fields), JSON, Schema, Context, Path, Id) :-
+    get_field_values_(JSON, Schema, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_hash(Path_Base, Values, Id).
+json_idgen_schema_(value_hash(Base), JSON, _Schema, _Context, _Path, Id) :-
+    get_all_path_values(JSON, Path_Values),
+    idgen_path_values_hash(Base, Path_Values, Id).
+json_idgen_schema_(random(Base), JSON, _Schema, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_schema_(base(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 
 json_idgen_base(Base, JSON, Context, Path, Id) :-
@@ -818,9 +858,10 @@ json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Cap
     ->  true
     ;   Parents = []
     ),
+    database_schema(DB, Schema),
     when(ground(Parents),
          do_or_die(
-             json_assign_ids(DB,Context,Ids,Elaborated),
+             json_assign_ids_(Schema,Context,Ids,Elaborated),
              error(unable_to_assign_ids))).
 
 /*
@@ -897,8 +938,12 @@ split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields) :-
              Normal_Fields).
 
 json_assign_ids(DB,Context,Ids,JSON) :-
+    database_schema(DB, Schema),
+    json_assign_ids_(Schema,Context,Ids,JSON).
+
+json_assign_ids_(Schema,Context,Ids,JSON) :-
     get_dict('@type',JSON,Type),
-    (   is_subdocument(DB, Type)
+    (   schema_is_subdocument(Schema, Type)
     %% Great, it's a subdocument inserted at the top level
     %% We gotta modify the path to include the parent
     ->  do_or_die(get_dict('@linked-by', JSON, [Link]),
@@ -910,26 +955,26 @@ json_assign_ids(DB,Context,Ids,JSON) :-
         del_dict('@linked-by', JSON, _, JSON2)
     ;   Path = [],
         JSON2 = JSON),
-    json_assign_ids(DB,Context,JSON2,Ids,Path).
+    json_assign_ids_(Schema,Context,JSON2,Ids,Path).
 
-json_assign_ids(_DB,_Context,JSON,[],_Path) :-
+json_assign_ids_(_Schema,_Context,JSON,[],_Path) :-
     \+ is_dict(JSON),
     !.
-json_assign_ids(_DB,_Context,JSON,[],_Path) :-
+json_assign_ids_(_Schema,_Context,JSON,[],_Path) :-
     get_dict('@type',JSON,"@id"),
     !.
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@id',JSON,Id),
     !,
 
     get_dict('@type',JSON,Type),
-    (   is_subdocument(DB, Type)
+    (   schema_is_subdocument(Schema, Type)
     ->  Next_Path = Path,
         die_if(get_dict('@linked-by', JSON, _),
                error(embedded_subdocument_has_linked_by, _))
     ;   Next_Path = []),
 
-    key_descriptor(DB, Context, Type, Descriptor),
+    schema_key_descriptor(Schema, Context, Type, Descriptor),
     split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields),
 
     % The key fields get an id assigned to them first, as this
@@ -939,8 +984,8 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     % is no path dependency. So we don't even submit a valid path
     % here, but rather a fake one that will error if it is encountered
     % later.
-    maplist({DB, Context}/[Property-Value,Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, [inferred_non_subdocument])
+    maplist({Schema, Context}/[Property-Value,Ids]>>(
+                json_assign_ids_(Schema, Context, Value, Ids, [inferred_non_subdocument])
             ),
             Key_Fields,
             New_Id_Lists_1),
@@ -948,7 +993,7 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
 
     % Now that all potential dependencies have their key generated,
     % the id of this document can be generated too.
-    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
+    json_idgen_schema(Descriptor, JSON, Schema, Context, Next_Path, Generated_Id),
     check_submitted_id_against_generated_id(Context, Generated_Id, Id),
 
     % Finally, we can descend into the other children, giving it a
@@ -957,35 +1002,35 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     % the node(Id) already contains the full path - appending Next_Path would
     % cause duplicate path segments in deeply nested subdocuments.
 
-    maplist({DB, Context, Id}/[Property-Value,Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)])
+    maplist({Schema, Context, Id}/[Property-Value,Ids]>>(
+                json_assign_ids_(Schema, Context, Value, Ids, [property(Property),node(Id)])
             ),
             Normal_Fields,
             New_Id_Lists_2),
     append(New_Id_Lists_1, New_Id_Lists_2, New_Id_Lists),
     append(New_Id_Lists, New_Ids),
-    (   key_descriptor(DB, Type, value_hash(_))
+    (   schema_key_descriptor(Schema, Context, Type, value_hash(_))
     ->  Ids = [Id-value_hash|New_Ids]
-    ;   is_subdocument(DB, Type)
+    ;   schema_is_subdocument(Schema, Type)
     ->  Ids = [Id-subdocument|New_Ids]
     ;   Ids = [Id-normal|New_Ids]
     ).
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@set"),
     !,
     get_dict('@value', JSON, Values),
-    maplist({DB,Context,Path}/[Value, Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, Path)
+    maplist({Schema,Context,Path}/[Value, Ids]>>(
+                json_assign_ids_(Schema, Context, Value, Ids, Path)
             ),
             Values,
             Ids_List),
     append(Ids_List, Ids).
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@array"),
     !,
     get_dict('@value', JSON, Values),
-    array_assign_ids(Values,DB,Context,Ids,Path).
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+    array_assign_ids_(Values,Schema,Context,Ids,Path).
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, _),
     !,
     get_dict('@value', JSON, Values),
@@ -996,33 +1041,33 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
         numlist(0, Max_Index, Numlist)
     ),
 
-    maplist({DB,Context,Path}/[Value,Index,Ids]>>(
+    maplist({Schema,Context,Path}/[Value,Index,Ids]>>(
                 New_Path=[index(Index)|Path],
-                json_assign_ids(DB, Context, Value, Ids, New_Path)
+                json_assign_ids_(Schema, Context, Value, Ids, New_Path)
             ),
             Values,
             Numlist,
             Ids_List),
     append(Ids_List, Ids).
-json_assign_ids(_DB,_Context,_JSON,[],_Path).
+json_assign_ids_(_Schema,_Context,_JSON,[],_Path).
 
-array_assign_ids([],_,_,[],_) :-
+array_assign_ids_([],_,_,[],_) :-
     !.
-array_assign_ids(Values,DB,Context,Ids,Path) :-
+array_assign_ids_(Values,Schema,Context,Ids,Path) :-
     length(Values, Value_Len),
     Max_Index is Value_Len - 1,
     numlist(0, Max_Index, Numlist),
-    array_assign_ids(Values,Numlist,DB,Context,Ids,Path).
+    array_assign_ids_(Values,Numlist,Schema,Context,Ids,Path).
 
-array_assign_ids([], [], _, _, [], _).
-array_assign_ids([H|T], [I|Idx], DB, Context, Ids, Path) :-
+array_assign_ids_([], [], _, _, [], _).
+array_assign_ids_([H|T], [I|Idx], Schema, Context, Ids, Path) :-
     New_Path=[index(I)|Path],
     (   is_list(H)
-    ->  array_assign_ids(H,DB,Context,Sub_Ids,New_Path)
-    ;   json_assign_ids(DB,Context,H,Sub_Ids,New_Path)
+    ->  array_assign_ids_(H,Schema,Context,Sub_Ids,New_Path)
+    ;   json_assign_ids_(Schema,Context,H,Sub_Ids,New_Path)
     ),
     append(Sub_Ids, More_Ids, Ids),
-    array_assign_ids(T,Idx,DB,Context,More_Ids,Path).
+    array_assign_ids_(T,Idx,Schema,Context,More_Ids,Path).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
