@@ -3,7 +3,7 @@
  * Provides standardized before/after optimization and other test utilities
  */
 
-const { optimizeDatabase, optimizeSystem } = require('./optimize.js')
+const { optimizeSystem } = require('./optimize.js')
 
 /**
  * Generic before hook for tests that create databases
