@@ -21,9 +21,12 @@ endif
 
 ifeq "$(shell uname)" "Darwin"
   DYLIB_EXT := dylib
+  # Disable default features on macOS to exclude jemalloc background_threads
+  # (background_threads requires Linux pthreads, prints warning on macOS)
   FEATURES ?= --no-default-features
 else
   DYLIB_EXT := so
+  # Default features include jemalloc-bg-threads for Linux performance
   FEATURES ?=
 endif
 
