@@ -1,4 +1,4 @@
-TUS_VERSION := v0.0.16
+TUS_VERSION := v0.0.17
 JWT_VERSION := v1.0.4
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
@@ -13,7 +13,7 @@ default:
 	@$(MAKE) install-jwt
 
 .PHONY: install-tus
-install-tus: REPO_URL=https://github.com/terminusdb/tus.git
+install-tus: REPO_URL=https://github.com/terminusdb-org/tus.git
 install-tus: PACK_NAME=tus
 install-tus: BRANCH=$(TUS_VERSION)
 install-tus: install-pack

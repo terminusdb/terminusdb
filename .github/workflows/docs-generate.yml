@@ -65,9 +65,9 @@ jobs:
       - name: Checkout tus
         uses: actions/checkout@v4
         with:
-          repository: terminusdb/tus
+          repository: terminusdb-org/tus
           path: tus
-          ref: v0.0.5
+          ref: v0.0.17
 
       - name: Install tus
         run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
