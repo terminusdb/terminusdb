@@ -33,7 +33,7 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`12.0.3-dev...main`](https://github.com/terminusdb/terminusdb/compare/v12.0.3-dev...main)
+[`12.0.2...main`](https://github.com/terminusdb/terminusdb/compare/v12.0.2...main)
 <!-- [[[end]]] -->
 
 ---
