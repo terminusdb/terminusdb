@@ -1,20 +1,67 @@
-# TerminusDB Server v12.0.3-dev Release Notes
+# TerminusDB Server v12.0.3 Release Notes
 
-## Enhancements
-* Add cardinality functionality to Set
-* Added `comment` predicate to WOQL
+The DFRNT team is very proud of this release. It is a signficant milestone in the 12.x release series.
+
+**Highlights and core enhancements**:
+* at least 10% performance increase or more for reasoning-heavy workloads thanks to swipl 10
+* significant investment in lean memory usage and memory defragmentation for handling heavy sustained workloads
+* schema context elements now managed atomically, introduced JSON for @context and @metadata elements in the schema.
+* @context value as IRI in schema context, is provided as JSON-LD header value in document API if set (custom context)
+* builds are prepared to be included in nixos
+* system is now prepared for heavy-duty enterprise usage overall
+* add cardinality functionality to `Set` (`Cardinality` is now deprecated)
+* added `comment` predicate to WOQL.
+
+## Features
+* Add WOQL `comment` predicate by @hoijnet in [#2337](https://github.com/terminusdb/terminusdb/pull/2337)
+* Add cardinality constraints to Set too, for consistency by @hoijnet in [#2339](https://github.com/terminusdb/terminusdb/pull/2339)
+* Handle @metadata and @context keys starting with an @ properly (#1775) by @hoijnet in [#2344](https://github.com/terminusdb/terminusdb/pull/2344)
+* Atomic context prefix management by @hoijnet in [#2350](https://github.com/terminusdb/terminusdb/pull/2350)
+* Idempotent prefix creation by @hoijnet in [#2355](https://github.com/terminusdb/terminusdb/pull/2355)
+* Implement `ChangeKey` migration for subdocument ID conformance by @hoijnet in [#2373](https://github.com/terminusdb/terminusdb/pull/2373)
+
+## Bugfixes
+* Ensure that xsd:anyURI is RFC3987 compliant for the URI/IRI by @hoijnet in [#2338](https://github.com/terminusdb/terminusdb/pull/2338)
+* Address regression in optimize code due to cache eviction work in this dev version by @hoijnet in [#2348](https://github.com/terminusdb/terminusdb/pull/2348)
+* Fix delegated database access pattern by @hoijnet in [#2347](https://github.com/terminusdb/terminusdb/pull/2347)
+* Fix incorrect commit of label during optimization by @hoijnet in [#2353](https://github.com/terminusdb/terminusdb/pull/2353)
+* tests: respect TERMINUSDB_EXEC_PATH override by @daniel-fahey in [#2362](https://github.com/terminusdb/terminusdb/pull/2362)
+* Addressed schema migration bug for inherited properties by @hoijnet in [#2372](https://github.com/terminusdb/terminusdb/pull/2372)
+* Add use-system-gmp feature flag for system GMP/MPFR by @daniel-fahey in [#2360](https://github.com/terminusdb/terminusdb/pull/2360)
+* Fix SWI-Prolog 10 stack exhaustion and improve memory management by @hoijnet in [#2377](https://github.com/terminusdb/terminusdb/pull/2377)
+* Fix eviction of memory for stale layers for #2301 by @hoijnet in [#2342](https://github.com/terminusdb/terminusdb/pull/2342)
+
+## Maintenance
+* Bump qs from 6.11.0 to 6.14.2 in /tests by @dependabot[bot] in https://[#2343](github.com/terminusdb/terminusdb/pull/2343 and [#2376](https://)github.com/terminusdb/terminusdb/pull/2376)
+* Restore previsouly blocked push and pull tests by @hoijnet in [#2349](https://github.com/terminusdb/terminusdb/pull/2349)
+* Bump lru from 0.11.1 to 0.16.3 in /src/rust by @dependabot[bot] in [#2354](https://github.com/terminusdb/terminusdb/pull/2354)
+* Support for building both swipl 9 and 10 in TerminusDB by @hoijnet in [#2367](https://github.com/terminusdb/terminusdb/pull/2367)
+* Bump bytes from 1.10.1 to 1.11.1 in /src/rust by @dependabot[bot] in [#2365](https://github.com/terminusdb/terminusdb/pull/2365)
+* Bump diff from 5.2.0 to 5.2.2 in /tests by @dependabot[bot] in [#2361](https://github.com/terminusdb/terminusdb/pull/2361)
+* Bump lodash from 4.17.21 to 4.17.23 in /tests by @dependabot[bot] in [#2363](https://github.com/terminusdb/terminusdb/pull/2363)
+* CI: Use PR workflow for man page documentation updates by @hoijnet in [#2356](https://github.com/terminusdb/terminusdb/pull/2356)
+* Enable customer-specific build support by @hoijnet in [#2375](https://github.com/terminusdb/terminusdb/pull/2375)
+
+## Documentation
+* Update documentation for capabilities endpoint, fixes #2340 by @hoijnet in [#2345](https://github.com/terminusdb/terminusdb/pull/2345)
+* Fix openapi linting by @hoijnet in [#2352](https://github.com/terminusdb/terminusdb/pull/2352)
+* docs: Update generated man page by @github-actions[bot] in [#2371](https://github.com/terminusdb/terminusdb/pull/2371)
+* The woql.json specification now includes slice, set and comment predicates
 
 ## Deprecation
 * `Cardinality` is deprecated, use `Set` instead.
 
-## Bug fixes
-* The woql.json specification now includes slice, set and comment predicates
+## New Contributors
+* @daniel-fahey made their first contribution in [#2362](https://github.com/terminusdb/terminusdb/pull/2362)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.2...v12.0.3
 
 # TerminusDB Server v12.0.2 Release Notes
 
 ## Bug fixes
 * New set operators also work for non-admin users
-* Ensure that xsd:anyURI is RFC3987 compliant for the URI/IRI (#2110)
+  
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.1...v12.0.2
 
 # TerminusDB Server v12.0.1 Release Notes
 
@@ -607,7 +654,7 @@ Beyond that, this version brings various fixes and enhancements to our GraphQL s
 
 ## Bug fixes
 
-+ Fix serious performance regression (https://github.com/terminusdb/terminusdb/pull/1401)
++ Fix serious performance regression ([#1401](https://github.com/terminusdb/terminusdb/pull/1401))
 + Fix JSONDocument type is not linkable from Option, Set, List, Array (issue #1278)
 
 # TerminusDB Server v10.1.3 Release Notes
