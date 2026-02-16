@@ -63,9 +63,9 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}            
         uses: actions/checkout@v4
         with:
-          repository: terminusdb/tus
+          repository: terminusdb-org/tus
           path: tus
-          ref: v0.0.5
+          ref: v0.0.17
 
       - name: Install tus
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                  
@@ -132,9 +132,9 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        
         uses: actions/checkout@v4
         with:
-          repository: terminusdb/tus
+          repository: terminusdb-org/tus
           path: tus
-          ref: v0.0.5
+          ref: v0.0.17
 
       - name: Install tus
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        

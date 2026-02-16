@@ -10,6 +10,7 @@
               is_json_class/2,
               is_tagged_union/2,
               is_foreign/2,
+              is_schema_foreign/2,
               is_base_type/1,
               is_built_in/1,
               is_list_type/1,
@@ -18,10 +19,13 @@
               is_documentation/1,
               refute_class/3,
               class_predicate_type/4,
+              schema_class_predicate_type/4,
               class_predicate_conjunctive_type/4,
               type_descriptor/3,
               schema_type_descriptor/3,
               class_subsumed/3,
+              schema_class_subsumed/3,
+              is_schema_simple_class/2,
               key_descriptor/3,
               key_descriptor/4,
               schema_key_descriptor/4,
@@ -49,7 +53,8 @@
               schema_supermap/4,
               schema_subclass_of/3,
               class_super/3,
-              supermap/3
+              supermap/3,
+              schema_read_layer/2
           ]).
 
 /*
@@ -84,6 +89,9 @@ graph_member_list(Instance, O,L) :-
 graph_member_array(Instance, O, A) :-
     xrdf(Instance, A, rdf:value, O).
 
+schema_read_layer([RWO|_], Layer) :-
+    read_write_obj_reader(RWO, Layer).
+
 is_unit(Class) :-
     global_prefix_expand(sys:'Unit', Class).
 
@@ -95,11 +103,9 @@ is_choice(Validation_Object, Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_choice(Schema, Class).
 
-:- table is_schema_enum/2 as private.
 is_schema_enum(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Enum').
 
-:- table is_schema_choice/2 as private.
 is_schema_choice(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Choice').
 
@@ -107,7 +113,6 @@ is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_foreign(Schema, Class).
 
-:- table is_schema_foreign/2 as private.
 is_schema_foreign(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'Foreign').
 
@@ -115,7 +120,6 @@ is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_tagged_union(Schema, Class).
 
-:- table is_schema_tagged_union/2 as private.
 is_schema_tagged_union(Schema, Class) :-
     xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
 
@@ -179,17 +183,23 @@ is_frame_class(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_frame_class(Schema, Class).
 
-:- table is_schema_frame_class/2 as private.
 is_schema_frame_class(Schema, Class) :-
     system_frame_class(C),
     xrdf(Schema,Class, rdf:type, C).
 
 % NOTE
 % This generator is no longer stable under ordering!
-:- table is_schema_simple_class/2 as private.
 is_schema_simple_class(Schema, Class) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  is_schema_simple_class_tabled(Layer, Class)
+    ;   system_class(C),
+        xrdf(Schema, Class, rdf:type, C)
+    ).
+
+:- table is_schema_simple_class_tabled/2 as private.
+is_schema_simple_class_tabled(Layer, Class) :-
     system_class(C),
-    xrdf(Schema,Class, rdf:type, C).
+    xrdf([_{read: Layer}], Class, rdf:type, C).
 
 is_base_type(Type) :-
     base_type(Type).
@@ -214,7 +224,6 @@ class_super(Validation_Object,Class,Super) :-
     database_schema(Validation_Object,Schema),
     schema_class_super(Schema,Class,Super).
 
-:- table schema_class_super/2 as private.
 schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Super).
 schema_class_super(Schema,Class,Super) :-
@@ -234,7 +243,6 @@ supermap(Transaction, Supermap, Options) :-
     database_prefixes(Transaction, Prefixes),
     schema_supermap(Schema, Prefixes, Supermap, Options).
 
-:- table schema_supermap/4 as private.
 schema_supermap(Schema, Prefixes, Supermap, Options) :-
     findall(C-Supers,
             (   is_schema_simple_class(Schema,Class),
@@ -247,12 +255,23 @@ class_predicate_conjunctive_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_conjunctive_type(Schema, Class, Predicate, Type).
 
-:- table schema_class_predicate_conjunctive_type/4 as private.
 schema_class_predicate_conjunctive_type(Schema,Class,Predicate,Type) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_predicate_conjunctive_type_tabled(Layer,Class,Predicate,Type)
+    ;   schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type)
+    ;
+        schema_class_super(Schema,Class,Super),
+        schema_class_predicate_conjunctive_type(Schema,Super,Predicate,Type)
+    ).
+
+:- table schema_class_predicate_conjunctive_type_tabled/4 as private.
+schema_class_predicate_conjunctive_type_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type).
-schema_class_predicate_conjunctive_type(Schema,Class,Predicate,Type) :-
+schema_class_predicate_conjunctive_type_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_super(Schema,Class,Super),
-    schema_class_predicate_conjunctive_type(Schema,Super,Predicate,Type).
+    schema_class_predicate_conjunctive_type_tabled(Layer,Super,Predicate,Type).
 
 schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type) :-
     \+ is_schema_tagged_union(Schema,Class),
@@ -269,12 +288,23 @@ class_predicate_oneof(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_oneof(Schema, Class, Predicate, Type).
 
-:- table schema_class_predicate_oneof/4 as private.
 schema_class_predicate_oneof(Schema,Class,Predicate,Type) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_predicate_oneof_tabled(Layer,Class,Predicate,Type)
+    ;   schema_class_predicate_oneof_step(Schema,Class,Predicate,Type)
+    ;
+        schema_class_super(Schema,Class,Super),
+        schema_class_predicate_oneof(Schema,Super,Predicate,Type)
+    ).
+
+:- table schema_class_predicate_oneof_tabled/4 as private.
+schema_class_predicate_oneof_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
-schema_class_predicate_oneof(Schema,Class,Predicate,Type) :-
+schema_class_predicate_oneof_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_super(Schema,Class,Super),
-    schema_class_predicate_oneof(Schema,Super,Predicate,Type).
+    schema_class_predicate_oneof_tabled(Layer,Super,Predicate,Type).
 
 schema_class_predicate_oneof_step(Schema,Class,Predicate,Type) :-
     is_schema_tagged_union(Schema,Class),
@@ -295,14 +325,28 @@ class_predicate_type(Validation_Object,Class,Predicate,Type) :-
     database_schema(Validation_Object,Schema),
     schema_class_predicate_type(Schema, Class, Predicate, Type).
 
-:- table schema_class_predicate_type/4 as private.
 schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_predicate_type_tabled(Layer,Class,Predicate,Type)
+    ;   schema_class_predicate_oneof_step(Schema,Class,Predicate,Type)
+    ;
+        schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type)
+    ;
+        schema_class_super(Schema,Class,Super),
+        schema_class_predicate_type(Schema,Super,Predicate,Type)
+    ).
+
+:- table schema_class_predicate_type_tabled/4 as private.
+schema_class_predicate_type_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_predicate_oneof_step(Schema,Class,Predicate,Type).
-schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+schema_class_predicate_type_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_predicate_conjunctive_type_step(Schema,Class,Predicate,Type).
-schema_class_predicate_type(Schema,Class,Predicate,Type) :-
+schema_class_predicate_type_tabled(Layer,Class,Predicate,Type) :-
+    Schema = [_{read: Layer}],
     schema_class_super(Schema,Class,Super),
-    schema_class_predicate_type(Schema,Super,Predicate,Type).
+    schema_class_predicate_type_tabled(Layer,Super,Predicate,Type).
 
 refute_schema_context_documentation(Validation_Object, Documentation, Witness) :-
     database_schema(Validation_Object,Schema),
@@ -585,9 +629,15 @@ is_abstract(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_abstract(Schema, C).
 
-:- table schema_is_abstract/2 as private.
 schema_is_abstract(Schema, C) :-
-    xrdf(Schema, C, sys:abstract, rdf:nil).
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_is_abstract_tabled(Layer, C)
+    ;   xrdf(Schema, C, sys:abstract, rdf:nil)
+    ).
+
+:- table schema_is_abstract_tabled/2 as private.
+schema_is_abstract_tabled(Layer, C) :-
+    xrdf([_{read: Layer}], C, sys:abstract, rdf:nil).
 
 is_direct_subdocument(Schema, C) :-
     xrdf(Schema, C, sys:subdocument, rdf:nil).
@@ -596,8 +646,16 @@ is_subdocument(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_subdocument(Schema, C).
 
-:- table schema_is_subdocument/2 as private.
 schema_is_subdocument(Schema, C) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_is_subdocument_tabled(Layer, C)
+    ;   schema_class_subsumed(Schema, C, D),
+        is_direct_subdocument(Schema, D)
+    ).
+
+:- table schema_is_subdocument_tabled/2 as private.
+schema_is_subdocument_tabled(Layer, C) :-
+    Schema = [_{read: Layer}],
     schema_class_subsumed(Schema, C, D),
     is_direct_subdocument(Schema, D).
 
@@ -608,8 +666,16 @@ is_unfoldable(Validation_Object, C) :-
     database_schema(Validation_Object,Schema),
     schema_is_unfoldable(Schema, C).
 
-:- table schema_is_unfoldable/2 as private.
 schema_is_unfoldable(Schema, C) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_is_unfoldable_tabled(Layer, C)
+    ;   schema_class_subsumed(Schema, C, D),
+        is_direct_unfoldable(Schema, D)
+    ).
+
+:- table schema_is_unfoldable_tabled/2 as private.
+schema_is_unfoldable_tabled(Layer, C) :-
+    Schema = [_{read: Layer}],
     schema_class_subsumed(Schema, C, D),
     is_direct_unfoldable(Schema, D).
 
@@ -1003,27 +1069,36 @@ type_descriptor(Validation_Object, Class, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_type_descriptor(Schema, Class, Descriptor).
 
-:- table schema_type_descriptor/3 as private.
-schema_type_descriptor(_Schema, Class, unit) :-
+schema_type_descriptor(Schema, Class, Descriptor) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_type_descriptor_tabled(Layer, Class, Descriptor)
+    ;   schema_type_descriptor_compute(Schema, Class, Descriptor)
+    ).
+
+:- table schema_type_descriptor_tabled/3 as private.
+schema_type_descriptor_tabled(Layer, Class, Descriptor) :-
+    schema_type_descriptor_compute([_{read: Layer}], Class, Descriptor).
+
+schema_type_descriptor_compute(_Schema, Class, unit) :-
     is_unit(Class),
     !.
-schema_type_descriptor(Schema, Class, foreign(Class)) :-
+schema_type_descriptor_compute(Schema, Class, foreign(Class)) :-
     is_schema_foreign(Schema,Class),
     !.
-schema_type_descriptor(Schema, Class, enum(Class,List)) :-
+schema_type_descriptor_compute(Schema, Class, enum(Class,List)) :-
     is_schema_enum(Schema,Class),
     !,
     xrdf(Schema, Class, sys:value, Cons),
     schema_rdf_list(Schema, Cons, List).
-schema_type_descriptor(_Schema, Class, base_class(Class)) :-
+schema_type_descriptor_compute(_Schema, Class, base_class(Class)) :-
     % Not sure these should be conflated...
     is_base_type(Class),
     !.
-schema_type_descriptor(Schema, Class, class(Class)) :-
+schema_type_descriptor_compute(Schema, Class, class(Class)) :-
     % Not sure these should be conflated...
     is_schema_simple_class(Schema, Class),
     !.
-schema_type_descriptor(Schema, Type, set(Class, N, M)) :-
+schema_type_descriptor_compute(Schema, Type, set(Class, N, M)) :-
     xrdf(Schema, Type, rdf:type, sys:'Set'),
     (   xrdf(Schema, Type, sys:min_cardinality, _)
     ;   xrdf(Schema, Type, sys:max_cardinality, _)
@@ -1038,26 +1113,26 @@ schema_type_descriptor(Schema, Type, set(Class, N, M)) :-
     ->  true
     ;   M = inf
     ).
-schema_type_descriptor(Schema, Type, set(Class)) :-
+schema_type_descriptor_compute(Schema, Type, set(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Set'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-schema_type_descriptor(Schema, Type, list(Class)) :-
+schema_type_descriptor_compute(Schema, Type, list(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'List'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-schema_type_descriptor(Schema, Type, table(Class)) :-
+schema_type_descriptor_compute(Schema, Type, table(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Table'),
     !,
     xrdf(Schema, Type, sys:class, Class).
-schema_type_descriptor(Schema, Type, array(Class,Dimensions)) :-
+schema_type_descriptor_compute(Schema, Type, array(Class,Dimensions)) :-
     xrdf(Schema, Type, rdf:type, sys:'Array'),
     !,
     xrdf(Schema, Type, sys:class, Class),
     (   xrdf(Schema, Type, sys:dimensions, Dimensions^^xsd:nonNegativeInteger)
     ->  true
     ;   Dimensions = 1).
-schema_type_descriptor(Schema, Type, cardinality(Class,N,M)) :-
+schema_type_descriptor_compute(Schema, Type, cardinality(Class,N,M)) :-
     xrdf(Schema, Type, rdf:type, sys:'Cardinality'),
     !,
     xrdf(Schema, Type, sys:class, Class),
@@ -1069,7 +1144,7 @@ schema_type_descriptor(Schema, Type, cardinality(Class,N,M)) :-
     ->  true
     ;   M = inf
     ).
-schema_type_descriptor(Schema, Type, optional(Class)) :-
+schema_type_descriptor_compute(Schema, Type, optional(Class)) :-
     xrdf(Schema, Type, rdf:type, sys:'Optional'),
     !,
     xrdf(Schema, Type, sys:class, Class).
@@ -1095,7 +1170,6 @@ key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_key_descriptor(Schema, Prefixes, Type, Descriptor).
 
-:- table schema_key_descriptor/4 as private.
 schema_key_descriptor(Schema, Prefixes, Type, Descriptor) :-
     xrdf(Schema, Type, sys:key, Obj),
     schema_key_descriptor_(Schema,Prefixes,Type,Obj,Descriptor),

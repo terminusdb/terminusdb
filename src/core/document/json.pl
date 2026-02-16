@@ -55,6 +55,7 @@
               replace_json_schema/2,
               class_frame/3,
               class_frame/4,
+              schema_class_frame/5,
               all_class_frames/2,
               all_class_frames/3,
               class_property_dictionary/3,
@@ -380,6 +381,24 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
         ),
         Values).
 
+get_field_values_(JSON,Schema,Context,Fields,Values) :-
+    findall(
+        Value,
+        (   member(Field,Fields),
+            prefix_expand_schema(Field,Context,Field_Ex),
+            (   get_dict(Field_Ex,JSON,Value)
+            ->  true
+            ;   get_dict('@type',JSON,Type),
+                prefix_expand_schema(Type, Context, Type_Ex),
+                prefix_expand_schema(Field, Context, Field_Ex),
+                schema_class_predicate_type(Schema, Type_Ex, Field_Ex, Field_Type),
+                memberchk(Field_Type, [optional(_), set(_), array(_,_)])
+            ->  Value = optional(none)
+            ;   throw(error(key_missing_required_field(Field),_))
+            )
+        ),
+        Values).
+
 untyped_typecast(V, Type, Val, Val_Type) :-
     (   string(V)
     ->  typecast(V^^xsd:string,
@@ -524,6 +543,28 @@ json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
 json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 json_idgen_(base(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+
+json_idgen_schema(Descriptor, JSON, Schema, Context, Path, Id) :-
+    json_idgen_schema_(Descriptor, JSON, Schema, Context, Path, Id),
+    !.
+json_idgen_schema(Descriptor, _JSON, _Schema, _Context, _Path, _Id) :-
+    throw(error(unexpected_argument_instantiation(json_idgen, Descriptor), _)).
+
+json_idgen_schema_(lexical(Base, Fields), JSON, Schema, Context, Path, Id) :-
+    get_field_values_(JSON, Schema, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_lexical(Path_Base, Values, Id).
+json_idgen_schema_(hash(Base, Fields), JSON, Schema, Context, Path, Id) :-
+    get_field_values_(JSON, Schema, Context, Fields, Values),
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_hash(Path_Base, Values, Id).
+json_idgen_schema_(value_hash(Base), JSON, _Schema, _Context, _Path, Id) :-
+    get_all_path_values(JSON, Path_Values),
+    idgen_path_values_hash(Base, Path_Values, Id).
+json_idgen_schema_(random(Base), JSON, _Schema, Context, Path, Id) :-
+    json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_schema_(base(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 
 json_idgen_base(Base, JSON, Context, Path, Id) :-
@@ -709,8 +750,18 @@ database_context_object(Askable,Context) :-
     create_context(Askable, Query_Context),
     database_context_object(Query_Context, Context).
 
-:- table database_schema_prefixes/2 as private.
 database_schema_prefixes(Schema,Context) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  database_schema_prefixes_tabled(Layer, Context)
+    ;   database_schema_prefixes_compute(Schema, Context)
+    ).
+
+:- table database_schema_prefixes_tabled/2 as private.
+database_schema_prefixes_tabled(Layer, Context) :-
+    Schema = [_{read: Layer}],
+    database_schema_prefixes_compute(Schema, Context).
+
+database_schema_prefixes_compute(Schema,Context) :-
     once(
         (   xrdf(Schema, ID, rdf:type, sys:'Context')
         ->  id_schema_json(Schema,ID,Pre_Context),
@@ -817,9 +868,10 @@ json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Cap
     ->  true
     ;   Parents = []
     ),
+    database_schema(DB, Schema),
     when(ground(Parents),
          do_or_die(
-             json_assign_ids(DB,Context,Ids,Elaborated),
+             json_assign_ids_(Schema,Context,Ids,Elaborated),
              error(unable_to_assign_ids))).
 
 /*
@@ -896,8 +948,12 @@ split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields) :-
              Normal_Fields).
 
 json_assign_ids(DB,Context,Ids,JSON) :-
+    database_schema(DB, Schema),
+    json_assign_ids_(Schema,Context,Ids,JSON).
+
+json_assign_ids_(Schema,Context,Ids,JSON) :-
     get_dict('@type',JSON,Type),
-    (   is_subdocument(DB, Type)
+    (   schema_is_subdocument(Schema, Type)
     %% Great, it's a subdocument inserted at the top level
     %% We gotta modify the path to include the parent
     ->  do_or_die(get_dict('@linked-by', JSON, [Link]),
@@ -909,26 +965,26 @@ json_assign_ids(DB,Context,Ids,JSON) :-
         del_dict('@linked-by', JSON, _, JSON2)
     ;   Path = [],
         JSON2 = JSON),
-    json_assign_ids(DB,Context,JSON2,Ids,Path).
+    json_assign_ids_(Schema,Context,JSON2,Ids,Path).
 
-json_assign_ids(_DB,_Context,JSON,[],_Path) :-
+json_assign_ids_(_Schema,_Context,JSON,[],_Path) :-
     \+ is_dict(JSON),
     !.
-json_assign_ids(_DB,_Context,JSON,[],_Path) :-
+json_assign_ids_(_Schema,_Context,JSON,[],_Path) :-
     get_dict('@type',JSON,"@id"),
     !.
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@id',JSON,Id),
     !,
 
     get_dict('@type',JSON,Type),
-    (   is_subdocument(DB, Type)
+    (   schema_is_subdocument(Schema, Type)
     ->  Next_Path = Path,
         die_if(get_dict('@linked-by', JSON, _),
                error(embedded_subdocument_has_linked_by, _))
     ;   Next_Path = []),
 
-    key_descriptor(DB, Context, Type, Descriptor),
+    schema_key_descriptor(Schema, Context, Type, Descriptor),
     split_fields(Context, Descriptor, JSON, Key_Fields, Normal_Fields),
 
     % The key fields get an id assigned to them first, as this
@@ -938,8 +994,8 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     % is no path dependency. So we don't even submit a valid path
     % here, but rather a fake one that will error if it is encountered
     % later.
-    maplist({DB, Context}/[Property-Value,Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, [inferred_non_subdocument])
+    maplist({Schema, Context}/[Property-Value,Ids]>>(
+                json_assign_ids_(Schema, Context, Value, Ids, [inferred_non_subdocument])
             ),
             Key_Fields,
             New_Id_Lists_1),
@@ -947,7 +1003,7 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
 
     % Now that all potential dependencies have their key generated,
     % the id of this document can be generated too.
-    json_idgen(Descriptor, JSON, DB, Context, Next_Path, Generated_Id),
+    json_idgen_schema(Descriptor, JSON, Schema, Context, Next_Path, Generated_Id),
     check_submitted_id_against_generated_id(Context, Generated_Id, Id),
 
     % Finally, we can descend into the other children, giving it a
@@ -956,35 +1012,35 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
     % the node(Id) already contains the full path - appending Next_Path would
     % cause duplicate path segments in deeply nested subdocuments.
 
-    maplist({DB, Context, Id}/[Property-Value,Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, [property(Property),node(Id)])
+    maplist({Schema, Context, Id}/[Property-Value,Ids]>>(
+                json_assign_ids_(Schema, Context, Value, Ids, [property(Property),node(Id)])
             ),
             Normal_Fields,
             New_Id_Lists_2),
     append(New_Id_Lists_1, New_Id_Lists_2, New_Id_Lists),
     append(New_Id_Lists, New_Ids),
-    (   key_descriptor(DB, Type, value_hash(_))
+    (   schema_key_descriptor(Schema, Context, Type, value_hash(_))
     ->  Ids = [Id-value_hash|New_Ids]
-    ;   is_subdocument(DB, Type)
+    ;   schema_is_subdocument(Schema, Type)
     ->  Ids = [Id-subdocument|New_Ids]
     ;   Ids = [Id-normal|New_Ids]
     ).
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@set"),
     !,
     get_dict('@value', JSON, Values),
-    maplist({DB,Context,Path}/[Value, Ids]>>(
-                json_assign_ids(DB, Context, Value, Ids, Path)
+    maplist({Schema,Context,Path}/[Value, Ids]>>(
+                json_assign_ids_(Schema, Context, Value, Ids, Path)
             ),
             Values,
             Ids_List),
     append(Ids_List, Ids).
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, "@array"),
     !,
     get_dict('@value', JSON, Values),
-    array_assign_ids(Values,DB,Context,Ids,Path).
-json_assign_ids(DB,Context,JSON,Ids,Path) :-
+    array_assign_ids_(Values,Schema,Context,Ids,Path).
+json_assign_ids_(Schema,Context,JSON,Ids,Path) :-
     get_dict('@container',JSON, _),
     !,
     get_dict('@value', JSON, Values),
@@ -995,33 +1051,33 @@ json_assign_ids(DB,Context,JSON,Ids,Path) :-
         numlist(0, Max_Index, Numlist)
     ),
 
-    maplist({DB,Context,Path}/[Value,Index,Ids]>>(
+    maplist({Schema,Context,Path}/[Value,Index,Ids]>>(
                 New_Path=[index(Index)|Path],
-                json_assign_ids(DB, Context, Value, Ids, New_Path)
+                json_assign_ids_(Schema, Context, Value, Ids, New_Path)
             ),
             Values,
             Numlist,
             Ids_List),
     append(Ids_List, Ids).
-json_assign_ids(_DB,_Context,_JSON,[],_Path).
+json_assign_ids_(_Schema,_Context,_JSON,[],_Path).
 
-array_assign_ids([],_,_,[],_) :-
+array_assign_ids_([],_,_,[],_) :-
     !.
-array_assign_ids(Values,DB,Context,Ids,Path) :-
+array_assign_ids_(Values,Schema,Context,Ids,Path) :-
     length(Values, Value_Len),
     Max_Index is Value_Len - 1,
     numlist(0, Max_Index, Numlist),
-    array_assign_ids(Values,Numlist,DB,Context,Ids,Path).
+    array_assign_ids_(Values,Numlist,Schema,Context,Ids,Path).
 
-array_assign_ids([], [], _, _, [], _).
-array_assign_ids([H|T], [I|Idx], DB, Context, Ids, Path) :-
+array_assign_ids_([], [], _, _, [], _).
+array_assign_ids_([H|T], [I|Idx], Schema, Context, Ids, Path) :-
     New_Path=[index(I)|Path],
     (   is_list(H)
-    ->  array_assign_ids(H,DB,Context,Sub_Ids,New_Path)
-    ;   json_assign_ids(DB,Context,H,Sub_Ids,New_Path)
+    ->  array_assign_ids_(H,Schema,Context,Sub_Ids,New_Path)
+    ;   json_assign_ids_(Schema,Context,H,Sub_Ids,New_Path)
     ),
     append(Sub_Ids, More_Ids, Ids),
-    array_assign_ids(T,Idx,DB,Context,More_Ids,Path).
+    array_assign_ids_(T,Idx,Schema,Context,More_Ids,Path).
 
 expansion_key(Key,Expansion,Prop,Cleaned) :-
     (   select_dict(json{'@id' : Prop}, Expansion, Cleaned)
@@ -2041,6 +2097,9 @@ rdf_list_list(Graph, Cons,[H|L]) :-
 
 array_lists(DB,Id,P,Dimension,Lists) :-
     database_instance(DB,Instance),
+    array_lists_(Instance,Id,P,Dimension,Lists).
+
+array_lists_(Instance,Id,P,Dimension,Lists) :-
     findall(
         Idxs-V,
         (   xrdf(Instance,Id,P,ArrayElement),
@@ -2173,10 +2232,19 @@ set_list(DB,Id,P,Set) :-
     setof(V,xrdf(Instance,Id,P,V),Set),
     !.
 
+set_list_(Instance,Id,P,Set) :-
+    setof(V,xrdf(Instance,Id,P,V),Set),
+    !.
+
 list_type_id_predicate_value([],_,_,_,_,_,_,[]).
 list_type_id_predicate_value([O|T],C,Id,P,DB,Prefixes,Options,[V|L]) :-
     type_id_predicate_iri_value(C,Id,P,O,DB,Prefixes,Options,V),
     list_type_id_predicate_value(T,C,Id,P,DB,Prefixes,Options,L).
+
+list_type_id_predicate_value_([],_,_,_,_,_,_,_,[]).
+list_type_id_predicate_value_([O|T],C,Id,P,Schema,Instance,Prefixes,Options,[V|L]) :-
+    type_id_predicate_iri_value_(C,Id,P,O,Schema,Instance,Prefixes,Options,V),
+    list_type_id_predicate_value_(T,C,Id,P,Schema,Instance,Prefixes,Options,L).
 
 array_type_id_predicate_value([],_,_,_,_,_,_,_,[]).
 array_type_id_predicate_value(In,1,C,Id,P,DB,Prefixes,Options,Out) :-
@@ -2187,6 +2255,15 @@ array_type_id_predicate_value([O|T],D,C,Id,P,DB,Prefixes,Options,[V|L]) :-
     array_type_id_predicate_value(O,E,C,Id,P,DB,Prefixes,Options,V),
     array_type_id_predicate_value(T,D,C,Id,P,DB,Prefixes,Options,L).
 
+array_type_id_predicate_value_([],_,_,_,_,_,_,_,_,[]).
+array_type_id_predicate_value_(In,1,C,Id,P,Schema,Instance,Prefixes,Options,Out) :-
+    !,
+    list_type_id_predicate_value_(In,C,Id,P,Schema,Instance,Prefixes,Options,Out).
+array_type_id_predicate_value_([O|T],D,C,Id,P,Schema,Instance,Prefixes,Options,[V|L]) :-
+    E is D - 1,
+    array_type_id_predicate_value_(O,E,C,Id,P,Schema,Instance,Prefixes,Options,V),
+    array_type_id_predicate_value_(T,D,C,Id,P,Schema,Instance,Prefixes,Options,L).
+
 should_unfold_property(DB, _ParentId, _P, TargetClass) :-
     is_subdocument(DB, TargetClass),
     !.
@@ -2196,6 +2273,17 @@ should_unfold_property(DB, _ParentId, _P, TargetClass) :-
 should_unfold_property(DB, ParentId, P, _TargetClass) :-
     instance_of(DB, ParentId, ParentClass),
     property_is_unfold(DB, ParentClass, P, true),
+    !.
+
+should_unfold_property_(Schema, _Instance, _ParentId, _P, TargetClass) :-
+    schema_is_subdocument(Schema, TargetClass),
+    !.
+should_unfold_property_(Schema, _Instance, _ParentId, _P, TargetClass) :-
+    schema_is_unfoldable(Schema, TargetClass),
+    !.
+should_unfold_property_(Schema, Instance, ParentId, P, _TargetClass) :-
+    xrdf(Instance, ParentId, rdf:type, ParentClass),
+    schema_property_is_unfold(Schema, ParentClass, P, true),
     !.
 
 type_id_predicate_iri_value(unit,_,_,_,_,_,_,[]).
@@ -2274,6 +2362,79 @@ type_id_predicate_iri_value(base_class(C),_,_,Elt,DB,Prefixes,_Options,V) :-
             % NOTE: We're always compressing, even if Compress_Ids is false
             % The reason here is that this is a datatype property, not a node of our own.
             % We may want to revisit this logic though.
+            compress_dict_uri(T2,Prefixes,T2C),
+            V = json{ '@type' : T2C, '@value' : D}
+        )
+    ;   Elt = X@L
+    ->  V = json{ '@value' : X, '@lang' : L}
+    ).
+
+type_id_predicate_iri_value_(unit,_,_,_,_,_,_,_,[]).
+type_id_predicate_iri_value_(enum(C,_),_,_,V,_,_,_,_,O) :-
+    enum_value(C, O, V).
+type_id_predicate_iri_value_(foreign(_),_,_,Id,_,_,Prefixes,Options,Value) :-
+    (   option(compress_ids(true), Options)
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
+type_id_predicate_iri_value_(list(C),Id,P,O,Schema,Instance,Prefixes,Options,L) :-
+    rdf_list_list(Instance,O,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(array(C,Dim),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    array_lists_(Instance,Id,P,Dim,V),
+    schema_type_descriptor(Schema,C,Desc),
+    array_type_id_predicate_value_(V,Dim,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(set(C),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    set_list_(Instance,Id,P,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(set(C,_,_),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    set_list_(Instance,Id,P,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(cardinality(C,_,_),Id,P,_,Schema,Instance,Prefixes,Options,L) :-
+    set_list_(Instance,Id,P,V),
+    schema_type_descriptor(Schema,C,Desc),
+    list_type_id_predicate_value_(V,Desc,Id,P,Schema,Instance,Prefixes,Options,L).
+type_id_predicate_iri_value_(class(_),ParentId,P,Id,Schema,Instance,Prefixes,Options,Value) :-
+    (   xrdf(Instance, Id, rdf:type, C),
+        option(unfold(true), Options),
+        should_unfold_property_(Schema, Instance, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
+    ->  get_document_(Schema, Instance, Prefixes, Id, Value, Options)
+    ;   option(compress_ids(true), Options)
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
+type_id_predicate_iri_value_(tagged_union(C,_),ParentId,P,Id,Schema,Instance,Prefixes,Options,Value) :-
+    (   xrdf(Instance, Id, rdf:type, C),
+        option(unfold(true), Options),
+        should_unfold_property_(Schema, Instance, ParentId, P, C),
+        % Cycle detection: check if Id is already in visited ancestors
+        option(visited(Visited), Options, []),
+        \+ memberchk(Id, Visited)
+    ->  get_document_(Schema, Instance, Prefixes, Id, Value, Options)
+    ;   option(compress_ids(true),Options)
+    ->  compress_dict_uri(Id, Prefixes, Value)
+    ;   Value = Id
+    ).
+type_id_predicate_iri_value_(optional(C),Id,P,O,Schema,Instance,Prefixes,Options,V) :-
+    schema_type_descriptor(Schema,C,Desc),
+    type_id_predicate_iri_value_(Desc,Id,P,O,Schema,Instance,Prefixes,Options,V).
+type_id_predicate_iri_value_(base_class(C),_,_,Elt,_Schema,Instance,Prefixes,_Options,V) :-
+    (   C = 'http://terminusdb.com/schema/sys#JSON'
+    ->  graph_get_json_object(Instance, Elt, V0),
+        (   get_dict('@value', V0, Unwrapped)
+        ->  V = Unwrapped
+        ;   V = V0
+        )
+    ;   Elt = X^^T
+    ->  (   C = T
+        ->  value_type_json_type(X,T,V,_)
+        ;   value_type_json_type(X,T,D,T2),
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
@@ -2404,7 +2565,11 @@ get_document(DB, Id, Document, Options) :-
     get_document(DB, Prefixes, Id, Document, Options).
 
 get_document(DB, Prefixes, Id, Document, Options) :-
-    database_instance(DB,Instance),
+    database_schema(DB, Schema),
+    database_instance(DB, Instance),
+    get_document_(Schema, Instance, Prefixes, Id, Document, Options).
+
+get_document_(Schema, Instance, Prefixes, Id, Document, Options) :-
     prefix_expand(Id,Prefixes,Id_Ex),
     % Initialize visited ancestors list if not present, add current doc
     (   option(visited(Visited), Options)
@@ -2414,7 +2579,7 @@ get_document(DB, Prefixes, Id, Document, Options) :-
     merge_options([visited(NewVisited)], Options, NewOptions),
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
-    ->  get_json_object(DB, Id_Ex, JSON0),
+    ->  graph_get_json_object(Instance, Id_Ex, JSON0),
         (   option(keep_json_type(true), Options)
         ->  (   option(compress_ids(true), Options)
             ->  prefix_expand_schema(Class, Prefixes, Class_Ex)
@@ -2430,8 +2595,8 @@ get_document(DB, Prefixes, Id, Document, Options) :-
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
                 \+ is_built_in(P),
 
-                once(class_predicate_type(DB,Class,P,Type)),
-                type_id_predicate_iri_value(Type,Id_Ex,P,O,DB,Prefixes,NewOptions,Value),
+                once(schema_class_predicate_type(Schema,Class,P,Type)),
+                type_id_predicate_iri_value_(Type,Id_Ex,P,O,Schema,Instance,Prefixes,NewOptions,Value),
                 compress_schema_uri(P, Prefixes, Prop, Options)
             ),
             Data),
@@ -3459,7 +3624,6 @@ class_frame(Desc, Class, Frame, Options) :-
     open_descriptor(Desc, Trans),
     class_frame(Trans, Class, Frame, Options).
 
-:- table schema_class_frame/5 as private.
 schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
         Predicate_Comp-Subframe,

@@ -1,6 +1,7 @@
 const api = require('./api')
 const { Params } = require('./params.js')
 const util = require('./util.js')
+const { optimizeDatabase, optimizeSystem } = require('./optimize.js')
 
 function create (agent, params) {
   params = new Params(params)
@@ -30,7 +31,17 @@ function create (agent, params) {
 
   return {
     then (resolve) {
-      resolve(request.then(api.response.verify(api.response.db.createSuccess)))
+      resolve(request.then(api.response.verify(api.response.db.createSuccess)).then(async (result) => {
+        // Auto-optimize database after successful creation
+        try {
+          const dbPath = params.string('path', `${agent.orgName}/${agent.dbName}`)
+          await optimizeDatabase(agent, dbPath, 'main')
+        } catch (error) {
+          // Optimization failures shouldn't break database creation
+          console.warn('Database optimization failed:', error.message)
+        }
+        return result
+      }))
     },
     fails (error) {
       return request.then(api.response.verify(api.response.db.createFailure(error)))
@@ -103,4 +114,8 @@ module.exports = {
   create,
   exists,
   delete: delete_,
+  optimize: {
+    optimizeDatabase,
+    optimizeSystem,
+  },
 }

@@ -25,16 +25,22 @@ dev:
 restart:
 	tests/terminusdb-test-server.sh restart
 
+.PHONY: server-clean
+server-clean:
+	tests/terminusdb-test-server.sh start --clean
+
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
 # To make with swipl 10, use: make docker SWIPL_VERSION=10.0.0
 .PHONY: docker
 docker: export DOCKER_BUILDKIT=1
+docker: SKIP_TESTS ?= false
 docker:
 	docker build . \
 	  --file Dockerfile \
 	  --tag terminusdb/terminusdb-server:local \
 	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
+	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
 	  --build-arg DIST="$(DIST)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
@@ -108,7 +114,7 @@ test:
 #        make test-int SUITE=data-version # run test/data-version.js
 #        make test-int SUITE="cli-*"      # run all cli tests
 .PHONY: test-int
-test-int:
+test-int: server-clean
 ifdef SUITE
 	sh -c "cd tests ; npx mocha 'test/$(SUITE).js'"
 else

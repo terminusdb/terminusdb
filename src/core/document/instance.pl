@@ -294,21 +294,28 @@ range_term_list(Validation_Object, S, P, L) :-
             L).
 
 refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
+    database_schema(Validation_Object, Schema),
+    refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness).
+
+refute_cardinality(_Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     is_array_type(C),
     !,
     refute_cardinality_(array, Validation_Object, S_Id, P_Id, Witness).
-refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
+refute_cardinality(_Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     is_list_type(C),
     !,
     refute_cardinality_(list, Validation_Object, S_Id, P_Id, Witness).
-refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
-    oneof_descriptor(Validation_Object, C, tagged_union(TU,TC)),
+refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
+    (   schema_oneof_descriptor(Schema, C, tagged_union(TU,TC))
+    ;   schema_subclass_of(Schema, C, Super),
+        schema_oneof_descriptor(Schema, Super, tagged_union(TU,TC))
+    ),
     instance_layer(Validation_Object, Layer),
     (   integer(P_Id)
     ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
     ;   Predicate = P_Id
     ),
-    class_predicate_type(Validation_Object,C,Predicate,_),
+    schema_class_predicate_type(Schema,C,Predicate,_),
     atom_string(P,Predicate),
     dict_keys(TC,Keys),
     member(P,Keys),
@@ -320,26 +327,29 @@ refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
         P_Id \= Q_Id,
         refute_cardinality_(not_tagged_union(TU,TC),Validation_Object,S_Id,Q_Id,Witness)
     ).
-refute_cardinality(Validation_Object,S_Id,P_Id,C,Witness) :-
+refute_cardinality(Schema,Validation_Object,S_Id,P_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
     (   integer(P_Id)
     ->  terminus_store:predicate_id(Layer, Predicate, P_Id)
     ;   Predicate = P_Id
     ),
-    class_predicate_conjunctive_type(Validation_Object, C, Predicate, Desc),
+    schema_class_predicate_conjunctive_type(Schema, C, Predicate, Desc),
     refute_cardinality_(Desc,Validation_Object,S_Id,P_Id,Witness).
 
-refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
+refute_cardinality_new(Schema,Validation_Object,S_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
-    class_predicate_conjunctive_type(Validation_Object, C, Predicate, _),
+    schema_class_predicate_conjunctive_type(Schema, C, Predicate, _),
     (   terminus_store:predicate_id(Layer, Predicate, P_Id)
     ->  \+ terminus_store:id_triple_addition(Layer, S_Id, P_Id, _) % unchecking
     ;   P_Id = Predicate % doesn't exist in the dictionary
     ),
-    refute_cardinality(Validation_Object, S_Id, P_Id, C, Witness).
-refute_cardinality_new(Validation_Object,S_Id,C,Witness) :-
+    refute_cardinality(Schema, Validation_Object, S_Id, P_Id, C, Witness).
+refute_cardinality_new(Schema,Validation_Object,S_Id,C,Witness) :-
     instance_layer(Validation_Object, Layer),
-    oneof_descriptor(Validation_Object, C, tagged_union(_TU,TC)),
+    (   schema_oneof_descriptor(Schema, C, tagged_union(_TU,TC))
+    ;   schema_subclass_of(Schema, C, Super),
+        schema_oneof_descriptor(Schema, Super, tagged_union(_TU,TC))
+    ),
     dict_keys(TC,Keys),
     (   member(Predicate,Keys),
         terminus_store:predicate_id(Layer, Predicate, P_Id),
@@ -407,8 +417,8 @@ subject_predicate_updated(Validation_Object, S_Id, P_Id) :-
     distinct(S_Id-P_Id,(terminus_store:id_triple_removal(Layer, S_Id, P_Id,_),
                         terminus_store:id_triple_addition(Layer, S_Id ,P_Id,_))).
 
-refute_key(Validation_Object, S_Id,P_Id,Class,Witness) :-
-    key_descriptor(Validation_Object, Class,Desc),
+refute_key(_Schema,Validation_Object, S_Id,P_Id,Class,Witness) :-
+    key_descriptor(Validation_Object, Class, Desc),
     subject_predicate_updated(Validation_Object,S_Id,P_Id),
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject_String, S_Id),
@@ -444,7 +454,7 @@ schema_layer(Validation_Object, Layer) :-
 
 refute_existing_object_keys(Validation_Object,Class,Witness) :-
     % this is just wrong
-    key_descriptor(Validation_Object, Class,Desc),
+    key_descriptor(Validation_Object, Class, Desc),
     instance_layer(Validation_Object, Layer),
     global_prefix_expand(rdf:type, Rdf_Type),
     terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
@@ -514,7 +524,7 @@ refute_subject_type_change(Validation_Object,S_Id,Witness) :-
                     old_type : Old_Type,
                     new_type : New_Type}.
 
-refute_object_type(_Validation_Object,Class,_,_,_) :-
+refute_object_type(_Schema,_Validation_Object,Class,_,_,_) :-
     (   is_json_document_type(Class)
     ;   is_json_subdocument_type(Class)
     ),
@@ -522,7 +532,7 @@ refute_object_type(_Validation_Object,Class,_,_,_) :-
     % predicates, but this will be faster.
     !,
     fail.
-refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
+refute_object_type(_Schema,Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_array_type(Class),
     !,
     instance_layer(Validation_Object, Layer),
@@ -544,7 +554,7 @@ refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     Witness = json{ '@type' : invalid_array_type,
                     subject: Subject,
                     class: Class }.
-refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
+refute_object_type(_Schema,Validation_Object,Class,S_Id,P_Id,Witness) :-
     is_list_type(Class),
     !,
     instance_layer(Validation_Object, Layer),
@@ -558,15 +568,15 @@ refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness) :-
     Witness = json{ '@type' : invalid_list_type,
                     subject: Subject,
                     class: Class }.
-refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
+refute_object_type(Schema,Validation_Object, Class,S_Id,P_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:predicate_id(Layer, Predicate_String, P_Id),
     atom_string(Predicate, Predicate_String),
-    (   class_predicate_type(Validation_Object, Class, Predicate, Type)
+    (   schema_class_predicate_type(Schema, Class, Predicate, Type)
     ->  terminus_store:id_triple_addition(Layer,S_Id,P_Id,O_Id),
         terminus_store:object_id(Layer,O,O_Id),
         storage_object(O,Object),
-        refute_object_type_(Type,Validation_Object,Object,Witness)
+        refute_object_type_(Schema,Type,Validation_Object,Object,Witness)
     ;   terminus_store:id_triple(Layer,S_Id,P_Id,_),
         terminus_store:subject_id(Layer, Subject_String, S_Id),
         atom_string(Subject, Subject_String),
@@ -576,54 +586,54 @@ refute_object_type(Validation_Object, Class,S_Id,P_Id,Witness) :-
                         subject: Subject }
     ).
 
-refute_object_type_(enum(C,List),_Validation_Object,Object,Witness) :-
+refute_object_type_(_Schema,enum(C,List),_Validation_Object,Object,Witness) :-
     \+ memberchk(Object, List),
     Witness = witness{ '@type' : instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(base_type(C),_Validation_Object,Object,Witness) :-
+refute_object_type_(_Schema,base_type(C),_Validation_Object,Object,Witness) :-
     refute_basetype_elt(Object,C,Witness).
-refute_object_type_(foreign(_),_,_,_) :-
+refute_object_type_(_Schema,foreign(_),_,_,_) :-
     fail.
-refute_object_type_(class(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,class(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
     % Skip validation for Foreign types - they reference external data
-    \+ is_foreign(Validation_Object, C),
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(set(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,set(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
     % Skip validation for Foreign types - they reference external data
-    \+ is_foreign(Validation_Object, C),
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(cardinality(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,cardinality(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
     % Skip validation for Foreign types - they reference external data
-    \+ is_foreign(Validation_Object, C),
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(optional(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,optional(C),Validation_Object,Object,Witness) :-
     % Skip validation for sys:JSON - internal nodes have their own structure
     \+ is_internal_json_class(C),
     % Skip validation for Foreign types - they reference external data
-    \+ is_foreign(Validation_Object, C),
+    \+ is_schema_foreign(Schema, C),
     \+ is_instance(Validation_Object,Object,C),
     Witness = witness{ '@type': instance_not_of_class,
                        class: C,
                        instance: Object }.
-refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,array(C,_D),Validation_Object,Object,Witness) :-
     % Skip validation for Foreign types - they reference external data
-    \+ is_foreign(Validation_Object, C),
+    \+ is_schema_foreign(Schema, C),
     database_instance(Validation_Object, Instance),
     xrdf_added(Instance,Object,sys:value,O),
     \+ is_instance(Validation_Object,O,C),
@@ -633,9 +643,9 @@ refute_object_type_(array(C,_D),Validation_Object,Object,Witness) :-
                   object: O,
                   array: Object
               }.
-refute_object_type_(list(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,list(C),Validation_Object,Object,Witness) :-
     % Skip validation for Foreign types - they reference external data
-    \+ is_foreign(Validation_Object, C),
+    \+ is_schema_foreign(Schema, C),
     (   \+ is_rdf_list(Validation_Object, Object)
     ->  Witness = witness{'@type':not_a_valid_list,
                           class:C,
@@ -649,13 +659,13 @@ refute_object_type_(list(C),Validation_Object,Object,Witness) :-
                       list: Object
                   }
     ).
-refute_object_type_(table(C),Validation_Object,Object,Witness) :-
+refute_object_type_(Schema,table(C),Validation_Object,Object,Witness) :-
     (   \+ is_rdf_list(Validation_Object, Object)
     ->  Witness = witness{'@type':not_a_valid_table,
                           class:C,
                           table:Object}
     ;   member_array(Validation_Object, Array_Elt, Object),
-        refute_object_type_(array(C,2),Validation_Object,Array_Elt,Array_Witness),
+        refute_object_type_(Schema,array(C,2),Validation_Object,Array_Elt,Array_Witness),
         (   witness{'@type':array_element_not_of_class,
                     object: Elt} :< Array_Witness,
             Witness = witness{
@@ -680,7 +690,7 @@ refute_abstract(Subject, Class, Witness) :-
                   subject: Subject
               }.
 
-refute_typed_subject(Validation_Object,S_Id,Class,Witness) :-
+refute_typed_subject(Schema,Validation_Object,S_Id,Class,Witness) :-
     subject_predicate_changed(Validation_Object,S_Id,P_Id),
     % We also need to check arrays / lists for coherence here?
     (   instance_layer(Validation_Object, Layer),
@@ -691,27 +701,27 @@ refute_typed_subject(Validation_Object,S_Id,Class,Witness) :-
         ;   global_prefix_expand(rdf:type, Predicate),
             (   refute_subject_deletion(Validation_Object, S_Id, Witness)
             ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
-            ;   refute_cardinality_new(Validation_Object,S_Id,Class,Witness)))
-    ;   is_abstract(Validation_Object,Class)
+            ;   refute_cardinality_new(Schema,Validation_Object,S_Id,Class,Witness)))
+    ;   schema_is_abstract(Schema,Class)
     ->  refute_abstract(S_Id, Class, Witness)
     ;   refute_subject_type_change(Validation_Object,S_Id,Witness)
-    ;   refute_key(Validation_Object,S_Id,P_Id,Class,Witness)
+    ;   refute_key(Schema,Validation_Object,S_Id,P_Id,Class,Witness)
         % NOTE: Perhaps this can be more intelligence predicates
-    ;   refute_cardinality(Validation_Object,S_Id,P_Id,Class,Witness)
-    ;   refute_object_type(Validation_Object,Class,S_Id,P_Id,Witness)
+    ;   refute_cardinality(Schema,Validation_Object,S_Id,P_Id,Class,Witness)
+    ;   refute_object_type(Schema,Validation_Object,Class,S_Id,P_Id,Witness)
     ).
 
-refute_subject(Validation_Object,S_Id,Witness) :-
+refute_subject(Schema,Validation_Object,S_Id,Witness) :-
     (   refute_subject_deletion(Validation_Object,S_Id,Witness)
     *-> true
-    ;   refute_subject_1(Validation_Object, S_Id, Witness)).
+    ;   refute_subject_1(Schema,Validation_Object, S_Id, Witness)).
 
-refute_subject_1(Validation_Object,S_Id,_Witness) :-
+refute_subject_1(_Schema,Validation_Object,S_Id,_Witness) :-
     instance_layer(Validation_Object, Layer),
     \+ terminus_store:id_triple(Layer,S_Id, _,_),
     !,
     fail.
-refute_subject_1(Validation_Object,S_Id,Witness) :-
+refute_subject_1(_Schema,Validation_Object,S_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject, S_Id),
     foreign_instance_of(Validation_Object, Subject, Class),
@@ -726,27 +736,29 @@ refute_subject_1(Validation_Object,S_Id,Witness) :-
                   foreign_type: Class,
                   instance: Subject
               }.
-refute_subject_1(Validation_Object,S_Id,Witness) :-
+refute_subject_1(Schema,Validation_Object,S_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
     terminus_store:subject_id(Layer, Subject, S_Id),
     (   instance_of(Validation_Object, Subject, Class)
-    ->  refute_typed_subject(Validation_Object, S_Id, Class, Witness)
+    ->  refute_typed_subject(Schema, Validation_Object, S_Id, Class, Witness)
     ;   Witness = witness{
                       '@type': subject_has_no_type,
                       subject: Subject
                   }).
 
 refute_instance(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
     subject_changed(Validation_Object, Subject),
-    refute_subject(Validation_Object,Subject,Witness).
+    refute_subject(Schema,Validation_Object,Subject,Witness).
 
 refute_instance_schema(Validation_Object, Witness) :-
     refute_schema(Validation_Object,Witness).
 refute_instance_schema(Validation_Object, Witness) :-
+    database_schema(Validation_Object, Schema),
     instance_layer(Validation_Object, Layer),
     distinct(S_Id,
              terminus_store:id_triple(Layer, S_Id, _, _)),
-    refute_subject(Validation_Object,S_Id,Witness).
+    refute_subject(Schema,Validation_Object,S_Id,Witness).
 
 /*
 

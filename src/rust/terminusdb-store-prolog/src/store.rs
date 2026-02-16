@@ -110,11 +110,14 @@ predicates! {
         let directory_layer_backend = DirectoryArchiveBackend::new((&*dir).into());
         let layer_backend = LruArchiveBackend::new(directory_layer_backend.clone(), directory_layer_backend, cache_size);
         let lru_ref = layer_backend.clone();
+        let lru_evict_ref = layer_backend.clone();
         let layer_store = CachedLayerStore::new(ArchiveLayerStore::new(layer_backend.clone(), layer_backend), LockingHashMapLayerCache::new());
 
         let label_store = context.try_or_die_generic(task_sync(GrpcLabelStore::new(address.to_string(), pool_size as usize)))?;
 
-        let store = SyncStore::wrap(Store::new(label_store, layer_store).with_lru_used_bytes(move || lru_ref.used_bytes()));
+        let store = SyncStore::wrap(Store::new(label_store, layer_store)
+            .with_lru_used_bytes(move || lru_ref.used_bytes())
+            .with_lru_evict(move |fraction| lru_evict_ref.evict_to_target(fraction)));
 
         out_term.unify(&WrappedStore(store))
     }
@@ -247,7 +250,7 @@ predicates! {
     }
 
     /// Get current LRU archive cache usage in bytes.
-    /// Fails if the value is temporarily unavailable (lock contended).
+    /// Fails if no LRU backend is configured (e.g. memory store).
     pub semidet fn lru_cache_used_bytes(_context, store_term, bytes_term) {
         let store: WrappedStore = store_term.get_ex()?;
         match store.lru_cache_used_bytes() {

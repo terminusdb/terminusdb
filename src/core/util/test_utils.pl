@@ -414,14 +414,17 @@ inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
     inherit_env_vars(Env_List_Out, Vars, Env_List).
 
 read_line_until_start_line(Error) :-
+    read_line_until_start_line(Error, []).
+
+read_line_until_start_line(Error, Collected) :-
     read_line_to_string(Error, Line),
     (   Line = end_of_file
-    ->  throw(error(server_has_no_output, _))
+    ->  reverse(Collected, Stderr_Lines),
+        throw(error(server_has_no_output(Stderr_Lines), _))
     ;   re_match("% You can view your server in a browser at ",Line)
-    ),
-    !.
-read_line_until_start_line(Error) :-
-    read_line_until_start_line(Error).
+    ->  true
+    ;   read_line_until_start_line(Error, [Line|Collected])
+    ).
 
 % spawn_server(+Path, -URL, -PID, +Options) is det.
 spawn_server_1(Path, URL, PID, Options) :-
@@ -484,7 +487,13 @@ spawn_server_1(Path, URL, PID, Options) :-
     % we read 2 lines, because the first line will report start. the second line will be printed after load is done.
     % This is very fragile though.
     sleep(0.5),
-    read_line_until_start_line(Error),
+    % Catch server startup failures and retry with a different port.
+    % Previously, server_has_no_output threw past the between/3 retry.
+    catch(read_line_until_start_line(Error),
+          error(server_has_no_output(_Stderr_Lines), _),
+          (   catch(process_kill(PID, 9), _, true),
+              catch(process_wait(PID, _), _, true),
+              fail)),
 
     ignore(memberchk(error(Error), Options)),
     ignore(memberchk(input(Input), Options)),

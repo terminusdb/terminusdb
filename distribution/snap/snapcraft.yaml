@@ -36,8 +36,8 @@ package-repositories:
 parts:
   tus:
     plugin: dump
-    source: https://github.com/terminusdb/tus.git
-    source-tag: v0.0.16
+    source: https://github.com/terminusdb-org/tus.git
+    source-tag: v0.0.17
     override-build: |
       mkdir -p tus
       mv * tus/ 2>/dev/null || true

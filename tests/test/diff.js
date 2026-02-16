@@ -1,11 +1,15 @@
 const { expect } = require('chai')
 const { Agent, api } = require('../lib')
+const { optimizeSystem } = require('../lib/optimize')
 
 describe('diff', function () {
   let agent
 
-  before(function () {
+  before(async function () {
     agent = new Agent().auth()
+    // Optimize system for consistent test performance
+    await optimizeSystem(agent)
+    console.log('🔧 System optimized\n')
   })
 
   it('gets a value diff', async function () {

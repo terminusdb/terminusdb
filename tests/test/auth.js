@@ -1,4 +1,5 @@
 const { Agent, api, db, util } = require('../lib')
+const { optimizeSystem } = require('../lib/optimize')
 
 let agent
 
@@ -14,6 +15,12 @@ async function create () {
 }
 
 describe('auth', function () {
+  before(async function () {
+    // Optimize system for consistent test performance
+    await optimizeSystem(new Agent().auth())
+    console.log('🔧 System optimized\n')
+  })
+
   describe('basic: unknown user', function () {
     before(function () {
       const user = util.randomString()

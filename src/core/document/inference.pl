@@ -106,7 +106,7 @@ update_document_links_monadic([Parent|Parents], [ParentOut|ParentsOut], Subdoc, 
 
     update_document_links_monadic(Parents, ParentsOut, Subdoc, Prefixes, Id, captures(Mid, DepMid-DepT, SubMid-SubT, Out)).
 
-update_document_links(Value, ValueOut, Database, Prefixes, Type, Captures),
+update_document_links(Value, ValueOut, Schema, Prefixes, Type, Captures),
 is_dict(Value),
 get_dict('@linked-by', Value, Parent) =>
     update_id_field(Value, Prefixes, ValueMid),
@@ -116,7 +116,7 @@ get_dict('@linked-by', Value, Parent) =>
     ->  Parents = Parent
     ;   Parents = [Parent]),
 
-    (   is_subdocument(Database, Type)
+    (   schema_is_subdocument(Schema, Type)
     ->  do_or_die(Parents = [_],
                   error(not_one_parent_of_subdocument(Parents),_)),
         Subdoc = true
@@ -125,7 +125,7 @@ get_dict('@linked-by', Value, Parent) =>
     update_document_links_monadic(Parents, ParentsOut, Subdoc, Prefixes, Id, Captures),
 
     put_dict(_{'@linked-by': ParentsOut}, ValueMid, ValueOut).
-update_document_links(Value, ValueOut, _Database, _Prefixes, _Type, captures(In, DepH-DepT, SubH-SubT, Out)) =>
+update_document_links(Value, ValueOut, _Schema, _Prefixes, _Type, captures(In, DepH-DepT, SubH-SubT, Out)) =>
     ValueOut = Value,
     DepH = DepT,
     SubH = SubT,
@@ -146,8 +146,14 @@ foreign_class(Type,Class) =>
                  '@class' : Class_Ex}.
 
 % DB, Prefixes |- Value <= Type
-check_type(Database,_Prefixes,Value,Type,_Annotated,_Captures) :-
-    is_abstract(Database, Type),
+check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
+    database_schema(Database, Schema),
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    check_type_(Schema,Merged_Prefixes,Value,Type,Annotated,Captures).
+
+check_type_(Schema,_Prefixes,Value,Type,_Annotated,_Captures) :-
+    schema_is_abstract(Schema, Type),
     !,
     (   is_dict(Value),
         get_dict('@id', Value, Id)
@@ -159,16 +165,17 @@ check_type(Database,_Prefixes,Value,Type,_Annotated,_Captures) :-
         class: Type,
         subject: Id
     }]), _)).
-check_type(Database,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
-    update_document_links(Value, ValueOut, Database, Prefixes, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
+check_type_(Schema,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
+    update_document_links(Value, ValueOut, Schema, Prefixes, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
     NextCaptures = captures(Mid, DepMid-DepT, SubMid-SubT, Out),
-    class_frame(Database, Type, Frame, [expand_abstract(false),
-                                        compress_ids(false)]),
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    schema_class_frame(Schema, Prefixes, Type_Ex, Frame, [expand_abstract(false),
+                                                          compress_ids(false)]),
     (   is_dict(Value),
-        shape_mismatch(Database,Type,ValueOut,Properties)
+        shape_mismatch_(Schema,Type,ValueOut,Properties)
     ->  no_captures(NextCaptures),
         missing_property_witness(ValueOut,Properties,Type,Annotated)
-    ;   check_frame(Frame,Database,Prefixes,ValueOut,Type,Annotated,NextCaptures)
+    ;   check_frame_(Frame,Schema,Prefixes,ValueOut,Type,Annotated,NextCaptures)
     ).
 
 missing_property_witness(Dictionary,Properties,Type,witness(Result)) :-
@@ -203,7 +210,7 @@ drop_key(Key,Dict,New) :-
     ;   Dict = New
     ).
 
-check_frame(_Frame,_Database,_Prefixes,Value,Type,Annotated,Captures),
+check_frame_(_Frame,_Schema,_Prefixes,Value,Type,Annotated,Captures),
 Type = 'http://terminusdb.com/schema/sys#Unit' =>
     no_captures(Captures),
     (   Value = []
@@ -212,21 +219,21 @@ Type = 'http://terminusdb.com/schema/sys#Unit' =>
         Annotated = witness(json{ '@type' : not_a_sys_unit,
                                   document : Value })
     ).
-check_frame(Frame,_Database,_Prefixes,Enum_Value,Type,Annotated,Captures),
+check_frame_(Frame,_Schema,_Prefixes,Enum_Value,Type,Annotated,Captures),
 is_dict(Frame),
 _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
   '@values': Enums
  } :< Frame =>
     no_captures(Captures),
     check_enum(Enum_Value,Type,Enums,Annotated).
-check_frame(Frame,Database,Prefixes,Value,_Type,Annotated,Captures),
+check_frame_(Frame,Schema,Prefixes,Value,_Type,Annotated,Captures),
 is_dict(Frame),
 get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
     dict_pairs(Frame,json,Pairs),
     (   is_dict(Value)
     ->  expand_dictionary_keys(Value,Prefixes,Expanded)
     ;   Value = Expanded),
-    check_type_pairs(Pairs,Database,Prefixes,success(Expanded),Annotated,Captures).
+    check_type_pairs_(Pairs,Schema,Prefixes,success(Expanded),Annotated,Captures).
 
 expand_dictionary_pairs([],_Prefixes,[]).
 expand_dictionary_pairs([Key-Value|Pairs],Prefixes,[Key_Ex-Value_Ex|Expanded_Pairs]) :-
@@ -254,22 +261,22 @@ promote_result_list(List, Promoted) :-
         Promoted = witness(Witnesses)
     ).
 
-process_choices([],_Database,_Prefixes,Result,Result,captures(In,T-T,S-S,In)).
-process_choices([_|_],_Database,_Prefixes,witness(Witness),witness(Witness),captures(In,T-T,S-S,In)).
-process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated,Captures) :-
+process_choices_([],_Schema,_Prefixes,Result,Result,captures(In,T-T,S-S,In)).
+process_choices_([_|_],_Schema,_Prefixes,witness(Witness),witness(Witness),captures(In,T-T,S-S,In)).
+process_choices_([Choice|Choices],Schema,Prefixes,success(Dictionary),Annotated,Captures) :-
     Captures = captures(In,DepH-DepT,SubH-SubT,Out),
     findall(
         Key-Result-captures(In,DepH-DepT0,SubH-SubT0,Out0),
         (   get_dict(Key,Choice,Type),
             get_dict(Key,Dictionary,_Value),
-            check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Result,captures(In,DepH-DepT0,SubH-SubT0,Out0))
+            check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Result,captures(In,DepH-DepT0,SubH-SubT0,Out0))
         ),
         Results),
     (   Results = [Key-Result-captures(_,DepH-DepT0,SubH-SubT0,C1)]
     ->  (   Result = success(OutDict)
         ->  %put_dict(Key,Dictionary,D,OutDict),
             Capture1 = captures(C1,DepT0-DepT,SubT0-SubT,Out),
-            process_choices(Choices,Database,Prefixes,success(OutDict),Annotated,Capture1)
+            process_choices_(Choices,Schema,Prefixes,success(OutDict),Annotated,Capture1)
         ;   Result = witness(Witness)
         ->  no_captures(Captures),
             %dict_pairs(Witness, json, [Key-D]),
@@ -288,21 +295,21 @@ process_choices([Choice|Choices],Database,Prefixes,success(Dictionary),Annotated
                      document : Dictionary})
     ).
 
-check_type_pairs([],_,_,Dictionary,Dictionary,captures(In,T-T,S-S,In)).
-check_type_pairs([Key-Range|Pairs],Database,Prefixes,Dictionary,Annotated,captures(In,DepH-DepT,SubH-SubT,Out)) :-
-    check_type_pair(Key,Range,Database,Prefixes,Dictionary,Dictionary0,captures(In,DepH-DepM,SubH-SubM,Middle)),
-    check_type_pairs(Pairs,Database,Prefixes,Dictionary0,Annotated,captures(Middle,DepM-DepT,SubM-SubT,Out)).
+check_type_pairs_([],_,_,Dictionary,Dictionary,captures(In,T-T,S-S,In)).
+check_type_pairs_([Key-Range|Pairs],Schema,Prefixes,Dictionary,Annotated,captures(In,DepH-DepT,SubH-SubT,Out)) :-
+    check_type_pair_(Key,Range,Schema,Prefixes,Dictionary,Dictionary0,captures(In,DepH-DepM,SubH-SubM,Middle)),
+    check_type_pairs_(Pairs,Schema,Prefixes,Dictionary0,Annotated,captures(Middle,DepM-DepT,SubM-SubT,Out)).
 
-check_type_pair(_Key,_Range,_Database,_Prefixes,witness(Failure),Annotated,Captures) =>
+check_type_pair_(_Key,_Range,_Schema,_Prefixes,witness(Failure),Annotated,Captures) =>
     no_captures(Captures),
     witness(Failure) = Annotated.
-check_type_pair('@oneOf',Range,Database,Prefixes,success(Dictionary),Annotated,Captures) =>
-    process_choices(Range,Database,Prefixes,success(Dictionary),Annotated,Captures).
-check_type_pair(Key,_Range,_Database,_Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_('@oneOf',Range,Schema,Prefixes,success(Dictionary),Annotated,Captures) =>
+    process_choices_(Range,Schema,Prefixes,success(Dictionary),Annotated,Captures).
+check_type_pair_(Key,_Range,_Schema,_Prefixes,success(Dictionary),Annotated,Captures),
 has_at(Key) =>
     no_captures(Captures),
     success(Dictionary) = Annotated.
-check_type_pair(Key,Type,_Database,_Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Type,_Schema,_Prefixes,success(Dictionary),Annotated,Captures),
 Type = 'http://terminusdb.com/schema/sys#Unit' =>
     no_captures(Captures),
     (   get_dict(Key, Dictionary, [])
@@ -312,12 +319,12 @@ Type = 'http://terminusdb.com/schema/sys#Unit' =>
                                   field : Key,
                                   document : Dictionary })
     ).
-check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 (   atom(Type)
 ;   foreign_class(Type, _)) =>
     expand_type(Type, Prefixes, Type_Ex),
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  (   check_value_type(Database, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
+    ->  (   check_value_type_(Schema, Prefixes, Value, Type_Ex, Annotated_Value,Captures)
         ->  (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
@@ -336,7 +343,7 @@ check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Capture
                                   document : Dictionary,
                                   field : Key })
     ).
-check_type_pair(Key,Range,_Database,_Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,_Schema,_Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
    '@values' : Enums} :< Range =>
     no_captures(Captures),
@@ -353,10 +360,10 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
                                   document : Dictionary,
                                   field : Key })
     ).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type(Database, Prefixes, Value, Type, Annotated_Value, Captures),
+    ->  check_value_type_(Schema, Prefixes, Value, Type, Annotated_Value, Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -369,10 +376,10 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
                                   document : Dictionary,
                                   field : Key })
     ).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@unfoldable' : [], '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Value)
-    ->  check_value_type(Database, Prefixes, Value, Type, Annotated_Value, Captures),
+    ->  check_value_type_(Schema, Prefixes, Value, Type, Annotated_Value, Captures),
         (   Annotated_Value = success(Success_Value)
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
@@ -386,25 +393,25 @@ _{ '@unfoldable' : [], '@class' : Type} :< Range =>
                                   field : Key })
     ).
 
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
   '@max':Max,'@min':Min,'@class': Type} :< Range =>
-    check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,Captures).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+    check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures).
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Set',
   '@max':Max,'@min':Min,'@class': Type} :< Range =>
-    check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,Captures).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+    check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures).
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>
     % Unconstrained Set
     (   get_dict_not_null(Key,Dictionary,Values)
     ->  (   is_list(Values)
         ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
             mapm(
-                {Database,Prefixes,Type}/
+                {Schema,Prefixes,Type}/
                 [Value,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
                     Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
-                    check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
+                    check_simple_or_compound_type_(Schema,Prefixes,Value,Type,Exp,Capture0)
                 ),
                 Values,Expanded,DepH-SubH-In,DepT-SubT-Out),
             promote_result_list(Expanded,Result_List),
@@ -420,7 +427,7 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
                          Annotated_Dict),
                 success(Annotated_Dict) = Annotated
             )
-        ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result,Captures),
+        ;   check_simple_or_compound_type_(Schema,Prefixes,Values,Type,Result,Captures),
             (   Result = witness(Witness_Value)
             ->  dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
@@ -438,12 +445,12 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =
         drop_key(Key,Dictionary,New),
         success(New) = Annotated
     ).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< Range =>
     (   get_dict_not_null(Key, Dictionary, Value)
     ->  (   foreign_class(Range,Type)
-        ->  check_type_pair(Key,Type,Database,Prefixes,success(Dictionary),Annotated,Captures)
-        ;   check_simple_or_compound_type(Database, Prefixes, Value, Class, Annotated_Value,Captures),
+        ->  check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures)
+        ;   check_simple_or_compound_type_(Schema, Prefixes, Value, Class, Annotated_Value,Captures),
             (   Annotated_Value = success(Success_Value)
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
@@ -456,11 +463,11 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Optional', '@class' : Class } :< 
         drop_key(Key,Dictionary,New),
         success(New) = Annotated
     ).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Array', '@class' : Type,
    '@dimensions' : N } :< Range =>
     (   get_dict_not_null(Key,Dictionary,Values)
-    ->  check_n_dim_array(Values, N, Database, Prefixes, Type, Result_List, Captures),
+    ->  check_n_dim_array_(Values, N, Schema, Prefixes, Type, Result_List, Captures),
         (   Result_List = witness(_)
         ->  Annotated = Result_List
         ;   Result_List = success(List)
@@ -483,16 +490,16 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#Array', '@class' : Type,
                  Annotated_Dictionary),
         Annotated = success(Annotated_Dictionary)
     ).
-check_type_pair(Key,Range,Database,Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#List',
    '@class' : Type} :< Range =>
     (   get_dict_not_null(Key,Dictionary,Values)
     ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
         mapm(
-            {Database,Prefixes,Type}/
+            {Schema,Prefixes,Type}/
             [Value,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
                 Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
-                check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
+                check_simple_or_compound_type_(Schema,Prefixes,Value,Type,Exp,Capture0)
             ),
             Values,Expanded,DepH-SubH-In,DepT-SubT-Out),
         promote_result_list(Expanded,Result_List),
@@ -513,17 +520,17 @@ _{ '@type' : 'http://terminusdb.com/schema/sys#List',
                                   field : Key })
     ).
 
-check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,Captures) :-
+check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures) :-
     (   get_dict_not_null(Key,Dictionary,Values)
     ->  (   is_list(Values),
             length(Values, N)
         ->  (   N >= Min, N =< Max
             ->  Captures = captures(In,DepH-DepT,SubH-SubT,Out),
                 mapm(
-                    {Database,Prefixes,Type}/
+                    {Schema,Prefixes,Type}/
                     [Value,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
                         Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
-                        check_simple_or_compound_type(Database,Prefixes,Value,Type,Exp,Capture0)
+                        check_simple_or_compound_type_(Schema,Prefixes,Value,Type,Exp,Capture0)
                     ),
                     Values,Expanded,DepH-SubH-In,DepT-SubT-Out),
                 promote_result_list(Expanded,Result_List),
@@ -547,7 +554,7 @@ check_bounded_set_type(Key,Min,Max,Type,Database,Prefixes,Dictionary,Annotated,C
                                           document : Dictionary,
                                           field : Key })
             )
-        ;   check_simple_or_compound_type(Database,Prefixes,Values,Type,Result,Captures),
+        ;   check_simple_or_compound_type_(Schema,Prefixes,Values,Type,Result,Captures),
             (   Result = witness(Witness_Value)
             ->  dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
@@ -594,11 +601,11 @@ has_n_dim([V|_], N) :-
     has_n_dim(V, M),
     N is M + 1.
 
-check_n_dim_array(Values, N, Database, Prefixes, Type, Expanded, Captures) :-
+check_n_dim_array_(Values, N, Schema, Prefixes, Type, Expanded, Captures) :-
     (   has_n_dim(Values,N)
     ->  catch(
-            (   check_n_dim_array_(Values, N, Database, Prefixes, Type,
-                                   Expanded_Candidate, Captures),
+            (   check_n_dim_array__(Values, N, Schema, Prefixes, Type,
+                                    Expanded_Candidate, Captures),
                 Expanded = success(Expanded_Candidate)
             ),
             witness(W),
@@ -614,46 +621,46 @@ check_n_dim_array(Values, N, Database, Prefixes, Type, Expanded, Captures) :-
 
 is_witness(witness(_)).
 
-check_n_dim_array_([], _, _Database, _Prefixes, _Type, [], captures(In,T-T,S-S,In)).
-check_n_dim_array_([null|Values], 1, Database, Prefixes, Type, [null|Expanded],
-                   captures(In,H-T,SH-ST,Out)) :-
+check_n_dim_array__([], _, _Schema, _Prefixes, _Type, [], captures(In,T-T,S-S,In)).
+check_n_dim_array__([null|Values], 1, Schema, Prefixes, Type, [null|Expanded],
+                    captures(In,H-T,SH-ST,Out)) :-
     !,
-    check_n_dim_array_(Values, 1, Database, Prefixes, Type, Expanded, captures(In,H-T,SH-ST,Out)).
-check_n_dim_array_([Value|Values], 1, Database, Prefixes, Type, [E|Expanded],
-                   captures(In,H-T,SH-ST,Out)) :-
+    check_n_dim_array__(Values, 1, Schema, Prefixes, Type, Expanded, captures(In,H-T,SH-ST,Out)).
+check_n_dim_array__([Value|Values], 1, Schema, Prefixes, Type, [E|Expanded],
+                    captures(In,H-T,SH-ST,Out)) :-
     !,
-    check_simple_or_compound_type(Database, Prefixes,Value,Type, Exp, captures(In,H-MT,SH-SMT,Mid)),
+    check_simple_or_compound_type_(Schema, Prefixes,Value,Type, Exp, captures(In,H-MT,SH-SMT,Mid)),
     (   is_witness(Exp)
     ->  throw(Exp)
     ;   Exp = success(E)
     ),
-    check_n_dim_array_(Values, 1, Database, Prefixes, Type, Expanded, captures(Mid,MT-T,SMT-ST,Out)).
-check_n_dim_array_([null|Values], N, Database, Prefixes, Type, [null|Expanded],
-                   captures(In,H-T,SH-ST,Out)) :-
+    check_n_dim_array__(Values, 1, Schema, Prefixes, Type, Expanded, captures(Mid,MT-T,SMT-ST,Out)).
+check_n_dim_array__([null|Values], N, Schema, Prefixes, Type, [null|Expanded],
+                    captures(In,H-T,SH-ST,Out)) :-
     !,
-    check_n_dim_array_(Values, N, Database, Prefixes, Type, Expanded,
-                       captures(In,H-T,SH-ST,Out)).
-check_n_dim_array_([Value|Values], N, Database, Prefixes, Type, [Exp|Expanded],
-                   captures(In,H-T,SH-ST,Out)) :-
+    check_n_dim_array__(Values, N, Schema, Prefixes, Type, Expanded,
+                        captures(In,H-T,SH-ST,Out)).
+check_n_dim_array__([Value|Values], N, Schema, Prefixes, Type, [Exp|Expanded],
+                    captures(In,H-T,SH-ST,Out)) :-
     M is N - 1,
-    check_n_dim_array_(Value, M, Database, Prefixes, Type, Exp,
-                       captures(In,H-MT,SH-SMT,Mid)),
-    check_n_dim_array_(Values, N, Database, Prefixes, Type, Expanded,
-                       captures(Mid,MT-T,SMT-ST,Out)).
+    check_n_dim_array__(Value, M, Schema, Prefixes, Type, Exp,
+                        captures(In,H-MT,SH-SMT,Mid)),
+    check_n_dim_array__(Values, N, Schema, Prefixes, Type, Expanded,
+                        captures(Mid,MT-T,SMT-ST,Out)).
 
-check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
+check_simple_or_compound_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 (   atom(Type)
 ;   foreign_class(Type,_)) =>
     expand_type(Type, Prefixes, Type_Ex),
-    check_value_type(Database,Prefixes,Value,Type_Ex,Annotated,Captures).
-check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
+    check_value_type_(Schema,Prefixes,Value,Type_Ex,Annotated,Captures).
+check_simple_or_compound_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 _{ '@subdocument' : _, '@class' : Class} :< Type =>
-    check_simple_or_compound_type(Database,Prefixes,Value,Class,Annotated,Captures).
-check_simple_or_compound_type(Database,Prefixes,Value,Type,Annotated,Captures),
+    check_simple_or_compound_type_(Schema,Prefixes,Value,Class,Annotated,Captures).
+check_simple_or_compound_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 _{ '@id' : Type_Id } :< Type =>
-    check_frame(Type,Database,Prefixes,Value,Type_Id,Annotated,Captures).
+    check_frame_(Type,Schema,Prefixes,Value,Type_Id,Annotated,Captures).
 
-check_value_type(_Database,_Prefixes,Value,_Type,Annotated,captures(Capture_In,Dep-DepT,Sub-SubT,Capture_Out)),
+check_value_type_(_Schema,_Prefixes,Value,_Type,Annotated,captures(Capture_In,Dep-DepT,Sub-SubT,Capture_Out)),
 is_dict(Value),
 get_dict('@ref', Value, Ref) =>
     Sub=SubT,
@@ -661,7 +668,7 @@ get_dict('@ref', Value, Ref) =>
     put_dict(_{'@id' : Capture_Var, '@type': "@id"},Value, Result),
     Dep = [Capture_Var|DepT],
     Annotated = success(Result).
-check_value_type(_Database,Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(_Schema,Prefixes,Value,Type,Annotated,Captures),
 foreign_class(Type,Class) =>
     no_captures(Captures),
     (   text(Value)
@@ -674,39 +681,39 @@ foreign_class(Type,Class) =>
                       value : Value },
         Annotated = witness(Error)
     ).
-check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value),
 Type = 'http://terminusdb.com/schema/sys#JSON' =>
     % For sys:JSON, recursively escape all @-prefixed keys to prevent them being treated as control fields
     escape_at_prefixed_keys(Value, EscapedValue),
-    infer_type(Database, Prefixes, Type, EscapedValue, _, Annotated, Captures).
-check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
+    infer_type_(Schema, Prefixes, Type, EscapedValue, _, Annotated, Captures).
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
-    infer_type(Database, Prefixes, Type, Value, _, Annotated, Captures).
-check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+    infer_type_(Schema, Prefixes, Type, Value, _, Annotated, Captures).
+check_value_type_(_Schema,_Prefixes,Value,Type,Annotated,Captures),
 Type = 'http://terminusdb.com/schema/sys#Unit',
 is_list(Value) =>
     no_captures(Captures),
     Annotated = success([]).
-check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(_Schema,_Prefixes,Value,Type,Annotated,Captures),
 Type = 'http://terminusdb.com/schema/sys#JSON',
 is_list(Value) =>
     % Arrays are valid JSON values for sys:JSON
     no_captures(Captures),
     Annotated = success(json{ '@type' : Type,
                               '@value' : Value }).
-check_value_type(_Database,_Prefixes,Value,Type,_Annotated,_Captures),
+check_value_type_(_Schema,_Prefixes,Value,Type,_Annotated,_Captures),
 is_list(Value) =>
     throw(error(schema_check_failure([witness{ '@type' : unexpected_list,
                                                value: Value, type : Type }]), _)).
-check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(_Schema,_Prefixes,Value,Type,Annotated,Captures),
 Type = 'http://terminusdb.com/schema/sys#JSON',
 (Value = _Val^^_ValType ; string(Value) ; number(Value) ; memberchk(Value, [true, false, null])) =>
     % Accept primitive types (typed or untyped) for sys:JSON
     no_captures(Captures),
     Annotated = success(json{'@type' : Type,
                              '@value' : Value }).
-check_value_type(_Database,_Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(_Schema,_Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
     catch(
@@ -719,12 +726,12 @@ is_base_type(Type) =>
                                  'value': Val,
                                  'type' : Type })
     ).
-check_value_type(Database,Prefixes,Value,Type,Annotated,Captures),
-is_enum(Database,Type) =>
-    check_type(Database, Prefixes, Value, Type, Annotated, Captures).
-check_value_type(Database,Prefixes,Value,Type,Annotated,Captures) =>
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
+is_schema_enum(Schema,Type) =>
+    check_type_(Schema, Prefixes, Value, Type, Annotated, Captures).
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures) =>
     no_captures(Captures),
-    (   is_simple_class(Database,Type)
+    (   is_schema_simple_class(Schema,Type)
     ->  (   (   string(Value)
             ;   atom(Value))
         ->  prefix_expand(Value,Prefixes,Exp),
@@ -742,13 +749,22 @@ check_value_type(Database,Prefixes,Value,Type,Annotated,Captures) =>
                                   type : Type })
     ).
 
-:- table schema_class_has_property/3 as private.
-schema_class_has_property(Schema, Class,Property) :-
-    xrdf(Schema,Class,Property,_).
 schema_class_has_property(Schema, Class, Property) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_has_property_tabled(Layer, Class, Property)
+    ;   schema_class_has_property_compute(Schema, Class, Property)
+    ).
+
+:- table schema_class_has_property_tabled/3 as private.
+schema_class_has_property_tabled(Layer, Class, Property) :-
+    schema_class_has_property_compute([_{read: Layer}], Class, Property).
+
+schema_class_has_property_compute(Schema, Class,Property) :-
+    xrdf(Schema,Class,Property,_).
+schema_class_has_property_compute(Schema, Class, Property) :-
     xrdf(Schema,Class,sys:inherits,Parent),
     schema_class_has_property(Schema, Parent, Property).
-schema_class_has_property(Schema, Class, Property) :-
+schema_class_has_property_compute(Schema, Class, Property) :-
     xrdf(Schema,Class,sys:oneOf,OneOf),
     xrdf(Schema,OneOf,Property,_).
 
@@ -764,6 +780,9 @@ matches_shape(Database,Candidate,Dictionary) :-
 
 shape_mismatch(Database,Candidate,Dictionary,Properties) :-
     database_schema(Database,Schema),
+    shape_mismatch_(Schema,Candidate,Dictionary,Properties).
+
+shape_mismatch_(Schema,Candidate,Dictionary,Properties) :-
     dict_keys(Dictionary,Keys),
     exclude(has_at,Keys,Props),
     exclude({Schema,Candidate}/[Prop]>>
@@ -780,18 +799,36 @@ candidate_subsumed(Database, Super, Candidate, Dictionary) =>
     matches_shape(Database, Candidate, Dictionary),
     class_subsumed(Database, Candidate, Super).
 
+candidate_subsumed_(Schema,'http://terminusdb.com/schema/sys#Top', Candidate, Dictionary) =>
+    schema_matches_shape(Schema, Candidate, Dictionary),
+    is_schema_simple_class(Schema, Candidate),
+    \+ schema_is_subdocument(Schema, Candidate),
+    \+ schema_is_abstract(Schema, Candidate).
+candidate_subsumed_(Schema, Super, Candidate, Dictionary) =>
+    schema_matches_shape(Schema, Candidate, Dictionary),
+    schema_class_subsumed(Schema, Candidate, Super).
+
 infer_type(Database, Prefixes, Dictionary, Type, Annotated) :-
     empty_assoc(In),
     infer_type(Database, Prefixes, Dictionary, Type, Annotated,
                captures(In,_H-_T,_H2-_T2,_Out)).
 
 infer_type(Database, Prefixes, Dictionary, Type, Annotated, Captures) :-
-    infer_type(Database, Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
-               Type, Annotated, Captures).
+    database_schema(Database, Schema),
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    infer_type_(Schema, Merged_Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
+                Type, Annotated, Captures).
 
-infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,DepH-DepT,SubH-SubT,Out)) :-
-    infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated0,
-                        captures(In,DepH-DepT,SubH-SubT,Middle)),
+infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, Captures) :-
+    database_schema(Database, Schema),
+    default_prefixes(Default_Prefixes),
+    put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    infer_type_(Schema, Merged_Prefixes, Super, Dictionary, Type, Annotated, Captures).
+
+infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, captures(In,DepH-DepT,SubH-SubT,Out)) :-
+    infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated0,
+                         captures(In,DepH-DepT,SubH-SubT,Middle)),
     (   success(Dict) = Annotated0
     ->  update_id_field(Dict,Prefixes,Result),
         update_captures(Result,Middle,Out),
@@ -800,7 +837,7 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, captures(In,D
         In = Out
     ).
 
-infer_type_or_check(_Database, Prefixes, _Super, Dictionary, _Inferred_Type, Annotated, Captures),
+infer_type_or_check_(_Schema, Prefixes, _Super, Dictionary, _Inferred_Type, Annotated, Captures),
 get_dict('@type', Dictionary, "@id"),
 get_dict('@id', Dictionary, Id),
 text(Id) =>
@@ -808,14 +845,14 @@ text(Id) =>
     prefix_expand(Id, Prefixes, Id_Ex),
     Annotated = success(json{ '@type' : "@id",
                               '@id' : Id_Ex }).
-infer_type_or_check(_Database, _Prefixes, Super, Value, _Inferred_Type, Annotated, Captures),
+infer_type_or_check_(_Schema, _Prefixes, Super, Value, _Inferred_Type, Annotated, Captures),
 Super = 'http://terminusdb.com/schema/sys#JSON',
 \+ is_dict(Value) =>
     % Handle primitive JSON types: strings, numbers, booleans, null
     no_captures(Captures),
     Annotated = success(json{ '@type' : Super,
                               '@value' : Value }).
-infer_type_or_check(_Database, _Prefixes, Super, Dictionary, _Inferred_Type, Annotated, Captures),
+infer_type_or_check_(_Schema, _Prefixes, Super, Dictionary, _Inferred_Type, Annotated, Captures),
 memberchk(Super, ['http://terminusdb.com/schema/sys#JSON',
                   'http://terminusdb.com/schema/sys#JSONDocument']) =>
     no_captures(Captures),
@@ -823,21 +860,21 @@ memberchk(Super, ['http://terminusdb.com/schema/sys#JSON',
              Dictionary,
              Result),
     Annotated = success(Result).
-infer_type_or_check(Database, Prefixes, Super, Dictionary, Inferred_Type, Annotated,Captures),
+infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Inferred_Type, Annotated,Captures),
 get_dict('@type', Dictionary, Type) =>
     prefix_expand_schema(Type, Prefixes, Type_Ex),
     (   (   is_base_type(Type_Ex),
             basetype_subsumption_of(Type_Ex,Super)
-        ;   class_subsumed(Database, Type_Ex, Super)
+        ;   schema_class_subsumed(Schema, Type_Ex, Super)
         ;   Super = 'http://terminusdb.com/schema/sys#Top',
-            is_simple_class(Database, Type_Ex)
+            is_schema_simple_class(Schema, Type_Ex)
         )
     ->  put_dict('@type', Dictionary, Type_Ex, New_Dictionary),
         expand_dictionary_keys(New_Dictionary,Prefixes,Dictionary_Expanded),
-        check_type(Database,Prefixes,Dictionary_Expanded,Type_Ex,Annotated,Captures),
+        check_type_(Schema,Prefixes,Dictionary_Expanded,Type_Ex,Annotated,Captures),
         Inferred_Type = Type_Ex
     ;   no_captures(Captures),
-        (   (   is_simple_class(Database, Type_Ex)
+        (   (   is_schema_simple_class(Schema, Type_Ex)
             ;   is_base_type(Type_Ex))
         ->      Annotated = witness(json{ '@type' : ascribed_type_not_subsumed,
                                           'document' : Dictionary,
@@ -848,12 +885,12 @@ get_dict('@type', Dictionary, Type) =>
                                       'ascribed_type' : Type_Ex})
         )
     ).
-infer_type_or_check(Database, Prefixes, Super, Dictionary, Type, Annotated,captures(In,DepH-DepT,SubH-SubT,Out)) =>
+infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated,captures(In,DepH-DepT,SubH-SubT,Out)) =>
     expand_dictionary_keys(Dictionary,Prefixes,Dictionary_Expanded),
     findall(Candidate-Annotated0-captures(In,DepH-DepT0,SubH-SubT0,Out0),
             (   Captures0 = captures(In,DepH-DepT0,SubH-SubT0, Out0),
-                candidate_subsumed(Database, Super, Candidate, Dictionary_Expanded),
-                check_type(Database,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0)
+                candidate_subsumed_(Schema, Super, Candidate, Dictionary_Expanded),
+                check_type_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0)
             ),
             Results),
     exclude([_-witness(_)-_]>>true, Results, Successes),
