@@ -34,6 +34,7 @@ ignore_predicate("par_print_documents_json_by_id/9").
 
 
 ignore_file("./src/library").
+ignore_file("./x").
 
 :- if(\+ getenv("TERMINUSDB_ENTERPRISE", true)).
 ignore_file("./terminusdb-enterprise").

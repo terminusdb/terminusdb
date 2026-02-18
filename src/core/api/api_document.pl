@@ -18,7 +18,17 @@
 
               api_insert_documents_core_string/8,
               api_replace_documents_core_string/6,
-              api_delete_documents_by_ids/3
+              api_delete_documents_by_ids/3,
+
+              document_input_format/1,
+              document_output_format/1,
+              detect_input_format/2,
+              detect_output_format/3,
+              convert_input_to_json_stream/4,
+              document_stream_headers/3,
+              document_stream_start/3,
+              document_stream_write/4,
+              document_stream_end/2
           ]).
 
 :- use_module(core(util)).
@@ -35,7 +45,60 @@
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
 :- use_module(library(apply)).
+:- use_module(library(pcre), [re_match/3]).
 :- use_module(library(pprint), [print_term/2]).
+
+%%% Document Format Extension Points (multifile hooks)
+%%%
+%%% Enterprise can register additional formats (jsonld, rdfxml) by adding
+%%% clauses to these predicates. Community only supports 'json'.
+
+:- multifile document_input_format/1.
+:- multifile document_output_format/1.
+:- multifile convert_input_to_json_stream/4.
+:- multifile document_stream_headers/3.
+:- multifile document_stream_start/3.
+:- multifile document_stream_write/4.
+:- multifile document_stream_end/2.
+
+document_input_format(json).
+document_output_format(json).
+
+detect_input_format(ContentType, Format) :-
+    (   re_match('^application/json', ContentType, [])
+    ->  Format = json
+    ;   re_match('^application/ld\\+json', ContentType, [])
+    ->  (   document_input_format(jsonld)
+        ->  Format = jsonld
+        ;   throw(error(unsupported_document_format(jsonld), _))
+        )
+    ;   re_match('^application/rdf\\+xml', ContentType, [])
+    ->  (   document_input_format(rdfxml)
+        ->  Format = rdfxml
+        ;   throw(error(unsupported_document_format(rdfxml), _))
+        )
+    ;   throw(error(bad_content_type(ContentType, 'application/json'), _))
+    ).
+
+detect_output_format(Search, Request, Format) :-
+    (   memberchk(format=FormatParam, Search),
+        FormatParam \= ''
+    ->  atom_string(FormatAtom, FormatParam),
+        (   document_output_format(FormatAtom)
+        ->  Format = FormatAtom
+        ;   throw(error(unsupported_document_format(FormatAtom), _))
+        )
+    ;   memberchk(accept(AcceptList), Request),
+        member(media(Type/SubType, _, _, _), AcceptList),
+        accept_to_format(Type/SubType, AcceptFormat),
+        document_output_format(AcceptFormat)
+    ->  Format = AcceptFormat
+    ;   Format = json
+    ).
+
+accept_to_format(application/json, json).
+accept_to_format(application/'ld+json', jsonld).
+accept_to_format(application/'rdf+xml', rdfxml).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
@@ -168,7 +231,8 @@ api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :
     ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
-    do_or_die(get_document(Transaction, Config.compress, Config.unfold, Id, Document),
+    Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false},
+    do_or_die(get_document(Transaction, Id, Document, Options),
               error(document_not_found(Id), _)).
 api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
@@ -574,8 +638,50 @@ api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version,
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, _).
 
+format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Config, DataVersion) :-
+    database_context_object(Transaction, SchemaContext),
+    database_prefixes(Transaction, InternalPrefixes),
+    put_dict(schema_context, Config, SchemaContext, Config1),
+    put_dict(internal_prefixes, Config1, InternalPrefixes, ConfigWithCtx),
+
+    Request = ConfigWithCtx.request,
+    document_stream_headers(Format, Request, DataVersion),
+
+    document_stream_start(Format, ConfigWithCtx, StreamState),
+
+    (   nonvar(Query)
+    ->  die_if(Graph_Type \= instance,
+               error(query_is_only_supported_for_instance_graphs, _)),
+        expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+        forall(api_get_documents_by_query(Transaction, instance, Type_Ex, Query_Ex, ConfigWithCtx, Document),
+               document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   ground(Id)
+    ->  api_get_document(Graph_Type, Transaction, Id, ConfigWithCtx, Document),
+        document_stream_write(Format, ConfigWithCtx, StreamState, Document)
+    ;   ground(Ids)
+    ->  forall(
+            (   member(OneId, Ids),
+                api_get_document(Graph_Type, Transaction, OneId, ConfigWithCtx, Document)
+            ),
+            document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   ground(Type)
+    ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, ConfigWithCtx, Document),
+               document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   forall(api_get_documents(Transaction, Graph_Type, ConfigWithCtx, Document),
+               document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ),
+
+    document_stream_end(Format, ConfigWithCtx).
+
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, _Initial_Goal) :-
+    get_dict(format, Config, Format),
+    Format \= json,
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Config, Actual_Data_Version).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
     nonvar(Query),
     !,
@@ -1392,4 +1498,58 @@ test(full_replace_instance_no_author, [
     get_document(T, Id, Document),
     _{'@type': 'City', 'name': "Utrecht"} :< Document.
 :- end_tests(full_replace).
+
+:- begin_tests(document_format_detection).
+:- use_module(config(terminus_config)).
+
+test(detect_input_json) :-
+    detect_input_format('application/json', json).
+
+test(detect_input_json_with_charset) :-
+    detect_input_format('application/json; charset=UTF-8', json).
+
+test(detect_input_jsonld_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(jsonld), _)]) :-
+    detect_input_format('application/ld+json', _).
+
+test(detect_input_rdfxml_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(rdfxml), _)]) :-
+    detect_input_format('application/rdf+xml', _).
+
+test(detect_input_unknown_rejects,
+     [error(bad_content_type('text/plain', 'application/json'), _)]) :-
+    detect_input_format('text/plain', _).
+
+test(detect_output_default_json) :-
+    detect_output_format([], [accept(accept(application/json))], json).
+
+test(detect_output_format_param_json) :-
+    detect_output_format([format=json], [], json).
+
+test(detect_output_format_param_jsonld_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(jsonld), _)]) :-
+    detect_output_format([format=jsonld], [], _).
+
+test(detect_output_format_param_rdfxml_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(rdfxml), _)]) :-
+    detect_output_format([format=rdfxml], [], _).
+
+test(detect_output_format_param_unknown_rejects,
+     [error(unsupported_document_format(turtle), _)]) :-
+    detect_output_format([format=turtle], [], _).
+
+test(detect_output_no_accept_defaults_json) :-
+    detect_output_format([], [], json).
+
+test(document_input_format_json) :-
+    document_input_format(json).
+
+test(document_output_format_json) :-
+    document_output_format(json).
+
+:- end_tests(document_format_detection).
 

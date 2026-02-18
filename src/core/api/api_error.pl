@@ -2674,6 +2674,11 @@ generic_exception_jsonld(bad_content_type(ContentType, Expected), JSON) :-
     JSON = _{'@type' : 'api:BadContentTypeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(unsupported_document_format(Format), JSON) :-
+    format(string(Msg), "Unsupported document format: ~q. This format requires enterprise edition.", [Format]),
+    JSON = _{'@type' : 'api:UnsupportedDocumentFormatErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : Msg}.
 generic_exception_jsonld(syntax_error(M),JSON) :-
     format(atom(OM), '~q', [M]),
     JSON = _{'api:status' : 'api:failure',
