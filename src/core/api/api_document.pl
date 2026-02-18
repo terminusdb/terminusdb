@@ -387,7 +387,8 @@ insert_documents_default_options(
         full_replace: false,
         raw_json: false,
         merge_repeats: false,
-        overwrite: false
+        overwrite: false,
+        input_format: json
     }).
 
 api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
@@ -414,9 +415,14 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     % See routes.pl where HTTP body is buffered into string stream for this reason.
     % Reset stream to beginning for each transaction attempt (retry on conflict)
     stream_property(Stream, position(Pos)),
+    option(input_format(InputFormat), Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                         (   InputFormat = json
+                         ->  InsertStream = Stream
+                         ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, InsertStream)
+                         ),
+                         api_insert_documents_core(Transaction, InsertStream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
                      ),
                      Meta_Data,
                      Options),
@@ -589,7 +595,8 @@ replace_document_default_options(
     options{
         graph_type: instance,
         create: false,
-        raw_json: false
+        raw_json: false,
+        input_format: json
     }).
 
 api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options_New) :-
@@ -602,10 +609,15 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option(raw_json(Raw_JSON),Options,false),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    option(input_format(InputFormat), Options),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids)
+                         (   InputFormat = json
+                         ->  ReplaceStream = Stream
+                         ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
+                         ),
+                         api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Ids)
                      ),
                      Meta_Data,
                      Options),
