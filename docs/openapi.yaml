@@ -821,25 +821,39 @@ paths:
       description: |
         Retrieve documents from the database. Supports filtering, pagination, and result formatting.
         
+        **Streaming Behavior:**
+        - By default (`as_list=false`), documents are returned as **newline-delimited JSON stream** - one document per line, no wrapping array
+        - With `as_list=true`, documents are returned as a **JSON array** `[{...}, {...}]`
+        - Streaming is more memory-efficient for large result sets
+        
         **Examples:**
         ```bash
-        # Get all documents
+        # Get all documents (streaming)
         curl -u admin:root http://localhost:6363/api/document/myorg/mydb
         
+        # Get all documents as JSON array
+        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?as_list=true"
+        
         # Get specific document by ID
-        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?ids=Document/abc123"
+        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?id=Document/abc123"
+        
+        # Get multiple documents by IDs
+        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?ids=[\"Document/abc123\",\"Document/def456\"]"
         
         # Pagination
         curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?skip=10&count=5"
+        
+        # Filter by type
+        curl -u admin:root "http://localhost:6363/api/document/myorg/mydb?type=Person"
 
-        # Use POST to submit complex queries as JSON instead of URL parameters
+        # Complex query (POST with query object)
         curl -u admin:root -X POST "http://localhost:6363/api/document/myorg/mydb" \
              -H "Content-Type: application/json" \
              -H "X-HTTP-Method-Override: GET" \
-             -d '{"ids": ["Document/abc123", "Document/def456"]}'
+             -d '{"query": {"name": "Alice", "age": {"@gt": 25}}, "as_list": true}'
         ```
         
-        **POST Alternative:** Use `X-HTTP-Method-Override: GET` to submit complex queries as JSON instead of URL parameters.
+        **POST Alternative:** Use `X-HTTP-Method-Override: GET` to submit complex queries as JSON instead of URL parameters. This is especially useful for the `query` parameter.
       parameters:
         - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
@@ -866,55 +880,149 @@ paths:
             default: true
         - name: as_list
           in: query
-          description: Return the JSONs as list instead of as a json stream
+          description: |
+            Return documents as a JSON array instead of newline-delimited JSON stream.
+            - `false` (default): Streaming mode - one JSON object per line, no array wrapper. More memory-efficient.
+            - `true`: Array mode - documents wrapped in JSON array `[{...}, {...}]`
           required: false
           schema:
             type: boolean
             default: false
         - name: unfold
           in: query
-          description: Unfold the documents (join other referenced documents)
+          description: |
+            Unfold (expand) referenced subdocuments inline. When true, subdocuments and references are expanded into the parent document.
+          required: false
           schema:
             type: boolean
             default: true
         - name: id
           in: query
           required: false
-          description: Specific document ID to look for (takes precedence over ids field)
+          description: |
+            Specific document ID to retrieve. Takes precedence over `ids` and `type` parameters.
+            Example: `Person/Robin_1991-02-01` or `Document/abc123`
           schema:
             type: string
             example: Person/Robin_1991-02-01
         - name: ids
           in: query
           required: false
-          description: Multiple document IDs to look for, as a json list (EXPERIMENTAL)
+          description: |
+            Multiple document IDs to retrieve, as a JSON array.
+            Example: `["Person/Alice", "Person/Bob"]`
+            Note: For complex queries, use POST with `X-HTTP-Method-Override: GET` instead.
           schema:
-            type: string
-            example: Person/Robin_1991-02-01
+            type: array
+            items:
+              type: string
+            example: ["Person/Alice", "Person/Bob"]
         - name: type
           in: query
           required: false
-          description: Get documents of only a specific type
+          description: |
+            Filter documents by @type. Only returns documents of the specified type.
+            Example: `Person` to get all Person documents
           schema:
             type: string
             example: Person
+        - name: query
+          in: query
+          required: false
+          description: |
+            Complex query object for filtering documents (JSON object). Due to URL encoding complexity, 
+            it's recommended to use POST with `X-HTTP-Method-Override: GET` for complex queries.
+            
+            Query syntax supports field matching and comparison operators like `@gt`, `@lt`, `@gte`, `@lte`, etc.
+            Example: `{"name": "Alice", "age": {"@gt": 25}}`
+          schema:
+            type: object
+            additionalProperties: true
+            example: {"name": "Alice", "age": {"@gt": 25}}
         - name: compress_ids
           in: query
           required: false
-          description: Whether to compress all ids using prefixes
+          description: |
+            Whether to compress all IDs and type names using prefixes defined in the database.
+            When true, IDs like `http://example.org/Person/Alice` become `Person/Alice`.
+          schema:
+            type: boolean
+            default: true
+        - name: prefixed
+          in: query
+          required: false
+          deprecated: true
+          description: |
+            **DEPRECATED**: Use `compress_ids` instead. This parameter is maintained for backward compatibility.
           schema:
             type: boolean
             default: true
 
       responses:
         200:
-          description: List or stream of documents
+          description: |
+            Documents retrieved successfully. Response format depends on `as_list` parameter:
+            
+            **Streaming mode** (`as_list=false`, default):
+            - Content-Type: `application/json`
+            - Format: Newline-delimited JSON (one document per line)
+            - Example response body:
+              ```
+              {"@id":"Person/Alice","@type":"Person","name":"Alice","age":30}
+              {"@id":"Person/Bob","@type":"Person","name":"Bob","age":25}
+              ```
+            
+            **Array mode** (`as_list=true`):
+            - Content-Type: `application/json`
+            - Format: Standard JSON array
+            - Example response body:
+              ```json
+              [
+                {"@id":"Person/Alice","@type":"Person","name":"Alice","age":30},
+                {"@id":"Person/Bob","@type":"Person","name":"Bob","age":25}
+              ]
+              ```
           content:
             application/json:
               schema:
-                type: object
-                description: Concatenated list of JSON documents
-                example: {"@id":"Organization/admin", "@type":"Organization", "database": ["SystemDatabase/system", "UserDatabase/60c35164e937174bbf4dd814c78153d660edc55b3d799c534c1e2d872a3d2dd6" ], "name":"admin"}
+                oneOf:
+                  - type: object
+                    description: Single document (when streaming with as_list=false)
+                    properties:
+                      "@id":
+                        type: string
+                        example: Person/Alice
+                      "@type":
+                        type: string
+                        example: Person
+                    additionalProperties: true
+                  - type: array
+                    description: Array of documents (when as_list=true)
+                    items:
+                      type: object
+                      properties:
+                        "@id":
+                          type: string
+                        "@type":
+                          type: string
+                      additionalProperties: true
+              examples:
+                streamingMode:
+                  summary: Streaming mode (as_list=false)
+                  value: |
+                    {"@id":"Person/Alice","@type":"Person","name":"Alice","age":30}
+                    {"@id":"Person/Bob","@type":"Person","name":"Bob","age":25}
+                arrayMode:
+                  summary: Array mode (as_list=true)
+                  value:
+                    - "@id": "Person/Alice"
+                      "@type": "Person"
+                      "name": "Alice"
+                      "age": 30
+                    - "@id": "Person/Bob"
+                      "@type": "Person"
+                      "name": "Bob"
+                      "age": 25
         400:
           description: Bad Request
         401:
