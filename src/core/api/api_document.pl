@@ -77,6 +77,11 @@ detect_input_format(ContentType, Format) :-
         ->  Format = rdfxml
         ;   throw(error(unsupported_document_format(rdfxml), _))
         )
+    ;   re_match('^text/turtle', ContentType, [])
+    ->  (   document_input_format(turtle)
+        ->  Format = turtle
+        ;   throw(error(unsupported_document_format(turtle), _))
+        )
     ;   throw(error(bad_content_type(ContentType, 'application/json'), _))
     ).
 
@@ -99,6 +104,7 @@ detect_output_format(Search, Request, Format) :-
 accept_to_format(application/json, json).
 accept_to_format(application/'ld+json', jsonld).
 accept_to_format(application/'rdf+xml', rdfxml).
+accept_to_format(text/turtle, turtle).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
@@ -1530,6 +1536,11 @@ test(detect_input_rdfxml_community_rejects,
       error(unsupported_document_format(rdfxml), _)]) :-
     detect_input_format('application/rdf+xml', _).
 
+test(detect_input_turtle_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(turtle), _)]) :-
+    detect_input_format('text/turtle', _).
+
 test(detect_input_unknown_rejects,
      [error(bad_content_type('text/plain', 'application/json'), _)]) :-
     detect_input_format('text/plain', _).
@@ -1550,9 +1561,14 @@ test(detect_output_format_param_rdfxml_community_rejects,
       error(unsupported_document_format(rdfxml), _)]) :-
     detect_output_format([format=rdfxml], [], _).
 
-test(detect_output_format_param_unknown_rejects,
-     [error(unsupported_document_format(turtle), _)]) :-
+test(detect_output_format_param_turtle_community_rejects,
+     [condition(\+ is_enterprise),
+      error(unsupported_document_format(turtle), _)]) :-
     detect_output_format([format=turtle], [], _).
+
+test(detect_output_format_param_unknown_rejects,
+     [error(unsupported_document_format(csv), _)]) :-
+    detect_output_format([format=csv], [], _).
 
 test(detect_output_no_accept_defaults_json) :-
     detect_output_format([], [], json).
