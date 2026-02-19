@@ -28,7 +28,7 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v12.0.3-dev`
+`v12.0.3`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
@@ -45,11 +45,12 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 **Before creating the release**, update release notes on `main`:
 
 1. Review changes since last release (see link above)
-2. Create a PR updating [`RELEASE_NOTES.md`](./RELEASE_NOTES.md):
+2. Draft a new release, preparing the tag and generate draft notes
+3. Create a PR updating [`RELEASE_NOTES.md`](./RELEASE_NOTES.md):
    - Add a new section at the top for the intended upcoming version
    - Use standard subsection headers: `Enhancements`, `Bug fixes`, `Maintenance and bug fixes`, `Other`
    - Include issue/PR references (e.g., `#1234`)
-3. Get the PR reviewed, approved, and merged
+4. Get the PR reviewed, approved, and merged
 
 ### 2. Bump Version
 
