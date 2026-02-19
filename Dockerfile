@@ -25,7 +25,7 @@ RUN make
 FROM swipl_minimal AS rust_builder_base
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN set -eux; \
-    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
+    BUILD_DEPS="git build-essential curl clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev libssl-dev pkg-config"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
@@ -83,6 +83,7 @@ FROM base AS base_enterprise
 ARG SKIP_TESTS=false
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
+COPY terminusdb-enterprise/data/context-seeds/ terminusdb-enterprise/data/context-seeds/
 RUN set -eux; \
     make DIST=enterprise; \
     [ "$SKIP_TESTS" = "true" ] || make test

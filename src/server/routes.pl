@@ -502,13 +502,17 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             ;   true),
             read_data_version_header(Request, Requested_Data_Version),
 
+            detect_output_format(Search, Request, OutputFormat),
+
             Config = config{
                          skip: Skip,
                          count: Count,
                          as_list: As_List,
                          compress: Compress_Ids,
                          unfold: Unfold,
-                         minimized: Minimized
+                         minimized: Minimized,
+                         format: OutputFormat,
+                         request: Request
                      },
 
             api_read_document_selector(
@@ -527,7 +531,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         insert_documents,
         Request,
-        (   http_read_json_stream_for_documents(Stream, Request),
+        (   http_read_document_stream(Stream, Request, InputFormat),
 
             (   memberchk(search(Search), Request)
             ->  true
@@ -554,7 +558,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           require_migration: Require_Migration,
                           allow_destructive_migration: Allow_Destructive_Migration,
                           merge_repeats: Merge_Repeats,
-                          overwrite: Overwrite
+                          overwrite: Overwrite,
+                          input_format: InputFormat
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -611,7 +616,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
     api_report_errors(
         replace_documents,
         Request,
-        (   http_read_json_stream_for_documents(Stream, Request),
+        (   http_read_document_stream(Stream, Request, InputFormat),
 
             (   memberchk(search(Search), Request)
             ->  true
@@ -633,7 +638,8 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 create : Create,
                 raw_json : Raw_JSON,
                 require_migration: Require_Migration,
-                allow_destructive_migration: Allow_Destructive_Migration
+                allow_destructive_migration: Allow_Destructive_Migration,
+                input_format: InputFormat
             },
             api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -3954,6 +3960,40 @@ read_woql_json_dict(AtomOrText, JSON) :-
     ).
 
 /*
+ * http_read_document_stream(-Stream, +Request, -InputFormat) is det.
+ *
+ * Read document request body into a seekable string stream, detecting
+ * the input format from the Content-Type header.
+ *
+ * Supported Content-Types:
+ *   application/json      → json (community)
+ *   application/ld+json   → jsonld (enterprise)
+ *   application/rdf+xml   → rdfxml (enterprise)
+ *   ...
+ *
+ * For JSON: validates and reads as before.
+ * For non-JSON formats: reads raw body; enterprise convert_input_to_json_stream
+ * hook will convert when Transaction is available.
+ */
+http_read_document_stream(Stream, Request, InputFormat) :-
+    check_content_type(Request, 'application/json, application/ld+json, or application/rdf+xml', ContentType),
+    detect_input_format(ContentType, InputFormat),
+    (   InputFormat = json
+    ->  http_read_json_stream_for_documents_body(Stream, Request)
+    ;   http_read_raw_document_stream(Stream, Request)
+    ).
+
+http_read_raw_document_stream(Stream, Request) :-
+    (   content_encoded(Request, Encoding)
+    ->  memberchk(input(Input_Stream), Request),
+        zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
+        read_string(Uncompressed_Stream, _, BufferedString),
+        close(Uncompressed_Stream)
+    ;   http_read_data(Request, BufferedString, [to(string)])
+    ),
+    open_string(BufferedString, Stream).
+
+/*
  * http_read_json_stream_for_documents(-Stream, +Request) is det.
  *
  * Read JSON request body into a seekable string stream for document operations.
@@ -3972,6 +4012,9 @@ read_woql_json_dict(AtomOrText, JSON) :-
  */
 http_read_json_stream_for_documents(Stream, Request) :-
     check_content_type_json(Request),
+    http_read_json_stream_for_documents_body(Stream, Request).
+
+http_read_json_stream_for_documents_body(Stream, Request) :-
     (   content_encoded(Request, Encoding)
     ->  % Compressed request - decompress first
         memberchk(input(Input_Stream), Request),

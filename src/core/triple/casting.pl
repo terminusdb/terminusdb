@@ -26,6 +26,7 @@
  * Per XSD decimal specification: 20 digits of precision.
  * This constant is used for rational-to-string conversions.
  */
+:- multifile decimal_precision/1.
 decimal_precision(20).
 
 :- use_module(core(query/jsonld)). % dubious. we should not be importing query stuff here.

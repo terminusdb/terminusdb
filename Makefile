@@ -94,9 +94,11 @@ lint-mocha:
 lint-mocha-fix:
 	sh -c "cd tests; npx npm run lint"
 
+# The 1.34.7 version is chosen as the others have a React/styled components
+# dependency that is not resolved by npx, making it an issue using npx
 .PHONY: lint-openapi
 lint-openapi:
-	sh -c "npx @redocly/cli lint docs/openapi.yaml --skip-rule no-server-example.com"
+	sh -c "npx @redocly/cli@1.34.7 lint docs/openapi.yaml --skip-rule no-server-example.com"
 
 # Build the dylib.
 .PHONY: rust
