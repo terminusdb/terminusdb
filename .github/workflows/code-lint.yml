@@ -53,7 +53,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Lint
-        run: npx @redocly/cli lint docs/openapi.yaml
+        run: make lint-openapi
 
   clippy:
     name: Rust Clippy
