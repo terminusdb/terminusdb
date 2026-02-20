@@ -1,7 +1,7 @@
 const api = require('./api')
 const { Params } = require('./params.js')
 const util = require('./util.js')
-const { optimizeDatabase, optimizeSystem } = require('./optimize.js')
+const { optimizeDatabase } = require('./optimize.js')
 
 function create (agent, params) {
   params = new Params(params)
@@ -116,6 +116,5 @@ module.exports = {
   delete: delete_,
   optimize: {
     optimizeDatabase,
-    optimizeSystem,
   },
 }

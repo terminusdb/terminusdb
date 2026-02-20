@@ -52,36 +52,6 @@ async function optimizeDescriptor (agent, path) {
 }
 
 /**
- * Optimize the system database
- * @param {Object} agent - Authenticated agent instance
- * @returns {Promise} Resolves when optimization completes
- */
-async function optimizeSystem (agent) {
-  if (!agent) {
-    throw new Error('Agent is required for system optimization')
-  }
-
-  const optimizePath = '/api/optimize/_system'
-
-  try {
-    const response = await agent.post(optimizePath).send({})
-
-    if (response.status !== 200) {
-      console.warn(`System optimization warning: received status ${response.status}`)
-    }
-
-    if (response.body && response.body['api:status'] === 'api:success') {
-      console.log('🔧 System optimized\n')
-    } else {
-      console.warn('System optimization may not have succeeded:', response.body)
-    }
-  } catch (error) {
-    console.warn('System optimization failed:', error.message)
-    // Don't throw - optimization failures shouldn't break tests
-  }
-}
-
-/**
  * Optimize a repository
  * @param {Object} agent - Authenticated agent instance
  * @param {string} path - Repository path (e.g., 'admin/testdb')
@@ -114,6 +84,5 @@ async function optimizeRepository (agent, path) {
 
 module.exports = {
   optimizeDatabase,
-  optimizeSystem,
   optimizeRepository,
 }
