@@ -139,6 +139,15 @@
               api_get_documents/4,
               api_get_document/5,
               call_catch_document_mutation/2,
+              detect_input_format/2,
+              detect_output_format/3,
+              document_input_format/1,
+              document_output_format/1,
+              convert_input_to_json_stream/4,
+              document_stream_headers/3,
+              document_stream_start/3,
+              document_stream_write/4,
+              document_stream_end/2,
 
               % api_user_organizations.pl
               user_organizations/3,

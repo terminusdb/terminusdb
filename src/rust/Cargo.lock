@@ -484,7 +484,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1847,7 +1847,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2147,13 +2147,13 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix 1.1.3",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "terminus-store"
-version = "0.21.6"
-source = "git+https://github.com/terminusdb-org/terminusdb-store#7d1dda1be06a95756f999e34ea8cc2f387e15803"
+version = "0.21.7"
+source = "git+https://github.com/terminusdb-org/terminusdb-store#5c36fed548941ac7c1c75d0725696a52fdb3ba18"
 dependencies = [
  "async-trait",
  "base64 0.13.1",

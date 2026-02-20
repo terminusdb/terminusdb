@@ -7,6 +7,9 @@ publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+rollup_metadata_experimental = ["terminus-store/rollup_metadata_experimental"]
+
 [dependencies]
 swipl = {version="0.3.16", features=["serde"]}
 #terminus-store = {version="0.21.5", features=[]}
