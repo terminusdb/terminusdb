@@ -2836,6 +2836,12 @@ generic_exception_jsonld(document_doctype_not_allowed, JSON) :-
     JSON = _{'@type' : 'api:DocumentDoctypeNotAllowedErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : "DOCTYPE declarations are not allowed in document input"}.
+generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
+    format(user_error, '[ERROR] Document format error (~w): ~w~n', [Format, Message]),
+    format(string(Msg), "Invalid ~w document", [Format]),
+    JSON = _{'@type' : 'api:InvalidDocumentFormatError',
+             'api:status' : 'api:failure',
+             'api:message' : Msg}.
 generic_exception_jsonld(Error, JSON) :-
     % Catch-all for unhandled errors - log the full error but return sanitized message
     % This prevents information leakage in 500 errors
