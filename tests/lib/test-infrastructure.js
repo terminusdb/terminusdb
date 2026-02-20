@@ -3,8 +3,6 @@
  * Provides standardized before/after optimization and other test utilities
  */
 
-const { optimizeSystem } = require('./optimize.js')
-
 /**
  * Generic before hook for tests that create databases
  * Automatically handles database creation and optimization
@@ -50,9 +48,6 @@ async function databaseTestAfter (agent) {
 async function systemTestBefore (agent, options = {}) {
   // Custom before logic can be added here
   await customBeforeLogic(agent, options)
-
-  // Optimize system for consistent test performance
-  await optimizeSystem(agent)
 
   // Additional system setup logic can be added here
   await postSystemSetupLogic(agent, options)

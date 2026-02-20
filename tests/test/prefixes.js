@@ -1,6 +1,5 @@
 const { expect } = require('chai')
 const { Agent, api, db } = require('../lib')
-const { optimizeSystem } = require('../lib/optimize')
 
 describe('prefixes', function () {
   describe('no-auth', function () {
@@ -8,8 +7,6 @@ describe('prefixes', function () {
 
     before(async function () {
       agent = new Agent()
-      // Optimize system for consistent test performance
-      await optimizeSystem(agent)
     })
 
     describe('fails create with bad prefixes', function () {
