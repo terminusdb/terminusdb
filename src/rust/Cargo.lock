@@ -2153,7 +2153,6 @@ dependencies = [
 [[package]]
 name = "terminus-store"
 version = "0.21.7"
-source = "git+https://github.com/terminusdb-org/terminusdb-store#5c36fed548941ac7c1c75d0725696a52fdb3ba18"
 dependencies = [
  "async-trait",
  "base64 0.13.1",

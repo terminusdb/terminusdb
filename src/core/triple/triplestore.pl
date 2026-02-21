@@ -10,6 +10,12 @@
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
+              xrdf_value_range/6,
+              xquad_value_range/7,
+              xrdf_value_next/5,
+              xquad_value_next/6,
+              xrdf_value_previous/5,
+              xquad_value_previous/6,
               insert/5,
               delete/5,
               delete_all/1,
@@ -371,6 +377,80 @@ unlink_object(Gs, ID) :-
         delete(G, Subject, Predicate, ID, _)
     ).
 
+xrdf_value_range(Gs, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_range(Gs, G, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xrdf_value_next(Gs, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_next(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_next(Gs, G, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_next(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xrdf_value_previous(Gs, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_previous(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_previous(Gs, G, X, Y, Ref, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Ref, RefS),
+    triple_value_previous(Layer, A, B, RefS, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
 pre_convert_node(X,A) :-
     (   nonvar(X)
     ->  (   X = id(_)
@@ -399,3 +479,61 @@ xrdf_db(Layer,X,Y,Z) :-
     post_convert_node(A,X),
     post_convert_node(B,Y),
     storage_object(S,Z).
+
+:- begin_tests(triplestore_value_range).
+
+test(xrdf_value_range_string_range) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Gs = [rwo{read: Layer, write: _}],
+    Low = "beta"^^'http://www.w3.org/2001/XMLSchema#string',
+    High = "gamma"^^'http://www.w3.org/2001/XMLSchema#string',
+    findall(S, xrdf_value_range(Gs, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = [doc2, doc4].
+
+test(xrdf_value_range_empty_when_out_of_range, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Gs = [rwo{read: Layer, write: _}],
+    Low = "x"^^'http://www.w3.org/2001/XMLSchema#string',
+    High = "z"^^'http://www.w3.org/2001/XMLSchema#string',
+    xrdf_value_range(Gs, Low, High, _, _, _).
+
+test(xrdf_value_range_numeric_int) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "s1", "val", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s2", "val", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s3", "val", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Gs = [rwo{read: Layer, write: _}],
+    Low = 15^^'http://www.w3.org/2001/XMLSchema#int',
+    High = 25^^'http://www.w3.org/2001/XMLSchema#int',
+    findall(S, xrdf_value_range(Gs, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = [s2].
+
+test(xquad_value_range_returns_graph) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    G = rwo{read: Layer, write: _},
+    Gs = [G],
+    Low = "alpha"^^'http://www.w3.org/2001/XMLSchema#string',
+    High = "gamma"^^'http://www.w3.org/2001/XMLSchema#string',
+    findall(GOut-S, xquad_value_range(Gs, GOut, Low, High, S, _, _), Results),
+    length(Results, 3),
+    forall(member(GR-_, Results), get_dict(read, GR, Layer)).
+
+:- end_tests(triplestore_value_range).

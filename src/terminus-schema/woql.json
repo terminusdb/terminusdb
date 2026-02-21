@@ -327,6 +327,92 @@
 }
 {
   "@documentation": {
+    "@comment":"Specify an edge pattern with a half-open value range [low, high) on the object. Returns triples whose object value falls within the range.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "high":"The exclusive upper bound of the value range.",
+      "low":"The inclusive lower bound of the value range.",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleSlice",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "low", "high", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+", "+", "+" ],
+      "types": ["node", "node", "value", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "high":"Value",
+  "low":"Value",
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Find the next object value after a reference for a given subject-predicate pair. When object is bound and next is free, finds the smallest next value greater than object. When next is bound and object is free, finds the largest object value less than next.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "next":"The next object value or the reference upper bound.",
+      "object":"The current object value or the result of lookup by next.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleNext",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "next", "optional(graph)" ],
+      "mode": ["+", "+", "?", "?", "+" ],
+      "types": ["node", "node", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "next":"Value",
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
+    "@comment":"Find the previous object value before a reference for a given subject-predicate pair. When object is bound and previous is free, finds the largest previous value less than object. When previous is bound and object is free, finds the smallest object value greater than previous.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"The current object value or the result of lookup by previous.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "previous":"The previous object value or the reference lower bound.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TriplePrevious",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "previous", "optional(graph)" ],
+      "mode": ["+", "+", "?", "?", "+" ],
+      "types": ["node", "node", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object":"Value",
+  "predicate":"NodeValue",
+  "previous":"Value",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
     "@comment":"Specify an edge to add to the graph.",
     "@properties": {
       "graph":"An optional graph (either 'instance' or 'schema')",

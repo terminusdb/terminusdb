@@ -878,6 +878,27 @@ find_resources(t(_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
     resolve_filter(Type, DRG),
     Write = [],
     Read = [resource(Collection,DRG)].
+find_resources(triple_slice(_,_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_slice(_,_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_next(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_next(_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_previous(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_previous(_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
 find_resources(path(_,_,_), Collection, DRG, _DWG, Read, Write) :-
     Write = [],
     Read = [resource(Collection,DRG)].
@@ -1263,6 +1284,76 @@ compile_wf(t(X,P,Y,G),Goal) -->
     },
     update(filter, Old_Filter, Filter),
     compile_wf(t(X,P,Y), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_slice(X,P,Y,Low,High),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Low,LowE),
+    resolve(High,HighE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_slice(X,P,Y,Low,High,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_slice(X,P,Y,Low,High), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_next(X,P,Y,Next),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Next,NextE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_next(XE, PE, YE, NextE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_next(X,P,Y,Next,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_next(X,P,Y,Next), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_previous(X,P,Y,Prev),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Prev,PrevE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_previous(X,P,Y,Prev,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_previous(X,P,Y,Prev), Goal),
     update(filter, _Filter, Old_Filter).
 compile_wf(path(X,Pattern,Y),Goal) -->
     compile_wf(path(X,Pattern,Y,false),Goal).
@@ -2448,6 +2539,88 @@ filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Obj
     compile_schema_predicate(PE, Transaction_Object, PS),
     compile_schema_object(YE, Transaction_Object, YS),
     Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Search_1 = [xrdf_value_range(Transaction_Object.instance_objects, LowE, HighE, XI, PI, YE)]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Search_2 = [xrdf_value_range(Transaction_Object.schema_objects, LowE, HighE, XS, PS, YE)]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = xrdf_value_range((Transaction_Object.instance_objects), LowE, HighE, XI, PI, YE).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = xrdf_value_range((Transaction_Object.schema_objects), LowE, HighE, XS, PS, YE).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Gs_I = Transaction_Object.instance_objects,
+        Search_1 = [(ground(YE) -> xrdf_value_next(Gs_I, XI, PI, YE, NextE)
+                     ; xrdf_value_previous(Gs_I, XI, PI, NextE, YE))]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Gs_S = Transaction_Object.schema_objects,
+        Search_2 = [(ground(YE) -> xrdf_value_next(Gs_S, XS, PS, YE, NextE)
+                     ; xrdf_value_previous(Gs_S, XS, PS, NextE, YE))]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Gs = Transaction_Object.instance_objects,
+    Goal = (ground(YE) -> xrdf_value_next(Gs, XI, PI, YE, NextE)
+            ; xrdf_value_previous(Gs, XI, PI, NextE, YE)).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Gs = Transaction_Object.schema_objects,
+    Goal = (ground(YE) -> xrdf_value_next(Gs, XS, PS, YE, NextE)
+            ; xrdf_value_previous(Gs, XS, PS, NextE, YE)).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Gs_I = Transaction_Object.instance_objects,
+        Search_1 = [(ground(YE) -> xrdf_value_previous(Gs_I, XI, PI, YE, PrevE)
+                     ; xrdf_value_next(Gs_I, XI, PI, PrevE, YE))]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Gs_S = Transaction_Object.schema_objects,
+        Search_2 = [(ground(YE) -> xrdf_value_previous(Gs_S, XS, PS, YE, PrevE)
+                     ; xrdf_value_next(Gs_S, XS, PS, PrevE, YE))]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Gs = Transaction_Object.instance_objects,
+    Goal = (ground(YE) -> xrdf_value_previous(Gs, XI, PI, YE, PrevE)
+            ; xrdf_value_next(Gs, XI, PI, PrevE, YE)).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Gs = Transaction_Object.schema_objects,
+    Goal = (ground(YE) -> xrdf_value_previous(Gs, XS, PS, YE, PrevE)
+            ; xrdf_value_next(Gs, XS, PS, PrevE, YE)).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance
@@ -6098,6 +6271,190 @@ test(less_than_mixed_uri_representation, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [_] = (JSON.bindings).
+
+test(triple_slice_string_range, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc2, label, "beta"^^xsd:string),
+                      insert(doc3, label, "gamma"^^xsd:string),
+                      insert(doc4, label, "delta"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), label, v(o),
+                             "beta"^^xsd:string,
+                             "gamma"^^xsd:string)),
+            Results),
+    length(Results, 2).
+
+test(triple_slice_numeric_int_range, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(s1, reading, 10^^xsd:integer),
+                      insert(s2, reading, 20^^xsd:integer),
+                      insert(s3, reading, 30^^xsd:integer),
+                      insert(s4, reading, 40^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), reading, v(o),
+                             15^^xsd:integer,
+                             35^^xsd:integer)),
+            Results),
+    length(Results, 2).
+
+test(triple_slice_empty_when_out_of_range, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State)),
+         fail
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, insert(doc1, label, "alpha"^^xsd:string)),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        triple_slice(v(x), label, v(o),
+                     "x"^^xsd:string,
+                     "z"^^xsd:string)).
+
+test(triple_slice_half_open_excludes_high, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc2, label, "beta"^^xsd:string),
+                      insert(doc3, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), label, v(o),
+                             "alpha"^^xsd:string,
+                             "gamma"^^xsd:string)),
+            Results),
+    length(Results, 2).
+
+test(triple_next_finds_next_value, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc1, label, "beta"^^xsd:string),
+                      insert(doc1, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        triple_next(doc1, label, "alpha"^^xsd:string, v(next))),
+    once(ask(Descriptor,
+             (triple_next(doc1, label, "alpha"^^xsd:string, v(n)),
+              v(n) = "beta"^^xsd:string))).
+
+test(triple_next_mode_b_next_bound, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, score, 10^^xsd:integer),
+                      insert(doc1, score, 20^^xsd:integer),
+                      insert(doc1, score, 30^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (triple_next(doc1, score, v(o), 30^^xsd:integer),
+              v(o) = 20^^xsd:integer))).
+
+test(triple_previous_finds_previous_value, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc1, label, "beta"^^xsd:string),
+                      insert(doc1, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (triple_previous(doc1, label, "gamma"^^xsd:string, v(prev)),
+              v(prev) = "beta"^^xsd:string))).
+
+test(triple_previous_mode_b_prev_bound, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, score, 10^^xsd:integer),
+                      insert(doc1, score, 20^^xsd:integer),
+                      insert(doc1, score, 30^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (triple_previous(doc1, score, v(o), 10^^xsd:integer),
+              v(o) = 20^^xsd:integer))).
 
 :- end_tests(woql).
 

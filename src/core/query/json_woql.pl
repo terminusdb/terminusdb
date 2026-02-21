@@ -379,6 +379,97 @@ json_type_to_woql_ast('Triple',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Object,WQC,[object
                                        |Path]),
     WOQL = t(WQA,WQB,WQC).
+json_type_to_woql_ast('TripleSlice',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      low : Low,
+      high : High,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate|Path]),
+    json_value_to_woql_ast(Object,WQC,[object|Path]),
+    json_value_to_woql_ast(Low,WQL,[low|Path]),
+    json_value_to_woql_ast(High,WQH,[high|Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = triple_slice(WQA,WQB,WQC,WQL,WQH,Graph_String).
+json_type_to_woql_ast('TripleSlice',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      low : Low,
+      high : High
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate|Path]),
+    json_value_to_woql_ast(Object,WQC,[object|Path]),
+    json_value_to_woql_ast(Low,WQL,[low|Path]),
+    json_value_to_woql_ast(High,WQH,[high|Path]),
+    WOQL = triple_slice(WQA,WQB,WQC,WQL,WQH).
+json_type_to_woql_ast('TripleNext',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      next : Next,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate|Path]),
+    json_value_to_woql_ast(Object,WQC,[object|Path]),
+    json_value_to_woql_ast(Next,WQN,[next|Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = triple_next(WQA,WQB,WQC,WQN,Graph_String).
+json_type_to_woql_ast('TripleNext',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      next : Next
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate|Path]),
+    json_value_to_woql_ast(Object,WQC,[object|Path]),
+    json_value_to_woql_ast(Next,WQN,[next|Path]),
+    WOQL = triple_next(WQA,WQB,WQC,WQN).
+json_type_to_woql_ast('TriplePrevious',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      previous : Previous,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate|Path]),
+    json_value_to_woql_ast(Object,WQC,[object|Path]),
+    json_value_to_woql_ast(Previous,WQP,[previous|Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = triple_previous(WQA,WQB,WQC,WQP,Graph_String).
+json_type_to_woql_ast('TriplePrevious',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      previous : Previous
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate|Path]),
+    json_value_to_woql_ast(Object,WQC,[object|Path]),
+    json_value_to_woql_ast(Previous,WQP,[previous|Path]),
+    WOQL = triple_previous(WQA,WQB,WQC,WQP).
 json_type_to_woql_ast('Subsumption',JSON,WOQL,Path) :-
     _{ child : Class_A,
        parent : Class_B
