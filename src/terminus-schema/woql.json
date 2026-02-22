@@ -1133,6 +1133,84 @@
 }
 {
   "@documentation": {
+    "@comment":"Computes the first day of the month for a given year-month. YearMonth must be ground.",
+    "@properties": {"year_month":"A gYearMonth value (e.g. 2024-01).", "date":"The resulting xsd:date for the first day of the month."}
+  },
+  "@id":"MonthStartDate",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["year_month", "date"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "year_month":"DataValue",
+  "date":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the last day of the month for a given year-month. Handles leap years correctly. YearMonth must be ground.",
+    "@properties": {"year_month":"A gYearMonth value (e.g. 2024-02).", "date":"The resulting xsd:date for the last day of the month."}
+  },
+  "@id":"MonthEndDate",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["year_month", "date"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "year_month":"DataValue",
+  "date":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generator: produces every first-of-month date in the half-open range [Start, End).",
+    "@properties": {"date":"The generated first-of-month date.", "start":"The inclusive start date.", "end":"The exclusive end date."}
+  },
+  "@id":"MonthStartDates",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "start", "end"],
+      "mode": ["?", "+", "+"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Generator: produces every last-of-month date in the half-open range [Start, End).",
+    "@properties": {"date":"The generated last-of-month date.", "start":"The inclusive start date.", "end":"The exclusive end date."}
+  },
+  "@id":"MonthEndDates",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "start", "end"],
+      "mode": ["?", "+", "+"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },

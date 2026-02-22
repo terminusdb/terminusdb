@@ -626,4 +626,142 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
     })
   })
+
+  describe('MonthStartDate', function () {
+    it('computes first day of January 2024', async function () {
+      const query = {
+        '@type': 'MonthStartDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2024-01' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('2024-01-01')
+    })
+
+    it('computes first day of December 2023', async function () {
+      const query = {
+        '@type': 'MonthStartDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2023-12' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('2023-12-01')
+    })
+  })
+
+  describe('MonthEndDate', function () {
+    it('computes last day of January (31 days)', async function () {
+      const query = {
+        '@type': 'MonthEndDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2024-01' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('2024-01-31')
+    })
+
+    it('handles leap year February: 2024-02 -> 2024-02-29', async function () {
+      const query = {
+        '@type': 'MonthEndDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2024-02' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('2024-02-29')
+    })
+
+    it('handles non-leap year February: 2023-02 -> 2023-02-28', async function () {
+      const query = {
+        '@type': 'MonthEndDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2023-02' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('2023-02-28')
+    })
+
+    it('handles century leap year: 2000-02 -> 2000-02-29', async function () {
+      const query = {
+        '@type': 'MonthEndDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2000-02' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('2000-02-29')
+    })
+
+    it('handles century non-leap year: 1900-02 -> 1900-02-28', async function () {
+      const query = {
+        '@type': 'MonthEndDate',
+        year_month: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '1900-02' } },
+        date: { '@type': 'DataValue', variable: 'd' },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('1900-02-28')
+    })
+  })
+
+  describe('MonthStartDates (generator)', function () {
+    it('generates 12 first-of-month dates in FY2024', async function () {
+      const query = {
+        '@type': 'MonthStartDates',
+        date: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2024-01-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(12)
+      expect(r.body.bindings[0].d['@value']).to.equal('2024-01-01')
+      expect(r.body.bindings[11].d['@value']).to.equal('2024-12-01')
+    })
+
+    it('generates 3 first-of-month dates in a quarter', async function () {
+      const query = {
+        '@type': 'MonthStartDates',
+        date: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2024-04-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2024-07-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(3)
+      const values = r.body.bindings.map((b) => b.d['@value'])
+      expect(values).to.deep.equal(['2024-04-01', '2024-05-01', '2024-06-01'])
+    })
+  })
+
+  describe('MonthEndDates (generator)', function () {
+    it('generates 12 last-of-month dates in FY2024', async function () {
+      const query = {
+        '@type': 'MonthEndDates',
+        date: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2024-01-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(12)
+      expect(r.body.bindings[0].d['@value']).to.equal('2024-01-31')
+      expect(r.body.bindings[1].d['@value']).to.equal('2024-02-29')
+      expect(r.body.bindings[11].d['@value']).to.equal('2024-12-31')
+    })
+
+    it('generates correct Feb end dates across leap/non-leap boundary', async function () {
+      const query = {
+        '@type': 'MonthEndDates',
+        date: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2023-01-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.have.lengthOf(24)
+      expect(r.body.bindings[1].d['@value']).to.equal('2023-02-28')
+      expect(r.body.bindings[13].d['@value']).to.equal('2024-02-29')
+    })
+  })
 })

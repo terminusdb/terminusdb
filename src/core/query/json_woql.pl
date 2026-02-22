@@ -778,6 +778,38 @@ json_type_to_woql_ast('Sequence',JSON,WOQL,Path) :-
     ;   WCount = none
     ),
     WOQL = sequence(WV,WS,WE,WStep,WCount).
+json_type_to_woql_ast('MonthStartDate',JSON,WOQL,Path) :-
+    _{year_month : YM,
+      date : D
+     } :< JSON,
+    json_value_to_woql_ast(YM,WYM,[year_month|Path]),
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    WOQL = month_start_date(WYM,WD).
+json_type_to_woql_ast('MonthEndDate',JSON,WOQL,Path) :-
+    _{year_month : YM,
+      date : D
+     } :< JSON,
+    json_value_to_woql_ast(YM,WYM,[year_month|Path]),
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    WOQL = month_end_date(WYM,WD).
+json_type_to_woql_ast('MonthStartDates',JSON,WOQL,Path) :-
+    _{date : D,
+      start : S,
+      end : E
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(S,WS,[start|Path]),
+    json_value_to_woql_ast(E,WE,['end'|Path]),
+    WOQL = month_start_dates(WD,WS,WE).
+json_type_to_woql_ast('MonthEndDates',JSON,WOQL,Path) :-
+    _{date : D,
+      start : S,
+      end : E
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(S,WS,[start|Path]),
+    json_value_to_woql_ast(E,WE,['end'|Path]),
+    WOQL = month_end_dates(WD,WS,WE).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

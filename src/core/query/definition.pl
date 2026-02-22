@@ -349,6 +349,34 @@ definition(
         types: [data_value,data_value,data_value,data_value,data_value]
     }).
 definition(
+    month_start_date{
+        name: 'MonthStartDate',
+        fields: [year_month,date],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_end_date{
+        name: 'MonthEndDate',
+        fields: [year_month,date],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_start_dates{
+        name: 'MonthStartDates',
+        fields: [date,start,'end'],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    month_end_dates{
+        name: 'MonthEndDates',
+        fields: [date,start,'end'],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -642,6 +670,10 @@ operator(_>=_).
 operator(_=<_).
 operator(in_range(_,_,_)).
 operator(sequence(_,_,_,_,_)).
+operator(month_start_date(_,_)).
+operator(month_end_date(_,_)).
+operator(month_start_dates(_,_,_)).
+operator(month_end_dates(_,_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

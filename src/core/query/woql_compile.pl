@@ -853,6 +853,104 @@ gen_numeric_sequence(Val^^Type, Current, End, Step, Type) :-
     ).
 
 /*
+ * woql_month_start_date(YearMonth, Date) is semidet.
+ *
+ * Computes the first day of the month for a given xsd:gYearMonth.
+ * If Date is bound, validates it matches; if unbound, unifies.
+ */
+woql_month_start_date(YearMonth, Date) :-
+    YearMonth = gyear_month(Y,M,Offset)^^'http://www.w3.org/2001/XMLSchema#gYearMonth',
+    Expected = date(Y,M,1,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    (   nonvar(Date)
+    ->  Date = Expected
+    ;   Date = Expected
+    ).
+
+/*
+ * woql_month_end_date(YearMonth, Date) is semidet.
+ *
+ * Computes the last day of the month for a given xsd:gYearMonth.
+ * Handles leap years correctly.
+ */
+woql_month_end_date(YearMonth, Date) :-
+    YearMonth = gyear_month(Y,M,Offset)^^'http://www.w3.org/2001/XMLSchema#gYearMonth',
+    days_in_month(Y, M, Days),
+    Expected = date(Y,M,Days,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    (   nonvar(Date)
+    ->  Date = Expected
+    ;   Date = Expected
+    ).
+
+/*
+ * woql_month_start_dates(Date, Start, End) is nondet.
+ *
+ * Generator: produces every first-of-month date in [Start, End).
+ */
+woql_month_start_dates(Date, Start, End) :-
+    Start = date(SY,SM,_,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    gen_month_start_dates(Date, SY, SM, EY, EM, Offset).
+
+gen_month_start_dates(Date, Y, M, EY, EM, Offset) :-
+    (   Y < EY
+    ;   Y =:= EY, M =< EM
+    ),
+    Candidate = date(Y,M,1,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    woql_less(Candidate, End),
+    (   Date = Candidate
+    ;   next_month(Y, M, NY, NM),
+        gen_month_start_dates(Date, NY, NM, EY, EM, Offset)
+    ).
+
+/*
+ * woql_month_end_dates(Date, Start, End) is nondet.
+ *
+ * Generator: produces every last-of-month date in [Start, End).
+ */
+woql_month_end_dates(Date, Start, End) :-
+    Start = date(SY,SM,_,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    gen_month_end_dates(Date, SY, SM, EY, EM, Offset).
+
+gen_month_end_dates(Date, Y, M, EY, EM, Offset) :-
+    (   Y < EY
+    ;   Y =:= EY, M =< EM
+    ),
+    days_in_month(Y, M, Days),
+    Candidate = date(Y,M,Days,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    woql_less(Candidate, End),
+    (   Date = Candidate
+    ;   next_month(Y, M, NY, NM),
+        gen_month_end_dates(Date, NY, NM, EY, EM, Offset)
+    ).
+
+next_month(Y, 12, NY, 1) :- !, NY is Y + 1.
+next_month(Y, M, Y, NM) :- NM is M + 1.
+
+is_leap_year(Y) :-
+    0 =:= Y mod 4,
+    (   0 =\= Y mod 100
+    ->  true
+    ;   0 =:= Y mod 400
+    ).
+
+days_in_month(_, 1, 31).
+days_in_month(Y, 2, 29) :- is_leap_year(Y), !.
+days_in_month(_, 2, 28).
+days_in_month(_, 3, 31).
+days_in_month(_, 4, 30).
+days_in_month(_, 5, 31).
+days_in_month(_, 6, 30).
+days_in_month(_, 7, 31).
+days_in_month(_, 8, 31).
+days_in_month(_, 9, 30).
+days_in_month(_, 10, 31).
+days_in_month(_, 11, 30).
+days_in_month(_, 12, 31).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1086,6 +1184,10 @@ find_resources('>='(_,_),_, _, _, [], []).
 find_resources('=<'(_,_),_, _, _, [], []).
 find_resources(in_range(_,_,_),_, _, _, [], []).
 find_resources(sequence(_,_,_,_,_),_, _, _, [], []).
+find_resources(month_start_date(_,_),_, _, _, [], []).
+find_resources(month_end_date(_,_),_, _, _, [], []).
+find_resources(month_start_dates(_,_,_),_, _, _, [], []).
+find_resources(month_end_dates(_,_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1284,6 +1386,20 @@ compile_wf(sequence(V,S,E,Step,Count),woql_sequence(VE,SE,EE,StepE,CountE)) -->
     ->  resolve(Count,CountE)
     ;   { CountE = none }
     ).
+compile_wf(month_start_date(YM,D),woql_month_start_date(YME,DE)) -->
+    resolve(YM,YME),
+    resolve(D,DE).
+compile_wf(month_end_date(YM,D),woql_month_end_date(YME,DE)) -->
+    resolve(YM,YME),
+    resolve(D,DE).
+compile_wf(month_start_dates(D,S,E),woql_month_start_dates(DE,SE,EE)) -->
+    resolve(D,DE),
+    resolve(S,SE),
+    resolve(E,EE).
+compile_wf(month_end_dates(D,S,E),woql_month_end_dates(DE,SE,EE)) -->
+    resolve(D,DE),
+    resolve(S,SE),
+    resolve(E,EE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -6555,6 +6671,98 @@ test(sequence_single_value, [
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 1).
+
+test(month_start_date_january, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthStartDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-01"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2024-01-01"}.
+
+test(month_end_date_january, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-01"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2024-01-31"}.
+
+test(month_end_date_leap_february, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-02"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2024-02-29"}.
+
+test(month_end_date_nonleap_february, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2023-02"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2023-02-28"}.
+
+test(month_start_dates_fy2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthStartDates",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 12).
+
+test(month_end_dates_fy2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDates",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 12).
 
 :- end_tests(woql).
 
