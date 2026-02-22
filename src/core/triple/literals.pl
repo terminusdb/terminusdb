@@ -8,6 +8,7 @@
               storage_object/2,
               date_string/2,
               date_time_string/2,
+              remove_date_time_offset/9,
               time_string/2,
               duration_string/2,
               gyear_string/2,

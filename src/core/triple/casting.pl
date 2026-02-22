@@ -6,6 +6,8 @@
               decimal_precision/1
           ]).
 
+:- discontiguous typecast_switch/5.
+
 /** <module> Casting
  *
  * Utilities for casting between types for I/O.
@@ -318,6 +320,30 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
         date_string(D2,Val2)
     ->  format(string(S), '[~w,~w]', [Val1,Val2])
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
+%%% xsd:string => xdd:dateTimeInterval
+typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
+    !,
+    (   atom_codes(Val, Codes), phrase(dateTimeInterval(X,Y),Codes)
+    ->  normalise_interval_component(X, NX),
+        normalise_interval_component(Y, NY),
+        Cast = date_time_interval(NX,NY)
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
+%%% xdd:dateTimeInterval => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    (   is_date_time_interval(Val),
+        Val = date_time_interval(C1,C2),
+        interval_component_string(C1,Val1),
+        interval_component_string(C2,Val2)
+    ->  format(string(S), '[~w,~w)', [Val1,Val2])
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
+
+normalise_interval_component(date(Y,M,D,_Offset), date(Y,M,D,0)) :- !.
+normalise_interval_component(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
+    remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
+
+interval_component_string(date(Y,M,D,Offset), S) :- !, date_string(date(Y,M,D,Offset), S).
+interval_component_string(DT, S) :- date_time_string(DT, S).
 %%% xsd:string => xdd:integerRange
 typecast_switch('http://terminusdb.com/schema/xdd#integerRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#integerRange') :-
     !,

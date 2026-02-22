@@ -1133,6 +1133,66 @@
 }
 {
   "@documentation": {
+    "@comment":"Constructs or deconstructs a half-open xdd:dateTimeInterval [start, end) from two date or dateTime endpoints. Bidirectional: given start+end computes interval, given interval extracts start+end. Endpoints are stored in UTC canonical form for correct lexical ordering.",
+    "@properties": {"start":"Inclusive start date or dateTime.", "end":"Exclusive end date or dateTime.", "interval":"The xdd:dateTimeInterval value."}
+  },
+  "@id":"Interval",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "end", "interval"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "start":"DataValue",
+  "end":"DataValue",
+  "interval":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Relates an xdd:dateTimeInterval to its start endpoint and precise xsd:duration. Bidirectional: given interval extracts start+duration, given start+duration computes interval. Duration is a precise day/time count.",
+    "@properties": {"start":"Inclusive start date or dateTime.", "duration":"The xsd:duration between start and end.", "interval":"The xdd:dateTimeInterval value."}
+  },
+  "@id":"IntervalStartDuration",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "duration", "interval"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "start":"DataValue",
+  "duration":"DataValue",
+  "interval":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Relates an xdd:dateTimeInterval to its end endpoint and precise xsd:duration. Bidirectional: given interval extracts duration+end, given duration+end computes interval. Duration is a precise day/time count.",
+    "@properties": {"duration":"The xsd:duration between start and end.", "end":"Exclusive end date or dateTime.", "interval":"The xdd:dateTimeInterval value."}
+  },
+  "@id":"IntervalDurationEnd",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["duration", "end", "interval"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "duration":"DataValue",
+  "end":"DataValue",
+  "interval":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"Computes the calendar day after the given date. Bidirectional: given date computes next, given next computes date.",
     "@properties": {"date":"The input date.", "next":"The next calendar day."}
   },

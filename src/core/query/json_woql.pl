@@ -778,6 +778,33 @@ json_type_to_woql_ast('Sequence',JSON,WOQL,Path) :-
     ;   WCount = none
     ),
     WOQL = sequence(WV,WS,WE,WStep,WCount).
+json_type_to_woql_ast('Interval',JSON,WOQL,Path) :-
+    _{start : S,
+      'end' : E,
+      interval : I
+     } :< JSON,
+    json_value_to_woql_ast(S,WS,[start|Path]),
+    json_value_to_woql_ast(E,WE,['end'|Path]),
+    json_value_to_woql_ast(I,WI,[interval|Path]),
+    WOQL = interval(WS,WE,WI).
+json_type_to_woql_ast('IntervalStartDuration',JSON,WOQL,Path) :-
+    _{start : S,
+      duration : D,
+      interval : I
+     } :< JSON,
+    json_value_to_woql_ast(S,WS,[start|Path]),
+    json_value_to_woql_ast(D,WD,[duration|Path]),
+    json_value_to_woql_ast(I,WI,[interval|Path]),
+    WOQL = interval_start_duration(WS,WD,WI).
+json_type_to_woql_ast('IntervalDurationEnd',JSON,WOQL,Path) :-
+    _{duration : D,
+      'end' : E,
+      interval : I
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[duration|Path]),
+    json_value_to_woql_ast(E,WE,['end'|Path]),
+    json_value_to_woql_ast(I,WI,[interval|Path]),
+    WOQL = interval_duration_end(WD,WE,WI).
 json_type_to_woql_ast('DayAfter',JSON,WOQL,Path) :-
     _{date : D,
       next : N

@@ -905,6 +905,153 @@ describe('woql-comparison', function () {
     })
   })
 
+  describe('Interval (xdd:dateTimeInterval)', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function intervalVal (v) { return { '@type': 'xdd:dateTimeInterval', '@value': v } }
+
+    it('constructs interval from start+end dates', async function () {
+      const q = {
+        '@type': 'Interval',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        end: { '@type': 'DataValue', data: datVal('2025-04-01') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:i']['@type']).to.equal('xdd:dateTimeInterval')
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('[2025-01-01,2025-04-01)')
+    })
+    it('deconstructs interval into start+end dates', async function () {
+      const q = {
+        '@type': 'Interval',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        end: { '@type': 'DataValue', variable: 'v:e' },
+        interval: { '@type': 'DataValue', data: intervalVal('[2025-01-01,2025-04-01)') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01')
+      expect(r.body.bindings[0]['v:e']['@value']).to.equal('2025-04-01')
+    })
+    it('validates matching start+end+interval', async function () {
+      const q = {
+        '@type': 'Interval',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        end: { '@type': 'DataValue', data: datVal('2025-04-01') },
+        interval: { '@type': 'DataValue', data: intervalVal('[2025-01-01,2025-04-01)') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('rejects mismatched start+end+interval', async function () {
+      const q = {
+        '@type': 'Interval',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        end: { '@type': 'DataValue', data: datVal('2025-06-01') },
+        interval: { '@type': 'DataValue', data: intervalVal('[2025-01-01,2025-04-01)') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+    it('constructs interval from dateTime endpoints', async function () {
+      const dtVal = (v) => ({ '@type': 'xsd:dateTime', '@value': v })
+      const q = {
+        '@type': 'Interval',
+        start: { '@type': 'DataValue', data: dtVal('2025-01-01T09:00:00Z') },
+        end: { '@type': 'DataValue', data: dtVal('2025-01-01T17:30:00Z') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('[2025-01-01T09:00:00Z,2025-01-01T17:30:00Z)')
+    })
+    it('constructs mixed date/dateTime interval', async function () {
+      const dtVal = (v) => ({ '@type': 'xsd:dateTime', '@value': v })
+      const q = {
+        '@type': 'Interval',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        end: { '@type': 'DataValue', data: dtVal('2025-04-01T12:00:00Z') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('[2025-01-01,2025-04-01T12:00:00Z)')
+    })
+  })
+
+  describe('IntervalStartDuration', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function durVal (v) { return { '@type': 'xsd:duration', '@value': v } }
+    function intervalVal (v) { return { '@type': 'xdd:dateTimeInterval', '@value': v } }
+
+    it('extracts start + duration from a 90-day interval', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        interval: { '@type': 'DataValue', data: intervalVal('[2025-01-01,2025-04-01)') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01')
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('P90D')
+    })
+    it('constructs interval from start + P90D duration', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        duration: { '@type': 'DataValue', data: durVal('P90D') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('[2025-01-01,2025-04-01)')
+    })
+    it('extracts sub-day duration from dateTime interval', async function () {
+      const dtVal = (v) => ({ '@type': 'xsd:dateTime', '@value': v })
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        interval: { '@type': 'DataValue', data: intervalVal('[2025-01-01T09:00:00Z,2025-01-01T17:30:00Z)') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT8H30M')
+    })
+  })
+
+  describe('IntervalDurationEnd', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function durVal (v) { return { '@type': 'xsd:duration', '@value': v } }
+    function intervalVal (v) { return { '@type': 'xdd:dateTimeInterval', '@value': v } }
+
+    it('extracts end + duration from a 90-day interval', async function () {
+      const q = {
+        '@type': 'IntervalDurationEnd',
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        end: { '@type': 'DataValue', variable: 'v:e' },
+        interval: { '@type': 'DataValue', data: intervalVal('[2025-01-01,2025-04-01)') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:e']['@value']).to.equal('2025-04-01')
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('P90D')
+    })
+    it('constructs interval from P90D duration + end date', async function () {
+      const q = {
+        '@type': 'IntervalDurationEnd',
+        duration: { '@type': 'DataValue', data: durVal('P90D') },
+        end: { '@type': 'DataValue', data: datVal('2025-04-01') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('[2025-01-01,2025-04-01)')
+    })
+  })
+
   describe('DayAfter', function () {
     function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
     function dvArg (v) {

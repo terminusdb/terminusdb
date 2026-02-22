@@ -349,6 +349,27 @@ definition(
         types: [data_value,data_value,data_value,data_value,data_value]
     }).
 definition(
+    interval{
+        name: 'Interval',
+        fields: [start,'end',interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_start_duration{
+        name: 'IntervalStartDuration',
+        fields: [start,duration,interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_duration_end{
+        name: 'IntervalDurationEnd',
+        fields: [duration,'end',interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
     day_after{
         name: 'DayAfter',
         fields: [date,next],
@@ -1250,6 +1271,15 @@ cost_(X << Y, Cost, _Polarity),
 is_var(X),
 is_var(Y) =>
     Cost = 100.
+
+cost_(interval(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(interval_start_duration(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(interval_duration_end(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
 
 cost_(day_after(_,_), Cost, _Polarity) =>
     Cost = 1.
