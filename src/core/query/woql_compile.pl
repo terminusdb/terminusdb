@@ -772,6 +772,32 @@ woql_greater_normalized(AE,BE) :-
     compare((>),AE,BE).
 
 /*
+ * woql_gte(AE,BE) is semidet.
+ *
+ * Greater-than-or-equal comparison. Succeeds if AE >= BE.
+ * Reuses woql_greater/2 and woql_equal/2 for type normalization,
+ * numeric family validation, and dateTime special-casing.
+ */
+woql_gte(AE,BE) :-
+    (   woql_greater(AE,BE)
+    ->  true
+    ;   woql_equal(AE,BE)
+    ).
+
+/*
+ * woql_lte(AE,BE) is semidet.
+ *
+ * Less-than-or-equal comparison. Succeeds if AE <= BE.
+ * Reuses woql_less/2 and woql_equal/2 for type normalization,
+ * numeric family validation, and dateTime special-casing.
+ */
+woql_lte(AE,BE) :-
+    (   woql_less(AE,BE)
+    ->  true
+    ;   woql_equal(AE,BE)
+    ).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1001,6 +1027,8 @@ find_resources(trim(_,_),_, _, _, [], []).
 find_resources('='(_,_),_, _, _, [], []).
 find_resources('<'(_,_),_, _, _, [], []).
 find_resources('>'(_,_),_, _, _, [], []).
+find_resources('>='(_,_),_, _, _, [], []).
+find_resources('=<'(_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1175,6 +1203,12 @@ compile_wf(A<B,woql_less(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
 compile_wf(A>B,woql_greater(AE,BE)) -->
+    resolve(A,AE),
+    resolve(B,BE).
+compile_wf(A>=B,woql_gte(AE,BE)) -->
+    resolve(A,AE),
+    resolve(B,BE).
+compile_wf(A=<B,woql_lte(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
 compile_wf(like(A,B,F), Isub) -->
@@ -6098,6 +6132,171 @@ test(less_than_mixed_uri_representation, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [_] = (JSON.bindings).
+
+test(gte_integer_greater, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_integer_equal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_integer_less_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 4}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(lte_integer_less, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(lte_integer_equal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(lte_integer_greater_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 6}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(gte_decimal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 21.1}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 21.1}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_date_equal_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_date_day_after_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(lte_date_before_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-28"}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_cross_family_throws, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State)),
+    throws(error(incompatible_numeric_comparison(_,_),_))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:float', '@value': 5.0}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, _JSON).
 
 :- end_tests(woql).
 

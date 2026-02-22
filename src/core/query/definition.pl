@@ -321,6 +321,20 @@ definition(
         types: [any,any]
     }).
 definition(
+    '>='{
+        name: 'Gte',
+        fields: [left,right],
+        mode: [+,+],
+        types: [any,any]
+    }).
+definition(
+    '=<'{
+        name: 'Lte',
+        fields: [left,right],
+        mode: [+,+],
+        types: [any,any]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -610,6 +624,8 @@ term_mode_correct(Term) :-
 operator(_=_).
 operator(_>_).
 operator(_<_).
+operator(_>=_).
+operator(_=<_).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

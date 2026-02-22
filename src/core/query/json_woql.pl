@@ -728,6 +728,24 @@ json_type_to_woql_ast('Greater',JSON,WOQL,Path) :-
     json_value_to_woql_ast(B,WB,[right
                                  |Path]),
     WOQL = '>'(WA,WB).
+json_type_to_woql_ast('Gte',JSON,WOQL,Path) :-
+    _{left : A,
+      right : B
+     } :< JSON,
+    json_value_to_woql_ast(A,WA,[left
+                                 |Path]),
+    json_value_to_woql_ast(B,WB,[right
+                                 |Path]),
+    WOQL = '>='(WA,WB).
+json_type_to_woql_ast('Lte',JSON,WOQL,Path) :-
+    _{left : A,
+      right : B
+     } :< JSON,
+    json_value_to_woql_ast(A,WA,[left
+                                 |Path]),
+    json_value_to_woql_ast(B,WB,[right
+                                 |Path]),
+    WOQL = '=<'(WA,WB).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

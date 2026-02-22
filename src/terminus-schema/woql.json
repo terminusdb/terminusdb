@@ -1053,6 +1053,44 @@
 }
 {
   "@documentation": {
+    "@comment":"Predicate determining if one thing is greater than or equal to another according to natural ordering.",
+    "@properties": {"left":"The greater or equal element.", "right":"The lesser or equal element."}
+  },
+  "@id":"Gte",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["+", "+" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Predicate determining if one thing is less than or equal to another according to natural ordering.",
+    "@properties": {"left":"The lesser or equal element.", "right":"The greater or equal element."}
+  },
+  "@id":"Lte",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["left", "right" ],
+      "mode": ["+", "+" ],
+      "types": ["any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "left":"DataValue",
+  "right":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },
