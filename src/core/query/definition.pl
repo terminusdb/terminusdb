@@ -419,6 +419,13 @@ definition(
         types: [data_value,data_value,data_value,data_value,data_value]
     }).
 definition(
+    interval_relation_typed{
+        name: 'IntervalRelationTyped',
+        fields: [relation,x,y],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
     weekday{
         name: 'Weekday',
         fields: [date,weekday],
@@ -745,6 +752,7 @@ operator(month_end_date(_,_)).
 operator(month_start_dates(_,_,_)).
 operator(month_end_dates(_,_,_)).
 operator(interval_relation(_,_,_,_,_)).
+operator(interval_relation_typed(_,_,_)).
 operator(weekday(_,_)).
 operator(weekday_sunday_start(_,_)).
 operator(iso_week(_,_,_)).

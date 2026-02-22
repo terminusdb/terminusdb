@@ -1331,6 +1331,26 @@
 }
 {
   "@documentation": {
+    "@comment":"Allen's Interval Algebra on xdd:dateTimeInterval values. Classifies or validates the temporal relationship between two interval values. When relation is ground, validates that the named relation holds. When relation is a variable, determines which of the 13 Allen relations holds (deterministic). Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@properties": {"relation":"The Allen relation name (string) or variable.", "x":"The first xdd:dateTimeInterval.", "y":"The second xdd:dateTimeInterval."}
+  },
+  "@id":"IntervalRelationTyped",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["relation", "x", "y"],
+      "mode": ["?", "+", "+"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "relation":"DataValue",
+  "x":"DataValue",
+  "y":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"Computes the ISO 8601 weekday number (Monday=1, Sunday=7) for a date. Accepts xsd:date or xsd:dateTime. Date must be ground.",
     "@properties": {"date":"The input date or dateTime.", "weekday":"The ISO weekday number (1=Monday, 7=Sunday)."}
   },

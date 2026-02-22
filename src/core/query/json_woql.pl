@@ -864,6 +864,15 @@ json_type_to_woql_ast('IntervalRelation',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Ys,WYs,[y_start|Path]),
     json_value_to_woql_ast(Ye,WYe,[y_end|Path]),
     WOQL = interval_relation(WR,WXs,WXe,WYs,WYe).
+json_type_to_woql_ast('IntervalRelationTyped',JSON,WOQL,Path) :-
+    _{relation : R,
+      x : X,
+      y : Y
+     } :< JSON,
+    json_value_to_woql_ast(R,WR,[relation|Path]),
+    json_value_to_woql_ast(X,WX,[x|Path]),
+    json_value_to_woql_ast(Y,WY,[y|Path]),
+    WOQL = interval_relation_typed(WR,WX,WY).
 json_type_to_woql_ast('Weekday',JSON,WOQL,Path) :-
     _{date : D,
       weekday : W

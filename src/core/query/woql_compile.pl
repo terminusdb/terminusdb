@@ -1155,6 +1155,22 @@ classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
     Rel = R^^'http://www.w3.org/2001/XMLSchema#string'.
 
 /*
+ * woql_interval_relation_typed(Rel, X, Y) is semidet.
+ *
+ * Allen's Interval Algebra on xdd:dateTimeInterval values.
+ * Decomposes intervals X and Y into start/end endpoints, then delegates
+ * to woql_interval_relation/5.
+ */
+woql_interval_relation_typed(Rel, X, Y) :-
+    X = date_time_interval(Xc1,Xc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    Y = date_time_interval(Yc1,Yc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    interval_component_typed(Xc1, Xs),
+    interval_component_typed(Xc2, Xe),
+    interval_component_typed(Yc1, Ys),
+    interval_component_typed(Yc2, Ye),
+    woql_interval_relation(Rel, Xs, Xe, Ys, Ye).
+
+/*
  * extract_ymd(+DateOrDateTime, -Y, -M, -D) is det.
  *
  * Extracts year, month, day from either xsd:date or xsd:dateTime.
@@ -1667,6 +1683,7 @@ find_resources(month_end_date(_,_),_, _, _, [], []).
 find_resources(month_start_dates(_,_,_),_, _, _, [], []).
 find_resources(month_end_dates(_,_,_),_, _, _, [], []).
 find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
+find_resources(interval_relation_typed(_,_,_),_, _, _, [], []).
 find_resources(weekday(_,_),_, _, _, [], []).
 find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
 find_resources(iso_week(_,_,_),_, _, _, [], []).
@@ -1907,6 +1924,10 @@ compile_wf(interval_relation(R,Xs,Xe,Ys,Ye),woql_interval_relation(RE,XsE,XeE,Ys
     resolve(Xe,XeE),
     resolve(Ys,YsE),
     resolve(Ye,YeE).
+compile_wf(interval_relation_typed(R,X,Y),woql_interval_relation_typed(RE,XE,YE)) -->
+    resolve(R,RE),
+    resolve(X,XE),
+    resolve(Y,YE).
 compile_wf(weekday(D,W),woql_weekday(DE,WE)) -->
     resolve(D,DE),
     resolve(W,WE).
@@ -7970,6 +7991,137 @@ test(interval_relation_during_dates, [
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 1).
+
+test(interval_relation_typed_meets, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_meets_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-05-01/2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(interval_relation_typed_before, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "before"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-06-01/2024-09-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_during, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "during"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-03-01/2024-06-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-12-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_classify, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            variable : "rel"},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.rel = _{'@type': 'xsd:string', '@value': "meets"}.
+
+test(interval_relation_typed_classify_before, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            variable : "rel"},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-06-01/2024-09-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.rel = _{'@type': 'xsd:string', '@value': "before"}.
+
+test(interval_relation_typed_equals, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "equals"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-06-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-06-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            variable : "rel"},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01T08:00:00Z/2024-01-01T12:00:00Z"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01T12:00:00Z/2024-01-01T17:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.rel = _{'@type': 'xsd:string', '@value': "meets"}.
 
 test(weekday_monday, [
     setup((setup_temp_store(State),
