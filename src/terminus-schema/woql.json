@@ -1111,6 +1111,28 @@
 }
 {
   "@documentation": {
+    "@comment":"Generates a sequence of values in the half-open range [Start, End). When Value is unbound, produces each value via backtracking. Supports integer and decimal types.",
+    "@properties": {"value":"The generated sequence value.", "start":"The inclusive start of the sequence.", "end":"The exclusive end of the sequence.", "step":"Optional increment per step. Defaults to 1 for integers, 1.0 for decimals.", "count":"Optional total count. If bound, validates. If unbound, unifies with actual count."}
+  },
+  "@id":"Sequence",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["value", "start", "end", "optional(step)", "optional(count)" ],
+      "mode": ["?", "+", "+", "+", "?" ],
+      "types": ["data_value", "data_value", "data_value", "data_value", "data_value" ]
+    }
+  },
+  "@type":"Class",
+  "value":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue",
+  "step": {"@class":"DataValue", "@type":"Optional"},
+  "count": {"@class":"DataValue", "@type":"Optional"}
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },

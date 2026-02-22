@@ -808,6 +808,51 @@ woql_in_range(VE,SE,EE) :-
     woql_less(VE,EE).
 
 /*
+ * woql_sequence(Value, Start, End, Step, Count) is nondet.
+ *
+ * Generates a sequence of values in half-open range [Start, End).
+ * Supports integer and decimal types. Step and Count are optional
+ * (unbound when not provided).
+ */
+woql_sequence(Value, Start, End, Step, Count) :-
+    Start = SRaw^^SType,
+    End = ERaw^^_,
+    % Determine step value
+    (   Step \= none
+    ->  Step = StepRaw^^_
+    ;   default_sequence_step(SType, StepRaw)
+    ),
+    % Compute expected count
+    (   StepRaw > 0, ERaw > SRaw
+    ->  RawCount is ceiling((ERaw - SRaw) / StepRaw)
+    ;   RawCount = 0
+    ),
+    % Handle count parameter
+    (   Count \= none
+    ->  Count = CountVal^^_,
+        (   nonvar(CountVal)
+        ->  CountVal =:= RawCount
+        ;   CountVal = RawCount
+        )
+    ;   true
+    ),
+    % Generate values (fails naturally for empty ranges)
+    RawCount > 0,
+    gen_numeric_sequence(Value, SRaw, ERaw, StepRaw, SType).
+
+default_sequence_step('http://www.w3.org/2001/XMLSchema#integer', 1).
+default_sequence_step('http://www.w3.org/2001/XMLSchema#decimal', 1).
+default_sequence_step('http://www.w3.org/2001/XMLSchema#double', 1.0).
+default_sequence_step('http://www.w3.org/2001/XMLSchema#float', 1.0).
+
+gen_numeric_sequence(Val^^Type, Current, End, Step, Type) :-
+    Current < End,
+    (   Val = Current
+    ;   Next is Current + Step,
+        gen_numeric_sequence(Val^^Type, Next, End, Step, Type)
+    ).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1040,6 +1085,7 @@ find_resources('>'(_,_),_, _, _, [], []).
 find_resources('>='(_,_),_, _, _, [], []).
 find_resources('=<'(_,_),_, _, _, [], []).
 find_resources(in_range(_,_,_),_, _, _, [], []).
+find_resources(sequence(_,_,_,_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1226,6 +1272,18 @@ compile_wf(in_range(V,S,E),woql_in_range(VE,SE,EE)) -->
     resolve(V,VE),
     resolve(S,SE),
     resolve(E,EE).
+compile_wf(sequence(V,S,E,Step,Count),woql_sequence(VE,SE,EE,StepE,CountE)) -->
+    resolve(V,VE),
+    resolve(S,SE),
+    resolve(E,EE),
+    (   { Step \= none }
+    ->  resolve(Step,StepE)
+    ;   { StepE = none }
+    ),
+    (   { Count \= none }
+    ->  resolve(Count,CountE)
+    ;   { CountE = none }
+    ).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -6431,6 +6489,72 @@ test(in_range_date_at_end_exclusive, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [] = (JSON.bindings).
+
+test(sequence_integer_1_to_5, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 6}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(sequence_integer_with_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 0}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(sequence_empty_range, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_single_value, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
 
 :- end_tests(woql).
 
