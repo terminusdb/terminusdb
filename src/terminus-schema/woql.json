@@ -1389,6 +1389,26 @@
 }
 {
   "@documentation": {
+    "@comment":"Tri-directional duration arithmetic for dates and dateTimes. Given any two of start, end, and duration, computes the third. Accepts xsd:date or xsd:dateTime for start/end and xsd:duration for duration. Uses end-of-month (EOM) preservation: if the input is the last day of its month, the result will be the last day of the target month. Duration output omits time components when they are zero.",
+    "@properties": {"start":"The start date or dateTime.", "end":"The end date or dateTime.", "duration":"The xsd:duration between start and end."}
+  },
+  "@id":"DateDuration",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["start", "end", "duration"],
+      "mode": ["?", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "duration":"DataValue",
+  "end":"DataValue",
+  "start":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },

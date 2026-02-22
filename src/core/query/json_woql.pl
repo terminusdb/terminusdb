@@ -887,6 +887,15 @@ json_type_to_woql_ast('IsoWeek',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Y,WY,[year|Path]),
     json_value_to_woql_ast(W,WW,[week|Path]),
     WOQL = iso_week(WD,WY,WW).
+json_type_to_woql_ast('DateDuration',JSON,WOQL,Path) :-
+    _{start : S,
+      'end' : E,
+      duration : D
+     } :< JSON,
+    json_value_to_woql_ast(S,WS,[start|Path]),
+    json_value_to_woql_ast(E,WE,['end'|Path]),
+    json_value_to_woql_ast(D,WD,[duration|Path]),
+    WOQL = date_duration(WS,WE,WD).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

@@ -1134,4 +1134,222 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('2025-04-01')
     })
   })
+
+  describe('Weekday (ISO: Monday=1, Sunday=7)', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function dtmVal (v) { return { '@type': 'xsd:dateTime', '@value': v } }
+    function weekdayQuery (date, weekday) {
+      const dateArg = typeof date === 'string' && date.startsWith('v:')
+        ? { '@type': 'DataValue', variable: date }
+        : { '@type': 'DataValue', data: date.includes('T') ? dtmVal(date) : datVal(date) }
+      const wArg = typeof weekday === 'string' && weekday.startsWith('v:')
+        ? { '@type': 'DataValue', variable: weekday }
+        : { '@type': 'DataValue', data: weekday }
+      return { '@type': 'Weekday', date: dateArg, weekday: wArg }
+    }
+
+    it('Monday: 2024-01-01 -> 1', async function () {
+      const r = await woql.post(agent, weekdayQuery('2024-01-01', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(1)
+    })
+    it('Sunday: 2024-01-07 -> 7', async function () {
+      const r = await woql.post(agent, weekdayQuery('2024-01-07', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(7)
+    })
+    it('Leap day 2024-02-29 -> Thursday (4)', async function () {
+      const r = await woql.post(agent, weekdayQuery('2024-02-29', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(4)
+    })
+    it('dateTime: 2024-01-01T12:00:00Z -> Monday (1)', async function () {
+      const r = await woql.post(agent, weekdayQuery('2024-01-01T12:00:00Z', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(1)
+    })
+    it('validates: 2024-01-01 is Monday (1)', async function () {
+      const r = await woql.post(agent, weekdayQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 1 }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validation fails: 2024-01-01 is not Tuesday (2)', async function () {
+      const r = await woql.post(agent, weekdayQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 2 }))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+  })
+
+  describe('WeekdaySundayStart (US: Sunday=1, Saturday=7)', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function sundayStartQuery (date, weekday) {
+      const dateArg = { '@type': 'DataValue', data: datVal(date) }
+      const wArg = typeof weekday === 'string' && weekday.startsWith('v:')
+        ? { '@type': 'DataValue', variable: weekday }
+        : { '@type': 'DataValue', data: weekday }
+      return { '@type': 'WeekdaySundayStart', date: dateArg, weekday: wArg }
+    }
+
+    it('Sunday: 2024-01-07 -> 1', async function () {
+      const r = await woql.post(agent, sundayStartQuery('2024-01-07', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(1)
+    })
+    it('Saturday: 2024-01-06 -> 7', async function () {
+      const r = await woql.post(agent, sundayStartQuery('2024-01-06', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(7)
+    })
+    it('Monday: 2024-01-01 -> 2', async function () {
+      const r = await woql.post(agent, sundayStartQuery('2024-01-01', 'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal(2)
+    })
+  })
+
+  describe('IsoWeek (ISO 8601 week-date)', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function dtmVal (v) { return { '@type': 'xsd:dateTime', '@value': v } }
+    function isoWeekQuery (date, year, week) {
+      const dateArg = typeof date === 'string' && date.includes('T')
+        ? { '@type': 'DataValue', data: dtmVal(date) }
+        : { '@type': 'DataValue', data: datVal(date) }
+      const yArg = typeof year === 'string' && year.startsWith('v:')
+        ? { '@type': 'DataValue', variable: year }
+        : { '@type': 'DataValue', data: year }
+      const wArg = typeof week === 'string' && week.startsWith('v:')
+        ? { '@type': 'DataValue', variable: week }
+        : { '@type': 'DataValue', data: week }
+      return { '@type': 'IsoWeek', date: dateArg, year: yArg, week: wArg }
+    }
+
+    it('2024-01-01 -> week 1 of 2024', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2024-01-01', 'v:y', 'v:w'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:y']['@value']).to.equal(2024)
+      expect(r.body.bindings[0]['v:w']['@value']).to.equal(1)
+    })
+    it('2024-12-30 -> week 1 of 2025 (year boundary)', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2024-12-30', 'v:y', 'v:w'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:y']['@value']).to.equal(2025)
+      expect(r.body.bindings[0]['v:w']['@value']).to.equal(1)
+    })
+    it('2023-01-01 -> week 52 of 2022', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2023-01-01', 'v:y', 'v:w'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:y']['@value']).to.equal(2022)
+      expect(r.body.bindings[0]['v:w']['@value']).to.equal(52)
+    })
+    it('2020-12-31 -> week 53 of 2020 (53-week year)', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2020-12-31', 'v:y', 'v:w'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:y']['@value']).to.equal(2020)
+      expect(r.body.bindings[0]['v:w']['@value']).to.equal(53)
+    })
+    it('2024-06-15 -> week 24 of 2024', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2024-06-15', 'v:y', 'v:w'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:y']['@value']).to.equal(2024)
+      expect(r.body.bindings[0]['v:w']['@value']).to.equal(24)
+    })
+    it('dateTime: 2024-06-15T09:30:00Z -> week 24 of 2024', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2024-06-15T09:30:00Z', 'v:y', 'v:w'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:y']['@value']).to.equal(2024)
+      expect(r.body.bindings[0]['v:w']['@value']).to.equal(24)
+    })
+    it('validates: 2024-01-01 is week 1 of 2024', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 2024 }, { '@type': 'xsd:integer', '@value': 1 }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validation fails: 2024-01-01 is not week 2', async function () {
+      const r = await woql.post(agent, isoWeekQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 2024 }, { '@type': 'xsd:integer', '@value': 2 }))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+  })
+
+  function dateDurationQuery (start, end, duration) {
+    const dv = (v) => {
+      if (typeof v === 'string' && v.startsWith('v:')) {
+        return { '@type': 'DataValue', variable: v.slice(2) }
+      }
+      if (typeof v === 'object' && v['@type']) {
+        return { '@type': 'DataValue', data: v }
+      }
+      return { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': v } }
+    }
+    return { '@type': 'DateDuration', start: dv(start), end: dv(end), duration: dv(duration) }
+  }
+
+  describe('DateDuration', function () {
+    it('computes duration: 2024-01-01 to 2024-04-01 = P91D (leap)', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:date', '@value': '2024-01-01' },
+        { '@type': 'xsd:date', '@value': '2024-04-01' },
+        'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('P91D')
+    })
+    it('computes duration: 2025-01-01 to 2025-04-01 = P90D (non-leap)', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:date', '@value': '2025-01-01' },
+        { '@type': 'xsd:date', '@value': '2025-04-01' },
+        'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('P90D')
+    })
+    it('EOM add: Jan 31 + P1M = Feb 29 (leap)', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:date', '@value': '2020-01-31' },
+        'v:e',
+        { '@type': 'xsd:duration', '@value': 'P1M' }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].e['@value']).to.equal('2020-02-29')
+    })
+    it('EOM add: Feb 29 + P1M = Mar 31', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:date', '@value': '2020-02-29' },
+        'v:e',
+        { '@type': 'xsd:duration', '@value': 'P1M' }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].e['@value']).to.equal('2020-03-31')
+    })
+    it('EOM subtract: Mar 31 - P1M = Feb 29 (leap)', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        'v:s',
+        { '@type': 'xsd:date', '@value': '2020-03-31' },
+        { '@type': 'xsd:duration', '@value': 'P1M' }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].s['@value']).to.equal('2020-02-29')
+    })
+    it('EOM reversibility: Feb 29 - P1M = Jan 31', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        'v:s',
+        { '@type': 'xsd:date', '@value': '2020-02-29' },
+        { '@type': 'xsd:duration', '@value': 'P1M' }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].s['@value']).to.equal('2020-01-31')
+    })
+    it('datetime with time: computes PT9H30M', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:dateTime', '@value': '2024-01-01T08:00:00Z' },
+        { '@type': 'xsd:dateTime', '@value': '2024-01-01T17:30:00Z' },
+        'v:d'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0].d['@value']).to.equal('PT9H30M')
+    })
+    it('validates: consistent start+end+duration', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:date', '@value': '2024-01-01' },
+        { '@type': 'xsd:date', '@value': '2024-04-01' },
+        { '@type': 'xsd:duration', '@value': 'P91D' }))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validation fails: inconsistent start+end+duration', async function () {
+      const r = await woql.post(agent, dateDurationQuery(
+        { '@type': 'xsd:date', '@value': '2024-01-01' },
+        { '@type': 'xsd:date', '@value': '2024-04-01' },
+        { '@type': 'xsd:duration', '@value': 'P90D' }))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+  })
 })

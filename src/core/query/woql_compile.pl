@@ -1293,6 +1293,137 @@ woql_iso_week(Date, Year, Week) :-
     ).
 
 /*
+ * woql_date_duration(Start, End, Duration) is semidet.
+ *
+ * Tri-directional duration arithmetic for dates and dateTimes.
+ * Given any two of Start, End, Duration, computes the third.
+ * Uses EOM preservation in both addition and subtraction:
+ * if the input is the last day of its month, the result is the
+ * last day of the target month.
+ * Duration output omits time components when they are zero.
+ */
+woql_date_duration(Start, End, Duration) :-
+    (   nonvar(Start), nonvar(End), nonvar(Duration)
+    ->  % Validation: Start + Duration should equal End
+        Start = C1^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        eom_add_duration(C1, Dur, C2),
+        interval_component_typed(C2, ComputedEnd),
+        woql_equal(End, ComputedEnd)
+    ;   nonvar(Start), nonvar(End)
+    ->  % Compute duration from Start and End (day-count/time)
+        Start = C1^^_,
+        End = C2^^_,
+        interval_component_stamp(C1, S1),
+        interval_component_stamp(C2, S2),
+        DiffSecs is S2 - S1,
+        seconds_to_duration_significant(DiffSecs, Dur),
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
+    ;   nonvar(Start), nonvar(Duration)
+    ->  % Compute End = Start + Duration (EOM-aware)
+        Start = C1^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        eom_add_duration(C1, Dur, C2),
+        interval_component_typed(C2, End)
+    ;   nonvar(Duration), nonvar(End)
+    ->  % Compute Start = End - Duration (EOM-aware)
+        End = C2^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        eom_subtract_duration(C2, Dur, C1),
+        interval_component_typed(C1, Start)
+    ;   throw(error(instantiation_error(date_duration), _))
+    ).
+
+/*
+ * normalize_year_month(+Y, +M, -NY, -NM) is det.
+ *
+ * Normalize month overflow/underflow (e.g., month 0 or 13).
+ */
+normalize_year_month(Y, M, NY, NM) :-
+    NM0 is ((M - 1) mod 12) + 1,
+    NY is Y + ((M - 1) div 12),
+    NM = NM0.
+
+/*
+ * eom_add_months(+Component, +Sign, +DY, +DMo, -Result) is det.
+ *
+ * EOM-aware year/month addition. If the source day is the last day
+ * of its month, the result day is the last day of the target month.
+ * Otherwise, clamp to target month's max.
+ */
+eom_add_months(date(Y,M,D,O), Sign, DY, DMo, date(Y2,M2,D2,O)) :-
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    normalize_year_month(Y1, M1, Y2, M2),
+    days_in_month(Y, M, SrcMaxD),
+    days_in_month(Y2, M2, TgtMaxD),
+    (   D >= SrcMaxD
+    ->  D2 = TgtMaxD
+    ;   D2 is min(D, TgtMaxD)
+    ).
+eom_add_months(date_time(Y,M,D,HH,MM,SS,NS), Sign, DY, DMo, date_time(Y2,M2,D2,HH,MM,SS,NS)) :-
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    normalize_year_month(Y1, M1, Y2, M2),
+    days_in_month(Y, M, SrcMaxD),
+    days_in_month(Y2, M2, TgtMaxD),
+    (   D >= SrcMaxD
+    ->  D2 = TgtMaxD
+    ;   D2 is min(D, TgtMaxD)
+    ).
+
+/*
+ * eom_add_duration(+Component, +Duration, -Result) is det.
+ *
+ * EOM-aware duration addition. When the duration has year/month
+ * components, applies EOM preservation for the month part first,
+ * then adds any day/time components via timestamp arithmetic.
+ */
+eom_add_duration(Component, duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+    (   (DY =:= 0, DMo =:= 0)
+    ->  add_duration_to_component(Component, duration(Sign,0,0,DD,DH,DMi,DS), End)
+    ;   eom_add_months(Component, Sign, DY, DMo, Intermediate),
+        (   DD =:= 0, DH =:= 0, DMi =:= 0, DS =:= 0
+        ->  End = Intermediate
+        ;   add_duration_to_component(Intermediate, duration(Sign,0,0,DD,DH,DMi,DS), End)
+        )
+    ).
+
+/*
+ * eom_subtract_duration(+Component, +Duration, -Result) is det.
+ *
+ * EOM-aware duration subtraction. Negates the sign and applies
+ * EOM-aware addition, preserving end-of-month symmetry.
+ */
+eom_subtract_duration(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
+    NSign is Sign * -1,
+    eom_add_duration(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
+
+/*
+ * seconds_to_duration_significant(+Secs, -Duration) is det.
+ *
+ * Converts a seconds difference to an xsd:duration term.
+ * Omits time components when they are all zero (produces PnD).
+ * When there are only time components (< 1 day), produces PTnHnMnS.
+ */
+seconds_to_duration_significant(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Secs < 0
+    ->  Sign = -1, AbsSecs is abs(Secs)
+    ;   Sign = 1, AbsSecs = Secs
+    ),
+    Days is floor(AbsSecs) // 86400,
+    Rem1 is floor(AbsSecs) mod 86400,
+    Hours is Rem1 // 3600,
+    Rem2 is Rem1 mod 3600,
+    Mins is Rem2 // 60,
+    RemSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60),
+    % Use 0.0 (float) for zero seconds so duration_string's SS \= 0.0 check works
+    (   RemSec =:= 0
+    ->  SSec = 0.0
+    ;   SSec = RemSec
+    ).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1539,6 +1670,7 @@ find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
 find_resources(weekday(_,_),_, _, _, [], []).
 find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
 find_resources(iso_week(_,_,_),_, _, _, [], []).
+find_resources(date_duration(_,_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1785,6 +1917,10 @@ compile_wf(iso_week(D,Y,W),woql_iso_week(DE,YE,WE)) -->
     resolve(D,DE),
     resolve(Y,YE),
     resolve(W,WE).
+compile_wf(date_duration(S,E,D),woql_date_duration(SE,EE,DE)) -->
+    resolve(S,SE),
+    resolve(E,EE),
+    resolve(D,DE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -8149,6 +8285,338 @@ test(iso_week_validate_fails, [
                         'data' : _{'@type': 'xsd:integer', '@value': 2024}},
                week : _{'@type' : "DataValue",
                         'data' : _{'@type': 'xsd:integer', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+%% DateDuration tests
+
+% Start + End → Duration (day-count, dates)
+test(date_duration_compute_duration_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P91D"}.
+
+test(date_duration_compute_duration_non_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P90D"}.
+
+test(date_duration_zero, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P0D"}.
+
+% Start + Duration → End (EOM-aware addition)
+test(date_duration_add_jan31_p1m_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-01-31"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-02-29"}.
+
+test(date_duration_add_jan31_p1m_nonleap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2021-01-31"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2021-02-28"}.
+
+test(date_duration_add_jan30_p1m_clamped, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-01-30"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-02-29"}.
+
+test(date_duration_add_jan28_p1m_normal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-01-28"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-02-28"}.
+
+test(date_duration_add_feb29_p1m_eom, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-02-29"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-03-31"}.
+
+test(date_duration_add_apr30_p1m_eom, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-04-30"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-05-31"}.
+
+test(date_duration_add_dec31_p1m_year_boundary, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-12-31"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2021-01-31"}.
+
+% Duration + End → Start (EOM-aware subtraction)
+test(date_duration_subtract_mar31_p1m_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-03-31"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2020-02-29"}.
+
+test(date_duration_subtract_mar31_p1m_nonleap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2021-03-31"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2021-02-28"}.
+
+test(date_duration_subtract_jan31_p1m_year_boundary, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2021-01-31"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2020-12-31"}.
+
+% EOM reversibility: Jan 31 → +P1M → Feb 29 → -P1M → Jan 31
+test(date_duration_eom_reversibility_feb29, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-02-29"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2020-01-31"}.
+
+% DateTime support: Start + End → Duration with time components
+test(date_duration_datetime_with_time, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T08:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T17:30:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT9H30M"}.
+
+% DateTime: time-significance — midnight-to-midnight produces day-only duration
+test(date_duration_datetime_midnight_day_only, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-04T00:00:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P3D"}.
+
+% Start + Duration → End with dateTime
+test(date_duration_datetime_add_p1m, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2020-01-31T10:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2020-02-29T10:00:00Z"}.
+
+% Validation: all three ground and consistent → success
+test(date_duration_validate_succeeds, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P91D"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+% Validation: all three ground and inconsistent → failure
+test(date_duration_validate_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P90D"}}
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 0).

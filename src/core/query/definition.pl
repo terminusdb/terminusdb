@@ -440,6 +440,13 @@ definition(
         types: [data_value,data_value,data_value]
     }).
 definition(
+    date_duration{
+        name: 'DateDuration',
+        fields: [start,'end',duration],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -741,6 +748,7 @@ operator(interval_relation(_,_,_,_,_)).
 operator(weekday(_,_)).
 operator(weekday_sunday_start(_,_)).
 operator(iso_week(_,_,_)).
+operator(date_duration(_,_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

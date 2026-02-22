@@ -466,7 +466,12 @@ duration_string(Duration,String) :-
     (   SS \= 0.0
     ->  format(atom(SSP),'~wS',[SS])
     ;   SSP = ''),
-    atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom),
+    atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
+    % Zero duration: "P" alone is not valid ISO 8601, use "P0D"
+    (   (Atom0 == 'P' ; Atom0 == '-P')
+    ->  atom_concat(Atom0, '0D', Atom)
+    ;   Atom = Atom0
+    ),
     atom_string(Atom,String).
 duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
     nonvar(String),
