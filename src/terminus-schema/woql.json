@@ -1211,6 +1211,28 @@
 }
 {
   "@documentation": {
+    "@comment":"Allen's Interval Algebra: classifies or validates the temporal relationship between two half-open intervals [x_start, x_end) and [y_start, y_end). When relation is ground, validates that the named relation holds. When relation is a variable, determines which of the 13 Allen relations holds (deterministic). Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@properties": {"relation":"The Allen relation name (string) or variable.", "x_start":"Inclusive start of interval X.", "x_end":"Exclusive end of interval X.", "y_start":"Inclusive start of interval Y.", "y_end":"Exclusive end of interval Y."}
+  },
+  "@id":"IntervalRelation",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["relation", "x_start", "x_end", "y_start", "y_end"],
+      "mode": ["?", "+", "+", "+", "+"],
+      "types": ["data_value", "data_value", "data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "relation":"DataValue",
+  "x_start":"DataValue",
+  "x_end":"DataValue",
+  "y_start":"DataValue",
+  "y_end":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },

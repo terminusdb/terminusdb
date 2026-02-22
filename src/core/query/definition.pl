@@ -377,6 +377,13 @@ definition(
         types: [data_value,data_value,data_value]
     }).
 definition(
+    interval_relation{
+        name: 'IntervalRelation',
+        fields: [relation,x_start,x_end,y_start,y_end],
+        mode: [?,+,+,+,+],
+        types: [data_value,data_value,data_value,data_value,data_value]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -674,6 +681,7 @@ operator(month_start_date(_,_)).
 operator(month_end_date(_,_)).
 operator(month_start_dates(_,_,_)).
 operator(month_end_dates(_,_,_)).
+operator(interval_relation(_,_,_,_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

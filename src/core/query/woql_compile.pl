@@ -951,6 +951,44 @@ days_in_month(_, 11, 30).
 days_in_month(_, 12, 31).
 
 /*
+ * woql_interval_relation(Rel, Xs, Xe, Ys, Ye) is semidet.
+ *
+ * Allen's Interval Algebra for half-open intervals [start, end).
+ * When Rel is ground, validates the named relation holds.
+ * When Rel is unbound, classifies which of the 13 Allen relations holds (deterministic).
+ */
+woql_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
+    (   nonvar(Rel)
+    ->  Rel = RelStr^^'http://www.w3.org/2001/XMLSchema#string',
+        check_interval_relation(RelStr, Xs, Xe, Ys, Ye)
+    ;   classify_interval_relation(Rel, Xs, Xe, Ys, Ye)
+    ).
+
+% 7 fundamental relations
+check_interval_relation("before", _Xs, Xe, Ys, _Ye)    :- woql_less(Xe, Ys).
+check_interval_relation("meets", _Xs, Xe, Ys, _Ye)     :- woql_equal(Xe, Ys).
+check_interval_relation("overlaps", Xs, Xe, Ys, Ye)     :- woql_less(Xs, Ys), woql_greater(Xe, Ys), woql_less(Xe, Ye).
+check_interval_relation("starts", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_less(Xe, Ye).
+check_interval_relation("during", Xs, Xe, Ys, Ye)       :- woql_greater(Xs, Ys), woql_less(Xe, Ye).
+check_interval_relation("finishes", Xs, Xe, Ys, Ye)     :- woql_greater(Xs, Ys), woql_equal(Xe, Ye).
+check_interval_relation("equals", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_equal(Xe, Ye).
+% 6 inverses: swap X and Y
+check_interval_relation("after", Xs, Xe, Ys, Ye)        :- check_interval_relation("before", Ys, Ye, Xs, Xe).
+check_interval_relation("met_by", Xs, Xe, Ys, Ye)       :- check_interval_relation("meets", Ys, Ye, Xs, Xe).
+check_interval_relation("overlapped_by", Xs, Xe, Ys, Ye):- check_interval_relation("overlaps", Ys, Ye, Xs, Xe).
+check_interval_relation("started_by", Xs, Xe, Ys, Ye)   :- check_interval_relation("starts", Ys, Ye, Xs, Xe).
+check_interval_relation("contains", Xs, Xe, Ys, Ye)     :- check_interval_relation("during", Ys, Ye, Xs, Xe).
+check_interval_relation("finished_by", Xs, Xe, Ys, Ye)  :- check_interval_relation("finishes", Ys, Ye, Xs, Xe).
+
+% classify: when Rel is unbound, find THE one matching relation (deterministic)
+classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
+    member(R, ["before","meets","overlaps","starts","during","finishes","equals",
+               "after","met_by","overlapped_by","started_by","contains","finished_by"]),
+    check_interval_relation(R, Xs, Xe, Ys, Ye),
+    !,
+    Rel = R^^'http://www.w3.org/2001/XMLSchema#string'.
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1188,6 +1226,7 @@ find_resources(month_start_date(_,_),_, _, _, [], []).
 find_resources(month_end_date(_,_),_, _, _, [], []).
 find_resources(month_start_dates(_,_,_),_, _, _, [], []).
 find_resources(month_end_dates(_,_,_),_, _, _, [], []).
+find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1400,6 +1439,12 @@ compile_wf(month_end_dates(D,S,E),woql_month_end_dates(DE,SE,EE)) -->
     resolve(D,DE),
     resolve(S,SE),
     resolve(E,EE).
+compile_wf(interval_relation(R,Xs,Xe,Ys,Ye),woql_interval_relation(RE,XsE,XeE,YsE,YeE)) -->
+    resolve(R,RE),
+    resolve(Xs,XsE),
+    resolve(Xe,XeE),
+    resolve(Ys,YsE),
+    resolve(Ye,YeE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -6763,6 +6808,288 @@ test(month_end_dates_fy2024, [
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 12).
+
+test(interval_relation_before_integers, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "before"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_before_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "before"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(interval_relation_meets, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_overlaps, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "overlaps"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 6}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 4}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_starts, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "starts"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_during, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "during"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_finishes, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "finishes"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_equals, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "equals"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_after_inverse, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "after"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 3}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_contains_inverse, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "contains"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_classify_before, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "NodeValue",
+                            variable : "v:rel"},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.'v:rel' = _{'@type': 'xsd:string', '@value': "before"}.
+
+test(interval_relation_classify_during, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "NodeValue",
+                            variable : "v:rel"},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.'v:rel' = _{'@type': 'xsd:string', '@value': "during"}.
+
+test(interval_relation_meets_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_during_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "during"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-03-15"}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-03-20"}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
 
 :- end_tests(woql).
 

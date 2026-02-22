@@ -764,4 +764,144 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[13].d['@value']).to.equal('2024-02-29')
     })
   })
+
+  describe('IntervalRelation (Allen\'s Interval Algebra)', function () {
+    function intervalQuery (relation, xs, xe, ys, ye) {
+      const q = {
+        '@type': 'IntervalRelation',
+        x_start: { '@type': 'DataValue', data: xs },
+        x_end: { '@type': 'DataValue', data: xe },
+        y_start: { '@type': 'DataValue', data: ys },
+        y_end: { '@type': 'DataValue', data: ye },
+      }
+      if (typeof relation === 'string') {
+        q.relation = { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': relation } }
+      } else {
+        q.relation = relation
+      }
+      return q
+    }
+    function dec (v) { return { '@type': 'xsd:decimal', '@value': v } }
+    function dat (v) { return { '@type': 'xsd:date', '@value': v } }
+
+    // 7 fundamental relations
+    it('validates before: [1,3) before [5,8)', async function () {
+      const r = await woql.post(agent, intervalQuery('before', dec(1), dec(3), dec(5), dec(8)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('rejects before when intervals overlap: [1,5) not before [3,8)', async function () {
+      const r = await woql.post(agent, intervalQuery('before', dec(1), dec(5), dec(3), dec(8)))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+    it('validates meets: [1,5) meets [5,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('meets', dec(1), dec(5), dec(5), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('rejects meets when gap exists: [1,4) does not meet [5,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('meets', dec(1), dec(4), dec(5), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+    it('validates overlaps: [1,6) overlaps [4,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('overlaps', dec(1), dec(6), dec(4), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates starts: [1,5) starts [1,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('starts', dec(1), dec(5), dec(1), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates during: [3,7) during [1,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('during', dec(3), dec(7), dec(1), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates finishes: [5,10) finishes [1,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('finishes', dec(5), dec(10), dec(1), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates equals: [1,10) equals [1,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('equals', dec(1), dec(10), dec(1), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('rejects equals when endpoints differ: [1,10) != [1,9)', async function () {
+      const r = await woql.post(agent, intervalQuery('equals', dec(1), dec(10), dec(1), dec(9)))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+
+    // 6 inverse relations
+    it('validates after (inverse of before): [5,8) after [1,3)', async function () {
+      const r = await woql.post(agent, intervalQuery('after', dec(5), dec(8), dec(1), dec(3)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates met_by (inverse of meets): [5,10) met_by [1,5)', async function () {
+      const r = await woql.post(agent, intervalQuery('met_by', dec(5), dec(10), dec(1), dec(5)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates overlapped_by: [4,10) overlapped_by [1,6)', async function () {
+      const r = await woql.post(agent, intervalQuery('overlapped_by', dec(4), dec(10), dec(1), dec(6)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates started_by: [1,10) started_by [1,5)', async function () {
+      const r = await woql.post(agent, intervalQuery('started_by', dec(1), dec(10), dec(1), dec(5)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates contains (inverse of during): [1,10) contains [3,7)', async function () {
+      const r = await woql.post(agent, intervalQuery('contains', dec(1), dec(10), dec(3), dec(7)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates finished_by: [1,10) finished_by [5,10)', async function () {
+      const r = await woql.post(agent, intervalQuery('finished_by', dec(1), dec(10), dec(5), dec(10)))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+
+    // Classification mode (relation as variable)
+    it('classifies relation as "before" when [1,3) vs [5,8)', async function () {
+      const q = intervalQuery(
+        { '@type': 'NodeValue', variable: 'v:rel' },
+        dec(1), dec(3), dec(5), dec(8))
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:rel']['@value']).to.equal('before')
+    })
+    it('classifies relation as "during" when [3,7) vs [1,10)', async function () {
+      const q = intervalQuery(
+        { '@type': 'NodeValue', variable: 'v:rel' },
+        dec(3), dec(7), dec(1), dec(10))
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:rel']['@value']).to.equal('during')
+    })
+    it('classifies relation as "equals" when [1,10) vs [1,10)', async function () {
+      const q = intervalQuery(
+        { '@type': 'NodeValue', variable: 'v:rel' },
+        dec(1), dec(10), dec(1), dec(10))
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:rel']['@value']).to.equal('equals')
+    })
+
+    // Date-based tests
+    it('Q1 meets Q2 with dates (half-open adjacency)', async function () {
+      const r = await woql.post(agent, intervalQuery('meets',
+        dat('2024-01-01'), dat('2024-04-01'),
+        dat('2024-04-01'), dat('2024-07-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('week during fiscal year with dates', async function () {
+      const r = await woql.post(agent, intervalQuery('during',
+        dat('2024-03-15'), dat('2024-03-20'),
+        dat('2024-01-01'), dat('2025-01-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('FY contains June with dates', async function () {
+      const r = await woql.post(agent, intervalQuery('contains',
+        dat('2024-01-01'), dat('2025-01-01'),
+        dat('2024-06-01'), dat('2024-07-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('Q1 before Q2 with dates', async function () {
+      const r = await woql.post(agent, intervalQuery('before',
+        dat('2024-01-01'), dat('2024-03-31'),
+        dat('2024-04-01'), dat('2024-06-30')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+  })
 })

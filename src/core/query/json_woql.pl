@@ -810,6 +810,19 @@ json_type_to_woql_ast('MonthEndDates',JSON,WOQL,Path) :-
     json_value_to_woql_ast(S,WS,[start|Path]),
     json_value_to_woql_ast(E,WE,['end'|Path]),
     WOQL = month_end_dates(WD,WS,WE).
+json_type_to_woql_ast('IntervalRelation',JSON,WOQL,Path) :-
+    _{relation : R,
+      x_start : Xs,
+      x_end : Xe,
+      y_start : Ys,
+      y_end : Ye
+     } :< JSON,
+    json_value_to_woql_ast(R,WR,[relation|Path]),
+    json_value_to_woql_ast(Xs,WXs,[x_start|Path]),
+    json_value_to_woql_ast(Xe,WXe,[x_end|Path]),
+    json_value_to_woql_ast(Ys,WYs,[y_start|Path]),
+    json_value_to_woql_ast(Ye,WYe,[y_end|Path]),
+    WOQL = interval_relation(WR,WXs,WXe,WYs,WYe).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,
