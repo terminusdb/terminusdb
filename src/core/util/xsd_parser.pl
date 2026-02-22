@@ -33,6 +33,7 @@
                        coordinatePolygon//1,
                        dateRange//2,
                        dateTimeInterval//2,
+                       dateTimeInterval//3,
                        decimalRange//2,
                        email//0,
                        gYearRange//2,
@@ -445,11 +446,13 @@ dateRange(date(Y1,M1,D1,Offset1),date(Y2,M2,D2,Offset2)) -->
 	"," , whitespace, date(Y2,M2,D2,Offset2), whitespace,
 	"]" .
 
+dateTimeInterval(Start,End,Duration) -->
+    dateTimeIntervalComponent(Start), "/" , dateTimeIntervalComponent(End), "/" , dateTimeIntervalComponent(Duration).
 dateTimeInterval(Start,End) -->
-    "[" , whitespace, dateTimeIntervalComponent(Start), whitespace,
-	"," , whitespace, dateTimeIntervalComponent(End), whitespace,
-	")" .
+    dateTimeIntervalComponent(Start), "/" , dateTimeIntervalComponent(End).
 
+dateTimeIntervalComponent(duration(Sign,Y,Mo,D,H,M,S)) -->
+    duration(Sign,Y,Mo,D,H,M,S), !.
 dateTimeIntervalComponent(date_time(Y,Mo,D,H,M,S,NS,Offset)) -->
     dateTime(Y,Mo,D,H,M,S,NS,Offset), !.
 dateTimeIntervalComponent(date(Y,M,D,Offset)) -->

@@ -199,6 +199,7 @@
               coordinatePolygon//1,
               dateRange//2,
               dateTimeInterval//2,
+              dateTimeInterval//3,
               decimalRange//2,
               email//0,
               gYearRange//2,

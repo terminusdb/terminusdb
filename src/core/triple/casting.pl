@@ -323,26 +323,97 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
 %%% xsd:string => xdd:dateTimeInterval
 typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
     !,
-    (   atom_codes(Val, Codes), phrase(dateTimeInterval(X,Y),Codes)
-    ->  normalise_interval_component(X, NX),
-        normalise_interval_component(Y, NY),
-        Cast = date_time_interval(NX,NY)
-    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
+    (   parse_date_time_interval(Val, Cast)
+    ->  true
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))
+    ).
+
+parse_date_time_interval(Val, Cast) :-
+    atom_codes(Val, Codes),
+    phrase(dateTimeInterval(X, Y, Z), Codes),
+    !,
+    normalise_interval_component(X, NX),
+    normalise_interval_component(Y, NY),
+    Cast = date_time_interval(NX, NY, Z, explicit).
+parse_date_time_interval(Val, Cast) :-
+    atom_codes(Val, Codes),
+    phrase(dateTimeInterval(X, Y), Codes),
+    !,
+    parse_two_component_interval(X, Y, Cast).
+
+parse_two_component_interval(X, Y, date_time_interval(NX, NY, X, duration_end)) :-
+    is_duration(X),
+    !,
+    normalise_interval_component(Y, NY),
+    subtract_duration_from_component(NY, X, NX).
+parse_two_component_interval(X, Y, date_time_interval(NX, NY, Y, start_duration)) :-
+    is_duration(Y),
+    !,
+    normalise_interval_component(X, NX),
+    add_duration_to_component(NX, Y, NY).
+parse_two_component_interval(X, Y, date_time_interval(NX, NY, Dur, explicit)) :-
+    normalise_interval_component(X, NX),
+    normalise_interval_component(Y, NY),
+    compute_duration_between(NX, NY, Dur).
+
 %%% xdd:dateTimeInterval => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
-    (   is_date_time_interval(Val),
-        Val = date_time_interval(C1,C2),
-        interval_component_string(C1,Val1),
-        interval_component_string(C2,Val2)
-    ->  format(string(S), '[~w,~w)', [Val1,Val2])
-    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
+    (   is_date_time_interval(Val)
+    ->  interval_to_string(Val, S)
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))
+    ).
+
+interval_to_string(date_time_interval(C1,C2,_Dur,_Flag), S) :-
+    interval_component_string(C1,Val1),
+    interval_component_string(C2,Val2),
+    format(string(S), '~w/~w', [Val1,Val2]).
+
+interval_to_string_as(date_time_interval(C1,C2,_Dur,_Flag), explicit, S) :-
+    !,
+    interval_component_string(C1,Val1),
+    interval_component_string(C2,Val2),
+    format(string(S), '~w/~w', [Val1,Val2]).
+interval_to_string_as(date_time_interval(C1,_C2,Dur,_Flag), start_duration, S) :-
+    !,
+    interval_component_string(C1,Val1),
+    interval_component_string(Dur,Val2),
+    format(string(S), '~w/~w', [Val1,Val2]).
+interval_to_string_as(date_time_interval(_C1,C2,Dur,_Flag), duration_end, S) :-
+    !,
+    interval_component_string(Dur,Val1),
+    interval_component_string(C2,Val2),
+    format(string(S), '~w/~w', [Val1,Val2]).
 
 normalise_interval_component(date(Y,M,D,_Offset), date(Y,M,D,0)) :- !.
 normalise_interval_component(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
+normalise_interval_component(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
+
+compute_duration_between(Start, End, duration(Sign, 0, 0, Days, Hours, Minutes, Seconds)) :-
+    component_to_timestamp(Start, T1),
+    component_to_timestamp(End, T2),
+    Diff is T2 - T1,
+    (   Diff >= 0
+    ->  Sign = 1, AbsDiff = Diff
+    ;   Sign = -1, AbsDiff is abs(Diff)
+    ),
+    Days is truncate(AbsDiff / 86400),
+    Rem1 is AbsDiff - Days * 86400,
+    Hours is truncate(Rem1 / 3600),
+    Rem2 is Rem1 - Hours * 3600,
+    Minutes is truncate(Rem2 / 60),
+    Seconds is Rem2 - Minutes * 60 * 1.0.
+
+component_to_timestamp(date(Y,M,D,_), T) :-
+    !,
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), T).
+component_to_timestamp(date_time(Y,Mo,D,H,Mi,S,NS), T) :-
+    Sec is S + NS / 1000000000,
+    date_time_stamp(date(Y,Mo,D,H,Mi,Sec,0,-,-), T).
 
 interval_component_string(date(Y,M,D,Offset), S) :- !, date_string(date(Y,M,D,Offset), S).
+interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
 interval_component_string(DT, S) :- date_time_string(DT, S).
 %%% xsd:string => xdd:integerRange
 typecast_switch('http://terminusdb.com/schema/xdd#integerRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#integerRange') :-

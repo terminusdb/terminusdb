@@ -22,7 +22,9 @@
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3,
-              uri_eq/3
+              uri_eq/3,
+              add_duration_to_component/3,
+              subtract_duration_from_component/3
           ]).
 
 /** <module> Literals
@@ -218,6 +220,82 @@ remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_F
     date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),
     stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
     SS_Floor is floor(SS1).
+
+/*
+ * add_duration_to_component(+Component, +Duration, -Result) is det.
+ *
+ * Calendar-aware duration addition. Handles year/month components via
+ * calendar arithmetic and day/time via seconds. Result type matches
+ * input unless sub-day time components are added to a date.
+ */
+add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    duration_normalize_year_month(Y1, M1, Y2, M2),
+    duration_clamp_day(Y2, M2, D, D2),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + DS),
+    date_time_stamp(date(Y2,M2,D2,0,0,0,0,-,-), BaseStamp),
+    EndStamp is BaseStamp + DaySecs,
+    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS,0,'UTC',-), 'UTC'),
+    ESSF is floor(ESS),
+    (   DH =:= 0, DMi =:= 0, DS =:= 0
+    ->  End = date(EY,EM,ED,O)
+    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,0)
+    ).
+add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    duration_normalize_year_month(Y1, M1, Y2, M2),
+    duration_clamp_day(Y2, M2, D, D2),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + DS),
+    S is SS + NS / 1000000000,
+    date_time_stamp(date(Y2,M2,D2,HH,MM,S,0,-,-), BaseStamp),
+    EndStamp is BaseStamp + DaySecs,
+    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
+    ESSF is floor(ESS1),
+    ENS is floor((ESS1 - ESSF) * 1000000000),
+    End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS).
+
+/*
+ * subtract_duration_from_component(+Component, +Duration, -Result) is det.
+ *
+ * Negate the duration sign and add.
+ */
+subtract_duration_from_component(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
+    NSign is Sign * -1,
+    add_duration_to_component(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
+
+% Normalize month overflow/underflow: e.g. month 0 or 13.
+duration_normalize_year_month(Y, M, NY, NM) :-
+    NM0 is ((M - 1) mod 12) + 1,
+    NY is Y + ((M - 1) // 12),
+    NM = NM0.
+
+% Clamp day to the maximum valid day for a given year/month.
+duration_clamp_day(Y, M, D, CD) :-
+    duration_days_in_month(Y, M, MaxD),
+    CD is min(D, MaxD).
+
+duration_days_in_month(_, 1, 31).
+duration_days_in_month(Y, 2, 29) :- duration_is_leap(Y), !.
+duration_days_in_month(_, 2, 28).
+duration_days_in_month(_, 3, 31).
+duration_days_in_month(_, 4, 30).
+duration_days_in_month(_, 5, 31).
+duration_days_in_month(_, 6, 30).
+duration_days_in_month(_, 7, 31).
+duration_days_in_month(_, 8, 31).
+duration_days_in_month(_, 9, 30).
+duration_days_in_month(_, 10, 31).
+duration_days_in_month(_, 11, 30).
+duration_days_in_month(_, 12, 31).
+
+duration_is_leap(Y) :-
+    0 =:= Y mod 4,
+    (   0 =\= Y mod 100
+    ->  true
+    ;   0 =:= Y mod 400
+    ).
 
 /*
  * date_string(-Date,+String) is det.
