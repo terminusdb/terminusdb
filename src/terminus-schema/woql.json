@@ -1091,6 +1091,26 @@
 }
 {
   "@documentation": {
+    "@comment":"Predicate testing whether a value falls within a half-open range [Start, End). Succeeds if Start <= Value < End.",
+    "@properties": {"value":"The value to test.", "start":"The inclusive lower bound.", "end":"The exclusive upper bound."}
+  },
+  "@id":"InRange",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["value", "start", "end" ],
+      "mode": ["+", "+", "+" ],
+      "types": ["any", "any", "any" ]
+    }
+  },
+  "@type":"Class",
+  "value":"DataValue",
+  "start":"DataValue",
+  "end":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },

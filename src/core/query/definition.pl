@@ -335,6 +335,13 @@ definition(
         types: [any,any]
     }).
 definition(
+    in_range{
+        name: 'InRange',
+        fields: [value,start,'end'],
+        mode: [+,+,+],
+        types: [any,any,any]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -626,6 +633,7 @@ operator(_>_).
 operator(_<_).
 operator(_>=_).
 operator(_=<_).
+operator(in_range(_,_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

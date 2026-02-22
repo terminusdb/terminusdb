@@ -798,6 +798,16 @@ woql_lte(AE,BE) :-
     ).
 
 /*
+ * woql_in_range(VE,SE,EE) is semidet.
+ *
+ * Half-open range containment: succeeds if SE <= VE < EE.
+ * Equivalent to gte(Value, Start), less(Value, End).
+ */
+woql_in_range(VE,SE,EE) :-
+    woql_lte(SE,VE),
+    woql_less(VE,EE).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1029,6 +1039,7 @@ find_resources('<'(_,_),_, _, _, [], []).
 find_resources('>'(_,_),_, _, _, [], []).
 find_resources('>='(_,_),_, _, _, [], []).
 find_resources('=<'(_,_),_, _, _, [], []).
+find_resources(in_range(_,_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1211,6 +1222,10 @@ compile_wf(A>=B,woql_gte(AE,BE)) -->
 compile_wf(A=<B,woql_lte(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
+compile_wf(in_range(V,S,E),woql_in_range(VE,SE,EE)) -->
+    resolve(V,VE),
+    resolve(S,SE),
+    resolve(E,EE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -6297,6 +6312,125 @@ test(gte_cross_family_throws, [
              },
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, _JSON).
+
+test(in_range_integer_within, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(in_range_integer_at_start_inclusive, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(in_range_integer_at_end_exclusive, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(in_range_integer_below, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 0}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(in_range_integer_above, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 11}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(in_range_date_within, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(in_range_date_at_end_exclusive, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
 
 :- end_tests(woql).
 

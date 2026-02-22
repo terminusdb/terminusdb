@@ -746,6 +746,18 @@ json_type_to_woql_ast('Lte',JSON,WOQL,Path) :-
     json_value_to_woql_ast(B,WB,[right
                                  |Path]),
     WOQL = '=<'(WA,WB).
+json_type_to_woql_ast('InRange',JSON,WOQL,Path) :-
+    _{value : V,
+      start : S,
+      end : E
+     } :< JSON,
+    json_value_to_woql_ast(V,WV,[value
+                                 |Path]),
+    json_value_to_woql_ast(S,WS,[start
+                                 |Path]),
+    json_value_to_woql_ast(E,WE,['end'
+                                 |Path]),
+    WOQL = in_range(WV,WS,WE).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,
