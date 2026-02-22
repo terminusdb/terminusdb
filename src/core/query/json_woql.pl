@@ -864,6 +864,29 @@ json_type_to_woql_ast('IntervalRelation',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Ys,WYs,[y_start|Path]),
     json_value_to_woql_ast(Ye,WYe,[y_end|Path]),
     WOQL = interval_relation(WR,WXs,WXe,WYs,WYe).
+json_type_to_woql_ast('Weekday',JSON,WOQL,Path) :-
+    _{date : D,
+      weekday : W
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(W,WW,[weekday|Path]),
+    WOQL = weekday(WD,WW).
+json_type_to_woql_ast('WeekdaySundayStart',JSON,WOQL,Path) :-
+    _{date : D,
+      weekday : W
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(W,WW,[weekday|Path]),
+    WOQL = weekday_sunday_start(WD,WW).
+json_type_to_woql_ast('IsoWeek',JSON,WOQL,Path) :-
+    _{date : D,
+      year : Y,
+      week : W
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(Y,WY,[year|Path]),
+    json_value_to_woql_ast(W,WW,[week|Path]),
+    WOQL = iso_week(WD,WY,WW).
 json_type_to_woql_ast('Optional',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

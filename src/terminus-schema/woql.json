@@ -1331,6 +1331,64 @@
 }
 {
   "@documentation": {
+    "@comment":"Computes the ISO 8601 weekday number (Monday=1, Sunday=7) for a date. Accepts xsd:date or xsd:dateTime. Date must be ground.",
+    "@properties": {"date":"The input date or dateTime.", "weekday":"The ISO weekday number (1=Monday, 7=Sunday)."}
+  },
+  "@id":"Weekday",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "weekday"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "weekday":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the US-convention weekday number (Sunday=1, Saturday=7) for a date. Accepts xsd:date or xsd:dateTime. Date must be ground.",
+    "@properties": {"date":"The input date or dateTime.", "weekday":"The US weekday number (1=Sunday, 7=Saturday)."}
+  },
+  "@id":"WeekdaySundayStart",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "weekday"],
+      "mode": ["+", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "weekday":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the ISO 8601 week-numbering year and week number for a date. Accepts xsd:date or xsd:dateTime. Date must be ground. The ISO year may differ from the calendar year at year boundaries.",
+    "@properties": {"date":"The input date or dateTime.", "year":"The ISO week-numbering year.", "week":"The ISO week number (1-53)."}
+  },
+  "@id":"IsoWeek",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "year", "week"],
+      "mode": ["+", "?", "?"],
+      "types": ["data_value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "week":"DataValue",
+  "year":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"A query which will succeed (without bindings) even in the case of failure.",
     "@properties": {"query":"The query to run."}
   },

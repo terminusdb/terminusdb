@@ -419,6 +419,27 @@ definition(
         types: [data_value,data_value,data_value,data_value,data_value]
     }).
 definition(
+    weekday{
+        name: 'Weekday',
+        fields: [date,weekday],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    weekday_sunday_start{
+        name: 'WeekdaySundayStart',
+        fields: [date,weekday],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    iso_week{
+        name: 'IsoWeek',
+        fields: [date,year,week],
+        mode: [+,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -717,6 +738,9 @@ operator(month_end_date(_,_)).
 operator(month_start_dates(_,_,_)).
 operator(month_end_dates(_,_,_)).
 operator(interval_relation(_,_,_,_,_)).
+operator(weekday(_,_)).
+operator(weekday_sunday_start(_,_)).
+operator(iso_week(_,_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

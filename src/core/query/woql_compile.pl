@@ -1155,6 +1155,144 @@ classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
     Rel = R^^'http://www.w3.org/2001/XMLSchema#string'.
 
 /*
+ * extract_ymd(+DateOrDateTime, -Y, -M, -D) is det.
+ *
+ * Extracts year, month, day from either xsd:date or xsd:dateTime.
+ */
+extract_ymd(date(Y,M,D,_)^^'http://www.w3.org/2001/XMLSchema#date', Y, M, D).
+extract_ymd(date_time(Y,M,D,_,_,_,_)^^'http://www.w3.org/2001/XMLSchema#dateTime', Y, M, D).
+
+/*
+ * iso_weekday_number(+Y, +M, +D, -IsoDay) is det.
+ *
+ * Computes ISO 8601 weekday number (Monday=1, Sunday=7) using
+ * Tomohiko Sakamoto's algorithm.
+ */
+iso_weekday_number(Y, M, D, IsoDay) :-
+    nth0(M, [0, 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4], T),
+    (   M < 3
+    ->  Y1 is Y - 1
+    ;   Y1 = Y
+    ),
+    DoW is (Y1 + Y1 // 4 - Y1 // 100 + Y1 // 400 + T + D) mod 7,
+    % DoW: 0=Sunday, 1=Monday, ..., 6=Saturday
+    % Convert to ISO: Monday=1, ..., Sunday=7
+    (   DoW =:= 0
+    ->  IsoDay = 7
+    ;   IsoDay = DoW
+    ).
+
+/*
+ * woql_weekday(Date, Weekday) is semidet.
+ *
+ * Computes the ISO 8601 weekday number (Monday=1, Sunday=7) for a date.
+ * Accepts xsd:date or xsd:dateTime. Date must be ground.
+ */
+woql_weekday(Date, Weekday) :-
+    (   nonvar(Date)
+    ->  extract_ymd(Date, Y, M, D),
+        iso_weekday_number(Y, M, D, IsoDay),
+        Expected = IsoDay^^'http://www.w3.org/2001/XMLSchema#integer',
+        (   nonvar(Weekday)
+        ->  Weekday = Expected
+        ;   Weekday = Expected
+        )
+    ;   throw(error(instantiation_error(weekday), _))
+    ).
+
+/*
+ * woql_weekday_sunday_start(Date, Weekday) is semidet.
+ *
+ * Computes the US-convention weekday number (Sunday=1, Saturday=7) for a date.
+ * Accepts xsd:date or xsd:dateTime. Date must be ground.
+ */
+woql_weekday_sunday_start(Date, Weekday) :-
+    (   nonvar(Date)
+    ->  extract_ymd(Date, Y, M, D),
+        iso_weekday_number(Y, M, D, IsoDay),
+        USDay is (IsoDay mod 7) + 1,
+        Expected = USDay^^'http://www.w3.org/2001/XMLSchema#integer',
+        (   nonvar(Weekday)
+        ->  Weekday = Expected
+        ;   Weekday = Expected
+        )
+    ;   throw(error(instantiation_error(weekday_sunday_start), _))
+    ).
+
+/*
+ * ordinal_day(+Y, +M, +D, -Ordinal) is det.
+ *
+ * Day of year (1-366).
+ */
+ordinal_day(Y, M, D, Ordinal) :-
+    ordinal_day_(Y, 1, M, D, 0, Ordinal).
+
+ordinal_day_(_Y, Month, Month, D, Acc, Ordinal) :- !,
+    Ordinal is Acc + D.
+ordinal_day_(Y, Current, Month, D, Acc, Ordinal) :-
+    days_in_month(Y, Current, Days),
+    Next is Current + 1,
+    Acc1 is Acc + Days,
+    ordinal_day_(Y, Next, Month, D, Acc1, Ordinal).
+
+/*
+ * iso_week_date(+Y, +M, +D, -IsoYear, -IsoWeek) is det.
+ *
+ * Computes ISO 8601 week-numbering year and week number.
+ * Week 1 is the week containing the first Thursday of the year.
+ */
+iso_week_date(Y, M, D, IsoYear, IsoWeek) :-
+    iso_weekday_number(Y, M, D, DayOfWeek),
+    ordinal_day(Y, M, D, Ordinal),
+    % Thursday of this week's ordinal day
+    ThursdayOrd is Ordinal + (4 - DayOfWeek),
+    (   ThursdayOrd < 1
+    ->  % Thursday is in the previous year
+        PrevY is Y - 1,
+        (   is_leap_year(PrevY)
+        ->  PrevDays = 366
+        ;   PrevDays = 365
+        ),
+        AdjOrd is PrevDays + ThursdayOrd,
+        IsoYear = PrevY,
+        IsoWeek is (AdjOrd - 1) // 7 + 1
+    ;   (   is_leap_year(Y)
+        ->  YearDays = 366
+        ;   YearDays = 365
+        ),
+        (   ThursdayOrd > YearDays
+        ->  % Thursday is in the next year
+            IsoYear is Y + 1,
+            IsoWeek = 1
+        ;   IsoYear = Y,
+            IsoWeek is (ThursdayOrd - 1) // 7 + 1
+        )
+    ).
+
+/*
+ * woql_iso_week(Date, Year, Week) is semidet.
+ *
+ * Computes the ISO 8601 week-numbering year and week for a date.
+ * Accepts xsd:date or xsd:dateTime. Date must be ground.
+ */
+woql_iso_week(Date, Year, Week) :-
+    (   nonvar(Date)
+    ->  extract_ymd(Date, Y, M, D),
+        iso_week_date(Y, M, D, IsoYear, IsoWeek),
+        ExpectedYear = IsoYear^^'http://www.w3.org/2001/XMLSchema#integer',
+        ExpectedWeek = IsoWeek^^'http://www.w3.org/2001/XMLSchema#integer',
+        (   nonvar(Year)
+        ->  Year = ExpectedYear
+        ;   Year = ExpectedYear
+        ),
+        (   nonvar(Week)
+        ->  Week = ExpectedWeek
+        ;   Week = ExpectedWeek
+        )
+    ;   throw(error(instantiation_error(iso_week), _))
+    ).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -1398,6 +1536,9 @@ find_resources(month_end_date(_,_),_, _, _, [], []).
 find_resources(month_start_dates(_,_,_),_, _, _, [], []).
 find_resources(month_end_dates(_,_,_),_, _, _, [], []).
 find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
+find_resources(weekday(_,_),_, _, _, [], []).
+find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
+find_resources(iso_week(_,_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1634,6 +1775,16 @@ compile_wf(interval_relation(R,Xs,Xe,Ys,Ye),woql_interval_relation(RE,XsE,XeE,Ys
     resolve(Xe,XeE),
     resolve(Ys,YsE),
     resolve(Ye,YeE).
+compile_wf(weekday(D,W),woql_weekday(DE,WE)) -->
+    resolve(D,DE),
+    resolve(W,WE).
+compile_wf(weekday_sunday_start(D,W),woql_weekday_sunday_start(DE,WE)) -->
+    resolve(D,DE),
+    resolve(W,WE).
+compile_wf(iso_week(D,Y,W),woql_iso_week(DE,YE,WE)) -->
+    resolve(D,DE),
+    resolve(Y,YE),
+    resolve(W,WE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -7683,6 +7834,324 @@ test(interval_relation_during_dates, [
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 1).
+
+test(weekday_monday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(weekday_sunday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-07"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 7}.
+
+test(weekday_saturday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-06"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 6}.
+
+test(weekday_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 4}.
+
+test(weekday_validate_succeeds, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:integer', '@value': 1}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(weekday_validate_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:integer', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(weekday_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T12:00:00Z"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(weekday_datetime_sunday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-07T23:59:59Z"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 7}.
+
+test(weekday_sunday_start_sunday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-07"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(weekday_sunday_start_saturday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-06"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 7}.
+
+test(weekday_sunday_start_monday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 2}.
+
+test(weekday_sunday_start_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-07T10:00:00Z"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(iso_week_first_day_2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2024},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(iso_week_year_boundary_dec30_2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-12-30"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2025},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(iso_week_jan1_2023_in_2022_w52, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2023-01-01"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2022},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 52}.
+
+test(iso_week_2020_has_53_weeks, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2020-12-31"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2020},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 53}.
+
+test(iso_week_mid_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2024},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 24}.
+
+test(iso_week_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-06-15T09:30:00Z"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2024},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 24}.
+
+test(iso_week_validate_succeeds, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               year : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 2024}},
+               week : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 1}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(iso_week_validate_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               year : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 2024}},
+               week : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
 
 :- end_tests(woql).
 
