@@ -484,7 +484,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1847,7 +1847,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2115,8 +2115,7 @@ dependencies = [
 [[package]]
 name = "tdb-succinct"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dd2121c78e3a6efd81722c3828e01ab51123cb38d6a54794eb84ab435ad9022"
+source = "git+https://github.com/terminusdb-org/tdb-succinct?branch=iso8601-predicates#956f12df7f0c909a84fc15e701aa30a245909df0"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -2147,7 +2146,7 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix 1.1.3",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
