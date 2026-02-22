@@ -778,6 +778,20 @@ json_type_to_woql_ast('Sequence',JSON,WOQL,Path) :-
     ;   WCount = none
     ),
     WOQL = sequence(WV,WS,WE,WStep,WCount).
+json_type_to_woql_ast('DayAfter',JSON,WOQL,Path) :-
+    _{date : D,
+      next : N
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(N,WN,[next|Path]),
+    WOQL = day_after(WD,WN).
+json_type_to_woql_ast('DayBefore',JSON,WOQL,Path) :-
+    _{date : D,
+      previous : P
+     } :< JSON,
+    json_value_to_woql_ast(D,WD,[date|Path]),
+    json_value_to_woql_ast(P,WP,[previous|Path]),
+    WOQL = day_before(WD,WP).
 json_type_to_woql_ast('MonthStartDate',JSON,WOQL,Path) :-
     _{year_month : YM,
       date : D

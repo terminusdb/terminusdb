@@ -1133,6 +1133,44 @@
 }
 {
   "@documentation": {
+    "@comment":"Computes the calendar day after the given date. Bidirectional: given date computes next, given next computes date.",
+    "@properties": {"date":"The input date.", "next":"The next calendar day."}
+  },
+  "@id":"DayAfter",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "next"],
+      "mode": ["?", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "next":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Computes the calendar day before the given date. Bidirectional: given date computes previous, given previous computes date.",
+    "@properties": {"date":"The input date.", "previous":"The previous calendar day."}
+  },
+  "@id":"DayBefore",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["date", "previous"],
+      "mode": ["?", "?"],
+      "types": ["data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "date":"DataValue",
+  "previous":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"Computes the first day of the month for a given year-month. YearMonth must be ground.",
     "@properties": {"year_month":"A gYearMonth value (e.g. 2024-01).", "date":"The resulting xsd:date for the first day of the month."}
   },

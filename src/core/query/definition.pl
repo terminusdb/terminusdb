@@ -349,6 +349,20 @@ definition(
         types: [data_value,data_value,data_value,data_value,data_value]
     }).
 definition(
+    day_after{
+        name: 'DayAfter',
+        fields: [date,next],
+        mode: [?,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    day_before{
+        name: 'DayBefore',
+        fields: [date,previous],
+        mode: [?,?],
+        types: [data_value,data_value]
+    }).
+definition(
     month_start_date{
         name: 'MonthStartDate',
         fields: [year_month,date],
@@ -1236,6 +1250,12 @@ cost_(X << Y, Cost, _Polarity),
 is_var(X),
 is_var(Y) =>
     Cost = 100.
+
+cost_(day_after(_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(day_before(_,_), Cost, _Polarity) =>
+    Cost = 1.
 
 cost_(typecast(_,_,_), Cost, _Polarity) =>
     Cost = 1.

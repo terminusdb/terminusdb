@@ -929,6 +929,59 @@ gen_month_end_dates(Date, Y, M, EY, EM, Offset) :-
 next_month(Y, 12, NY, 1) :- !, NY is Y + 1.
 next_month(Y, M, Y, NM) :- NM is M + 1.
 
+prev_month(Y, 1, PY, 12) :- !, PY is Y - 1.
+prev_month(Y, M, Y, PM) :- PM is M - 1.
+
+/*
+ * woql_day_after(Date, Next) is det.
+ *
+ * Computes the calendar day after Date, or validates the relationship.
+ * Bidirectional: given Date computes Next, given Next computes Date.
+ */
+woql_day_after(Date, Next) :-
+    (   nonvar(Date)
+    ->  Date = date(Y,M,D,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+        days_in_month(Y, M, MaxD),
+        (   D < MaxD
+        ->  D1 is D + 1,
+            Expected = date(Y,M,D1,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ;   next_month(Y, M, NY, NM),
+            Expected = date(NY,NM,1,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ),
+        (   nonvar(Next)
+        ->  Next = Expected
+        ;   Next = Expected
+        )
+    ;   nonvar(Next)
+    ->  woql_day_before(Next, Date)
+    ;   throw(error(instantiation_error(day_after), _))
+    ).
+
+/*
+ * woql_day_before(Date, Previous) is det.
+ *
+ * Computes the calendar day before Date, or validates the relationship.
+ * Bidirectional: given Date computes Previous, given Previous computes Date.
+ */
+woql_day_before(Date, Previous) :-
+    (   nonvar(Date)
+    ->  Date = date(Y,M,D,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+        (   D > 1
+        ->  D1 is D - 1,
+            Expected = date(Y,M,D1,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ;   prev_month(Y, M, PY, PM),
+            days_in_month(PY, PM, PrevMaxD),
+            Expected = date(PY,PM,PrevMaxD,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ),
+        (   nonvar(Previous)
+        ->  Previous = Expected
+        ;   Previous = Expected
+        )
+    ;   nonvar(Previous)
+    ->  woql_day_after(Previous, Date)
+    ;   throw(error(instantiation_error(day_before), _))
+    ).
+
 is_leap_year(Y) :-
     0 =:= Y mod 4,
     (   0 =\= Y mod 100
@@ -1222,6 +1275,8 @@ find_resources('>='(_,_),_, _, _, [], []).
 find_resources('=<'(_,_),_, _, _, [], []).
 find_resources(in_range(_,_,_),_, _, _, [], []).
 find_resources(sequence(_,_,_,_,_),_, _, _, [], []).
+find_resources(day_after(_,_),_, _, _, [], []).
+find_resources(day_before(_,_),_, _, _, [], []).
 find_resources(month_start_date(_,_),_, _, _, [], []).
 find_resources(month_end_date(_,_),_, _, _, [], []).
 find_resources(month_start_dates(_,_,_),_, _, _, [], []).
@@ -1425,6 +1480,12 @@ compile_wf(sequence(V,S,E,Step,Count),woql_sequence(VE,SE,EE,StepE,CountE)) -->
     ->  resolve(Count,CountE)
     ;   { CountE = none }
     ).
+compile_wf(day_after(D,N),woql_day_after(DE,NE)) -->
+    resolve(D,DE),
+    resolve(N,NE).
+compile_wf(day_before(D,P),woql_day_before(DE,PE)) -->
+    resolve(D,DE),
+    resolve(P,PE).
 compile_wf(month_start_date(YM,D),woql_month_start_date(YME,DE)) -->
     resolve(YM,YME),
     resolve(D,DE).
@@ -6808,6 +6869,186 @@ test(month_end_dates_fy2024, [
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 12).
+
+test(day_after_mid_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-15"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2025-01-16"}.
+
+test(day_after_end_of_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-31"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2025-02-01"}.
+
+test(day_after_end_of_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-12-31"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2026-01-01"}.
+
+test(day_after_leap_feb28, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-28"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2024-02-29"}.
+
+test(day_after_leap_feb29, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2024-03-01"}.
+
+test(day_after_nonleap_feb28, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2023-02-28"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2023-03-01"}.
+
+test(day_before_mid_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-15"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2025-01-14"}.
+
+test(day_before_start_of_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-03-01"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2025-02-28"}.
+
+test(day_before_start_of_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2024-12-31"}.
+
+test(day_before_leap_mar01, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2024-02-29"}.
+
+test(day_after_bidirectional_from_next, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               next : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2025-03-31"}.
+
+test(day_before_bidirectional_from_previous, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               previous : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:date', '@value': "2025-03-31"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2025-04-01"}.
 
 test(interval_relation_before_integers, [
     setup((setup_temp_store(State),

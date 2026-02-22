@@ -904,4 +904,88 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
     })
   })
+
+  describe('DayAfter', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function dvArg (v) {
+      if (typeof v === 'string' && v.startsWith('v:')) return { '@type': 'DataValue', variable: v }
+      return { '@type': 'DataValue', data: datVal(v) }
+    }
+    function dayAfterQuery (date, next) {
+      return { '@type': 'DayAfter', date: dvArg(date), next: dvArg(next) }
+    }
+
+    it('mid-month: Jan 15 -> Jan 16', async function () {
+      const r = await woql.post(agent, dayAfterQuery('2025-01-15', 'v:n'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:n']['@value']).to.equal('2025-01-16')
+    })
+    it('end-of-month: Jan 31 -> Feb 1', async function () {
+      const r = await woql.post(agent, dayAfterQuery('2025-01-31', 'v:n'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:n']['@value']).to.equal('2025-02-01')
+    })
+    it('end-of-year: Dec 31 -> Jan 1 next year', async function () {
+      const r = await woql.post(agent, dayAfterQuery('2025-12-31', 'v:n'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:n']['@value']).to.equal('2026-01-01')
+    })
+    it('leap Feb 28 -> Feb 29', async function () {
+      const r = await woql.post(agent, dayAfterQuery('2024-02-28', 'v:n'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:n']['@value']).to.equal('2024-02-29')
+    })
+    it('leap Feb 29 -> Mar 1', async function () {
+      const r = await woql.post(agent, dayAfterQuery('2024-02-29', 'v:n'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:n']['@value']).to.equal('2024-03-01')
+    })
+    it('non-leap Feb 28 -> Mar 1', async function () {
+      const r = await woql.post(agent, dayAfterQuery('2023-02-28', 'v:n'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:n']['@value']).to.equal('2023-03-01')
+    })
+    it('bidirectional: given next=Apr 1, deduces date=Mar 31', async function () {
+      const r = await woql.post(agent, dayAfterQuery('v:d', '2025-04-01'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('2025-03-31')
+    })
+  })
+
+  describe('DayBefore', function () {
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function dvArg (v) {
+      if (typeof v === 'string' && v.startsWith('v:')) return { '@type': 'DataValue', variable: v }
+      return { '@type': 'DataValue', data: datVal(v) }
+    }
+    function dayBeforeQuery (date, previous) {
+      return { '@type': 'DayBefore', date: dvArg(date), previous: dvArg(previous) }
+    }
+
+    it('mid-month: Jan 15 -> Jan 14', async function () {
+      const r = await woql.post(agent, dayBeforeQuery('2025-01-15', 'v:p'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:p']['@value']).to.equal('2025-01-14')
+    })
+    it('start-of-month: Mar 1 -> Feb 28', async function () {
+      const r = await woql.post(agent, dayBeforeQuery('2025-03-01', 'v:p'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:p']['@value']).to.equal('2025-02-28')
+    })
+    it('start-of-year: Jan 1 -> Dec 31 prev year', async function () {
+      const r = await woql.post(agent, dayBeforeQuery('2025-01-01', 'v:p'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:p']['@value']).to.equal('2024-12-31')
+    })
+    it('leap Mar 1 -> Feb 29', async function () {
+      const r = await woql.post(agent, dayBeforeQuery('2024-03-01', 'v:p'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:p']['@value']).to.equal('2024-02-29')
+    })
+    it('bidirectional: given previous=Mar 31, deduces date=Apr 1', async function () {
+      const r = await woql.post(agent, dayBeforeQuery('v:d', '2025-03-31'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('2025-04-01')
+    })
+  })
 })
