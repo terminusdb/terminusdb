@@ -6526,7 +6526,7 @@ test(triple_slice_rev_descending_order, [
         _Meta_Data
     ),
 
-    findall(O,
+    findall(_,
             ask(Descriptor,
                 triple_slice_rev(v(x), label, v(o),
                              "alpha"^^xsd:string,
