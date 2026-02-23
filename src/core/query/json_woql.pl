@@ -1037,6 +1037,18 @@ json_type_to_woql_ast('GroupBy',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Collector,WCollector,[grouped
                                                  |Path]),
     WOQL = group_by(WSpec,WObj,WQuery,WCollector).
+json_type_to_woql_ast('Collect',JSON,WOQL,Path) :-
+    _{template : Template,
+      into : Into,
+      query : Query
+     } :< JSON,
+    % Backwards compat with "variable list"
+    (   variable_list(Template,WTemplate)
+    ->  true
+    ;   json_value_to_woql_ast(Template,WTemplate,[template|Path])),
+    json_value_to_woql_ast(Into,WInto,[into|Path]),
+    json_to_woql_ast(Query,WQuery,[query|Path]),
+    WOQL = collect(WTemplate,WInto,WQuery).
 json_type_to_woql_ast('Length',JSON,WOQL,Path) :-
     _{list : A,
       length : B

@@ -969,6 +969,8 @@ find_resources(order_by(_, P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(group_by(_,_,P, _), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
+find_resources(collect(_,_,P), Collection, DRG, DWG, Read, Write) :-
+    find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(distinct(_,P), Collection, DRG, DWG, Read, Write) :-
     find_resources(P, Collection, DRG, DWG, Read, Write).
 find_resources(pin(P), Collection, DRG, DWG, Read, Write) :-
@@ -1547,6 +1549,17 @@ compile_wf(group_by(WGroup,WTemplate,WQuery,WAcc),group_by(Group,UnwrappedTempla
       ;   UnwrappedTemplate = Template) },
     compile_wf(WQuery, Query),
     resolve(WAcc,Acc).
+compile_wf(collect(WTemplate,WInto,WQuery),findall(UnwrappedTemplate,Query,Into)) -->
+    resolve(WTemplate,Template),
+    % Unwrap single-element lists to avoid extra nesting in results
+    % findall/3 wraps each result if Template is a list
+    { (   is_list(Template),
+          Template = [SingleElement],
+          \+ is_list(SingleElement)
+      ->  UnwrappedTemplate = SingleElement
+      ;   UnwrappedTemplate = Template) },
+    compile_wf(WQuery, Query),
+    resolve(WInto,Into).
 compile_wf(distinct(X,WQuery), distinct(XE,Query)) -->
     resolve(X,XE),
     compile_wf(WQuery,Query).
@@ -3518,6 +3531,153 @@ test(group_by_single_element_list_template, [
        'Object':null,'Predicate':null,'Subject':x},
      _{'Grouped': ['@schema:p','@schema:p'],
        'Object':null,'Predicate':null,'Subject':y}] = JSON.bindings.
+
+test(collect_basic, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w),
+                      insert(x,p,q))),
+        _Meta),
+
+    Query = _{'@type' : "Collect",
+              template : _{ '@type' : 'Value',
+                            variable : "Object"},
+              into : _{'@type' : "Value",
+                       variable : "Collected"},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
+                       }},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+
+    [Binding] = JSON.bindings,
+    msort(Binding.'Collected', Sorted),
+    Sorted = [q, w, z].
+
+test(collect_empty_result, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+
+    Query = _{'@type' : "Collect",
+              template : _{ '@type' : 'Value',
+                            variable : "Object"},
+              into : _{'@type' : "Value",
+                       variable : "Collected"},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
+                       }},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+
+    [Binding] = JSON.bindings,
+    Binding.'Collected' = [].
+
+test(collect_with_list_template, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w))),
+        _Meta),
+
+    Query = _{'@type' : "Collect",
+              template : _{ '@type' : 'Value',
+                            list : [_{ '@type' : 'Value',
+                                       variable : "Subject"},
+                                    _{ '@type' : 'Value',
+                                       variable : "Object"}]},
+              into : _{'@type' : "Value",
+                       variable : "Collected"},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
+                       }},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+
+    [Binding] = JSON.bindings,
+    length(Binding.'Collected', 2),
+    % Each element should be a pair [Subject, Object]
+    forall(member(Pair, Binding.'Collected'),
+           length(Pair, 2)).
+
+test(collect_single_element_list_template, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test",
+                                            message : "testing"}, Context),
+
+    with_transaction(
+        Context,
+        ask(Context, (insert(x,p,z),
+                      insert(x,p,w))),
+        _Meta),
+
+    % Single-element list template should produce flat list, not nested
+    Query = _{'@type' : "Collect",
+              template : _{ '@type' : 'Value',
+                            list : [_{ '@type' : 'Value',
+                                       variable : "Object"}]},
+              into : _{'@type' : "Value",
+                       variable : "Collected"},
+              query : _{ '@type' : "Triple",
+                         subject : _{'@type' : "NodeValue",
+                                     variable : "Subject"},
+                         predicate : _{'@type' : "NodeValue",
+                                       variable : "Predicate"},
+                         object : _{'@type' : "Value",
+                                    variable : "Object"}
+                       }},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+
+    [Binding] = JSON.bindings,
+    msort(Binding.'Collected', Sorted),
+    Sorted = [w, z].
 
 test(select, [setup(setup_temp_store(State)),
               cleanup(teardown_temp_store(State))
