@@ -357,6 +357,36 @@
 }
 {
   "@documentation": {
+    "@comment":"Specify an edge pattern with a half-open value range [low, high) on the object, returning triples in reverse (descending) object order. Same semantics as TripleSlice but iterates from highest to lowest value.",
+    "@properties": {
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "high":"The exclusive upper bound of the value range.",
+      "low":"The inclusive lower bound of the value range.",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleSliceRev",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "low", "high", "optional(graph)" ],
+      "mode": ["?", "?", "?", "+", "+", "+" ],
+      "types": ["node", "node", "value", "value", "value", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "high":"Value",
+  "low":"Value",
+  "object":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
+}
+{
+  "@documentation": {
     "@comment":"Find the next object value after a reference for a given subject-predicate pair. When object is bound and next is free, finds the smallest next value greater than object. When next is bound and object is free, finds the largest object value less than next.",
     "@properties": {
       "graph":"An optional graph (either 'instance' or 'schema')",

@@ -103,6 +103,8 @@
               xrdf_added/4,
               xrdf_value_range/6,
               xquad_value_range/7,
+              xrdf_value_range_rev/6,
+              xquad_value_range_rev/7,
               xrdf_value_next/5,
               xquad_value_next/6,
               xrdf_value_previous/5,

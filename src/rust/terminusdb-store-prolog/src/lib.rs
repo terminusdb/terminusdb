@@ -62,6 +62,7 @@ pub fn install(module: Option<&str>) {
     layer::register_id_triple_addition_in_module(module);
     layer::register_id_triple_removal_in_module(module);
     layer::register_id_triple_value_range_in_module(module);
+    layer::register_id_triple_value_range_rev_in_module(module);
     layer::register_id_triple_sp_value_next_in_module(module);
     layer::register_id_triple_sp_value_previous_in_module(module);
     layer::register_sp_card_in_module(module);

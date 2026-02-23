@@ -277,6 +277,13 @@ definition(
         types: [node,node,value,value,value,graph]
     }).
 definition(
+    triple_slice_rev{
+        name: 'TripleSliceRev',
+        fields: [subject,predicate,object,low,high,optional(graph)],
+        mode: [?,?,?,+,+,+],
+        types: [node,node,value,value,value,graph]
+    }).
+definition(
     triple_next{
         name: 'TripleNext',
         fields: [subject,predicate,object,next,optional(graph)],

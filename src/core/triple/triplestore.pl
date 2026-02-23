@@ -12,6 +12,8 @@
               xrdf_added/4,
               xrdf_value_range/6,
               xquad_value_range/7,
+              xrdf_value_range_rev/6,
+              xquad_value_range_rev/7,
               xrdf_value_next/5,
               xquad_value_next/6,
               xrdf_value_previous/5,
@@ -399,6 +401,32 @@ xquad_value_range(Gs, G, Low, High, X, Y, Z) :-
     ground_object_storage(Low, LowS),
     ground_object_storage(High, HighS),
     triple_value_range(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xrdf_value_range_rev(Gs, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    member(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range_rev(Layer, LowS, HighS, A, B, S),
+    post_convert_node(A, X),
+    post_convert_node(B, Y),
+    storage_object(S, Z).
+
+xquad_value_range_rev(Gs, G, Low, High, X, Y, Z) :-
+    assertion(is_list(Gs)),
+    memberchk(G, Gs),
+    read_write_obj_reader(G, Layer),
+    pre_convert_node(X, A),
+    pre_convert_node(Y, B),
+    ground_object_storage(Low, LowS),
+    ground_object_storage(High, HighS),
+    triple_value_range_rev(Layer, LowS, HighS, A, B, S),
     post_convert_node(A, X),
     post_convert_node(B, Y),
     storage_object(S, Z).
