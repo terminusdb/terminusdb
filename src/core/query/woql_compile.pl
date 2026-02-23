@@ -811,45 +811,205 @@ woql_in_range(VE,SE,EE) :-
  * woql_sequence(Value, Start, End, Step, Count) is nondet.
  *
  * Generates a sequence of values in half-open range [Start, End).
- * Supports integer and decimal types. Step and Count are optional
- * (unbound when not provided).
+ * Supports numeric types (integer, decimal, double, float),
+ * xsd:date (step = days, default 1), xsd:dateTime (step = seconds,
+ * default 1), xsd:gYearMonth (step = months, default 1), and
+ * xsd:gYear (step = years, default 1).
+ * Step and Count are optional (unbound when not provided).
  */
 woql_sequence(Value, Start, End, Step, Count) :-
+    Start = _^^SType,
+    (   is_numeric_type(SType)
+    ->  woql_sequence_numeric(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#date'
+    ->  woql_sequence_date(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#dateTime'
+    ->  woql_sequence_datetime(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gYearMonth'
+    ->  woql_sequence_gyearmonth(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gYear'
+    ->  woql_sequence_gyear(Value, Start, End, Step, Count)
+    ).
+
+% --- Shared helpers ---
+
+sequence_extract_step(none, Default, Default).
+sequence_extract_step(Step, _, StepInt) :-
+    Step \= none,
+    Step = StepRaw^^_,
+    StepInt is truncate(StepRaw).
+
+sequence_handle_count(none, _) :- !.
+sequence_handle_count(Count, RawCount) :-
+    Count = CountVal^^_,
+    (   nonvar(CountVal)
+    ->  CountVal =:= RawCount
+    ;   CountVal = RawCount
+    ).
+
+% --- Numeric sequences ---
+
+woql_sequence_numeric(Value, Start, End, Step, Count) :-
     Start = SRaw^^SType,
     End = ERaw^^_,
-    % Determine step value
     (   Step \= none
     ->  Step = StepRaw^^_
-    ;   default_sequence_step(SType, StepRaw)
+    ;   default_numeric_step(SType, StepRaw)
     ),
-    % Compute expected count
     (   StepRaw > 0, ERaw > SRaw
     ->  RawCount is ceiling((ERaw - SRaw) / StepRaw)
     ;   RawCount = 0
     ),
-    % Handle count parameter
-    (   Count \= none
-    ->  Count = CountVal^^_,
-        (   nonvar(CountVal)
-        ->  CountVal =:= RawCount
-        ;   CountVal = RawCount
-        )
-    ;   true
-    ),
-    % Generate values (fails naturally for empty ranges)
+    sequence_handle_count(Count, RawCount),
     RawCount > 0,
     gen_numeric_sequence(Value, SRaw, ERaw, StepRaw, SType).
 
-default_sequence_step('http://www.w3.org/2001/XMLSchema#integer', 1).
-default_sequence_step('http://www.w3.org/2001/XMLSchema#decimal', 1).
-default_sequence_step('http://www.w3.org/2001/XMLSchema#double', 1.0).
-default_sequence_step('http://www.w3.org/2001/XMLSchema#float', 1.0).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#integer', 1).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#decimal', 1).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#double', 1.0).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#float', 1.0).
+default_numeric_step(_, 1).
 
 gen_numeric_sequence(Val^^Type, Current, End, Step, Type) :-
     Current < End,
     (   Val = Current
     ;   Next is Current + Step,
         gen_numeric_sequence(Val^^Type, Next, End, Step, Type)
+    ).
+
+% --- Date sequences (step = integer days, default 1) ---
+
+woql_sequence_date(Value, Start, End, Step, Count) :-
+    Start = date(SY,SM,SD,Offset)^^DateType,
+    End = date(EY,EM,ED,_)^^DateType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    gregorian_jdn(SY, SM, SD, SJ),
+    gregorian_jdn(EY, EM, ED, EJ),
+    DayDiff is EJ - SJ,
+    (   DayDiff > 0
+    ->  RawCount is ceiling(DayDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_date_sequence(Value, SJ, EJ, StepInt, Offset, DateType).
+
+gen_date_sequence(Value, CurrentJ, EndJ, StepInt, Offset, DateType) :-
+    CurrentJ < EndJ,
+    jdn_to_gregorian(CurrentJ, Y, M, D),
+    (   Value = date(Y, M, D, Offset)^^DateType
+    ;   NextJ is CurrentJ + StepInt,
+        gen_date_sequence(Value, NextJ, EndJ, StepInt, Offset, DateType)
+    ).
+
+% --- gYearMonth sequences (step = integer months, default 1) ---
+
+woql_sequence_gyearmonth(Value, Start, End, Step, Count) :-
+    Start = gyear_month(SY,SM,Offset)^^YMType,
+    End = gyear_month(EY,EM,_)^^YMType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    MonthDiff is (EY * 12 + EM) - (SY * 12 + SM),
+    (   MonthDiff > 0
+    ->  RawCount is ceiling(MonthDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    SIdx is SY * 12 + SM - 1,
+    EIdx is EY * 12 + EM - 1,
+    gen_gyearmonth_sequence(Value, SIdx, EIdx, StepInt, Offset, YMType).
+
+gen_gyearmonth_sequence(Value, CurrentIdx, EndIdx, StepInt, Offset, YMType) :-
+    CurrentIdx < EndIdx,
+    Y is CurrentIdx // 12,
+    M is CurrentIdx mod 12 + 1,
+    (   Value = gyear_month(Y, M, Offset)^^YMType
+    ;   NextIdx is CurrentIdx + StepInt,
+        gen_gyearmonth_sequence(Value, NextIdx, EndIdx, StepInt, Offset, YMType)
+    ).
+
+% --- Julian Day Number conversion (Gregorian calendar) ---
+
+gregorian_jdn(Y, M, D, JDN) :-
+    A is (14 - M) // 12,
+    Y1 is Y + 4800 - A,
+    M1 is M + 12 * A - 3,
+    JDN is D + (153 * M1 + 2) // 5 + 365 * Y1
+         + Y1 // 4 - Y1 // 100 + Y1 // 400 - 32045.
+
+jdn_to_gregorian(JDN, Year, Month, Day) :-
+    A is JDN + 32044,
+    B is (4 * A + 3) // 146097,
+    C is A - (146097 * B) // 4,
+    DD is (4 * C + 3) // 1461,
+    E is C - (1461 * DD) // 4,
+    MM is (5 * E + 2) // 153,
+    Day is E - (153 * MM + 2) // 5 + 1,
+    Month is MM + 3 - 12 * (MM // 10),
+    Year is 100 * B + DD - 4800 + MM // 10.
+
+% --- dateTime sequences (step = integer seconds, default 1) ---
+
+woql_sequence_datetime(Value, Start, End, Step, Count) :-
+    Start = date_time(SY,SM,SD,SH,SMin,SS,_SNS)^^DTType,
+    End = date_time(EY,EM,ED,EH,EMin,ES,_ENS)^^DTType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    datetime_to_total_seconds(SY, SM, SD, SH, SMin, SS, STotalS),
+    datetime_to_total_seconds(EY, EM, ED, EH, EMin, ES, ETotalS),
+    SecDiff is ETotalS - STotalS,
+    (   SecDiff > 0
+    ->  RawCount is ceiling(SecDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_datetime_sequence(Value, STotalS, ETotalS, StepInt, DTType).
+
+datetime_to_total_seconds(Y, M, D, H, Min, S, TotalS) :-
+    gregorian_jdn(Y, M, D, JDN),
+    TotalS is JDN * 86400 + H * 3600 + Min * 60 + truncate(S).
+
+total_seconds_to_datetime(TotalS, Y, M, D, H, Min, S) :-
+    JDN is TotalS // 86400,
+    Remainder is TotalS mod 86400,
+    jdn_to_gregorian(JDN, Y, M, D),
+    H is Remainder // 3600,
+    Rest is Remainder mod 3600,
+    Min is Rest // 60,
+    S is Rest mod 60.
+
+gen_datetime_sequence(Value, CurrentS, EndS, StepInt, DTType) :-
+    CurrentS < EndS,
+    total_seconds_to_datetime(CurrentS, Y, M, D, H, Min, S),
+    (   Value = date_time(Y, M, D, H, Min, S, 0)^^DTType
+    ;   NextS is CurrentS + StepInt,
+        gen_datetime_sequence(Value, NextS, EndS, StepInt, DTType)
+    ).
+
+% --- gYear sequences (step = integer years, default 1) ---
+
+woql_sequence_gyear(Value, Start, End, Step, Count) :-
+    Start = gyear(SY, Offset)^^GYType,
+    End = gyear(EY, _)^^GYType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    YearDiff is EY - SY,
+    (   YearDiff > 0
+    ->  RawCount is ceiling(YearDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gyear_sequence(Value, SY, EY, StepInt, Offset, GYType).
+
+gen_gyear_sequence(Value, CurrentY, EndY, StepInt, Offset, GYType) :-
+    CurrentY < EndY,
+    (   Value = gyear(CurrentY, Offset)^^GYType
+    ;   NextY is CurrentY + StepInt,
+        gen_gyear_sequence(Value, NextY, EndY, StepInt, Offset, GYType)
     ).
 
 /*
@@ -8269,6 +8429,397 @@ test(range_min_equal_elements, [
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
     Binding.m = _{'@type': 'xsd:integer', '@value': 3}.
+
+test(sequence_date_daily_week, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-06"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-13"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 7),
+    maplist([B]>>(get_dict(d, B, D), get_dict('@value', D, _)), JSON.bindings).
+
+test(sequence_date_weekly_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-02-01"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 7}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5),
+    [First|_] = JSON.bindings,
+    First.d = _{'@type': 'xsd:date', '@value': "2025-01-01"}.
+
+test(sequence_date_crosses_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-30"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-02-03"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_date_leap_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-27"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-03-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_date_non_leap_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-02-27"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-03-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 3).
+
+test(sequence_date_empty_range, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_date_single, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2025-06-01"}.
+
+test(sequence_gyearmonth_h1, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-07"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 6),
+    [First|_] = JSON.bindings,
+    First.m = _{'@type': 'xsd:gYearMonth', '@value': "2025-01"}.
+
+test(sequence_gyearmonth_year_boundary, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-10"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-04"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 6).
+
+test(sequence_gyearmonth_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-03"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-03"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_gyearmonth_single, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-06"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-07"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:gYearMonth', '@value': "2025-06"}.
+
+test(sequence_gyearmonth_quarterly_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2026-01"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 3}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_datetime_hourly, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T06:00:00Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 3600}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 6),
+    [First|_] = JSON.bindings,
+    First.t = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}.
+
+test(sequence_datetime_every_second, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T23:59:57Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-02T00:00:02Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(sequence_datetime_15min, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-06-15T09:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-06-15T10:00:00Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 900}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_datetime_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T12:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T12:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_datetime_matcher, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T03:00:00Z"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T06:00:00Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 3600}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(sequence_gyear_decade, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2020"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2030"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 10),
+    [First|_] = JSON.bindings,
+    First.y = _{'@type': 'xsd:gYear', '@value': "2020"}.
+
+test(sequence_gyear_step5, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2000"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2020"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 5}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_gyear_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_gyear_single, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2026"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:gYear', '@value': "2025"}.
+
+test(sequence_gyear_matcher, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2020"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2030"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(sequence_byte_default_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:byte', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:byte', '@value': 4}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 3).
+
+test(sequence_long_default_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:long', '@value': 10}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:long', '@value': 15}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
 
 test(weekday_monday, [
     setup((setup_temp_store(State),

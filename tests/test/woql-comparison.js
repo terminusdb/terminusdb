@@ -627,6 +627,278 @@ describe('woql-comparison', function () {
     })
   })
 
+  describe('Sequence of xsd:date values', function () {
+    it('generates daily dates for a week', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-06' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-13' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(7)
+      const values = r.body.bindings.map((b) => b.d['@value'])
+      expect(values).to.deep.equal([
+        '2025-01-06', '2025-01-07', '2025-01-08', '2025-01-09',
+        '2025-01-10', '2025-01-11', '2025-01-12',
+      ])
+    })
+
+    it('generates weekly dates with step=7', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-02-01' } },
+        step: { '@type': 'DataValue', data: { '@type': 'xsd:integer', '@value': 7 } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(5)
+      expect(r.body.bindings[0].d['@value']).to.equal('2025-01-01')
+    })
+
+    it('crosses month boundary correctly', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-30' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-02-03' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+    })
+
+    it('handles leap year Feb 28-29 correctly', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2024-02-27' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2024-03-02' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+    })
+
+    it('returns empty for equal start and end', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'd' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-06-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-06-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
+    })
+
+    it('matches a date within range', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-15' } },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-02-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
+    })
+
+    it('fails to match a date at exclusive end', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-02-01' } },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-01-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:date', '@value': '2025-02-01' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
+    })
+  })
+
+  describe('Sequence of xsd:gYearMonth values', function () {
+    it('generates months for H1 2025', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'm' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-07' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(6)
+      const values = r.body.bindings.map((b) => b.m['@value'])
+      expect(values).to.deep.equal([
+        '2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06',
+      ])
+    })
+
+    it('generates months crossing year boundary', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'm' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2024-10' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-04' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(6)
+    })
+
+    it('returns empty for equal gYearMonth', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'm' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-03' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-03' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
+    })
+
+    it('generates quarterly months with step=3', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'm' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2026-01' } },
+        step: { '@type': 'DataValue', data: { '@type': 'xsd:integer', '@value': 3 } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+      const values = r.body.bindings.map((b) => b.m['@value'])
+      expect(values).to.deep.equal(['2025-01', '2025-04', '2025-07', '2025-10'])
+    })
+
+    it('matches a gYearMonth within range', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-03' } },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-07' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
+    })
+
+    it('fails to match gYearMonth at exclusive end', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-07' } },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-01' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYearMonth', '@value': '2025-07' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
+    })
+  })
+
+  describe('Sequence of xsd:dateTime values', function () {
+    it('generates hourly timestamps for 6 hours', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 't' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T00:00:00Z' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T06:00:00Z' } },
+        step: { '@type': 'DataValue', data: { '@type': 'xsd:integer', '@value': 3600 } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(6)
+      expect(r.body.bindings[0].t['@value']).to.equal('2025-01-01T00:00:00Z')
+    })
+
+    it('crosses midnight boundary with per-second step', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 't' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T23:59:57Z' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-02T00:00:02Z' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(5)
+    })
+
+    it('generates 15-minute intervals', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 't' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-06-15T09:00:00Z' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-06-15T10:00:00Z' } },
+        step: { '@type': 'DataValue', data: { '@type': 'xsd:integer', '@value': 900 } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+    })
+
+    it('returns empty for equal dateTime', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 't' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T12:00:00Z' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T12:00:00Z' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
+    })
+
+    it('matches a dateTime on an hourly step', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T03:00:00Z' } },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T00:00:00Z' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:dateTime', '@value': '2025-01-01T06:00:00Z' } },
+        step: { '@type': 'DataValue', data: { '@type': 'xsd:integer', '@value': 3600 } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
+    })
+  })
+
+  describe('Sequence of xsd:gYear values', function () {
+    it('generates a decade of years', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'y' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2020' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2030' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(10)
+      expect(r.body.bindings[0].y['@value']).to.equal('2020')
+    })
+
+    it('generates every 5th year', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'y' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2000' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2020' } },
+        step: { '@type': 'DataValue', data: { '@type': 'xsd:integer', '@value': 5 } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(4)
+      const values = r.body.bindings.map((b) => b.y['@value'])
+      expect(values).to.deep.equal(['2000', '2005', '2010', '2015'])
+    })
+
+    it('returns empty for equal gYear', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', variable: 'y' },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2025' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2025' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(0)
+    })
+
+    it('matches a gYear in range', async function () {
+      const query = {
+        '@type': 'Sequence',
+        value: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2025' } },
+        start: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2020' } },
+        end: { '@type': 'DataValue', data: { '@type': 'xsd:gYear', '@value': '2030' } },
+      }
+      const r = await woql.post(agent, query)
+      expect(r.body.bindings).to.be.an('array').that.has.lengthOf(1)
+    })
+  })
+
   describe('MonthStartDate', function () {
     it('computes first day of January 2024', async function () {
       const query = {
@@ -902,6 +1174,66 @@ describe('woql-comparison', function () {
         dat('2024-01-01'), dat('2024-03-31'),
         dat('2024-04-01'), dat('2024-06-30')))
       expect(r.body.bindings).to.have.lengthOf(1)
+    })
+  })
+
+  describe('IntervalRelationTyped (Allen\'s on xdd:dateTimeInterval)', function () {
+    function iv (v) { return { '@type': 'xdd:dateTimeInterval', '@value': v } }
+    function irtQuery (relation, x, y) {
+      const q = {
+        '@type': 'IntervalRelationTyped',
+        x: { '@type': 'DataValue', data: x },
+        y: { '@type': 'DataValue', data: y },
+      }
+      if (typeof relation === 'string') {
+        q.relation = { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': relation } }
+      } else {
+        q.relation = relation
+      }
+      return q
+    }
+
+    it('validates meets: Q1 meets Q2', async function () {
+      const r = await woql.post(agent, irtQuery('meets', iv('2024-01-01/2024-04-01'), iv('2024-04-01/2024-07-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('rejects meets when gap exists', async function () {
+      const r = await woql.post(agent, irtQuery('meets', iv('2024-01-01/2024-04-01'), iv('2024-05-01/2024-07-01')))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+    it('validates before: Q1 before Q3', async function () {
+      const r = await woql.post(agent, irtQuery('before', iv('2024-01-01/2024-03-01'), iv('2024-06-01/2024-09-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates during: sub-interval within year', async function () {
+      const r = await woql.post(agent, irtQuery('during', iv('2024-03-01/2024-06-01'), iv('2024-01-01/2024-12-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('validates equals: same interval', async function () {
+      const r = await woql.post(agent, irtQuery('equals', iv('2024-01-01/2024-06-01'), iv('2024-01-01/2024-06-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+    it('classifies relation as meets', async function () {
+      const r = await woql.post(agent, irtQuery(
+        { '@type': 'DataValue', variable: 'v:rel' },
+        iv('2024-01-01/2024-04-01'), iv('2024-04-01/2024-07-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:rel']['@value']).to.equal('meets')
+    })
+    it('classifies relation as before', async function () {
+      const r = await woql.post(agent, irtQuery(
+        { '@type': 'DataValue', variable: 'v:rel' },
+        iv('2024-01-01/2024-03-01'), iv('2024-06-01/2024-09-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:rel']['@value']).to.equal('before')
+    })
+    it('classifies dateTime intervals as meets', async function () {
+      const r = await woql.post(agent, irtQuery(
+        { '@type': 'DataValue', variable: 'v:rel' },
+        iv('2024-01-01T08:00:00Z/2024-01-01T12:00:00Z'),
+        iv('2024-01-01T12:00:00Z/2024-01-01T17:00:00Z')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:rel']['@value']).to.equal('meets')
     })
   })
 
