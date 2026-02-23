@@ -39,6 +39,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
         Datatype::DayTimeDuration => tde.as_val::<DayTimeDuration, String>(),
         Datatype::Base64Binary => tde.as_val::<Base64Binary, String>(),
         Datatype::HexBinary => tde.as_val::<HexBinary, String>(),
+        Datatype::DateTimeInterval => tde.as_val::<DateTimeInterval, String>(),
         x => panic!("not a stringy type: {:?}", x),
     };
 
@@ -264,8 +265,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
         Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
         Datatype::DateTimeInterval => {
-            let iv = tde.as_val::<DateTimeInterval, DateTimeInterval>();
-            Value::String(format!("DateTimeInterval({:?})", iv))
+            Value::String(tde.as_val::<DateTimeInterval, String>())
         }
     }
 }
@@ -431,8 +431,7 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             tde.as_val::<AnySimpleType, String>(),
         )),
         Datatype::DateTimeInterval => {
-            let iv = tde.as_val::<DateTimeInterval, DateTimeInterval>();
-            juniper::Value::Scalar(DefaultScalarValue::String(format!("DateTimeInterval({:?})", iv)))
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<DateTimeInterval, String>()))
         }
     }
 }
