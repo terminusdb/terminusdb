@@ -829,6 +829,14 @@ woql_sequence(Value, Start, End, Step, Count) :-
     ->  woql_sequence_gyearmonth(Value, Start, End, Step, Count)
     ;   SType = 'http://www.w3.org/2001/XMLSchema#gYear'
     ->  woql_sequence_gyear(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#time'
+    ->  woql_sequence_time(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gMonth'
+    ->  woql_sequence_gmonth(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gDay'
+    ->  woql_sequence_gday(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gMonthDay'
+    ->  woql_sequence_gmonthday(Value, Start, End, Step, Count)
     ).
 
 % --- Shared helpers ---
@@ -854,7 +862,7 @@ woql_sequence_numeric(Value, Start, End, Step, Count) :-
     End = ERaw^^_,
     (   Step \= none
     ->  Step = StepRaw^^_
-    ;   default_numeric_step(SType, StepRaw)
+    ;   once(default_numeric_step(SType, StepRaw))
     ),
     (   StepRaw > 0, ERaw > SRaw
     ->  RawCount is ceiling((ERaw - SRaw) / StepRaw)
@@ -1011,6 +1019,165 @@ gen_gyear_sequence(Value, CurrentY, EndY, StepInt, Offset, GYType) :-
     ;   NextY is CurrentY + StepInt,
         gen_gyear_sequence(Value, NextY, EndY, StepInt, Offset, GYType)
     ).
+
+% --- time sequences (step = seconds, default 1, no midnight roll-over) ---
+
+woql_sequence_time(Value, Start, End, Step, Count) :-
+    Start = time(SH,SMin,SS)^^TType,
+    End = time(EH,EMin,ES)^^TType,
+    sequence_extract_step_number(Step, 1, StepNum),
+    StepNum > 0,
+    time_to_seconds(SH, SMin, SS, STotalS),
+    time_to_seconds(EH, EMin, ES, ETotalS),
+    SecDiff is ETotalS - STotalS,
+    (   SecDiff > 0
+    ->  RawCount is ceiling(SecDiff / StepNum)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_time_sequence(Value, STotalS, ETotalS, StepNum, TType).
+
+time_to_seconds(H, M, S, TotalS) :-
+    TotalS is H * 3600 + M * 60 + S.
+
+seconds_to_time(TotalS, H, M, S) :-
+    H is truncate(TotalS) // 3600,
+    Rem is TotalS - H * 3600,
+    M is truncate(Rem) // 60,
+    S is Rem - M * 60.
+
+sequence_extract_step_number(none, Default, Default).
+sequence_extract_step_number(Step, _, StepNum) :-
+    Step \= none,
+    Step = StepRaw^^_,
+    StepNum is StepRaw.
+
+gen_time_sequence(Value, CurrentS, EndS, StepNum, TType) :-
+    CurrentS < EndS,
+    seconds_to_time(CurrentS, H, M, S),
+    (   Value = time(H, M, S)^^TType
+    ;   NextS is CurrentS + StepNum,
+        gen_time_sequence(Value, NextS, EndS, StepNum, TType)
+    ).
+
+% --- gMonth sequences (step = integer months, default 1, range 1..12) ---
+
+woql_sequence_gmonth(Value, Start, End, Step, Count) :-
+    Start = gmonth(SM, Offset)^^GMType,
+    End = gmonth(EM, _)^^GMType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    MonthDiff is EM - SM,
+    (   MonthDiff > 0
+    ->  RawCount is ceiling(MonthDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gmonth_sequence(Value, SM, EM, StepInt, Offset, GMType).
+
+gen_gmonth_sequence(Value, CurrentM, EndM, StepInt, Offset, GMType) :-
+    CurrentM < EndM,
+    (   Value = gmonth(CurrentM, Offset)^^GMType
+    ;   NextM is CurrentM + StepInt,
+        gen_gmonth_sequence(Value, NextM, EndM, StepInt, Offset, GMType)
+    ).
+
+% --- gDay sequences (step = integer days, default 1, range 1..31) ---
+
+woql_sequence_gday(Value, Start, End, Step, Count) :-
+    Start = gday(SD, Offset)^^GDType,
+    End = gday(ED, _)^^GDType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    DayDiff is ED - SD,
+    (   DayDiff > 0
+    ->  RawCount is ceiling(DayDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gday_sequence(Value, SD, ED, StepInt, Offset, GDType).
+
+gen_gday_sequence(Value, CurrentD, EndD, StepInt, Offset, GDType) :-
+    CurrentD < EndD,
+    (   Value = gday(CurrentD, Offset)^^GDType
+    ;   NextD is CurrentD + StepInt,
+        gen_gday_sequence(Value, NextD, EndD, StepInt, Offset, GDType)
+    ).
+
+% --- gMonthDay sequences (step = integer days, default 1, non-leap year) ---
+
+woql_sequence_gmonthday(Value, Start, End, Step, Count) :-
+    Start = gmonth_day(SM, SD, Offset)^^GMDType,
+    End = gmonth_day(EM, ED, _)^^GMDType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    monthday_to_doy(SM, SD, SDOY),
+    monthday_to_doy(EM, ED, EDOY),
+    DayDiff is EDOY - SDOY,
+    (   DayDiff > 0
+    ->  RawCount is ceiling(DayDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gmonthday_sequence(Value, SDOY, EDOY, StepInt, Offset, GMDType).
+
+gen_gmonthday_sequence(Value, CurrentDOY, EndDOY, StepInt, Offset, GMDType) :-
+    CurrentDOY < EndDOY,
+    doy_to_monthday(CurrentDOY, M, D),
+    (   Value = gmonth_day(M, D, Offset)^^GMDType
+    ;   NextDOY is CurrentDOY + StepInt,
+        gen_gmonthday_sequence(Value, NextDOY, EndDOY, StepInt, Offset, GMDType)
+    ).
+
+% Non-leap year cumulative days: Jan=31,Feb=28,Mar=31,...
+monthday_to_doy(M, D, DOY) :-
+    nonleap_cum_days(M, Cum),
+    DOY is Cum + D.
+
+doy_to_monthday(DOY, Month, Day) :-
+    doy_to_monthday_(1, DOY, Month, Day).
+
+doy_to_monthday_(M, DOY, Month, Day) :-
+    M =< 12,
+    nonleap_month_days(M, MDays),
+    nonleap_cum_days(M, Cum),
+    EndOfMonth is Cum + MDays,
+    (   DOY =< EndOfMonth
+    ->  Month = M,
+        Day is DOY - Cum
+    ;   M1 is M + 1,
+        doy_to_monthday_(M1, DOY, Month, Day)
+    ).
+
+nonleap_cum_days(1, 0).
+nonleap_cum_days(2, 31).
+nonleap_cum_days(3, 59).
+nonleap_cum_days(4, 90).
+nonleap_cum_days(5, 120).
+nonleap_cum_days(6, 151).
+nonleap_cum_days(7, 181).
+nonleap_cum_days(8, 212).
+nonleap_cum_days(9, 243).
+nonleap_cum_days(10, 273).
+nonleap_cum_days(11, 304).
+nonleap_cum_days(12, 334).
+
+nonleap_month_days(1, 31).
+nonleap_month_days(2, 28).
+nonleap_month_days(3, 31).
+nonleap_month_days(4, 30).
+nonleap_month_days(5, 31).
+nonleap_month_days(6, 30).
+nonleap_month_days(7, 31).
+nonleap_month_days(8, 31).
+nonleap_month_days(9, 30).
+nonleap_month_days(10, 31).
+nonleap_month_days(11, 30).
+nonleap_month_days(12, 31).
 
 /*
  * woql_month_start_date(YearMonth, Date) is semidet.
@@ -9470,6 +9637,121 @@ test(date_duration_validate_fails, [
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 0).
+
+% --- Sequence tests for new temporal types ---
+
+test(sequence_time_basic, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:03Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "10:00:00Z",
+    get_dict('v:i', B1, V1), V1.'@value' = "10:00:01Z",
+    get_dict('v:i', B2, V2), V2.'@value' = "10:00:02Z".
+
+test(sequence_time_fractional_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:02Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': "0.5"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_time_start_ge_end_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "12:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_gmonth_basic, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonth', '@value': "--03"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonth', '@value': "--07"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2,B3] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "--03",
+    get_dict('v:i', B1, V1), V1.'@value' = "--04",
+    get_dict('v:i', B2, V2), V2.'@value' = "--05",
+    get_dict('v:i', B3, V3), V3.'@value' = "--06".
+
+test(sequence_gday_basic, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gDay', '@value': "---10"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gDay', '@value': "---15"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2,B3,B4] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "---10",
+    get_dict('v:i', B1, V1), V1.'@value' = "---11",
+    get_dict('v:i', B2, V2), V2.'@value' = "---12",
+    get_dict('v:i', B3, V3), V3.'@value' = "---13",
+    get_dict('v:i', B4, V4), V4.'@value' = "---14".
+
+test(sequence_gmonthday_crosses_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonthDay', '@value': "-02-27"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonthDay', '@value': "-03-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "-02-27",
+    get_dict('v:i', B1, V1), V1.'@value' = "-02-28",
+    get_dict('v:i', B2, V2), V2.'@value' = "-03-01".
 
 :- end_tests(woql).
 
