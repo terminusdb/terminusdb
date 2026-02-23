@@ -560,7 +560,7 @@ impl BaseOrDerived<ShortName> {
 }
 
 pub fn is_base_type(s: &str) -> bool {
-    // TODO this is not good enough
+  // TODO this is not good enough
   s.starts_with("xsd:") || s.starts_with("sys:") || s.starts_with("xdd:")
 }
 
