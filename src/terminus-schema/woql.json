@@ -1694,6 +1694,44 @@
 }
 {
   "@documentation": {
+    "@comment":"Find the minimum value in a list using the standard ordering (woql_less). Works with any comparable types: numbers, dates, strings. Empty list produces no bindings.",
+    "@properties": {"list":"The list of values to search.", "result":"The minimum value found."}
+  },
+  "@id":"RangeMin",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result"],
+      "mode": ["+", "?"],
+      "types": ["list(any)", "any"]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
+    "@comment":"Find the maximum value in a list using the standard ordering (woql_less). Works with any comparable types: numbers, dates, strings. Empty list produces no bindings.",
+    "@properties": {"list":"The list of values to search.", "result":"The maximum value found."}
+  },
+  "@id":"RangeMax",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["list", "result"],
+      "mode": ["+", "?"],
+      "types": ["list(any)", "any"]
+    }
+  },
+  "@type":"Class",
+  "list":"DataValue",
+  "result":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"Start a query at the nth solution specified by 'start'. Allows resumption and paging of queries.",
     "@properties": {
       "query":"The query to perform.",

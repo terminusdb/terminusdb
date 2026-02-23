@@ -1116,6 +1116,20 @@ json_type_to_woql_ast('Sum',JSON,WOQL,Path) :-
     json_value_to_woql_ast(Value,WValue,[result
                                          |Path]),
     WOQL = sum(WList,WValue).
+json_type_to_woql_ast('RangeMin',JSON,WOQL,Path) :-
+    _{list : List,
+      result : Value
+     } :< JSON,
+    json_value_to_woql_ast(List,WList,[list|Path]),
+    json_value_to_woql_ast(Value,WValue,[result|Path]),
+    WOQL = range_min(WList,WValue).
+json_type_to_woql_ast('RangeMax',JSON,WOQL,Path) :-
+    _{list : List,
+      result : Value
+     } :< JSON,
+    json_value_to_woql_ast(List,WList,[list|Path]),
+    json_value_to_woql_ast(Value,WValue,[result|Path]),
+    WOQL = range_max(WList,WValue).
 json_type_to_woql_ast('Slice',JSON,WOQL,Path) :-
     _{list : List,
       result : Result,

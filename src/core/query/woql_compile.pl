@@ -1171,6 +1171,34 @@ woql_interval_relation_typed(Rel, X, Y) :-
     woql_interval_relation(Rel, Xs, Xe, Ys, Ye).
 
 /*
+ * woql_range_min(+List, -Result) is semidet.
+ *
+ * Find the minimum value in a list using woql_less/2.
+ * Fails (0 bindings) on empty list.
+ */
+woql_range_min([H|T], Result) :-
+    foldl([Elem, Acc, Next]>>(
+              (   woql_less(Elem, Acc)
+              ->  Next = Elem
+              ;   Next = Acc
+              )
+          ), T, H, Result).
+
+/*
+ * woql_range_max(+List, -Result) is semidet.
+ *
+ * Find the maximum value in a list using woql_less/2.
+ * Fails (0 bindings) on empty list.
+ */
+woql_range_max([H|T], Result) :-
+    foldl([Elem, Acc, Next]>>(
+              (   woql_less(Acc, Elem)
+              ->  Next = Elem
+              ;   Next = Acc
+              )
+          ), T, H, Result).
+
+/*
  * extract_ymd(+DateOrDateTime, -Y, -M, -D) is det.
  *
  * Extracts year, month, day from either xsd:date or xsd:dateTime.
@@ -1688,6 +1716,8 @@ find_resources(weekday(_,_),_, _, _, [], []).
 find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
 find_resources(iso_week(_,_,_),_, _, _, [], []).
 find_resources(date_duration(_,_,_),_, _, _, [], []).
+find_resources(range_min(_,_),_, _, _, [], []).
+find_resources(range_max(_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1942,6 +1972,12 @@ compile_wf(date_duration(S,E,D),woql_date_duration(SE,EE,DE)) -->
     resolve(S,SE),
     resolve(E,EE),
     resolve(D,DE).
+compile_wf(range_min(List,Result),woql_range_min(ListE,ResultE)) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE).
+compile_wf(range_max(List,Result),woql_range_max(ListE,ResultE)) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -8122,6 +8158,117 @@ test(interval_relation_typed_datetime, [
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
     Binding.rel = _{'@type': 'xsd:string', '@value': "meets"}.
+
+test(range_min_integers, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 7}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 2}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 9}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 1}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 5}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(range_max_integers, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMax",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 7}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 2}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 9}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 1}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 5}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 9}.
+
+test(range_min_single_element, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 42}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 42}.
+
+test(range_min_empty_list, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : []},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(range_min_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:date', '@value': "2024-01-01"}.
+
+test(range_max_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMax",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:date', '@value': "2024-06-15"}.
+
+test(range_min_equal_elements, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 3}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 3}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 3}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 3}.
 
 test(weekday_monday, [
     setup((setup_temp_store(State),

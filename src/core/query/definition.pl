@@ -454,6 +454,20 @@ definition(
         types: [data_value,data_value,data_value]
     }).
 definition(
+    range_min{
+        name: 'RangeMin',
+        fields: [list,result],
+        mode: [+,?],
+        types: [list(any),any]
+    }).
+definition(
+    range_max{
+        name: 'RangeMax',
+        fields: [list,result],
+        mode: [+,?],
+        types: [list(any),any]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -757,6 +771,8 @@ operator(weekday(_,_)).
 operator(weekday_sunday_start(_,_)).
 operator(iso_week(_,_,_)).
 operator(date_duration(_,_,_)).
+operator(range_min(_,_)).
+operator(range_max(_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).

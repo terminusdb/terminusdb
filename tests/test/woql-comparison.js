@@ -1352,4 +1352,51 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(0)
     })
   })
+
+  describe('RangeMin / RangeMax', function () {
+    function intVal (v) { return { '@type': 'xsd:integer', '@value': v } }
+    function datVal (v) { return { '@type': 'xsd:date', '@value': v } }
+    function rangeQuery (type, list, resultVar) {
+      return {
+        '@type': type,
+        list: { '@type': 'DataValue', list: list.map(d => ({ '@type': 'DataValue', data: d })) },
+        result: { '@type': 'DataValue', variable: resultVar },
+      }
+    }
+
+    it('range_min of integers', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMin', [intVal(7), intVal(2), intVal(9), intVal(1), intVal(5)], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:m']['@value']).to.equal(1)
+    })
+    it('range_max of integers', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMax', [intVal(7), intVal(2), intVal(9), intVal(1), intVal(5)], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:m']['@value']).to.equal(9)
+    })
+    it('range_min single element', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMin', [intVal(42)], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:m']['@value']).to.equal(42)
+    })
+    it('range_min empty list yields no bindings', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMin', [], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+    it('range_min of dates', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMin', [datVal('2024-06-15'), datVal('2024-01-01'), datVal('2024-03-01')], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:m']['@value']).to.equal('2024-01-01')
+    })
+    it('range_max of dates', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMax', [datVal('2024-06-15'), datVal('2024-01-01'), datVal('2024-03-01')], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:m']['@value']).to.equal('2024-06-15')
+    })
+    it('range_min equal elements', async function () {
+      const r = await woql.post(agent, rangeQuery('RangeMin', [intVal(3), intVal(3), intVal(3)], 'v:m'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:m']['@value']).to.equal(3)
+    })
+  })
 })
