@@ -321,6 +321,153 @@ definition(
         types: [any,any]
     }).
 definition(
+    '>='{
+        name: 'Gte',
+        fields: [left,right],
+        mode: [+,+],
+        types: [any,any]
+    }).
+definition(
+    '=<'{
+        name: 'Lte',
+        fields: [left,right],
+        mode: [+,+],
+        types: [any,any]
+    }).
+definition(
+    in_range{
+        name: 'InRange',
+        fields: [value,start,'end'],
+        mode: [+,+,+],
+        types: [any,any,any]
+    }).
+definition(
+    sequence{
+        name: 'Sequence',
+        fields: [value,start,'end',optional(step),optional(count)],
+        mode: [?,+,+,+,?],
+        types: [data_value,data_value,data_value,data_value,data_value]
+    }).
+definition(
+    interval{
+        name: 'Interval',
+        fields: [start,'end',interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_start_duration{
+        name: 'IntervalStartDuration',
+        fields: [start,duration,interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_duration_end{
+        name: 'IntervalDurationEnd',
+        fields: [duration,'end',interval],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    day_after{
+        name: 'DayAfter',
+        fields: [date,next],
+        mode: [?,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    day_before{
+        name: 'DayBefore',
+        fields: [date,previous],
+        mode: [?,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_start_date{
+        name: 'MonthStartDate',
+        fields: [year_month,date],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_end_date{
+        name: 'MonthEndDate',
+        fields: [year_month,date],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    month_start_dates{
+        name: 'MonthStartDates',
+        fields: [date,start,'end'],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    month_end_dates{
+        name: 'MonthEndDates',
+        fields: [date,start,'end'],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    interval_relation{
+        name: 'IntervalRelation',
+        fields: [relation,x_start,x_end,y_start,y_end],
+        mode: [?,+,+,+,+],
+        types: [data_value,data_value,data_value,data_value,data_value]
+    }).
+definition(
+    interval_relation_typed{
+        name: 'IntervalRelationTyped',
+        fields: [relation,x,y],
+        mode: [?,+,+],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    weekday{
+        name: 'Weekday',
+        fields: [date,weekday],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    weekday_sunday_start{
+        name: 'WeekdaySundayStart',
+        fields: [date,weekday],
+        mode: [+,?],
+        types: [data_value,data_value]
+    }).
+definition(
+    iso_week{
+        name: 'IsoWeek',
+        fields: [date,year,week],
+        mode: [+,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    date_duration{
+        name: 'DateDuration',
+        fields: [start,'end',duration],
+        mode: [?,?,?],
+        types: [data_value,data_value,data_value]
+    }).
+definition(
+    range_min{
+        name: 'RangeMin',
+        fields: [list,result],
+        mode: [+,?],
+        types: [list(any),any]
+    }).
+definition(
+    range_max{
+        name: 'RangeMax',
+        fields: [list,result],
+        mode: [+,?],
+        types: [list(any),any]
+    }).
+definition(
     like{
         name: 'Like',
         fields: [left,right,similarity],
@@ -610,6 +757,22 @@ term_mode_correct(Term) :-
 operator(_=_).
 operator(_>_).
 operator(_<_).
+operator(_>=_).
+operator(_=<_).
+operator(in_range(_,_,_)).
+operator(sequence(_,_,_,_,_)).
+operator(month_start_date(_,_)).
+operator(month_end_date(_,_)).
+operator(month_start_dates(_,_,_)).
+operator(month_end_dates(_,_,_)).
+operator(interval_relation(_,_,_,_,_)).
+operator(interval_relation_typed(_,_,_)).
+operator(weekday(_,_)).
+operator(weekday_sunday_start(_,_)).
+operator(iso_week(_,_,_)).
+operator(date_duration(_,_,_)).
+operator(range_min(_,_)).
+operator(range_max(_,_)).
 operator(like(_,_,_)).
 operator(concat(_,_)).
 operator(trim(_,_)).
@@ -1164,6 +1327,21 @@ cost_(X << Y, Cost, _Polarity),
 is_var(X),
 is_var(Y) =>
     Cost = 100.
+
+cost_(interval(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(interval_start_duration(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(interval_duration_end(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(day_after(_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(day_before(_,_), Cost, _Polarity) =>
+    Cost = 1.
 
 cost_(typecast(_,_,_), Cost, _Polarity) =>
     Cost = 1.
