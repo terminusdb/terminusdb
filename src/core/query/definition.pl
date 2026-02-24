@@ -49,6 +49,10 @@ term_vars(group_by(Unique,_Template,Query,Result), Vars) =>
     intersection(UVars, QVars, Both_Vars),
     term_vars(Result, RVars),
     union(Both_Vars, RVars, Vars).
+term_vars(collect(_Template,Into,Query), Vars) =>
+    term_vars(Query, QVars),
+    term_vars(Into, IVars),
+    union(QVars, IVars, Vars).
 term_vars(Term, Vars) =>
     Term =.. [_|Rest],
     maplist(term_vars, Rest, Vars_Lists),
@@ -163,6 +167,13 @@ definition(
         fields: [template,group_by,value,query],
         mode: [?,?,?,:],
         types: [value,template,data_value,query]
+    }).
+definition(
+    collect{
+        name: 'Collect',
+        fields: [template,into,query],
+        mode: [?,?,:],
+        types: [value,data_value,query]
     }).
 definition(
     distinct{
@@ -891,6 +902,9 @@ cost_(not(Query), Cost, _Polarity) =>
     cost_(Query, Cost, neg).
 
 cost_(group_by(_,_,Query,_), Cost, Polarity) =>
+    cost_(Query, Cost, Polarity).
+
+cost_(collect(_,_,Query), Cost, Polarity) =>
     cost_(Query, Cost, Polarity).
 
 cost_(distinct(_,Query), Cost, Polarity) =>

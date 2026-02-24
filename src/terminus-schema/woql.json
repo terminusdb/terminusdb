@@ -1967,6 +1967,30 @@
 }
 {
   "@documentation": {
+    "@comment":"Collect all solutions of a sub-query into a list. The template specifies what to collect from each solution, and the result is unified with into. If the query has no solutions, into is unified with the empty list.",
+    "@properties": {
+      "into":"The variable to bind the collected list of solutions.",
+      "query":"The subquery whose solutions will be collected.",
+      "template":"The template of elements in the result list."
+    }
+  },
+  "@id":"Collect",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["template", "into", "query"],
+      "mode": ["?", "?", ":"],
+      "types": ["value", "data_value", "query"]
+    }
+  },
+  "@type":"Class",
+  "into":"Value",
+  "query":"Query",
+  "template":"Value"
+}
+{
+  "@documentation": {
     "@comment":"Group a query into a list with each element of the list specified by 'template' using a given variable set for the group.",
     "@properties": {
       "group_by":"The variables which should be grouped into like solutions.",
