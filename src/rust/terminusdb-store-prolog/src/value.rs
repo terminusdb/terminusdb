@@ -274,6 +274,11 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(HexBinary::make_entry(&HexBinary(
             hex::decode(hexstring).unwrap(),
         )))
+    } else if atom!("http://terminusdb.com/schema/xdd#dateTimeInterval") == ty {
+        // Serialize compound term to string and parse in Rust,
+        // because swipl-rs get_arg cannot extract compound sub-terms.
+        let term_string: String = context.string_from_term(inner_term)?;
+        parse_interval_term(&term_string).map_err(|_| PrologError::Exception)
     } else {
         Err(PrologError::Exception)
     }
@@ -746,6 +751,157 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#hexBinary"))
         }
+        Datatype::DateTimeInterval => {
+            let iv = entry.as_val::<DateTimeInterval, DateTimeInterval>();
+            let term_string = format_interval_term(&iv);
+            {
+                let f = context.open_frame();
+                let term = f.term_from_string(&term_string)?;
+                object_term.unify_arg(1, term)?;
+                f.close();
+            }
+            object_term.unify_arg(2, atom!("http://terminusdb.com/schema/xdd#dateTimeInterval"))
+        }
         Datatype::LangString => panic!("Unreachable"),
     }
+}
+
+// --- DateTimeInterval string parsing/formatting helpers ---
+
+fn split_top_level_args(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(s[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(s[start..].trim());
+    parts
+}
+
+fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
+    if let Some(inner) = s.strip_prefix("date_time(").and_then(|s| s.strip_suffix(")")) {
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() != 7 {
+            return Err(format!("invalid date_time arity: {}", parts.len()));
+        }
+        let y: i32 = parts[0].parse().map_err(|e| format!("{e}"))?;
+        let mo: u32 = parts[1].parse().map_err(|e| format!("{e}"))?;
+        let d: u32 = parts[2].parse().map_err(|e| format!("{e}"))?;
+        let h: u32 = parts[3].parse().map_err(|e| format!("{e}"))?;
+        let mi: u32 = parts[4].parse().map_err(|e| format!("{e}"))?;
+        let s_val: u32 = parts[5].parse().map_err(|e| format!("{e}"))?;
+        let ns: u32 = parts[6].parse().map_err(|e| format!("{e}"))?;
+        let dt = NaiveDate::from_ymd_opt(y, mo, d)
+            .ok_or_else(|| format!("invalid date: {y}-{mo}-{d}"))?
+            .and_hms_nano_opt(h, mi, s_val, ns)
+            .ok_or_else(|| format!("invalid time: {h}:{mi}:{s_val}.{ns}"))?;
+        Ok((dt.and_utc().timestamp(), dt.and_utc().timestamp_subsec_nanos(), INTERVAL_COMPONENT_DATETIME))
+    } else if let Some(inner) = s.strip_prefix("date(").and_then(|s| s.strip_suffix(")")) {
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() != 4 {
+            return Err(format!("invalid date arity: {}", parts.len()));
+        }
+        let y: i32 = parts[0].parse().map_err(|e| format!("{e}"))?;
+        let m: u32 = parts[1].parse().map_err(|e| format!("{e}"))?;
+        let d: u32 = parts[2].parse().map_err(|e| format!("{e}"))?;
+        let dt = NaiveDate::from_ymd_opt(y, m, d)
+            .ok_or_else(|| format!("invalid date: {y}-{m}-{d}"))?
+            .and_hms_opt(0, 0, 0)
+            .ok_or("invalid hms")?;
+        Ok((dt.and_utc().timestamp(), 0, INTERVAL_COMPONENT_DATE))
+    } else {
+        Err(format!("unknown component: {s}"))
+    }
+}
+
+fn parse_duration_fields(s: &str) -> Result<Duration, String> {
+    let inner = s
+        .strip_prefix("duration(")
+        .and_then(|s| s.strip_suffix(")"))
+        .ok_or_else(|| format!("invalid duration: {s}"))?;
+    let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+    if parts.len() != 7 {
+        return Err(format!("invalid duration arity: {}", parts.len()));
+    }
+    Ok(Duration {
+        sign: parts[0].parse::<i64>().map_err(|e| format!("{e}"))? as i8,
+        year: parts[1].parse().map_err(|e| format!("{e}"))?,
+        month: parts[2].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
+        day: parts[3].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
+        hour: parts[4].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
+        minute: parts[5].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
+        second: parts[6].parse().map_err(|e| format!("{e}"))?,
+    })
+}
+
+fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
+    let inner = s
+        .strip_prefix("date_time_interval(")
+        .and_then(|s| s.strip_suffix(")"))
+        .ok_or_else(|| format!("invalid interval term: {s}"))?;
+    let args = split_top_level_args(inner);
+    if args.len() != 4 {
+        return Err(format!("expected 4 args, got {}", args.len()));
+    }
+    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0])?;
+    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1])?;
+    let duration = parse_duration_fields(args[2])?;
+    let flag = match args[3] {
+        "explicit" => INTERVAL_FLAG_EXPLICIT,
+        "start_duration" => INTERVAL_FLAG_START_DURATION,
+        "duration_end" => INTERVAL_FLAG_DURATION_END,
+        other => return Err(format!("unknown flag: {other}")),
+    };
+    Ok(DateTimeInterval::make_entry(&DateTimeInterval {
+        start_seconds,
+        start_nanos,
+        end_seconds,
+        end_nanos,
+        start_type,
+        end_type,
+        flag,
+        duration,
+    }))
+}
+
+fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String {
+    use chrono::DateTime;
+    let dt = DateTime::from_timestamp(seconds, nanos)
+        .map(|dt| dt.naive_utc())
+        .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap());
+    if component_type == INTERVAL_COMPONENT_DATE {
+        format!("date({},{},{},0)", dt.year(), dt.month(), dt.day())
+    } else {
+        format!(
+            "date_time({},{},{},{},{},{},{})",
+            dt.year(), dt.month(), dt.day(),
+            dt.hour(), dt.minute(), dt.second(), dt.nanosecond()
+        )
+    }
+}
+
+fn format_interval_term(iv: &DateTimeInterval) -> String {
+    let start = format_component_term(iv.start_seconds, iv.start_nanos, iv.start_type);
+    let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type);
+    let dur = format!(
+        "duration({},{},{},{},{},{},{})",
+        iv.duration.sign, iv.duration.year, iv.duration.month,
+        iv.duration.day, iv.duration.hour, iv.duration.minute,
+        iv.duration.second
+    );
+    let flag = match iv.flag {
+        INTERVAL_FLAG_START_DURATION => "start_duration",
+        INTERVAL_FLAG_DURATION_END => "duration_end",
+        _ => "explicit",
+    };
+    format!("date_time_interval({},{},{},{})", start, end, dur, flag)
 }
