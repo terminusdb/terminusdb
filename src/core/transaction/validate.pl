@@ -41,6 +41,7 @@
 :- use_module(library(plunit)).
 
 :- use_module(library(terminus_store)).
+:- use_module(core(plugins), [enrich_commit_info/3]).
 
 /*
  * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
@@ -306,12 +307,17 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
     !,
 
     (   exists(validation_object_changed, [Instance_Object, Schema_Object])
-    ->  create_context(Parent_Transaction, Parent_Context),
+    ->  Commit_Info0 = (Validation_Object.commit_info),
+        (   enrich_commit_info(Validation_Object, Commit_Info0, Commit_Info)
+        ->  true
+        ;   Commit_Info = Commit_Info0
+        ),
+        create_context(Parent_Transaction, Parent_Context),
         (   branch_head_commit(Parent_Context, Branch_Name, Old_Commit_Uri),
             commit_type(Parent_Context, Old_Commit_Uri, Commit_Type),
             Commit_Type = 'http://terminusdb.com/schema/ref#InitialCommit'
         ->  replace_initial_commit_on_branch(Parent_Transaction,
-                                             (Validation_Object.commit_info),
+                                             Commit_Info,
                                              Branch_Name,
                                              Instance_Object,
                                              Schema_Object)
@@ -324,7 +330,7 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
             insert_commit_object_on_branch(Parent_Transaction,
                                            Schema_Layer_Uri,
                                            Instance_Layer_Uri,
-                                           (Validation_Object.commit_info),
+                                           Commit_Info,
                                            Branch_Name,
                                            _Commit_Id,
                                            _Commit_Uri))
@@ -535,6 +541,7 @@ validation_objects_to_transaction_objects(Validation_Objects, Transaction_Object
 :- use_module(core(util/test_utils)).
 :- use_module(core(api)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 :- use_module(library(terminus_store)).
 
 test(commit_two_transactions_on_empty, [
@@ -712,6 +719,51 @@ test(double_insert, [
     layer_to_id(Schema2.read, ID2),
     ID1 = ID2.
 
+
+test(commit_with_user_field, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db_without_schema("admin", 'UserTest'),
+    resolve_absolute_string_descriptor("admin/UserTest", Branch_Descriptor),
+    Repo_Descriptor = (Branch_Descriptor.repository_descriptor),
+
+    User_IRI = "terminusdb://system/data/User/admin",
+    create_context(Branch_Descriptor,
+                   commit_info{ author: "test_author",
+                                message: "test with user",
+                                user: User_IRI },
+                   Context),
+    with_transaction(Context,
+                     ask(Context, insert(a, b, c)),
+                     _),
+
+    branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
+    once(ask(Repo_Descriptor,
+             t(Commit_Uri, user, User_Value^^xsd:anyURI))),
+    User_Value = User_IRI.
+
+test(commit_without_user_field, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    create_db_without_schema("admin", 'NoUserTest'),
+    resolve_absolute_string_descriptor("admin/NoUserTest", Branch_Descriptor),
+    Repo_Descriptor = (Branch_Descriptor.repository_descriptor),
+
+    create_context(Branch_Descriptor,
+                   commit_info{ author: "test_author",
+                                message: "test without user" },
+                   Context),
+    with_transaction(Context,
+                     ask(Context, insert(a, b, c)),
+                     _),
+
+    branch_head_commit(Repo_Descriptor, "main", Commit_Uri),
+    \+ ask(Repo_Descriptor,
+           t(Commit_Uri, user, _)).
 
 :- end_tests(inserts).
 

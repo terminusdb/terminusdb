@@ -2616,7 +2616,10 @@ paths:
             type: string
             example: "A/0"
         - name: start
-          description: Index to start from
+          description: >-
+            Number of commits to skip before collecting results.
+            This counts all commits in the branch history (layers examined),
+            not only commits where the specified document was changed.
           in: query
           required: false
           schema:

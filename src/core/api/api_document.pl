@@ -114,9 +114,11 @@ before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version).
 
-before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction) :-
+before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction) :-
+    Commit_Info0 = commit_info{author: Author, message: Message},
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
     do_or_die(
-        create_context(Descriptor, commit_info{author: Author, message: Message}, Context),
+        create_context(Descriptor, Commit_Info, Context),
         error(unresolvable_collection(Descriptor), _)),
     do_or_die(
         query_default_collection(Context, Transaction),
@@ -414,7 +416,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
         error(raw_json_and_schema_disallowed,_)
     ),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     % Transaction replay for conflict resolution:
     % Save stream position before transaction, reset it on retry.
     % REQUIRES: Stream must be seekable (string stream, not raw HTTP socket).
@@ -510,7 +512,7 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(message(Message), Options),
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
@@ -541,7 +543,7 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
     option(message(Message), Options),
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
                      Meta_Data,
@@ -560,7 +562,7 @@ api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version,
     option(message(Message), Options),
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
                      Meta_Data,
@@ -584,7 +586,7 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     option_or_die(author(Author),Options),
     option_or_die(message(Message),Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
                      Meta_Data,
@@ -614,7 +616,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option(message(Message),Options),
     option(raw_json(Raw_JSON),Options,false),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Author, Message, Requested_Data_Version, Context, Transaction),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     option(input_format(InputFormat), Options),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,

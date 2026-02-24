@@ -17,6 +17,7 @@
               create_db/10,
               create_db_unfinalized/10,
               create_schema/3,
+              create_schema/4,
               create_ref_layer/1,
 
               % db_branch.pl

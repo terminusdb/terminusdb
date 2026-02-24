@@ -9,7 +9,8 @@
 :- use_module(library(http/json)).
 
 prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_Data_Version, Options) :-
-    option(commit_info(Commit_Info), Options),
+    option(commit_info(Commit_Info0), Options),
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
     option(all_witnesses(All_Witnesses), Options),
     option(files(Files), Options),
     option(data_version(Requested_Data_Version), Options),

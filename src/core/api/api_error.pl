@@ -1872,6 +1872,8 @@ document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
 %document_error_type(patch, 'api:PatchErrorResponse').
 
+:- multifile api_document_error_jsonld/3.
+
 api_document_error_jsonld(Type,error(not_a_valid_keyword(Keyword),_), JSON) :-
     document_error_type(Type, JSON_Type),
     (   Keyword = '@id'
