@@ -41,6 +41,48 @@ describe('history', function () {
       expect(history[0].identifier).to.equal(version3)
     })
 
+    it('history entries include user field with authenticated user IRI', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'x' }
+      await document.insert(agent, { instance })
+
+      const updated = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'y' }
+      await document.replace(agent, { instance: updated })
+
+      const historyRequest = await agent.get(`/api/history/admin/${dbName}?id=${id}%2F0`)
+      const history = historyRequest.body
+
+      expect(history).to.have.lengthOf(2)
+      // Each history entry should carry the user IRI of the authenticated user
+      for (const entry of history) {
+        expect(entry).to.have.property('user')
+        expect(entry.user).to.equal('terminusdb://system/data/User/admin')
+        expect(entry).to.have.property('author')
+        expect(entry).to.have.property('message')
+        expect(entry).to.have.property('identifier')
+        expect(entry).to.have.property('timestamp')
+      }
+    })
+
+    it('created_at and updated_at include user field', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'a' }
+      await document.insert(agent, { instance })
+
+      const updated = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'b' }
+      await document.replace(agent, { instance: updated })
+
+      const historyRequest = await agent.get(`/api/history/admin/${dbName}?id=${id}%2F0&created=true&updated=true`)
+      const history = historyRequest.body
+
+      expect(history.created).to.have.property('user', 'terminusdb://system/data/User/admin')
+      expect(history.updated).to.have.property('user', 'terminusdb://system/data/User/admin')
+    })
+
     it('finds created and updated date', async function () {
       const id = util.randomString()
       const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }

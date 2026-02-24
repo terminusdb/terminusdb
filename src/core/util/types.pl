@@ -27,6 +27,7 @@
               is_gday/1,
               is_gyear_month/1,
               is_gmonth_day/1,
+              is_date_time_interval/1,
               is_gyear_range/1,
               is_time/1,
               is_boolean/1,
@@ -317,6 +318,19 @@ is_coordinate_polygon(coordinate_polygon(L)) :-
 is_date_range(date_range(Date1,Date2)) :-
     is_date(Date1),
     is_date(Date2).
+
+is_date_time_interval(date_time_interval(C1,C2,D,Flag)) :-
+    is_interval_component(C1),
+    is_interval_component(C2),
+    is_duration(D),
+    is_interval_flag(Flag).
+
+is_interval_flag(explicit).
+is_interval_flag(start_duration).
+is_interval_flag(duration_end).
+
+is_interval_component(C) :- is_date(C), !.
+is_interval_component(C) :- is_date_time(C).
 
 is_integer_range(integer_range(Integer1,Integer2)) :-
     integer(Integer1),

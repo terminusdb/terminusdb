@@ -1872,6 +1872,8 @@ document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
 %document_error_type(patch, 'api:PatchErrorResponse').
 
+:- multifile api_document_error_jsonld/3.
+
 api_document_error_jsonld(Type,error(not_a_valid_keyword(Keyword),_), JSON) :-
     document_error_type(Type, JSON_Type),
     (   Keyword = '@id'
@@ -2832,10 +2834,6 @@ generic_exception_jsonld(document_input_too_large(Length, MaxSize), JSON) :-
     JSON = _{'@type' : 'api:DocumentInputTooLargeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
-generic_exception_jsonld(document_doctype_not_allowed, JSON) :-
-    JSON = _{'@type' : 'api:DocumentDoctypeNotAllowedErrorResponse',
-             'api:status' : 'api:failure',
-             'api:message' : "DOCTYPE declarations are not allowed in document input"}.
 generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     format(user_error, '[ERROR] Document format error (~w): ~w~n', [Format, Message]),
     format(string(Msg), "Invalid ~w document", [Format]),

@@ -41,6 +41,28 @@ describe('log', function () {
       expect(log[1].identifier).to.equal(version1)
     })
 
+    it('log entries include user field with authenticated user IRI', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'val' }
+      await document.insert(agent, { instance })
+
+      const logRequest = await agent.get(`/api/log/admin/${dbName}`)
+      const log = logRequest.body
+
+      // Log entries are full commit documents returned by get_document.
+      // The user field is the authenticated user's IRI stored as xsd:anyURI.
+      expect(log.length).to.be.greaterThan(0)
+      for (const entry of log) {
+        expect(entry).to.have.property('user', 'terminusdb://system/data/User/admin')
+        expect(entry).to.have.property('author')
+        expect(entry).to.have.property('message')
+        expect(entry).to.have.property('identifier')
+        expect(entry).to.have.property('timestamp')
+      }
+    })
+
     it('gets a log from changes by commit', async function () {
       const id = util.randomString()
       const schema = { '@type': 'Class', '@id': id }

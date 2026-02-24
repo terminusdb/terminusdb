@@ -772,6 +772,1029 @@ woql_greater_normalized(AE,BE) :-
     compare((>),AE,BE).
 
 /*
+ * woql_gte(AE,BE) is semidet.
+ *
+ * Greater-than-or-equal comparison. Succeeds if AE >= BE.
+ * Reuses woql_greater/2 and woql_equal/2 for type normalization,
+ * numeric family validation, and dateTime special-casing.
+ */
+woql_gte(AE,BE) :-
+    (   woql_greater(AE,BE)
+    ->  true
+    ;   woql_equal(AE,BE)
+    ).
+
+/*
+ * woql_lte(AE,BE) is semidet.
+ *
+ * Less-than-or-equal comparison. Succeeds if AE <= BE.
+ * Reuses woql_less/2 and woql_equal/2 for type normalization,
+ * numeric family validation, and dateTime special-casing.
+ */
+woql_lte(AE,BE) :-
+    (   woql_less(AE,BE)
+    ->  true
+    ;   woql_equal(AE,BE)
+    ).
+
+/*
+ * woql_in_range(VE,SE,EE) is semidet.
+ *
+ * Half-open range containment: succeeds if SE <= VE < EE.
+ * Equivalent to gte(Value, Start), less(Value, End).
+ */
+woql_in_range(VE,SE,EE) :-
+    woql_lte(SE,VE),
+    woql_less(VE,EE).
+
+/*
+ * woql_sequence(Value, Start, End, Step, Count) is nondet.
+ *
+ * Generates a sequence of values in half-open range [Start, End).
+ * Supports numeric types (integer, decimal, double, float),
+ * xsd:date (step = days, default 1), xsd:dateTime (step = seconds,
+ * default 1), xsd:gYearMonth (step = months, default 1), and
+ * xsd:gYear (step = years, default 1).
+ * Step and Count are optional (unbound when not provided).
+ */
+woql_sequence(Value, Start, End, Step, Count) :-
+    Start = _^^SType,
+    (   is_numeric_type(SType)
+    ->  woql_sequence_numeric(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#date'
+    ->  woql_sequence_date(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#dateTime'
+    ->  woql_sequence_datetime(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gYearMonth'
+    ->  woql_sequence_gyearmonth(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gYear'
+    ->  woql_sequence_gyear(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#time'
+    ->  woql_sequence_time(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gMonth'
+    ->  woql_sequence_gmonth(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gDay'
+    ->  woql_sequence_gday(Value, Start, End, Step, Count)
+    ;   SType = 'http://www.w3.org/2001/XMLSchema#gMonthDay'
+    ->  woql_sequence_gmonthday(Value, Start, End, Step, Count)
+    ).
+
+% --- Shared helpers ---
+
+sequence_extract_step(none, Default, Default).
+sequence_extract_step(Step, _, StepInt) :-
+    Step \= none,
+    Step = StepRaw^^_,
+    StepInt is truncate(StepRaw).
+
+sequence_handle_count(none, _) :- !.
+sequence_handle_count(Count, RawCount) :-
+    Count = CountVal^^_,
+    (   nonvar(CountVal)
+    ->  CountVal =:= RawCount
+    ;   CountVal = RawCount
+    ).
+
+% --- Numeric sequences ---
+
+woql_sequence_numeric(Value, Start, End, Step, Count) :-
+    Start = SRaw^^SType,
+    End = ERaw^^_,
+    (   Step \= none
+    ->  Step = StepRaw^^_
+    ;   once(default_numeric_step(SType, StepRaw))
+    ),
+    (   StepRaw > 0, ERaw > SRaw
+    ->  RawCount is ceiling((ERaw - SRaw) / StepRaw)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_numeric_sequence(Value, SRaw, ERaw, StepRaw, SType).
+
+default_numeric_step('http://www.w3.org/2001/XMLSchema#integer', 1).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#decimal', 1).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#double', 1.0).
+default_numeric_step('http://www.w3.org/2001/XMLSchema#float', 1.0).
+default_numeric_step(_, 1).
+
+gen_numeric_sequence(Val^^Type, Current, End, Step, Type) :-
+    Current < End,
+    (   Val = Current
+    ;   Next is Current + Step,
+        gen_numeric_sequence(Val^^Type, Next, End, Step, Type)
+    ).
+
+% --- Date sequences (step = integer days, default 1) ---
+
+woql_sequence_date(Value, Start, End, Step, Count) :-
+    Start = date(SY,SM,SD,Offset)^^DateType,
+    End = date(EY,EM,ED,_)^^DateType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    gregorian_jdn(SY, SM, SD, SJ),
+    gregorian_jdn(EY, EM, ED, EJ),
+    DayDiff is EJ - SJ,
+    (   DayDiff > 0
+    ->  RawCount is ceiling(DayDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_date_sequence(Value, SJ, EJ, StepInt, Offset, DateType).
+
+gen_date_sequence(Value, CurrentJ, EndJ, StepInt, Offset, DateType) :-
+    CurrentJ < EndJ,
+    jdn_to_gregorian(CurrentJ, Y, M, D),
+    (   Value = date(Y, M, D, Offset)^^DateType
+    ;   NextJ is CurrentJ + StepInt,
+        gen_date_sequence(Value, NextJ, EndJ, StepInt, Offset, DateType)
+    ).
+
+% --- gYearMonth sequences (step = integer months, default 1) ---
+
+woql_sequence_gyearmonth(Value, Start, End, Step, Count) :-
+    Start = gyear_month(SY,SM,Offset)^^YMType,
+    End = gyear_month(EY,EM,_)^^YMType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    MonthDiff is (EY * 12 + EM) - (SY * 12 + SM),
+    (   MonthDiff > 0
+    ->  RawCount is ceiling(MonthDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    SIdx is SY * 12 + SM - 1,
+    EIdx is EY * 12 + EM - 1,
+    gen_gyearmonth_sequence(Value, SIdx, EIdx, StepInt, Offset, YMType).
+
+gen_gyearmonth_sequence(Value, CurrentIdx, EndIdx, StepInt, Offset, YMType) :-
+    CurrentIdx < EndIdx,
+    Y is CurrentIdx // 12,
+    M is CurrentIdx mod 12 + 1,
+    (   Value = gyear_month(Y, M, Offset)^^YMType
+    ;   NextIdx is CurrentIdx + StepInt,
+        gen_gyearmonth_sequence(Value, NextIdx, EndIdx, StepInt, Offset, YMType)
+    ).
+
+% --- Julian Day Number conversion (Gregorian calendar) ---
+
+gregorian_jdn(Y, M, D, JDN) :-
+    A is (14 - M) // 12,
+    Y1 is Y + 4800 - A,
+    M1 is M + 12 * A - 3,
+    JDN is D + (153 * M1 + 2) // 5 + 365 * Y1
+         + Y1 // 4 - Y1 // 100 + Y1 // 400 - 32045.
+
+jdn_to_gregorian(JDN, Year, Month, Day) :-
+    A is JDN + 32044,
+    B is (4 * A + 3) // 146097,
+    C is A - (146097 * B) // 4,
+    DD is (4 * C + 3) // 1461,
+    E is C - (1461 * DD) // 4,
+    MM is (5 * E + 2) // 153,
+    Day is E - (153 * MM + 2) // 5 + 1,
+    Month is MM + 3 - 12 * (MM // 10),
+    Year is 100 * B + DD - 4800 + MM // 10.
+
+% --- dateTime sequences (step = integer seconds, default 1) ---
+
+woql_sequence_datetime(Value, Start, End, Step, Count) :-
+    Start = date_time(SY,SM,SD,SH,SMin,SS,_SNS)^^DTType,
+    End = date_time(EY,EM,ED,EH,EMin,ES,_ENS)^^DTType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    datetime_to_total_seconds(SY, SM, SD, SH, SMin, SS, STotalS),
+    datetime_to_total_seconds(EY, EM, ED, EH, EMin, ES, ETotalS),
+    SecDiff is ETotalS - STotalS,
+    (   SecDiff > 0
+    ->  RawCount is ceiling(SecDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_datetime_sequence(Value, STotalS, ETotalS, StepInt, DTType).
+
+datetime_to_total_seconds(Y, M, D, H, Min, S, TotalS) :-
+    gregorian_jdn(Y, M, D, JDN),
+    TotalS is JDN * 86400 + H * 3600 + Min * 60 + truncate(S).
+
+total_seconds_to_datetime(TotalS, Y, M, D, H, Min, S) :-
+    JDN is TotalS // 86400,
+    Remainder is TotalS mod 86400,
+    jdn_to_gregorian(JDN, Y, M, D),
+    H is Remainder // 3600,
+    Rest is Remainder mod 3600,
+    Min is Rest // 60,
+    S is Rest mod 60.
+
+gen_datetime_sequence(Value, CurrentS, EndS, StepInt, DTType) :-
+    CurrentS < EndS,
+    total_seconds_to_datetime(CurrentS, Y, M, D, H, Min, S),
+    (   Value = date_time(Y, M, D, H, Min, S, 0)^^DTType
+    ;   NextS is CurrentS + StepInt,
+        gen_datetime_sequence(Value, NextS, EndS, StepInt, DTType)
+    ).
+
+% --- gYear sequences (step = integer years, default 1) ---
+
+woql_sequence_gyear(Value, Start, End, Step, Count) :-
+    Start = gyear(SY, Offset)^^GYType,
+    End = gyear(EY, _)^^GYType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    YearDiff is EY - SY,
+    (   YearDiff > 0
+    ->  RawCount is ceiling(YearDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gyear_sequence(Value, SY, EY, StepInt, Offset, GYType).
+
+gen_gyear_sequence(Value, CurrentY, EndY, StepInt, Offset, GYType) :-
+    CurrentY < EndY,
+    (   Value = gyear(CurrentY, Offset)^^GYType
+    ;   NextY is CurrentY + StepInt,
+        gen_gyear_sequence(Value, NextY, EndY, StepInt, Offset, GYType)
+    ).
+
+% --- time sequences (step = seconds, default 1, no midnight roll-over) ---
+
+woql_sequence_time(Value, Start, End, Step, Count) :-
+    Start = time(SH,SMin,SS)^^TType,
+    End = time(EH,EMin,ES)^^TType,
+    sequence_extract_step_number(Step, 1, StepNum),
+    StepNum > 0,
+    time_to_seconds(SH, SMin, SS, STotalS),
+    time_to_seconds(EH, EMin, ES, ETotalS),
+    SecDiff is ETotalS - STotalS,
+    (   SecDiff > 0
+    ->  RawCount is ceiling(SecDiff / StepNum)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_time_sequence(Value, STotalS, ETotalS, StepNum, TType).
+
+time_to_seconds(H, M, S, TotalS) :-
+    TotalS is H * 3600 + M * 60 + S.
+
+seconds_to_time(TotalS, H, M, S) :-
+    H is truncate(TotalS) // 3600,
+    Rem is TotalS - H * 3600,
+    M is truncate(Rem) // 60,
+    S is Rem - M * 60.
+
+sequence_extract_step_number(none, Default, Default).
+sequence_extract_step_number(Step, _, StepNum) :-
+    Step \= none,
+    Step = StepRaw^^_,
+    StepNum is StepRaw.
+
+gen_time_sequence(Value, CurrentS, EndS, StepNum, TType) :-
+    CurrentS < EndS,
+    seconds_to_time(CurrentS, H, M, S),
+    (   Value = time(H, M, S)^^TType
+    ;   NextS is CurrentS + StepNum,
+        gen_time_sequence(Value, NextS, EndS, StepNum, TType)
+    ).
+
+% --- gMonth sequences (step = integer months, default 1, range 1..12) ---
+
+woql_sequence_gmonth(Value, Start, End, Step, Count) :-
+    Start = gmonth(SM, Offset)^^GMType,
+    End = gmonth(EM, _)^^GMType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    MonthDiff is EM - SM,
+    (   MonthDiff > 0
+    ->  RawCount is ceiling(MonthDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gmonth_sequence(Value, SM, EM, StepInt, Offset, GMType).
+
+gen_gmonth_sequence(Value, CurrentM, EndM, StepInt, Offset, GMType) :-
+    CurrentM < EndM,
+    (   Value = gmonth(CurrentM, Offset)^^GMType
+    ;   NextM is CurrentM + StepInt,
+        gen_gmonth_sequence(Value, NextM, EndM, StepInt, Offset, GMType)
+    ).
+
+% --- gDay sequences (step = integer days, default 1, range 1..31) ---
+
+woql_sequence_gday(Value, Start, End, Step, Count) :-
+    Start = gday(SD, Offset)^^GDType,
+    End = gday(ED, _)^^GDType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    DayDiff is ED - SD,
+    (   DayDiff > 0
+    ->  RawCount is ceiling(DayDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gday_sequence(Value, SD, ED, StepInt, Offset, GDType).
+
+gen_gday_sequence(Value, CurrentD, EndD, StepInt, Offset, GDType) :-
+    CurrentD < EndD,
+    (   Value = gday(CurrentD, Offset)^^GDType
+    ;   NextD is CurrentD + StepInt,
+        gen_gday_sequence(Value, NextD, EndD, StepInt, Offset, GDType)
+    ).
+
+% --- gMonthDay sequences (step = integer days, default 1, non-leap year) ---
+
+woql_sequence_gmonthday(Value, Start, End, Step, Count) :-
+    Start = gmonth_day(SM, SD, Offset)^^GMDType,
+    End = gmonth_day(EM, ED, _)^^GMDType,
+    sequence_extract_step(Step, 1, StepInt),
+    StepInt > 0,
+    monthday_to_doy(SM, SD, SDOY),
+    monthday_to_doy(EM, ED, EDOY),
+    DayDiff is EDOY - SDOY,
+    (   DayDiff > 0
+    ->  RawCount is ceiling(DayDiff / StepInt)
+    ;   RawCount = 0
+    ),
+    sequence_handle_count(Count, RawCount),
+    RawCount > 0,
+    gen_gmonthday_sequence(Value, SDOY, EDOY, StepInt, Offset, GMDType).
+
+gen_gmonthday_sequence(Value, CurrentDOY, EndDOY, StepInt, Offset, GMDType) :-
+    CurrentDOY < EndDOY,
+    doy_to_monthday(CurrentDOY, M, D),
+    (   Value = gmonth_day(M, D, Offset)^^GMDType
+    ;   NextDOY is CurrentDOY + StepInt,
+        gen_gmonthday_sequence(Value, NextDOY, EndDOY, StepInt, Offset, GMDType)
+    ).
+
+% Non-leap year cumulative days: Jan=31,Feb=28,Mar=31,...
+monthday_to_doy(M, D, DOY) :-
+    nonleap_cum_days(M, Cum),
+    DOY is Cum + D.
+
+doy_to_monthday(DOY, Month, Day) :-
+    doy_to_monthday_(1, DOY, Month, Day).
+
+doy_to_monthday_(M, DOY, Month, Day) :-
+    M =< 12,
+    nonleap_month_days(M, MDays),
+    nonleap_cum_days(M, Cum),
+    EndOfMonth is Cum + MDays,
+    (   DOY =< EndOfMonth
+    ->  Month = M,
+        Day is DOY - Cum
+    ;   M1 is M + 1,
+        doy_to_monthday_(M1, DOY, Month, Day)
+    ).
+
+nonleap_cum_days(1, 0).
+nonleap_cum_days(2, 31).
+nonleap_cum_days(3, 59).
+nonleap_cum_days(4, 90).
+nonleap_cum_days(5, 120).
+nonleap_cum_days(6, 151).
+nonleap_cum_days(7, 181).
+nonleap_cum_days(8, 212).
+nonleap_cum_days(9, 243).
+nonleap_cum_days(10, 273).
+nonleap_cum_days(11, 304).
+nonleap_cum_days(12, 334).
+
+nonleap_month_days(1, 31).
+nonleap_month_days(2, 28).
+nonleap_month_days(3, 31).
+nonleap_month_days(4, 30).
+nonleap_month_days(5, 31).
+nonleap_month_days(6, 30).
+nonleap_month_days(7, 31).
+nonleap_month_days(8, 31).
+nonleap_month_days(9, 30).
+nonleap_month_days(10, 31).
+nonleap_month_days(11, 30).
+nonleap_month_days(12, 31).
+
+/*
+ * woql_month_start_date(YearMonth, Date) is semidet.
+ *
+ * Computes the first day of the month for a given xsd:gYearMonth.
+ * If Date is bound, validates it matches; if unbound, unifies.
+ */
+woql_month_start_date(YearMonth, Date) :-
+    YearMonth = gyear_month(Y,M,Offset)^^'http://www.w3.org/2001/XMLSchema#gYearMonth',
+    Expected = date(Y,M,1,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    (   nonvar(Date)
+    ->  Date = Expected
+    ;   Date = Expected
+    ).
+
+/*
+ * woql_month_end_date(YearMonth, Date) is semidet.
+ *
+ * Computes the last day of the month for a given xsd:gYearMonth.
+ * Handles leap years correctly.
+ */
+woql_month_end_date(YearMonth, Date) :-
+    YearMonth = gyear_month(Y,M,Offset)^^'http://www.w3.org/2001/XMLSchema#gYearMonth',
+    days_in_month(Y, M, Days),
+    Expected = date(Y,M,Days,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    (   nonvar(Date)
+    ->  Date = Expected
+    ;   Date = Expected
+    ).
+
+/*
+ * woql_month_start_dates(Date, Start, End) is nondet.
+ *
+ * Generator: produces every first-of-month date in [Start, End).
+ */
+woql_month_start_dates(Date, Start, End) :-
+    Start = date(SY,SM,_,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    gen_month_start_dates(Date, SY, SM, EY, EM, Offset).
+
+gen_month_start_dates(Date, Y, M, EY, EM, Offset) :-
+    (   Y < EY
+    ;   Y =:= EY, M =< EM
+    ),
+    Candidate = date(Y,M,1,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    woql_less(Candidate, End),
+    (   Date = Candidate
+    ;   next_month(Y, M, NY, NM),
+        gen_month_start_dates(Date, NY, NM, EY, EM, Offset)
+    ).
+
+/*
+ * woql_month_end_dates(Date, Start, End) is nondet.
+ *
+ * Generator: produces every last-of-month date in [Start, End).
+ */
+woql_month_end_dates(Date, Start, End) :-
+    Start = date(SY,SM,_,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    gen_month_end_dates(Date, SY, SM, EY, EM, Offset).
+
+gen_month_end_dates(Date, Y, M, EY, EM, Offset) :-
+    (   Y < EY
+    ;   Y =:= EY, M =< EM
+    ),
+    days_in_month(Y, M, Days),
+    Candidate = date(Y,M,Days,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+    End = date(EY,EM,_,_)^^'http://www.w3.org/2001/XMLSchema#date',
+    woql_less(Candidate, End),
+    (   Date = Candidate
+    ;   next_month(Y, M, NY, NM),
+        gen_month_end_dates(Date, NY, NM, EY, EM, Offset)
+    ).
+
+next_month(Y, 12, NY, 1) :- !, NY is Y + 1.
+next_month(Y, M, Y, NM) :- NM is M + 1.
+
+prev_month(Y, 1, PY, 12) :- !, PY is Y - 1.
+prev_month(Y, M, Y, PM) :- PM is M - 1.
+
+/*
+ * woql_day_after(Date, Next) is det.
+ *
+ * Computes the calendar day after Date, or validates the relationship.
+ * Bidirectional: given Date computes Next, given Next computes Date.
+ */
+woql_day_after(Date, Next) :-
+    (   nonvar(Date)
+    ->  Date = date(Y,M,D,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+        days_in_month(Y, M, MaxD),
+        (   D < MaxD
+        ->  D1 is D + 1,
+            Expected = date(Y,M,D1,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ;   next_month(Y, M, NY, NM),
+            Expected = date(NY,NM,1,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ),
+        (   nonvar(Next)
+        ->  Next = Expected
+        ;   Next = Expected
+        )
+    ;   nonvar(Next)
+    ->  woql_day_before(Next, Date)
+    ;   throw(error(instantiation_error(day_after), _))
+    ).
+
+/*
+ * woql_day_before(Date, Previous) is det.
+ *
+ * Computes the calendar day before Date, or validates the relationship.
+ * Bidirectional: given Date computes Previous, given Previous computes Date.
+ */
+woql_day_before(Date, Previous) :-
+    (   nonvar(Date)
+    ->  Date = date(Y,M,D,Offset)^^'http://www.w3.org/2001/XMLSchema#date',
+        (   D > 1
+        ->  D1 is D - 1,
+            Expected = date(Y,M,D1,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ;   prev_month(Y, M, PY, PM),
+            days_in_month(PY, PM, PrevMaxD),
+            Expected = date(PY,PM,PrevMaxD,Offset)^^'http://www.w3.org/2001/XMLSchema#date'
+        ),
+        (   nonvar(Previous)
+        ->  Previous = Expected
+        ;   Previous = Expected
+        )
+    ;   nonvar(Previous)
+    ->  woql_day_after(Previous, Date)
+    ;   throw(error(instantiation_error(day_before), _))
+    ).
+
+/*
+ * woql_interval(Start, End, Interval) is det.
+ *
+ * Constructs or deconstructs a half-open xdd:dateTimeInterval [Start, End].
+ * Bidirectional: given Start+End computes Interval, given Interval extracts Start+End.
+ * Supports both xsd:date and xsd:dateTime endpoints, stored in canonical form.
+ */
+woql_interval(Start, End, Interval) :-
+    (   nonvar(Interval)
+    ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+        IV = date_time_interval(C1,C2,_Dur,_Flag),
+        interval_component_typed(C1, Start),
+        interval_component_typed(C2, End)
+    ;   nonvar(Start), nonvar(End)
+    ->  Start = D1^^_,
+        End = D2^^_,
+        interval_component_stamp(D1, S1),
+        interval_component_stamp(D2, S2),
+        DiffSecs is S2 - S1,
+        seconds_to_duration(DiffSecs, Dur),
+        Interval = date_time_interval(D1,D2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+    ;   throw(error(instantiation_error(interval), _))
+    ).
+
+interval_component_typed(date(Y,M,D,O), Val) :- !,
+    Val = date(Y,M,D,O)^^'http://www.w3.org/2001/XMLSchema#date'.
+interval_component_typed(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
+    Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+
+/*
+ * Duration computation helpers for xdd:dateTimeInterval.
+ * Supports both precise day/time durations (P90D) and calendar-relative
+ * durations (P3M, P1Y). Duration is preserved in storage as a third
+ * component: date_time_interval(Start, End, Duration).
+ */
+
+% Convert an interval component to a Unix timestamp (seconds).
+interval_component_stamp(date(Y,M,D,_O), Stamp) :-
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp).
+interval_component_stamp(date_time(Y,M,D,HH,MM,SS,NS), Stamp) :-
+    S is SS + NS / 1000000000,
+    date_time_stamp(date(Y,M,D,HH,MM,S,0,-,-), Stamp).
+
+% Convert a Unix timestamp back to a component matching the type of a template.
+stamp_to_component_like(Stamp, date(_,_,_,_), date(Y,M,D,0)) :- !,
+    stamp_date_time(Stamp, date(Y,M,D,_,_,_,0,'UTC',-), 'UTC').
+stamp_to_component_like(Stamp, date_time(_,_,_,_,_,_,_), date_time(Y,M,D,HH,MM,SSF,NS)) :- !,
+    stamp_date_time(Stamp, date(Y,M,D,HH,MM,SS1,0,'UTC',-), 'UTC'),
+    SSF is floor(SS1),
+    NS is floor((SS1 - SSF) * 1000000000).
+
+% Convert seconds difference to xsd:duration term (days/time only).
+seconds_to_duration(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Secs < 0
+    ->  Sign = -1, AbsSecs is abs(Secs)
+    ;   Sign = 1, AbsSecs = Secs
+    ),
+    Days is floor(AbsSecs) // 86400,
+    Rem1 is floor(AbsSecs) mod 86400,
+    Hours is Rem1 // 3600,
+    Rem2 is Rem1 mod 3600,
+    Mins is Rem2 // 60,
+    SSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60).
+
+% Convert xsd:duration day/time components to seconds (ignores Y/M).
+duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
+    Secs is Sign * (D * 86400 + HH * 3600 + MM * 60 + SS).
+
+% Extract the stored duration from an arity-4 interval.
+interval_extract_duration(date_time_interval(_,_,Dur,_), Dur).
+
+/*
+ * woql_interval_start_duration(Start, Duration, Interval) is det.
+ *
+ * Relates an xdd:dateTimeInterval to its start endpoint and duration.
+ * When constructing, stores date_time_interval(Start, End, Duration, start_duration).
+ * When extracting, returns the stored duration directly.
+ */
+woql_interval_start_duration(Start, Duration, Interval) :-
+    (   nonvar(Interval)
+    ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+        IV = date_time_interval(C1,_C2,Dur,_Flag),
+        interval_component_typed(C1, Start),
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
+    ;   nonvar(Start), nonvar(Duration)
+    ->  Start = C1^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        add_duration_to_component(C1, Dur, C2),
+        Interval = date_time_interval(C1,C2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+    ;   throw(error(instantiation_error(interval_start_duration), _))
+    ).
+
+/*
+ * woql_interval_duration_end(Duration, End, Interval) is det.
+ *
+ * Relates an xdd:dateTimeInterval to its end endpoint and duration.
+ * When constructing, stores date_time_interval(Start, End, Duration, duration_end).
+ * When extracting, returns the stored duration directly.
+ */
+woql_interval_duration_end(Duration, End, Interval) :-
+    (   nonvar(Interval)
+    ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+        IV = date_time_interval(_C1,C2,Dur,_Flag),
+        interval_component_typed(C2, End),
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
+    ;   nonvar(Duration), nonvar(End)
+    ->  End = C2^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        subtract_duration_from_component(C2, Dur, C1),
+        Interval = date_time_interval(C1,C2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+    ;   throw(error(instantiation_error(interval_duration_end), _))
+    ).
+
+is_leap_year(Y) :-
+    0 =:= Y mod 4,
+    (   0 =\= Y mod 100
+    ->  true
+    ;   0 =:= Y mod 400
+    ).
+
+days_in_month(_, 1, 31).
+days_in_month(Y, 2, 29) :- is_leap_year(Y), !.
+days_in_month(_, 2, 28).
+days_in_month(_, 3, 31).
+days_in_month(_, 4, 30).
+days_in_month(_, 5, 31).
+days_in_month(_, 6, 30).
+days_in_month(_, 7, 31).
+days_in_month(_, 8, 31).
+days_in_month(_, 9, 30).
+days_in_month(_, 10, 31).
+days_in_month(_, 11, 30).
+days_in_month(_, 12, 31).
+
+/*
+ * woql_interval_relation(Rel, Xs, Xe, Ys, Ye) is semidet.
+ *
+ * Allen's Interval Algebra for half-open intervals [start, end).
+ * When Rel is ground, validates the named relation holds.
+ * When Rel is unbound, classifies which of the 13 Allen relations holds (deterministic).
+ */
+woql_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
+    (   nonvar(Rel)
+    ->  Rel = RelStr^^'http://www.w3.org/2001/XMLSchema#string',
+        check_interval_relation(RelStr, Xs, Xe, Ys, Ye)
+    ;   classify_interval_relation(Rel, Xs, Xe, Ys, Ye)
+    ).
+
+% 7 fundamental relations
+check_interval_relation("before", _Xs, Xe, Ys, _Ye)    :- woql_less(Xe, Ys).
+check_interval_relation("meets", _Xs, Xe, Ys, _Ye)     :- woql_equal(Xe, Ys).
+check_interval_relation("overlaps", Xs, Xe, Ys, Ye)     :- woql_less(Xs, Ys), woql_greater(Xe, Ys), woql_less(Xe, Ye).
+check_interval_relation("starts", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_less(Xe, Ye).
+check_interval_relation("during", Xs, Xe, Ys, Ye)       :- woql_greater(Xs, Ys), woql_less(Xe, Ye).
+check_interval_relation("finishes", Xs, Xe, Ys, Ye)     :- woql_greater(Xs, Ys), woql_equal(Xe, Ye).
+check_interval_relation("equals", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_equal(Xe, Ye).
+% 6 inverses: swap X and Y
+check_interval_relation("after", Xs, Xe, Ys, Ye)        :- check_interval_relation("before", Ys, Ye, Xs, Xe).
+check_interval_relation("met_by", Xs, Xe, Ys, Ye)       :- check_interval_relation("meets", Ys, Ye, Xs, Xe).
+check_interval_relation("overlapped_by", Xs, Xe, Ys, Ye):- check_interval_relation("overlaps", Ys, Ye, Xs, Xe).
+check_interval_relation("started_by", Xs, Xe, Ys, Ye)   :- check_interval_relation("starts", Ys, Ye, Xs, Xe).
+check_interval_relation("contains", Xs, Xe, Ys, Ye)     :- check_interval_relation("during", Ys, Ye, Xs, Xe).
+check_interval_relation("finished_by", Xs, Xe, Ys, Ye)  :- check_interval_relation("finishes", Ys, Ye, Xs, Xe).
+
+% classify: when Rel is unbound, find THE one matching relation (deterministic)
+classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
+    member(R, ["before","meets","overlaps","starts","during","finishes","equals",
+               "after","met_by","overlapped_by","started_by","contains","finished_by"]),
+    check_interval_relation(R, Xs, Xe, Ys, Ye),
+    !,
+    Rel = R^^'http://www.w3.org/2001/XMLSchema#string'.
+
+/*
+ * woql_interval_relation_typed(Rel, X, Y) is semidet.
+ *
+ * Allen's Interval Algebra on xdd:dateTimeInterval values.
+ * Decomposes intervals X and Y into start/end endpoints, then delegates
+ * to woql_interval_relation/5.
+ */
+woql_interval_relation_typed(Rel, X, Y) :-
+    X = date_time_interval(Xc1,Xc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    Y = date_time_interval(Yc1,Yc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    interval_component_typed(Xc1, Xs),
+    interval_component_typed(Xc2, Xe),
+    interval_component_typed(Yc1, Ys),
+    interval_component_typed(Yc2, Ye),
+    woql_interval_relation(Rel, Xs, Xe, Ys, Ye).
+
+/*
+ * woql_range_min(+List, -Result) is semidet.
+ *
+ * Find the minimum value in a list using woql_less/2.
+ * Fails (0 bindings) on empty list.
+ */
+woql_range_min([H|T], Result) :-
+    foldl([Elem, Acc, Next]>>(
+              (   woql_less(Elem, Acc)
+              ->  Next = Elem
+              ;   Next = Acc
+              )
+          ), T, H, Result).
+
+/*
+ * woql_range_max(+List, -Result) is semidet.
+ *
+ * Find the maximum value in a list using woql_less/2.
+ * Fails (0 bindings) on empty list.
+ */
+woql_range_max([H|T], Result) :-
+    foldl([Elem, Acc, Next]>>(
+              (   woql_less(Acc, Elem)
+              ->  Next = Elem
+              ;   Next = Acc
+              )
+          ), T, H, Result).
+
+/*
+ * extract_ymd(+DateOrDateTime, -Y, -M, -D) is det.
+ *
+ * Extracts year, month, day from either xsd:date or xsd:dateTime.
+ */
+extract_ymd(date(Y,M,D,_)^^'http://www.w3.org/2001/XMLSchema#date', Y, M, D).
+extract_ymd(date_time(Y,M,D,_,_,_,_)^^'http://www.w3.org/2001/XMLSchema#dateTime', Y, M, D).
+
+/*
+ * iso_weekday_number(+Y, +M, +D, -IsoDay) is det.
+ *
+ * Computes ISO 8601 weekday number (Monday=1, Sunday=7) using
+ * Tomohiko Sakamoto's algorithm.
+ */
+iso_weekday_number(Y, M, D, IsoDay) :-
+    nth0(M, [0, 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4], T),
+    (   M < 3
+    ->  Y1 is Y - 1
+    ;   Y1 = Y
+    ),
+    DoW is (Y1 + Y1 // 4 - Y1 // 100 + Y1 // 400 + T + D) mod 7,
+    % DoW: 0=Sunday, 1=Monday, ..., 6=Saturday
+    % Convert to ISO: Monday=1, ..., Sunday=7
+    (   DoW =:= 0
+    ->  IsoDay = 7
+    ;   IsoDay = DoW
+    ).
+
+/*
+ * woql_weekday(Date, Weekday) is semidet.
+ *
+ * Computes the ISO 8601 weekday number (Monday=1, Sunday=7) for a date.
+ * Accepts xsd:date or xsd:dateTime. Date must be ground.
+ */
+woql_weekday(Date, Weekday) :-
+    (   nonvar(Date)
+    ->  extract_ymd(Date, Y, M, D),
+        iso_weekday_number(Y, M, D, IsoDay),
+        Expected = IsoDay^^'http://www.w3.org/2001/XMLSchema#integer',
+        (   nonvar(Weekday)
+        ->  Weekday = Expected
+        ;   Weekday = Expected
+        )
+    ;   throw(error(instantiation_error(weekday), _))
+    ).
+
+/*
+ * woql_weekday_sunday_start(Date, Weekday) is semidet.
+ *
+ * Computes the US-convention weekday number (Sunday=1, Saturday=7) for a date.
+ * Accepts xsd:date or xsd:dateTime. Date must be ground.
+ */
+woql_weekday_sunday_start(Date, Weekday) :-
+    (   nonvar(Date)
+    ->  extract_ymd(Date, Y, M, D),
+        iso_weekday_number(Y, M, D, IsoDay),
+        USDay is (IsoDay mod 7) + 1,
+        Expected = USDay^^'http://www.w3.org/2001/XMLSchema#integer',
+        (   nonvar(Weekday)
+        ->  Weekday = Expected
+        ;   Weekday = Expected
+        )
+    ;   throw(error(instantiation_error(weekday_sunday_start), _))
+    ).
+
+/*
+ * ordinal_day(+Y, +M, +D, -Ordinal) is det.
+ *
+ * Day of year (1-366).
+ */
+ordinal_day(Y, M, D, Ordinal) :-
+    ordinal_day_(Y, 1, M, D, 0, Ordinal).
+
+ordinal_day_(_Y, Month, Month, D, Acc, Ordinal) :- !,
+    Ordinal is Acc + D.
+ordinal_day_(Y, Current, Month, D, Acc, Ordinal) :-
+    days_in_month(Y, Current, Days),
+    Next is Current + 1,
+    Acc1 is Acc + Days,
+    ordinal_day_(Y, Next, Month, D, Acc1, Ordinal).
+
+/*
+ * iso_week_date(+Y, +M, +D, -IsoYear, -IsoWeek) is det.
+ *
+ * Computes ISO 8601 week-numbering year and week number.
+ * Week 1 is the week containing the first Thursday of the year.
+ */
+iso_week_date(Y, M, D, IsoYear, IsoWeek) :-
+    iso_weekday_number(Y, M, D, DayOfWeek),
+    ordinal_day(Y, M, D, Ordinal),
+    % Thursday of this week's ordinal day
+    ThursdayOrd is Ordinal + (4 - DayOfWeek),
+    (   ThursdayOrd < 1
+    ->  % Thursday is in the previous year
+        PrevY is Y - 1,
+        (   is_leap_year(PrevY)
+        ->  PrevDays = 366
+        ;   PrevDays = 365
+        ),
+        AdjOrd is PrevDays + ThursdayOrd,
+        IsoYear = PrevY,
+        IsoWeek is (AdjOrd - 1) // 7 + 1
+    ;   (   is_leap_year(Y)
+        ->  YearDays = 366
+        ;   YearDays = 365
+        ),
+        (   ThursdayOrd > YearDays
+        ->  % Thursday is in the next year
+            IsoYear is Y + 1,
+            IsoWeek = 1
+        ;   IsoYear = Y,
+            IsoWeek is (ThursdayOrd - 1) // 7 + 1
+        )
+    ).
+
+/*
+ * woql_iso_week(Date, Year, Week) is semidet.
+ *
+ * Computes the ISO 8601 week-numbering year and week for a date.
+ * Accepts xsd:date or xsd:dateTime. Date must be ground.
+ */
+woql_iso_week(Date, Year, Week) :-
+    (   nonvar(Date)
+    ->  extract_ymd(Date, Y, M, D),
+        iso_week_date(Y, M, D, IsoYear, IsoWeek),
+        ExpectedYear = IsoYear^^'http://www.w3.org/2001/XMLSchema#integer',
+        ExpectedWeek = IsoWeek^^'http://www.w3.org/2001/XMLSchema#integer',
+        (   nonvar(Year)
+        ->  Year = ExpectedYear
+        ;   Year = ExpectedYear
+        ),
+        (   nonvar(Week)
+        ->  Week = ExpectedWeek
+        ;   Week = ExpectedWeek
+        )
+    ;   throw(error(instantiation_error(iso_week), _))
+    ).
+
+/*
+ * woql_date_duration(Start, End, Duration) is semidet.
+ *
+ * Tri-directional duration arithmetic for dates and dateTimes.
+ * Given any two of Start, End, Duration, computes the third.
+ * Uses EOM preservation in both addition and subtraction:
+ * if the input is the last day of its month, the result is the
+ * last day of the target month.
+ * Duration output omits time components when they are zero.
+ */
+woql_date_duration(Start, End, Duration) :-
+    (   nonvar(Start), nonvar(End), nonvar(Duration)
+    ->  % Validation: Start + Duration should equal End
+        Start = C1^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        eom_add_duration(C1, Dur, C2),
+        interval_component_typed(C2, ComputedEnd),
+        woql_equal(End, ComputedEnd)
+    ;   nonvar(Start), nonvar(End)
+    ->  % Compute duration from Start and End (day-count/time)
+        Start = C1^^_,
+        End = C2^^_,
+        interval_component_stamp(C1, S1),
+        interval_component_stamp(C2, S2),
+        DiffSecs is S2 - S1,
+        seconds_to_duration_significant(DiffSecs, Dur),
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
+    ;   nonvar(Start), nonvar(Duration)
+    ->  % Compute End = Start + Duration (EOM-aware)
+        Start = C1^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        eom_add_duration(C1, Dur, C2),
+        interval_component_typed(C2, End)
+    ;   nonvar(Duration), nonvar(End)
+    ->  % Compute Start = End - Duration (EOM-aware)
+        End = C2^^_,
+        Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
+        eom_subtract_duration(C2, Dur, C1),
+        interval_component_typed(C1, Start)
+    ;   throw(error(instantiation_error(date_duration), _))
+    ).
+
+/*
+ * normalize_year_month(+Y, +M, -NY, -NM) is det.
+ *
+ * Normalize month overflow/underflow (e.g., month 0 or 13).
+ */
+normalize_year_month(Y, M, NY, NM) :-
+    NM0 is ((M - 1) mod 12) + 1,
+    NY is Y + ((M - 1) div 12),
+    NM = NM0.
+
+/*
+ * eom_add_months(+Component, +Sign, +DY, +DMo, -Result) is det.
+ *
+ * EOM-aware year/month addition. If the source day is the last day
+ * of its month, the result day is the last day of the target month.
+ * Otherwise, clamp to target month's max.
+ */
+eom_add_months(date(Y,M,D,O), Sign, DY, DMo, date(Y2,M2,D2,O)) :-
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    normalize_year_month(Y1, M1, Y2, M2),
+    days_in_month(Y, M, SrcMaxD),
+    days_in_month(Y2, M2, TgtMaxD),
+    (   D >= SrcMaxD
+    ->  D2 = TgtMaxD
+    ;   D2 is min(D, TgtMaxD)
+    ).
+eom_add_months(date_time(Y,M,D,HH,MM,SS,NS), Sign, DY, DMo, date_time(Y2,M2,D2,HH,MM,SS,NS)) :-
+    Y1 is Y + Sign * DY,
+    M1 is M + Sign * DMo,
+    normalize_year_month(Y1, M1, Y2, M2),
+    days_in_month(Y, M, SrcMaxD),
+    days_in_month(Y2, M2, TgtMaxD),
+    (   D >= SrcMaxD
+    ->  D2 = TgtMaxD
+    ;   D2 is min(D, TgtMaxD)
+    ).
+
+/*
+ * eom_add_duration(+Component, +Duration, -Result) is det.
+ *
+ * EOM-aware duration addition. When the duration has year/month
+ * components, applies EOM preservation for the month part first,
+ * then adds any day/time components via timestamp arithmetic.
+ */
+eom_add_duration(Component, duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+    (   (DY =:= 0, DMo =:= 0)
+    ->  add_duration_to_component(Component, duration(Sign,0,0,DD,DH,DMi,DS), End)
+    ;   eom_add_months(Component, Sign, DY, DMo, Intermediate),
+        (   DD =:= 0, DH =:= 0, DMi =:= 0, DS =:= 0
+        ->  End = Intermediate
+        ;   add_duration_to_component(Intermediate, duration(Sign,0,0,DD,DH,DMi,DS), End)
+        )
+    ).
+
+/*
+ * eom_subtract_duration(+Component, +Duration, -Result) is det.
+ *
+ * EOM-aware duration subtraction. Negates the sign and applies
+ * EOM-aware addition, preserving end-of-month symmetry.
+ */
+eom_subtract_duration(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
+    NSign is Sign * -1,
+    eom_add_duration(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
+
+/*
+ * seconds_to_duration_significant(+Secs, -Duration) is det.
+ *
+ * Converts a seconds difference to an xsd:duration term.
+ * Omits time components when they are all zero (produces PnD).
+ * When there are only time components (< 1 day), produces PTnHnMnS.
+ */
+seconds_to_duration_significant(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Secs < 0
+    ->  Sign = -1, AbsSecs is abs(Secs)
+    ;   Sign = 1, AbsSecs = Secs
+    ),
+    Days is floor(AbsSecs) // 86400,
+    Rem1 is floor(AbsSecs) mod 86400,
+    Hours is Rem1 // 3600,
+    Rem2 is Rem1 mod 3600,
+    Mins is Rem2 // 60,
+    RemSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60),
+    % Use 0.0 (float) for zero seconds so duration_string's SS \= 0.0 check works
+    (   RemSec =:= 0
+    ->  SSec = 0.0
+    ;   SSec = RemSec
+    ).
+
+/*
  * term_literal(Value, Value_Cast) is det.
  *
  * Casts a bare object from prolog to a typed object
@@ -875,6 +1898,34 @@ find_resources(t(_,_,_), Collection, DRG, _DWG, Read, Write) :-
     Write = [],
     Read = [resource(Collection,DRG)].
 find_resources(t(_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_slice(_,_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_slice(_,_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_slice_rev(_,_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_slice_rev(_,_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_next(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_next(_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_previous(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_previous(_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
     resolve_filter(Type, DRG),
     Write = [],
     Read = [resource(Collection,DRG)].
@@ -1001,6 +2052,27 @@ find_resources(trim(_,_),_, _, _, [], []).
 find_resources('='(_,_),_, _, _, [], []).
 find_resources('<'(_,_),_, _, _, [], []).
 find_resources('>'(_,_),_, _, _, [], []).
+find_resources('>='(_,_),_, _, _, [], []).
+find_resources('=<'(_,_),_, _, _, [], []).
+find_resources(in_range(_,_,_),_, _, _, [], []).
+find_resources(sequence(_,_,_,_,_),_, _, _, [], []).
+find_resources(interval(_,_,_),_, _, _, [], []).
+find_resources(interval_start_duration(_,_,_),_, _, _, [], []).
+find_resources(interval_duration_end(_,_,_),_, _, _, [], []).
+find_resources(day_after(_,_),_, _, _, [], []).
+find_resources(day_before(_,_),_, _, _, [], []).
+find_resources(month_start_date(_,_),_, _, _, [], []).
+find_resources(month_end_date(_,_),_, _, _, [], []).
+find_resources(month_start_dates(_,_,_),_, _, _, [], []).
+find_resources(month_end_dates(_,_,_),_, _, _, [], []).
+find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
+find_resources(interval_relation_typed(_,_,_),_, _, _, [], []).
+find_resources(weekday(_,_),_, _, _, [], []).
+find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
+find_resources(iso_week(_,_,_),_, _, _, [], []).
+find_resources(date_duration(_,_,_),_, _, _, [], []).
+find_resources(range_min(_,_),_, _, _, [], []).
+find_resources(range_max(_,_),_, _, _, [], []).
 find_resources(like(_,_),_, _, _, [], []).
 find_resources(like(_,_,_),_, _, _, [], []).
 find_resources(pad(_,_,_,_),_, _, _, [], []).
@@ -1177,6 +2249,90 @@ compile_wf(A<B,woql_less(AE,BE)) -->
 compile_wf(A>B,woql_greater(AE,BE)) -->
     resolve(A,AE),
     resolve(B,BE).
+compile_wf(A>=B,woql_gte(AE,BE)) -->
+    resolve(A,AE),
+    resolve(B,BE).
+compile_wf(A=<B,woql_lte(AE,BE)) -->
+    resolve(A,AE),
+    resolve(B,BE).
+compile_wf(in_range(V,S,E),woql_in_range(VE,SE,EE)) -->
+    resolve(V,VE),
+    resolve(S,SE),
+    resolve(E,EE).
+compile_wf(sequence(V,S,E,Step,Count),woql_sequence(VE,SE,EE,StepE,CountE)) -->
+    resolve(V,VE),
+    resolve(S,SE),
+    resolve(E,EE),
+    (   { Step \= none }
+    ->  resolve(Step,StepE)
+    ;   { StepE = none }
+    ),
+    (   { Count \= none }
+    ->  resolve(Count,CountE)
+    ;   { CountE = none }
+    ).
+compile_wf(interval(S,E,I),woql_interval(SE,EE,IE)) -->
+    resolve(S,SE),
+    resolve(E,EE),
+    resolve(I,IE).
+compile_wf(interval_start_duration(S,Dur,I),woql_interval_start_duration(SE,DurE,IE)) -->
+    resolve(S,SE),
+    resolve(Dur,DurE),
+    resolve(I,IE).
+compile_wf(interval_duration_end(Dur,E,I),woql_interval_duration_end(DurE,EE,IE)) -->
+    resolve(Dur,DurE),
+    resolve(E,EE),
+    resolve(I,IE).
+compile_wf(day_after(D,N),woql_day_after(DE,NE)) -->
+    resolve(D,DE),
+    resolve(N,NE).
+compile_wf(day_before(D,P),woql_day_before(DE,PE)) -->
+    resolve(D,DE),
+    resolve(P,PE).
+compile_wf(month_start_date(YM,D),woql_month_start_date(YME,DE)) -->
+    resolve(YM,YME),
+    resolve(D,DE).
+compile_wf(month_end_date(YM,D),woql_month_end_date(YME,DE)) -->
+    resolve(YM,YME),
+    resolve(D,DE).
+compile_wf(month_start_dates(D,S,E),woql_month_start_dates(DE,SE,EE)) -->
+    resolve(D,DE),
+    resolve(S,SE),
+    resolve(E,EE).
+compile_wf(month_end_dates(D,S,E),woql_month_end_dates(DE,SE,EE)) -->
+    resolve(D,DE),
+    resolve(S,SE),
+    resolve(E,EE).
+compile_wf(interval_relation(R,Xs,Xe,Ys,Ye),woql_interval_relation(RE,XsE,XeE,YsE,YeE)) -->
+    resolve(R,RE),
+    resolve(Xs,XsE),
+    resolve(Xe,XeE),
+    resolve(Ys,YsE),
+    resolve(Ye,YeE).
+compile_wf(interval_relation_typed(R,X,Y),woql_interval_relation_typed(RE,XE,YE)) -->
+    resolve(R,RE),
+    resolve(X,XE),
+    resolve(Y,YE).
+compile_wf(weekday(D,W),woql_weekday(DE,WE)) -->
+    resolve(D,DE),
+    resolve(W,WE).
+compile_wf(weekday_sunday_start(D,W),woql_weekday_sunday_start(DE,WE)) -->
+    resolve(D,DE),
+    resolve(W,WE).
+compile_wf(iso_week(D,Y,W),woql_iso_week(DE,YE,WE)) -->
+    resolve(D,DE),
+    resolve(Y,YE),
+    resolve(W,WE).
+compile_wf(date_duration(S,E,D),woql_date_duration(SE,EE,DE)) -->
+    resolve(S,SE),
+    resolve(E,EE),
+    resolve(D,DE).
+compile_wf(range_min(List,Result),woql_range_min(ListE,ResultE)) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE).
+compile_wf(range_max(List,Result),woql_range_max(ListE,ResultE)) -->
+    resolve(List,ListE),
+    resolve(Result,ResultE).
 compile_wf(like(A,B,F), Isub) -->
     resolve(A,AE),
     resolve(B,BE),
@@ -1263,6 +2419,100 @@ compile_wf(t(X,P,Y,G),Goal) -->
     },
     update(filter, Old_Filter, Filter),
     compile_wf(t(X,P,Y), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_slice(X,P,Y,Low,High),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Low,LowE),
+    resolve(High,HighE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_slice(X,P,Y,Low,High,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_slice(X,P,Y,Low,High), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_slice_rev(X,P,Y,Low,High),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Low,LowE),
+    resolve(High,HighE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_slice_rev(XE, PE, YE, LowE, HighE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_slice_rev(X,P,Y,Low,High,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_slice_rev(X,P,Y,Low,High), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_next(X,P,Y,Next),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Next,NextE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_next(XE, PE, YE, NextE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_next(X,P,Y,Next,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_next(X,P,Y,Next), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_previous(X,P,Y,Prev),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Prev,PrevE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_previous(X,P,Y,Prev,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_previous(X,P,Y,Prev), Goal),
     update(filter, _Filter, Old_Filter).
 compile_wf(path(X,Pattern,Y),Goal) -->
     compile_wf(path(X,Pattern,Y,false),Goal).
@@ -2448,6 +3698,110 @@ filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Obj
     compile_schema_predicate(PE, Transaction_Object, PS),
     compile_schema_object(YE, Transaction_Object, YS),
     Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Search_1 = [xrdf_value_range(Transaction_Object.instance_objects, LowE, HighE, XI, PI, YE)]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Search_2 = [xrdf_value_range(Transaction_Object.schema_objects, LowE, HighE, XS, PS, YE)]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = xrdf_value_range((Transaction_Object.instance_objects), LowE, HighE, XI, PI, YE).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = xrdf_value_range((Transaction_Object.schema_objects), LowE, HighE, XS, PS, YE).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_slice_rev(XE, PE, YE, LowE, HighE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Search_1 = [xrdf_value_range_rev(Transaction_Object.instance_objects, LowE, HighE, XI, PI, YE)]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Search_2 = [xrdf_value_range_rev(Transaction_Object.schema_objects, LowE, HighE, XS, PS, YE)]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_slice_rev(XE, PE, YE, LowE, HighE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = xrdf_value_range_rev((Transaction_Object.instance_objects), LowE, HighE, XI, PI, YE).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_slice_rev(XE, PE, YE, LowE, HighE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = xrdf_value_range_rev((Transaction_Object.schema_objects), LowE, HighE, XS, PS, YE).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Gs_I = Transaction_Object.instance_objects,
+        Search_1 = [(ground(YE) -> xrdf_value_next(Gs_I, XI, PI, YE, NextE)
+                     ; xrdf_value_previous(Gs_I, XI, PI, NextE, YE))]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Gs_S = Transaction_Object.schema_objects,
+        Search_2 = [(ground(YE) -> xrdf_value_next(Gs_S, XS, PS, YE, NextE)
+                     ; xrdf_value_previous(Gs_S, XS, PS, NextE, YE))]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Gs = Transaction_Object.instance_objects,
+    Goal = (ground(YE) -> xrdf_value_next(Gs, XI, PI, YE, NextE)
+            ; xrdf_value_previous(Gs, XI, PI, NextE, YE)).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Gs = Transaction_Object.schema_objects,
+    Goal = (ground(YE) -> xrdf_value_next(Gs, XS, PS, YE, NextE)
+            ; xrdf_value_previous(Gs, XS, PS, NextE, YE)).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Gs_I = Transaction_Object.instance_objects,
+        Search_1 = [(ground(YE) -> xrdf_value_previous(Gs_I, XI, PI, YE, PrevE)
+                     ; xrdf_value_next(Gs_I, XI, PI, PrevE, YE))]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Gs_S = Transaction_Object.schema_objects,
+        Search_2 = [(ground(YE) -> xrdf_value_previous(Gs_S, XS, PS, YE, PrevE)
+                     ; xrdf_value_next(Gs_S, XS, PS, PrevE, YE))]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Gs = Transaction_Object.instance_objects,
+    Goal = (ground(YE) -> xrdf_value_previous(Gs, XI, PI, YE, PrevE)
+            ; xrdf_value_next(Gs, XI, PI, PrevE, YE)).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_previous(XE, PE, YE, PrevE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Gs = Transaction_Object.schema_objects,
+    Goal = (ground(YE) -> xrdf_value_previous(Gs, XS, PS, YE, PrevE)
+            ; xrdf_value_next(Gs, XS, PS, PrevE, YE)).
 
 filter_transaction_graph_descriptor(type_name_filter{ type : Type},Transaction,Graph_Descriptor) :-
     (   Type = instance
@@ -6098,6 +7452,2773 @@ test(less_than_mixed_uri_representation, [
     save_and_retrieve_woql(Query, Query_Out),
     query_test_response_test_branch(Query_Out, JSON),
     [_] = (JSON.bindings).
+
+test(triple_slice_string_range, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc2, label, "beta"^^xsd:string),
+                      insert(doc3, label, "gamma"^^xsd:string),
+                      insert(doc4, label, "delta"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), label, v(o),
+                             "beta"^^xsd:string,
+                             "gamma"^^xsd:string)),
+            Results),
+    length(Results, 2).
+
+test(triple_slice_numeric_int_range, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(s1, reading, 10^^xsd:integer),
+                      insert(s2, reading, 20^^xsd:integer),
+                      insert(s3, reading, 30^^xsd:integer),
+                      insert(s4, reading, 40^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), reading, v(o),
+                             15^^xsd:integer,
+                             35^^xsd:integer)),
+            Results),
+    length(Results, 2).
+
+test(triple_slice_empty_when_out_of_range, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State)),
+         fail
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, insert(doc1, label, "alpha"^^xsd:string)),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        triple_slice(v(x), label, v(o),
+                     "x"^^xsd:string,
+                     "z"^^xsd:string)).
+
+test(triple_slice_half_open_excludes_high, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc2, label, "beta"^^xsd:string),
+                      insert(doc3, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), label, v(o),
+                             "alpha"^^xsd:string,
+                             "gamma"^^xsd:string)),
+            Results),
+    length(Results, 2).
+
+test(triple_next_finds_next_value, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc1, label, "beta"^^xsd:string),
+                      insert(doc1, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        triple_next(doc1, label, "alpha"^^xsd:string, v(next))),
+    once(ask(Descriptor,
+             (triple_next(doc1, label, "alpha"^^xsd:string, v(n)),
+              v(n) = "beta"^^xsd:string))).
+
+test(triple_next_mode_b_next_bound, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, score, 10^^xsd:integer),
+                      insert(doc1, score, 20^^xsd:integer),
+                      insert(doc1, score, 30^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (triple_next(doc1, score, v(o), 30^^xsd:integer),
+              v(o) = 20^^xsd:integer))).
+
+test(triple_previous_finds_previous_value, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc1, label, "beta"^^xsd:string),
+                      insert(doc1, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (triple_previous(doc1, label, "gamma"^^xsd:string, v(prev)),
+              v(prev) = "beta"^^xsd:string))).
+
+test(triple_previous_mode_b_prev_bound, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, score, 10^^xsd:integer),
+                      insert(doc1, score, 20^^xsd:integer),
+                      insert(doc1, score, 30^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    once(ask(Descriptor,
+             (triple_previous(doc1, score, v(o), 10^^xsd:integer),
+              v(o) = 20^^xsd:integer))).
+
+test(triple_slice_rev_descending_order, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc2, label, "beta"^^xsd:string),
+                      insert(doc3, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice_rev(v(x), label, v(o),
+                             "alpha"^^xsd:string,
+                             "zeta"^^xsd:string)),
+            Results),
+    length(Results, 3).
+
+test(triple_slice_rev_same_count_as_forward, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,test))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor('admin', 'test', Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(doc1, label, "alpha"^^xsd:string),
+                      insert(doc2, label, "beta"^^xsd:string),
+                      insert(doc3, label, "gamma"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    findall(_,
+            ask(Descriptor,
+                triple_slice(v(x), label, v(o),
+                             "alpha"^^xsd:string,
+                             "zeta"^^xsd:string)),
+            Fwd),
+    findall(_,
+            ask(Descriptor,
+                triple_slice_rev(v(x), label, v(o),
+                             "alpha"^^xsd:string,
+                             "zeta"^^xsd:string)),
+            Rev),
+    length(Fwd, N),
+    length(Rev, N).
+
+test(gte_integer_greater, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_integer_equal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_integer_less_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 4}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(lte_integer_less, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(lte_integer_equal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(lte_integer_greater_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 6}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(gte_decimal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 21.1}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 21.1}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_date_equal_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_date_day_after_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(lte_date_before_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Lte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-28"}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(gte_cross_family_throws, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State)),
+    throws(error(incompatible_numeric_comparison(_,_),_))
+]) :-
+    Query = _{ '@type' : "Gte",
+               left : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:float', '@value': 5.0}},
+               right : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, _JSON).
+
+test(in_range_integer_within, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(in_range_integer_at_start_inclusive, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(in_range_integer_at_end_exclusive, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(in_range_integer_below, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 0}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(in_range_integer_above, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 11}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(in_range_date_within, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [_] = (JSON.bindings).
+
+test(in_range_date_at_end_exclusive, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "InRange",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+    [] = (JSON.bindings).
+
+test(sequence_integer_1_to_5, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 6}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(sequence_integer_with_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 0}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(sequence_empty_range, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_single_value, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "NodeValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(month_start_date_january, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthStartDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-01"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2024-01-01"}.
+
+test(month_end_date_january, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-01"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2024-01-31"}.
+
+test(month_end_date_leap_february, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-02"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2024-02-29"}.
+
+test(month_end_date_nonleap_february, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDate",
+               year_month : _{'@type' : "DataValue",
+                              'data' : _{'@type': 'xsd:gYearMonth', '@value': "2023-02"}},
+               date : _{'@type' : "DataValue",
+                        variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2023-02-28"}.
+
+test(month_start_dates_fy2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthStartDates",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 12).
+
+test(month_end_dates_fy2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "MonthEndDates",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 12).
+
+test(interval_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}.
+
+test(interval_deconstruct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2025-01-01"},
+    Binding.e = _{'@type': 'xsd:date', '@value': "2025-04-01"}.
+
+test(interval_validate, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_validate_mismatch, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(interval_construct_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-04-01T12:00:00Z"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"}.
+
+test(interval_deconstruct_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00Z/2025-04-01T17:30:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00Z"},
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2025-04-01T17:30:00Z"}.
+
+test(interval_mixed_date_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-04-01T12:00:00Z"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01T12:00:00Z"}.
+
+test(interval_typecast_datetime_string, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Typecast",
+               value : _{'@type' : "Value",
+                         'data' : _{'@type': 'xsd:string', '@value': "2025-01-01T09:00:00Z/2025-04-01T17:30:00Z"}},
+               type : _{'@type' : "NodeValue",
+                         node : 'xdd:dateTimeInterval'},
+               result : _{'@type' : "Value",
+                           variable : "iv"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00Z/2025-04-01T17:30:00Z"}.
+
+test(interval_start_duration_from_interval, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2025-01-01"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P90D"}.
+
+test(interval_start_duration_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P90D"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}.
+
+test(interval_duration_end_from_interval, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalDurationEnd",
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2025-04-01"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P90D"}.
+
+test(interval_duration_end_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalDurationEnd",
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P90D"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}.
+
+test(interval_start_duration_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00Z/2025-01-01T17:30:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00Z"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT8H30M"}.
+
+test(day_after_mid_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-15"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2025-01-16"}.
+
+test(day_after_end_of_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-31"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2025-02-01"}.
+
+test(day_after_end_of_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-12-31"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2026-01-01"}.
+
+test(day_after_leap_feb28, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-28"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2024-02-29"}.
+
+test(day_after_leap_feb29, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2024-03-01"}.
+
+test(day_after_nonleap_feb28, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2023-02-28"}},
+               next : _{'@type' : "DataValue",
+                        variable : "n"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.n = _{'@type': 'xsd:date', '@value': "2023-03-01"}.
+
+test(day_before_mid_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-15"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2025-01-14"}.
+
+test(day_before_start_of_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-03-01"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2025-02-28"}.
+
+test(day_before_start_of_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2024-12-31"}.
+
+test(day_before_leap_mar01, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}},
+               previous : _{'@type' : "DataValue",
+                            variable : "p"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.p = _{'@type': 'xsd:date', '@value': "2024-02-29"}.
+
+test(day_after_bidirectional_from_next, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayAfter",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               next : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2025-03-31"}.
+
+test(day_before_bidirectional_from_previous, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DayBefore",
+               date : _{'@type' : "DataValue",
+                        variable : "d"},
+               previous : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:date', '@value': "2025-03-31"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2025-04-01"}.
+
+test(interval_relation_before_integers, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "before"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_before_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "before"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(interval_relation_meets, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_overlaps, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "overlaps"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 6}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 4}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_starts, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "starts"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_during, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "during"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_finishes, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "finishes"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_equals, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "equals"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_after_inverse, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "after"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 3}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_contains_inverse, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "contains"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_classify_before, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "NodeValue",
+                            variable : "v:rel"},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 5}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 8}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.'v:rel' = _{'@type': 'xsd:string', '@value': "before"}.
+
+test(interval_relation_classify_during, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "NodeValue",
+                            variable : "v:rel"},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 3}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 7}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:decimal', '@value': 1}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:decimal', '@value': 10}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.'v:rel' = _{'@type': 'xsd:string', '@value': "during"}.
+
+test(interval_relation_meets_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_during_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelation",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "during"}},
+               x_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-03-15"}},
+               x_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-03-20"}},
+               y_start : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               y_end : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_meets, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_meets_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-05-01/2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(interval_relation_typed_before, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "before"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-06-01/2024-09-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_during, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "during"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-03-01/2024-06-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-12-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_classify, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            variable : "rel"},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-07-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.rel = _{'@type': 'xsd:string', '@value': "meets"}.
+
+test(interval_relation_typed_classify_before, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            variable : "rel"},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-06-01/2024-09-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.rel = _{'@type': 'xsd:string', '@value': "before"}.
+
+test(interval_relation_typed_equals, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "equals"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-06-01"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-06-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_relation_typed_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            variable : "rel"},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01T08:00:00Z/2024-01-01T12:00:00Z"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01T12:00:00Z/2024-01-01T17:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.rel = _{'@type': 'xsd:string', '@value': "meets"}.
+
+test(range_min_integers, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 7}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 2}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 9}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 1}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 5}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(range_max_integers, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMax",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 7}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 2}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 9}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 1}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 5}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 9}.
+
+test(range_min_single_element, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 42}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 42}.
+
+test(range_min_empty_list, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : []},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(range_min_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:date', '@value': "2024-01-01"}.
+
+test(range_max_dates, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMax",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:date', '@value': "2024-03-01"}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:date', '@value': "2024-06-15"}.
+
+test(range_min_equal_elements, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "RangeMin",
+               list : _{'@type' : "DataValue",
+                        list : [_{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 3}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 3}},
+                                _{'@type' : "DataValue", 'data' : _{'@type': 'xsd:integer', '@value': 3}}]},
+               result : _{'@type' : "DataValue", variable : "m"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:integer', '@value': 3}.
+
+test(sequence_date_daily_week, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-06"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-13"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 7),
+    maplist([B]>>(get_dict(d, B, D), get_dict('@value', D, _)), JSON.bindings).
+
+test(sequence_date_weekly_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-02-01"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 7}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5),
+    [First|_] = JSON.bindings,
+    First.d = _{'@type': 'xsd:date', '@value': "2025-01-01"}.
+
+test(sequence_date_crosses_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-30"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-02-03"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_date_leap_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-02-27"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-03-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_date_non_leap_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-02-27"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-03-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 3).
+
+test(sequence_date_empty_range, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_date_single, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "d"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:date', '@value': "2025-06-01"}.
+
+test(sequence_gyearmonth_h1, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-07"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 6),
+    [First|_] = JSON.bindings,
+    First.m = _{'@type': 'xsd:gYearMonth', '@value': "2025-01"}.
+
+test(sequence_gyearmonth_year_boundary, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2024-10"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-04"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 6).
+
+test(sequence_gyearmonth_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-03"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-03"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_gyearmonth_single, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-06"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-07"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1),
+    [Binding] = JSON.bindings,
+    Binding.m = _{'@type': 'xsd:gYearMonth', '@value': "2025-06"}.
+
+test(sequence_gyearmonth_quarterly_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "m"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2025-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYearMonth', '@value': "2026-01"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 3}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_datetime_hourly, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T06:00:00Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 3600}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 6),
+    [First|_] = JSON.bindings,
+    First.t = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}.
+
+test(sequence_datetime_every_second, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T23:59:57Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-02T00:00:02Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(sequence_datetime_15min, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-06-15T09:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-06-15T10:00:00Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 900}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_datetime_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "t"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T12:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T12:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_datetime_matcher, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T03:00:00Z"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T06:00:00Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 3600}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(sequence_gyear_decade, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2020"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2030"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 10),
+    [First|_] = JSON.bindings,
+    First.y = _{'@type': 'xsd:gYear', '@value': "2020"}.
+
+test(sequence_gyear_step5, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2000"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2020"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 5}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_gyear_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_gyear_single, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue", variable : "y"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2026"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:gYear', '@value': "2025"}.
+
+test(sequence_gyear_matcher, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2025"}},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2020"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gYear', '@value': "2030"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(sequence_byte_default_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:byte', '@value': 1}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:byte', '@value': 4}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 3).
+
+test(sequence_long_default_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:long', '@value': 10}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:long', '@value': 15}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 5).
+
+test(weekday_monday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(weekday_sunday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-07"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 7}.
+
+test(weekday_saturday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-06"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 6}.
+
+test(weekday_leap_day, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-02-29"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 4}.
+
+test(weekday_validate_succeeds, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:integer', '@value': 1}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(weekday_validate_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           'data' : _{'@type': 'xsd:integer', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(weekday_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T12:00:00Z"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(weekday_datetime_sunday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Weekday",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-07T23:59:59Z"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 7}.
+
+test(weekday_sunday_start_sunday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-07"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(weekday_sunday_start_saturday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-06"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 7}.
+
+test(weekday_sunday_start_monday, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 2}.
+
+test(weekday_sunday_start_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "WeekdaySundayStart",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-07T10:00:00Z"}},
+               weekday : _{'@type' : "DataValue",
+                           variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(iso_week_first_day_2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2024},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(iso_week_year_boundary_dec30_2024, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-12-30"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2025},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 1}.
+
+test(iso_week_jan1_2023_in_2022_w52, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2023-01-01"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2022},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 52}.
+
+test(iso_week_2020_has_53_weeks, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2020-12-31"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2020},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 53}.
+
+test(iso_week_mid_year, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-06-15"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2024},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 24}.
+
+test(iso_week_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:dateTime', '@value': "2024-06-15T09:30:00Z"}},
+               year : _{'@type' : "DataValue",
+                        variable : "y"},
+               week : _{'@type' : "DataValue",
+                        variable : "w"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.y = _{'@type': 'xsd:integer', '@value': 2024},
+    Binding.w = _{'@type': 'xsd:integer', '@value': 24}.
+
+test(iso_week_validate_succeeds, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               year : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 2024}},
+               week : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 1}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(iso_week_validate_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IsoWeek",
+               date : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               year : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 2024}},
+               week : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:integer', '@value': 2}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+%% DateDuration tests
+
+% Start + End → Duration (day-count, dates)
+test(date_duration_compute_duration_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P91D"}.
+
+test(date_duration_compute_duration_non_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P90D"}.
+
+test(date_duration_zero, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P0D"}.
+
+% Start + Duration → End (EOM-aware addition)
+test(date_duration_add_jan31_p1m_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-01-31"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-02-29"}.
+
+test(date_duration_add_jan31_p1m_nonleap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2021-01-31"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2021-02-28"}.
+
+test(date_duration_add_jan30_p1m_clamped, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-01-30"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-02-29"}.
+
+test(date_duration_add_jan28_p1m_normal, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-01-28"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-02-28"}.
+
+test(date_duration_add_feb29_p1m_eom, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-02-29"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-03-31"}.
+
+test(date_duration_add_apr30_p1m_eom, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-04-30"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2020-05-31"}.
+
+test(date_duration_add_dec31_p1m_year_boundary, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-12-31"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:date', '@value': "2021-01-31"}.
+
+% Duration + End → Start (EOM-aware subtraction)
+test(date_duration_subtract_mar31_p1m_leap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-03-31"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2020-02-29"}.
+
+test(date_duration_subtract_mar31_p1m_nonleap, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2021-03-31"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2021-02-28"}.
+
+test(date_duration_subtract_jan31_p1m_year_boundary, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2021-01-31"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2020-12-31"}.
+
+% EOM reversibility: Jan 31 → +P1M → Feb 29 → -P1M → Jan 31
+test(date_duration_eom_reversibility_feb29, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2020-02-29"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:date', '@value': "2020-01-31"}.
+
+% DateTime support: Start + End → Duration with time components
+test(date_duration_datetime_with_time, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T08:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T17:30:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT9H30M"}.
+
+% DateTime: time-significance — midnight-to-midnight produces day-only duration
+test(date_duration_datetime_midnight_day_only, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-01T00:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2024-01-04T00:00:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.d = _{'@type': 'xsd:duration', '@value': "P3D"}.
+
+% Start + Duration → End with dateTime
+test(date_duration_datetime_add_p1m, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2020-01-31T10:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P1M"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2020-02-29T10:00:00Z"}.
+
+% Validation: all three ground and consistent → success
+test(date_duration_validate_succeeds, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P91D"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+% Validation: all three ground and inconsistent → failure
+test(date_duration_validate_fails, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "DateDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2024-04-01"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P90D"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+% --- Sequence tests for new temporal types ---
+
+test(sequence_time_basic, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:03Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "10:00:00Z",
+    get_dict('v:i', B1, V1), V1.'@value' = "10:00:01Z",
+    get_dict('v:i', B2, V2), V2.'@value' = "10:00:02Z".
+
+test(sequence_time_fractional_step, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:02Z"}},
+               step : _{'@type' : "DataValue",
+                        'data' : _{'@type': 'xsd:decimal', '@value': "0.5"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 4).
+
+test(sequence_time_start_ge_end_empty, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "12:00:00Z"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:time', '@value': "10:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(sequence_gmonth_basic, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonth', '@value': "--03"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonth', '@value': "--07"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2,B3] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "--03",
+    get_dict('v:i', B1, V1), V1.'@value' = "--04",
+    get_dict('v:i', B2, V2), V2.'@value' = "--05",
+    get_dict('v:i', B3, V3), V3.'@value' = "--06".
+
+test(sequence_gday_basic, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gDay', '@value': "---10"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gDay', '@value': "---15"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2,B3,B4] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "---10",
+    get_dict('v:i', B1, V1), V1.'@value' = "---11",
+    get_dict('v:i', B2, V2), V2.'@value' = "---12",
+    get_dict('v:i', B3, V3), V3.'@value' = "---13",
+    get_dict('v:i', B4, V4), V4.'@value' = "---14".
+
+test(sequence_gmonthday_crosses_month, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Sequence",
+               value : _{'@type' : "DataValue",
+                         variable : "v:i"},
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonthDay', '@value': "-02-27"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:gMonthDay', '@value': "-03-02"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [B0,B1,B2] = JSON.bindings,
+    get_dict('v:i', B0, V0), V0.'@value' = "-02-27",
+    get_dict('v:i', B1, V1), V1.'@value' = "-02-28",
+    get_dict('v:i', B2, V2), V2.'@value' = "-03-01".
 
 :- end_tests(woql).
 

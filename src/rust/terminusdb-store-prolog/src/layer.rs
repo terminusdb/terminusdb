@@ -3,6 +3,7 @@ use crate::store::*;
 use std::io::{self, Write};
 use std::iter::Peekable;
 use swipl::prelude::*;
+use tdb_succinct::TypedDictEntry;
 use terminus_store::layer::{IdTriple, ObjectType};
 use terminus_store::storage::{name_to_string, string_to_name};
 use terminus_store::store::sync::*;
@@ -445,6 +446,172 @@ predicates! {
             else {
                 Err(PrologError::Failure)
             }
+        }
+    }
+
+    pub nondet fn id_triple_value_range<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, low_term, high_term, subject_id_term, predicate_id_term, object_id_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+
+            let low_inner = context.new_term_ref();
+            let low_ty = context.new_term_ref();
+            let low_entry;
+            if attempt(low_term.unify(term!{context: value(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_term(context, &low_inner, &low_ty)?;
+            } else if attempt(low_term.unify(term!{context: lang(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_lang_term(context, &low_inner, &low_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #low_term), _)}?);
+            }
+
+            let high_inner = context.new_term_ref();
+            let high_ty = context.new_term_ref();
+            let high_entry;
+            if attempt(high_term.unify(term!{context: value(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_term(context, &high_inner, &high_ty)?;
+            } else if attempt(high_term.unify(term!{context: lang(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_lang_term(context, &high_inner, &high_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #high_term), _)}?);
+            }
+
+            let iter = layer.triples_value_range(&low_entry, &high_entry).peekable();
+
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some(triple) = iter.next() {
+                subject_id_term.unify(triple.subject)?;
+                predicate_id_term.unify(triple.predicate)?;
+                object_id_term.unify(triple.object)?;
+
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
+    pub nondet fn id_triple_value_range_rev<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, low_term, high_term, subject_id_term, predicate_id_term, object_id_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+
+            let low_inner = context.new_term_ref();
+            let low_ty = context.new_term_ref();
+            let low_entry;
+            if attempt(low_term.unify(term!{context: value(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_term(context, &low_inner, &low_ty)?;
+            } else if attempt(low_term.unify(term!{context: lang(#&low_inner, #&low_ty)}?))? {
+                low_entry = make_entry_from_lang_term(context, &low_inner, &low_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #low_term), _)}?);
+            }
+
+            let high_inner = context.new_term_ref();
+            let high_ty = context.new_term_ref();
+            let high_entry;
+            if attempt(high_term.unify(term!{context: value(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_term(context, &high_inner, &high_ty)?;
+            } else if attempt(high_term.unify(term!{context: lang(#&high_inner, #&high_ty)}?))? {
+                high_entry = make_entry_from_lang_term(context, &high_inner, &high_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #high_term), _)}?);
+            }
+
+            let iter = layer.triples_value_range_rev(&low_entry, &high_entry).peekable();
+
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some(triple) = iter.next() {
+                subject_id_term.unify(triple.subject)?;
+                predicate_id_term.unify(triple.predicate)?;
+                object_id_term.unify(triple.object)?;
+
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
+    pub semidet fn id_triple_sp_value_next(context, layer_term, subject_id_term, predicate_id_term, reference_term, result_object_id_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let subject: u64 = subject_id_term.get_ex()?;
+        let predicate: u64 = predicate_id_term.get_ex()?;
+
+        let ref_inner = context.new_term_ref();
+        let ref_ty = context.new_term_ref();
+        let reference;
+        if attempt(reference_term.unify(term!{context: value(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_term(context, &ref_inner, &ref_ty)?;
+        } else if attempt(reference_term.unify(term!{context: lang(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_lang_term(context, &ref_inner, &ref_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #reference_term), _)}?);
+        }
+
+        let ref_dt = reference.datatype();
+        let mut best: Option<(u64, TypedDictEntry)> = None;
+
+        for triple in layer.triples_sp(subject, predicate) {
+            if let Some(ObjectType::Value(entry)) = layer.id_object(triple.object) {
+                if entry.datatype() == ref_dt && entry > reference {
+                    if let Some((_, ref best_entry)) = best {
+                        if entry < *best_entry {
+                            best = Some((triple.object, entry));
+                        }
+                    } else {
+                        best = Some((triple.object, entry));
+                    }
+                }
+            }
+        }
+
+        match best {
+            Some((oid, _)) => result_object_id_term.unify(oid),
+            None => Err(PrologError::Failure),
+        }
+    }
+
+    pub semidet fn id_triple_sp_value_previous(context, layer_term, subject_id_term, predicate_id_term, reference_term, result_object_id_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let subject: u64 = subject_id_term.get_ex()?;
+        let predicate: u64 = predicate_id_term.get_ex()?;
+
+        let ref_inner = context.new_term_ref();
+        let ref_ty = context.new_term_ref();
+        let reference;
+        if attempt(reference_term.unify(term!{context: value(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_term(context, &ref_inner, &ref_ty)?;
+        } else if attempt(reference_term.unify(term!{context: lang(#&ref_inner, #&ref_ty)}?))? {
+            reference = make_entry_from_lang_term(context, &ref_inner, &ref_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #reference_term), _)}?);
+        }
+
+        let ref_dt = reference.datatype();
+        let mut best: Option<(u64, TypedDictEntry)> = None;
+
+        for triple in layer.triples_sp(subject, predicate) {
+            if let Some(ObjectType::Value(entry)) = layer.id_object(triple.object) {
+                if entry.datatype() == ref_dt && entry < reference {
+                    if let Some((_, ref best_entry)) = best {
+                        if entry > *best_entry {
+                            best = Some((triple.object, entry));
+                        }
+                    } else {
+                        best = Some((triple.object, entry));
+                    }
+                }
+            }
+        }
+
+        match best {
+            Some((oid, _)) => result_object_id_term.unify(oid),
+            None => Err(PrologError::Failure),
         }
     }
 

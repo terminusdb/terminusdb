@@ -11,6 +11,9 @@
 :- use_module(library(plunit)).
 
 create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes) :-
+    create_schema(Repository_Context, _Auth, New_Branch_Name, Branch_Uri, Schema, Prefixes).
+
+create_schema(Repository_Context, Auth, New_Branch_Name, Branch_Uri, Schema, Prefixes) :-
     query_context_transaction_objects(Repository_Context, [Repository_Transaction]),
     Repository_Descriptor = (Repository_Transaction.descriptor),
     Database_Descriptor = (Repository_Descriptor.database_descriptor),
@@ -38,7 +41,8 @@ create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)
                      backlinks: [],
                      write: Builder},
 
-    Commit_Info = commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'},
+    Commit_Info0 = commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'},
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
 
     Branch_Transaction = transaction_object{
                              parent: Repository_Transaction,
@@ -87,6 +91,8 @@ info_from_main(Repository_Context, Prefixes, Schema) :-
     ;   Schema = true).
 
 branch_create_(Repository_Descriptor, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
+    branch_create_(Repository_Descriptor, _Auth, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri).
+branch_create_(Repository_Descriptor, Auth, empty(Input_Prefixes, Schema), New_Branch_Name, Branch_Uri) :-
     !,
     create_context(Repository_Descriptor, Context),
 
@@ -106,9 +112,9 @@ branch_create_(Repository_Descriptor, empty(Input_Prefixes, Schema), New_Branch_
                      (   insert_branch_object(Context,
                                               New_Branch_Name,
                                               Branch_Uri),
-                         create_schema(Context, New_Branch_Name, Branch_Uri, Schema, Prefixes)),
+                         create_schema(Context, Auth, New_Branch_Name, Branch_Uri, Schema, Prefixes)),
                      _).
-branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
+branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
     branch_descriptor{} :< Branch_Descriptor,
     Repository_Descriptor = Branch_Descriptor.repository_descriptor,
     !,
@@ -128,7 +134,7 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch
                          ->  link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri)
                          ;   true)),
                      _).
-branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
+branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
     branch_descriptor{} :< Branch_Descriptor,
     Repository_Descriptor \= Branch_Descriptor.repository_descriptor,
     !,
@@ -152,7 +158,7 @@ branch_create_(Repository_Descriptor, Branch_Descriptor, New_Branch_Name, Branch
                              link_commit_object_to_branch(Destination_Context, Branch_Uri, Head_Commit_Uri)
                          ;   true)),
                      _).
-branch_create_(Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
+branch_create_(Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
     commit_descriptor{repository_descriptor:Origin_Repository_Descriptor} :< Commit_Descriptor,
     Origin_Repository_Descriptor = Repository_Descriptor,
     !,
@@ -168,7 +174,7 @@ branch_create_(Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Branch
                                                   Branch_Uri),
                              link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri))),
                      _).
-branch_create_(Destination_Repository_Descriptor, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
+branch_create_(Destination_Repository_Descriptor, _Auth, Commit_Descriptor, New_Branch_Name, Branch_Uri) :-
     commit_descriptor{repository_descriptor:Origin_Repository_Descriptor} :< Commit_Descriptor,
 
     % in this case, the source is a commit descriptor, but it could come from anywhere.
@@ -241,7 +247,7 @@ branch_create(System_DB, Auth, Path, Origin_Option, Branch_Uri) :-
         error(branch_already_exists(New_Branch_Name),_)),
 
     do_or_die(
-        branch_create_(Repository_Descriptor, Origin_Descriptor, New_Branch_Name, Branch_Uri),
+        branch_create_(Repository_Descriptor, Auth, Origin_Descriptor, New_Branch_Name, Branch_Uri),
         error(origin_cannot_be_branched(Origin_Descriptor),_)).
 
 branch_delete_(Branch_Descriptor) :-
