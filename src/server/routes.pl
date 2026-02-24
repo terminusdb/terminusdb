@@ -413,9 +413,9 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
 triples_handler(post,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
     do_or_die(_{ turtle : TTL,
-                 commit_info : Commit_Info } :< Triples_Document,
+                 commit_info : Commit_Info0 } :< Triples_Document,
               error(bad_api_document(Triples_Document,[turtle,commit_info]),_)),
-
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
     api_report_errors(
         triples,
         Request,
@@ -425,9 +425,9 @@ triples_handler(post,Path,Request, System_DB, Auth) :-
 triples_handler(put,Path,Request, System_DB, Auth) :-
     get_payload(Triples_Document,Request),
     do_or_die(_{ turtle : TTL,
-                 commit_info : Commit_Info } :< Triples_Document,
+                 commit_info : Commit_Info0 } :< Triples_Document,
               error(bad_api_document(Triples_Document,[turtle,commit_info]),_)),
-
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
     api_report_errors(
         triples,
         Request,
@@ -2487,9 +2487,9 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
 
     do_or_die(
         (   get_payload(Document, Request),
-            _{ commit_info : Commit_Info } :< Document),
+            _{ commit_info : Commit_Info0 } :< Document),
         error(bad_api_document(Document, [commit_info]), _)),
-
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
     api_report_errors(
         squash,
         Request,
@@ -2715,10 +2715,12 @@ patch_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_required(Search, JSON, author, text, Author),
             param_value_search_or_json_required(Search, JSON, message, text, Message),
             param_value_search_or_json_optional(Search, JSON, match_final_state, boolean, true, Matches),
+            Patch_Commit_Info0 = commit_info{
+                                     author: Author,
+                                     message: Message },
+            maybe_inject_auth_user(Auth, Patch_Commit_Info0, Patch_Commit_Info),
             api_patch_resource(System_DB, Auth, Path, Patch,
-                               commit_info{
-                                   author: Author,
-                                   message: Message },
+                               Patch_Commit_Info,
                                Ids,
                                [match_final_state(Matches)]),
             cors_reply_json(Request, Ids)
@@ -2814,11 +2816,12 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
     get_payload(Document, Request),
     do_or_die((   _{ before_commit: Before_Commit,
                      after_commit: After_Commit,
-                     commit_info: Commit_Info
+                     commit_info: Commit_Info0
                    } :< Document
               ),
               error(bad_api_document(Document, [before_commit,after_commit,commit_info,type]))
              ),
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
 
     (   _{ match_final_state: Match_Final_State } :< Document
     ->  true

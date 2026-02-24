@@ -7,6 +7,8 @@
               commit_id_uri/3,
               commit_id_to_metadata/5,
               commit_uri_to_metadata/5,
+              commit_uri_to_user/3,
+              maybe_inject_auth_user/3,
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
               descriptor_commit_id_uri/4,
@@ -122,6 +124,18 @@ commit_id_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
     commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp).
 
+commit_uri_to_user(Askable, Commit_Uri, User) :-
+    ask(Askable,
+        t(Commit_Uri, user, User^^xsd:anyURI)),
+    !.
+
+maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info) :-
+    (   nonvar(Auth)
+    ->  atom_string(Auth, User_String),
+        put_dict(user, Commit_Info0, User_String, Commit_Info)
+    ;   Commit_Info = Commit_Info0
+    ).
+
 commit_uri_to_parent_uri(Askable, Commit_Uri, Parent_Commit_Uri) :-
     once(ask(Askable,
              t(Commit_Uri, parent, Parent_Commit_Uri))).
@@ -179,8 +193,16 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
     ;   Commit_Document1 = Commit_Document0),
 
     (   get_dict(migration, Commit_Info, Migration)
-    ->  put_dict(migration, Commit_Document1, Migration, Commit_Document)
-    ;   Commit_Document = Commit_Document1),
+    ->  put_dict(migration, Commit_Document1, Migration, Commit_Document2)
+    ;   Commit_Document2 = Commit_Document1),
+
+    (   get_dict(user, Commit_Info, User)
+    ->  put_dict(user, Commit_Document2, User, Commit_Document3)
+    ;   Commit_Document3 = Commit_Document2),
+
+    (   get_dict(metadata, Commit_Info, Metadata)
+    ->  put_dict(metadata, Commit_Document3, Metadata, Commit_Document)
+    ;   Commit_Document = Commit_Document3),
 
     insert_document(
         Context,

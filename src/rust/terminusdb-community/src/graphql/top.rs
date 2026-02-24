@@ -695,6 +695,14 @@ pub trait AbstractCommit {
         )
     }
 
+    fn user(&self, #[graphql(context)] info: &SystemInfo) -> Option<String> {
+        maybe_object_string(
+            info.commit.as_ref().expect("Missing commit graph"),
+            self.get_id(),
+            "http://terminusdb.com/schema/ref#user",
+        )
+    }
+
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
         let predicate_id = info
             .commit
@@ -735,6 +743,10 @@ impl Commit {
         <Self as AbstractCommit>::timestamp(self, info)
     }
 
+    fn user(&self, #[graphql(context)] info: &SystemInfo) -> Option<String> {
+        <Self as AbstractCommit>::user(self, info)
+    }
+
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
         <Self as AbstractCommit>::parent(self, info)
     }
@@ -768,6 +780,10 @@ impl InitialCommit {
 
     fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
         <Self as AbstractCommit>::timestamp(self, info)
+    }
+
+    fn user(&self, #[graphql(context)] info: &SystemInfo) -> Option<String> {
+        <Self as AbstractCommit>::user(self, info)
     }
 
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
@@ -805,6 +821,10 @@ impl ValidCommit {
         <Self as AbstractCommit>::timestamp(self, info)
     }
 
+    fn user(&self, #[graphql(context)] info: &SystemInfo) -> Option<String> {
+        <Self as AbstractCommit>::user(self, info)
+    }
+
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {
         <Self as AbstractCommit>::parent(self, info)
     }
@@ -838,6 +858,10 @@ impl InvalidCommit {
 
     fn timestamp(&self, #[graphql(context)] info: &SystemInfo) -> f64 {
         <Self as AbstractCommit>::timestamp(self, info)
+    }
+
+    fn user(&self, #[graphql(context)] info: &SystemInfo) -> Option<String> {
+        <Self as AbstractCommit>::user(self, info)
     }
 
     fn parent(&self, #[graphql(context)] info: &SystemInfo) -> Option<AbstractCommitValue> {

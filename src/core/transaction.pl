@@ -56,6 +56,8 @@
               commit_id_uri/3,
               commit_id_to_metadata/5,
               commit_uri_to_metadata/5,
+              commit_uri_to_user/3,
+              maybe_inject_auth_user/3,
               commit_id_to_parent_uri/3,
               commit_uri_to_parent_uri/3,
               descriptor_commit_id_uri/4,

@@ -16,7 +16,22 @@
               ]).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(plugins)).
 :- use_module(library(option)).
+
+commit_info_dict(Repo, Commit_Id, Info) :-
+    commit_id_uri(Repo, Commit_Id, Commit_Uri),
+    commit_uri_to_metadata(Repo, Commit_Uri, Author, Message, Timestamp),
+    Info0 = json{
+               identifier: Commit_Id,
+               author: Author,
+               message: Message,
+               timestamp: Timestamp
+           },
+    (   commit_uri_to_user(Repo, Commit_Uri, User)
+    ->  put_dict(user, Info0, User, Info)
+    ;   Info = Info0
+    ).
 
 /*
 
@@ -40,13 +55,7 @@ history_to_created_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     document_created(Commit_Descriptor, Id, []),
     !,
-    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
-    Info = json{
-               identifier: Commit_Id,
-               author: Author,
-               message: Message,
-               timestamp: Timestamp
-           }.
+    commit_info_dict(Repo, Commit_Id, Info).
 history_to_created_at([_|T], Repo, Id, Info) :-
     history_to_created_at(T, Repo, Id, Info).
 
@@ -62,13 +71,7 @@ history_to_updated_at([Commit_Id|_], Repo, Id, Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     document_modified(Commit_Descriptor, Id, []),
     !,
-    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
-    Info = json{
-               identifier: Commit_Id,
-               author: Author,
-               message: Message,
-               timestamp: Timestamp
-           }.
+    commit_info_dict(Repo, Commit_Id, Info).
 history_to_updated_at([_|T], Repo, Id, Info) :-
     history_to_updated_at(T, Repo, Id, Info).
 
@@ -158,13 +161,7 @@ commits(Repo, Branch_Name, Commits) :-
 has_change(Repo,Commit_Id,Id,Info) :-
     resolve_relative_descriptor(Repo,["commit", Commit_Id],Commit_Descriptor),
     changed_document_id(Commit_Descriptor, Id),
-    commit_id_to_metadata(Repo, Commit_Id, Author, Message, Timestamp),
-    Info = json{
-               identifier: Commit_Id,
-               author: Author,
-               message: Message,
-               timestamp: Timestamp
-           }.
+    commit_info_dict(Repo, Commit_Id, Info).
 
 collect_history([_|_], _Repo, _Id, _Start, Count, I, History-History) :-
     I >= Count,
@@ -186,12 +183,15 @@ collect_history([_|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
 collect_history([], _Repo, _Id, _Start, _Count, _I, History-History).
 
 document_history(Descriptor, Id, Start, Count, History) :-
-    Branch_Name = (Descriptor.branch_name),
-    Repo = (Descriptor.repository_descriptor),
-    commits(Repo,Branch_Name,LL),
     database_prefixes(Descriptor, Prefixes),
     prefix_expand(Id,Prefixes,Id_Ex),
-    collect_history(LL,Repo,Id_Ex,Start,Count,0,History-[]).
+    (   fast_document_history(Descriptor, Id_Ex, Start, Count, History)
+    ->  true
+    ;   Branch_Name = (Descriptor.branch_name),
+        Repo = (Descriptor.repository_descriptor),
+        commits(Repo,Branch_Name,LL),
+        collect_history(LL,Repo,Id_Ex,Start,Count,0,History-[])
+    ).
 
 
 :- begin_tests(history).
