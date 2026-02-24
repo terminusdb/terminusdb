@@ -4,7 +4,8 @@ use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexSet};
 use rug::Integer;
-use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
+use tdb_succinct::tfc::interval::parse_iso_interval;
+use tdb_succinct::{DateTimeInterval, Decimal, TdbDataType, TypedDictEntry};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -697,14 +698,25 @@ fn object_type_filter<'a>(
                 ordering_matches_op(cmp, op)
             }))
         }
-        FilterValue::String(op, val, _) => {
+        FilterValue::String(op, val, type_str) => {
             let op = *op;
             let val = val.clone();
             let g = g.clone();
+            // Use TypedDictEntry ordering for dateTimeInterval (binary sorts chronologically)
+            let interval_entry = if type_str == "dateTimeInterval" {
+                parse_iso_interval(&val).ok().map(|iv| DateTimeInterval::make_entry(&iv))
+            } else {
+                None
+            };
             ClonableIterator::new(iter.filter(move |object| {
-                let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_to_string(&object_value).to_string();
-                let cmp = object_string.cmp(&val);
+                let object_value =
+                    g.id_object_value(*object).expect("Object value must exist");
+                let cmp = if let Some(ref entry) = interval_entry {
+                    object_value.cmp(entry)
+                } else {
+                    let object_string = value_to_string(&object_value).to_string();
+                    object_string.cmp(&val)
+                };
                 ordering_matches_op(cmp, op)
             }))
         }

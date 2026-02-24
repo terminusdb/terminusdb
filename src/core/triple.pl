@@ -40,6 +40,8 @@
               prefixed_to_uri/3,
               prefixed_to_property/3,
               uri_eq/3,
+              add_duration_to_component/3,
+              subtract_duration_from_component/3,
 
               % temp_graph.pl
               extend_database_with_temp_graph/6,

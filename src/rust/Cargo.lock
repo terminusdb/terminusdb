@@ -182,7 +182,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -2108,8 +2108,7 @@ dependencies = [
 [[package]]
 name = "tdb-succinct"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dd2121c78e3a6efd81722c3828e01ab51123cb38d6a54794eb84ab435ad9022"
+source = "git+https://github.com/terminusdb-org/tdb-succinct#91a6096725c7e7031ed1724ea4939041cebe5456"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
