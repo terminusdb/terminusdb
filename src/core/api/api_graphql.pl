@@ -80,7 +80,9 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
         ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
             '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
 
-        create_context(Transaction, commit_info{author: Author, message: Message}, C),
+        Commit_Info0 = commit_info{author: Author, message: Message},
+        maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
+        create_context(Transaction, Commit_Info, C),
         catch(
             with_transaction(C,
                              (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, ResponseRaw, Is_Error, Author, Message),

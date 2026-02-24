@@ -40,6 +40,8 @@
               prefixed_to_uri/3,
               prefixed_to_property/3,
               uri_eq/3,
+              add_duration_to_component/3,
+              subtract_duration_from_component/3,
 
               % temp_graph.pl
               extend_database_with_temp_graph/6,
@@ -101,6 +103,14 @@
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
+              xrdf_value_range/6,
+              xquad_value_range/7,
+              xrdf_value_range_rev/6,
+              xquad_value_range_rev/7,
+              xrdf_value_next/5,
+              xquad_value_next/6,
+              xrdf_value_previous/5,
+              xquad_value_previous/6,
               insert/5,
               delete/5,
               delete_all/1,

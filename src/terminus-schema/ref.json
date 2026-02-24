@@ -45,6 +45,7 @@
                         "identifier" : "The identifier of the commit.",
                         "timestamp" : "The timestamp for the commit.",
                         "metadata" : "User supplied metadata for commit as JSON.",
+                        "user" : "The authenticated database user IRI who performed the commit.",
                         "parent" : "The previous commit (if one exists).",
                         "migration" : "The schema migration script (if one exists)."
                       }
@@ -62,6 +63,8 @@
                  "@class" : "sys:JSON"},
   "parent" : { "@type" : "Optional",
                "@class" : "Commit" },
+  "user" : { "@type" : "Optional",
+             "@class" : "xsd:anyURI" },
   "migration": { "@type": "Optional",
                  "@class": "xsd:string" } }
 

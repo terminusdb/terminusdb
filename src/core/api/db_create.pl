@@ -3,6 +3,7 @@
               create_db/9,
               create_db/10,
               create_schema/3,
+              create_schema/4,
               create_ref_layer/1,
               finalize_db/1,
               make_db_private/2,
@@ -159,10 +160,15 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
     Branch_Descriptor = branch_descriptor{
                             repository_descriptor:Repository_Descriptor,
                             branch_name: "main" },
-    create_schema(Branch_Descriptor, Schema, Prefixes).
+    create_schema(Branch_Descriptor, Auth, Schema, Prefixes).
 
 create_schema(Branch_Desc, Schema, Prefixes) :-
-    create_context(Branch_Desc, commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'}, Query_Context),
+    create_schema(Branch_Desc, _Auth, Schema, Prefixes).
+
+create_schema(Branch_Desc, Auth, Schema, Prefixes) :-
+    Commit_Info0 = commit_info{author: "system", message: "create initial schema", commit_type: 'InitialCommit'},
+    maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
+    create_context(Branch_Desc, Commit_Info, Query_Context),
     Prefix_Obj = (Prefixes.put('@type', "@context")),
 
     with_transaction(
