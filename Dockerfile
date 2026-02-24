@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.3
 
+# Community-only Docker build.
 # Set the swipl version by argument (see Makefile for the default!)
 ARG SWIPL_VERSION=10.0.0
-ARG DIST=community
 ARG SKIP_TESTS=false
 
 # Minimal SWI-Prolog
@@ -13,7 +13,9 @@ RUN apt-get update && \
 # Install the SWI-Prolog pack dependencies.
 FROM swipl_minimal AS pack_installer
 RUN set -eux; \
-    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev pkg-config clang ca-certificates m4 libgmp-dev protobuf-compiler libprotobuf-dev"; \
+    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev \
+    pkg-config clang ca-certificates m4 libgmp-dev \
+    protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
     apt-get install -y --no-install-recommends ${BUILD_DEPS}; \
     rm -rf /var/lib/apt/lists/*
@@ -38,18 +40,10 @@ COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 
 # Build the community dylib.
-FROM rust_builder_base AS rust_builder_community
+FROM rust_builder_base AS rust_builder
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 ARG SKIP_TESTS=false
 RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo swipl test --release))
-
-# Build the enterprise dylib.
-FROM rust_builder_base AS rust_builder_enterprise
-COPY terminusdb-enterprise/rust terminusdb-enterprise/rust/
-RUN make DIST=enterprise
-
-# Build the ${DIST} dylib.
-FROM rust_builder_${DIST} AS rust_builder
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM pack_installer AS base
@@ -78,24 +72,10 @@ RUN set -eux; \
     make DIST=community; \
     [ "$SKIP_TESTS" = "true" ] || make test
 
-# Build the enterprise executable.
-FROM base AS base_enterprise
-ARG SKIP_TESTS=false
-COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
-COPY terminusdb-enterprise/prolog terminusdb-enterprise/prolog/
-COPY terminusdb-enterprise/data/context-seeds/ terminusdb-enterprise/data/context-seeds/
-RUN set -eux; \
-    make DIST=enterprise; \
-    [ "$SKIP_TESTS" = "true" ] || make test
-    
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
 
-FROM swipl_minimal AS min_enterprise
-COPY --from=base_enterprise /app/terminusdb/terminusdb app/terminusdb/
-
-# Build the ${DIST} executable. Set the default command.
-FROM min_${DIST}
+FROM min_community
 COPY --from=base /app/terminusdb/distribution/init_docker.sh app/terminusdb/
 RUN set -eux; \
     RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \

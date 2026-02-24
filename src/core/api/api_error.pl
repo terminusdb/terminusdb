@@ -2832,10 +2832,6 @@ generic_exception_jsonld(document_input_too_large(Length, MaxSize), JSON) :-
     JSON = _{'@type' : 'api:DocumentInputTooLargeErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
-generic_exception_jsonld(document_doctype_not_allowed, JSON) :-
-    JSON = _{'@type' : 'api:DocumentDoctypeNotAllowedErrorResponse',
-             'api:status' : 'api:failure',
-             'api:message' : "DOCTYPE declarations are not allowed in document input"}.
 generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     format(user_error, '[ERROR] Document format error (~w): ~w~n', [Format, Message]),
     format(string(Msg), "Invalid ~w document", [Format]),
