@@ -121,6 +121,7 @@ base_type('http://terminusdb.com/schema/xdd#coordinate').
 base_type('http://terminusdb.com/schema/xdd#coordinatePolygon').
 base_type('http://terminusdb.com/schema/xdd#coordinatePolyline').
 base_type('http://terminusdb.com/schema/xdd#dateRange').
+base_type('http://terminusdb.com/schema/xdd#dateTimeInterval').
 base_type('http://terminusdb.com/schema/xdd#gYearRange').
 base_type('http://terminusdb.com/schema/xdd#integerRange').
 base_type('http://terminusdb.com/schema/xdd#decimalRange').
@@ -200,6 +201,7 @@ base_type_parent('http://terminusdb.com/schema/xdd#coordinate','http://www.w3.or
 base_type_parent('http://terminusdb.com/schema/xdd#coordinatePolygon','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#coordinatePolyLine','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#dateRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
+base_type_parent('http://terminusdb.com/schema/xdd#dateTimeInterval','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#gYearRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#integerRange','http://www.w3.org/2001/XMLSchema#anySimpleType').
 base_type_parent('http://terminusdb.com/schema/xdd#decimalRange','http://www.w3.org/2001/XMLSchema#anySimpleType').

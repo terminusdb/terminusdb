@@ -1257,6 +1257,16 @@ refute_basetype_elt_('http://terminusdb.com/schema/xdd#dateRange',S^^_, Reason) 
                      'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:dateRange'}
                  }
     ).
+refute_basetype_elt_('http://terminusdb.com/schema/xdd#dateTimeInterval',S^^_, Reason) :-
+    (   \+ is_date_time_interval(S),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed dateTimeInterval',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xdd:dateTimeInterval'}
+                 }
+    ).
 refute_basetype_elt_('http://terminusdb.com/schema/xdd#integerRange',S^^_, Reason) :-
     (   \+ is_integer_range(S),
         term_to_atom(S,A)

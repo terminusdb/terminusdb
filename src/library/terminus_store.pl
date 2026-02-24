@@ -42,6 +42,16 @@
               id_triple_removal/4,
               triple_removal/4,
 
+              id_triple_value_range/6,
+              id_triple_value_range_rev/6,
+              triple_value_range/6,
+              triple_value_range_rev/6,
+
+              id_triple_sp_value_next/5,
+              id_triple_sp_value_previous/5,
+              triple_value_next/5,
+              triple_value_previous/5,
+
               sp_card/4,
               op_card/4,
 
@@ -627,6 +637,56 @@ triple_removal(Layer, Subject, Predicate, Object) :-
     (   ground(Object)
     ->  true
     ;   object_id(Layer,Object, O_Id)).
+
+triple_value_range(Layer, Low, High, Subject, Predicate, Object) :-
+    id_triple_value_range(Layer, Low, High, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+triple_value_range_rev(Layer, Low, High, Subject, Predicate, Object) :-
+    id_triple_value_range_rev(Layer, Low, High, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+triple_value_next(Layer, Subject, Predicate, Reference, NextObject) :-
+    (   Subject = id(S_Id) -> true
+    ;   subject_id(Layer, Subject, S_Id)
+    ),
+    (   Predicate = id(P_Id) -> true
+    ;   predicate_id(Layer, Predicate, P_Id)
+    ),
+    id_triple_sp_value_next(Layer, S_Id, P_Id, Reference, O_Id),
+    object_id(Layer, NextObject, O_Id).
+
+triple_value_previous(Layer, Subject, Predicate, Reference, PrevObject) :-
+    (   Subject = id(S_Id) -> true
+    ;   subject_id(Layer, Subject, S_Id)
+    ),
+    (   Predicate = id(P_Id) -> true
+    ;   predicate_id(Layer, Predicate, P_Id)
+    ),
+    id_triple_sp_value_previous(Layer, S_Id, P_Id, Reference, O_Id),
+    object_id(Layer, PrevObject, O_Id).
 
 count_layer_stack_size(Layer, Acc, Count) :-
     parent(Layer, Parent),
@@ -1467,5 +1527,237 @@ test(merge_two_base_layers,
                ],
 
     Expected = Triples.
+
+test(id_triple_value_range_string_range) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S-P-O, id_triple_value_range(Layer, Low, High, S, P, O), Triples),
+    length(Triples, 2).
+
+test(id_triple_value_range_empty_when_no_match) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("x", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("z", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S-P-O, id_triple_value_range(Layer, Low, High, S, P, O), Triples),
+    Triples == [].
+
+test(id_triple_value_range_type_mismatch_empty) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value(1, 'http://www.w3.org/2001/XMLSchema#int'),
+    High = value(100, 'http://www.w3.org/2001/XMLSchema#int'),
+    findall(S-P-O, id_triple_value_range(Layer, Low, High, S, P, O), Triples),
+    Triples == [].
+
+test(triple_value_range_resolves_names) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S, triple_value_range(Layer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["doc2", "doc4"].
+
+test(triple_value_range_numeric_int_range) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "sensor1", "reading", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "sensor2", "reading", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "sensor3", "reading", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "sensor4", "reading", value(40,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Low = value(15, 'http://www.w3.org/2001/XMLSchema#int'),
+    High = value(35, 'http://www.w3.org/2001/XMLSchema#int'),
+    findall(S, triple_value_range(Layer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["sensor2", "sensor3"].
+
+test(triple_value_range_child_layer_removal) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    open_write(Layer, Builder2),
+    nb_remove_triple(Builder2, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder2, ChildLayer),
+    Low = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S, triple_value_range(ChildLayer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["doc1"].
+
+test(triple_value_range_empty_range_same_bounds, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("beta", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_range(Layer, Low, High, _, _, _).
+
+test(triple_value_range_half_open_excludes_high) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(S, triple_value_range(Layer, Low, High, S, _, _), Subjects),
+    msort(Subjects, Sorted),
+    Sorted = ["doc1", "doc2"].
+
+test(triple_value_next_finds_next_string) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_next(Layer, "doc1", "label", Ref, Next),
+    Next = value("beta", 'http://www.w3.org/2001/XMLSchema#string').
+
+test(triple_value_next_skips_to_correct_value) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "score", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "doc1", "score", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "doc1", "score", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Ref = value(10, 'http://www.w3.org/2001/XMLSchema#int'),
+    triple_value_next(Layer, "doc1", "score", Ref, Next),
+    Next = value(20, 'http://www.w3.org/2001/XMLSchema#int').
+
+test(triple_value_next_fails_at_last, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_next(Layer, "doc1", "label", Ref, _).
+
+test(triple_value_next_only_matches_same_sp) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    \+ triple_value_next(Layer, "doc1", "label", Ref, _).
+
+test(triple_value_previous_finds_previous_string) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("gamma", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_previous(Layer, "doc1", "label", Ref, Prev),
+    Prev = value("beta", 'http://www.w3.org/2001/XMLSchema#string').
+
+test(triple_value_previous_fails_at_first, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_previous(Layer, "doc1", "label", Ref, _).
+
+test(triple_value_previous_numeric_int) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "s1", "val", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s1", "val", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s1", "val", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Ref = value(30, 'http://www.w3.org/2001/XMLSchema#int'),
+    triple_value_previous(Layer, "s1", "val", Ref, Prev),
+    Prev = value(20, 'http://www.w3.org/2001/XMLSchema#int').
+
+test(triple_value_next_child_layer) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc1", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    open_write(Layer, Builder2),
+    nb_remove_triple(Builder2, "doc1", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder2, ChildLayer),
+    Ref = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_next(ChildLayer, "doc1", "label", Ref, Next),
+    Next = value("gamma", 'http://www.w3.org/2001/XMLSchema#string').
+
+test(triple_value_range_rev_descending_order) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc4", "label", value("delta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("alpha", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("zeta", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(O, triple_value_range_rev(Layer, Low, High, _, _, O), Objects),
+    maplist([value(V,_),V]>>true, Objects, Values),
+    Values = ["gamma", "delta", "beta", "alpha"].
+
+test(triple_value_range_rev_numeric) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "s1", "score", value(10,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s2", "score", value(20,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s3", "score", value(30,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_add_triple(Builder, "s4", "score", value(40,'http://www.w3.org/2001/XMLSchema#int')),
+    nb_commit(Builder, Layer),
+    Low = value(15, 'http://www.w3.org/2001/XMLSchema#int'),
+    High = value(35, 'http://www.w3.org/2001/XMLSchema#int'),
+    findall(V, triple_value_range_rev(Layer, Low, High, _, _, value(V, _)), Values),
+    Values = [30, 20].
+
+test(triple_value_range_rev_same_count_as_forward) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc2", "label", value("beta",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_add_triple(Builder, "doc3", "label", value("gamma",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("a", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("z", 'http://www.w3.org/2001/XMLSchema#string'),
+    findall(_, triple_value_range(Layer, Low, High, _, _, _), Fwd),
+    findall(_, triple_value_range_rev(Layer, Low, High, _, _, _), Rev),
+    length(Fwd, N),
+    length(Rev, N).
+
+test(triple_value_range_rev_empty_range, [fail]) :-
+    open_memory_store(Store),
+    open_write(Store, Builder),
+    nb_add_triple(Builder, "doc1", "label", value("alpha",'http://www.w3.org/2001/XMLSchema#string')),
+    nb_commit(Builder, Layer),
+    Low = value("zzz", 'http://www.w3.org/2001/XMLSchema#string'),
+    High = value("zzzz", 'http://www.w3.org/2001/XMLSchema#string'),
+    triple_value_range_rev(Layer, Low, High, _, _, _).
 
 :- end_tests(terminus_store).
