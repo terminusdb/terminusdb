@@ -270,6 +270,34 @@ definition(
         types: [node,node,value,graph]
     }).
 definition(
+    triple_slice{
+        name: 'TripleSlice',
+        fields: [subject,predicate,object,low,high,optional(graph)],
+        mode: [?,?,?,+,+,+],
+        types: [node,node,value,value,value,graph]
+    }).
+definition(
+    triple_slice_rev{
+        name: 'TripleSliceRev',
+        fields: [subject,predicate,object,low,high,optional(graph)],
+        mode: [?,?,?,+,+,+],
+        types: [node,node,value,value,value,graph]
+    }).
+definition(
+    triple_next{
+        name: 'TripleNext',
+        fields: [subject,predicate,object,next,optional(graph)],
+        mode: [+,+,?,?,+],
+        types: [node,node,value,value,graph]
+    }).
+definition(
+    triple_previous{
+        name: 'TriplePrevious',
+        fields: [subject,predicate,object,previous,optional(graph)],
+        mode: [+,+,?,?,+],
+        types: [node,node,value,value,graph]
+    }).
+definition(
     path{
         name: 'Path',
         fields: [subject,pattern,object,optional(path)],
