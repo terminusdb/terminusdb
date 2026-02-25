@@ -1580,7 +1580,7 @@ run_(['--version'|_]) :-
     format(user_output, "terminusdb-store v~s~n", [TerminusDB_Store_Version]).
 run_(_) :-
     setof(Command, command(Command), Commands),
-    format(current_output, "terminusdb [command]~n~twhere command is one of: ~q~n", [Commands]),
+    format(current_output, "terminusdb [command]~n~twhere command is one of: ~w~n", [Commands]),
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
 
 % Commands
