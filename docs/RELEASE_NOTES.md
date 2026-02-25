@@ -1,4 +1,4 @@
-# TerminusDB Server v12.0.3 Release Notes
+# TerminusDB Server v12.0.4 Release Notes
 
 The DFRNT team is very proud of this release. It is a signficant milestone in the 12.x release series.
 
@@ -54,7 +54,11 @@ The DFRNT team is very proud of this release. It is a signficant milestone in th
 ## New Contributors
 * @daniel-fahey made their first contribution in [#2362](https://github.com/terminusdb/terminusdb/pull/2362)
 
-**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.2...v12.0.3
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.2...v12.0.4
+
+# TerminusDB Server v12.0.3 Release Notes
+
+Non-release, use v12.0.4 instead!
 
 # TerminusDB Server v12.0.2 Release Notes
 
