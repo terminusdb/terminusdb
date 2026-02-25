@@ -1362,12 +1362,7 @@ paths:
         - Frame
       summary: Get the full class frame for a class or all classes for a schema
       parameters:
-        - name: path
-          description: Path to a specific data product
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/branch_path'
         - name: type
           in: query
           required: false
@@ -1466,13 +1461,7 @@ paths:
       tags:
         - WOQL
       parameters:
-        - name: path
-          description: Database Path
-          in: path
-          required: true
-          schema:
-            type: string
-            example: admin/foo
+        - $ref: '#/components/parameters/branch_path'
       requestBody:
         required: true
         content:
@@ -2534,7 +2523,7 @@ paths:
               schema:
                 type: object
                 example: { "@type" : "api:ApplyError", "api:status" : "api:conflict", "api:witnesses" : [{"@op" : "InsertConflict", "@id_already_exists" : "Person/Jane"}]}
-  /log/{organization}/{database}:
+  /log/{path}:
     get:
       operationId: getCommitLog
       x-python-client: Client::log
@@ -2543,8 +2532,7 @@ paths:
       tags:
         - Change management
       parameters:
-        - $ref: '#/components/parameters/organization'
-        - $ref: '#/components/parameters/database'
+        - $ref: '#/components/parameters/branch_path'
         - name: start
           description: Index to start from
           in: query
@@ -2597,7 +2585,7 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
-  /history/{organization}/{database}:
+  /history/{path}:
     get:
       operationId: getDocumentHistory
       x-python-client: not_implemented
@@ -2606,8 +2594,7 @@ paths:
       tags:
         - Change management
       parameters:
-        - $ref: '#/components/parameters/organization'
-        - $ref: '#/components/parameters/database'
+        - $ref: '#/components/parameters/branch_path'
         - name: id
           description: id of document to report history of
           in: query
@@ -3226,12 +3213,7 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
   /migration/{path}:
     parameters:
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-          example: admin/MyDB
+      - $ref: '#/components/parameters/branch_path'
     post:
       operationId: migrateSchema
       tags:
@@ -3412,7 +3394,16 @@ components:
       required: true
       schema:
         type: string
-        example: admin/test/local/branch/foo
+        examples: 
+          main:
+            value: admin/sandbox
+            summary: Refers to the main branch of a data product
+          branch:
+            value: admin/sandbox/local/branch/mybranch
+            summary: Refers to a specific mybranch of a data product
+          alt_main:
+            value: admin/sandbox/local/branch/main
+            summary: Refers to main of the sandbox data product
     graph_path:
       name: path
       in: path
