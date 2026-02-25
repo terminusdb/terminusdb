@@ -964,65 +964,46 @@ paths:
             Documents retrieved successfully. Response format depends on `as_list` parameter:
             
             **Streaming mode** (`as_list=false`, default):
-            - Content-Type: `application/json`
-            - Format: Newline-delimited JSON (one document per line)
-            - Example response body:
-              ```
-              {"@id":"Person/Alice","@type":"Person","name":"Alice","age":30}
-              {"@id":"Person/Bob","@type":"Person","name":"Bob","age":25}
-              ```
+            - Content-Type: `application/json; stream=true; charset=UTF-8`
+            - One JSON object per line, no wrapping array
             
             **Array mode** (`as_list=true`):
-            - Content-Type: `application/json`
-            - Format: Standard JSON array
-            - Example response body:
-              ```json
-              [
-                {"@id":"Person/Alice","@type":"Person","name":"Alice","age":30},
-                {"@id":"Person/Bob","@type":"Person","name":"Bob","age":25}
-              ]
-              ```
+            - Content-Type: `application/json; charset=UTF-8`
+            - Standard JSON array `[{...}, {...}]`
           content:
-            application/json:
+            application/json; stream=true; charset=UTF-8:
               schema:
-                oneOf:
-                  - type: object
-                    description: Single document (when streaming with as_list=false)
-                    properties:
-                      "@id":
-                        type: string
-                        example: Person/Alice
-                      "@type":
-                        type: string
-                        example: Person
-                    additionalProperties: true
-                  - type: array
-                    description: Array of documents (when as_list=true)
-                    items:
-                      type: object
-                      properties:
-                        "@id":
-                          type: string
-                        "@type":
-                          type: string
-                      additionalProperties: true
-              examples:
-                streamingMode:
-                  summary: Streaming mode (as_list=false)
-                  value: |
-                    {"@id":"Person/Alice","@type":"Person","name":"Alice","age":30}
-                    {"@id":"Person/Bob","@type":"Person","name":"Bob","age":25}
-                arrayMode:
-                  summary: Array mode (as_list=true)
-                  value:
-                    - "@id": "Person/Alice"
-                      "@type": "Person"
-                      "name": "Alice"
-                      "age": 30
-                    - "@id": "Person/Bob"
-                      "@type": "Person"
-                      "name": "Bob"
-                      "age": 25
+                type: object
+                description: Single document per line (streaming mode, as_list=false)
+                properties:
+                  "@id":
+                    type: string
+                    example: Person/Alice
+                  "@type":
+                    type: string
+                    example: Person
+                additionalProperties: true
+            application/json; charset=UTF-8:
+              schema:
+                type: array
+                description: Array of documents (array mode, as_list=true)
+                items:
+                  type: object
+                  properties:
+                    "@id":
+                      type: string
+                    "@type":
+                      type: string
+                  additionalProperties: true
+              example:
+                - "@id": "Person/Alice"
+                  "@type": "Person"
+                  "name": "Alice"
+                  "age": 30
+                - "@id": "Person/Bob"
+                  "@type": "Person"
+                  "name": "Bob"
+                  "age": 25
         400:
           description: Bad Request
         401:
@@ -3394,16 +3375,17 @@ components:
       required: true
       schema:
         type: string
-        examples: 
-          main:
-            value: admin/sandbox
-            summary: Refers to the main branch of a data product
-          branch:
-            value: admin/sandbox/local/branch/mybranch
-            summary: Refers to a specific mybranch of a data product
-          alt_main:
-            value: admin/sandbox/local/branch/main
-            summary: Refers to main of the sandbox data product
+        example: admin/sandbox/local/branch/main
+      examples:
+        main:
+          value: admin/sandbox
+          summary: Refers to the main branch of a data product
+        branch:
+          value: admin/sandbox/local/branch/mybranch
+          summary: Refers to a specific mybranch of a data product
+        alt_main:
+          value: admin/sandbox/local/branch/main
+          summary: Refers to main of the sandbox data product
     graph_path:
       name: path
       in: path
