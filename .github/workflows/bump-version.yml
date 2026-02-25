@@ -81,7 +81,7 @@ jobs:
             -D CURRENT_REPO_VERSION=${{ steps.new-version.outputs.version }} \
             docs/release-steps.md \
             src/config/terminus_config.pl \
-            snapcraft.yaml
+            snap/snapcraft.yaml
 
       - name: Commit changes and create PR
         if: ${{ github.ref == 'refs/heads/main' }}
@@ -94,7 +94,7 @@ jobs:
           BRANCH_NAME="version-bump-${{ steps.new-version.outputs.version }}"
       
           git checkout -b $BRANCH_NAME
-          git add VERSION docs/release-steps.md src/config/terminus_config.pl snapcraft.yaml
+          git add VERSION docs/release-steps.md src/config/terminus_config.pl snap/snapcraft.yaml
           git commit -m "Bump version to ${{ steps.new-version.outputs.version }}"
           git push origin $BRANCH_NAME
           
