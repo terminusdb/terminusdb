@@ -68,7 +68,7 @@ This will:
 - Update `VERSION` file
 - Update `docs/release-steps.md` (this file) via cogapp
 - Update `src/config/terminus_config.pl`
-- Update `distribution/snap/snapcraft.yaml`
+- Update `snapcraft.yaml`
 - Create a PR with the changes
 
 You may need to close and reopen the PR if the version bump verification build is stuck.
@@ -198,7 +198,7 @@ All Docker images are built for both AMD64 and ARM64:
 The `VERSION` file is the single source of truth. Cogapp (`cog -r`) propagates versions to:
 - `docs/release-steps.md` (this file)
 - `src/config/terminus_config.pl`
-- `distribution/snap/snapcraft.yaml`
+- `snapcraft.yaml`
 
 ---
 

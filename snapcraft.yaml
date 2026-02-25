@@ -15,7 +15,7 @@ description: |
     It's designed to act as as a system of record, making data management collaborative, versioned, and queryable.
 website: https://terminusdb.org
 source-code: https://github.com/terminusdb/terminusdb
-contact: team@terminusdb.com
+contact: business@dfrnt.com
 issues: https://github.com/terminusdb/terminusdb/issues
 icon: snap/local/terminusdb_icon.png
 confinement: strict
