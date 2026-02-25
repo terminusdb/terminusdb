@@ -8,6 +8,12 @@
 :- use_module(core(util)).
 
 :- use_module(library(option)).
+:- use_module(library(date), [parse_time/3]).
+:- use_module(library(lists), [append/2]).
+
+iso8601_to_rational_epoch(ISO8601, Epoch) :-
+    parse_time(ISO8601, iso_8601, FloatEpoch),
+    Epoch is rationalize(FloatEpoch).
 
 api_document_history(System_DB, Auth, Path, Id, Response, Options) :-
     do_or_die(
@@ -24,7 +30,8 @@ api_document_history(System_DB, Auth, Path, Id, Response, Options) :-
         option(updated(false), Options)
     ->  option(start(Start), Options),
         option(count(Count), Options),
-        document_history(Descriptor, Id, Start, Count, Response)
+        build_history_options(Options, History_Options),
+        document_history(Descriptor, Id, Start, Count, Response, History_Options)
     ;   (   option(created(true), Options)
         ->  document_created_at(Descriptor, Id, Created_Info),
             Response0 = json{ created : Created_Info }
@@ -36,3 +43,27 @@ api_document_history(System_DB, Auth, Path, Id, Response, Options) :-
         ;   Response = Response0
         )
     ).
+
+build_history_options(Options, History_Options) :-
+    (   option(before(Before_ISO), Options),
+        ground(Before_ISO)
+    ->  iso8601_to_rational_epoch(Before_ISO, Before_Epoch),
+        Before_Opts = [before(Before_Epoch)]
+    ;   Before_Opts = []
+    ),
+    (   option(after(After_ISO), Options),
+        ground(After_ISO)
+    ->  iso8601_to_rational_epoch(After_ISO, After_Epoch),
+        After_Opts = [after(After_Epoch)]
+    ;   After_Opts = []
+    ),
+    (   option(graph_type(Graph_Type), Options),
+        ground(Graph_Type)
+    ->  GT_Opts = [graph_type(Graph_Type)]
+    ;   GT_Opts = []
+    ),
+    (   option(fast(true), Options)
+    ->  Fast_Opts = [fast(true)]
+    ;   Fast_Opts = []
+    ),
+    append([Before_Opts, After_Opts, GT_Opts, Fast_Opts], History_Options).

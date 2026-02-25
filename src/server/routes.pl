@@ -674,12 +674,20 @@ history_handler(get, Path, Request, System_DB, Auth) :-
 
             param_value_search_or_json_optional(Search, JSON, start, integer, 0, Start),
             param_value_search_or_json_optional(Search, JSON, count, integer, inf, Count),
+            param_value_search_or_json_optional(Search, JSON, fast, boolean, false, Fast),
+            param_value_search_or_json_optional(Search, JSON, before, text, _, Before),
+            param_value_search_or_json_optional(Search, JSON, after, text, _, After),
+            param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
 
             api_document_history(System_DB, Auth, Path, Id, Result,
                                  [start(Start),
                                   count(Count),
                                   created(Created),
-                                  updated(Updated)]),
+                                  updated(Updated),
+                                  fast(Fast),
+                                  before(Before),
+                                  after(After),
+                                  graph_type(Graph_Type)]),
             write_cors_headers(Request),
             reply_json(Result, [width(0)])
         )

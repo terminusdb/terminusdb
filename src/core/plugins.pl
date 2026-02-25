@@ -2,9 +2,10 @@
               pre_commit_hook/2,
               post_commit_hook/2,
               enrich_commit_info/3,
-              fast_document_history/5,
+              fast_document_history/6,
               pre_server_startup_hook/1,
               post_server_startup_hook/1,
+              enrich_history/5,
               load_plugins/0
           ]).
 :- use_module(library(lists)).
@@ -14,7 +15,8 @@
 :- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
 :- multifile enrich_commit_info/3.
-:- multifile fast_document_history/5.
+:- multifile fast_document_history/6.
+:- multifile enrich_history/5.
 :- multifile pre_server_startup_hook/1.
 :- multifile post_server_startup_hook/1.
 

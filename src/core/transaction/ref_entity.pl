@@ -136,12 +136,7 @@ commit_uri_to_metadata(Askable, Commit_Uri, Author, Message, Timestamp) :-
     once(ask(Askable,
              (   t(Commit_Uri, author, Author^^xsd:string),
                  t(Commit_Uri, message, Message^^xsd:string),
-                 t(Commit_Uri, timestamp, TS^^xsd:decimal)))),
-    % Convert rational to float for backward compatibility
-    (   rational(TS)
-    ->  Timestamp is float(TS)
-    ;   Timestamp = TS
-    ).
+                 t(Commit_Uri, timestamp, Timestamp^^xsd:decimal)))).
 
 commit_id_to_metadata(Askable, Commit_Id, Author, Message, Timestamp) :-
     commit_id_uri(Askable, Commit_Id, Commit_Uri),
@@ -225,8 +220,17 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
 
     (   get_dict(metadata, Commit_Info, Metadata0)
     ->  json_atoms_to_strings(Metadata0, Metadata),
-        put_dict(metadata, Commit_Document3, Metadata, Commit_Document)
-    ;   Commit_Document = Commit_Document3),
+        put_dict(metadata, Commit_Document3, Metadata, Commit_Document4)
+    ;   Commit_Document4 = Commit_Document3),
+
+    foldl({Commit_Info}/[Key, DocIn, DocOut]>>(
+              (   get_dict(Key, Commit_Info, Val),
+                  Val \= []
+              ->  put_dict(Key, DocIn, Val, DocOut)
+              ;   DocOut = DocIn)),
+          [instance_added, instance_updated, instance_removed,
+           schema_added, schema_updated, schema_removed],
+          Commit_Document4, Commit_Document),
 
     insert_document(
         Context,
@@ -390,7 +394,7 @@ test(base_commit_insert,
 
     Author = "author",
     Message = "message",
-    Timestamp = 1234.567.
+    Timestamp =:= 1234.567.
 
 test(child_commit_insert,
      [setup((setup_temp_store(State),
@@ -431,7 +435,7 @@ test(child_commit_insert,
 
     Author = "author2",
     Message = "message2",
-    Timestamp = 2345.678,
+    Timestamp =:= 2345.678,
 
     commit_id_to_parent_uri(Descriptor, Commit_Id, Parent_Commit_Uri).
 
