@@ -117,8 +117,8 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 | `v11.2.0-beta` | `v11.2.0-beta`, `v11.2.0-beta-noroot` (no `latest` or `v11`) |
 
 #### Snap Package
-- Builds snap for **AMD64 and ARM64** via `.github/workflows/snap-build.yml`
-- Runs integration tests on both architectures
+- Builds snap for **AMD64** via `.github/workflows/snap-build.yml`
+- Runs integration tests
 - Publishes to Snap Store via `.github/workflows/snap-publish.yml`:
   - **stable** channel for production releases
   - **candidate** channel for `-rc`, `-beta`, `-alpha` versions

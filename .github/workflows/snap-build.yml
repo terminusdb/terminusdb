@@ -14,15 +14,8 @@ env:
 
 jobs:
   build:
-    name: Build (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+    name: Build
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -37,21 +30,14 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: terminusdb-snap-${{ matrix.arch }}
+          name: terminusdb-snap
           path: ${{ steps.snapcraft.outputs.snap }}
         
   test:
-    name: Integration Tests (${{ matrix.arch }})
+    name: Integration Tests
     needs: 
       - build
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
 
     steps:   
       - name: Checkout
@@ -60,7 +46,7 @@ jobs:
       - name: Download
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-snap-${{ matrix.arch }}
+          name: terminusdb-snap
           path: download_snap/
 
       - name: Install Snap
@@ -164,7 +150,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terminusdb-server-logs-${{ matrix.arch }}
+          name: terminusdb-server-logs
           path: terminusdb.log
           if-no-files-found: warn
 

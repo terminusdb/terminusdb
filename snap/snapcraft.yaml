@@ -24,7 +24,6 @@ grade: stable
 
 platforms:
   amd64:
-  arm64:
 
 lint:
   ignore:
