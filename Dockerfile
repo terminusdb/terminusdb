@@ -73,11 +73,13 @@ RUN set -eux; \
     [ "$SKIP_TESTS" = "true" ] || make test
 
 FROM swipl_minimal AS min_community
-COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
+COPY --from=base_community /app/terminusdb/terminusdb /app/terminusdb/
 
 FROM min_community
-COPY --from=base_community /app/terminusdb/terminusdb app/terminusdb/
-COPY --from=base_community /app/terminusdb/src/terminus-schema app/terminusdb/src/terminus-schema/
+COPY --from=base_community /app/terminusdb/terminusdb /app/terminusdb/
+COPY --from=base_community /app/terminusdb/src/terminus-schema /app/terminusdb/src/terminus-schema/
+COPY --from=base_community /app/terminusdb/distribution/init_docker.sh /app/terminusdb/distribution/
+
 RUN set -eux; \
     RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \
     apt-get update; \
