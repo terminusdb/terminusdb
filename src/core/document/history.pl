@@ -2,6 +2,7 @@
               document_created_at/3,
               document_updated_at/3,
               document_history/5,
+              document_history/6,
               changed_document_id/2,
               commits_changed_id/5
           ]).
@@ -163,34 +164,46 @@ has_change(Repo,Commit_Id,Id,Info) :-
     changed_document_id(Commit_Descriptor, Id),
     commit_info_dict(Repo, Commit_Id, Info).
 
-collect_history([_|_], _Repo, _Id, _Start, Count, I, History-History) :-
+collect_history(Commits, Repo, Id, Start, Count, I, History, Options) :-
+    (   option(before(Before), Options) -> true ; Before = none ),
+    (   option(after(After), Options) -> true ; After = none ),
+    collect_history_(Commits, Repo, Id, Start, Count, I, History, Before, After).
+
+collect_history_([_|_], _Repo, _Id, _Start, Count, I, History-History, _Before, _After) :-
     I >= Count,
     !.
-collect_history([Commit_URI|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
-    I >= Start,
+collect_history_([Commit_Id|Rest], Repo, Id, Start, Count, I, History-History_Tail, Before, After) :-
+    commit_id_uri(Repo, Commit_Id, Commit_Uri),
+    commit_uri_to_metadata(Repo, Commit_Uri, _, _, TS),
     !,
-    (   has_change(Repo,Commit_URI,Id,Info)
-    ->  History=[Info|Middle],
-        Iprime is I + 1,
-        collect_history(Rest, Repo, Id, Start, Count, Iprime, Middle-History_Tail)
-    ;   collect_history(Rest, Repo, Id, Start, Count, I, History-History_Tail)
+    (   Before \= none, TS >= Before
+    ->  collect_history_(Rest, Repo, Id, Start, Count, I, History-History_Tail, Before, After)
+    ;   After \= none, TS < After
+    ->  History = History_Tail
+    ;   I >= Start
+    ->  (   has_change(Repo, Commit_Id, Id, Info)
+        ->  History = [Info|Middle],
+            Iprime is I + 1,
+            collect_history_(Rest, Repo, Id, Start, Count, Iprime, Middle-History_Tail, Before, After)
+        ;   collect_history_(Rest, Repo, Id, Start, Count, I, History-History_Tail, Before, After)
+        )
+    ;   StartPrime is Start - 1,
+        collect_history_(Rest, Repo, Id, StartPrime, Count, I, History-History_Tail, Before, After)
     ).
-collect_history([_|Rest], Repo, Id, Start, Count, I, History-History_Tail) :-
-    I < Start,
-    !,
-    StartPrime is Start - 1,
-    collect_history(Rest, Repo, Id, StartPrime, Count, I, History-History_Tail).
-collect_history([], _Repo, _Id, _Start, _Count, _I, History-History).
+collect_history_([], _Repo, _Id, _Start, _Count, _I, History-History, _Before, _After).
 
 document_history(Descriptor, Id, Start, Count, History) :-
+    document_history(Descriptor, Id, Start, Count, History, []).
+
+document_history(Descriptor, Id, Start, Count, History, Options) :-
     database_prefixes(Descriptor, Prefixes),
     prefix_expand(Id,Prefixes,Id_Ex),
-    (   fast_document_history(Descriptor, Id_Ex, Start, Count, History)
+    (   fast_document_history(Descriptor, Id_Ex, Start, Count, History, Options)
     ->  true
     ;   Branch_Name = (Descriptor.branch_name),
         Repo = (Descriptor.repository_descriptor),
         commits(Repo,Branch_Name,LL),
-        collect_history(LL,Repo,Id_Ex,Start,Count,0,History-[])
+        collect_history(LL,Repo,Id_Ex,Start,Count,0,History-[],Options)
     ).
 
 

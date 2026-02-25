@@ -2617,7 +2617,7 @@ paths:
             example: "A/0"
         - name: start
           description: >-
-            Number of commits to skip before collecting results.
+            Number of commits to skip the scan for before collecting results.
             This counts all commits in the branch history (layers examined),
             not only commits where the specified document was changed.
           in: query

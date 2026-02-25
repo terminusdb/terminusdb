@@ -628,6 +628,15 @@ opt_spec(history,'terminusdb history DB_SPEC',
            default(false),
            help('give back schema update information')]
          ]).
+opt_spec('enrich-history','terminusdb enrich-history DB_SPEC',
+         'Enrich legacy commits with document change tracking metadata. Required before using fast=true on the history endpoint.',
+         [[opt(help),
+           type(boolean),
+           longflags([help]),
+           shortflags([h]),
+           default(false),
+           help('print help for the `enrich-history` command')]
+         ]).
 opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
          'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
          [[opt(help),
@@ -1962,6 +1971,20 @@ run_command(history,[Path], Opts) :-
             ->  json_write_dict(current_output, History, [])
             ;   format_log(current_output,History, Opts)
             )
+        )
+    ).
+run_command('enrich-history',[Path], Opts) :-
+    opt_authority(Opts, Auth),
+    create_context(system_descriptor{}, System_DB),
+    api_report_errors(
+        'enrich-history',
+        (   do_or_die(
+                enrich_history(System_DB, Auth, Path, Enriched, Skipped),
+                error(enrich_history_not_available_in_this_version, _)),
+            Total is Enriched + Skipped,
+            format(current_output, "~nEnrichment complete for ~s~n", [Path]),
+            format(current_output, "Total: ~d, Enriched: ~d, Skipped: ~d~n",
+                   [Total, Enriched, Skipped])
         )
     ).
 run_command(reset,[Path,Ref], Opts) :-
