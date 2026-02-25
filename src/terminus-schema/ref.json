@@ -48,12 +48,12 @@
                         "user" : "The authenticated database user IRI who performed the commit.",
                         "parent" : "The previous commit (if one exists).",
                         "migration" : "The schema migration script (if one exists).",
-                        "instance_added" : "Set of instance document IRIs added in this commit (optional).",
-                        "instance_updated" : "Set of instance document IRIs updated in this commit (optional).",
-                        "instance_removed" : "Set of instance document IRIs removed in this commit (optional).",
-                        "schema_added" : "Set of schema document IRIs added in this commit (optional).",
-                        "schema_updated" : "Set of schema document IRIs updated in this commit (optional).",
-                        "schema_removed" : "Set of schema document IRIs removed in this commit (optional)."
+                        "instance_added" : "Set of instance document IRIs added in this commit.",
+                        "instance_updated" : "Set of instance document IRIs updated in this commit.",
+                        "instance_removed" : "Set of instance document IRIs removed in this commit.",
+                        "schema_added" : "Set of schema document IRIs added in this commit.",
+                        "schema_updated" : "Set of schema document IRIs updated in this commit.",
+                        "schema_removed" : "Set of schema document IRIs removed in this commit."
                       }
   },
   "@key" : { "@type" : "Lexical",
