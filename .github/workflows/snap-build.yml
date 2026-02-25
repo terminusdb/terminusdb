@@ -7,42 +7,51 @@ on:
   pull_request:
     paths:
       - ".github/workflows/snap-build.yml"
+      - "snap/**"
   
 env:
   NODE_VERSION: '20'
 
 jobs:
   build:
-    name: Build
-    runs-on: ubuntu-latest
-
-    outputs:
-      snap: ${{ steps.snapcraft.outputs.snap }}
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy Sources
-        run: rsync -r ./ distribution/terminusdb_source/
-
       - name: Build
         uses: snapcore/action-build@v1
         id: snapcraft
         with:
-          path: distribution
+          snapcraft-args: pack
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: terminusdb-snap
+          name: terminusdb-snap-${{ matrix.arch }}
           path: ${{ steps.snapcraft.outputs.snap }}
         
   test:
-    name: Integration Tests
+    name: Integration Tests (${{ matrix.arch }})
     needs: 
       - build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:   
       - name: Checkout
@@ -51,7 +60,7 @@ jobs:
       - name: Download
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-snap
+          name: terminusdb-snap-${{ matrix.arch }}
           path: download_snap/
 
       - name: Install Snap
@@ -155,7 +164,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terminusdb-server-logs
+          name: terminusdb-server-logs-${{ matrix.arch }}
           path: terminusdb.log
           if-no-files-found: warn
 

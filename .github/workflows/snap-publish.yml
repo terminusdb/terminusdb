@@ -6,14 +6,17 @@ on:
 
 jobs:
   publish:
-    name: Publish
+    name: Publish (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
 
     steps:
       - name: Download
         uses: actions/download-artifact@v4
         with:
-          name: terminusdb-snap
+          name: terminusdb-snap-${{ matrix.arch }}
           path: download_snap/
 
       - name: Determine Path
@@ -58,6 +61,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: snapcraft-logs
+          name: snapcraft-logs-${{ matrix.arch }}
           path: ~/.local/state/snapcraft/log/
           if-no-files-found: warn
