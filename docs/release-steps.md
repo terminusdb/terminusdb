@@ -23,17 +23,17 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Last released version:** <!--
 [[[cog cog.out(last_released_version_link) ]]] -->
-[`v12.0.2`](https://github.com/terminusdb/terminusdb/releases/tag/v12.0.2)
+[`v12.0.3`](https://github.com/terminusdb/terminusdb/releases/tag/v12.0.3)
 <!-- [[[end]]] -->
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v12.0.3`
+`v12.0.4-dev`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`12.0.2...main`](https://github.com/terminusdb/terminusdb/compare/v12.0.2...main)
+[`12.0.3...main`](https://github.com/terminusdb/terminusdb/compare/v12.0.3...main)
 <!-- [[[end]]] -->
 
 ---
@@ -68,7 +68,7 @@ This will:
 - Update `VERSION` file
 - Update `docs/release-steps.md` (this file) via cogapp
 - Update `src/config/terminus_config.pl`
-- Update `snapcraft.yaml`
+- Update `snap/snapcraft.yaml`
 - Create a PR with the changes
 
 You may need to close and reopen the PR if the version bump verification build is stuck.
@@ -117,9 +117,11 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 | `v11.2.0-beta` | `v11.2.0-beta`, `v11.2.0-beta-noroot` (no `latest` or `v11`) |
 
 #### Snap Package
-- Builds snap via `.github/workflows/snap-build.yml`
+- Builds snap for **AMD64** via `.github/workflows/snap-build.yml`
+- Runs integration tests
 - Publishes to Snap Store via `.github/workflows/snap-publish.yml`:
   - **stable** channel for production releases
+  - **candidate** channel for `-rc`, `-beta`, `-alpha` versions
   - **edge** channel for `-dev` versions
 
 ### 5. Create GitHub Release
@@ -198,7 +200,7 @@ All Docker images are built for both AMD64 and ARM64:
 The `VERSION` file is the single source of truth. Cogapp (`cog -r`) propagates versions to:
 - `docs/release-steps.md` (this file)
 - `src/config/terminus_config.pl`
-- `snapcraft.yaml`
+- `snap/snapcraft.yaml`
 
 ---
 
@@ -231,9 +233,10 @@ See [`PREPARE_PR.md`](../PREPARE_PR.md) for complete pre-release testing checkli
 - See `.github/workflows/docker-arm64-build.yml`
 
 **Snap publish fails:**
-- Verify `SNAP_STORE_LOGIN` secret is valid
+- Verify `SNAP_STORE_LOGIN` secret is valid (regenerate with `snapcraft export-login --snaps=terminusdb --channels=edge,candidate,stable`)
 - Check version format matches snap naming conventions
 - Review snap build logs
+- The snap is built natively on AMD64 (`ubuntu-latest`) and ARM64 (`ubuntu-24.04-arm`) runners
 
 **Docker manifest creation fails:**
 - Ensure both AMD64 and ARM64 builds succeeded

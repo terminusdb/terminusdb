@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/snap-build.yml"
+      - "snap/**"
   
 env:
   NODE_VERSION: '20'
@@ -16,21 +17,15 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
 
-    outputs:
-      snap: ${{ steps.snapcraft.outputs.snap }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Copy Sources
-        run: rsync -r ./ distribution/terminusdb_source/
 
       - name: Build
         uses: snapcore/action-build@v1
         id: snapcraft
         with:
-          path: distribution
+          snapcraft-args: pack
 
       - name: Upload
         uses: actions/upload-artifact@v4

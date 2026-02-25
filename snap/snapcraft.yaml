@@ -1,7 +1,7 @@
 name: terminusdb
 title: TerminusDB
 # [[[cog import cog; cog.out(f"version: v{CURRENT_REPO_VERSION}") ]]]
-version: v12.0.3
+version: v12.0.4-dev
 # [[[end]]]
 license: Apache-2.0
 summary: Git-for-data document graph database
@@ -21,6 +21,9 @@ icon: snap/local/terminusdb_icon.png
 confinement: strict
 base: core24
 grade: stable
+
+platforms:
+  amd64:
 
 lint:
   ignore:
@@ -104,7 +107,7 @@ parts:
       - TERMINUSDB_SERVER_PACK_DIR: $CRAFT_STAGE
       - LANG: C.UTF-8
       - LC_ALL: C.UTF-8
-    source: ./terminusdb_source
+    source: .
     source-type: local
 
 apps:
