@@ -391,6 +391,16 @@ Number of results to return
 .TP
 \fB\-v\fR, \fB\-\-verbose\fR=[value]
 give back schema update information
+.SS "enrich\-history"
+\fBterminusdb enrich\-history DB_SPEC\fR
+.P
+Enrich legacy commits with document change tracking metadata\. Required before using fast=true on the history endpoint\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+print help for the \fBenrich\-history\fR command
 .SS "reset"
 \fBterminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC\fR
 .P
