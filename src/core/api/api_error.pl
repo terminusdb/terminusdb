@@ -1589,6 +1589,12 @@ api_error_jsonld_(delete_documents, Error, JSON) :-
     api_document_error_jsonld(delete_documents, Error, JSON).
 api_error_jsonld_(diff, Error, JSON) :-
     api_document_error_jsonld(diff, Error, JSON).
+api_error_jsonld_(history, error(fast_history_not_available, _), JSON) :-
+    JSON = _{'@type' : 'api:HistoryErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : "Fast history was requested but is not available in the community edition",
+             'api:error' : _{ '@type' : "api:FastHistoryNotAvailable"}
+            }.
 api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "Resource has no history, so log unavailable: ~s", [Path]),

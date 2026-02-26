@@ -2572,6 +2572,28 @@ paths:
       x-python-client: not_implemented
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
+      description: |
+        Retrieve the commit history for a specific document. Returns an array of history entries showing when and how the document was modified.
+
+        **Example: Basic history**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/history/admin/mydb?id=Person/alice"
+        ```
+
+        **Example: With full commit objects and diffs**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/history/admin/mydb?id=Person/alice&complete=true&diff=true&count=5"
+        ```
+
+        **Example: Streaming results (newline-delimited JSON)**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/history/admin/mydb?id=Person/alice&streaming=true"
+        ```
+
+        **Example: Time-bounded history**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/history/admin/mydb?id=Person/alice&after=2024-01-01T00:00:00Z&before=2025-01-01T00:00:00Z"
+        ```
       tags:
         - Change management
       parameters:
@@ -2612,6 +2634,58 @@ paths:
           schema:
             type: integer
             example: 10
+        - name: fast
+          description: >
+            Use fast history lookup via pre-computed commit change tracking
+            metadata (enterprise only). Returns an error if not available.
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: before
+          description: Only include commits before this ISO 8601 timestamp
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2024-01-01T00:00:00Z"
+        - name: after
+          description: Only include commits after this ISO 8601 timestamp
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2023-01-01T00:00:00Z"
+        - name: graph_type
+          description: Graph type to check for changes
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [instance, schema]
+            default: instance
+        - name: complete
+          description: Include the full commit object for each history entry
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: diff
+          description: Include the document-level JSON diff for each history entry (expensive, use with pagination)
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: streaming
+          description: Stream results using chunked transfer encoding (one JSON object per line)
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: "Successful history request"
@@ -2634,6 +2708,48 @@ paths:
                     "timestamp":
                       type: number
                       example: 1660919664.9129035
+                    "user":
+                      type: string
+                      nullable: true
+                      description: Database user ID of the commit author, or null if not recorded
+                      example: "terminusdb:///system/data/User/admin"
+                    "commit":
+                      type: object
+                      description: Full commit document (only present when complete=true)
+                    "diff":
+                      type: object
+                      description: JSON diff to parent commit (only present when diff=true)
+              example:
+                - author: "admin"
+                  identifier: "hpl18q42dbnab4vzq8me4bg1xn8p2a0"
+                  message: "Update Alice's age"
+                  timestamp: 1660919664.9129035
+                  user: "terminusdb:///system/data/User/admin"
+                - author: "admin"
+                  identifier: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p"
+                  message: "Create Person/alice"
+                  timestamp: 1660919600.0
+                  user: "terminusdb:///system/data/User/admin"
+            application/json; complete=true&diff=true:
+              example:
+                - author: "admin"
+                  identifier: "hpl18q42dbnab4vzq8me4bg1xn8p2a0"
+                  message: "Update Alice's age"
+                  timestamp: 1660919664.9129035
+                  user: "terminusdb:///system/data/User/admin"
+                  commit:
+                    "@id": "Commit/hpl18q42dbnab4vzq8me4bg1xn8p2a0"
+                    "@type": "Commit"
+                    author: "admin"
+                    message: "Update Alice's age"
+                    timestamp: "2024-08-19T12:34:24.912Z"
+                    instance: "layer_data:Layer/abcdef1234567890"
+                  diff:
+                    "@id": "Person/alice"
+                    age:
+                      "@op": "SwapValue"
+                      "@before": 30
+                      "@after": 31
         400:
           description: Bad Request
         401:

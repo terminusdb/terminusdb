@@ -1,5 +1,6 @@
 :- module(api_history, [
-              api_document_history/6
+              api_document_history/6,
+              api_document_history_streaming/5
           ]).
 
 :- use_module(core(document/history)).
@@ -10,6 +11,7 @@
 :- use_module(library(option)).
 :- use_module(library(date), [parse_time/3]).
 :- use_module(library(lists), [append/2]).
+:- use_module(library(http/json), [json_write_dict/3]).
 
 iso8601_to_rational_epoch(ISO8601, Epoch) :-
     parse_time(ISO8601, iso_8601, FloatEpoch),
@@ -66,4 +68,33 @@ build_history_options(Options, History_Options) :-
     ->  Fast_Opts = [fast(true)]
     ;   Fast_Opts = []
     ),
-    append([Before_Opts, After_Opts, GT_Opts, Fast_Opts], History_Options).
+    (   option(complete(true), Options)
+    ->  Complete_Opts = [complete(true)]
+    ;   Complete_Opts = []
+    ),
+    (   option(diff(true), Options)
+    ->  Diff_Opts = [diff(true)]
+    ;   Diff_Opts = []
+    ),
+    append([Before_Opts, After_Opts, GT_Opts, Fast_Opts,
+            Complete_Opts, Diff_Opts], History_Options).
+
+stream_history_entry(Entry) :-
+    json_write_dict(current_output, Entry, [width(0)]),
+    nl,
+    flush_output.
+
+api_document_history_streaming(System_DB, Auth, Path, Id, Options) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path), _)),
+
+    do_or_die(
+        branch_descriptor{} :< Descriptor,
+        error(not_a_branch_descriptor(Descriptor), _)),
+
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/commit_read_access', Auth),
+
+    build_history_options(Options, History_Options),
+    Enrichment_Options = History_Options,
+    document_history_entries(Descriptor, Id, api_history:stream_history_entry, Enrichment_Options, History_Options).

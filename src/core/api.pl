@@ -204,6 +204,7 @@
 
               % api_history.pl
               api_document_history/6,
+              api_document_history_streaming/5,
 
               % api_migration.pl
               api_migrate_resource/7,
