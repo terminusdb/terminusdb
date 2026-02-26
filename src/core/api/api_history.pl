@@ -76,8 +76,19 @@ build_history_options(Options, History_Options) :-
     ->  Diff_Opts = [diff(true)]
     ;   Diff_Opts = []
     ),
+    (   option(start(Start), Options),
+        ground(Start)
+    ->  Start_Opts = [start(Start)]
+    ;   Start_Opts = []
+    ),
+    (   option(count(Count), Options),
+        ground(Count)
+    ->  Count_Opts = [count(Count)]
+    ;   Count_Opts = []
+    ),
     append([Before_Opts, After_Opts, GT_Opts, Fast_Opts,
-            Complete_Opts, Diff_Opts], History_Options).
+            Complete_Opts, Diff_Opts, Start_Opts, Count_Opts],
+           History_Options).
 
 stream_history_entry(Entry) :-
     json_write_dict(current_output, Entry, [width(0)]),

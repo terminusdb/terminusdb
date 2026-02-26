@@ -695,8 +695,12 @@ history_handler(get, Path, Request, System_DB, Auth) :-
             (   Streaming = true
             ->  write_cors_headers(Request),
                 format('Status: 200~n'),
-                format('Content-Type: application/json~n'),
+                format('Content-Type: application/x-ndjson~n'),
+                format('Cache-Control: no-cache~n'),
+                format('X-Accel-Buffering: no~n'),
+                format('Connection: close~n'),
                 format("Transfer-Encoding: chunked~n~n"),
+                flush_output,
                 api_document_history_streaming(System_DB, Auth, Path, Id, Options)
             ;   api_document_history(System_DB, Auth, Path, Id, Result, Options),
                 write_cors_headers(Request),
