@@ -256,7 +256,7 @@ document_history_entries(Descriptor, Id, Goal, Options, History_Options) :-
     prefix_expand(Id, Prefixes, Id_Ex),
     Branch_Name = (Descriptor.branch_name),
     Repo = (Descriptor.repository_descriptor),
-    Enriched_Goal = enrich_and_call(Repo, Descriptor, Id_Ex, Options, Goal),
+    Enriched_Goal = 'document/history':enrich_and_call(Repo, Descriptor, Id_Ex, Options, Goal),
     (   option(fast(true), Options)
     ->  (   plugins:fast_document_history_entries(Descriptor, Id_Ex,
                                                   Enriched_Goal, Options,
