@@ -678,18 +678,34 @@ history_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, before, text, _, Before),
             param_value_search_or_json_optional(Search, JSON, after, text, _, After),
             param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
+            param_value_search_or_json_optional(Search, JSON, complete, boolean, false, Complete),
+            param_value_search_or_json_optional(Search, JSON, diff, boolean, false, Diff),
+            param_value_search_or_json_optional(Search, JSON, streaming, boolean, false, Streaming),
 
-            api_document_history(System_DB, Auth, Path, Id, Result,
-                                 [start(Start),
-                                  count(Count),
-                                  created(Created),
-                                  updated(Updated),
-                                  fast(Fast),
-                                  before(Before),
-                                  after(After),
-                                  graph_type(Graph_Type)]),
-            write_cors_headers(Request),
-            reply_json(Result, [width(0)])
+            Options = [start(Start),
+                       count(Count),
+                       created(Created),
+                       updated(Updated),
+                       fast(Fast),
+                       before(Before),
+                       after(After),
+                       graph_type(Graph_Type),
+                       complete(Complete),
+                       diff(Diff)],
+            (   Streaming = true
+            ->  write_cors_headers(Request),
+                format('Status: 200~n'),
+                format('Content-Type: application/x-ndjson~n'),
+                format('Cache-Control: no-cache~n'),
+                format('X-Accel-Buffering: no~n'),
+                format('Connection: close~n'),
+                format("Transfer-Encoding: chunked~n~n"),
+                flush_output,
+                api_document_history_streaming(System_DB, Auth, Path, Id, Options)
+            ;   api_document_history(System_DB, Auth, Path, Id, Result, Options),
+                write_cors_headers(Request),
+                reply_json(Result, [width(0)])
+            )
         )
     ).
 

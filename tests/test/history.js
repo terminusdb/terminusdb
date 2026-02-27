@@ -105,6 +105,100 @@ describe('history', function () {
       expect(history.updated.identifier).to.equal(version3)
     })
 
+    it('complete=true returns entries with full commit object', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'a' }
+      await document.insert(agent, { instance })
+
+      const updated = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'b' }
+      await document.replace(agent, { instance: updated })
+
+      const historyRequest = await agent.get(`/api/history/admin/${dbName}?id=${id}%2F0&complete=true`)
+      const history = historyRequest.body
+
+      expect(history).to.have.lengthOf(2)
+      for (const entry of history) {
+        expect(entry).to.have.property('identifier')
+        expect(entry).to.have.property('author')
+        expect(entry).to.have.property('message')
+        expect(entry).to.have.property('timestamp')
+        expect(entry).to.have.property('instance')
+        expect(entry).to.have.property('schema')
+        expect(entry).to.have.property('parent')
+        expect(entry).to.not.have.property('@id')
+        expect(entry).to.not.have.property('@type')
+      }
+    })
+
+    it('diff=true returns entries with document-level diff', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'a' }
+      await document.insert(agent, { instance })
+
+      const updated = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'b' }
+      await document.replace(agent, { instance: updated })
+
+      const historyRequest = await agent.get(`/api/history/admin/${dbName}?id=${id}%2F0&diff=true`)
+      const history = historyRequest.body
+
+      expect(history).to.have.lengthOf(2)
+      for (const entry of history) {
+        expect(entry).to.have.property('diff')
+      }
+      // The update entry should have a SwapValue diff on the 'a' field
+      const updateDiff = history[0].diff
+      expect(updateDiff).to.have.property('a')
+    })
+
+    it('complete=true and diff=true combined', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'a' }
+      await document.insert(agent, { instance })
+
+      const historyRequest = await agent.get(`/api/history/admin/${dbName}?id=${id}%2F0&complete=true&diff=true`)
+      const history = historyRequest.body
+
+      expect(history).to.have.lengthOf(1)
+      expect(history[0]).to.have.property('instance')
+      expect(history[0]).to.have.property('diff')
+      expect(history[0]).to.have.property('parent')
+    })
+
+    it('streaming=true returns newline-delimited JSON', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'a' }
+      await document.insert(agent, { instance })
+
+      const updated = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: 'b' }
+      await document.replace(agent, { instance: updated })
+
+      const historyRequest = await agent
+        .get(`/api/history/admin/${dbName}?id=${id}%2F0&streaming=true`)
+        .buffer(true)
+        .parse((res, callback) => {
+          let data = ''
+          res.on('data', (chunk) => { data += chunk })
+          res.on('end', () => { callback(null, data) })
+        })
+
+      const lines = historyRequest.body.trim().split('\n').filter(l => l.length > 0)
+      expect(lines).to.have.lengthOf(2)
+      for (const line of lines) {
+        const entry = JSON.parse(line)
+        expect(entry).to.have.property('identifier')
+        expect(entry).to.have.property('author')
+        expect(entry).to.have.property('user')
+      }
+    })
+
     it('pages history', async function () {
       const id = util.randomString()
       const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
