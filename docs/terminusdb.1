@@ -401,6 +401,12 @@ impersonate a particular user
 .TP
 \fB\-h\fR, \fB\-\-help\fR=[value]
 print help for the \fBenrich\-history\fR command
+.TP
+\fB\-f\fR, \fB\-\-force\fR=[value]
+force re\-enrichment of all commits, even those already enriched
+.TP
+\fB\-d\fR, \fB\-\-diagnose\fR=[value]
+diagnose enrichment: print what each commit would produce without writing
 .SS "reset"
 \fBterminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC\fR
 .P
