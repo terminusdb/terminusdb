@@ -7,6 +7,7 @@
               pre_server_startup_hook/1,
               post_server_startup_hook/1,
               enrich_history/5,
+              enrich_history/6,
               load_plugins/0
           ]).
 :- use_module(library(lists)).
@@ -19,6 +20,7 @@
 :- multifile fast_document_history/6.
 :- multifile fast_document_history_entries/5.
 :- multifile enrich_history/5.
+:- multifile enrich_history/6.
 :- multifile pre_server_startup_hook/1.
 :- multifile post_server_startup_hook/1.
 
