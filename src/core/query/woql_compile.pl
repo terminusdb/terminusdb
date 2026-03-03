@@ -3446,6 +3446,10 @@ unliterally([],[]).
 unliterally([H|T],[HL|TL]) :-
     unliterally(H,HL),
     unliterally(T,TL).
+unliterally(X, X^^_) :-
+    compound(X),
+    \+ is_list(X),
+    !.
 
 /*
  * infer_result_type(+Value, -Type) is det.
@@ -4522,6 +4526,48 @@ test(length_of_var, [
     [First] = (Result.bindings),
     (First.'N'.'@value') = 3.
 
+test(length_of_date_list, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = ((v('X')=[date(2025,1,1,0)^^'http://www.w3.org/2001/XMLSchema#date',
+                    date(2025,1,2,0)^^'http://www.w3.org/2001/XMLSchema#date',
+                    date(2025,1,3,0)^^'http://www.w3.org/2001/XMLSchema#date']),
+           length(v('X'), v('N'))),
+
+    create_context(system_descriptor{},Commit_Info, Context),
+
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Result),
+    [First] = (Result.bindings),
+    (First.'N'.'@value') = 3.
+
+test(group_by_dates_with_length, [
+         setup((setup_temp_store(State),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Commit_Info = commit_info{ author : "automated test framework",
+                               message : "testing"},
+
+    AST = (group_by([],
+                    [v('Date')],
+                    ((v('Date') = date(2025,1,1,0)^^'http://www.w3.org/2001/XMLSchema#date')
+                    ;(v('Date') = date(2025,1,2,0)^^'http://www.w3.org/2001/XMLSchema#date')
+                    ;(v('Date') = date(2025,1,3,0)^^'http://www.w3.org/2001/XMLSchema#date')),
+                    v('Dates')),
+           length(v('Dates'), v('Count'))),
+
+    create_context(system_descriptor{},Commit_Info, Context),
+
+    run_context_ast_jsonld_response(Context, AST, no_data_version, _, Result),
+    [First] = (Result.bindings),
+    (First.'Count'.'@value') = 3.
 
 test(order_by, [
          setup((setup_temp_store(State),

@@ -2842,7 +2842,7 @@ generic_exception_jsonld(document_input_too_large(Length, MaxSize), JSON) :-
              'api:message' : Msg}.
 generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     format(user_error, '[ERROR] Document format error (~w): ~w~n', [Format, Message]),
-    format(string(Msg), "Invalid ~w document", [Format]),
+    format(string(Msg), "Invalid ~w document: ~w", [Format, Message]),
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
