@@ -237,8 +237,16 @@ schedule_optimization(Validation_Objects) :-
     assertz(optimization_running),
     thread_create(optimization_thread_wrapper(Validation_Objects), _, [detached(true)]).
 
-plugins:post_commit_hook(Validation_Objects, _Meta_Data) :-
+commit_has_changes(Meta_Data) :-
+    get_dict(inserts, Meta_Data, Inserts),
+    get_dict(deletes, Meta_Data, Deletes),
+    (Inserts > 0 ; Deletes > 0),
+    !.
+
+plugins:post_commit_hook(Validation_Objects, Meta_Data) :-
     % GC runs async in dedicated thread
     maybe_garbage_collect,
+    % Only optimize if the commit actually changed triples
+    commit_has_changes(Meta_Data),
     % Optimization runs async in dedicated thread
     maybe_optimize(Validation_Objects).

@@ -38,10 +38,13 @@ named_graph_optimize(Graph_Name) :-
     storage(Store),
     safe_open_named_graph(Store,Graph_Name,Graph),
     (   head(Graph, Layer, Version)
-    ->  squash(Layer,New_Layer),
-        do_or_die(
-            nb_force_set_head(Graph,New_Layer,Version),
-            error(label_version_changed(Graph_Name,Version),_))
+    ->  (   parent(Layer, _)
+        ->  squash(Layer,New_Layer),
+            do_or_die(
+                nb_force_set_head(Graph,New_Layer,Version),
+                error(label_version_changed(Graph_Name,Version),_))
+        ;   true  % Already a base layer, nothing to squash
+        )
     ;   true).
 
 descriptor_optimize(system_descriptor{}) :-
@@ -441,6 +444,84 @@ test(optimize_branch,
 
     resolve_absolute_string_descriptor(System_Path,system_descriptor{}),
     api_optimize(system_descriptor{}, Auth, System_Path).
+
+
+test(optimize_system_idempotent,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    super_user_authority(Auth),
+
+    % First optimization
+    api_optimize(system_descriptor{}, Auth, "_system"),
+
+    open_descriptor(system_descriptor{}, Transaction1),
+    [Instance_Object1] = (Transaction1.instance_objects),
+    Layer1 = (Instance_Object1.read),
+    layer_to_id(Layer1, Layer1_Id),
+    \+ parent(Layer1, _),
+
+    % Second optimization (should be a no-op)
+    api_optimize(system_descriptor{}, Auth, "_system"),
+
+    open_descriptor(system_descriptor{}, Transaction2),
+    [Instance_Object2] = (Transaction2.instance_objects),
+    Layer2 = (Instance_Object2.read),
+    layer_to_id(Layer2, Layer2_Id),
+    \+ parent(Layer2, _),
+
+    % Head layer must be unchanged
+    Layer1_Id = Layer2_Id.
+
+test(optimize_db_idempotent,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    Repository_Descriptor = (Descriptor.repository_descriptor),
+    Database_Descriptor = (Repository_Descriptor.database_descriptor),
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    resolve_absolute_string_descriptor(Database_Path, Database_Descriptor),
+
+    % First optimization
+    api_optimize(system_descriptor{}, Auth, Database_Path),
+
+    open_descriptor(Database_Descriptor, Transaction1),
+    [Instance_Object1] = (Transaction1.instance_objects),
+    Layer1 = (Instance_Object1.read),
+    layer_to_id(Layer1, Layer1_Id),
+    \+ parent(Layer1, _),
+
+    % Second optimization (should be a no-op)
+    api_optimize(system_descriptor{}, Auth, Database_Path),
+
+    open_descriptor(Database_Descriptor, Transaction2),
+    [Instance_Object2] = (Transaction2.instance_objects),
+    Layer2 = (Instance_Object2.read),
+    layer_to_id(Layer2, Layer2_Id),
+    \+ parent(Layer2, _),
+
+    % Head layer must be unchanged
+    Layer1_Id = Layer2_Id.
 
 
 :- end_tests(optimize).
