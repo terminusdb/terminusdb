@@ -36,6 +36,8 @@
 :- multifile prolog:message//1.
 prolog:message(error(database_exists(Name), _)) -->
                 [ 'The database ~w already exists'-[Name]].
+prolog:message(error(create_db_sync_failure(Org, DB), _)) -->
+                [ 'Database creation sync barrier failed for ~w/~w: schema context not visible after finalization'-[Org, DB]].
 
 local_repo_uri(Name, Uri) :-
     atomic_list_concat(['terminusdb:///repository/', Name, '/data/Local'], Uri).
@@ -198,11 +200,61 @@ create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Sch
     create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, _).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
-    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
+    % Serialize the entire database creation under a per-database mutex.
+    % create_db performs 5 separate non-atomic transactions:
+    %   1. Insert DB object with state=creating in system graph
+    %   2. Create repo named graph + insert local repository
+    %   3. Create ref layer with "main" branch
+    %   4. Create schema with context document
+    %   5. Finalize: change state from creating to finalized
+    %
+    % Without the mutex, a concurrent request could observe the database
+    % in a partially-created state (e.g. named graph exists but schema
+    % context document is not yet committed), leading to context_not_found
+    % errors.
+    text_to_string(Organization_Name, Org_Str),
+    text_to_string(Database_Name, DB_Str),
+    atomic_list_concat([create_db_lock, ':', Org_Str, '/', DB_Str], Mutex_Id),
+    with_mutex(
+        Mutex_Id,
+        create_db_locked_(System_DB, Auth, Organization_Name, Database_Name,
+                          Label, Comment, Schema, Public, Prefixes, Db_Uri)).
+
+create_db_locked_(System_DB, Auth, Organization_Name, Database_Name,
+                  Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
+    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name,
+                          Label, Comment, Schema, Public, Prefixes, Db_Uri),
 
     % update system with finalized
     % This reopens system graph internally, as it was advanced
-    finalize_db(Db_Uri).
+    finalize_db(Db_Uri),
+
+    % Synchronization barrier: verify that all committed layers are
+    % visible by re-opening the branch descriptor and confirming the
+    % schema context document is readable. This prevents the caller
+    % (and any subsequent request) from racing ahead of layer visibility.
+    text_to_string(Organization_Name, Org_String),
+    text_to_string(Database_Name, DB_String),
+    Branch_Descriptor = branch_descriptor{
+                            repository_descriptor:
+                            repository_descriptor{
+                                database_descriptor:
+                                database_descriptor{
+                                    organization_name: Org_String,
+                                    database_name: DB_String
+                                },
+                                repository_name: "local"
+                            },
+                            branch_name: "main"
+                        },
+    global_prefix_expand(rdf:type, RDF_Type),
+    global_prefix_expand(sys:'Context', SYS_Context),
+    do_or_die(
+        (   open_descriptor(Branch_Descriptor, Transaction),
+            database_schema(Transaction, Schema_Objects),
+            xrdf(Schema_Objects, 'terminusdb://context', RDF_Type, SYS_Context)
+        ),
+        error(create_db_sync_failure(Organization_Name, Database_Name), _)).
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).
