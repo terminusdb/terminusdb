@@ -36,7 +36,7 @@ info:
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 12.0.2
+  version: 12.0.5
 externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.org
@@ -1057,7 +1057,14 @@ paths:
         - name: merge_repeats
           in: query
           required: false
-          description: Merge repeated values
+          description: If true, duplicate document IDs in the same request are silently merged instead of causing an error.
+          schema:
+            type: boolean
+            default: false
+        - name: overwrite
+          in: query
+          required: false
+          description: If true, existing documents with the same ID will be overwritten instead of causing an error. This enables upsert behavior.
           schema:
             type: boolean
             default: false
@@ -1151,6 +1158,13 @@ paths:
           in: query
           required: false
           description: Require migration if schema changes
+          schema:
+            type: boolean
+            default: false
+        - name: merge_repeats
+          in: query
+          required: false
+          description: If true, duplicate document IDs in the same request are silently merged instead of causing an error.
           schema:
             type: boolean
             default: false

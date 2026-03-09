@@ -266,7 +266,7 @@ impl TerminusMutationRoot {
         create: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
-        let [string_term, graph_type_term, raw_json_term, ids_term, create_term] =
+        let [string_term, graph_type_term, raw_json_term, ids_term, create_term, merge_repeats_term] =
             frame.new_term_refs();
 
         let graph_type_atom = if graph_type == "SchemaGraph" {
@@ -279,8 +279,9 @@ impl TerminusMutationRoot {
         graph_type_term.put(&graph_type_atom)?;
         raw_json_term.put(&raw_json)?;
         create_term.put(&create)?;
+        merge_repeats_term.put(&false)?;
 
-        let replace_doc = pred!("api_document:api_replace_documents_core_string/6");
+        let replace_doc = pred!("api_document:api_replace_documents_core_string/7");
         frame.call_once(
             replace_doc,
             [
@@ -289,6 +290,7 @@ impl TerminusMutationRoot {
                 &graph_type_term,
                 &raw_json_term,
                 &create_term,
+                &merge_repeats_term,
                 &ids_term,
             ],
         )?;
