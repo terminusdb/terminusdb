@@ -1,3 +1,19 @@
+# TerminusDB Server v12.0.5 Release Notes
+
+## Enhancements
+* Add diff and streaming to history endpoint and bugfix to document change detection by @hoijnet in https://github.com/terminusdb/terminusdb/pull/2397
+* Enable group_by on more types - by fixing `unliterally` to handle compound terms by @hoijnet in https://github.com/terminusdb/terminusdb/pull/2403
+* Support merge_repeats on document interface update too by @hoijnet in https://github.com/terminusdb/terminusdb/pull/2410
+
+## Maintenance
+* Bump minimatch from 3.1.3 to 3.1.5 in /tests by @dependabot[bot] in https://github.com/terminusdb/terminusdb/pull/2399
+* Switch trivy to non-vulnerable version by @hoijnet in https://github.com/terminusdb/terminusdb/pull/2417
+
+## Bugfixes
+* Only run auto-optimize on write and with parent by @hoijnet in https://github.com/terminusdb/terminusdb/pull/2400
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.4...v12.0.5
+
 # TerminusDB Server v12.0.4 Release Notes
 
 The DFRNT team is very proud of this release. It is a signficant milestone in the 12.x release series.
