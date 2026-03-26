@@ -11,6 +11,7 @@
 
 ## Bugfixes
 * Only run auto-optimize on write and with parent by @hoijnet in https://github.com/terminusdb/terminusdb/pull/2400
+* Fix race condition: reject operations on databases still being created #2407 
 
 **Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.4...v12.0.5
 
