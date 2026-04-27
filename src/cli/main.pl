@@ -635,7 +635,19 @@ opt_spec('enrich-history','terminusdb enrich-history DB_SPEC',
            longflags([help]),
            shortflags([h]),
            default(false),
-           help('print help for the `enrich-history` command')]
+           help('print help for the `enrich-history` command')],
+          [opt(force),
+           type(boolean),
+           longflags([force]),
+           shortflags([f]),
+           default(false),
+           help('force re-enrichment of all commits, even those already enriched')],
+          [opt(diagnose),
+           type(boolean),
+           longflags([diagnose]),
+           shortflags([d]),
+           default(false),
+           help('diagnose enrichment: print what each commit would produce without writing')]
          ]).
 opt_spec(reset,'terminusdb reset BRANCH_SPEC COMMIT_OR_COMMIT_SPEC',
          'Reset the branch at BRANCH_SPEC to the COMMIT_OR_COMMIT_SPEC',
@@ -1976,10 +1988,13 @@ run_command(history,[Path], Opts) :-
 run_command('enrich-history',[Path], Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),
+    memberchk(force(Force), Opts),
+    memberchk(diagnose(Diagnose), Opts),
     api_report_errors(
         'enrich-history',
         (   do_or_die(
-                enrich_history(System_DB, Auth, Path, Enriched, Skipped),
+                enrich_history(System_DB, Auth, Path, Enriched, Skipped,
+                               [force(Force), diagnose(Diagnose)]),
                 error(enrich_history_not_available_in_this_version, _)),
             Total is Enriched + Skipped,
             format(current_output, "~nEnrichment complete for ~s~n", [Path]),
