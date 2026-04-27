@@ -33,6 +33,28 @@ endif
 TARGET := $(COMMUNITY_SRC_DIR)/librust.$(DYLIB_EXT)
 CARGO_BUILD_TARGET := $(BUILD_DIR)/target/$(PROFILE)/libterminusdb_dylib.$(DYLIB_EXT)
 
+# DIST-tracking stamp.
+#
+# The shipped dylib lives at a single fixed path ($(TARGET) = librust.$(DYLIB_EXT))
+# regardless of distribution, but its contents differ between community and enterprise:
+# the enterprise dylib exports extra Prolog FFI.
+#
+# Without tracking, switching DIST between builds leaves the previous dylib in place
+# (it is newer than its cargo prerequisites, so the copy step is skipped) and tests
+# fail with "Unknown procedure" errors for missing FFI predicates. The traditional
+# workaround is `make clean && make && make test`, which is obtrusive.
+#
+# Instead we record the last DIST used to produce $(TARGET) in a stamp file. If the
+# current DIST does not match, we remove $(TARGET) at parse time so the normal copy
+# rule fires and refreshes it from the correct cargo build directory. When DIST is
+# unchanged this is a no-op.
+LAST_DIST_FILE := $(COMMUNITY_SRC_DIR)/.last-dist
+LAST_DIST := $(shell cat $(LAST_DIST_FILE) 2>/dev/null)
+ifneq ($(LAST_DIST),$(DIST))
+  $(shell rm -f $(TARGET))
+  $(shell printf '%s' '$(DIST)' > $(LAST_DIST_FILE))
+endif
+
 ################################################################################
 
 .PHONY: default
