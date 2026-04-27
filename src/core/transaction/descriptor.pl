@@ -24,7 +24,9 @@
               ensure_transaction_has_builder/2,
               ensure_transaction_schema_written/1,
               should_retain_layers_for_descriptor/1,
-              retain_descriptor_layers/2
+              retain_descriptor_layers/2,
+              db_creation_bypass/2,
+              db_currently_creating/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -160,6 +162,9 @@
 :- use_module(repo_entity).
 :- use_module(ref_entity).
 :- use_module(layer_entity).
+:- use_module(system_entity, [database_exists/3, database_finalized/3]).
+:- thread_local db_creation_bypass/2.
+:- dynamic db_currently_creating/2.
 
 
 :- use_module(core(util)).
@@ -545,6 +550,19 @@ open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
         database_name: Database_Name
     } = Descriptor,
     !,
+
+    % Gate: reject databases in 'creating' state unless creation bypass is active.
+    % db_currently_creating/2 is a cheap O(1) first filter. Only when a name
+    % matches do we verify against the current store's system graph, so isolated
+    % test stores and concurrent threads are handled correctly.
+    (   db_creation_bypass(Organization_Name, Database_Name)
+    ->  true
+    ;   db_currently_creating(Organization_Name, Database_Name),
+        database_exists(system_descriptor{}, Organization_Name, Database_Name),
+        \+ database_finalized(system_descriptor{}, Organization_Name, Database_Name)
+    ->  throw(error(database_not_finalized(Organization_Name, Database_Name), _))
+    ;   true
+    ),
 
     Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
                                             database_name: Database_Name,

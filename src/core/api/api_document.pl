@@ -17,7 +17,7 @@
               nonground_captures/2,
 
               api_insert_documents_core_string/8,
-              api_replace_documents_core_string/6,
+              api_replace_documents_core_string/7,
               api_delete_documents_by_ids/3,
 
               document_input_format/1,
@@ -604,6 +604,7 @@ replace_document_default_options(
         graph_type: instance,
         create: false,
         raw_json: false,
+        merge_repeats: false,
         input_format: json
     }).
 
@@ -615,6 +616,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option_or_die(author(Author),Options),
     option(message(Message),Options),
     option(raw_json(Raw_JSON),Options,false),
+    option(merge_repeats(Doc_Merge), Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     option(input_format(InputFormat), Options),
@@ -625,13 +627,13 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          ->  ReplaceStream = Stream
                          ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
                          ),
-                         api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Ids)
+                         api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids) :-
+api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
     empty_assoc(Captures),
     ensure_transaction_has_builder(Graph_Type, Transaction),
     stream_to_lazy_docs(Stream, Lazy_List),
@@ -646,11 +648,15 @@ api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Id
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
-    die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _)).
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
 
-api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Ids) :-
+api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
     open_string(String, Stream),
-    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Ids_Atoms),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
@@ -940,6 +946,52 @@ test(replace_objects_with_stream,
     api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Ids, Options),
 
     Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].
+
+test(replace_duplicate_documents_with_merge_repeats,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }', Stream),
+    Options = [graph_type(instance),
+               author("author"),
+               message("message"),
+               create(false),
+               merge_repeats(true)],
+    api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, Ids, Options),
+
+    length(Ids, 2).
+
+test(replace_duplicate_documents_without_merge_repeats,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin,foo))),
+      cleanup(teardown_temp_store(State)),
+      error(same_ids_in_one_transaction(_))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    insert_some_cities(System, 'admin/foo'),
+
+    open_string('
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }
+{ "@type": "City",
+  "@id" : "City/Dublin",
+  "name" : "Baile Atha Cliath" }', Stream),
+    Options = [graph_type(instance),
+               author("author"),
+               message("message"),
+               create(false)],
+    api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _Ids, Options).
 
 :- end_tests(replace_document).
 
