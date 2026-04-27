@@ -13213,6 +13213,96 @@ test(double_capture,
                    _,
                    _Out_2).
 
+capture_with_tagged_union_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Source",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "links": {"@type":"Set","@class":"Link"} }
+
+{ "@type": "Class",
+  "@id": "Link",
+  "@subdocument": [],
+  "@key": {"@type":"ValueHash"},
+  "@inherits": ["Choice"] }
+
+{ "@type": "TaggedUnion",
+  "@id": "Choice",
+  "node": "Node" }
+
+{ "@type": "Class",
+  "@id": "Node",
+  "@key": {"@type":"Hash","@fields":["origin","label"]},
+  "label": "xsd:string",
+  "origin": {"@type":"Optional","@class":"Source"} }
+').
+
+% Regression test for capture-resolved @ref pointing to a Hash-keyed Node
+% reached through a TaggedUnion variant (here: Link.node -> Node).
+% Before the fix to process_choices_/6, the inner findall used copy_term on
+% the Result and captures assoc, severing the shared Capture_Var identity
+% between the @id slot inside the elaborated dict and the captures assoc
+% entry. update_captures/3 then bound a copy of Capture_Var, leaving the
+% outer @ref slot unbound, which crashed idgen_suffix/2 with
+% instantiation_error during Hash key generation.
+test(capture_ref_through_tagged_union,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(capture_with_tagged_union_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB, Context),
+    empty_assoc(In),
+
+    Document =
+    _{ '@type' : "Source",
+       '@capture' : "SourceRef",
+       name : "main",
+       links : [
+           _{ '@type' : "Link",
+              node : _{ '@type' : "Node",
+                        label : "first",
+                        origin : _{ '@ref' : "SourceRef" } } },
+           _{ '@type' : "Link",
+              node : _{ '@type' : "Node",
+                        label : "second",
+                        origin : _{ '@ref' : "SourceRef" } } }
+       ] },
+
+    once(json_elaborate(DB,
+                        Document,
+                        Context,
+                        In,
+                        Elaborated,
+                        _Ids,
+                        _Dependencies,
+                        _,
+                        Out)),
+
+    % After a single self-resolving elaboration the captures assoc must be
+    % fully ground: every @ref encountered must resolve to a bound id.
+    % Before the fix, the @ref slots reached through the TaggedUnion variant
+    % were left referencing a copy of Capture_Var that update_captures/3
+    % never bound, and the embedded json_assign_ids_/4 inside json_elaborate
+    % would crash with instantiation_error during Hash key generation.
+    ground(Out),
+
+    % Sanity-check: the captured Source @id propagated into the inner @ref
+    % slot reached via the TaggedUnion variant (Link.node -> Node.origin).
+    once(( Source_Id = (Elaborated.'@id'),
+           Links = (Elaborated.'terminusdb:///schema#links'.'@value'),
+           nth0(0, Links, Link),
+           Origin_Ref = (Link.'terminusdb:///schema#node'.'terminusdb:///schema#origin'),
+           Origin_Id = (Origin_Ref.'@id')
+         )),
+    Source_Id == Origin_Id.
+
 :- end_tests(id_capture).
 
 :- begin_tests(json_tables, [concurrent(true)]).
