@@ -14,7 +14,7 @@ on:
 jobs:
   arm64_build:
     name: Build
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-22.04-arm
 
     steps:
       - name: Checkout repository      
@@ -45,5 +45,5 @@ jobs:
       test_ref: ${{ github.sha }}
       image_artifact: terminusdb-server-snapshot-arm64
       image_platform: linux/arm64
-      runner: buildjet-4vcpu-ubuntu-2204-arm
+      runner: ubuntu-22.04-arm
       mocha_parallel: false
