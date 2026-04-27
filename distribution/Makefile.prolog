@@ -49,11 +49,19 @@ RUST_TARGET := src/rust/librust.$(DYLIB_EXT)
 # DIST differs, we remove $(RUST_TARGET) at parse time so the normal rule
 # fires and rebuilds it from the correct cargo build directory. Same logic
 # also lives in distribution/Makefile.rust for direct `make rust` invocations.
+#
+# Important: this is only safe when distribution/Makefile.rust is actually
+# present so the rebuild path exists. In the Docker base stage we ship a
+# pre-built dylib and never copy Makefile.rust — removing the dylib there
+# would leave the build with no way to recreate it. So we make the
+# destructive part of the stamp logic conditional on Makefile.rust existing.
 LAST_DIST_FILE := src/rust/.last-dist
 LAST_DIST := $(shell cat $(LAST_DIST_FILE) 2>/dev/null)
-ifneq ($(LAST_DIST),$(DIST))
-  $(shell rm -f $(RUST_TARGET))
-  $(shell printf '%s' '$(DIST)' > $(LAST_DIST_FILE))
+ifneq ($(wildcard distribution/Makefile.rust),)
+  ifneq ($(LAST_DIST),$(DIST))
+    $(shell rm -f $(RUST_TARGET))
+    $(shell printf '%s' '$(DIST)' > $(LAST_DIST_FILE))
+  endif
 endif
 
 ################################################################################
