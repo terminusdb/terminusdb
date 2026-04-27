@@ -20,6 +20,19 @@ make test
 npx mocha tests/test/*.js
 ```
 
+> **Always run `make` (or `make dev`) before `make test` if you are unsure
+> whether your sources are built.** `make test` does not rebuild the Prolog
+> binary, so stale builds can silently run old code. When in doubt:
+>
+> ```bash
+> make dev && make test
+> ```
+>
+> Note: switching between `DIST=community` and `DIST=enterprise` is handled
+> automatically — `src/rust/.last-dist` tracks the last distribution used to
+> build `src/rust/librust.{so,dylib}` and the next build refreshes the dylib
+> when the distribution changes. You no longer need `make clean` to switch.
+
 **run json plunit test suite only**
 
 ```bash
