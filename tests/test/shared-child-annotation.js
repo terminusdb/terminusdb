@@ -2291,4 +2291,352 @@ describe('shared-child-annotation', function () {
       expect(JSON.stringify(r.body)).to.include('incompatible_class_annotations')
     })
   })
+
+  // =========================================================================
+  // 20. @shared CONTAINS @subdocument WHICH REFERENCES @shared
+  // =========================================================================
+
+  describe('@shared contains @subdocument which references @shared', function () {
+    before(async function () {
+      agent.dbName = 'test_shared_subdoc_shared_chain'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Inner',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Middle',
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+          inner: 'Inner',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Container',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+          embed: 'Middle',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Root',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          container: 'Container',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('cascade through subdocument reaches nested @shared target', async function () {
+      // Create Inner (standalone @shared)
+      await document.insert(agent, {
+        instance: { '@type': 'Inner', v: 'i1' },
+      })
+
+      // Create Container with embedded Middle subdocument pointing to Inner
+      await document.insert(agent, {
+        instance: {
+          '@type': 'Container',
+          v: 'c1',
+          embed: { '@type': 'Middle', inner: 'Inner/i1' },
+        },
+      })
+
+      // Root references the Container
+      await document.insert(agent, {
+        instance: { '@type': 'Root', n: 'r1', container: 'Container/c1' },
+      })
+
+      // Delete Root — cascade should propagate: Root → Container → (subdocument Middle removed) → Inner
+      await document.delete(agent, { query: { id: 'Root/r1' } })
+
+      // Root/r1 should be deleted
+      const rRoot = await document.get(agent, {
+        query: { id: 'Root/r1', as_list: true },
+      })
+      expect(rRoot.body).to.be.an('array').that.is.empty
+
+      // Container/c1 should be cascade-deleted (Root had last ref)
+      const rContainer = await document.get(agent, {
+        query: { id: 'Container/c1', as_list: true },
+      })
+      expect(rContainer.body).to.be.an('array').that.is.empty
+
+      // Inner/i1 should be cascade-deleted (Middle's ref was removed when Container was deleted)
+      const rInner = await document.get(agent, {
+        query: { id: 'Inner/i1', as_list: true },
+      })
+      expect(rInner.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 21. LIVENESS: REFERENCE FROM SUBDOCUMENT KEEPS @shared ALIVE
+  // =========================================================================
+
+  describe('liveness: reference from subdocument keeps @shared alive', function () {
+    before(async function () {
+      agent.dbName = 'test_subdoc_ref_keeps_alive'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Tag',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Sub',
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+          tag: 'Tag',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Owner',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          sub: 'Sub',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'OtherOwner',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          tag: 'Tag',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('subdocument reference keeps @shared target alive', async function () {
+      // Create a @shared tag
+      await document.insert(agent, {
+        instance: { '@type': 'Tag', v: 't1' },
+      })
+
+      // Owner has a subdocument that references the tag
+      await document.insert(agent, {
+        instance: {
+          '@type': 'Owner',
+          n: 'o1',
+          sub: { '@type': 'Sub', tag: 'Tag/t1' },
+        },
+      })
+
+      // OtherOwner also references the tag directly
+      await document.insert(agent, {
+        instance: { '@type': 'OtherOwner', n: 'oo1', tag: 'Tag/t1' },
+      })
+
+      // Delete OtherOwner — removes one reference to Tag/t1
+      await document.delete(agent, { query: { id: 'OtherOwner/oo1' } })
+
+      // Tag/t1 should STILL exist — the subdocument reference from Owner/o1 keeps it alive
+      const rTag = await document.get(agent, {
+        query: { id: 'Tag/t1', as_list: true },
+      })
+      expect(rTag.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rTag.body[0].v).to.equal('t1')
+
+      // Owner/o1 should still exist with its embedded sub intact
+      const rOwner = await document.get(agent, {
+        query: { id: 'Owner/o1', as_list: true },
+      })
+      expect(rOwner.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rOwner.body[0].n).to.equal('o1')
+      expect(rOwner.body[0].sub).to.have.property('tag')
+      expect(rOwner.body[0].sub.tag).to.equal('Tag/t1')
+
+      // OtherOwner/oo1 should be deleted
+      const rOther = await document.get(agent, {
+        query: { id: 'OtherOwner/oo1', as_list: true },
+      })
+      expect(rOther.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 22. REGULAR DOCUMENT LINK DOES NOT TRIGGER CASCADE ON @shared
+  // =========================================================================
+
+  describe('regular document link does NOT trigger cascade on @shared', function () {
+    before(async function () {
+      agent.dbName = 'test_no_cascade_through_regular'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Shared',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Producer',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          s: 'Shared',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Linker',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          producer: 'Producer',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('deleting Linker does not cascade into Producer or its @shared target', async function () {
+      // Create a @shared document
+      await document.insert(agent, {
+        instance: { '@type': 'Shared', v: 's1' },
+      })
+
+      // Producer references the @shared document
+      await document.insert(agent, {
+        instance: { '@type': 'Producer', n: 'p1', s: 'Shared/s1' },
+      })
+
+      // Linker references the Producer (regular doc link, not @shared)
+      await document.insert(agent, {
+        instance: { '@type': 'Linker', n: 'l1', producer: 'Producer/p1' },
+      })
+
+      // Delete Linker — removes link to Producer, but Producer is NOT @shared
+      await document.delete(agent, { query: { id: 'Linker/l1' } })
+
+      // Producer/p1 should still exist (regular document — no cascade)
+      const rProducer = await document.get(agent, {
+        query: { id: 'Producer/p1', as_list: true },
+      })
+      expect(rProducer.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rProducer.body[0].n).to.equal('p1')
+      expect(rProducer.body[0].s).to.equal('Shared/s1')
+
+      // Shared/s1 should still exist (Producer still holds the reference)
+      const rShared = await document.get(agent, {
+        query: { id: 'Shared/s1', as_list: true },
+      })
+      expect(rShared.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rShared.body[0].v).to.equal('s1')
+
+      // Linker/l1 should be deleted
+      const rLinker = await document.get(agent, {
+        query: { id: 'Linker/l1', as_list: true },
+      })
+      expect(rLinker.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 23. @shared → @shared MULTI-HOP WITHOUT @unfold (traversal boundary check)
+  // =========================================================================
+
+  describe('@shared → @shared multi-hop without @unfold', function () {
+    before(async function () {
+      agent.dbName = 'test_multihop_no_unfold'
+      await db.create(agent)
+
+      // Explicitly NO @unfold or @unfoldable on any class
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Inner',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Outer',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+          inner: 'Inner',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Root',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          outer: 'Outer',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('multi-hop cascade works without @unfold on intermediate @shared docs', async function () {
+      // Create Inner (no @unfold/unfoldable)
+      await document.insert(agent, {
+        instance: { '@type': 'Inner', v: 'i1' },
+      })
+
+      // Create Outer referencing Inner (no @unfold/unfoldable)
+      await document.insert(agent, {
+        instance: { '@type': 'Outer', v: 'o1', inner: 'Inner/i1' },
+      })
+
+      // Root references Outer
+      await document.insert(agent, {
+        instance: { '@type': 'Root', n: 'r1', outer: 'Outer/o1' },
+      })
+
+      // Delete Root — cascade should chain regardless of @unfold
+      await document.delete(agent, { query: { id: 'Root/r1' } })
+
+      // Outer/o1 should be deleted (direct cascade — Root had last ref)
+      const rOuter = await document.get(agent, {
+        query: { id: 'Outer/o1', as_list: true },
+      })
+      expect(rOuter.body).to.be.an('array').that.is.empty
+
+      // Inner/i1 should be deleted (multi-hop — Outer's deletion removed last ref)
+      const rInner = await document.get(agent, {
+        query: { id: 'Inner/i1', as_list: true },
+      })
+      expect(rInner.body).to.be.an('array').that.is.empty
+
+      // Root/r1 should be deleted
+      const rRoot = await document.get(agent, {
+        query: { id: 'Root/r1', as_list: true },
+      })
+      expect(rRoot.body).to.be.an('array').that.is.empty
+    })
+  })
 })
