@@ -12,9 +12,6 @@
  * 6. Standalone creation — @shared targets can be created without parent
  * 7. Set per-element liveness — per-element cascade on Set fields
  * 8. Migration compatibility — adding/removing @shared on existing schema
- *
- * These tests are written BEFORE implementation (TDD Phase 3). They MUST fail
- * because the @shared feature does not yet exist in the codebase.
  */
 
 const { expect } = require('chai')
@@ -304,6 +301,55 @@ describe('shared-child-annotation', function () {
         })
         expect(r.body).to.be.an('array').that.has.lengthOf(1)
         expect(r.body[0].text).to.equal('A shared footnote with two parents')
+      })
+
+      it('surviving referencing document is intact after partial cascade', async function () {
+        // Create a shared footnote
+        await document.insert(agent, {
+          instance: {
+            '@type': 'Footnote',
+            id: 'fn3',
+            text: 'Footnote for preservation test',
+          },
+        })
+
+        // Create TWO articles referencing the same footnote
+        await document.insert(agent, {
+          instance: [
+            {
+              '@type': 'Article',
+              title: 'article3a',
+              notes: ['Footnote/fn3'],
+            },
+            {
+              '@type': 'Article',
+              title: 'article3b',
+              notes: ['Footnote/fn3'],
+            },
+          ],
+        })
+
+        // Delete article3a (one reference remains via article3b)
+        await document.delete(agent, { query: { id: 'Article/article3a' } })
+
+        // The footnote should STILL exist with correct field values
+        const rFootnote = await document.get(agent, {
+          query: { id: 'Footnote/fn3', as_list: true },
+        })
+        expect(rFootnote.body).to.be.an('array').that.has.lengthOf(1)
+        expect(rFootnote.body[0].id).to.equal('fn3')
+        expect(rFootnote.body[0].text).to.equal('Footnote for preservation test')
+
+        // The SURVIVING article must be completely intact — all fields verified
+        const rArticle = await document.get(agent, {
+          query: { id: 'Article/article3b', as_list: true },
+        })
+        expect(rArticle.body).to.be.an('array').that.has.lengthOf(1)
+        expect(rArticle.body[0]['@id']).to.equal('Article/article3b')
+        expect(rArticle.body[0]['@type']).to.equal('Article')
+        expect(rArticle.body[0].title).to.equal('article3b')
+        expect(rArticle.body[0].notes).to.be.an('array').that.has.lengthOf(1)
+        expect(rArticle.body[0].notes[0]).to.equal('Footnote/fn3')
       })
     })
 
@@ -1268,6 +1314,60 @@ describe('shared-child-annotation', function () {
       expect(r1.body).to.be.an('array').that.is.empty
       expect(r2.body).to.be.an('array').that.is.empty
     })
+
+    it('parent collection document is intact with correct items after element cascade', async function () {
+      // Create three items
+      await document.insert(agent, {
+        instance: [
+          { '@type': 'Item', name: 'kept1' },
+          { '@type': 'Item', name: 'removed1' },
+          { '@type': 'Item', name: 'kept2' },
+        ],
+      })
+
+      // Create collection referencing all three
+      await document.insert(agent, {
+        instance: {
+          '@type': 'Collection',
+          name: 'coll3',
+          items: ['Item/kept1', 'Item/removed1', 'Item/kept2'],
+        },
+      })
+
+      // Replace collection removing only removed1
+      await document.replace(agent, {
+        instance: {
+          '@id': 'Collection/coll3',
+          '@type': 'Collection',
+          name: 'coll3',
+          items: ['Item/kept1', 'Item/kept2'],
+        },
+      })
+
+      // removed1 should be cascade-deleted
+      const rRemoved = await document.get(agent, { query: { id: 'Item/removed1', as_list: true } })
+      expect(rRemoved.body).to.be.an('array').that.is.empty
+
+      // Surviving items should have correct field values
+      const rKept1 = await document.get(agent, { query: { id: 'Item/kept1', as_list: true } })
+      const rKept2 = await document.get(agent, { query: { id: 'Item/kept2', as_list: true } })
+      expect(rKept1.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rKept1.body[0].name).to.equal('kept1')
+      expect(rKept2.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rKept2.body[0].name).to.equal('kept2')
+
+      // CRITICAL: Re-fetch the Collection document itself — verify it is intact
+      const rColl = await document.get(agent, { query: { id: 'Collection/coll3', as_list: true } })
+      expect(rColl.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rColl.body[0]['@id']).to.equal('Collection/coll3')
+      expect(rColl.body[0]['@type']).to.equal('Collection')
+      expect(rColl.body[0].name).to.equal('coll3')
+      // The items Set should contain exactly the two surviving items
+      expect(rColl.body[0].items).to.be.an('array').that.has.lengthOf(2)
+      expect(rColl.body[0].items).to.include('Item/kept1')
+      expect(rColl.body[0].items).to.include('Item/kept2')
+      expect(rColl.body[0].items).to.not.include('Item/removed1')
+    })
   })
 
   // =========================================================================
@@ -1424,7 +1524,84 @@ describe('shared-child-annotation', function () {
   })
 
   // =========================================================================
-  // 9. CIRCULAR REFERENCE HANDLING
+  // 9. BYSTANDER DOCUMENT PRESERVATION
+  // =========================================================================
+
+  describe('bystander document unaffected by cascade', function () {
+    before(async function () {
+      agent.dbName = 'test_bystander_preservation'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'SharedNote',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['name'] },
+          name: 'xsd:string',
+          content: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Parent',
+          '@key': { '@type': 'Lexical', '@fields': ['name'] },
+          name: 'xsd:string',
+          tag: 'xsd:string',
+          note: {
+            '@type': 'Optional',
+            '@class': 'SharedNote',
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('unrelated bystander document is fully intact after cascade', async function () {
+      // Create a @shared note
+      await document.insert(agent, {
+        instance: { '@type': 'SharedNote', name: 'n1', content: 'Important note' },
+      })
+
+      // Create Parent A referencing the shared note
+      await document.insert(agent, {
+        instance: { '@type': 'Parent', name: 'parentA', tag: 'urgent', note: 'SharedNote/n1' },
+      })
+
+      // Create Parent B — NO connection to any @shared document
+      await document.insert(agent, {
+        instance: { '@type': 'Parent', name: 'parentB', tag: 'routine' },
+      })
+
+      // Delete Parent A → SharedNote/n1 should cascade (zero refs remain)
+      await document.delete(agent, { query: { id: 'Parent/parentA' } })
+
+      // Verify cascade occurred: SharedNote/n1 is gone
+      const rNote = await document.get(agent, {
+        query: { id: 'SharedNote/n1', as_list: true },
+      })
+      expect(rNote.body).to.be.an('array').that.is.empty
+
+      // CRITICAL: Verify bystander Parent B is completely intact — all fields
+      const rB = await document.get(agent, {
+        query: { id: 'Parent/parentB', as_list: true },
+      })
+      expect(rB.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rB.body[0]['@id']).to.equal('Parent/parentB')
+      expect(rB.body[0]['@type']).to.equal('Parent')
+      expect(rB.body[0].name).to.equal('parentB')
+      expect(rB.body[0].tag).to.equal('routine')
+      // Parent B has no note field set — it should remain absent/undefined
+      expect(rB.body[0]).to.not.have.property('note')
+    })
+  })
+
+  // =========================================================================
+  // 10. CIRCULAR REFERENCE HANDLING
   // =========================================================================
 
   describe('circular reference handling', function () {
