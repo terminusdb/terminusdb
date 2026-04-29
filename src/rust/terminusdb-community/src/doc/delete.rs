@@ -210,6 +210,14 @@ fn has_other_link<L: Layer + Clone>(
 /// - References from other @shared documents (recursively check if referrer is live)
 /// - Self-references and circular @shared chains (visited set prevents infinite loops)
 ///
+/// Optimisations:
+/// - Shared memoisation table across all candidates: once a node is resolved as
+///   live or dead, the result is cached. Subsequent candidates sharing referrers
+///   reuse the cached result (avoids redundant backward traversals).
+/// - Orphan ID set for batch unlink filtering: backward references whose subject
+///   is in the orphan set are skipped during unlink (those triples are already
+///   removed by the matching delete_id_document call).
+///
 /// Returns the count of orphaned @shared documents deleted in this pass.
 pub fn cascade_shared_deletes<L: Layer + Clone>(
     context: &DocumentContext<L>,
@@ -225,6 +233,10 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
         return 0;
     }
 
+    // Memoisation table: true = live, false = orphaned.
+    // Shared across all candidates so repeated backward traversals are avoided.
+    let mut memo: HashMap<u64, bool> = HashMap::new();
+
     // Find all orphaned @shared instances in the current layer
     let mut orphaned: Vec<u64> = Vec::new();
 
@@ -236,8 +248,23 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
             }
             let candidate_id = type_triple.subject;
 
-            // Liveness check: is this @shared target reachable from a non-@shared doc?
-            if !is_shared_target_live(layer, context, rdf_type, candidate_id) {
+            // Check memo first
+            if let Some(&is_live) = memo.get(&candidate_id) {
+                if !is_live {
+                    orphaned.push(candidate_id);
+                }
+                continue;
+            }
+
+            // Liveness check with memoisation
+            let mut visited: HashSet<u64> = HashSet::new();
+            let is_live =
+                is_shared_target_live_memo(layer, context, rdf_type, candidate_id, &mut visited, &mut memo);
+
+            // Cache the result for this candidate
+            memo.insert(candidate_id, is_live);
+
+            if !is_live {
                 orphaned.push(candidate_id);
             }
         }
@@ -245,10 +272,13 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
 
     let count = orphaned.len();
 
+    // Build orphan set for batch unlink filtering
+    let orphan_set: HashSet<u64> = orphaned.iter().copied().collect();
+
     // Delete all orphaned @shared documents
-    for orphan_id in orphaned {
+    for &orphan_id in &orphaned {
         delete_id_document(context, builder, orphan_id);
-        unlink_id_document(context, builder, orphan_id);
+        unlink_id_document_filtered(context, builder, orphan_id, &orphan_set);
     }
 
     count
@@ -262,23 +292,22 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
 ///
 /// Uses a visited set for cycle prevention (handles self-referencing and
 /// circular @shared chains — these are all orphaned together).
-fn is_shared_target_live<L: Layer + Clone>(
-    layer: &L,
-    context: &DocumentContext<L>,
-    rdf_type: u64,
-    target_id: u64,
-) -> bool {
-    let mut visited: HashSet<u64> = HashSet::new();
-    is_shared_target_live_inner(layer, context, rdf_type, target_id, &mut visited)
-}
-
-fn is_shared_target_live_inner<L: Layer + Clone>(
+///
+/// Uses a shared memoisation table: once a node is resolved, the result is
+/// cached so subsequent candidates sharing referrers skip redundant traversals.
+fn is_shared_target_live_memo<L: Layer + Clone>(
     layer: &L,
     context: &DocumentContext<L>,
     rdf_type: u64,
     target_id: u64,
     visited: &mut HashSet<u64>,
+    memo: &mut HashMap<u64, bool>,
 ) -> bool {
+    // Check memo before traversal
+    if let Some(&cached) = memo.get(&target_id) {
+        return cached;
+    }
+
     visited.insert(target_id);
 
     // Find all triples pointing to this target
@@ -290,24 +319,38 @@ fn is_shared_target_live_inner<L: Layer + Clone>(
             continue;
         }
 
+        // Check memo for the source
+        if let Some(&cached) = memo.get(&source_id) {
+            if cached {
+                // Source is known-live → target is live
+                memo.insert(target_id, true);
+                return true;
+            }
+            // Source is known-dead → skip it, try other paths
+            continue;
+        }
+
         // Determine the type of the source
         let source_type = layer.single_triple_sp(source_id, rdf_type).map(|t| t.object);
 
         match source_type {
             Some(type_id) if context.shared_types.contains(&type_id) => {
                 // Source is itself @shared — recursively check if IT is live
-                if is_shared_target_live_inner(layer, context, rdf_type, source_id, visited) {
+                if is_shared_target_live_memo(layer, context, rdf_type, source_id, visited, memo) {
+                    memo.insert(target_id, true);
                     return true;
                 }
             }
             Some(_) => {
                 // Source is a non-@shared typed node — target is live!
+                memo.insert(target_id, true);
                 return true;
             }
             None => {
                 // Source has no type — could be an internal node (Set, List intermediate).
                 // Walk upward from this untyped node to find its owner.
-                if is_shared_target_live_inner(layer, context, rdf_type, source_id, visited) {
+                if is_shared_target_live_memo(layer, context, rdf_type, source_id, visited, memo) {
+                    memo.insert(target_id, true);
                     return true;
                 }
             }
@@ -315,6 +358,7 @@ fn is_shared_target_live_inner<L: Layer + Clone>(
     }
 
     // No live path found — target is orphaned
+    memo.insert(target_id, false);
     false
 }
 
@@ -331,6 +375,33 @@ pub fn unlink_id_document<L: Layer + Clone>(
         if Some(triple.predicate) != rdf_first {
             builder.remove_id_triple(triple);
         }
+    }
+}
+
+/// Unlink a document, but skip backward references whose subject is in the
+/// orphan set — those triples are already being removed by the matching
+/// delete_id_document call for that orphan. Avoids redundant remove_id_triple
+/// calls during batch cascade deletion.
+fn unlink_id_document_filtered<L: Layer + Clone>(
+    context: &DocumentContext<L>,
+    builder: &mut dyn LayerBuilder,
+    id: u64,
+    orphan_set: &HashSet<u64>,
+) {
+    let layer = context.layer();
+    let rdf_first = context.rdf.first();
+
+    for triple in layer.triples_o(id) {
+        // Skip list references (not supported for unlink)
+        if Some(triple.predicate) == rdf_first {
+            continue;
+        }
+        // Skip references from other orphans — their delete_id_document call
+        // already removes those triples via triples_s traversal
+        if orphan_set.contains(&triple.subject) {
+            continue;
+        }
+        builder.remove_id_triple(triple);
     }
 }
 

@@ -80,21 +80,37 @@ load_plugins.
 %  Entry point for @shared cascade delete.
 %  On success (cascade completed), performs mutations and FAILS (no witness).
 %  On error, succeeds with a witness.
+%
+%  Optimised: checks two lightweight conditions before calling Rust cascade:
+%  1. Schema has @shared types (constant-time schema check)
+%  2. Transaction has at least one deleted instance triple (O(1) — stops at first)
+%  This replaces the expensive full find_orphaned_shared_target scan while still
+%  avoiding the cascade on pure INSERT operations.
 pre_commit_hook(Validations, Witness) :-
     member(Validation, Validations),
-    has_shared_orphans(Validation),
+    has_shared_schema_types(Validation),
+    has_any_instance_deletions(Validation),
     !,
     perform_shared_cascade(Validation, Result),
     Result = error(Witness).
 
-%% has_shared_orphans(+Validation)
+%% has_shared_schema_types(+Validation)
 %
-%  True if the validation has any removed triples pointing to @shared
-%  instances that are no longer reachable from non-@shared documents.
-%  Uses the full reachability check for correctness (handles circular refs).
-has_shared_orphans(Validation) :-
-    empty_assoc(Empty),
-    find_orphaned_shared_target(Validation, Empty, _Target).
+%  True if the schema contains any @shared types. Lightweight check —
+%  only examines schema structure, NOT instance data or deleted triples.
+has_shared_schema_types(Validation) :-
+    database_schema(Validation, Schema),
+    schema_is_shared(Schema, _).
+
+%% has_any_instance_deletions(+Validation)
+%
+%  True if the instance graph has at least one deleted triple.
+%  O(1) — stops at the first match. This guards against firing the
+%  cascade on pure INSERT transactions.
+has_any_instance_deletions(Validation) :-
+    database_instance(Validation, Instance),
+    xrdf_deleted(Instance, _, _, _),
+    !.
 
 %% perform_shared_cascade(+Validation, -Result)
 %
@@ -135,6 +151,8 @@ perform_shared_cascade(Validation, Result) :-
 %% perform_shared_cascade_prolog(+Validation, -Result)
 %
 %  Fallback: pure Prolog cascade (used if Rust predicate is unavailable).
+%  Uses find_orphaned_shared_target directly as loop termination test
+%  (avoids the removed has_shared_orphans helper).
 perform_shared_cascade_prolog(Validation, Result) :-
     validation_objects_to_transaction_objects([Validation], [Transaction]),
     empty_assoc(Empty_Visited),
@@ -142,7 +160,9 @@ perform_shared_cascade_prolog(Validation, Result) :-
     (   Cascade_Result = done
     ->  transaction_objects_to_validation_objects([Transaction], [New_Validation]),
         update_validation_instance_layer(Validation, New_Validation),
-        (   has_shared_orphans(Validation)
+        %% Check if more orphans remain (replaces has_shared_orphans call)
+        (   empty_assoc(Empty2),
+            find_orphaned_shared_target(Validation, Empty2, _)
         ->  perform_shared_cascade_prolog(Validation, Result)
         ;   Result = ok
         )
