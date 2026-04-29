@@ -115,9 +115,10 @@ has_any_instance_deletions(Validation) :-
 %% perform_shared_cascade(+Validation, -Result)
 %
 %  Performs the cascade delete loop using Rust fast path.
-%  The Rust predicate '$doc':cascade_shared/3 finds all orphaned @shared
-%  instances in a single pass and batch-deletes them.
-%  Iterates until no more orphans are found (Count = 0).
+%  The Rust predicate '$doc':cascade_shared/3 collects candidates internally
+%  from the layer's triple removals (negative delta) — objects of deleted
+%  triples that are instances of @shared types — and checks liveness only
+%  for those candidates. Iterates until no more orphans are found (Count = 0).
 perform_shared_cascade(Validation, Result) :-
     % Convert validation to transaction (gets a fresh builder)
     validation_objects_to_transaction_objects([Validation], [Transaction]),
@@ -125,7 +126,7 @@ perform_shared_cascade(Validation, Result) :-
     '$doc':get_document_context(Transaction, Context),
     % Ensure the transaction has an instance builder
     ensure_transaction_has_builder(instance, Transaction),
-    % Call Rust fast path: finds and deletes all orphans in one pass
+    % Call Rust fast path: collects candidates from layer removals and deletes orphans
     (   catch(
             '$doc':cascade_shared(Context, Transaction, Count),
             Error,
@@ -151,8 +152,8 @@ perform_shared_cascade(Validation, Result) :-
 %% perform_shared_cascade_prolog(+Validation, -Result)
 %
 %  Fallback: pure Prolog cascade (used if Rust predicate is unavailable).
-%  Uses find_orphaned_shared_target directly as loop termination test
-%  (avoids the removed has_shared_orphans helper).
+%  Uses find_orphaned_shared_target which scans xrdf_deleted for candidates
+%  that are @shared instances, then checks liveness for each.
 perform_shared_cascade_prolog(Validation, Result) :-
     validation_objects_to_transaction_objects([Validation], [Transaction]),
     empty_assoc(Empty_Visited),
@@ -160,7 +161,7 @@ perform_shared_cascade_prolog(Validation, Result) :-
     (   Cascade_Result = done
     ->  transaction_objects_to_validation_objects([Transaction], [New_Validation]),
         update_validation_instance_layer(Validation, New_Validation),
-        %% Check if more orphans remain (replaces has_shared_orphans call)
+        %% Check if more orphans remain
         (   empty_assoc(Empty2),
             find_orphaned_shared_target(Validation, Empty2, _)
         ->  perform_shared_cascade_prolog(Validation, Result)

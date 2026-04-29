@@ -191,17 +191,22 @@ fn has_other_link<L: Layer + Clone>(
     false
 }
 
-/// Cascade-delete orphaned @shared documents.
+/// Cascade-delete orphaned @shared documents from a given set of candidates.
 ///
 /// Designed to be called on a DocumentContext built from the COMMITTED layer
 /// (after initial deletions have been applied). This means triples from already-deleted
 /// documents are no longer visible, and the liveness check can use straightforward
 /// backward traversal.
 ///
+/// IMPORTANT: Only checks the provided `candidate_ids` — NOT all instances of
+/// @shared types. Candidates must be pre-filtered by Prolog (objects of deleted
+/// triples that are instances of @shared types). This prevents standalone @shared
+/// documents (intentionally created without references) from being swept.
+///
 /// Algorithm:
-/// 1. Enumerate all instances of @shared types
-/// 2. For each candidate, perform a liveness check: walk backward through incoming
-///    references until we find a non-@shared document (LIVE) or exhaust all paths (ORPHAN)
+/// 1. For each candidate, verify it is still a @shared instance (has type triple)
+/// 2. Perform a liveness check: walk backward through incoming references until
+///    we find a non-@shared document (LIVE) or exhaust all paths (ORPHAN)
 /// 3. Collect all orphans in one batch, delete them all
 /// 4. The caller (Prolog) commits the builder and re-invokes until no orphans remain
 ///
@@ -222,6 +227,7 @@ fn has_other_link<L: Layer + Clone>(
 pub fn cascade_shared_deletes<L: Layer + Clone>(
     context: &DocumentContext<L>,
     builder: &mut dyn LayerBuilder,
+    candidate_ids: &[u64],
 ) -> usize {
     let layer = context.layer();
     let rdf_type = match context.rdf.type_() {
@@ -229,7 +235,7 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
         None => return 0,
     };
 
-    if context.shared_types.is_empty() {
+    if context.shared_types.is_empty() || candidate_ids.is_empty() {
         return 0;
     }
 
@@ -237,36 +243,35 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
     // Shared across all candidates so repeated backward traversals are avoided.
     let mut memo: HashMap<u64, bool> = HashMap::new();
 
-    // Find all orphaned @shared instances in the current layer
+    // Find orphaned candidates from the provided set
     let mut orphaned: Vec<u64> = Vec::new();
 
-    for &shared_type_id in &context.shared_types {
-        // Find all instances of this @shared type
-        for type_triple in layer.triples_o(shared_type_id) {
-            if type_triple.predicate != rdf_type {
-                continue;
-            }
-            let candidate_id = type_triple.subject;
+    for &candidate_id in candidate_ids {
+        // Verify the candidate still exists as a @shared type instance
+        let type_triple = layer.single_triple_sp(candidate_id, rdf_type);
+        match type_triple {
+            Some(t) if context.shared_types.contains(&t.object) => {}
+            _ => continue, // Not a @shared instance (already deleted or wrong type)
+        }
 
-            // Check memo first
-            if let Some(&is_live) = memo.get(&candidate_id) {
-                if !is_live {
-                    orphaned.push(candidate_id);
-                }
-                continue;
-            }
-
-            // Liveness check with memoisation
-            let mut visited: HashSet<u64> = HashSet::new();
-            let is_live =
-                is_shared_target_live_memo(layer, context, rdf_type, candidate_id, &mut visited, &mut memo);
-
-            // Cache the result for this candidate
-            memo.insert(candidate_id, is_live);
-
+        // Check memo first
+        if let Some(&is_live) = memo.get(&candidate_id) {
             if !is_live {
                 orphaned.push(candidate_id);
             }
+            continue;
+        }
+
+        // Liveness check with memoisation
+        let mut visited: HashSet<u64> = HashSet::new();
+        let is_live =
+            is_shared_target_live_memo(layer, context, rdf_type, candidate_id, &mut visited, &mut memo);
+
+        // Cache the result for this candidate
+        memo.insert(candidate_id, is_live);
+
+        if !is_live {
+            orphaned.push(candidate_id);
         }
     }
 
@@ -744,10 +749,18 @@ predicates! {
     ///
     /// Called from Prolog after initial deletions have been committed.
     /// The DocumentContext is built from the committed layer, so it reflects
-    /// the post-deletion state. Finds all @shared instances that are no longer
-    /// reachable from any non-@shared document and deletes them.
+    /// the post-deletion state.
     ///
-    /// Returns the count of cascade-deleted documents via count_term.
+    /// Candidate collection happens entirely in Rust: iterates over the
+    /// layer's triple_removals() (negative delta), identifies objects that
+    /// are instances of @shared types, and checks only those for liveness.
+    /// This avoids the expensive Prolog findall/xrdf_deleted round-trip.
+    ///
+    /// Parameters:
+    /// - document_context_term: DocumentContext blob (post-deletion layer)
+    /// - transaction_term: Transaction with builder for writing deletions
+    /// - count_term: Output — number of cascade-deleted documents
+    ///
     /// The caller (Prolog) should commit the builder and re-invoke until count == 0.
     #[module("$doc")]
     semidet fn cascade_shared(
@@ -768,9 +781,38 @@ predicates! {
         }
         let builder = builder.unwrap();
 
-        // Perform cascade deletion on the current committed layer
+        // Collect candidates from layer's negative delta (triple removals).
+        // A candidate is an object of a removed triple that is an instance of a @shared type.
+        let layer = document_context.layer();
+        let rdf_type = document_context.rdf.type_();
+        let candidate_ids = if let Some(rdf_type_id) = rdf_type {
+            if document_context.shared_types.is_empty() {
+                Vec::new()
+            } else {
+                let mut candidates: HashSet<u64> = HashSet::new();
+                if let Ok(removals) = layer.triple_removals() {
+                    for triple in removals {
+                        let object_id = triple.object;
+                        // Check if the object is a node (not a value/literal)
+                        if let Some(true) = layer.id_object_is_node(object_id) {
+                            // Check if it still has a type triple pointing to a @shared type
+                            if let Some(type_triple) = layer.single_triple_sp(object_id, rdf_type_id) {
+                                if document_context.shared_types.contains(&type_triple.object) {
+                                    candidates.insert(object_id);
+                                }
+                            }
+                        }
+                    }
+                }
+                candidates.into_iter().collect()
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Perform cascade deletion on the collected candidates only
         let cascaded_count = context.try_or_die(builder.with_builder(|builder| {
-            cascade_shared_deletes(&document_context, &mut **builder)
+            cascade_shared_deletes(&document_context, &mut **builder, &candidate_ids)
         }))?;
 
         count_term.unify(cascaded_count as u64)?;

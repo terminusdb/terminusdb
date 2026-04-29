@@ -1601,7 +1601,86 @@ describe('shared-child-annotation', function () {
   })
 
   // =========================================================================
-  // 10. CIRCULAR REFERENCE HANDLING
+  // 10. STANDALONE SHARED DOCUMENT SURVIVES UNRELATED CASCADE
+  // =========================================================================
+
+  describe('standalone @shared document survives unrelated cascade', function () {
+    before(async function () {
+      agent.dbName = 'test_standalone_survives_cascade'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Child',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Parent',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          c: {
+            '@type': 'Optional',
+            '@class': 'Child',
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('standalone @shared doc is not swept when unrelated cascade fires', async function () {
+      // Create a standalone @shared document — never referenced by any parent
+      await document.insert(agent, {
+        instance: { '@type': 'Child', v: 'standalone' },
+      })
+
+      // Create a DIFFERENT @shared document that IS owned by a parent
+      await document.insert(agent, {
+        instance: { '@type': 'Child', v: 'owned' },
+      })
+      await document.insert(agent, {
+        instance: { '@type': 'Parent', n: 'p1', c: 'Child/owned' },
+      })
+
+      // Delete the parent — cascade should delete Child/owned (zero refs remain)
+      await document.delete(agent, { query: { id: 'Parent/p1' } })
+
+      // Child/owned should be cascade-deleted (its only reference was removed)
+      const rOwned = await document.get(agent, {
+        query: { id: 'Child/owned', as_list: true },
+      })
+      expect(rOwned.body).to.be.an('array').that.is.empty
+
+      // CRITICAL: Child/standalone must still exist — it was never referenced,
+      // so no triple pointing to it was ever deleted. The cascade algorithm must
+      // only delete shared documents reachable from a deleted triple, not all
+      // zero-reference shared documents.
+      const rStandalone = await document.get(agent, {
+        query: { id: 'Child/standalone', as_list: true },
+      })
+      expect(rStandalone.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rStandalone.body[0]['@id']).to.equal('Child/standalone')
+      expect(rStandalone.body[0]['@type']).to.equal('Child')
+      expect(rStandalone.body[0].v).to.equal('standalone')
+
+      // Parent/p1 should be deleted
+      const rParent = await document.get(agent, {
+        query: { id: 'Parent/p1', as_list: true },
+      })
+      expect(rParent.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 11. CIRCULAR REFERENCE HANDLING
   // =========================================================================
 
   describe('circular reference handling', function () {
