@@ -98,24 +98,52 @@ has_shared_orphans(Validation) :-
 
 %% perform_shared_cascade(+Validation, -Result)
 %
-%  Performs the cascade delete loop. Mutates the validation object's
-%  instance layer in place. Returns 'ok' on success or 'error(Witness)'
-%  on failure.
-%  Iterates until no more orphaned @shared targets remain.
+%  Performs the cascade delete loop using Rust fast path.
+%  The Rust predicate '$doc':cascade_shared/3 finds all orphaned @shared
+%  instances in a single pass and batch-deletes them.
+%  Iterates until no more orphans are found (Count = 0).
 perform_shared_cascade(Validation, Result) :-
     % Convert validation to transaction (gets a fresh builder)
     validation_objects_to_transaction_objects([Validation], [Transaction]),
-    % Perform cascade deletes on the transaction
+    % Get document context from the transaction (reflects current committed layer)
+    '$doc':get_document_context(Transaction, Context),
+    % Ensure the transaction has an instance builder
+    ensure_transaction_has_builder(instance, Transaction),
+    % Call Rust fast path: finds and deletes all orphans in one pass
+    (   catch(
+            '$doc':cascade_shared(Context, Transaction, Count),
+            Error,
+            (   json_log_warning_formatted(
+                    'Rust cascade_shared failed: ~q', [Error]),
+                fail
+            )
+        )
+    ->  (   Count > 0
+        ->  % Commit the transaction builder to get new layers
+            transaction_objects_to_validation_objects([Transaction], [New_Validation]),
+            % Update the original validation object's instance layer in place
+            update_validation_instance_layer(Validation, New_Validation),
+            % Iterate: deleting @shared docs may orphan further @shared targets
+            perform_shared_cascade(Validation, Result)
+        ;   % Count = 0: no orphans found, cascade complete
+            Result = ok
+        )
+    ;   % Rust call failed — fall back to Prolog cascade
+        perform_shared_cascade_prolog(Validation, Result)
+    ).
+
+%% perform_shared_cascade_prolog(+Validation, -Result)
+%
+%  Fallback: pure Prolog cascade (used if Rust predicate is unavailable).
+perform_shared_cascade_prolog(Validation, Result) :-
+    validation_objects_to_transaction_objects([Validation], [Transaction]),
     empty_assoc(Empty_Visited),
     cascade_shared_deletes(Transaction, Validation, Empty_Visited, Cascade_Result),
     (   Cascade_Result = done
-    ->  % Commit the transaction builder to get new layers
-        transaction_objects_to_validation_objects([Transaction], [New_Validation]),
-        % Update the original validation object's instance layer in place
+    ->  transaction_objects_to_validation_objects([Transaction], [New_Validation]),
         update_validation_instance_layer(Validation, New_Validation),
-        % Check if more orphans were created (recursive cascade)
         (   has_shared_orphans(Validation)
-        ->  perform_shared_cascade(Validation, Result)
+        ->  perform_shared_cascade_prolog(Validation, Result)
         ;   Result = ok
         )
     ;   Result = error(Cascade_Result)

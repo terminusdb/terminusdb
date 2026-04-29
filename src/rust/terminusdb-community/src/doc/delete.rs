@@ -191,6 +191,133 @@ fn has_other_link<L: Layer + Clone>(
     false
 }
 
+/// Cascade-delete orphaned @shared documents.
+///
+/// Designed to be called on a DocumentContext built from the COMMITTED layer
+/// (after initial deletions have been applied). This means triples from already-deleted
+/// documents are no longer visible, and the liveness check can use straightforward
+/// backward traversal.
+///
+/// Algorithm:
+/// 1. Enumerate all instances of @shared types
+/// 2. For each candidate, perform a liveness check: walk backward through incoming
+///    references until we find a non-@shared document (LIVE) or exhaust all paths (ORPHAN)
+/// 3. Collect all orphans in one batch, delete them all
+/// 4. The caller (Prolog) commits the builder and re-invokes until no orphans remain
+///
+/// The liveness check handles:
+/// - Direct references from non-@shared documents (target is live)
+/// - References from other @shared documents (recursively check if referrer is live)
+/// - Self-references and circular @shared chains (visited set prevents infinite loops)
+///
+/// Returns the count of orphaned @shared documents deleted in this pass.
+pub fn cascade_shared_deletes<L: Layer + Clone>(
+    context: &DocumentContext<L>,
+    builder: &mut dyn LayerBuilder,
+) -> usize {
+    let layer = context.layer();
+    let rdf_type = match context.rdf.type_() {
+        Some(id) => id,
+        None => return 0,
+    };
+
+    if context.shared_types.is_empty() {
+        return 0;
+    }
+
+    // Find all orphaned @shared instances in the current layer
+    let mut orphaned: Vec<u64> = Vec::new();
+
+    for &shared_type_id in &context.shared_types {
+        // Find all instances of this @shared type
+        for type_triple in layer.triples_o(shared_type_id) {
+            if type_triple.predicate != rdf_type {
+                continue;
+            }
+            let candidate_id = type_triple.subject;
+
+            // Liveness check: is this @shared target reachable from a non-@shared doc?
+            if !is_shared_target_live(layer, context, rdf_type, candidate_id) {
+                orphaned.push(candidate_id);
+            }
+        }
+    }
+
+    let count = orphaned.len();
+
+    // Delete all orphaned @shared documents
+    for orphan_id in orphaned {
+        delete_id_document(context, builder, orphan_id);
+        unlink_id_document(context, builder, orphan_id);
+    }
+
+    count
+}
+
+/// Check if a @shared target is live (reachable from at least one non-@shared document).
+///
+/// A @shared target is live if:
+/// - Any non-@shared document directly references it, OR
+/// - A @shared document that is itself live references it (recursive)
+///
+/// Uses a visited set for cycle prevention (handles self-referencing and
+/// circular @shared chains — these are all orphaned together).
+fn is_shared_target_live<L: Layer + Clone>(
+    layer: &L,
+    context: &DocumentContext<L>,
+    rdf_type: u64,
+    target_id: u64,
+) -> bool {
+    let mut visited: HashSet<u64> = HashSet::new();
+    is_shared_target_live_inner(layer, context, rdf_type, target_id, &mut visited)
+}
+
+fn is_shared_target_live_inner<L: Layer + Clone>(
+    layer: &L,
+    context: &DocumentContext<L>,
+    rdf_type: u64,
+    target_id: u64,
+    visited: &mut HashSet<u64>,
+) -> bool {
+    visited.insert(target_id);
+
+    // Find all triples pointing to this target
+    for ref_triple in layer.triples_o(target_id) {
+        let source_id = ref_triple.subject;
+
+        // Skip self-references and already-visited nodes (cycle prevention)
+        if source_id == target_id || visited.contains(&source_id) {
+            continue;
+        }
+
+        // Determine the type of the source
+        let source_type = layer.single_triple_sp(source_id, rdf_type).map(|t| t.object);
+
+        match source_type {
+            Some(type_id) if context.shared_types.contains(&type_id) => {
+                // Source is itself @shared — recursively check if IT is live
+                if is_shared_target_live_inner(layer, context, rdf_type, source_id, visited) {
+                    return true;
+                }
+            }
+            Some(_) => {
+                // Source is a non-@shared typed node — target is live!
+                return true;
+            }
+            None => {
+                // Source has no type — could be an internal node (Set, List intermediate).
+                // Walk upward from this untyped node to find its owner.
+                if is_shared_target_live_inner(layer, context, rdf_type, source_id, visited) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // No live path found — target is orphaned
+    false
+}
+
 pub fn unlink_id_document<L: Layer + Clone>(
     context: &DocumentContext<L>,
     builder: &mut dyn LayerBuilder,
@@ -489,7 +616,7 @@ predicates! {
 
     /// Delete multiple JSON documents using pre-computed root IDs from Prolog.
     /// This properly handles layer stacking across multiple transactions.
-    /// 
+    ///
     /// Parameters:
     /// - document_context_term: Document context blob
     /// - transaction_term: Transaction object
@@ -497,9 +624,9 @@ predicates! {
     /// - all_root_ids_term: List of ALL document root IDs (from Prolog's id_triple/4)
     #[module("$doc")]
     semidet fn delete_documents_bulk_with_roots(
-        context, 
-        document_context_term, 
-        transaction_term, 
+        context,
+        document_context_term,
+        transaction_term,
         iris_term,
         all_root_ids_term
     ) {
@@ -508,20 +635,20 @@ predicates! {
             // no layer means nothing to delete.
             return Ok(())
         }
-        
+
         let builder = transaction_instance_builder(context, transaction_term)?;
         if builder.is_none() {
             return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
         }
         let builder = builder.unwrap();
-        
+
         // Parse list of IRIs to delete
         let iris_list: Vec<PrologText> = iris_term.get_ex()?;
-        
+
         // Parse list of all root IDs (from Prolog)
         let all_root_ids_vec: Vec<u64> = all_root_ids_term.get_ex()?;
         let all_root_ids: HashSet<u64> = all_root_ids_vec.into_iter().collect();
-        
+
         // Convert IRIs to internal IDs
         let layer = document_context.layer();
         let mut document_ids = HashSet::new();
@@ -530,16 +657,53 @@ predicates! {
                 document_ids.insert(id);
             }
         }
-        
+
         // Perform bulk deletion with reference counting
         context.try_or_die(builder.with_builder(|builder| {
             delete_multiple_documents_with_roots(
-                &document_context, 
-                &mut **builder, 
+                &document_context,
+                &mut **builder,
                 &document_ids,
                 &all_root_ids
             )
         }))
+    }
+
+    /// Cascade-delete orphaned @shared documents.
+    ///
+    /// Called from Prolog after initial deletions have been committed.
+    /// The DocumentContext is built from the committed layer, so it reflects
+    /// the post-deletion state. Finds all @shared instances that are no longer
+    /// reachable from any non-@shared document and deletes them.
+    ///
+    /// Returns the count of cascade-deleted documents via count_term.
+    /// The caller (Prolog) should commit the builder and re-invoke until count == 0.
+    #[module("$doc")]
+    semidet fn cascade_shared(
+        context,
+        document_context_term,
+        transaction_term,
+        count_term
+    ) {
+        let document_context: DocumentContextBlob = document_context_term.get_ex()?;
+        if document_context.layer.is_none() {
+            count_term.unify(0_u64)?;
+            return Ok(())
+        }
+
+        let builder = transaction_instance_builder(context, transaction_term)?;
+        if builder.is_none() {
+            return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
+        }
+        let builder = builder.unwrap();
+
+        // Perform cascade deletion on the current committed layer
+        let cascaded_count = context.try_or_die(builder.with_builder(|builder| {
+            cascade_shared_deletes(&document_context, &mut **builder)
+        }))?;
+
+        count_term.unify(cascaded_count as u64)?;
+        Ok(())
     }
 }
 
@@ -549,4 +713,5 @@ pub fn register() {
     register_delete_documents_by_type();
     register_delete_all();
     register_delete_documents_bulk_with_roots();
+    register_cascade_shared();
 }
