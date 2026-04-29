@@ -926,9 +926,22 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     schema_is_shared(Schema, Class),
     schema_is_subdocument(Schema, Class),
+    % Find the ancestors providing each conflicting annotation
+    (   schema_class_subsumed(Schema, Class, Shared_Ancestor),
+        is_direct_shared(Schema, Shared_Ancestor)
+    ->  true
+    ;   Shared_Ancestor = Class
+    ),
+    (   schema_class_subsumed(Schema, Class, Subdoc_Ancestor),
+        is_direct_subdocument(Schema, Subdoc_Ancestor)
+    ->  true
+    ;   Subdoc_Ancestor = Class
+    ),
     Witness = witness{ '@type' : incompatible_class_annotations,
                        class: Class,
-                       annotations: ["shared", "subdocument"] }.
+                       annotations: ["shared", "subdocument"],
+                       shared_ancestor: Shared_Ancestor,
+                       subdocument_ancestor: Subdoc_Ancestor }.
 refute_class_oneof(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:oneOf, Choice),

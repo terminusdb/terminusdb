@@ -1760,4 +1760,535 @@ describe('shared-child-annotation', function () {
       })
     })
   })
+
+  // =========================================================================
+  // 12. UPDATE-TRIGGERED CASCADE: FIELD RE-POINT
+  // =========================================================================
+
+  describe('update-triggered cascade: field re-point', function () {
+    before(async function () {
+      agent.dbName = 'test_update_repoint_cascade'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Child',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Parent',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          c: {
+            '@type': 'Optional',
+            '@class': 'Child',
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('re-pointing a field cascades the old target', async function () {
+      // Create two @shared children
+      await document.insert(agent, {
+        instance: [
+          { '@type': 'Child', v: 'a' },
+          { '@type': 'Child', v: 'b' },
+        ],
+      })
+
+      // Parent references Child/a
+      await document.insert(agent, {
+        instance: { '@type': 'Parent', n: 'p1', c: 'Child/a' },
+      })
+
+      // Update Parent/p1 to point to Child/b instead (Child/a loses its last ref)
+      await document.replace(agent, {
+        instance: {
+          '@id': 'Parent/p1',
+          '@type': 'Parent',
+          n: 'p1',
+          c: 'Child/b',
+        },
+      })
+
+      // Child/a should be cascade-deleted (lost its last reference via update)
+      const rA = await document.get(agent, {
+        query: { id: 'Child/a', as_list: true },
+      })
+      expect(rA.body).to.be.an('array').that.is.empty
+
+      // Child/b should still exist (now referenced by Parent/p1)
+      const rB = await document.get(agent, {
+        query: { id: 'Child/b', as_list: true },
+      })
+      expect(rB.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rB.body[0].v).to.equal('b')
+
+      // Parent/p1 should exist with c pointing to Child/b
+      const rP = await document.get(agent, {
+        query: { id: 'Parent/p1', as_list: true },
+      })
+      expect(rP.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rP.body[0].c).to.equal('Child/b')
+    })
+  })
+
+  // =========================================================================
+  // 13. UPDATE-TRIGGERED CASCADE: OPTIONAL FIELD CLEARED
+  // =========================================================================
+
+  describe('update-triggered cascade: Optional field cleared', function () {
+    before(async function () {
+      agent.dbName = 'test_update_optional_cleared'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Note',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Post',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          note: {
+            '@type': 'Optional',
+            '@class': 'Note',
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('clearing an Optional field cascades the target', async function () {
+      // Create a @shared note
+      await document.insert(agent, {
+        instance: { '@type': 'Note', v: 'n1' },
+      })
+
+      // Post references the note
+      await document.insert(agent, {
+        instance: { '@type': 'Post', n: 'post1', note: 'Note/n1' },
+      })
+
+      // Update Post/post1 to clear the note field (omit it entirely)
+      await document.replace(agent, {
+        instance: {
+          '@id': 'Post/post1',
+          '@type': 'Post',
+          n: 'post1',
+          // note field omitted — cleared
+        },
+      })
+
+      // Note/n1 should be cascade-deleted (zero refs remain)
+      const rNote = await document.get(agent, {
+        query: { id: 'Note/n1', as_list: true },
+      })
+      expect(rNote.body).to.be.an('array').that.is.empty
+
+      // Post/post1 should exist with no note field
+      const rPost = await document.get(agent, {
+        query: { id: 'Post/post1', as_list: true },
+      })
+      expect(rPost.body).to.be.an('array').that.has.lengthOf(1)
+      expect(rPost.body[0].n).to.equal('post1')
+      expect(rPost.body[0]).to.not.have.property('note')
+    })
+  })
+
+  // =========================================================================
+  // 14. MULTI-HOP CASCADE VIA CASCADE-REMOVED TRIPLES
+  // =========================================================================
+
+  describe('multi-hop cascade via cascade-removed triples', function () {
+    before(async function () {
+      agent.dbName = 'test_multi_hop_cascade'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Inner',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Outer',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+          inner: 'Inner',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Root',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          outer: 'Outer',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('deleting root cascades through two hops: outer then inner', async function () {
+      // Create the chain: Root → Outer → Inner
+      await document.insert(agent, {
+        instance: { '@type': 'Inner', v: 'i1' },
+      })
+      await document.insert(agent, {
+        instance: { '@type': 'Outer', v: 'o1', inner: 'Inner/i1' },
+      })
+      await document.insert(agent, {
+        instance: { '@type': 'Root', n: 'r1', outer: 'Outer/o1' },
+      })
+
+      // Delete root — cascade should chain: Root → Outer → Inner
+      await document.delete(agent, { query: { id: 'Root/r1' } })
+
+      // Outer/o1 should be deleted (Root held the last ref)
+      const rOuter = await document.get(agent, {
+        query: { id: 'Outer/o1', as_list: true },
+      })
+      expect(rOuter.body).to.be.an('array').that.is.empty
+
+      // Inner/i1 should be deleted (Outer's deletion removed the last ref)
+      const rInner = await document.get(agent, {
+        query: { id: 'Inner/i1', as_list: true },
+      })
+      expect(rInner.body).to.be.an('array').that.is.empty
+
+      // Root/r1 should be deleted
+      const rRoot = await document.get(agent, {
+        query: { id: 'Root/r1', as_list: true },
+      })
+      expect(rRoot.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 15. DUPLICATE SET REFERENCES (same @shared doc appears twice)
+  // =========================================================================
+
+  describe('duplicate Set references — same @shared doc twice', function () {
+    before(async function () {
+      agent.dbName = 'test_duplicate_set_refs'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Tag',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Article',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          tags: {
+            '@type': 'Set',
+            '@class': 'Tag',
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('cascade handles duplicate Set entries correctly', async function () {
+      // Create a @shared tag
+      await document.insert(agent, {
+        instance: { '@type': 'Tag', v: 't1' },
+      })
+
+      // Create article with the same tag referenced twice in the Set
+      // (Sets deduplicate, but the insertion path should handle this gracefully)
+      await document.insert(agent, {
+        instance: { '@type': 'Article', n: 'a1', tags: ['Tag/t1', 'Tag/t1'] },
+      })
+
+      // Delete the article — cascade should handle deduplication gracefully
+      await document.delete(agent, { query: { id: 'Article/a1' } })
+
+      // Tag/t1 should be deleted (no refs remain, not double-deleted or errored)
+      const rTag = await document.get(agent, {
+        query: { id: 'Tag/t1', as_list: true },
+      })
+      expect(rTag.body).to.be.an('array').that.is.empty
+
+      // Article/a1 should be deleted
+      const rArticle = await document.get(agent, {
+        query: { id: 'Article/a1', as_list: true },
+      })
+      expect(rArticle.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 16. CIRCULAR @shared ISLAND (dedicated test)
+  // =========================================================================
+
+  describe('circular @shared island — mutual references', function () {
+    before(async function () {
+      agent.dbName = 'test_circular_island_mutual'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Node',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+          next: {
+            '@type': 'Optional',
+            '@class': 'Node',
+          },
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Holder',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          head: 'Node',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('circular island is fully deleted when holder removed', async function () {
+      // Create two nodes without next refs first (avoid dangling ref on insert)
+      await document.insert(agent, {
+        instance: [
+          { '@type': 'Node', v: 'a' },
+          { '@type': 'Node', v: 'b' },
+        ],
+      })
+
+      // Add circular references via WOQL
+      await woql.post(agent, {
+        '@type': 'And',
+        and: [
+          {
+            '@type': 'AddTriple',
+            subject: { '@type': 'NodeValue', node: 'Node/a' },
+            predicate: { '@type': 'NodeValue', node: 'next' },
+            object: { '@type': 'Value', node: 'Node/b' },
+          },
+          {
+            '@type': 'AddTriple',
+            subject: { '@type': 'NodeValue', node: 'Node/b' },
+            predicate: { '@type': 'NodeValue', node: 'next' },
+            object: { '@type': 'Value', node: 'Node/a' },
+          },
+        ],
+      })
+
+      // Holder provides the external reference to Node/a
+      await document.insert(agent, {
+        instance: { '@type': 'Holder', n: 'h1', head: 'Node/a' },
+      })
+
+      // Delete the holder — removes all external references to the island
+      await document.delete(agent, { query: { id: 'Holder/h1' } })
+
+      // Both nodes should be cascade-deleted (circular island with no external refs)
+      const rA = await document.get(agent, {
+        query: { id: 'Node/a', as_list: true },
+      })
+      expect(rA.body).to.be.an('array').that.is.empty
+
+      const rB = await document.get(agent, {
+        query: { id: 'Node/b', as_list: true },
+      })
+      expect(rB.body).to.be.an('array').that.is.empty
+
+      // Holder should be deleted
+      const rH = await document.get(agent, {
+        query: { id: 'Holder/h1', as_list: true },
+      })
+      expect(rH.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 17. SUBCLASS INHERITS @shared CASCADE
+  // =========================================================================
+
+  describe('subclass inherits @shared cascade', function () {
+    before(async function () {
+      agent.dbName = 'test_subclass_shared_cascade'
+      await db.create(agent)
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'BaseNote',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'SpecialNote',
+          '@inherits': ['BaseNote'],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          extra: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Article',
+          '@key': { '@type': 'Lexical', '@fields': ['n'] },
+          n: 'xsd:string',
+          note: 'BaseNote',
+        },
+      ]
+
+      await document.insert(agent, { schema })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('subclass instance is cascade-deleted via inherited @shared', async function () {
+      // Create a SpecialNote (subclass of BaseNote which has @shared)
+      await document.insert(agent, {
+        instance: { '@type': 'SpecialNote', v: 'sn1', extra: 'bonus data' },
+      })
+
+      // Article references the SpecialNote via the BaseNote-typed field
+      await document.insert(agent, {
+        instance: { '@type': 'Article', n: 'a1', note: 'SpecialNote/sn1' },
+      })
+
+      // Delete the article — should cascade-delete SpecialNote/sn1
+      await document.delete(agent, { query: { id: 'Article/a1' } })
+
+      // SpecialNote/sn1 should be cascade-deleted (inherited @shared)
+      const rNote = await document.get(agent, {
+        query: { id: 'SpecialNote/sn1', as_list: true },
+      })
+      expect(rNote.body).to.be.an('array').that.is.empty
+
+      // Article/a1 should be deleted
+      const rArticle = await document.get(agent, {
+        query: { id: 'Article/a1', as_list: true },
+      })
+      expect(rArticle.body).to.be.an('array').that.is.empty
+    })
+  })
+
+  // =========================================================================
+  // 18. SCHEMA VALIDATION: @subdocument REJECTED ON SUBCLASS OF @shared
+  // =========================================================================
+
+  describe('schema validation: @subdocument rejected on subclass of @shared', function () {
+    before(async function () {
+      agent.dbName = 'test_schema_subdoc_on_shared_subclass'
+      await db.create(agent)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('rejects @subdocument on a subclass of a @shared class', async function () {
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Base',
+          '@shared': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+          v: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Child',
+          '@inherits': ['Base'],
+          '@subdocument': [],
+          '@key': { '@type': 'Lexical', '@fields': ['v'] },
+        },
+      ]
+
+      const r = await document.insert(agent, { schema }).fails()
+      expect(r.status).to.equal(400)
+      expect(JSON.stringify(r.body)).to.include('incompatible_class_annotations')
+    })
+  })
+
+  // =========================================================================
+  // 19. SCHEMA VALIDATION: @shared REJECTED ON SUBCLASS OF @subdocument
+  // =========================================================================
+
+  describe('schema validation: @shared rejected on subclass of @subdocument', function () {
+    before(async function () {
+      agent.dbName = 'test_schema_shared_on_subdoc_subclass'
+      await db.create(agent)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('rejects @shared on a subclass of a @subdocument class', async function () {
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Base',
+          '@subdocument': [],
+          '@key': { '@type': 'Random' },
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Child',
+          '@inherits': ['Base'],
+          '@shared': [],
+          '@key': { '@type': 'Random' },
+        },
+      ]
+
+      const r = await document.insert(agent, { schema }).fails()
+      expect(r.status).to.equal(400)
+      expect(JSON.stringify(r.body)).to.include('incompatible_class_annotations')
+    })
+  })
 })
