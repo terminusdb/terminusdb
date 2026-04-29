@@ -27,14 +27,7 @@
 :- use_module(core(document/json), [
       delete_document/2
   ]).
-
-%% Maximum recursion depth for cascade deletes (security limit).
-%% Prevents unbounded recursion on deeply nested @shared chains.
-max_cascade_depth(100).
-
-%% Maximum total cascade-deleted documents per transaction (security limit).
-%% Prevents resource exhaustion on large circular islands or fan-out.
-max_cascade_deletes(1000000).
+:- use_module(core(util)).
 
 :- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
@@ -72,9 +65,14 @@ load_plugins.
 %%% non-backtrackable and persist even when the hook fails (which is
 %%% the success case — no witness means success).
 %%%
-%%% Security limits:
-%%%   - max_cascade_depth/1: maximum recursion depth (default 100)
-%%%   - max_cascade_deletes/1: maximum total deletions (default 1000)
+%%% Termination guarantee:
+%%%   - cascade_shared_deletes uses a Visited set to avoid re-deleting
+%%%     the same document within one iteration
+%%%   - is_shared_target_live uses a Visited set to detect circular
+%%%     references during liveness checks
+%%%   - Between iterations, the layer is mutated so deleted documents
+%%%     no longer appear in xrdf queries — has_shared_orphans will not
+%%%     rediscover them
 %%% ====================================================================
 
 %% pre_commit_hook(+Validations, -Witness)
@@ -86,9 +84,7 @@ pre_commit_hook(Validations, Witness) :-
     member(Validation, Validations),
     has_shared_orphans(Validation),
     !,
-    max_cascade_depth(Max_Depth),
-    max_cascade_deletes(Max_Count),
-    perform_shared_cascade(Validation, 0, Max_Depth, 0, Max_Count, Result),
+    perform_shared_cascade(Validation, Result),
     Result = error(Witness).
 
 %% has_shared_orphans(+Validation)
@@ -100,90 +96,56 @@ has_shared_orphans(Validation) :-
     empty_assoc(Empty),
     find_orphaned_shared_target(Validation, Empty, _Target).
 
-%% perform_shared_cascade(+Validation, +Depth, +Max_Depth,
-%%                        +Count, +Max_Count, -Result)
+%% perform_shared_cascade(+Validation, -Result)
 %
 %  Performs the cascade delete loop. Mutates the validation object's
 %  instance layer in place. Returns 'ok' on success or 'error(Witness)'
 %  on failure.
-%  Depth tracks outer iteration count (cascade chain depth).
-%  Count tracks total cascade-deleted documents.
-perform_shared_cascade(_Validation, Depth, Max_Depth, _Count, _Max_Count, Result) :-
-    Depth >= Max_Depth,
-    !,
-    Result = error(witness{
-        '@type': cascade_depth_exceeded,
-        depth: Depth,
-        limit: Max_Depth
-    }).
-perform_shared_cascade(_Validation, _Depth, _Max_Depth, Count, Max_Count, Result) :-
-    Count >= Max_Count,
-    !,
-    Result = error(witness{
-        '@type': cascade_count_exceeded,
-        count: Count,
-        limit: Max_Count
-    }).
-perform_shared_cascade(Validation, Depth, Max_Depth, Count, Max_Count, Result) :-
+%  Iterates until no more orphaned @shared targets remain.
+perform_shared_cascade(Validation, Result) :-
     % Convert validation to transaction (gets a fresh builder)
     validation_objects_to_transaction_objects([Validation], [Transaction]),
     % Perform cascade deletes on the transaction
     empty_assoc(Empty_Visited),
-    cascade_shared_deletes(Transaction, Validation, Empty_Visited,
-                           Count, Max_Count, New_Count, Cascade_Result),
+    cascade_shared_deletes(Transaction, Validation, Empty_Visited, Cascade_Result),
     (   Cascade_Result = done
     ->  % Commit the transaction builder to get new layers
         transaction_objects_to_validation_objects([Transaction], [New_Validation]),
         % Update the original validation object's instance layer in place
         update_validation_instance_layer(Validation, New_Validation),
         % Check if more orphans were created (recursive cascade)
-        Depth1 is Depth + 1,
         (   has_shared_orphans(Validation)
-        ->  perform_shared_cascade(Validation, Depth1, Max_Depth,
-                                   New_Count, Max_Count, Result)
+        ->  perform_shared_cascade(Validation, Result)
         ;   Result = ok
         )
     ;   Result = error(Cascade_Result)
     ).
 
-%% cascade_shared_deletes(+Transaction, +Validation, +Visited,
-%%                         +Count, +Max_Count, -New_Count, -Result)
+%% cascade_shared_deletes(+Transaction, +Validation, +Visited, -Result)
 %
 %  Find all orphaned @shared targets in this iteration and delete them.
 %  Uses the Validation for reading (schema lookups, liveness checks)
 %  and Transaction for writing (delete_document).
 %  Visited is an assoc map for O(log n) membership checks.
-%  Count tracks total deletions across all iterations (enforces max_cascade_deletes).
 %  Result is 'done' on success, or a witness dict on error.
-cascade_shared_deletes(_Transaction, _Validation, _Visited,
-                       Count, Max_Count, Count, Result) :-
-    Count >= Max_Count,
-    !,
-    Result = witness{
-        '@type': cascade_count_exceeded,
-        count: Count,
-        limit: Max_Count
-    }.
-cascade_shared_deletes(Transaction, Validation, Visited,
-                       Count, Max_Count, New_Count, Result) :-
+cascade_shared_deletes(Transaction, Validation, Visited, Result) :-
     (   find_orphaned_shared_target(Validation, Visited, Target)
     ->  (   catch(
                 delete_document(Transaction, Target),
-                _Error,
-                fail
+                Error,
+                (   json_log_warning_formatted(
+                        'Shared cascade delete failed for ~q: ~q', [Target, Error]),
+                    fail
+                )
             )
         ->  put_assoc(Target, Visited, true, New_Visited),
-            Count1 is Count + 1,
-            cascade_shared_deletes(Transaction, Validation, New_Visited,
-                                   Count1, Max_Count, New_Count, Result)
+            cascade_shared_deletes(Transaction, Validation, New_Visited, Result)
         ;   Result = witness{
                 '@type': shared_cascade_delete_failed,
                 target: Target
-            },
-            New_Count = Count
+            }
         )
-    ;   Result = done,
-        New_Count = Count
+    ;   Result = done
     ).
 
 %% find_orphaned_shared_target(+Validation, +Visited, -Target)

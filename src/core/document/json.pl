@@ -1738,6 +1738,11 @@ json_schema_predicate_value('@unfold',true,_,_,P,[]) :-
 json_schema_predicate_value('@shared',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:shared, P).
+json_schema_predicate_value('@shared',V,_,_,_,_) :-
+    % Non-list value for @shared — reject with bad_shared_value witness
+    !,
+    throw(error(schema_check_failure([witness{ '@type': bad_shared_value,
+                                               value: V }]),_)).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -1866,6 +1871,15 @@ check_schema_document_restrictions(Elaborated) :-
     global_prefix_expand(sys:subdocument, SubP),
     \+ get_dict(SubP, Elaborated, _),
     !.
+check_schema_document_restrictions(Elaborated) :-
+    % Reject @shared + @subdocument before checking key requirements
+    global_prefix_expand(sys:shared, SharedP),
+    get_dict(SharedP, Elaborated, _),
+    global_prefix_expand(sys:subdocument, SubP2),
+    get_dict(SubP2, Elaborated, _),
+    !,
+    throw(error(schema_check_failure([witness{ '@type': incompatible_class_annotations,
+                                               annotations: ["shared", "subdocument"] }]),_)).
 check_schema_document_restrictions(Elaborated) :-
     global_prefix_expand(sys:abstract, AbsP),
     get_dict(AbsP, Elaborated, _),
@@ -2761,6 +2775,9 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@subdocument',[]) :-
     global_prefix_expand(sys:subdocument,P),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@shared',[]) :-
+    global_prefix_expand(sys:shared,P),
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@unfoldable',[]) :-
     global_prefix_expand(sys:unfoldable,P),

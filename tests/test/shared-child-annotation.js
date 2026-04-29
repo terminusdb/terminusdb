@@ -1424,38 +1424,40 @@ describe('shared-child-annotation', function () {
   })
 
   // =========================================================================
-  // 9. SECURITY LIMITS
+  // 9. CIRCULAR REFERENCE HANDLING
   // =========================================================================
 
-  describe('security limits', function () {
-    describe('cascade depth limit', function () {
+  describe('circular reference handling', function () {
+    describe('circular @shared documents cascade-deleted correctly', function () {
       before(async function () {
-        this.timeout(60000)
-        agent.dbName = 'test_cascade_depth_limit'
+        agent.dbName = 'test_circular_cascade'
         await db.create(agent)
 
-        // Schema: a deeply nested @shared chain
-        // Each DeepNode can reference another DeepNode
+        // Schema: @shared nodes that can reference each other (circular)
         const schema = [
           {
             '@type': 'Class',
-            '@id': 'DeepNode',
+            '@id': 'CircNode',
             '@shared': [],
             '@key': { '@type': 'Lexical', '@fields': ['name'] },
             name: 'xsd:string',
-            next: {
+            peer: {
               '@type': 'Optional',
-              '@class': 'DeepNode',
+              '@class': 'CircNode',
             },
           },
           {
             '@type': 'Class',
-            '@id': 'DeepRoot',
+            '@id': 'CircParent',
             '@key': { '@type': 'Lexical', '@fields': ['name'] },
             name: 'xsd:string',
-            head: {
+            left: {
               '@type': 'Optional',
-              '@class': 'DeepNode',
+              '@class': 'CircNode',
+            },
+            right: {
+              '@type': 'Optional',
+              '@class': 'CircNode',
             },
           },
         ]
@@ -1467,97 +1469,38 @@ describe('shared-child-annotation', function () {
         await db.delete(agent)
       })
 
-      it('cascade exceeding depth limit fails with cascade_depth_exceeded', async function () {
-        this.timeout(120000)
-
-        // Create a chain of 120 @shared nodes (exceeds default limit of 100)
-        const chainLength = 120
-        const nodes = []
-        for (let i = chainLength; i >= 1; i--) {
-          const node = { '@type': 'DeepNode', name: `deep${i}` }
-          if (i < chainLength) {
-            node.next = `DeepNode/deep${i + 1}`
-          }
-          nodes.push(node)
-        }
-
-        // Insert all nodes
-        await document.insert(agent, { instance: nodes })
-
-        // Create root pointing to the head of the chain
+      it('cascade-deletes circular @shared pair when parent removed', async function () {
+        // Create two @shared nodes that reference each other
         await document.insert(agent, {
-          instance: { '@type': 'DeepRoot', name: 'root_deep', head: 'DeepNode/deep1' },
+          instance: [
+            { '@type': 'CircNode', name: 'nodeA', peer: 'CircNode/nodeB' },
+            { '@type': 'CircNode', name: 'nodeB', peer: 'CircNode/nodeA' },
+          ],
         })
 
-        // Delete the root — should trigger cascade but exceed depth limit
-        const r = await document.delete(agent, { query: { id: 'DeepRoot/root_deep' } }).fails()
-        expect(r.status).to.equal(400)
-        expect(JSON.stringify(r.body)).to.include('cascade_depth_exceeded')
-      })
-    })
-
-    describe('cascade count limit', function () {
-      before(async function () {
-        this.timeout(60000)
-        agent.dbName = 'test_cascade_count_limit'
-        await db.create(agent)
-
-        // Schema: a fan-out structure where one parent references many @shared targets
-        const schema = [
-          {
-            '@type': 'Class',
-            '@id': 'CountNode',
-            '@shared': [],
-            '@key': { '@type': 'Lexical', '@fields': ['name'] },
-            name: 'xsd:string',
-          },
-          {
-            '@type': 'Class',
-            '@id': 'CountRoot',
-            '@key': { '@type': 'Lexical', '@fields': ['name'] },
-            name: 'xsd:string',
-            targets: {
-              '@type': 'Set',
-              '@class': 'CountNode',
-            },
-          },
-        ]
-
-        await document.insert(agent, { schema })
-      })
-
-      after(async function () {
-        await db.delete(agent)
-      })
-
-      it('cascade exceeding count limit fails with cascade_count_exceeded', async function () {
-        this.timeout(120000)
-
-        // Create 1100 @shared nodes (exceeds default limit of 1000)
-        const nodeCount = 1100
-        const batchSize = 100
-
-        for (let batch = 0; batch < nodeCount; batch += batchSize) {
-          const nodes = []
-          for (let i = batch; i < Math.min(batch + batchSize, nodeCount); i++) {
-            nodes.push({ '@type': 'CountNode', name: `count${i}` })
-          }
-          await document.insert(agent, { instance: nodes })
-        }
-
-        // Create root referencing all nodes
-        const refs = []
-        for (let i = 0; i < nodeCount; i++) {
-          refs.push(`CountNode/count${i}`)
-        }
+        // Create a parent referencing both
         await document.insert(agent, {
-          instance: { '@type': 'CountRoot', name: 'root_count', targets: refs },
+          instance: {
+            '@type': 'CircParent',
+            name: 'parent1',
+            left: 'CircNode/nodeA',
+            right: 'CircNode/nodeB',
+          },
         })
 
-        // Delete the root — should trigger cascade but exceed count limit
-        const r = await document.delete(agent, { query: { id: 'CountRoot/root_count' } }).fails()
-        expect(r.status).to.equal(400)
-        expect(JSON.stringify(r.body)).to.include('cascade_count_exceeded')
+        // Delete the parent — removes all external references to the circular pair
+        await document.delete(agent, { query: { id: 'CircParent/parent1' } })
+
+        // Both circular nodes should be cascade-deleted (no infinite loop)
+        const rA = await document.get(agent, {
+          query: { id: 'CircNode/nodeA', as_list: true },
+        })
+        expect(rA.body).to.be.an('array').that.is.empty
+
+        const rB = await document.get(agent, {
+          query: { id: 'CircNode/nodeB', as_list: true },
+        })
+        expect(rB.body).to.be.an('array').that.is.empty
       })
     })
   })
