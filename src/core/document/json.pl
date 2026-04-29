@@ -1735,6 +1735,9 @@ json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
 json_schema_predicate_value('@unfold',true,_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfold, P).
+json_schema_predicate_value('@shared',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:shared, P).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -3695,8 +3698,12 @@ schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
     (   schema_is_unfoldable(Schema, Class_Ex)
     ->  Pairs10 = ['@unfoldable'-[]|Pairs9]
     ;   Pairs10 = Pairs9),
+    % Shared
+    (   schema_is_shared(Schema, Class_Ex)
+    ->  Pairs11 = ['@shared'-[]|Pairs10]
+    ;   Pairs11 = Pairs10),
 
-    sort(Pairs10, Sorted_Pairs),
+    sort(Pairs11, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),

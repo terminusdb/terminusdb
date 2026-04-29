@@ -36,6 +36,7 @@ pub struct DocumentContext<L: Layer + Clone> {
     enums: HashMap<u64, String>,
     set_pairs: HashSet<(u64, u64)>,
     value_hashes: HashSet<u64>,
+    shared_types: HashSet<u64>,
     sys_index_ids: Vec<u64>,
 
     rdf: Arc<RdfIds<L>>,
@@ -53,6 +54,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         let mut subtypes: HashMap<String, HashSet<u64>>;
         let mut document_types: HashSet<u64>;
         let unfoldables: HashSet<u64>;
+        let shared_types: HashSet<u64>;
         let mut unfold_pairs: HashSet<(u64, u64)>;
         let mut enums: HashMap<u64, String>;
         let mut set_pairs: HashSet<(u64, u64)>;
@@ -78,6 +80,12 @@ impl<L: Layer + Clone> DocumentContext<L> {
 
             unfoldables = schema_query_context
                 .schema_to_instance_types(instance, schema_unfoldable_ids)
+                .collect();
+
+            // Extract @shared type IDs and translate to instance IDs
+            let schema_shared_ids = schema_query_context.get_shared_ids_from_schema();
+            shared_types = schema_query_context
+                .schema_to_instance_types(instance, schema_shared_ids)
                 .collect();
 
             // Extract field-level @unfold pairs and translate to instance IDs
@@ -156,6 +164,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             subtypes = HashMap::with_capacity(0);
             document_types = HashSet::with_capacity(0);
             unfoldables = HashSet::with_capacity(0);
+            shared_types = HashSet::with_capacity(0);
             unfold_pairs = HashSet::with_capacity(0);
             enums = HashMap::with_capacity(0);
             set_pairs = HashSet::with_capacity(0);
@@ -177,6 +186,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             enums,
             set_pairs,
             value_hashes,
+            shared_types,
             sys_index_ids,
 
             rdf,
@@ -200,6 +210,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             enums: HashMap::with_capacity(0),
             set_pairs: HashSet::with_capacity(0),
             value_hashes: HashSet::with_capacity(0),
+            shared_types: HashSet::with_capacity(0),
             sys_index_ids: Vec::with_capacity(0),
 
             rdf: Arc::new(RdfIds::new(instance.clone())),
