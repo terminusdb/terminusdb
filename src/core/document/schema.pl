@@ -48,6 +48,8 @@
               schema_is_abstract/2,
               schema_concrete_subclass/3,
               schema_is_unfoldable/2,
+              is_shared/2,
+              schema_is_shared/2,
               schema_class_predicate_conjunctive_type/4,
               schema_class_super/3,
               schema_supermap/4,
@@ -620,6 +622,7 @@ is_built_in(P) :-
             sys:subdocument,
             sys:unfoldable,
             sys:unfold,
+            sys:shared,
             sys:metadata
         ],
         List),
@@ -678,6 +681,31 @@ schema_is_unfoldable_tabled(Layer, C) :-
     Schema = [_{read: Layer}],
     schema_class_subsumed(Schema, C, D),
     is_direct_unfoldable(Schema, D).
+
+%% is_shared(+Validation_Object, +C) is nondet.
+%
+%  True if class C (or any superclass of C) is annotated @shared.
+%  @shared documents are regular documents (own IRI, not subdocuments)
+%  that support cascade-delete when their last reference is removed.
+is_direct_shared(Schema, C) :-
+    xrdf(Schema, C, sys:shared, rdf:nil).
+
+is_shared(Validation_Object, C) :-
+    database_schema(Validation_Object, Schema),
+    schema_is_shared(Schema, C).
+
+schema_is_shared(Schema, C) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_is_shared_tabled(Layer, C)
+    ;   schema_class_subsumed(Schema, C, D),
+        is_direct_shared(Schema, D)
+    ).
+
+:- table schema_is_shared_tabled/2 as private.
+schema_is_shared_tabled(Layer, C) :-
+    Schema = [_{read: Layer}],
+    schema_class_subsumed(Schema, C, D),
+    is_direct_shared(Schema, D).
 
 property_is_unfold(Validation_Object, Class, Predicate, Unfold) :-
     database_schema(Validation_Object, Schema),
@@ -879,6 +907,41 @@ refute_class_meta(Validation_Object,Class,Witness) :-
     Witness = witness{ '@type' : bad_unfoldable_value,
                        class: Class,
                        value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:shared, Result),
+    global_prefix_expand(rdf:nil, RDF_Nil),
+    Result \= RDF_Nil,
+    Witness = witness{ '@type' : bad_shared_value,
+                       class: Class,
+                       value: Result }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    xrdf(Schema, Class, sys:shared, rdf:nil),
+    xrdf(Schema, Class, sys:subdocument, rdf:nil),
+    Witness = witness{ '@type' : incompatible_class_annotations,
+                       class: Class,
+                       annotations: ["shared", "subdocument"] }.
+refute_class_meta(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    schema_is_shared(Schema, Class),
+    schema_is_subdocument(Schema, Class),
+    % Find the ancestors providing each conflicting annotation
+    (   schema_class_subsumed(Schema, Class, Shared_Ancestor),
+        is_direct_shared(Schema, Shared_Ancestor)
+    ->  true
+    ;   Shared_Ancestor = Class
+    ),
+    (   schema_class_subsumed(Schema, Class, Subdoc_Ancestor),
+        is_direct_subdocument(Schema, Subdoc_Ancestor)
+    ->  true
+    ;   Subdoc_Ancestor = Class
+    ),
+    Witness = witness{ '@type' : incompatible_class_annotations,
+                       class: Class,
+                       annotations: ["shared", "subdocument"],
+                       shared_ancestor: Shared_Ancestor,
+                       subdocument_ancestor: Subdoc_Ancestor }.
 refute_class_oneof(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),
     xrdf(Schema, Class, sys:oneOf, Choice),
