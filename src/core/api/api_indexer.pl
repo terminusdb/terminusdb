@@ -7,7 +7,8 @@
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
-:- use_module(core(document),[get_document/3, all_class_frames/3]).
+:- use_module(core(document),[get_document/3, all_class_frames/3,
+                              schema_metadata_descriptor/3]).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(core(util)).
@@ -43,17 +44,17 @@ api_check_job(Task_Id, Status) :-
         []).
 
 embedding_type_queries(Commit_Descriptor, TypeQueries) :-
+    open_descriptor(Commit_Descriptor, Transaction),
+    database_schema(Transaction, Schema),
     findall(
         Type-Query-Template,
-        (   ask(Commit_Descriptor,
-                (   t(Embedding, json:query,  Query_Point, schema),
-                    opt(t(Embedding, json:template, Template_Point, schema)),
-                    t(Meta, json:embedding,  Embedding, schema),
-                    t(Type, sys:metadata, Meta, schema))),
-            Query_Point = Query^^xsd:string,
-            (   ground(Template_Point)
-            ->  Template_Point = Template^^_
-            ;   true)),
+        (   xrdf(Schema, Type, sys:metadata, _),
+            schema_metadata_descriptor(Schema, Type, metadata(Metadata)),
+            get_dict(embedding, Metadata, Embedding),
+            get_dict(query, Embedding, Query),
+            (   get_dict(template, Embedding, Template)
+            ->  true
+            ;   Template = none)),
         TypeQueries
     ).
 
