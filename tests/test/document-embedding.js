@@ -92,5 +92,15 @@ describe('document-embedding', function () {
       expect(r.type).to.equal('text/plain')
       expect(r.text).to.include('The animal is named Plato.')
     })
+
+    it('returns 200 text/plain via Accept header', async function () {
+      const r = await document
+        .get(agent, { query: { id: 'Animal/Plato' } })
+        .set('Accept', 'text/plain')
+        .unverified()
+      expect(r.status).to.equal(200)
+      expect(r.type).to.equal('text/plain')
+      expect(r.text).to.include('The animal is named Plato.')
+    })
   })
 })
