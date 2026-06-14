@@ -857,6 +857,17 @@ paths:
       parameters:
         - $ref: '#/components/parameters/resource_path'
         - $ref: '#/components/parameters/graph_type'
+        - name: format
+          in: query
+          required: false
+          description: |
+            Output format for retrieved documents.
+            - `json` (default): Standard JSON document representation
+            - `embedding`: Text/plain rendered embedding string using schema-defined Handlebars template. Requires the document type to have an embedding query defined in `@metadata.embedding`.
+          schema:
+            type: string
+            enum: [json, embedding]
+            default: json
         - name: skip
           in: query
           description: Skip a certain amount of documents

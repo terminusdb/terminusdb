@@ -63,6 +63,7 @@
 
 document_input_format(json).
 document_output_format(json).
+document_output_format(embedding).
 
 detect_input_format(ContentType, Format) :-
     (   re_match('^application/json', ContentType, [])
@@ -105,6 +106,7 @@ accept_to_format(application/json, json).
 accept_to_format(application/'ld+json', jsonld).
 accept_to_format(application/'rdf+xml', rdfxml).
 accept_to_format(text/turtle, turtle).
+accept_to_format(text/plain, embedding).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
@@ -668,7 +670,8 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
     database_context_object(Transaction, SchemaContext),
     database_prefixes(Transaction, InternalPrefixes),
     put_dict(schema_context, Config, SchemaContext, Config1),
-    put_dict(internal_prefixes, Config1, InternalPrefixes, ConfigWithCtx),
+    put_dict(internal_prefixes, Config1, InternalPrefixes, Config2),
+    put_dict(transaction, Config2, Transaction, ConfigWithCtx),
 
     Request = ConfigWithCtx.request,
     document_stream_headers(Format, Request, DataVersion),
@@ -699,6 +702,129 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
 
     document_stream_end(Format, ConfigWithCtx).
 
+% Embedding helpers
+embedding_type_queries_from_transaction(Transaction, TypeQueries) :-
+    database_schema(Transaction, Schema),
+    findall(
+        Type-Query-Template,
+        (   xrdf(Schema, Type, sys:metadata, _),
+            schema_metadata_descriptor(Schema, Type, metadata(Metadata)),
+            get_dict(embedding, Metadata, Embedding),
+            get_dict(query, Embedding, Query),
+            (   get_dict(template, Embedding, Template)
+            ->  true
+            ;   Template = none)),
+        TypeQueries
+    ).
+
+% Normalize a document type IRI to the schema namespace.
+% Some instance documents store rdf:type with the @base prefix;
+% for matching against schema classes we need the @schema prefix.
+normalize_document_type(Transaction, DocType, Normalized) :-
+    database_prefixes(Transaction, Prefixes),
+    (   get_dict('@base', Prefixes, Base),
+        get_dict('@schema', Prefixes, Schema),
+        atom_concat(Base, Local, DocType)
+    ->  atom_concat(Schema, Local, Normalized)
+    ;   Normalized = DocType
+    ).
+
+embedding_document_types(Transaction, _Graph_Type, Id, Ids, Type, Query, DocTypes) :-
+    database_prefixes(Transaction, Prefixes),
+    (   nonvar(Query)
+    ->  expand_query_document(Transaction, Type, Query, _Query_Ex, Type_Ex),
+        (   ground(Type_Ex)
+        ->  prefix_expand(Type_Ex, Prefixes, Expanded),
+          findall(DT, (class_subsumed(Transaction, DT, Expanded),
+                       is_instance_class(Transaction, _, DT)),
+                  DocTypes)
+        ;   findall(DT, is_instance_class(Transaction, _, DT), DocTypes)
+        )
+    ;   ground(Id)
+    ->  findall(Norm,
+                (   ask(Transaction, t(Id, rdf:type, DT),
+                        [compress_prefixes(false)]),
+                    normalize_document_type(Transaction, DT, Norm)),
+                DocTypes)
+    ;   ground(Ids)
+    ->  findall(Norm,
+                (   member(OneId, Ids),
+                    ask(Transaction, t(OneId, rdf:type, DT),
+                        [compress_prefixes(false)]),
+                    normalize_document_type(Transaction, DT, Norm)),
+                DocTypes)
+    ;   ground(Type)
+    ->  prefix_expand(Type, Prefixes, Expanded),
+        findall(DT, (class_subsumed(Transaction, DT, Expanded),
+                     is_instance_class(Transaction, _, DT)),
+                DocTypes)
+    ;   findall(DT, is_instance_class(Transaction, _, DT), DocTypes)
+    ).
+
+% Embedding stream handlers
+document_stream_headers(embedding, Request, DataVersion) :-
+    routes:write_cors_headers(Request),
+    (   DataVersion \= no_data_version
+    ->  routes:write_data_version_header(DataVersion)
+    ;   true
+    ),
+    format("Transfer-Encoding: chunked~n"),
+    format("Content-type: text/plain; charset=UTF-8~n~n").
+
+document_stream_start(embedding, Config, StreamState) :-
+    System_DB = Config.system_db,
+    Transaction = Config.transaction,
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    maplist([Type-Query-_Template, Type-Query]>>true, TypeQueries, Queries),
+    convlist([Type-Query-Template, Type-Template]>>ground(Template),
+             TypeQueries, Templates),
+    all_class_frames(Transaction, Frames,
+                     [compress_ids(true), expand_abstract(true), simple(true)]),
+    '$embedding':embedding_context(System_DB, Transaction, Templates, Queries,
+                                   Frames, EmbeddingContext),
+    StreamState = state(System_DB, Transaction, EmbeddingContext).
+
+document_stream_write(embedding, _Config, StreamState, Document) :-
+    StreamState = state(System_DB, Transaction, EmbeddingContext),
+    get_dict('@type', Document, Type),
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    get_dict('@id', Document, Id),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    '$embedding':embedding_string_for(System_DB, Transaction, EmbeddingContext,
+                                       Type_Ex, Id_Ex, EmbeddingString),
+    format("~w~n", [EmbeddingString]).
+
+document_stream_end(embedding, _Config).
+
+% Embedding selector with full pre-flight
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
+                           Query, Config, Requested_Data_Version,
+                           Actual_Data_Version, _Initial_Goal) :-
+    get_dict(format, Config, embedding),
+    !,
+    die_if(Graph_Type \= instance,
+           error(embedding_only_supported_for_instance_graphs, _)),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type,
+                            Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
+                Transaction),
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    die_if(TypeQueries = [],
+           error(no_embedding_queries_defined, _)),
+    embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
+                             DocTypes),
+    list_to_set(DocTypes, UniqueTypes),
+    forall(
+        member(DocType, UniqueTypes),
+        (   member(SchemaType-_Query-_Template, TypeQueries),
+            class_subsumed(Transaction, DocType, SchemaType)
+        ->  true
+        ;   throw(error(no_embedding_query_for_type(DocType), _))
+        )),
+    put_dict(system_db, Config, System_DB, ConfigWithSystem),
+    format_read_documents(embedding, Transaction, Graph_Type, Id, Ids, Type,
+                        Query, ConfigWithSystem, Actual_Data_Version).
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, _Initial_Goal) :-
@@ -1661,5 +1787,240 @@ test(document_input_format_json) :-
 test(document_output_format_json) :-
     document_output_format(json).
 
+test(document_output_format_embedding) :-
+    document_output_format(embedding).
+
+test(detect_output_format_param_embedding) :-
+    detect_output_format([format=embedding], [], embedding).
+
+test(accept_to_format_text_plain) :-
+    accept_to_format(text/plain, embedding).
+
 :- end_tests(document_format_detection).
+
+:- begin_tests(document_embedding, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document)).
+:- use_module(core(query)).
+
+test(embedding_format_registered) :-
+    document_output_format(embedding).
+
+test(embedding_accept_header) :-
+    accept_to_format(text/plain, embedding).
+
+test(embedding_type_queries_from_transaction, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/world/",
+    "@schema": "http://example.com/schema/worldOntology#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Animal",
+    "@key": { "@type": "Lexical", "@fields": ["name"] },
+    "name": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Animal(id : $id) { name } }",
+        "template": "The animal is named {{name}}."
+      }
+    }
+  }
+]
+', Stream),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    TypeQueries = [_Type-Query-Template],
+    Query = "query($id: ID){ Animal(id : $id) { name } }",
+    Template = "The animal is named {{name}}.".
+
+test(embedding_metadata_stored, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    % Insert a schema with embedding metadata
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/world/",
+    "@schema": "http://example.com/schema/worldOntology#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Animal",
+    "@key": { "@type": "Lexical", "@fields": ["name"] },
+    "name": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Animal(id : $id) { name } }",
+        "template": "The animal is named {{name}}."
+      }
+    }
+  }
+]
+', Stream),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+
+    % Get the transaction and check metadata is stored
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    % Check that @metadata is stored
+    ask(Transaction, t(_Animal, sys:metadata, _Metadata, schema)).
+
+test(embedding_type_queries_empty_when_no_embeddings, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    % Use the default test schema which has no embedding metadata
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    TypeQueries = [].
+
+test(embedding_document_types_single, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    % Insert a schema with embedding metadata
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/world/",
+    "@schema": "http://example.com/schema/worldOntology#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Animal",
+    "@key": { "@type": "Lexical", "@fields": ["name"] },
+    "name": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Animal(id : $id) { name } }",
+        "template": "The animal is named {{name}}."
+      }
+    }
+  }
+]
+', Stream),
+    Options = [author("test"),
+               full_replace(true),
+               graph_type(schema),
+               message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+
+    % Insert an instance document
+    open_string('
+{
+  "@type": "Animal",
+  "name": "Plato"
+}
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                        graph_type(instance),
+                        message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, [Id], InstanceOptions),
+
+    % Test embedding_document_types
+    resolve_absolute_string_descriptor("admin/testdb", TestDB),
+    open_descriptor(TestDB, Transaction),
+
+    embedding_document_types(Transaction, instance, Id, [], _Type, _Query, DocTypes),
+    % This should identify Animal as the document type
+    memberchk('http://example.com/schema/worldOntology#Animal', DocTypes).
+
+test(embedding_api_end_to_end, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert schema with embedding metadata
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, SchemaOptions),
+
+    % Insert instance document
+    open_string('
+{ "@type": "Animal", "name": "Plato" }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, [Id], InstanceOptions),
+
+    % Call the API selector with format=embedding and capture output
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    % Verify the output contains the rendered template
+    once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Plato.")).
+
+:- end_tests(document_embedding).
 

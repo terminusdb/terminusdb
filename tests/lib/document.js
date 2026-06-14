@@ -14,6 +14,7 @@ function commonGetParams (params) {
   result.skip = params.integer('skip')
   result.compress_ids = params.boolean('compress_ids')
   result.prefixed = params.boolean('prefixed')
+  result.format = params.string('format')
   params.assertEmpty()
   return result
 }
