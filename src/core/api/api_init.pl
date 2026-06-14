@@ -601,6 +601,7 @@ test("admin secret defaults to root",
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_parameters)).
+:- use_module(library(http/http_client), [http_read_data/3]).
 :- use_module(library(readutil)).
 
 :- begin_tests(push_driver).
@@ -668,26 +669,26 @@ test("descriptor_graphspec graphspec branch agrees with descriptor branch_name",
     sub_string(GS_String, _, _, 0, Suffix_String).
 
 test("build_push_url with parent_commit includes parent_commit param",
-     [true(URL == 'http://engine:8080/push?domain=admin/db&branch=main&target_commit=head1&parent_commit=prev1')]) :-
+     [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1&parent_commit=prev1')]) :-
     api_indexer:build_push_url("http://engine:8080", "admin/db", "main",
                                "head1", "prev1", URL).
 
 test("build_push_url with none parent omits parent_commit param",
-     [true(URL == 'http://engine:8080/push?domain=admin/db&branch=main&target_commit=head1')]) :-
+     [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1')]) :-
     api_indexer:build_push_url("http://engine:8080", "admin/db", "main",
                                "head1", none, URL).
 
-test("handle_push_response 200 returns task id",
-     [true(Task_Id == "task-abc")]) :-
-    api_indexer:handle_push_response(200, "task-abc", Task_Id).
+test("handle_push_response 200 returns accepted(Task_Id)",
+     [true(Result == accepted("task-abc"))]) :-
+    api_indexer:handle_push_response(200, "task-abc", Result).
+
+test("handle_push_response 409 returns conflict_already_pushed",
+     [true(Result == conflict_already_pushed)]) :-
+    api_indexer:handle_push_response(409, "Conflict", Result).
 
 test("handle_push_response 401 throws loud failure",
      [throws(error(tdb_search_push_failed(401, "Unauthorized"), _))]) :-
     api_indexer:handle_push_response(401, "Unauthorized", _).
-
-test("handle_push_response 409 throws loud failure",
-     [throws(error(tdb_search_push_failed(409, "Conflict"), _))]) :-
-    api_indexer:handle_push_response(409, "Conflict", _).
 
 test("handle_push_response 500 throws loud failure",
      [throws(error(tdb_search_push_failed(500, "Internal error"), _))]) :-
@@ -735,6 +736,8 @@ test("io_index_branch refuses when backend is none",
 :- dynamic stub_received/2.   % stub_received(Key, Data)
 :- dynamic stub_last_indexed_response/1.  % the JSON to return from /last-indexed
 :- dynamic stub_push_call_count/1.  % tracks the number of pushes received
+:- dynamic stub_check_response/2.   % stub_check_response(Task_Id, json_string)
+:- dynamic stub_push_response_override/1.  % stub_push_response_override(status(Code))
 
 % Start stub server on a fixed test port.
 % Uses port 19876 (high, unlikely to conflict with other services).
@@ -745,6 +748,8 @@ start_push_stub(Port) :-
     retractall(stub_received(_, _)),
     retractall(stub_last_indexed_response(_)),
     retractall(stub_push_call_count(_)),
+    retractall(stub_check_response(_, _)),
+    retractall(stub_push_response_override(_)),
     assertz(stub_push_call_count(0)),
     http_server(http_dispatch, [port(Port), workers(1)]).
 
@@ -752,11 +757,14 @@ stop_push_stub(Port) :-
     http_stop_server(Port, []),
     retractall(stub_received(_, _)),
     retractall(stub_last_indexed_response(_)),
-    retractall(stub_push_call_count(_)).
+    retractall(stub_push_call_count(_)),
+    retractall(stub_check_response(_, _)),
+    retractall(stub_push_response_override(_)).
 
 % Stub handlers registered via http_handler directives below.
 :- http_handler('/last-indexed', push_stub_last_indexed, []).
 :- http_handler('/push', push_stub_push, [methods([post])]).
+:- http_handler('/check', push_stub_check, []).
 
 push_stub_last_indexed(Request) :-
     (   memberchk(search(Search), Request)
@@ -798,7 +806,7 @@ push_stub_push(Request) :-
     ->  assertz(stub_received(push_auth, basic(User, Secret)))
     ;   true
     ),
-    % Record the request body (read it fully for the test)
+    % Record the request body using http_read_data for chunked body support.
     (   memberchk(input(In), Request)
     ->  read_string(In, _, Body),
         assertz(stub_received(push_body(N1), Body))
@@ -809,9 +817,44 @@ push_stub_push(Request) :-
     ->  assertz(stub_received(push_chunked, true))
     ;   true
     ),
-    % Return a task id (200)
-    format("Content-Type: text/plain~n~n"),
-    format("task-stub-~w", [N1]).
+    % Auto-register a "Complete" check response for this task (for await tests)
+    format(atom(Task_Id), "task-stub-~w", [N1]),
+    format(atom(CheckJson), '{"status":"Complete","task_id":"~w"}', [Task_Id]),
+    assertz(stub_check_response(Task_Id, CheckJson)),
+    % Return response: check for override (409) or default (200 + task id)
+    (   stub_push_response_override(status(Override_Code))
+    ->  format("Status: ~w~n", [Override_Code]),
+        format("Content-Type: text/plain~n~n"),
+        format("Conflict")
+    ;   format("Content-Type: text/plain~n~n"),
+        write(Task_Id)
+    ).
+
+% ---- /check handler: returns pre-configured check response for task id ----
+push_stub_check(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    % SWI HTTP delivers query params as atoms — coerce for lookup.
+    (   memberchk(task_id=Task_Id_Raw, Search)
+    ->  (   atom(Task_Id_Raw)
+        ->  atom_string(Task_Id_Raw, Task_Id_Str),
+            atom_string(Task_Id, Task_Id_Str)
+        ;   Task_Id = Task_Id_Raw
+        )
+    ;   Task_Id = unknown
+    ),
+    % Find the pre-registered response for this task id (string key).
+    atom_string(Task_Id, Task_Id_Key),
+    (   stub_check_response(Task_Id_Key, ResponseJson)
+    ->  format("Content-Type: application/json~n~n"),
+        write(ResponseJson)
+    ;   % No response registered — return 404
+        format("Status: 404~n"),
+        format("Content-Type: text/plain~n~n"),
+        format("Task not found: ~w", [Task_Id])
+    ).
 
 % ---- Full-flow integration test: null commit → full index ----
 % Uses the real embedding FFI (available in base_community build stage).
@@ -1050,5 +1093,198 @@ test("normalise_commit_value coerces atom to string",
 test("normalise_commit_value passes through strings",
      [true(Result == "def456")]) :-
     api_indexer:normalise_commit_value("def456", Result).
+
+% ---- build_push_url encoding: reserved characters ----
+
+test("build_push_url encodes slash in domain path",
+     [true(URL == 'http://engine:8080/push?domain=org%2fdb%2flocal%2fbranch%2fmain&branch=main&target_commit=c1')]) :-
+    api_indexer:build_push_url("http://engine:8080", "org/db/local/branch/main",
+                               "main", "c1", none, URL).
+
+test("build_push_url encodes ampersand and equals in branch name",
+     [true(sub_atom(URL, _, _, _, 'branch=a%26b%3dc'))]) :-
+    api_indexer:build_push_url("http://engine:8080", "d", "a&b=c",
+                               "c1", none, URL).
+
+% ---- build_last_indexed_url encoding tests ----
+
+test("build_last_indexed_url encodes slash in domain",
+     [true(URL == 'http://engine:8080/last-indexed?domain=admin%2fdb&branch=main')]) :-
+    api_indexer:build_last_indexed_url("http://engine:8080", "admin/db", "main", URL).
+
+test("build_last_indexed_url encodes special chars in branch",
+     [true(sub_atom(URL, _, _, _, 'branch=feat%2fx'))]) :-
+    api_indexer:build_last_indexed_url("http://engine:8080", "d", "feat/x", URL).
+
+% ---- io_await_task_completion tests (with stub /check endpoint) ----
+
+test("io_await_task_completion succeeds when check returns Complete",
+     [ setup((push_stub_port(Port),
+              start_push_stub(Port),
+              % Pre-register a Complete response for task-test-1
+              assertz(stub_check_response("task-test-1",
+                  '{"status":"Complete","task_id":"task-test-1"}'))
+             )),
+       cleanup(stop_push_stub(Port))
+     ]) :-
+    push_stub_port(Port),
+    format(atom(Endpoint), "http://127.0.0.1:~w", [Port]),
+    api_indexer:io_await_task_completion(Endpoint, "task-test-1").
+
+test("io_await_task_completion throws when task not found (404 from check)",
+     [ setup((push_stub_port(Port),
+              start_push_stub(Port)
+             )),
+       cleanup(stop_push_stub(Port)),
+       throws(error(tdb_search_task_failed("task-nonexistent", _), _))
+     ]) :-
+    push_stub_port(Port),
+    format(atom(Endpoint), "http://127.0.0.1:~w", [Port]),
+    % No check response registered for this task id.
+    % The handler returns 404 which interpret_check_response maps to
+    % error(Body_String). io_await_task_completion_ then throws
+    % tdb_search_task_failed.
+    api_indexer:io_await_task_completion(Endpoint, "task-nonexistent").
+
+% ---- interpret_check_response atom/string normalisation (CLASS A) ----
+
+test("interpret_check_response handles string 'Complete' from atom_json_dict",
+     [true(Status == complete)]) :-
+    % Simulate atom_json_dict returning a string "Complete" value
+    api_indexer:interpret_check_response(200, '{"status":"Complete"}', Status).
+
+test("interpret_check_response handles string 'Pending' from atom_json_dict",
+     [true(Status == pending)]) :-
+    api_indexer:interpret_check_response(200, '{"status":"Pending"}', Status).
+
+test("interpret_check_response 500 returns error term",
+     [true(Status == error("server crashed"))]) :-
+    api_indexer:interpret_check_response(500, "server crashed", Status).
+
+% ============================================================================
+% validate_index_path — Pure predicate test matrix (CLASS C proper fix)
+%
+% Contract: ACCEPT 2-seg "org/db" and 5-seg "org/db/repo/branch/<name>" or
+%           "org/db/repo/commit/<id>". REJECT everything else with a clear error
+%           BEFORE any descriptor resolution or network I/O.
+% ============================================================================
+
+% ---- Accepted paths ----
+
+test("validate_index_path accepts 2-segment path (org/db)") :-
+    api_indexer:validate_index_path("admin/testdb").
+
+test("validate_index_path accepts 5-segment branch path") :-
+    api_indexer:validate_index_path("admin/testdb/local/branch/main").
+
+test("validate_index_path accepts 5-segment commit path") :-
+    api_indexer:validate_index_path("admin/testdb/local/commit/abc123").
+
+test("validate_index_path accepts atom input") :-
+    api_indexer:validate_index_path('org/db').
+
+test("validate_index_path accepts 5-segment with unusual branch name") :-
+    api_indexer:validate_index_path("org/db/local/branch/feat-x").
+
+% ---- Rejected paths ----
+
+test("validate_index_path rejects 1-segment path",
+     [throws(error(invalid_index_path(_, wrong_segment_count(1, expected_2_or_5)), _))]) :-
+    api_indexer:validate_index_path("onlyone").
+
+test("validate_index_path rejects 3-segment path",
+     [throws(error(invalid_index_path(_, wrong_segment_count(3, expected_2_or_5)), _))]) :-
+    api_indexer:validate_index_path("admin/testdb/local").
+
+test("validate_index_path rejects 4-segment path",
+     [throws(error(invalid_index_path(_, wrong_segment_count(4, expected_2_or_5)), _))]) :-
+    api_indexer:validate_index_path("admin/testdb/local/branch").
+
+test("validate_index_path rejects 6-segment path",
+     [throws(error(invalid_index_path(_, wrong_segment_count(6, expected_2_or_5)), _))]) :-
+    api_indexer:validate_index_path("admin/db/local/branch/main/extra").
+
+test("validate_index_path rejects 5-segment with bad segment-4 (not branch/commit)",
+     [throws(error(invalid_index_path(_, bad_segment_4(_, expected_branch_or_commit)), _))]) :-
+    api_indexer:validate_index_path("admin/db/local/tag/v1.0").
+
+test("validate_index_path rejects _meta path (3-segment system form)",
+     [throws(error(invalid_index_path(_, wrong_segment_count(3, expected_2_or_5)), _))]) :-
+    api_indexer:validate_index_path("admin/db/_meta").
+
+test("validate_index_path rejects empty string",
+     [throws(error(invalid_index_path(_, wrong_segment_count(0, expected_2_or_5)), _))]) :-
+    api_indexer:validate_index_path("").
+
+% ============================================================================
+% io_index_branch rejection integration tests (CLASS C)
+%
+% These tests verify that invalid paths are REJECTED before any network I/O.
+% They set the backend to http_tdb_search with endpoint on port 9999 (unused)
+% to prove that if validation passes incorrectly, the test would hang/fail on
+% connection refused — but validation rejects FIRST.
+% ============================================================================
+
+test("io_index_branch rejects 3-segment path before any I/O",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_indexer_env),
+       throws(error(invalid_index_path("admin/testdb/local",
+                        wrong_segment_count(3, expected_2_or_5)), _))
+     ]) :-
+    io_index_branch(_, _, "admin/testdb/local").
+
+test("io_index_branch rejects 4-segment path before any I/O",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_indexer_env),
+       throws(error(invalid_index_path("admin/testdb/local/branch",
+                        wrong_segment_count(4, expected_2_or_5)), _))
+     ]) :-
+    io_index_branch(_, _, "admin/testdb/local/branch").
+
+test("io_index_branch rejects _meta path before any I/O",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_indexer_env),
+       throws(error(invalid_index_path("admin/db/_meta",
+                        wrong_segment_count(3, expected_2_or_5)), _))
+     ]) :-
+    io_index_branch(_, _, "admin/db/_meta").
+
+test("io_index_branch rejects 5-segment with bad segment-4 before any I/O",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_indexer_env),
+       throws(error(invalid_index_path("admin/db/local/tag/v1",
+                        bad_segment_4(_, expected_branch_or_commit)), _))
+     ]) :-
+    io_index_branch(_, _, "admin/db/local/tag/v1").
+
+% ---- io_push_delta rejection tests (same pattern) ----
+
+test("io_push_delta rejects 3-segment path before any I/O",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_indexer_env),
+       throws(error(invalid_index_path("admin/testdb/local",
+                        wrong_segment_count(3, expected_2_or_5)), _))
+     ]) :-
+    io_push_delta(_, _, "admin/testdb/local", "main").
+
+test("io_push_delta rejects _meta path before any I/O",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_indexer_env),
+       throws(error(invalid_index_path("admin/db/_meta",
+                        wrong_segment_count(3, expected_2_or_5)), _))
+     ]) :-
+    io_push_delta(_, _, "admin/db/_meta", "main").
 
 :- end_tests(push_driver).
