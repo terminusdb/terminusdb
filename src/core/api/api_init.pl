@@ -12,9 +12,18 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util)).
+:- use_module(core(util/test_utils),
+             [setup_temp_store/1, teardown_temp_store/1,
+              create_db_without_schema/2, create_db_with_empty_schema/2]).
+:- use_module(core(api/api_document), [api_insert_documents/8]).
+:- use_module(core(api/db_branch), [branch_create/5]).
 :- use_module(core(document)).
-:- use_module(core(query), [expand/2, default_prefixes/1, create_context/3]).
-:- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(query), [expand/2, default_prefixes/1, create_context/3,
+                            resolve_absolute_string_descriptor/2,
+                            ask/2]).
+:- use_module(core(transaction), [open_descriptor/2, with_transaction/3]).
+:- use_module(core(transaction/ref_entity),
+             [branch_head_commit/3, commit_id_uri/3]).
 :- use_module(core(account), [generate_password_hash/2]).
 
 :- use_module(config(terminus_config)).
@@ -22,6 +31,7 @@
 :- use_module(library(semweb/turtle)).
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
+:- use_module(library(http/http_authenticate), [http_authorization_data/2]).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
@@ -407,3 +417,638 @@ test("TERMINUSDB_SERVER_DB_PATH=/absolute/path",
     config:default_database_path(DB_Path).
 
 :- end_tests(env_vars).
+
+% --------------------------------------------------------------------------
+% Shared test helper: reset indexer env to a clean state.
+%
+% Lives at MODULE level (not inside any begin_tests/end_tests block) so it is
+% accessible from ALL test suites in this file — both indexer_backend_selector
+% and push_driver use it in setup/cleanup.
+%
+% SYMMETRIC WITH clear_indexer_backend_config/0 in terminus_config.pl:
+% that predicate abolishes ALL five tabled predicates (indexer_backend,
+% tdb_search_endpoint, semantic_indexer_endpoint, tdb_search_admin_user,
+% tdb_search_admin_secret). This predicate unsets the CORRESPONDING env
+% vars so the tables, once cleared, don't re-read stale leaked values.
+% Keep both predicates in sync — see terminus_config.pl:443-448.
+% --------------------------------------------------------------------------
+clean_indexer_env :-
+    clear_indexer_backend_config,
+    unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+    unsetenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT'),
+    unsetenv('TERMINUSDB_TDB_SEARCH_ENDPOINT'),
+    unsetenv('TERMINUSDB_SEARCH_ADMIN_USER'),
+    unsetenv('TERMINUSDB_SEARCH_ADMIN_SECRET').
+
+:- begin_tests(indexer_backend_selector).
+
+/*
+ * Semantic-indexer backend selector (Spec 16 §2.3 / RISK-17). These tests live
+ * here rather than in terminus_config.pl because config is loaded before
+ * set_test_options(load(always)) during bootstrap, so plunit blocks placed in
+ * it are discarded (same reason the insecure-user-header config tests live in
+ * this module).
+ *
+ * The selector predicates are tabled and read process env vars, so every test
+ * clears the tables (clear_indexer_backend_config) and unsets BOTH endpoint
+ * vars in setup and cleanup, guaranteeing each test starts from a clean,
+ * fully-unset configuration regardless of host env or test ordering.
+ */
+
+test("default backend is none when unset",
+     [ setup(clean_indexer_env),
+       cleanup(clean_indexer_env),
+       true(Backend == none)
+     ]) :-
+    indexer_backend(Backend).
+
+test("none with no endpoints set passes the startup check",
+     [ setup(clean_indexer_env),
+       cleanup(clean_indexer_env)
+     ]) :-
+    check_indexer_backend_config.
+
+test("explicit none with no endpoints passes the startup check",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env)
+     ]) :-
+    check_indexer_backend_config.
+
+test("unknown backend value fails loud",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', wibble))),
+       cleanup(clean_indexer_env),
+       throws(error(bad_env_var_value('TERMINUSDB_INDEXER_BACKEND', wibble), _))
+     ]) :-
+    indexer_backend(_).
+
+test("unknown backend value refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', nonsense))),
+       cleanup(clean_indexer_env),
+       throws(error(bad_env_var_value('TERMINUSDB_INDEXER_BACKEND', nonsense), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("http_vectorlink with its endpoint resolves and passes the check",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_indexer_env),
+       true(Backend == http_vectorlink)
+     ]) :-
+    check_indexer_backend_config,
+    indexer_backend(Backend).
+
+test("http_tdb_search with its endpoint resolves and passes the check",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
+       cleanup(clean_indexer_env),
+       true(Endpoint == 'http://tdb-search:8080')
+     ]) :-
+    check_indexer_backend_config,
+    tdb_search_endpoint(Endpoint).
+
+test("http_vectorlink without its endpoint refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_incomplete(http_vectorlink, _), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("http_tdb_search without its endpoint refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_incomplete(http_tdb_search, _), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("none with legacy endpoint set is ambiguous and refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_ambiguous(none, _), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("none with tdb-search endpoint set is ambiguous and refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_ambiguous(none, _), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("http_vectorlink with both endpoints set is ambiguous and refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_ambiguous(http_vectorlink, _), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("http_tdb_search with both endpoints set is ambiguous and refuses startup",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_ambiguous(http_tdb_search, _), _))
+     ]) :-
+    check_indexer_backend_config.
+
+test("admin user defaults to admin",
+     [ setup((clean_indexer_env,
+              unsetenv('TERMINUSDB_SEARCH_ADMIN_USER'))),
+       cleanup((clean_indexer_env,
+                clear_indexer_backend_config)),
+       true(User == admin)
+     ]) :-
+    tdb_search_admin_user(User).
+
+test("admin secret defaults to root",
+     [ setup((clean_indexer_env,
+              unsetenv('TERMINUSDB_SEARCH_ADMIN_SECRET'))),
+       cleanup((clean_indexer_env,
+                clear_indexer_backend_config)),
+       true(Secret == root)
+     ]) :-
+    tdb_search_admin_secret(Secret).
+
+:- end_tests(indexer_backend_selector).
+
+% ==========================================================================
+% Phase 6 T3 — Push driver unit tests.
+%
+% Tests the pure logic + backend gates of the push driver (io_push_delta,
+% io_index_branch). The full integration test (streaming NDJSON through
+% to a real tdb-search engine) is T6 scope and runs against the compose
+% stack. These unit tests verify:
+%   - path_to_domain/2 extraction
+%   - build_push_url/6 URL construction
+%   - handle_push_response/3 error surfacing
+%   - Backend gate enforcement (wrong backend → fail loud)
+%   - Full push flow with a stub HTTP server (chunked stream verification)
+% ==========================================================================
+
+:- use_module(core(api/api_indexer)).
+:- use_module(library(http/thread_httpd)).
+:- use_module(library(http/http_dispatch)).
+:- use_module(library(http/http_parameters)).
+:- use_module(library(readutil)).
+
+:- begin_tests(push_driver).
+
+% ---- Pure logic tests ----
+
+test("path_to_domain extracts org/db from short path",
+     [true(Domain == 'admin/testdb')]) :-
+    api_indexer:path_to_domain("admin/testdb", Domain).
+
+test("path_to_domain extracts org/db from full branch path",
+     [true(Domain == 'myorg/mydb')]) :-
+    api_indexer:path_to_domain("myorg/mydb/local/branch/main", Domain).
+
+test("path_to_domain extracts org/db from commit path",
+     [true(Domain == 'org/db')]) :-
+    api_indexer:path_to_domain("org/db/local/commit/abc123", Domain).
+
+test("path_to_domain fails on single-segment path",
+     [throws(error(invalid_path_for_domain(_), _))]) :-
+    api_indexer:path_to_domain("onlyone", _).
+
+test("path_to_domain fails on empty path",
+     [throws(error(invalid_path_for_domain(_), _))]) :-
+    api_indexer:path_to_domain("", _).
+
+% ---- descriptor_graphspec tests: full graphspec from resolved descriptor ----
+
+test("descriptor_graphspec produces full graphspec for main branch",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State)),
+       true(GraphSpec == 'admin/testdb/local/branch/main')
+     ]) :-
+    create_db_without_schema("admin", "testdb"),
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    api_indexer:descriptor_graphspec(Descriptor, GraphSpec).
+
+test("descriptor_graphspec produces full graphspec for feature branch",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State)),
+       true(GraphSpec == 'admin/testdb/local/branch/feature-x')
+     ]) :-
+    create_db_without_schema("admin", "testdb"),
+    % Create a feature branch using the branch_create API.
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    branch_create(System_DB, Auth,
+                  "admin/testdb/local/branch/feature-x",
+                  branch("admin/testdb"), _),
+    resolve_absolute_string_descriptor("admin/testdb/local/branch/feature-x", FeatureDesc),
+    api_indexer:descriptor_graphspec(FeatureDesc, GraphSpec).
+
+test("descriptor_graphspec graphspec branch agrees with descriptor branch_name",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    create_db_without_schema("admin", "testdb2"),
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor),
+    branch_descriptor{branch_name: Branch} :< Descriptor,
+    api_indexer:descriptor_graphspec(Descriptor, GraphSpec),
+    % The graphspec must end with the branch name — single source of truth.
+    atom_string(GraphSpec, GS_String),
+    format(atom(Expected_Suffix), "/branch/~w", [Branch]),
+    atom_string(Expected_Suffix, Suffix_String),
+    sub_string(GS_String, _, _, 0, Suffix_String).
+
+test("build_push_url with parent_commit includes parent_commit param",
+     [true(URL == 'http://engine:8080/push?domain=admin/db&branch=main&target_commit=head1&parent_commit=prev1')]) :-
+    api_indexer:build_push_url("http://engine:8080", "admin/db", "main",
+                               "head1", "prev1", URL).
+
+test("build_push_url with none parent omits parent_commit param",
+     [true(URL == 'http://engine:8080/push?domain=admin/db&branch=main&target_commit=head1')]) :-
+    api_indexer:build_push_url("http://engine:8080", "admin/db", "main",
+                               "head1", none, URL).
+
+test("handle_push_response 200 returns task id",
+     [true(Task_Id == "task-abc")]) :-
+    api_indexer:handle_push_response(200, "task-abc", Task_Id).
+
+test("handle_push_response 401 throws loud failure",
+     [throws(error(tdb_search_push_failed(401, "Unauthorized"), _))]) :-
+    api_indexer:handle_push_response(401, "Unauthorized", _).
+
+test("handle_push_response 409 throws loud failure",
+     [throws(error(tdb_search_push_failed(409, "Conflict"), _))]) :-
+    api_indexer:handle_push_response(409, "Conflict", _).
+
+test("handle_push_response 500 throws loud failure",
+     [throws(error(tdb_search_push_failed(500, "Internal error"), _))]) :-
+    api_indexer:handle_push_response(500, "Internal error", _).
+
+% ---- Backend gate tests ----
+
+test("io_push_delta refuses when backend is not http_tdb_search",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_not_tdb_search(io_push_delta), _))
+     ]) :-
+    io_push_delta(_, _, "admin/testdb", "main").
+
+test("io_push_delta refuses when backend is http_vectorlink",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy:8080'))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_not_tdb_search(io_push_delta), _))
+     ]) :-
+    io_push_delta(_, _, "admin/testdb", "main").
+
+test("io_index_branch refuses when backend is none",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(indexer_backend_not_tdb_search(io_index_branch), _))
+     ]) :-
+    io_index_branch(_, _, "admin/testdb").
+
+% ---- Stub HTTP server for full-flow tests ----
+%
+% These tests start a local HTTP stub that mimics tdb-search's
+% /last-indexed and /push endpoints, then drive io_push_delta against
+% a real temp-store database. They verify:
+%   - Correct /last-indexed handshake
+%   - Chunked NDJSON streaming (Transfer-Encoding: chunked on the request)
+%   - Correct URL parameters (domain, branch, target_commit, parent_commit)
+%   - HTTP Basic auth header sent correctly
+%   - Nothing-to-push case (engine already at HEAD)
+
+% Global state for the stub — records what the stub received.
+:- dynamic stub_received/2.   % stub_received(Key, Data)
+:- dynamic stub_last_indexed_response/1.  % the JSON to return from /last-indexed
+:- dynamic stub_push_call_count/1.  % tracks the number of pushes received
+
+% Start stub server on a fixed test port.
+% Uses port 19876 (high, unlikely to conflict with other services).
+push_stub_port(19876).
+
+start_push_stub(Port) :-
+    push_stub_port(Port),
+    retractall(stub_received(_, _)),
+    retractall(stub_last_indexed_response(_)),
+    retractall(stub_push_call_count(_)),
+    assertz(stub_push_call_count(0)),
+    http_server(http_dispatch, [port(Port), workers(1)]).
+
+stop_push_stub(Port) :-
+    http_stop_server(Port, []),
+    retractall(stub_received(_, _)),
+    retractall(stub_last_indexed_response(_)),
+    retractall(stub_push_call_count(_)).
+
+% Stub handlers registered via http_handler directives below.
+:- http_handler('/last-indexed', push_stub_last_indexed, []).
+:- http_handler('/push', push_stub_push, [methods([post])]).
+
+push_stub_last_indexed(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    % Record what we received for test assertions
+    assertz(stub_received(last_indexed, Search)),
+    % Check auth — SWI HTTP dispatch provides authorization(Text), not parsed.
+    (   memberchk(authorization(AuthText), Request),
+        http_authorization_data(AuthText, basic(User, Secret))
+    ->  assertz(stub_received(last_indexed_auth, basic(User, Secret)))
+    ;   true
+    ),
+    % Return the configured response
+    (   stub_last_indexed_response(ResponseJson)
+    ->  true
+    ;   ResponseJson = '{"branch":"main","commit":null,"version":0}'
+    ),
+    format("Content-Type: application/json~n~n"),
+    write(ResponseJson).
+
+push_stub_push(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    % Increment call counter and record this push with its index.
+    retract(stub_push_call_count(N)),
+    N1 is N + 1,
+    assertz(stub_push_call_count(N1)),
+    % Record URL params indexed by call number (for multi-push tests).
+    assertz(stub_received(push_params(N1), Search)),
+    % Also record unindexed for simpler single-push assertions.
+    assertz(stub_received(push_params, Search)),
+    % Check auth
+    (   memberchk(authorization(AuthText), Request),
+        http_authorization_data(AuthText, basic(User, Secret))
+    ->  assertz(stub_received(push_auth, basic(User, Secret)))
+    ;   true
+    ),
+    % Record the request body (read it fully for the test)
+    (   memberchk(input(In), Request)
+    ->  read_string(In, _, Body),
+        assertz(stub_received(push_body(N1), Body))
+    ;   true
+    ),
+    % Check Transfer-Encoding
+    (   memberchk(transfer_encoding(chunked), Request)
+    ->  assertz(stub_received(push_chunked, true))
+    ;   true
+    ),
+    % Return a task id (200)
+    format("Content-Type: text/plain~n~n"),
+    format("task-stub-~w", [N1]).
+
+% ---- Full-flow integration test: null commit → full index ----
+% Uses the real embedding FFI (available in base_community build stage).
+% Schema fixture follows the pattern from commit 3ee8b803 (document-embedding
+% test): a class with @metadata.embedding.{query,template} which produces
+% the json:embedding / json:query / json:template triples that
+% embedding_type_queries/2 reads from the schema graph.
+test("io_push_delta full index when engine returns null commit",
+     [ setup((setup_temp_store(State),
+              create_db_with_empty_schema("admin", "testdb"),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % Insert schema with embedding metadata (GraphQL query + Handlebars template).
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    open_string('[
+      { "@type": "@context",
+        "@base": "terminusdb:///data/",
+        "@schema": "terminusdb:///schema#" },
+      { "@type": "Class",
+        "@id": "Animal",
+        "@key": { "@type": "Lexical", "@fields": ["name"] },
+        "name": "xsd:string",
+        "@metadata": {
+          "embedding": {
+            "query": "query($id: ID){ Animal(id: $id) { name } }",
+            "template": "The animal is named {{name}}."
+          }
+        }
+      }
+    ]', SchemaStream),
+    api_insert_documents(System_DB, Auth, "admin/testdb", SchemaStream,
+                         no_data_version, _, _,
+                         [author("test"), full_replace(true),
+                          graph_type(schema), message("add embedding schema")]),
+    % Insert an instance document to produce a meaningful commit.
+    open_string('{ "@type": "Animal", "name": "Plato" }', InstanceStream),
+    api_insert_documents(System_DB, Auth, "admin/testdb", InstanceStream,
+                         no_data_version, _, _,
+                         [author("test"), graph_type(instance),
+                          message("add animal")]),
+    % Configure stub to return null commit (unindexed branch)
+    retractall(stub_last_indexed_response(_)),
+    assertz(stub_last_indexed_response('{"branch":"main","commit":null,"version":0}')),
+    % Drive the push
+    io_push_delta(System_DB, Auth, "admin/testdb", "main"),
+    % Verify the stub received the correct /last-indexed call.
+    % Domain is the FULL graphspec (org/db/repo/branch/<name>) derived from
+    % the resolved descriptor — NOT truncated org/db.
+    stub_received(last_indexed, Last_Indexed_Search),
+    memberchk(domain='admin/testdb/local/branch/main', Last_Indexed_Search),
+    memberchk(branch=main, Last_Indexed_Search),
+    % Verify push was called with correct params
+    stub_received(push_params, Push_Search),
+    memberchk(domain='admin/testdb/local/branch/main', Push_Search),
+    memberchk(branch=main, Push_Search),
+    memberchk(target_commit=_, Push_Search),
+    % parent_commit should NOT be present (full index from null)
+    \+ memberchk(parent_commit=_, Push_Search),
+    % Verify auth was sent
+    stub_received(push_auth, basic(admin, root)),
+    % Verify the push body contains rendered NDJSON op-lines with the
+    % embedding content (proves the GraphQL→Handlebars→NDJSON pipeline works).
+    stub_received(push_body(1), Body),
+    sub_string(Body, _, _, _, "The animal is named Plato."),
+    sub_string(Body, _, _, _, "Inserted").
+
+% ---- Test: engine already at HEAD → nothing to push ----
+test("io_push_delta does nothing when engine is at HEAD",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "testdb2"),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % Create a commit
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor),
+    create_context(Descriptor, commit_info{author:"test", message:"data"}, Context),
+    with_transaction(Context, ask(Context, insert(x,y,z)), _),
+    % Get the HEAD commit id
+    Repository_Descriptor = Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "main", Head_Uri),
+    commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Uri),
+    % Configure stub to return this same commit (already indexed)
+    retractall(stub_last_indexed_response(_)),
+    format(atom(ResponseJson), '{"branch":"main","commit":"~w","version":5}', [Head_Commit_Id]),
+    assertz(stub_last_indexed_response(ResponseJson)),
+    % Drive the push
+    super_user_authority(Auth),
+    open_descriptor(system_descriptor{}, System_DB),
+    io_push_delta(System_DB, Auth, "admin/testdb2", "main"),
+    % Verify NO push was made (only last-indexed was called)
+    stub_received(last_indexed, _),
+    \+ stub_received(push_params, _).
+
+% ---- Pure logic tests for commits_after/3 ----
+
+test("commits_after returns suffix after the given commit",
+     [true(Forward == ["c2", "c3", "c4"])]) :-
+    api_indexer:commits_after("c1", ["c0", "c1", "c2", "c3", "c4"], Forward).
+
+test("commits_after returns empty list when commit is last",
+     [true(Forward == [])]) :-
+    api_indexer:commits_after("c4", ["c0", "c1", "c2", "c3", "c4"], Forward).
+
+test("commits_after throws when commit is not in history",
+     [throws(error(tdb_search_last_indexed_not_in_history("missing"), _))]) :-
+    api_indexer:commits_after("missing", ["c0", "c1", "c2"], _).
+
+test("commits_after returns single-element suffix for second-to-last",
+     [true(Forward == ["c2"])]) :-
+    api_indexer:commits_after("c1", ["c0", "c1", "c2"], Forward).
+
+% ---- Multi-commit integration test: 3 commits, engine at c1, verify 2 pushes ----
+% Uses real embedding schema fixture. Creates 3 instance commits after the
+% schema commit, then sets engine at the first instance commit and verifies
+% commits 2 and 3 are pushed individually in order.
+test("io_push_delta pushes each commit individually oldest-first",
+     [ setup((setup_temp_store(State),
+              create_db_with_empty_schema("admin", "testmc"),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % Insert schema with embedding metadata (produces json:embedding triples).
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    open_string('[
+      { "@type": "@context",
+        "@base": "terminusdb:///data/",
+        "@schema": "terminusdb:///schema#" },
+      { "@type": "Class",
+        "@id": "Animal",
+        "@key": { "@type": "Lexical", "@fields": ["name"] },
+        "name": "xsd:string",
+        "@metadata": {
+          "embedding": {
+            "query": "query($id: ID){ Animal(id: $id) { name } }",
+            "template": "The animal is named {{name}}."
+          }
+        }
+      }
+    ]', SchemaStream),
+    api_insert_documents(System_DB, Auth, "admin/testmc", SchemaStream,
+                         no_data_version, _, _,
+                         [author("test"), full_replace(true),
+                          graph_type(schema), message("add embedding schema")]),
+    % Create 3 instance commits to produce a chain with data changes.
+    % Commit 1: insert first animal
+    open_string('{ "@type": "Animal", "name": "Alpha" }', Inst1),
+    api_insert_documents(System_DB, Auth, "admin/testmc", Inst1,
+                         no_data_version, _, _,
+                         [author("test"), graph_type(instance),
+                          message("commit1")]),
+    resolve_absolute_string_descriptor("admin/testmc", Descriptor),
+    Repository_Descriptor = Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "main", C1_Uri),
+    commit_id_uri(Repository_Descriptor, C1_Id, C1_Uri),
+    % Commit 2: insert second animal
+    open_string('{ "@type": "Animal", "name": "Bravo" }', Inst2),
+    api_insert_documents(System_DB, Auth, "admin/testmc", Inst2,
+                         no_data_version, _, _,
+                         [author("test"), graph_type(instance),
+                          message("commit2")]),
+    branch_head_commit(Repository_Descriptor, "main", C2_Uri),
+    commit_id_uri(Repository_Descriptor, C2_Id, C2_Uri),
+    % Commit 3: insert third animal
+    open_string('{ "@type": "Animal", "name": "Charlie" }', Inst3),
+    api_insert_documents(System_DB, Auth, "admin/testmc", Inst3,
+                         no_data_version, _, _,
+                         [author("test"), graph_type(instance),
+                          message("commit3")]),
+    branch_head_commit(Repository_Descriptor, "main", C3_Uri),
+    commit_id_uri(Repository_Descriptor, C3_Id, C3_Uri),
+    % Configure stub: engine is at commit 1 (the first instance commit).
+    retractall(stub_last_indexed_response(_)),
+    format(atom(ResponseJson), '{"branch":"main","commit":"~w","version":1}', [C1_Id]),
+    assertz(stub_last_indexed_response(ResponseJson)),
+    % Drive the push — should push commits 2 and 3 individually.
+    io_push_delta(System_DB, Auth, "admin/testmc", "main"),
+    % Verify: exactly 2 pushes happened (c2 and c3)
+    stub_push_call_count(2),
+    % Push 1: target_commit=c2, parent_commit=c1
+    stub_received(push_params(1), Push1_Search),
+    memberchk(target_commit=C2_Id_Atom, Push1_Search),
+    atom_string(C2_Id_Atom, C2_Id),
+    memberchk(parent_commit=C1_Id_Atom, Push1_Search),
+    atom_string(C1_Id_Atom, C1_Id),
+    % Push 2: target_commit=c3, parent_commit=c2
+    stub_received(push_params(2), Push2_Search),
+    memberchk(target_commit=C3_Id_Atom, Push2_Search),
+    atom_string(C3_Id_Atom, C3_Id),
+    memberchk(parent_commit=C2_Id_Atom2, Push2_Search),
+    atom_string(C2_Id_Atom2, C2_Id),
+    % Verify auth was sent
+    stub_received(push_auth, basic(admin, root)),
+    % Verify NDJSON body of push 2 contains the new animal (Bravo was in c2)
+    stub_received(push_body(1), Body1),
+    sub_string(Body1, _, _, _, "Bravo"),
+    stub_received(push_body(2), Body2),
+    sub_string(Body2, _, _, _, "Charlie").
+
+% ---- Test: normalise_commit_value handles all cases correctly ----
+test("normalise_commit_value handles JSON null (@(null))",
+     [true(Result == null)]) :-
+    api_indexer:normalise_commit_value(@(null), Result).
+
+test("normalise_commit_value handles plain null atom",
+     [true(Result == null)]) :-
+    api_indexer:normalise_commit_value(null, Result).
+
+test("normalise_commit_value coerces atom to string",
+     [true(Result == "abc123")]) :-
+    api_indexer:normalise_commit_value(abc123, Result).
+
+test("normalise_commit_value passes through strings",
+     [true(Result == "def456")]) :-
+    api_indexer:normalise_commit_value("def456", Result).
+
+:- end_tests(push_driver).

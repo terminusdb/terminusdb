@@ -3255,6 +3255,11 @@ index_handler(get,Path,Request,System_DB,Auth) :-
         index,
         Request,
         (
+            % Legacy pull-serving route. Only reachable under the http_vectorlink
+            % backend; the selector (Spec 16 §2.3 / RISK-17) makes the legacy and
+            % push paths mutually exclusive. Refuse loud otherwise.
+            do_or_die(config:indexer_backend(http_vectorlink),
+                      error(indexer_backend_not_vectorlink(index_handler), _)),
             param_value_search_required(Search, commit_id, text, Commit_Id),
             param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
             (   Previous_Commit_Id = none
