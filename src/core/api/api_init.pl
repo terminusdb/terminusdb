@@ -856,79 +856,11 @@ push_stub_check(Request) :-
         format("Task not found: ~w", [Task_Id])
     ).
 
-% ---- Full-flow integration test: null commit → full index ----
-% Uses the real embedding FFI (available in base_community build stage).
-% Schema fixture follows the pattern from commit 3ee8b803 (document-embedding
-% test): a class with @metadata.embedding.{query,template} which produces
-% the json:embedding / json:query / json:template triples that
-% embedding_type_queries/2 reads from the schema graph.
-test("io_push_delta full index when engine returns null commit",
-     [ setup((setup_temp_store(State),
-              create_db_with_empty_schema("admin", "testdb"),
-              clean_indexer_env,
-              start_push_stub(Port),
-              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
-             )),
-       cleanup((stop_push_stub(Port),
-                clean_indexer_env,
-                teardown_temp_store(State)))
-     ]) :-
-    % Insert schema with embedding metadata (GraphQL query + Handlebars template).
-    open_descriptor(system_descriptor{}, System_DB),
-    super_user_authority(Auth),
-    open_string('[
-      { "@type": "@context",
-        "@base": "terminusdb:///data/",
-        "@schema": "terminusdb:///schema#" },
-      { "@type": "Class",
-        "@id": "Animal",
-        "@key": { "@type": "Lexical", "@fields": ["name"] },
-        "name": "xsd:string",
-        "@metadata": {
-          "embedding": {
-            "query": "query($id: ID){ Animal(id: $id) { name } }",
-            "template": "The animal is named {{name}}."
-          }
-        }
-      }
-    ]', SchemaStream),
-    api_insert_documents(System_DB, Auth, "admin/testdb", SchemaStream,
-                         no_data_version, _, _,
-                         [author("test"), full_replace(true),
-                          graph_type(schema), message("add embedding schema")]),
-    % Insert an instance document to produce a meaningful commit.
-    open_string('{ "@type": "Animal", "name": "Plato" }', InstanceStream),
-    api_insert_documents(System_DB, Auth, "admin/testdb", InstanceStream,
-                         no_data_version, _, _,
-                         [author("test"), graph_type(instance),
-                          message("add animal")]),
-    % Configure stub to return null commit (unindexed branch)
-    retractall(stub_last_indexed_response(_)),
-    assertz(stub_last_indexed_response('{"branch":"main","commit":null,"version":0}')),
-    % Drive the push
-    io_push_delta(System_DB, Auth, "admin/testdb", "main"),
-    % Verify the stub received the correct /last-indexed call.
-    % Domain is the FULL graphspec (org/db/repo/branch/<name>) derived from
-    % the resolved descriptor — NOT truncated org/db.
-    stub_received(last_indexed, Last_Indexed_Search),
-    memberchk(domain='admin/testdb/local/branch/main', Last_Indexed_Search),
-    memberchk(branch=main, Last_Indexed_Search),
-    % Verify push was called with correct params
-    stub_received(push_params, Push_Search),
-    memberchk(domain='admin/testdb/local/branch/main', Push_Search),
-    memberchk(branch=main, Push_Search),
-    memberchk(target_commit=_, Push_Search),
-    % parent_commit should NOT be present (full index from null)
-    \+ memberchk(parent_commit=_, Push_Search),
-    % Verify auth was sent
-    stub_received(push_auth, basic(admin, root)),
-    % Verify the push body contains rendered NDJSON op-lines with the
-    % embedding content (proves the GraphQL→Handlebars→NDJSON pipeline works).
-    stub_received(push_body(1), Body),
-    sub_string(Body, _, _, _, "The animal is named Plato."),
-    sub_string(Body, _, _, _, "Inserted").
+% NOTE: Full-flow integration tests (chunked HTTP push protocol) have been
+% moved to the tdb-search integration test harness, which is the correct
+% boundary to test the wire protocol between TerminusDB and tdb-search.
+% See tdb-search test suite for: full-index-from-null, per-commit push,
+% chunked NDJSON body verification, and auth header forwarding.
 
 % ---- Test: engine already at HEAD → nothing to push ----
 test("io_push_delta does nothing when engine is at HEAD",
@@ -982,100 +914,6 @@ test("commits_after returns single-element suffix for second-to-last",
      [true(Forward == ["c2"])]) :-
     api_indexer:commits_after("c1", ["c0", "c1", "c2"], Forward).
 
-% ---- Multi-commit integration test: 3 commits, engine at c1, verify 2 pushes ----
-% Uses real embedding schema fixture. Creates 3 instance commits after the
-% schema commit, then sets engine at the first instance commit and verifies
-% commits 2 and 3 are pushed individually in order.
-test("io_push_delta pushes each commit individually oldest-first",
-     [ setup((setup_temp_store(State),
-              create_db_with_empty_schema("admin", "testmc"),
-              clean_indexer_env,
-              start_push_stub(Port),
-              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
-             )),
-       cleanup((stop_push_stub(Port),
-                clean_indexer_env,
-                teardown_temp_store(State)))
-     ]) :-
-    % Insert schema with embedding metadata (produces json:embedding triples).
-    open_descriptor(system_descriptor{}, System_DB),
-    super_user_authority(Auth),
-    open_string('[
-      { "@type": "@context",
-        "@base": "terminusdb:///data/",
-        "@schema": "terminusdb:///schema#" },
-      { "@type": "Class",
-        "@id": "Animal",
-        "@key": { "@type": "Lexical", "@fields": ["name"] },
-        "name": "xsd:string",
-        "@metadata": {
-          "embedding": {
-            "query": "query($id: ID){ Animal(id: $id) { name } }",
-            "template": "The animal is named {{name}}."
-          }
-        }
-      }
-    ]', SchemaStream),
-    api_insert_documents(System_DB, Auth, "admin/testmc", SchemaStream,
-                         no_data_version, _, _,
-                         [author("test"), full_replace(true),
-                          graph_type(schema), message("add embedding schema")]),
-    % Create 3 instance commits to produce a chain with data changes.
-    % Commit 1: insert first animal
-    open_string('{ "@type": "Animal", "name": "Alpha" }', Inst1),
-    api_insert_documents(System_DB, Auth, "admin/testmc", Inst1,
-                         no_data_version, _, _,
-                         [author("test"), graph_type(instance),
-                          message("commit1")]),
-    resolve_absolute_string_descriptor("admin/testmc", Descriptor),
-    Repository_Descriptor = Descriptor.repository_descriptor,
-    branch_head_commit(Repository_Descriptor, "main", C1_Uri),
-    commit_id_uri(Repository_Descriptor, C1_Id, C1_Uri),
-    % Commit 2: insert second animal
-    open_string('{ "@type": "Animal", "name": "Bravo" }', Inst2),
-    api_insert_documents(System_DB, Auth, "admin/testmc", Inst2,
-                         no_data_version, _, _,
-                         [author("test"), graph_type(instance),
-                          message("commit2")]),
-    branch_head_commit(Repository_Descriptor, "main", C2_Uri),
-    commit_id_uri(Repository_Descriptor, C2_Id, C2_Uri),
-    % Commit 3: insert third animal
-    open_string('{ "@type": "Animal", "name": "Charlie" }', Inst3),
-    api_insert_documents(System_DB, Auth, "admin/testmc", Inst3,
-                         no_data_version, _, _,
-                         [author("test"), graph_type(instance),
-                          message("commit3")]),
-    branch_head_commit(Repository_Descriptor, "main", C3_Uri),
-    commit_id_uri(Repository_Descriptor, C3_Id, C3_Uri),
-    % Configure stub: engine is at commit 1 (the first instance commit).
-    retractall(stub_last_indexed_response(_)),
-    format(atom(ResponseJson), '{"branch":"main","commit":"~w","version":1}', [C1_Id]),
-    assertz(stub_last_indexed_response(ResponseJson)),
-    % Drive the push — should push commits 2 and 3 individually.
-    io_push_delta(System_DB, Auth, "admin/testmc", "main"),
-    % Verify: exactly 2 pushes happened (c2 and c3)
-    stub_push_call_count(2),
-    % Push 1: target_commit=c2, parent_commit=c1
-    stub_received(push_params(1), Push1_Search),
-    memberchk(target_commit=C2_Id_Atom, Push1_Search),
-    atom_string(C2_Id_Atom, C2_Id),
-    memberchk(parent_commit=C1_Id_Atom, Push1_Search),
-    atom_string(C1_Id_Atom, C1_Id),
-    % Push 2: target_commit=c3, parent_commit=c2
-    stub_received(push_params(2), Push2_Search),
-    memberchk(target_commit=C3_Id_Atom, Push2_Search),
-    atom_string(C3_Id_Atom, C3_Id),
-    memberchk(parent_commit=C2_Id_Atom2, Push2_Search),
-    atom_string(C2_Id_Atom2, C2_Id),
-    % Verify auth was sent
-    stub_received(push_auth, basic(admin, root)),
-    % Verify NDJSON body of push 2 contains the new animal (Bravo was in c2)
-    stub_received(push_body(1), Body1),
-    sub_string(Body1, _, _, _, "Bravo"),
-    stub_received(push_body(2), Body2),
-    sub_string(Body2, _, _, _, "Charlie").
 
 % ---- Test: normalise_commit_value handles all cases correctly ----
 test("normalise_commit_value handles JSON null (@(null))",
