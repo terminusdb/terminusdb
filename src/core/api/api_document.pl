@@ -36,6 +36,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
+:- use_module(core(document/instance), [is_instance_class/3]).
 :- use_module(core(account)).
 :- use_module(config(terminus_config)).
 
