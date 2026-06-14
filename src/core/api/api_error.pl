@@ -1813,6 +1813,7 @@ error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
 error_type_(concat, 'api:ConcatErrorResponse').
 error_type_(index, 'api:IndexErrorResponse').
+error_type_(search, 'api:SearchErrorResponse').
 
 % Info endpoint errors
 api_error_jsonld_(info, error(no_database_store_version, _), JSON) :-

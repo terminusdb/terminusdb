@@ -901,7 +901,9 @@ report_result(failure(Unit, Name, Line, How), Options) :-
 report_result(success(Unit, Name, Line, Determinism, Time), Options) :-
     !,
     success(Unit, Name, Line, Determinism, Time, Options).
-report_result(setup_failed(_Unit, _Name, _Line), _Options).
+report_result(setup_failed(Unit, Name, Line), Options) :-
+    !,
+    failure(Unit, Name, Line, setup_failed, Options).
 report_result(sto(Unit, Name, Line, ResultByType), Options) :-
     assert(sto(Unit, Name, Line, ResultByType)),
     print_message(error, plunit(sto(Unit, Name, Line))),

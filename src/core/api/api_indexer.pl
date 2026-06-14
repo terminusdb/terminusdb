@@ -9,7 +9,8 @@
               descriptor_graphspec/2,
               io_await_task_completion/2,
               build_last_indexed_url/4,
-              validate_index_path/1
+              validate_index_path/1,
+              encode_query_value/2
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).

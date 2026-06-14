@@ -21,6 +21,8 @@
 :- use_module(core(account)).
 :- use_module(core(document)).
 :- use_module(core(api/api_init)).
+:- use_module(core(api/api_search)).
+:- use_module(core(api/api_indexer), [descriptor_graphspec/2, io_push_delta/4]).
 
 :- use_module(config(terminus_config)).
 
@@ -3282,6 +3284,359 @@ index_handler(get,Path,Request,System_DB,Auth) :-
         )
     ).
 
+
+%%%%%%%%%%%%%%%%%%%% Search Fronting Handlers (Phase 6 T4) %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% TerminusDB authorises every caller against its OWN capability system, then
+% forwards the request to the tdb-search engine. One ACL, no drift (RISK-09).
+% Gated on indexer_backend(http_tdb_search).
+
+:- http_handler(api(search/Path), cors_handler(Method, search_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,get,post])]).
+
+:- http_handler(api(similar/Path), cors_handler(Method, similar_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,get,post])]).
+
+:- http_handler(api(duplicates/Path), cors_handler(Method, duplicates_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,get])]).
+
+:- http_handler(api(statistics), cors_handler(Method, statistics_handler),
+                [method(Method),
+                 methods([options,get])]).
+
+% ---- /api/search handler ----
+% RISK-09 parity gate: resolve_descriptor_auth MUST succeed BEFORE any engine call.
+search_handler(get, Path, Request, System_DB, Auth) :-
+    search_handler(post, Path, Request, System_DB, Auth).
+search_handler(post, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    % POST JSON body (auto-parsed by cors_handler; absent on GET). Body fields
+    % win over query (tdb-search parity) for the allowlisted forward params.
+    search_request_body(Request, Body),
+    api_report_errors(
+        search,
+        Request,
+        (
+            % FAIL-CLOSED authz gate (RISK-09): caller must hold instance_read_access.
+            % Throws access_not_authorised -> 403 BEFORE any engine call.
+            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            % Backend gate: refuses if not http_tdb_search.
+            do_or_die(config:indexer_backend(http_tdb_search),
+                      error(search_requires_tdb_search_backend, _)),
+            do_or_die(config:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(search_handler), _)),
+            % Resolve branch HEAD commit.
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            Repository_Descriptor = Descriptor.repository_descriptor,
+            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            % Compute the full graphspec as the engine domain.
+            descriptor_graphspec(Descriptor, Domain),
+            % Compute the ancestor window (last 10 ancestors, nearest first).
+            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            % Collect extra query params from the request (body wins over query).
+            search_extra_params(Search, Body, Extra_Params),
+            % Forward to the engine.
+            io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                              Extra_Params, Response_Body, Data_Version_Header),
+            % Stale-version nudge: if served != requested, trigger a push.
+            maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                             System_DB, Auth, Path, Branch_Name),
+            % Relay response to caller with the data-version header.
+            reply_search_response(Request, Response_Body, Data_Version_Header)
+        )
+    ).
+
+% ---- /api/similar handler ----
+similar_handler(get, Path, Request, System_DB, Auth) :-
+    similar_handler(post, Path, Request, System_DB, Auth).
+similar_handler(post, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    search_request_body(Request, Body),
+    api_report_errors(
+        search,
+        Request,
+        (
+            % FAIL-CLOSED authz gate (RISK-09).
+            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(config:indexer_backend(http_tdb_search),
+                      error(search_requires_tdb_search_backend, _)),
+            do_or_die(config:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(similar_handler), _)),
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            Repository_Descriptor = Descriptor.repository_descriptor,
+            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            descriptor_graphspec(Descriptor, Domain),
+            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            similar_extra_params(Search, Body, Extra_Params),
+            io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                               Extra_Params, Response_Body, Data_Version_Header),
+            maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                             System_DB, Auth, Path, Branch_Name),
+            reply_search_response(Request, Response_Body, Data_Version_Header)
+        )
+    ).
+
+% ---- /api/duplicates handler ----
+duplicates_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    search_request_body(Request, Body),
+    api_report_errors(
+        search,
+        Request,
+        (
+            % FAIL-CLOSED authz gate (RISK-09).
+            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(config:indexer_backend(http_tdb_search),
+                      error(search_requires_tdb_search_backend, _)),
+            do_or_die(config:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(duplicates_handler), _)),
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            Repository_Descriptor = Descriptor.repository_descriptor,
+            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            descriptor_graphspec(Descriptor, Domain),
+            duplicates_extra_params(Search, Body, Extra_Params),
+            io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
+                                  Extra_Params, Response_Body, Data_Version_Header),
+            reply_search_response(Request, Response_Body, Data_Version_Header)
+        )
+    ).
+
+% ---- /api/statistics handler (global, no per-domain authz) ----
+statistics_handler(get, Request, _System_DB, _Auth) :-
+    api_report_errors(
+        search,
+        Request,
+        (
+            do_or_die(config:indexer_backend(http_tdb_search),
+                      error(search_requires_tdb_search_backend, _)),
+            io_statistics_forward(Response_Body),
+            write_cors_headers(Request),
+            format("Content-Type: application/json~n~n"),
+            write(Response_Body)
+        )
+    ).
+
+% ---- Helper: the request's JSON body as a dict (empty dict if none) ----
+%
+% cors_handler auto-parses a POST/PUT JSON body into payload/1 (these handlers
+% do NOT set add_payload(false)). GET requests carry no payload, and a
+% non-object body (array/scalar) is treated as "no body" — in every such case
+% we return an empty dict so the query string is used. Only the allowlisted
+% fields are ever read from this dict; domain/commit/ancestors are never sourced
+% from it (graphspec-from-URL invariant).
+search_request_body(Request, Body) :-
+    (   memberchk(payload(Body0), Request),
+        is_dict(Body0)
+    ->  Body = Body0
+    ;   Body = _{}
+    ).
+
+% ---- Shared merge helpers: POST body wins over query string ----
+%
+% These implement the tdb-search precedence contract (body field overrides the
+% same query field). They are the ONLY place the body/query merge happens, so
+% the allowlist clauses below stay declarative. See the search_fronting_params
+% test block for the precedence matrix.
+
+% A scalar value is "present" in the body when it is a non-empty string/atom or
+% any number/boolean. Empty values fall through to the query so a blank body
+% field never masks a real query value.
+search_scalar_present(V) :- string(V), !, V \== "".
+search_scalar_present(V) :- number(V), !.
+search_scalar_present(V) :- atom(V), !, V \== '', V \== null.
+
+% merged_scalar_param(+Key, +Body, +Search, -Value): body value wins; otherwise
+% the (non-empty) query value; fails if neither is present so the field is
+% omitted entirely (never forwarded blank).
+merged_scalar_param(Key, Body, Search, Value) :-
+    (   get_dict(Key, Body, Body_Value),
+        search_scalar_present(Body_Value)
+    ->  Value = Body_Value
+    ;   memberchk(Key=Query_Value, Search),
+        Query_Value \== '',
+        Value = Query_Value
+    ).
+
+% merged_repeated_param(+Key, +Body, +Search, -Values): a non-empty body array
+% wins wholesale; otherwise the repeated query values; fails if neither yields a
+% non-empty list.
+merged_repeated_param(Key, Body, Search, Values) :-
+    (   get_dict(Key, Body, Body_Values),
+        is_list(Body_Values),
+        Body_Values \== []
+    ->  Values = Body_Values
+    ;   findall(V, memberchk(Key=V, Search), Query_Values),
+        Query_Values \== [],
+        Values = Query_Values
+    ).
+
+% ---- Helper: extract search-specific extra params (body wins over query) ----
+search_extra_params(Search, Body, Params) :-
+    findall(Param,
+            search_extra_param(Search, Body, Param),
+            Params).
+
+search_extra_param(Search, Body, q=Q) :-
+    merged_scalar_param(q, Body, Search, Q).
+search_extra_param(Search, Body, mode=Mode) :-
+    merged_scalar_param(mode, Body, Search, Mode).
+search_extra_param(Search, Body, start=Start) :-
+    merged_scalar_param(start, Body, Search, Start).
+search_extra_param(Search, Body, count=Count) :-
+    merged_scalar_param(count, Body, Search, Count).
+search_extra_param(Search, Body, snippet=Snippet) :-
+    merged_scalar_param(snippet, Body, Search, Snippet).
+search_extra_param(Search, Body, doc_type=repeated(Types)) :-
+    merged_repeated_param(doc_type, Body, Search, Types).
+search_extra_param(Search, Body, doc_id=repeated(Ids)) :-
+    merged_repeated_param(doc_id, Body, Search, Ids).
+
+% ---- Helper: extract similar-specific extra params (body wins over query) ----
+similar_extra_params(Search, Body, Params) :-
+    findall(Param,
+            similar_extra_param(Search, Body, Param),
+            Params).
+
+similar_extra_param(Search, Body, id=Id) :-
+    merged_scalar_param(id, Body, Search, Id).
+similar_extra_param(Search, Body, start=Start) :-
+    merged_scalar_param(start, Body, Search, Start).
+similar_extra_param(Search, Body, count=Count) :-
+    merged_scalar_param(count, Body, Search, Count).
+similar_extra_param(Search, Body, snippet=Snippet) :-
+    merged_scalar_param(snippet, Body, Search, Snippet).
+similar_extra_param(Search, Body, doc_type=repeated(Types)) :-
+    merged_repeated_param(doc_type, Body, Search, Types).
+similar_extra_param(Search, Body, doc_id=repeated(Ids)) :-
+    merged_repeated_param(doc_id, Body, Search, Ids).
+
+% ---- Helper: extract duplicates-specific extra params (body wins over query) ----
+duplicates_extra_params(Search, Body, Params) :-
+    findall(Param,
+            duplicates_extra_param(Search, Body, Param),
+            Params).
+
+duplicates_extra_param(Search, Body, threshold=T) :-
+    merged_scalar_param(threshold, Body, Search, T).
+duplicates_extra_param(Search, Body, start=Start) :-
+    merged_scalar_param(start, Body, Search, Start).
+duplicates_extra_param(Search, Body, count=Count) :-
+    merged_scalar_param(count, Body, Search, Count).
+duplicates_extra_param(Search, Body, snippet=Snippet) :-
+    merged_scalar_param(snippet, Body, Search, Snippet).
+duplicates_extra_param(Search, Body, doc_type=repeated(Types)) :-
+    merged_repeated_param(doc_type, Body, Search, Types).
+duplicates_extra_param(Search, Body, doc_id=repeated(Ids)) :-
+    merged_repeated_param(doc_id, Body, Search, Ids).
+duplicates_extra_param(Search, Body, target_doc_type=repeated(Types)) :-
+    merged_repeated_param(target_doc_type, Body, Search, Types).
+duplicates_extra_param(Search, Body, target_doc_id=repeated(Ids)) :-
+    merged_repeated_param(target_doc_id, Body, Search, Ids).
+
+% ==========================================================================
+% Search-fronting param precedence (body wins over query, tdb-search parity).
+%
+% INTENTIONAL DIVERGENCE from the TerminusDB-wide param_value_search_or_json/5
+% convention (which is QUERY-first, body-fallback — see core/util/param.pl).
+% The search-fronting endpoints mirror the tdb-search engine's contract, where
+% the POST JSON body takes precedence over the query string field-by-field
+% (handlers.rs: `body.X.or(params.X)`). Only the KNOWN allowlist fields below
+% are ever read/forwarded; domain/commit/ancestors are derived server-side from
+% the URL descriptor and are never sourced from the body OR the query.
+% ==========================================================================
+:- begin_tests(search_fronting_params).
+
+% --- scalar: body wins over query ---
+test("search q: body value overrides query value",
+     [true(Params == [q="from-body"])]) :-
+    search_extra_params([q='from-query'], _{q: "from-body"}, Params).
+
+test("search q: query used when body absent (GET path, empty body)",
+     [true(Params == [q='from-query'])]) :-
+    search_extra_params([q='from-query'], _{}, Params).
+
+test("search q: empty body value falls back to query",
+     [true(Params == [q='from-query'])]) :-
+    search_extra_params([q='from-query'], _{q: ""}, Params).
+
+test("search scalar absent in both body and query is omitted",
+     [true(Params == [])]) :-
+    search_extra_params([], _{}, Params).
+
+% --- repeated: body list wins over query repeated ---
+test("search doc_type: body list overrides query repeated values",
+     [true(Params == [doc_type=repeated(["A", "B"])])]) :-
+    search_extra_params([doc_type='X', doc_type='Y'],
+                        _{doc_type: ["A", "B"]}, Params).
+
+test("search doc_type: query repeated used when body absent",
+     [true(Params == [doc_type=repeated(['X', 'Y'])])]) :-
+    search_extra_params([doc_type='X', doc_type='Y'], _{}, Params).
+
+% --- security: server-derived fields never forwarded from body or query ---
+test("search never forwards domain/commit/ancestor from body",
+     [true(Params == [q="hi"])]) :-
+    search_extra_params([],
+                        _{q: "hi", domain: "evil/db", commit: "deadbeef",
+                          ancestors: ["x"]},
+                        Params).
+
+test("search never forwards domain/commit from query",
+     [true(Params == [q='hi'])]) :-
+    search_extra_params([q='hi', domain='evil/db', commit='deadbeef'],
+                        _{}, Params).
+
+test("search ignores unknown body fields (allowlist only)",
+     [true(Params == [q="hi"])]) :-
+    search_extra_params([], _{q: "hi", wibble: "nope", '$inject': 1}, Params).
+
+% --- similar: id body wins ---
+test("similar id: body value overrides query value",
+     [true(Params == [id="body-id"])]) :-
+    similar_extra_params([id='query-id'], _{id: "body-id"}, Params).
+
+% --- duplicates: threshold body wins; target_* repeated body wins ---
+test("duplicates threshold: body value overrides query value",
+     [true(Params == [threshold=0.25])]) :-
+    duplicates_extra_params([threshold='0.9'], _{threshold: 0.25}, Params).
+
+test("duplicates target_doc_type: body list overrides query repeated",
+     [true(Params == [target_doc_type=repeated(["Buy"])])]) :-
+    duplicates_extra_params([target_doc_type='Abt'],
+                            _{target_doc_type: ["Buy"]}, Params).
+
+:- end_tests(search_fronting_params).
+
+% ---- Helper: relay engine response with data-version header ----
+reply_search_response(Request, Response_Body, Data_Version_Header) :-
+    write_cors_headers(Request),
+    (   Data_Version_Header \== none
+    ->  format("TerminusDB-Data-Version: ~w~n", [Data_Version_Header])
+    ;   true
+    ),
+    format("Content-Type: application/json~n~n"),
+    write(Response_Body).
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).

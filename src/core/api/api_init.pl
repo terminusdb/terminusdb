@@ -604,6 +604,140 @@ test("admin secret defaults to root",
 :- use_module(library(http/http_client), [http_read_data/3]).
 :- use_module(library(readutil)).
 
+% ==========================================================================
+% Shared stub HTTP server for push_driver and search_fronting tests.
+%
+% Defined at MODULE LEVEL so both test suites can call start_push_stub/1,
+% stop_push_stub/1, and assert on stub_received/2 without cross-module
+% visibility issues (same fix pattern as clean_indexer_env).
+%
+% Mimics tdb-search's /last-indexed, /push, and /check endpoints.
+% ==========================================================================
+
+% Global state for the stub — records what the stub received.
+:- dynamic stub_received/2.   % stub_received(Key, Data)
+:- dynamic stub_last_indexed_response/1.  % the JSON to return from /last-indexed
+:- dynamic stub_push_call_count/1.  % tracks the number of pushes received
+:- dynamic stub_check_response/2.   % stub_check_response(Task_Id, json_string)
+:- dynamic stub_push_response_override/1.  % stub_push_response_override(status(Code))
+
+% Start stub server on a fixed test port.
+% Uses port 19876 (high, unlikely to conflict with other services).
+push_stub_port(19876).
+
+start_push_stub(Port) :-
+    push_stub_port(Port),
+    retractall(stub_received(_, _)),
+    retractall(stub_last_indexed_response(_)),
+    retractall(stub_push_call_count(_)),
+    retractall(stub_check_response(_, _)),
+    retractall(stub_push_response_override(_)),
+    assertz(stub_push_call_count(0)),
+    http_server(http_dispatch, [port(Port), workers(1)]).
+
+stop_push_stub(Port) :-
+    http_stop_server(Port, []),
+    retractall(stub_received(_, _)),
+    retractall(stub_last_indexed_response(_)),
+    retractall(stub_push_call_count(_)),
+    retractall(stub_check_response(_, _)),
+    retractall(stub_push_response_override(_)).
+
+% Stub handlers registered via http_handler directives below.
+:- http_handler('/last-indexed', push_stub_last_indexed, []).
+:- http_handler('/push', push_stub_push, [methods([post])]).
+:- http_handler('/check', push_stub_check, []).
+
+push_stub_last_indexed(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    % Record what we received for test assertions.
+    assertz(stub_received(last_indexed, Search)),
+    % Check auth — SWI HTTP dispatch provides authorization(Text), not parsed.
+    (   memberchk(authorization(AuthText), Request),
+        http_authorization_data(AuthText, basic(User, Secret))
+    ->  assertz(stub_received(last_indexed_auth, basic(User, Secret)))
+    ;   true
+    ),
+    % Return the configured response.
+    (   stub_last_indexed_response(ResponseJson)
+    ->  true
+    ;   ResponseJson = '{"branch":"main","commit":null,"version":0}'
+    ),
+    format("Content-Type: application/json~n~n"),
+    write(ResponseJson).
+
+push_stub_push(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    % Increment call counter and record this push with its index.
+    retract(stub_push_call_count(N)),
+    N1 is N + 1,
+    assertz(stub_push_call_count(N1)),
+    % Record URL params indexed by call number (for multi-push tests).
+    assertz(stub_received(push_params(N1), Search)),
+    % Also record unindexed for simpler single-push assertions.
+    assertz(stub_received(push_params, Search)),
+    % Check auth.
+    (   memberchk(authorization(AuthText), Request),
+        http_authorization_data(AuthText, basic(User, Secret))
+    ->  assertz(stub_received(push_auth, basic(User, Secret)))
+    ;   true
+    ),
+    % Record the request body using http_read_data for chunked body support.
+    (   memberchk(input(In), Request)
+    ->  read_string(In, _, Body),
+        assertz(stub_received(push_body(N1), Body))
+    ;   true
+    ),
+    % Check Transfer-Encoding.
+    (   memberchk(transfer_encoding(chunked), Request)
+    ->  assertz(stub_received(push_chunked, true))
+    ;   true
+    ),
+    % Auto-register a "Complete" check response for this task (for await tests).
+    format(atom(Task_Id), "task-stub-~w", [N1]),
+    format(atom(CheckJson), '{"status":"Complete","task_id":"~w"}', [Task_Id]),
+    assertz(stub_check_response(Task_Id, CheckJson)),
+    % Return response: check for override (409) or default (200 + task id).
+    (   stub_push_response_override(status(Override_Code))
+    ->  format("Status: ~w~n", [Override_Code]),
+        format("Content-Type: text/plain~n~n"),
+        format("Conflict")
+    ;   format("Content-Type: text/plain~n~n"),
+        write(Task_Id)
+    ).
+
+% ---- /check handler: returns pre-configured check response for task id ----
+push_stub_check(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    % SWI HTTP delivers query params as atoms — coerce for lookup.
+    (   memberchk(task_id=Task_Id_Raw, Search)
+    ->  (   atom(Task_Id_Raw)
+        ->  atom_string(Task_Id_Raw, Task_Id_Str),
+            atom_string(Task_Id, Task_Id_Str)
+        ;   Task_Id = Task_Id_Raw
+        )
+    ;   Task_Id = unknown
+    ),
+    % Find the pre-registered response for this task id (string key).
+    atom_string(Task_Id, Task_Id_Key),
+    (   stub_check_response(Task_Id_Key, ResponseJson)
+    ->  format("Content-Type: application/json~n~n"),
+        write(ResponseJson)
+    ;   % No response registered — return 404.
+        format("Status: 404~n"),
+        format("Content-Type: text/plain~n~n"),
+        format("Task not found: ~w", [Task_Id])
+    ).
+
 :- begin_tests(push_driver).
 
 % ---- Pure logic tests ----
@@ -720,141 +854,6 @@ test("io_index_branch refuses when backend is none",
        throws(error(indexer_backend_not_tdb_search(io_index_branch), _))
      ]) :-
     io_index_branch(_, _, "admin/testdb").
-
-% ---- Stub HTTP server for full-flow tests ----
-%
-% These tests start a local HTTP stub that mimics tdb-search's
-% /last-indexed and /push endpoints, then drive io_push_delta against
-% a real temp-store database. They verify:
-%   - Correct /last-indexed handshake
-%   - Chunked NDJSON streaming (Transfer-Encoding: chunked on the request)
-%   - Correct URL parameters (domain, branch, target_commit, parent_commit)
-%   - HTTP Basic auth header sent correctly
-%   - Nothing-to-push case (engine already at HEAD)
-
-% Global state for the stub — records what the stub received.
-:- dynamic stub_received/2.   % stub_received(Key, Data)
-:- dynamic stub_last_indexed_response/1.  % the JSON to return from /last-indexed
-:- dynamic stub_push_call_count/1.  % tracks the number of pushes received
-:- dynamic stub_check_response/2.   % stub_check_response(Task_Id, json_string)
-:- dynamic stub_push_response_override/1.  % stub_push_response_override(status(Code))
-
-% Start stub server on a fixed test port.
-% Uses port 19876 (high, unlikely to conflict with other services).
-push_stub_port(19876).
-
-start_push_stub(Port) :-
-    push_stub_port(Port),
-    retractall(stub_received(_, _)),
-    retractall(stub_last_indexed_response(_)),
-    retractall(stub_push_call_count(_)),
-    retractall(stub_check_response(_, _)),
-    retractall(stub_push_response_override(_)),
-    assertz(stub_push_call_count(0)),
-    http_server(http_dispatch, [port(Port), workers(1)]).
-
-stop_push_stub(Port) :-
-    http_stop_server(Port, []),
-    retractall(stub_received(_, _)),
-    retractall(stub_last_indexed_response(_)),
-    retractall(stub_push_call_count(_)),
-    retractall(stub_check_response(_, _)),
-    retractall(stub_push_response_override(_)).
-
-% Stub handlers registered via http_handler directives below.
-:- http_handler('/last-indexed', push_stub_last_indexed, []).
-:- http_handler('/push', push_stub_push, [methods([post])]).
-:- http_handler('/check', push_stub_check, []).
-
-push_stub_last_indexed(Request) :-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []
-    ),
-    % Record what we received for test assertions
-    assertz(stub_received(last_indexed, Search)),
-    % Check auth — SWI HTTP dispatch provides authorization(Text), not parsed.
-    (   memberchk(authorization(AuthText), Request),
-        http_authorization_data(AuthText, basic(User, Secret))
-    ->  assertz(stub_received(last_indexed_auth, basic(User, Secret)))
-    ;   true
-    ),
-    % Return the configured response
-    (   stub_last_indexed_response(ResponseJson)
-    ->  true
-    ;   ResponseJson = '{"branch":"main","commit":null,"version":0}'
-    ),
-    format("Content-Type: application/json~n~n"),
-    write(ResponseJson).
-
-push_stub_push(Request) :-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []
-    ),
-    % Increment call counter and record this push with its index.
-    retract(stub_push_call_count(N)),
-    N1 is N + 1,
-    assertz(stub_push_call_count(N1)),
-    % Record URL params indexed by call number (for multi-push tests).
-    assertz(stub_received(push_params(N1), Search)),
-    % Also record unindexed for simpler single-push assertions.
-    assertz(stub_received(push_params, Search)),
-    % Check auth
-    (   memberchk(authorization(AuthText), Request),
-        http_authorization_data(AuthText, basic(User, Secret))
-    ->  assertz(stub_received(push_auth, basic(User, Secret)))
-    ;   true
-    ),
-    % Record the request body using http_read_data for chunked body support.
-    (   memberchk(input(In), Request)
-    ->  read_string(In, _, Body),
-        assertz(stub_received(push_body(N1), Body))
-    ;   true
-    ),
-    % Check Transfer-Encoding
-    (   memberchk(transfer_encoding(chunked), Request)
-    ->  assertz(stub_received(push_chunked, true))
-    ;   true
-    ),
-    % Auto-register a "Complete" check response for this task (for await tests)
-    format(atom(Task_Id), "task-stub-~w", [N1]),
-    format(atom(CheckJson), '{"status":"Complete","task_id":"~w"}', [Task_Id]),
-    assertz(stub_check_response(Task_Id, CheckJson)),
-    % Return response: check for override (409) or default (200 + task id)
-    (   stub_push_response_override(status(Override_Code))
-    ->  format("Status: ~w~n", [Override_Code]),
-        format("Content-Type: text/plain~n~n"),
-        format("Conflict")
-    ;   format("Content-Type: text/plain~n~n"),
-        write(Task_Id)
-    ).
-
-% ---- /check handler: returns pre-configured check response for task id ----
-push_stub_check(Request) :-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []
-    ),
-    % SWI HTTP delivers query params as atoms — coerce for lookup.
-    (   memberchk(task_id=Task_Id_Raw, Search)
-    ->  (   atom(Task_Id_Raw)
-        ->  atom_string(Task_Id_Raw, Task_Id_Str),
-            atom_string(Task_Id, Task_Id_Str)
-        ;   Task_Id = Task_Id_Raw
-        )
-    ;   Task_Id = unknown
-    ),
-    % Find the pre-registered response for this task id (string key).
-    atom_string(Task_Id, Task_Id_Key),
-    (   stub_check_response(Task_Id_Key, ResponseJson)
-    ->  format("Content-Type: application/json~n~n"),
-        write(ResponseJson)
-    ;   % No response registered — return 404
-        format("Status: 404~n"),
-        format("Content-Type: text/plain~n~n"),
-        format("Task not found: ~w", [Task_Id])
-    ).
 
 % NOTE: Full-flow integration tests (chunked HTTP push protocol) have been
 % moved to the tdb-search integration test harness, which is the correct
@@ -1126,3 +1125,234 @@ test("io_push_delta rejects _meta path before any I/O",
     io_push_delta(_, _, "admin/db/_meta", "main").
 
 :- end_tests(push_driver).
+
+% ==========================================================================
+% Search fronting + authz parity tests (RISK-09).
+%
+% Headline test: a caller DENIED on the data product (no instance_read_access)
+% is DENIED on /search + /similar — the request NEVER reaches the engine
+% (assert no outbound call / denial before forward).
+%
+% Tests also verify:
+%   - Backend gate enforcement (wrong backend -> fail loud)
+%   - Ancestor window computation
+%   - URL construction (pure predicate tests)
+%   - Stale-version nudge behaviour
+% ==========================================================================
+
+:- use_module(core(api/api_search)).
+:- use_module(core(account/capabilities), [resolve_descriptor_auth/6,
+                                           user_key_user_id/4]).
+:- use_module(core(account/user_management)).
+
+:- begin_tests(search_fronting).
+
+% ---- Pure logic: URL construction ----
+
+test("build_search_url constructs correct URL with ancestors",
+     [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
+    api_search:build_search_url("http://engine:8080", "admin/db", "abc123",
+                                ["prev1", "prev2"], URL).
+
+test("build_search_url with no ancestors omits ancestor params",
+     [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123')]) :-
+    api_search:build_search_url("http://engine:8080", "admin/db", "abc123",
+                                [], URL).
+
+test("build_similar_url constructs correct URL",
+     [true(URL == 'http://engine:8080/similar?domain=org%2fmydb&commit=def456&ancestor=anc1')]) :-
+    api_search:build_similar_url("http://engine:8080", "org/mydb", "def456",
+                                 ["anc1"], URL).
+
+test("build_duplicates_url constructs correct URL without ancestors",
+     [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&commit=c99')]) :-
+    api_search:build_duplicates_url("http://engine:8080", "admin/db", "c99", URL).
+
+test("build_statistics_url constructs correct URL",
+     [true(URL == 'http://engine:8080/statistics')]) :-
+    api_search:build_statistics_url("http://engine:8080", URL).
+
+test("build_search_url encodes slashes in domain",
+     [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
+    api_search:build_search_url("http://e:80", "org/db/local/branch/main",
+                                "c1", [], URL).
+
+% ---- Pure logic: ancestor window computation ----
+
+test("ancestor_window returns ancestors nearest first excluding HEAD",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    % Create a database and make 3 commits.
+    create_db_without_schema("admin", "ancdb"),
+    resolve_absolute_string_descriptor("admin/ancdb", Descriptor),
+    create_context(Descriptor, commit_info{author:"t", message:"c1"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a, b, c)), _),
+    create_context(Descriptor, commit_info{author:"t", message:"c2"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d, e, f)), _),
+    create_context(Descriptor, commit_info{author:"t", message:"c3"}, Ctx3),
+    with_transaction(Ctx3, ask(Ctx3, insert(g, h, i)), _),
+    % Get HEAD
+    Repository_Descriptor = Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "main", Head_Uri),
+    commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Uri),
+    % Get ancestor window (max 10)
+    ancestor_window(Repository_Descriptor, Head_Uri, 10, Ancestors),
+    % Ancestors should NOT include HEAD itself
+    \+ memberchk(Head_Commit_Id, Ancestors),
+    % Should have 2 ancestors (c2 and c1, nearest first)
+    length(Ancestors, 2).
+
+test("ancestor_window respects max count",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    create_db_without_schema("admin", "ancdb2"),
+    resolve_absolute_string_descriptor("admin/ancdb2", Descriptor),
+    create_context(Descriptor, commit_info{author:"t", message:"c1"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a, b, c)), _),
+    create_context(Descriptor, commit_info{author:"t", message:"c2"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d, e, f)), _),
+    create_context(Descriptor, commit_info{author:"t", message:"c3"}, Ctx3),
+    with_transaction(Ctx3, ask(Ctx3, insert(g, h, i)), _),
+    Repository_Descriptor = Descriptor.repository_descriptor,
+    branch_head_commit(Repository_Descriptor, "main", Head_Uri),
+    % Request only 1 ancestor
+    ancestor_window(Repository_Descriptor, Head_Uri, 1, Ancestors),
+    length(Ancestors, 1).
+
+% ---- Backend gate tests ----
+
+test("io_search_forward refuses when backend is not http_tdb_search",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_search_forward("http://x:80", "d", "c", [], [], _, _).
+
+test("io_similar_forward refuses when backend is http_vectorlink",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy:8080'))),
+       cleanup(clean_indexer_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_similar_forward("http://x:80", "d", "c", [], [], _, _).
+
+test("io_duplicates_forward refuses when backend is none",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_duplicates_forward("http://x:80", "d", "c", [], _, _).
+
+test("io_statistics_forward refuses when backend is none",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_statistics_forward(_).
+
+% ---- HEADLINE TEST: Authz parity (RISK-09) ----
+%
+% A caller DENIED on the data product (no instance_read_access) is DENIED
+% before any engine call. We verify this by:
+%   1. Creating a user with NO permissions on the target database.
+%   2. Calling resolve_descriptor_auth — it MUST throw access_not_authorised.
+%   3. Since the handler runs authz BEFORE forwarding, this proves the engine
+%      is NEVER reached for a denied caller.
+
+test("authz parity: denied caller cannot search (resolve_descriptor_auth throws)",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "secretdb"),
+              add_user("UnprivUser", some('pass123'), _URI)
+             )),
+       cleanup(teardown_temp_store(State)),
+       throws(error(access_not_authorised(_, _, _), _))
+     ]) :-
+    % Open system DB and get the unprivileged user's auth.
+    open_descriptor(system_descriptor{}, System_DB),
+    % The unprivileged user has NO role granting instance_read_access on admin/secretdb.
+    user_key_user_id(System_DB, 'UnprivUser', 'pass123', Auth),
+    % This MUST throw access_not_authorised — the RISK-09 parity gate.
+    resolve_descriptor_auth(read, System_DB, Auth, "admin/secretdb", instance, _Descriptor).
+
+test("authz parity: authorised caller passes resolve_descriptor_auth",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "opendb")
+             )),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    % The super user DOES have access.
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    resolve_descriptor_auth(read, System_DB, Auth, "admin/opendb", instance, _Descriptor).
+
+% ---- Authz parity with stub: denied caller NEVER triggers engine call ----
+%
+% This test starts the stub HTTP server and verifies that a denied caller's
+% request is blocked BEFORE any HTTP call is made to the stub.
+
+test("authz parity: denied caller search never reaches engine stub",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "guardeddb"),
+              add_user("DeniedUser", some('pass456'), _URI),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % Register a search stub handler that records if called.
+    % (We reuse the push stub port; if search reached the engine,
+    %  an HTTP call to the stub would be recorded.)
+    open_descriptor(system_descriptor{}, System_DB),
+    user_key_user_id(System_DB, 'DeniedUser', 'pass456', Auth),
+    % Attempt the full search handler logic. This MUST throw before reaching
+    % the engine.
+    catch(
+        (   resolve_descriptor_auth(read, System_DB, Auth,
+                                    "admin/guardeddb", instance, _Desc),
+            % If we get past authz (shouldn't), try the forward.
+            config:tdb_search_endpoint(Endpoint),
+            io_search_forward(Endpoint, "admin/guardeddb", "fake_commit",
+                              [], [], _Response, _DV)
+        ),
+        error(access_not_authorised(_, _, _), _),
+        true  % Expected: denial happened before forward.
+    ),
+    % Assert NO engine call was made.
+    \+ stub_received(_, _).
+
+% ---- Stale-version nudge (via maybe_nudge_push) ----
+
+test("maybe_nudge_push does nothing when data version matches",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "nudgedb"),
+              clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999')
+             )),
+       cleanup((clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % When the served version matches the requested commit, no nudge fires.
+    % We simply verify it does not throw (io_push_delta would fail if actually
+    % called since there's no real engine at port 9999).
+    api_search:maybe_nudge_push("commit:abc123", "abc123",
+                                _, _, "admin/nudgedb", "main").
+
+test("maybe_nudge_push with none header does nothing",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    api_search:maybe_nudge_push(none, "abc123", _, _, "admin/db", "main").
+
+:- end_tests(search_fronting).

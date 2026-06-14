@@ -254,4 +254,5 @@
 :- use_module(api/api_history).
 :- use_module(api/api_migration).
 :- use_module(api/api_indexer).
+:- use_module(api/api_search).
 :- use_module(api/api_merge).
