@@ -1168,9 +1168,15 @@ test("build_duplicates_url constructs correct URL without ancestors",
      [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&commit=c99')]) :-
     api_search:build_duplicates_url("http://engine:8080", "admin/db", "c99", URL).
 
-test("build_statistics_url constructs correct URL",
-     [true(URL == 'http://engine:8080/statistics')]) :-
-    api_search:build_statistics_url("http://engine:8080", URL).
+test("build_statistics_url constructs scoped URL with domain and commit",
+     [true(URL == 'http://engine:8080/statistics?domain=admin%2fmydb&commit=abc123')]) :-
+    api_search:build_statistics_url("http://engine:8080", "admin/mydb", "abc123",
+                                    [], URL).
+
+test("build_statistics_url includes ancestor params",
+     [true(sub_atom(URL, _, _, _, '&ancestor=anc1'))]) :-
+    api_search:build_statistics_url("http://engine:8080", "admin/db", "c1",
+                                    ["anc1"], URL).
 
 test("build_search_url encodes slashes in domain",
      [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
@@ -1254,7 +1260,7 @@ test("io_statistics_forward refuses when backend is none",
        cleanup(clean_indexer_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_statistics_forward(_).
+    io_statistics_forward("http://x:80", "admin/db", "c0", [], _, _).
 
 % ---- HEADLINE TEST: Authz parity (RISK-09) ----
 %
@@ -1324,6 +1330,53 @@ test("authz parity: denied caller search never reaches engine stub",
             config:tdb_search_endpoint(Endpoint),
             io_search_forward(Endpoint, "admin/guardeddb", "fake_commit",
                               [], [], _Response, _DV)
+        ),
+        error(access_not_authorised(_, _, _), _),
+        true  % Expected: denial happened before forward.
+    ),
+    % Assert NO engine call was made.
+    \+ stub_received(_, _).
+
+% ---- Authz parity: denied caller cannot get statistics ----
+
+test("authz parity: denied caller cannot get statistics (resolve_descriptor_auth throws)",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "statsdb"),
+              add_user("StatsBlockedUser", some('pass789'), _URI)
+             )),
+       cleanup(teardown_temp_store(State)),
+       throws(error(access_not_authorised(_, _, _), _))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    user_key_user_id(System_DB, 'StatsBlockedUser', 'pass789', Auth),
+    % This MUST throw access_not_authorised — the RISK-09 parity gate for statistics.
+    resolve_descriptor_auth(read, System_DB, Auth, "admin/statsdb", instance, _Descriptor).
+
+test("authz parity: denied caller statistics never reaches engine stub",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "guardedstatsdb"),
+              add_user("StatsDeniedUser", some('pass012'), _URI),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    user_key_user_id(System_DB, 'StatsDeniedUser', 'pass012', Auth),
+    % Attempt the full statistics handler logic. This MUST throw before reaching
+    % the engine.
+    catch(
+        (   resolve_descriptor_auth(read, System_DB, Auth,
+                                    "admin/guardedstatsdb", instance, _Desc),
+            % If we get past authz (shouldn't), try the forward.
+            config:tdb_search_endpoint(Endpoint),
+            io_statistics_forward(Endpoint, "admin/guardedstatsdb", "fake_commit",
+                                  [], _Response, _DV)
         ),
         error(access_not_authorised(_, _, _), _),
         true  % Expected: denial happened before forward.

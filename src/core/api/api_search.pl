@@ -2,11 +2,11 @@
               io_search_forward/7,
               io_similar_forward/7,
               io_duplicates_forward/6,
-              io_statistics_forward/1,
+              io_statistics_forward/6,
               build_search_url/5,
               build_similar_url/5,
               build_duplicates_url/4,
-              build_statistics_url/2,
+              build_statistics_url/5,
               ancestor_window/4,
               maybe_nudge_push/6
           ]).
@@ -168,12 +168,19 @@ build_duplicates_url(Endpoint, Domain, Commit, URL) :-
            [Endpoint, Enc_Domain, Enc_Commit]).
 
 /**
- * build_statistics_url(+Endpoint, -URL) is det.
+ * build_statistics_url(+Endpoint, +Domain, +Commit, +Ancestors, -URL) is det.
  *
- * Constructs the engine's /statistics URL. Global — no domain/commit params.
+ * Constructs the engine's /statistics URL scoped to a single domain.
+ * Includes domain, commit, and ancestor query parameters (same contract as
+ * build_search_url). TerminusDB always sends domain — the engine never
+ * receives global statistics from a user-facing route.
  */
-build_statistics_url(Endpoint, URL) :-
-    format(atom(URL), "~w/statistics", [Endpoint]).
+build_statistics_url(Endpoint, Domain, Commit, Ancestors, URL) :-
+    encode_query_value(Domain, Enc_Domain),
+    encode_query_value(Commit, Enc_Commit),
+    ancestor_query_params(Ancestors, Ancestor_Params),
+    format(atom(URL), "~w/statistics?domain=~w&commit=~w~w",
+           [Endpoint, Enc_Domain, Enc_Commit, Ancestor_Params]).
 
 /**
  * ancestor_query_params(+Ancestors, -ParamString) is det.
@@ -243,19 +250,18 @@ io_duplicates_forward(Endpoint, Domain, Commit,
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
 /**
- * io_statistics_forward(-Response_Body) is det.
+ * io_statistics_forward(+Endpoint, +Domain, +Commit, +Ancestors,
+ *                       -Response_Body, -Data_Version_Header) is det.
  *
- * Forwards a statistics request to the engine's GET /statistics endpoint.
- * Global endpoint — no per-domain authz, just backend gate + admin secret.
+ * Forwards a statistics request to the engine's GET /statistics endpoint,
+ * scoped to a single domain. Mirrors io_search_forward contract.
  */
-io_statistics_forward(Response_Body) :-
+io_statistics_forward(Endpoint, Domain, Commit, Ancestors,
+                      Response_Body, Data_Version_Header) :-
     assert_search_backend,
-    do_or_die(
-        tdb_search_endpoint(Endpoint),
-        error(tdb_search_endpoint_not_configured(io_statistics_forward), _)),
     search_auth_header(AuthHeader),
-    build_statistics_url(Endpoint, URL),
-    io_forward_get(URL, AuthHeader, Response_Body, _Data_Version).
+    build_statistics_url(Endpoint, Domain, Commit, Ancestors, URL),
+    io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
 % ==========================================================================
 % Internal: HTTP GET forwarding with response header extraction.

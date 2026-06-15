@@ -3306,8 +3306,9 @@ index_handler(get,Path,Request,System_DB,Auth) :-
                  prefix,
                  methods([options,get])]).
 
-:- http_handler(api(statistics), cors_handler(Method, statistics_handler),
+:- http_handler(api(statistics/Path), cors_handler(Method, statistics_handler(Path)),
                 [method(Method),
+                 prefix,
                  methods([options,get])]).
 
 % ---- /api/search handler ----
@@ -3337,7 +3338,7 @@ search_handler(post, Path, Request, System_DB, Auth) :-
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
-            Repository_Descriptor = Descriptor.repository_descriptor,
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             % Compute the full graphspec as the engine domain.
@@ -3378,7 +3379,7 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
-            Repository_Descriptor = Descriptor.repository_descriptor,
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             descriptor_graphspec(Descriptor, Domain),
@@ -3411,7 +3412,7 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
-            Repository_Descriptor = Descriptor.repository_descriptor,
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             descriptor_graphspec(Descriptor, Domain),
@@ -3422,18 +3423,37 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         )
     ).
 
-% ---- /api/statistics handler (global, no per-domain authz) ----
-statistics_handler(get, Request, _System_DB, _Auth) :-
+% ---- /api/statistics handler (per-domain authz, RISK-09 parity) ----
+% Mirrors search_handler: resolves authz BEFORE forwarding to engine.
+statistics_handler(get, Path, Request, System_DB, Auth) :-
     api_report_errors(
         search,
         Request,
         (
+            % FAIL-CLOSED authz gate (RISK-09): caller must hold instance_read_access.
+            % Throws access_not_authorised -> 403 BEFORE any engine call.
+            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            % Backend gate: refuses if not http_tdb_search.
             do_or_die(config:indexer_backend(http_tdb_search),
                       error(search_requires_tdb_search_backend, _)),
-            io_statistics_forward(Response_Body),
-            write_cors_headers(Request),
-            format("Content-Type: application/json~n~n"),
-            write(Response_Body)
+            do_or_die(config:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(statistics_handler), _)),
+            % Resolve branch HEAD commit.
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            % Compute the full graphspec as the engine domain.
+            descriptor_graphspec(Descriptor, Domain),
+            % Compute the ancestor window (last 10 ancestors, nearest first).
+            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            % Forward to the engine, scoped to this domain.
+            io_statistics_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                  Response_Body, Data_Version_Header),
+            % Relay response to caller with the data-version header.
+            reply_search_response(Request, Response_Body, Data_Version_Header)
         )
     ).
 
