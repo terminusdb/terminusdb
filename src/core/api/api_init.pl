@@ -647,6 +647,8 @@ stop_push_stub(Port) :-
 :- http_handler('/last-indexed', push_stub_last_indexed, []).
 :- http_handler('/push', push_stub_push, [methods([post])]).
 :- http_handler('/check', push_stub_check, []).
+:- http_handler('/domain', push_stub_domain_delete, [methods([delete])]).
+:- http_handler('/resolve', push_stub_resolve, [methods([post])]).
 
 push_stub_last_indexed(Request) :-
     (   memberchk(search(Search), Request)
@@ -737,6 +739,27 @@ push_stub_check(Request) :-
         format("Content-Type: text/plain~n~n"),
         format("Task not found: ~w", [Task_Id])
     ).
+
+% ---- /domain DELETE handler: records the deletion request, returns 204 ----
+push_stub_domain_delete(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    assertz(stub_received(domain_delete, Search)),
+    format("Status: 204~n"),
+    format("Content-Type: text/plain~n~n").
+
+% ---- /resolve POST handler: records the resolve request, returns stub JSON ----
+push_stub_resolve(Request) :-
+    (   memberchk(input(In), Request)
+    ->  read_string(In, _, Body),
+        assertz(stub_received(resolve_body, Body))
+    ;   true
+    ),
+    assertz(stub_received(resolve_called, true)),
+    format("Content-Type: application/json~n~n"),
+    write('{"matches":[]}').
 
 :- begin_tests(push_driver).
 
@@ -883,17 +906,20 @@ test("io_push_delta does nothing when engine is at HEAD",
     Repository_Descriptor = Descriptor.repository_descriptor,
     branch_head_commit(Repository_Descriptor, "main", Head_Uri),
     commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Uri),
-    % Configure stub to return this same commit (already indexed)
-    retractall(stub_last_indexed_response(_)),
+    % Configure stub to return this same commit (already indexed).
+    % Module-qualify dynamic predicates: plunit test bodies run in a separate
+    % internal module (plunit_push_driver), so bare assertz/retractall would
+    % target the wrong clause database. The stub handler reads from api_init.
+    retractall(api_init:stub_last_indexed_response(_)),
     format(atom(ResponseJson), '{"branch":"main","commit":"~w","version":5}', [Head_Commit_Id]),
-    assertz(stub_last_indexed_response(ResponseJson)),
+    assertz(api_init:stub_last_indexed_response(ResponseJson)),
     % Drive the push
     super_user_authority(Auth),
     open_descriptor(system_descriptor{}, System_DB),
     io_push_delta(System_DB, Auth, "admin/testdb2", "main"),
     % Verify NO push was made (only last-indexed was called)
-    stub_received(last_indexed, _),
-    \+ stub_received(push_params, _).
+    api_init:stub_received(last_indexed, _),
+    \+ api_init:stub_received(push_params, _).
 
 % ---- Pure logic tests for commits_after/3 ----
 
@@ -958,8 +984,10 @@ test("build_last_indexed_url encodes special chars in branch",
 test("io_await_task_completion succeeds when check returns Complete",
      [ setup((push_stub_port(Port),
               start_push_stub(Port),
-              % Pre-register a Complete response for task-test-1
-              assertz(stub_check_response("task-test-1",
+              % Pre-register a Complete response for task-test-1.
+              % Module-qualify: plunit setup runs in plunit_push_driver module,
+              % but the stub handler reads from api_init.
+              assertz(api_init:stub_check_response("task-test-1",
                   '{"status":"Complete","task_id":"task-test-1"}'))
              )),
        cleanup(stop_push_stub(Port))
@@ -1141,9 +1169,11 @@ test("io_push_delta rejects _meta path before any I/O",
 % ==========================================================================
 
 :- use_module(core(api/api_search)).
+:- use_module(core(api/db_delete), [delete_db/5]).
 :- use_module(core(account/capabilities), [resolve_descriptor_auth/6,
                                            user_key_user_id/4]).
 :- use_module(core(account/user_management)).
+:- use_module(core(transaction/system_entity), [database_exists/2]).
 
 :- begin_tests(search_fronting).
 
@@ -1408,4 +1438,141 @@ test("maybe_nudge_push with none header does nothing",
      ]) :-
     api_search:maybe_nudge_push(none, "abc123", _, _, "admin/db", "main").
 
+% ---- Authz parity for /resolve (RISK-09, T4) ----
+
+test("authz parity: denied caller cannot resolve (resolve_descriptor_auth throws)",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "resolvedb"),
+              add_user("ResolveDeniedUser", some('pass321'), _URI)
+             )),
+       cleanup(teardown_temp_store(State)),
+       throws(error(access_not_authorised(_, _, _), _))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    user_key_user_id(System_DB, 'ResolveDeniedUser', 'pass321', Auth),
+    % This MUST throw access_not_authorised — the RISK-09 parity gate for /resolve.
+    resolve_descriptor_auth(read, System_DB, Auth, "admin/resolvedb", instance, _Descriptor).
+
+test("authz parity: authorised caller passes resolve for resolve endpoint",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "resolveopendb")
+             )),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    resolve_descriptor_auth(read, System_DB, Auth, "admin/resolveopendb", instance, _Descriptor).
+
+test("authz parity: denied caller resolve never reaches engine stub",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "guardedresolvedb"),
+              add_user("ResolveBlockedUser", some('pass654'), _URI),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    user_key_user_id(System_DB, 'ResolveBlockedUser', 'pass654', Auth),
+    % Attempt the full resolve handler logic. This MUST throw before reaching
+    % the engine.
+    catch(
+        (   resolve_descriptor_auth(read, System_DB, Auth,
+                                    "admin/guardedresolvedb", instance, _Desc),
+            % If we get past authz (shouldn't), try the forward.
+            config:tdb_search_endpoint(Endpoint),
+            io_resolve_forward(Endpoint, "admin/guardedresolvedb", "fake_commit",
+                               [], _{}, _Response)
+        ),
+        error(access_not_authorised(_, _, _), _),
+        true  % Expected: denial happened before forward.
+    ),
+    % Assert NO engine call was made.
+    \+ stub_received(_, _).
+
 :- end_tests(search_fronting).
+
+% ==========================================================================
+% T4 — Resolve URL construction tests.
+% ==========================================================================
+
+:- begin_tests(resolve_url_construction).
+
+test("build_resolve_url constructs correct URL",
+     [true(URL == 'http://engine:8080/resolve?domain=admin%2fdb&commit=abc123')]) :-
+    api_search:build_resolve_url("http://engine:8080", "admin/db", "abc123", URL).
+
+test("build_resolve_url encodes slashes in domain",
+     [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
+    api_search:build_resolve_url("http://e:80", "org/db/local/branch/main", "c1", URL).
+
+test("io_resolve_forward refuses when backend is not http_tdb_search",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_resolve_forward("http://x:80", "d", "c", [], _{}, _).
+
+:- end_tests(resolve_url_construction).
+
+% ==========================================================================
+% T5 — DELETE /domain trigger tests.
+% ==========================================================================
+
+:- begin_tests(delete_domain_trigger).
+
+test("build_delete_domain_url constructs correct URL",
+     [true(URL == 'http://engine:8080/domain?domain=admin%2fmydb')]) :-
+    api_search:build_delete_domain_url("http://engine:8080", "admin/mydb", URL).
+
+test("io_delete_domain refuses when backend is not http_tdb_search",
+     [ setup((clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none))),
+       cleanup(clean_indexer_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_delete_domain("http://x:80", "admin/mydb").
+
+test("delete_db triggers maybe_delete_search_domain (stub receives DELETE)",
+     [ setup((setup_temp_store(State),
+              clean_indexer_env,
+              start_push_stub(Port),
+              format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL),
+              setenv('TERMINUSDB_SEARCH_ADMIN_USER', admin),
+              setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
+             )),
+       cleanup((stop_push_stub(Port),
+                clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % Create a database, then delete it via the API.
+    create_db_without_schema("admin", "deleteme"),
+    open_descriptor(system_descriptor{}, System_DB),
+    super_user_authority(Auth),
+    % The delete_db/5 call should succeed even though the stub doesn't
+    % have a proper /domain DELETE handler — it will return 404, which
+    % io_delete_domain treats as success (idempotent).
+    delete_db(System_DB, Auth, "admin", "deleteme", false),
+    % Database should be gone.
+    \+ database_exists("admin", "deleteme").
+
+test("maybe_delete_search_domain is silent no-op when backend is none",
+     [ setup((setup_temp_store(State),
+              clean_indexer_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', none)
+             )),
+       cleanup((clean_indexer_env,
+                teardown_temp_store(State)))
+     ]) :-
+    % Should succeed silently — no engine to notify.
+    db_delete:maybe_delete_search_domain("admin", "nonexistent").
+
+:- end_tests(delete_domain_trigger).

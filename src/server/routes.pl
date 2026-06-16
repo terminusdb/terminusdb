@@ -21,7 +21,12 @@
 :- use_module(core(account)).
 :- use_module(core(document)).
 :- use_module(core(api/api_init)).
-:- use_module(core(api/api_search)).
+:- use_module(core(api/api_search),
+             [io_search_forward/7, io_similar_forward/7,
+              io_duplicates_forward/6, io_statistics_forward/6,
+              io_resolve_forward/6, io_compare_forward/4,
+              io_delete_domain/2,
+              ancestor_window/4, maybe_nudge_push/6]).
 :- use_module(core(api/api_indexer), [descriptor_graphspec/2, io_push_delta/4]).
 
 :- use_module(config(terminus_config)).
@@ -3306,10 +3311,19 @@ index_handler(get,Path,Request,System_DB,Auth) :-
                  prefix,
                  methods([options,get])]).
 
+:- http_handler(api(resolve/Path), cors_handler(Method, resolve_handler(Path)),
+                [method(Method),
+                 prefix,
+                 methods([options,post])]).
+
 :- http_handler(api(statistics/Path), cors_handler(Method, statistics_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
+
+:- http_handler(api(compare), cors_handler(Method, compare_handler),
+                [method(Method),
+                 methods([options,post])]).
 
 % ---- /api/search handler ----
 % RISK-09 parity gate: resolve_descriptor_auth MUST succeed BEFORE any engine call.
@@ -3347,14 +3361,30 @@ search_handler(post, Path, Request, System_DB, Auth) :-
             ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
             % Collect extra query params from the request (body wins over query).
             search_extra_params(Search, Body, Extra_Params),
-            % Forward to the engine.
-            io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
-                              Extra_Params, Response_Body, Data_Version_Header),
-            % Stale-version nudge: if served != requested, trigger a push.
-            maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
-                             System_DB, Auth, Path, Branch_Name),
-            % Relay response to caller with the data-version header.
-            reply_search_response(Request, Response_Body, Data_Version_Header)
+            % Forward to the engine — DEFECT-2 FIX: catch engine 404 (not indexed),
+            % fire the nudge so the next search converges, then re-throw as a handled error.
+            catch(
+                (   io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                      Extra_Params, Response_Body, Data_Version_Header),
+                    % Stale-version nudge: if served != requested, trigger a push.
+                    maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                                     System_DB, Auth, Path, Branch_Name),
+                    % Relay response to caller with the data-version header.
+                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   % DEFECT-2: Engine returned 404 (no indexed lineage). Fire nudge
+                    % so the next search converges, then throw a handled error.
+                    catch(
+                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        Nudge_Error,
+                        format(user_error,
+                               "[WARN] Search not-indexed nudge failed for ~w: ~q~n",
+                               [Path, Nudge_Error])
+                    ),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
         )
     ).
 
@@ -3385,11 +3415,25 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
             descriptor_graphspec(Descriptor, Domain),
             ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
             similar_extra_params(Search, Body, Extra_Params),
-            io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
-                               Extra_Params, Response_Body, Data_Version_Header),
-            maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
-                             System_DB, Auth, Path, Branch_Name),
-            reply_search_response(Request, Response_Body, Data_Version_Header)
+            % DEFECT-2 FIX: catch engine 404, fire nudge, then re-throw handled error.
+            catch(
+                (   io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                       Extra_Params, Response_Body, Data_Version_Header),
+                    maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                                     System_DB, Auth, Path, Branch_Name),
+                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   catch(
+                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        Nudge_Error,
+                        format(user_error,
+                               "[WARN] Similar not-indexed nudge failed for ~w: ~q~n",
+                               [Path, Nudge_Error])
+                    ),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
         )
     ).
 
@@ -3417,11 +3461,104 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
             commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             descriptor_graphspec(Descriptor, Domain),
             duplicates_extra_params(Search, Body, Extra_Params),
-            io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
-                                  Extra_Params, Response_Body, Data_Version_Header),
-            reply_search_response(Request, Response_Body, Data_Version_Header)
+            % catch engine 404, fire nudge, then re-throw handled error.
+            catch(
+                (   io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
+                                          Extra_Params, Response_Body, Data_Version_Header),
+                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   catch(
+                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        Nudge_Error,
+                        format(user_error,
+                               "[WARN] Duplicates not-indexed nudge failed for ~w: ~q~n",
+                               [Path, Nudge_Error])
+                    ),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
         )
     ).
+
+% ---- /api/resolve handler (single-domain authz, RISK-09 parity, T4) ----
+% Entity resolution fronting. SINGLE-DOMAIN: the engine's /resolve endpoint
+% operates on ONE domain (set/target are doc_type/doc_id filters WITHIN that
+% domain). Cross-data-product resolve is NOT expressible in the current
+% contract — DEFERRED-AND-LOGGED for PO.
+%
+% AUTHZ: resolve_descriptor_auth(read) on the descriptor path — same
+% fail-closed gate as search/similar/duplicates (P6-AUTHZ-1).
+resolve_handler(post, Path, Request, System_DB, Auth) :-
+    search_request_body(Request, Body),
+    api_report_errors(
+        search,
+        Request,
+        (
+            % FAIL-CLOSED authz gate (RISK-09): caller must hold instance_read_access.
+            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            % Backend gate: refuses if not http_tdb_search.
+            do_or_die(config:indexer_backend(http_tdb_search),
+                      error(search_requires_tdb_search_backend, _)),
+            do_or_die(config:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(resolve_handler), _)),
+            % Resolve branch HEAD commit.
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            % Compute the full graphspec as the engine domain.
+            descriptor_graphspec(Descriptor, Domain),
+            % Compute the ancestor window (last 10 ancestors, nearest first).
+            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            % Strip server-derived fields from the caller body (defence in depth)
+            % and forward with server-injected domain/commit/ancestors.
+            resolve_forward_body(Body, Forward_Body),
+            % catch engine 404, fire nudge, then re-throw handled error.
+            catch(
+                (   io_resolve_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                       Forward_Body, Response_Body),
+                    % Relay response to caller.
+                    write_cors_headers(Request),
+                    format("Content-Type: application/json~n~n"),
+                    write(Response_Body)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   catch(
+                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        Nudge_Error,
+                        format(user_error,
+                               "[WARN] Resolve not-indexed nudge failed for ~w: ~q~n",
+                               [Path, Nudge_Error])
+                    ),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
+        )
+    ).
+
+% Strip server-derived fields from the resolve body before forwarding.
+% Only user-supplied tuning parameters are forwarded; domain/commit/ancestors
+% are server-derived from the URL path (graphspec-from-URL invariant).
+resolve_forward_body(Body, Forward_Body) :-
+    findall(Key-Value,
+            (   resolve_allowed_body_key(Key),
+                get_dict(Key, Body, Value)
+            ),
+            Pairs),
+    dict_pairs(Forward_Body, _, Pairs).
+
+resolve_allowed_body_key(set_doc_types).
+resolve_allowed_body_key(set_doc_ids).
+resolve_allowed_body_key(target_doc_types).
+resolve_allowed_body_key(target_doc_ids).
+resolve_allowed_body_key(threshold).
+resolve_allowed_body_key(tau_one_to_one).
+resolve_allowed_body_key(tau_one_to_many).
+resolve_allowed_body_key(tau_many_to_one).
+resolve_allowed_body_key(k).
 
 % ---- /api/statistics handler (per-domain authz, RISK-09 parity) ----
 % Mirrors search_handler: resolves authz BEFORE forwarding to engine.
@@ -3449,13 +3586,82 @@ statistics_handler(get, Path, Request, System_DB, Auth) :-
             descriptor_graphspec(Descriptor, Domain),
             % Compute the ancestor window (last 10 ancestors, nearest first).
             ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            % Forward to the engine, scoped to this domain.
-            io_statistics_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
-                                  Response_Body, Data_Version_Header),
-            % Relay response to caller with the data-version header.
-            reply_search_response(Request, Response_Body, Data_Version_Header)
+            % catch engine 404, fire nudge, then re-throw handled error.
+            catch(
+                (   io_statistics_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                          Response_Body, Data_Version_Header),
+                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   catch(
+                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        Nudge_Error,
+                        format(user_error,
+                               "[WARN] Statistics not-indexed nudge failed for ~w: ~q~n",
+                               [Path, Nudge_Error])
+                    ),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
         )
     ).
+
+% ---- /api/compare handler (authenticated, no descriptor auth) ----
+% AUTHZ: requires a valid authenticated user but NO per-data-product capability
+% check — there is no domain (stateless text comparison only embeds caller-supplied
+% text). ANONYMOUS access is explicitly rejected: the authenticate/3
+% fallthrough assigns the anonymous URI when no credentials are supplied — we
+% fail-closed here since there is no resolve_descriptor_auth to gate on.
+% Do NOT call resolve_descriptor_auth.
+compare_handler(post, Request, _System_DB, Auth) :-
+    do_or_die(
+        Auth \== 'terminusdb://system/data/User/anonymous',
+        error(authentication_incorrect(anonymous_not_allowed), _)),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    search_request_body(Request, Body),
+    api_report_errors(
+        search,
+        Request,
+        (
+            % Backend gate: refuses if not http_tdb_search.
+            do_or_die(config:indexer_backend(http_tdb_search),
+                      error(search_requires_tdb_search_backend, _)),
+            do_or_die(config:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(compare_handler), _)),
+            % Extract the method query parameter (required).
+            do_or_die(
+                (   memberchk(method=Method, Search),
+                    Method \== ''
+                ),
+                error(missing_parameter(method), _)),
+            % Extract source and target from the body.
+            do_or_die(
+                (   get_dict(source, Body, Source),
+                    string(Source),
+                    Source \== ""
+                ),
+                error(missing_parameter(source), _)),
+            do_or_die(
+                (   get_dict(target, Body, Target),
+                    string(Target),
+                    Target \== ""
+                ),
+                error(missing_parameter(target), _)),
+            % Forward to the engine's POST /compare?method=<method>.
+            Forward_Body = _{source: Source, target: Target},
+            io_compare_forward(Endpoint, Method, Forward_Body, Response_Body),
+            % Relay the engine's JSON response to the caller.
+            reply_compare_response(Request, Response_Body)
+        )
+    ).
+
+% ---- Helper: relay compare response (no data-version header — stateless) ----
+reply_compare_response(Request, Response_Body) :-
+    write_cors_headers(Request),
+    format("Content-Type: application/json~n~n"),
+    write(Response_Body).
 
 % ---- Helper: the request's JSON body as a dict (empty dict if none) ----
 %
@@ -3506,7 +3712,7 @@ merged_repeated_param(Key, Body, Search, Values) :-
         is_list(Body_Values),
         Body_Values \== []
     ->  Values = Body_Values
-    ;   findall(V, memberchk(Key=V, Search), Query_Values),
+    ;   findall(V, member(Key=V, Search), Query_Values),
         Query_Values \== [],
         Values = Query_Values
     ).

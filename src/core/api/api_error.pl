@@ -252,6 +252,34 @@ api_global_error_jsonld(error(document_not_found(Id, Document), _), Type, JSON) 
                               'api:document': Document },
              'api:message' : Msg
             }.
+% Search-family handler received 404 from engine (not indexed yet).
+% Returns a structured 404 response instead of an unhandled 500.
+api_global_error_jsonld(error(search_not_indexed(Path, Engine_Body), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "No indexed data for ~w — the data product has not been indexed yet or indexing is in progress. A background index has been triggered; retry shortly.",
+           [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:SearchNotIndexed',
+                              'api:path' : Path,
+                              'api:engine_detail' : Engine_Body },
+             'api:message' : Msg
+            }.
+% Generic handler for engine forward failures (non-404 status codes).
+% Maps non-404 engine errors to a structured 500 response instead of a raw exception.
+api_global_error_jsonld(error(tdb_search_forward_failed(Status, Body, URL), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search engine returned unexpected status ~w for ~w",
+           [Status, URL]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:SearchEngineError',
+                              'api:status_code' : Status,
+                              'api:engine_body' : Body },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted_Id, Generated_Id), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Document was submitted with id ~q, but id ~q was generated", [Submitted_Id, Generated_Id]),

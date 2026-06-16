@@ -3,10 +3,16 @@
               io_similar_forward/7,
               io_duplicates_forward/6,
               io_statistics_forward/6,
+              io_resolve_forward/6,
+              io_compare_forward/4,
+              io_delete_domain/2,
               build_search_url/5,
               build_similar_url/5,
               build_duplicates_url/4,
               build_statistics_url/5,
+              build_resolve_url/4,
+              build_compare_url/3,
+              build_delete_domain_url/3,
               ancestor_window/4,
               maybe_nudge_push/6
           ]).
@@ -264,6 +270,62 @@ io_statistics_forward(Endpoint, Domain, Commit, Ancestors,
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
 % ==========================================================================
+% Compare: stateless text distance (no domain, no descriptor).
+% ==========================================================================
+
+/**
+ * build_compare_url(+Endpoint, +Method, -URL) is det.
+ *
+ * Constructs the engine's POST /compare URL with the required method
+ * query parameter. Currently only "embedding" is supported.
+ */
+build_compare_url(Endpoint, Method, URL) :-
+    encode_query_value(Method, Enc_Method),
+    format(atom(URL), "~w/compare?method=~w", [Endpoint, Enc_Method]).
+
+/**
+ * io_compare_forward(+Endpoint, +Method, +Body_Dict, -Response_Body) is det.
+ *
+ * Forwards a compare request to the engine's POST /compare endpoint.
+ * Body_Dict is a dict with `source` and `target` fields (plain text strings).
+ * Response_Body is the JSON string from the engine.
+ *
+ * Stateless: no domain, no dataset, no ANN index. The engine embeds both
+ * texts and returns their cosine distance on the [0, 1] reference scale.
+ *
+ * Fails loud on non-2xx responses (the engine validates method and body).
+ */
+io_compare_forward(Endpoint, Method, Body_Dict, Response_Body) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_compare_url(Endpoint, Method, URL),
+    setup_call_cleanup(
+        http_open(URL, In,
+                  [ method(post),
+                    post(json(Body_Dict)),
+                    status_code(Status),
+                    AuthHeader,
+                    request_header('Content-Type' = 'application/json'),
+                    request_header('Accept' = 'application/json')
+                  ]),
+        read_string(In, _, Response_Body),
+        close(In)),
+    handle_compare_response(Status, Response_Body, URL).
+
+/**
+ * handle_compare_response(+Status, +Body, +URL) is det.
+ *
+ * Succeeds on 2xx responses. Fails loud on error status, preserving
+ * the engine's error body for diagnostics.
+ */
+handle_compare_response(Status, _Body, _URL) :-
+    Status >= 200,
+    Status < 300,
+    !.
+handle_compare_response(Status, Body, URL) :-
+    throw(error(tdb_search_forward_failed(Status, Body, URL), _)).
+
+% ==========================================================================
 % Internal: HTTP GET forwarding with response header extraction.
 % ==========================================================================
 
@@ -380,3 +442,125 @@ maybe_nudge_push(Data_Version_Header, Commit, System_DB, Auth, Path, Branch) :-
                    [Path, Nudge_Error])
         )
     ).
+
+% ==========================================================================
+% Resolve: entity resolution (single-domain, POST /resolve).
+%
+% DUAL-DOMAIN ANALYSIS (T4 PO decision):
+% The /resolve endpoint's set_doc_types/set_doc_ids and target_doc_types/
+% target_doc_ids are FILTERS WITHIN a single domain — the `domain` field
+% is singular in the ResolveRequestBody. Cross-data-product set/target is
+% NOT expressible in the current engine contract. Therefore, single-domain
+% authz (resolve_descriptor_auth(read) on the ONE data product in the URL
+% path) is correct and complete for the current contract.
+%
+% DEFERRED: Cross-data-product resolve (separate domain for set vs target)
+% is NOT implemented. If a future engine contract allows two domains, a
+% second resolve_descriptor_auth(read) call on the target domain is needed.
+% Logged as a defer-and-log item for the PO.
+% ==========================================================================
+
+/**
+ * build_resolve_url(+Endpoint, +Domain, +Commit, -URL) is det.
+ *
+ * Constructs the engine's POST /resolve URL. Domain and commit are passed
+ * in the JSON body (not query params) for /resolve, so the URL is bare.
+ * However, we still include domain and commit as query params for the
+ * auth header to be consistent with the engine's routing model.
+ */
+build_resolve_url(Endpoint, Domain, Commit, URL) :-
+    encode_query_value(Domain, Enc_Domain),
+    encode_query_value(Commit, Enc_Commit),
+    format(atom(URL), "~w/resolve?domain=~w&commit=~w",
+           [Endpoint, Enc_Domain, Enc_Commit]).
+
+/**
+ * io_resolve_forward(+Endpoint, +Domain, +Commit, +Ancestors,
+ *                    +Body_Dict, -Response_Body) is det.
+ *
+ * Forwards a resolve request to the engine's POST /resolve endpoint.
+ * Body_Dict is the full JSON body dict from the caller (with server-derived
+ * domain, commit, and ancestors injected). Returns the engine's JSON response.
+ *
+ * Fails loud on non-2xx responses.
+ */
+io_resolve_forward(Endpoint, Domain, Commit, Ancestors,
+                   Body_Dict, Response_Body) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_resolve_url(Endpoint, Domain, Commit, _URL),
+    % /resolve uses POST with JSON body — domain, commit, ancestors in body.
+    format(atom(Resolve_URL), "~w/resolve", [Endpoint]),
+    % Inject server-derived fields into the body (overwriting any caller attempt
+    % to supply them — graphspec-from-URL invariant).
+    put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
+             Body_Dict, Forward_Body),
+    setup_call_cleanup(
+        http_open(Resolve_URL, In,
+                  [ method(post),
+                    post(json(Forward_Body)),
+                    status_code(Status),
+                    AuthHeader,
+                    request_header('Content-Type' = 'application/json'),
+                    request_header('Accept' = 'application/json')
+                  ]),
+        read_string(In, _, Response_Body),
+        close(In)),
+    handle_forward_response(Status, Response_Body, Resolve_URL).
+
+% ==========================================================================
+% DELETE /domain: drop a domain's search index on data-product deletion (T5).
+%
+% FAIL-LOUD, BEST-EFFORT: if the engine call fails, surface a loud error/log
+% but do NOT block the TerminusDB-side deletion. The orphaned-index scenario
+% is VISIBLE (logged to user_error), not silent.
+% ==========================================================================
+
+/**
+ * build_delete_domain_url(+Endpoint, +Domain, -URL) is det.
+ *
+ * Constructs the engine's DELETE /domain?domain=<org/db> URL.
+ */
+build_delete_domain_url(Endpoint, Domain, URL) :-
+    encode_query_value(Domain, Enc_Domain),
+    format(atom(URL), "~w/domain?domain=~w", [Endpoint, Enc_Domain]).
+
+/**
+ * io_delete_domain(+Endpoint, +Domain) is det.
+ *
+ * Sends DELETE /domain?domain=<Domain> to the engine. Idempotent: the engine
+ * returns 204 for both existing and already-removed domains. Fails loud
+ * on genuine I/O errors (non-2xx and non-404).
+ *
+ * Called from db_delete.pl on data-product deletion. Best-effort: the caller
+ * catches failures and logs them loudly without blocking the TerminusDB
+ * deletion.
+ */
+io_delete_domain(Endpoint, Domain) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_delete_domain_url(Endpoint, Domain, URL),
+    setup_call_cleanup(
+        http_open(URL, In,
+                  [ method(delete),
+                    status_code(Status),
+                    AuthHeader,
+                    request_header('Accept' = 'application/json')
+                  ]),
+        read_string(In, _, Response_Body),
+        close(In)),
+    handle_delete_domain_response(Status, Response_Body, URL).
+
+/**
+ * handle_delete_domain_response(+Status, +Body, +URL) is det.
+ *
+ * Succeeds on 2xx and 404 (idempotent deletion). Fails loud on any other
+ * status — the error propagates to the caller which logs it.
+ */
+handle_delete_domain_response(Status, _Body, _URL) :-
+    Status >= 200,
+    Status < 300,
+    !.
+handle_delete_domain_response(404, _Body, _URL) :- !.
+handle_delete_domain_response(Status, Body, URL) :-
+    throw(error(tdb_search_delete_domain_failed(Status, Body, URL), _)).
