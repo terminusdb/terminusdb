@@ -63,7 +63,7 @@ tags:
   description: |
     Semantic search, similarity, near-duplicate detection, batch entity resolution, and stateless text comparison.
 
-    **Backend requirement:** These endpoints require the search indexer backend to be configured and enabled. Set `TERMINUSDB_INDEXER_BACKEND=http_tdb_search` with a valid `TERMINUSDB_TDB_SEARCH_ENDPOINT` pointing to a running tdb-search engine instance. When the backend is not configured (set to `none` or absent), these endpoints return 503 with error `search_requires_tdb_search_backend`. The search/entity-resolution capability is an OPTIONAL, separately-enabled backend — it is not part of the always-on core TerminusDB API.
+    **Backend requirement:** These endpoints require the search backend to be enabled on the server. When the search backend is unavailable, all endpoints in this group return **503**. Search and entity resolution is an **optional**, separately-enabled capability — it is not part of the always-on core TerminusDB API.
 paths:
   /:
     get:
@@ -3503,15 +3503,20 @@ paths:
         Read-only, cacheable search against a data product branch. The query
         text is the `q` parameter. Results paginate with `start` (default 0)
         and `count` (default 50). The `TerminusDB-Data-Version` response header
-        reports the commit actually served (the nearest indexed ancestor under
-        lag); if it differs from the branch HEAD, the result is stale and a
-        background push is triggered.
+        reports the commit actually served (the nearest indexed ancestor); if it
+        differs from the branch HEAD, the result is stale and a background
+        re-index is triggered.
 
-        Authorization: the caller must hold `instance_read_access` on the
-        addressed data product (resolve_descriptor_auth(read)). Denied callers
-        receive 403 BEFORE any engine call (RISK-09 parity gate).
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
 
-        Requires: `indexer_backend(http_tdb_search)` configured.
+        **Response codes:**
+        - **200**: Search results
+        - **400**: Invalid or missing query parameters
+        - **401**: Authentication required
+        - **403**: Caller lacks read access to the data product
+        - **404**: No indexed ancestor exists for this branch
+        - **503**: Search backend unavailable
       parameters:
         - $ref: '#/components/parameters/search_path'
         - name: q
@@ -3537,13 +3542,13 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         404:
-          description: No indexed ancestor for this branch (engine returns 404).
+          description: No indexed ancestor exists for this branch.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -3554,17 +3559,14 @@ paths:
       summary: Semantic / full-text / hybrid search (POST, structured).
       description: |
         Structured search via JSON body. Every parameter may be given as a query
-        parameter OR in the JSON body; the body value takes precedence (same
-        precedence as the tdb-search engine contract). `q` must be present in
-        the body OR the query.
+        parameter or in the JSON body; the body value takes precedence. `q` must
+        be present in the body or the query string.
 
         The descriptor path in the URL determines the domain and commit —
-        `domain`, `commit`, and `ancestors` are server-derived and NEVER sourced
-        from the request body or query string. This is the graphspec-from-URL
-        invariant.
+        these values are always server-derived and never sourced from the
+        request body or query string.
 
-        Authorization: same as GET — resolve_descriptor_auth(read) on the
-        addressed data product.
+        **Authorization:** requires read access to the addressed data product.
       parameters:
         - $ref: '#/components/parameters/search_path'
         - name: q
@@ -3606,13 +3608,13 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         404:
-          description: No indexed ancestor for this branch.
+          description: No indexed ancestor exists for this branch.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -3624,13 +3626,14 @@ paths:
       operationId: similarGet
       summary: Documents similar to a known indexed document (GET).
       description: |
-        Looks up the document's vector(s) by id, then runs a vector search.
-        Same response shape and staleness header as `/search`; paginates with
-        `start` and `count`. Supports `doc_type` and `doc_id` filters to scope
+        Finds documents similar to a given document by looking up its stored
+        vectors and running a nearest-neighbour search. Returns the same
+        response shape and staleness header as `/search`; paginates with
+        `start` and `count`. Use `doc_type` and `doc_id` filters to scope
         the candidate pool.
 
-        Authorization: resolve_descriptor_auth(read) on the addressed data
-        product. Denied callers receive 403 BEFORE any engine call.
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
       parameters:
         - $ref: '#/components/parameters/search_path'
         - name: id
@@ -3649,7 +3652,7 @@ paths:
         200:
           $ref: '#/components/responses/SearchOk'
         400:
-          description: The id is not present in the index, or a param is invalid.
+          description: The id is not present in the index, or a parameter is invalid.
           content:
             application/json:
               schema:
@@ -3659,13 +3662,13 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         404:
-          description: No indexed ancestor for this branch.
+          description: No indexed ancestor exists for this branch.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -3675,12 +3678,12 @@ paths:
       operationId: similarPost
       summary: Documents similar to a known indexed document (POST).
       description: |
-        POST variant of /similar for large candidate pools. Same semantics as
-        GET /similar but accepts parameters in the JSON body. Preferred when
-        `doc_id` candidate pools are large (dozens+). Body values override
+        Accepts parameters in the JSON body instead of the query string.
+        Same semantics as GET /similar. Preferred when `doc_id` candidate
+        pools are large and would overflow a GET URL. Body values override
         same-named query parameters.
 
-        Authorization: same as GET — resolve_descriptor_auth(read).
+        **Authorization:** requires read access to the addressed data product.
       parameters:
         - $ref: '#/components/parameters/search_path'
         - name: id
@@ -3709,7 +3712,7 @@ paths:
         200:
           $ref: '#/components/responses/SearchOk'
         400:
-          description: The id is not present in the index, or a param is invalid.
+          description: The id is not present in the index, or a parameter is invalid.
           content:
             application/json:
               schema:
@@ -3719,13 +3722,13 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         404:
-          description: No indexed ancestor for this branch.
+          description: No indexed ancestor exists for this branch.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -3737,23 +3740,23 @@ paths:
       operationId: duplicates
       summary: Scoped near-duplicate document groups (bounded).
       description: |
-        Scoped near-duplicate detection. For each indexed point in the SET
-        population, the engine runs one ANN nearest-neighbour query. Matches
-        reduce to DOCUMENT-level groups: a group is DISTINCT documents whose
-        best chunks are within `threshold`, deduplicated and canonicalised
-        (lower id first). A document is never grouped with itself.
+        Detects near-duplicate documents within a data product. For each
+        indexed document in the set population, a nearest-neighbour query
+        finds cross-document matches within `threshold`. Results are grouped
+        at the document level (lower id first); a document is never grouped
+        with itself.
 
-        Scope: the repeated `doc_type`/`doc_id` params define the SET
-        population. The repeated `target_doc_type`/`target_doc_id` params, when
-        present, define a second TARGET population so every group straddles
-        set-to-target (cross-catalogue entity resolution); absent, the scan is
-        within-set dedup.
+        **Scope:** the `doc_type`/`doc_id` parameters define the set
+        population. The `target_doc_type`/`target_doc_id` parameters, when
+        present, define a second target population so that every group
+        straddles set-to-target (cross-catalogue entity resolution). When
+        omitted, the scan is within-set deduplication.
 
         `threshold` is on the [0, 1] cosine distance scale (0 = identical,
         0.5 = unrelated, 1 = opposite).
 
-        Authorization: resolve_descriptor_auth(read) on the addressed data
-        product. Denied callers receive 403 BEFORE any engine call.
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
       parameters:
         - $ref: '#/components/parameters/search_path'
         - name: threshold
@@ -3772,8 +3775,8 @@ paths:
           in: query
           required: false
           description: |
-            Restrict near-duplicate NEIGHBOURS to these document types (the
-            TARGET population). Repeated key.
+            Restrict near-duplicate neighbours to these document types (the
+            target population). Repeated key.
           schema:
             type: array
             items:
@@ -3784,8 +3787,8 @@ paths:
           in: query
           required: false
           description: |
-            Restrict near-duplicate NEIGHBOURS to these document IDs (the
-            TARGET population). Repeated key.
+            Restrict near-duplicate neighbours to these document IDs (the
+            target population). Repeated key.
           schema:
             type: array
             items:
@@ -3824,13 +3827,13 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         404:
-          description: No indexed ancestor for this branch.
+          description: No indexed ancestor exists for this branch.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -3842,32 +3845,32 @@ paths:
       operationId: resolve
       summary: Batch entity resolution over stored vectors.
       description: |
-        Server-side batch entity resolution: reciprocal cross-NN retrieval
-        over stored vectors, then a 3-threshold matching algorithm producing
-        a 3-partition output (matched, set_only, target_only).
+        Server-side batch entity resolution. Performs reciprocal
+        nearest-neighbour retrieval over stored vectors, then applies a
+        3-threshold matching algorithm to produce a 3-partition output
+        (matched, set_only, target_only).
 
-        The SET and TARGET populations are defined by `set_doc_types`/
+        The set and target populations are defined by `set_doc_types`/
         `set_doc_ids` and `target_doc_types`/`target_doc_ids` in the request
-        body (same scoping as /duplicates). When no target is specified,
-        target = set (within-set dedup).
+        body (same scoping as `/duplicates`). When no target is specified,
+        target equals set (within-set deduplication).
 
-        `threshold` is the GATHER cap (max distance for a candidate NN to
-        be considered). The three `tau_*` are independent MATCHING thresholds
-        applied after gathering:
-        - `tau_one_to_one` (required): 1:1 mutual-best CORE threshold
+        `threshold` is the gather cap (maximum distance for a candidate
+        neighbour to be considered). The three `tau_*` values are independent
+        matching thresholds applied after gathering:
+        - `tau_one_to_one` (required): one-to-one mutual-best core threshold
         - `tau_one_to_many` (optional): set-side extras threshold
         - `tau_many_to_one` (optional): target-side extras threshold
-        All tau values must be <= threshold.
+        All tau values must be less than or equal to `threshold`.
 
-        `k` is how many candidates are evaluated per document in the set
-        (default 5).
+        `k` controls how many candidates are evaluated per document in the
+        set (default 5).
 
-        The descriptor path determines the single domain for this resolution
-        (the engine operates on ONE domain). Cross-data-product resolve is
-        NOT supported in the current contract.
+        The descriptor path determines the single domain for this resolution.
+        Cross-data-product resolution is not supported.
 
-        Authorization: resolve_descriptor_auth(read) on the addressed data
-        product. Denied callers receive 403 BEFORE any engine call.
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
       parameters:
         - $ref: '#/components/parameters/search_path'
       requestBody:
@@ -3933,13 +3936,13 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         404:
-          description: No indexed ancestor for this branch.
+          description: No indexed ancestor exists for this branch.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -3951,28 +3954,25 @@ paths:
       operationId: compare
       summary: Stateless semantic distance between two texts.
       description: |
-        Embeds `source` (Query role) and `target` (Document role), L2-normalises
-        both vectors, and returns the normalized cosine distance on the same
-        [0, 1] reference scale as `/search`, `/similar`, `/duplicates`, and
-        `/resolve` (0 = identical, ~0.5 = unrelated, 1 = opposite).
+        Embeds `source` and `target` and returns the normalised cosine
+        distance on the same [0, 1] scale as `/search`, `/similar`,
+        `/duplicates`, and `/resolve` (0 = identical, ~0.5 = unrelated,
+        1 = opposite).
 
-        **Identical-input shortcircuit**: if `source` and `target` are the exact
-        same string, distance 0.0 is returned immediately without embedding.
-        This avoids the asymmetric-prefix artefact where identical content would
-        otherwise produce ~0.16 distance. For near-identical but non-equal texts,
-        expect a distance floor of approximately 0.16.
+        **Identical-input shortcut:** when `source` and `target` are the
+        exact same string, distance 0.0 is returned immediately without
+        embedding. For near-identical but non-equal texts, expect a distance
+        floor of approximately 0.16.
 
-        Stateless: no dataset, no ANN index, no domain/descriptor. Pure
-        convenience function for a UI to compare two records without
-        provisioning an index.
+        **Stateless:** no dataset, no index, no domain. A convenience
+        endpoint for comparing two texts without provisioning an index.
 
-        Authorization: requires a valid authenticated user but NO per-data-product
-        capability check (no descriptor auth). There is no domain — the endpoint
-        only embeds caller-supplied text. The standard TerminusDB authentication
-        validates the user credential. Anonymous access is rejected (401).
+        **Authorization:** requires a valid authenticated user. No
+        per-data-product access check is applied — the endpoint only
+        embeds caller-supplied text. Anonymous access is rejected (401).
 
-        The `method` query parameter is required. Currently the only supported
-        value is `embedding`. Unknown or missing values give 400.
+        The `method` query parameter is required. Currently the only
+        supported value is `embedding`. Unknown or missing values return 400.
       parameters:
         - name: method
           in: query
@@ -4026,7 +4026,7 @@ paths:
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         503:
-          description: Search backend not configured or embedding backend unavailable.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:
@@ -4038,15 +4038,12 @@ paths:
       operationId: statistics
       summary: Index statistics for a data product (domain-scoped).
       description: |
-        Operational counters scoped to the addressed data product. Returns
-        statistics for the resolved domain ONLY (domains=1, counts scoped).
+        Returns operational counters scoped to the addressed data product.
+        Statistics are always scoped to a single domain (derived from the
+        descriptor path in the URL).
 
-        TerminusDB always sends the domain (derived from the descriptor path
-        in the URL) — the engine never receives a global statistics request
-        from a user-facing route.
-
-        Authorization: resolve_descriptor_auth(read) on the addressed data
-        product. Denied callers receive 403 BEFORE any engine call.
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any statistics are returned.
       parameters:
         - $ref: '#/components/parameters/search_path'
       responses:
@@ -4071,7 +4068,7 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
         503:
-          description: Search backend not configured.
+          description: Search backend unavailable.
           content:
             application/json:
               schema:

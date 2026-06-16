@@ -10,7 +10,9 @@
               io_await_task_completion/2,
               build_last_indexed_url/4,
               validate_index_path/1,
-              encode_query_value/2
+              encode_query_value/2,
+              validation_is_index_enabled/1,
+              io_auto_push_worker/2
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
@@ -628,3 +630,126 @@ io_index_branch(System_DB, Auth, Path) :-
         branch_descriptor{branch_name: Branch_Name} :< Descriptor,
         error(push_requires_branch_descriptor(Path), _)),
     io_push_delta(System_DB, Auth, Path, Branch_Name).
+
+% ==========================================================================
+% Auto-push-on-commit hook
+%
+% Fires after every commit (multifile post_commit_hook/2 from plugins.pl).
+% GATE: only acts when indexer_backend = http_tdb_search AND the committed
+% data product's schema has at least one type with embedding metadata.
+% For all other commits this is a cheap no-op (two config checks + fail).
+%
+% ASYNC FIRE-AND-FORGET: spawns a detached thread to drive io_push_delta
+% so commit latency is NOT inflated. The thread runs as the SYSTEM identity
+% (super_user_authority) — indexing is infrastructure, not coupled to the
+% committing user's auth. It needs to run as system as the user may not have
+% read rights on the data product they write into.
+%
+% FAILURE SEMANTICS: thread catches its own errors, logs them loud
+% ([ERROR] via json_log_error_formatted), and stops. The commit is NEVER
+% blocked or broken by engine-down / push failure. The existing search-miss
+% nudge (api_search.pl maybe_nudge_push) remains as catch-up fallback.
+%
+% NO DOUBLE-PUSH: the engine's 409 transactional guard makes a duplicate
+% push (hook + nudge both fire for same commit) a safe no-op.
+% ==========================================================================
+
+:- use_module(core(plugins)).
+:- multifile plugins:post_commit_hook/2.
+
+plugins:post_commit_hook(Validations, _Meta_Data) :-
+    % Gate 1: backend must be http_tdb_search. Cheap tabled check.
+    indexer_backend(http_tdb_search),
+    % Gate 2 + spawn: for each validation with a branch_descriptor whose
+    % schema has embedding metadata, spawn an async push worker.
+    % forall/2 iterates all matching validations; the hook as a whole
+    % succeeds once (deterministic) regardless of how many branches matched.
+    %
+    % SAFETY: The entire forall is wrapped in catch/3 so that NEITHER a
+    % Generator exception (malformed validation) NOR a thread_create failure
+    % (OS resource exhaustion) can propagate into the commit path. The
+    % documented contract is "failure never breaks commit" — ignore/1 in
+    % database.pl:310 only catches failure, NOT exceptions, so we must
+    % catch here at source.
+    catch(
+        forall(
+            (   member(Validation, Validations),
+                validation_is_index_enabled(Validation),
+                get_dict(descriptor, Validation, Descriptor),
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                descriptor_graphspec(Descriptor, Path)
+            ),
+            catch(
+                thread_create(
+                    io_auto_push_worker(Path, Branch_Name),
+                    _Thread_Id,
+                    [detached(true)]
+                ),
+                Spawn_Error,
+                % WHY: thread_create can throw on OS resource exhaustion.
+                % INVARIANT: the commit already succeeded at this point;
+                %   indexing is best-effort infrastructure.
+                % CONSEQUENCE: push is skipped for this commit; the existing
+                %   search-miss nudge (maybe_nudge_push) catches up on next query.
+                format(user_error,
+                       "[ERROR] Auto-push thread spawn failed for ~w (~w): ~q~n",
+                       [Path, Branch_Name, Spawn_Error])
+            )
+        ),
+        Hook_Error,
+        % WHY: Generator goals (get_dict, descriptor_graphspec) could
+        %   theoretically throw on malformed validation objects.
+        % INVARIANT: transaction infrastructure always produces well-formed
+        %   validation_object{} dicts; this is a last-resort defensive catch.
+        % CONSEQUENCE: all pending pushes for this commit are skipped;
+        %   the search-miss nudge catches up on next query.
+        format(user_error,
+               "[ERROR] Auto-push hook generator failed: ~q~n",
+               [Hook_Error])
+    ).
+
+/**
+ * validation_is_index_enabled(+Validation) is semidet.
+ *
+ * True if Validation has a branch_descriptor AND its schema contains at
+ * least one type with sys:metadata embedding configuration. This is the
+ * lightweight enablement gate — avoids spawning threads for data products
+ * that have no indexed types.
+ */
+validation_is_index_enabled(Validation) :-
+    get_dict(descriptor, Validation, Descriptor),
+    branch_descriptor{} :< Descriptor,
+    get_dict(schema_objects, Validation, Schema_Objects),
+    Schema_Objects \== [],
+    % Check if schema has at least one type with embedding metadata.
+    % Uses xrdf which iterates the schema_objects list.
+    once(xrdf(Schema_Objects, _Type, sys:metadata, _)).
+
+/**
+ * io_auto_push_worker(+Path, +Branch_Name) is det.
+ *
+ * The async worker spawned by the post_commit_hook. Resolves system
+ * credentials (System_DB + super_user_authority) and drives io_push_delta.
+ * Catches ALL errors — logs them loud and stops. Never propagates exceptions
+ * to the caller (there is none — detached thread).
+ */
+io_auto_push_worker(Path, Branch_Name) :-
+    catch(
+        (   open_descriptor(system_descriptor{}, System_DB),
+            super_user_authority(Auth),
+            io_push_delta(System_DB, Auth, Path, Branch_Name)
+        ),
+        Error,
+        % Recovery must itself be robust — the Error term may contain dead
+        % stream references that crash formatters. Double-catch ensures the
+        % worker thread NEVER dies on an uncaught exception.
+        catch(
+            json_log_error_formatted(
+                "[ERROR] Auto-push-on-commit failed for ~w (~w): ~q",
+                [Path, Branch_Name, Error]),
+            _Log_Error,
+            format(user_error,
+                   "[ERROR] Auto-push-on-commit failed for ~w (~w); error not printable~n",
+                   [Path, Branch_Name])
+        )
+    ).

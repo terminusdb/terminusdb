@@ -488,7 +488,6 @@ io_resolve_forward(Endpoint, Domain, Commit, Ancestors,
                    Body_Dict, Response_Body) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_resolve_url(Endpoint, Domain, Commit, _URL),
     % /resolve uses POST with JSON body — domain, commit, ancestors in body.
     format(atom(Resolve_URL), "~w/resolve", [Endpoint]),
     % Inject server-derived fields into the body (overwriting any caller attempt

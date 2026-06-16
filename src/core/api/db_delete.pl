@@ -78,15 +78,18 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
 
     (   Force = true
     ->  force_delete_db(Organization, DB_Name)
+        % force_delete_db/2 already calls maybe_delete_search_domain/2 —
+        % do NOT call it again here (avoids double DELETE /domain round-trip).
     ;   do_or_die(delete_database_label(Organization, DB_Name),
                   error(database_files_do_not_exist(Organization, DB_Name), _)),
-        delete_db_from_system(Organization, DB_Name)),
-    % T5: FAIL-LOUD, BEST-EFFORT engine index cleanup.
-    % After the TerminusDB-side deletion is complete, notify the search engine
-    % to drop its index for this domain. Best-effort: if the engine call fails,
-    % surface a loud error log (orphaned index is VISIBLE, not silent) but do
-    % NOT block the TerminusDB-side deletion that already succeeded.
-    maybe_delete_search_domain(Organization, DB_Name).
+        delete_db_from_system(Organization, DB_Name),
+        % T5: FAIL-LOUD, BEST-EFFORT engine index cleanup.
+        % After the TerminusDB-side deletion is complete, notify the search engine
+        % to drop its index for this domain. Best-effort: if the engine call fails,
+        % surface a loud error log (orphaned index is VISIBLE, not silent) but do
+        % NOT block the TerminusDB-side deletion that already succeeded.
+        maybe_delete_search_domain(Organization, DB_Name)
+    ).
 
 /**
 * Deletes the database label for the global store. Fails if the label does not
