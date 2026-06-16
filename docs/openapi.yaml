@@ -3507,6 +3507,10 @@ paths:
         differs from the branch HEAD, the result is stale and a background
         re-index is triggered.
 
+        **Identical documents:** when a result's content is literally identical to
+        the query text, the reported distance is 0; any difference yields a
+        non-zero distance.
+
         **Authorization:** requires read access to the addressed data product.
         Denied callers receive 403 before any search is executed.
 
@@ -3565,6 +3569,10 @@ paths:
         The descriptor path in the URL determines the domain and commit —
         these values are always server-derived and never sourced from the
         request body or query string.
+
+        **Identical documents:** when a result's content is literally identical to
+        the query text, the reported distance is 0; any difference yields a
+        non-zero distance.
 
         **Authorization:** requires read access to the addressed data product.
       parameters:
@@ -3632,6 +3640,10 @@ paths:
         `start` and `count`. Use `doc_type` and `doc_id` filters to scope
         the candidate pool.
 
+        **Identical documents:** when a neighbour's content is literally identical
+        to the source document, the reported distance is 0; any difference yields
+        a non-zero distance.
+
         **Authorization:** requires read access to the addressed data product.
         Denied callers receive 403 before any search is executed.
       parameters:
@@ -3682,6 +3694,10 @@ paths:
         Same semantics as GET /similar. Preferred when `doc_id` candidate
         pools are large and would overflow a GET URL. Body values override
         same-named query parameters.
+
+        **Identical documents:** when a neighbour's content is literally identical
+        to the source document, the reported distance is 0; any difference yields
+        a non-zero distance.
 
         **Authorization:** requires read access to the addressed data product.
       parameters:
@@ -3754,6 +3770,10 @@ paths:
 
         `threshold` is on the [0, 1] cosine distance scale (0 = identical,
         0.5 = unrelated, 1 = opposite).
+
+        **Identical documents:** when two documents contain literally identical
+        content, the distance between them is 0; any difference yields a non-zero
+        distance.
 
         **Authorization:** requires read access to the addressed data product.
         Denied callers receive 403 before any search is executed.
@@ -3865,6 +3885,10 @@ paths:
 
         `k` controls how many candidates are evaluated per document in the
         set (default 5).
+
+        **Identical documents:** when two documents contain literally identical
+        content, the distance between them is 0; any difference yields a non-zero
+        distance.
 
         The descriptor path determines the single domain for this resolution.
         Cross-data-product resolution is not supported.
@@ -4375,7 +4399,7 @@ components:
           type: string
           description: Human-readable cause.
       example:
-        error: "search_requires_tdb_search_backend"
+        error: "search backend unavailable"
 
     SearchHit:
       type: object
@@ -4857,7 +4881,7 @@ components:
                 error: "missing required parameter: q"
             backendNotConfigured:
               value:
-                error: "search_requires_tdb_search_backend"
+                error: "search backend unavailable"
 
   securitySchemes:
     basicAuth:
