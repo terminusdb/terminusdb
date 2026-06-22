@@ -265,24 +265,34 @@ process_choices_([],_Schema,_Prefixes,Result,Result,captures(In,T-T,S-S,In)).
 process_choices_([_|_],_Schema,_Prefixes,witness(Witness),witness(Witness),captures(In,T-T,S-S,In)).
 process_choices_([Choice|Choices],Schema,Prefixes,success(Dictionary),Annotated,Captures) :-
     Captures = captures(In,DepH-DepT,SubH-SubT,Out),
-    findall(
-        Key-Result-captures(In,DepH-DepT0,SubH-SubT0,Out0),
-        (   get_dict(Key,Choice,Type),
-            get_dict(Key,Dictionary,_Value),
-            check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Result,captures(In,DepH-DepT0,SubH-SubT0,Out0))
-        ),
-        Results),
-    (   Results = [Key-Result-captures(_,DepH-DepT0,SubH-SubT0,C1)]
-    ->  (   Result = success(OutDict)
-        ->  %put_dict(Key,Dictionary,D,OutDict),
-            Capture1 = captures(C1,DepT0-DepT,SubT0-SubT,Out),
+    % First, enumerate which discriminator keys exist in BOTH the Choice
+    % schema and the Dictionary instance. We collect keys (atoms) only, so
+    % findall's copy_term has nothing to break here.
+    %
+    % We must NOT run check_type_pair_/7 inside findall: that would copy
+    % Result and Out0, severing the shared identity between the captures
+    % assoc and the @id slots populated by capture_ref/4 inside Result.
+    % That severance would leave outer @ref slots pointing at variables
+    % that are no longer reachable from the captures assoc, which then
+    % stay unbound after update_captures/3 runs and crash idgen_suffix
+    % with instantiation_error during hash key generation.
+    findall(Key,
+            (   get_dict(Key,Choice,_Type),
+                get_dict(Key,Dictionary,_Value)
+            ),
+            Keys),
+    (   Keys = [Key]
+    ->  get_dict(Key,Choice,Type),
+        check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Result,
+                         captures(In,DepH-DepT0,SubH-SubT0,C1)),
+        (   Result = success(OutDict)
+        ->  Capture1 = captures(C1,DepT0-DepT,SubT0-SubT,Out),
             process_choices_(Choices,Schema,Prefixes,success(OutDict),Annotated,Capture1)
         ;   Result = witness(Witness)
         ->  no_captures(Captures),
-            %dict_pairs(Witness, json, [Key-D]),
             Annotated = witness(Witness)
         )
-    ;   Results = []
+    ;   Keys = []
     ->  no_captures(Captures),
         Annotated =
         witness(json{'@type' : no_choice_is_cardinality_one,

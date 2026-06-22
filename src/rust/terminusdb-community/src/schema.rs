@@ -101,6 +101,28 @@ impl<'a, L: Layer + Clone> SchemaQueryContext<'a, L> {
         result
     }
 
+    /// Returns type IDs of all classes annotated with @shared (including subclasses).
+    /// @shared documents are regular documents that support cascade-delete when
+    /// their last reference is removed.
+    pub fn get_shared_ids_from_schema(&self) -> HashSet<u64> {
+        let mut result = HashSet::new();
+        let inheritance = self.get_reverse_inheritance_graph();
+        let mut work: Vec<_> =
+            get_direct_shared_ids_from_schema(self.layer, self.sys).collect();
+        while let Some(cur) = work.pop() {
+            if !result.insert(cur) {
+                // we already found this type.
+                continue;
+            }
+
+            if let Some(children) = inheritance.get(&cur) {
+                work.extend(children);
+            }
+        }
+
+        result
+    }
+
     /// Returns (class_id, predicate_id) pairs where the property has @unfold: true
     pub fn get_unfold_pairs_from_schema(&self) -> HashSet<(u64, u64)> {
         let mut result = HashSet::new();
@@ -326,6 +348,18 @@ fn get_direct_unfoldable_ids_from_schema<L: Layer + Clone>(
 ) -> impl Iterator<Item = u64> {
     if let Some(unfoldable_id) = sys.unfoldable() {
         itertools::Either::Left(layer.triples_p(unfoldable_id).map(|t| t.subject))
+    } else {
+        itertools::Either::Right(std::iter::empty())
+    }
+}
+
+/// Returns type IDs of classes directly annotated with @shared in the schema.
+fn get_direct_shared_ids_from_schema<L: Layer + Clone>(
+    layer: &L,
+    sys: &SysIds<L>,
+) -> impl Iterator<Item = u64> {
+    if let Some(shared_id) = sys.shared() {
+        itertools::Either::Left(layer.triples_p(shared_id).map(|t| t.subject))
     } else {
         itertools::Either::Right(std::iter::empty())
     }

@@ -3467,6 +3467,43 @@ call_http_handler(Method, Goal, Request, System_Database, Auth) :-
 
     call(NewGoal, Request, System_Database, Auth).
 
+% Log full Prolog error context (including backtrace from catch_with_backtrace)
+% to user_error so unhandled exceptions can be diagnosed from the server log.
+%
+% Implementation notes:
+% - We must NOT use print_message/2 here: when invoked from inside an HTTP
+%   request handler it can interfere with the response stream (we observed
+%   requests hanging when print_message/2 was used).
+% - We render the backtrace ourselves using get_prolog_backtrace/2 +
+%   print_prolog_backtrace/2 directly to user_error, with bounded depth so
+%   huge transaction_object terms do not flood the log.
+log_unhandled_error_backtrace(E, Context) :-
+    catch(
+        log_unhandled_error_backtrace_(E, Context),
+        Inner,
+        catch(
+            format(user_error,
+                   "[ERROR] log_unhandled_error_backtrace failed: ~q~n",
+                   [Inner]),
+            _,
+            true)
+    ).
+
+log_unhandled_error_backtrace_(E, Context) :-
+    format(user_error,
+           "[ERROR] Unhandled exception: ~q~n",
+           [E]),
+    (   nonvar(Context),
+        Context = prolog_stack(Frames),
+        is_list(Frames)
+    ->  with_output_to(
+            user_error,
+            print_prolog_backtrace(user_error, Frames))
+    ;   format(user_error,
+               "[ERROR] Error context: ~q~n",
+               [Context])
+    ).
+
 customise_exception(reply_json(M,Status)) :-
     reply_json(M,
                [status(Status), width(0)]).
@@ -3476,8 +3513,12 @@ customise_exception(error(E)) :-
     generic_exception_jsonld(E,JSON),
     json_http_code(JSON,Status),
     reply_json(JSON,[status(Status), width(0)]).
-customise_exception(error(E,_)) :-
+customise_exception(error(E,Context)) :-
     generic_exception_jsonld(E,JSON),
+    (   get_dict('@type', JSON, 'api:UnhandledErrorResponse')
+    ->  log_unhandled_error_backtrace(E, Context)
+    ;   true
+    ),
     json_http_code(JSON,Status),
     reply_json(JSON,[status(Status), width(0)]).
 customise_exception(http_reply(method_not_allowed(JSON))) :-

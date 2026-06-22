@@ -191,6 +191,182 @@ fn has_other_link<L: Layer + Clone>(
     false
 }
 
+/// Cascade-delete orphaned @shared documents from a given set of candidates.
+///
+/// Designed to be called on a DocumentContext built from the COMMITTED layer
+/// (after initial deletions have been applied). This means triples from already-deleted
+/// documents are no longer visible, and the liveness check can use straightforward
+/// backward traversal.
+///
+/// IMPORTANT: Only checks the provided `candidate_ids` — NOT all instances of
+/// @shared types. Candidates must be pre-filtered by Prolog (objects of deleted
+/// triples that are instances of @shared types). This prevents standalone @shared
+/// documents (intentionally created without references) from being swept.
+///
+/// Algorithm:
+/// 1. For each candidate, verify it is still a @shared instance (has type triple)
+/// 2. Perform a liveness check: walk backward through incoming references until
+///    we find a non-@shared document (LIVE) or exhaust all paths (ORPHAN)
+/// 3. Collect all orphans in one batch, delete them all
+/// 4. The caller (Prolog) commits the builder and re-invokes until no orphans remain
+///
+/// The liveness check handles:
+/// - Direct references from non-@shared documents (target is live)
+/// - References from other @shared documents (recursively check if referrer is live)
+/// - Self-references and circular @shared chains (visited set prevents infinite loops)
+///
+/// Optimisations:
+/// - Shared memoisation table across all candidates: once a node is resolved as
+///   live or dead, the result is cached. Subsequent candidates sharing referrers
+///   reuse the cached result (avoids redundant backward traversals).
+/// - Orphan ID set for batch unlink filtering: backward references whose subject
+///   is in the orphan set are skipped during unlink (those triples are already
+///   removed by the matching delete_id_document call).
+///
+/// Returns the count of orphaned @shared documents deleted in this pass.
+pub fn cascade_shared_deletes<L: Layer + Clone>(
+    context: &DocumentContext<L>,
+    builder: &mut dyn LayerBuilder,
+    candidate_ids: &[u64],
+) -> usize {
+    let layer = context.layer();
+    let rdf_type = match context.rdf.type_() {
+        Some(id) => id,
+        None => return 0,
+    };
+
+    if context.shared_types.is_empty() || candidate_ids.is_empty() {
+        return 0;
+    }
+
+    // Memoisation table: true = live, false = orphaned.
+    // Shared across all candidates so repeated backward traversals are avoided.
+    let mut memo: HashMap<u64, bool> = HashMap::new();
+
+    // Find orphaned candidates from the provided set
+    let mut orphaned: Vec<u64> = Vec::new();
+
+    for &candidate_id in candidate_ids {
+        // Verify the candidate still exists as a @shared type instance
+        let type_triple = layer.single_triple_sp(candidate_id, rdf_type);
+        match type_triple {
+            Some(t) if context.shared_types.contains(&t.object) => {}
+            _ => continue, // Not a @shared instance (already deleted or wrong type)
+        }
+
+        // Check memo first
+        if let Some(&is_live) = memo.get(&candidate_id) {
+            if !is_live {
+                orphaned.push(candidate_id);
+            }
+            continue;
+        }
+
+        // Liveness check with memoisation
+        let mut visited: HashSet<u64> = HashSet::new();
+        let is_live =
+            is_shared_target_live_memo(layer, context, rdf_type, candidate_id, &mut visited, &mut memo);
+
+        // Cache the result for this candidate
+        memo.insert(candidate_id, is_live);
+
+        if !is_live {
+            orphaned.push(candidate_id);
+        }
+    }
+
+    let count = orphaned.len();
+
+    // Build orphan set for batch unlink filtering
+    let orphan_set: HashSet<u64> = orphaned.iter().copied().collect();
+
+    // Delete all orphaned @shared documents
+    for &orphan_id in &orphaned {
+        delete_id_document(context, builder, orphan_id);
+        unlink_id_document_filtered(context, builder, orphan_id, &orphan_set);
+    }
+
+    count
+}
+
+/// Check if a @shared target is live (reachable from at least one non-@shared document).
+///
+/// A @shared target is live if:
+/// - Any non-@shared document directly references it, OR
+/// - A @shared document that is itself live references it (recursive)
+///
+/// Uses a visited set for cycle prevention (handles self-referencing and
+/// circular @shared chains — these are all orphaned together).
+///
+/// Uses a shared memoisation table: once a node is resolved, the result is
+/// cached so subsequent candidates sharing referrers skip redundant traversals.
+fn is_shared_target_live_memo<L: Layer + Clone>(
+    layer: &L,
+    context: &DocumentContext<L>,
+    rdf_type: u64,
+    target_id: u64,
+    visited: &mut HashSet<u64>,
+    memo: &mut HashMap<u64, bool>,
+) -> bool {
+    // Check memo before traversal
+    if let Some(&cached) = memo.get(&target_id) {
+        return cached;
+    }
+
+    visited.insert(target_id);
+
+    // Find all triples pointing to this target
+    for ref_triple in layer.triples_o(target_id) {
+        let source_id = ref_triple.subject;
+
+        // Skip self-references and already-visited nodes (cycle prevention)
+        if source_id == target_id || visited.contains(&source_id) {
+            continue;
+        }
+
+        // Check memo for the source
+        if let Some(&cached) = memo.get(&source_id) {
+            if cached {
+                // Source is known-live → target is live
+                memo.insert(target_id, true);
+                return true;
+            }
+            // Source is known-dead → skip it, try other paths
+            continue;
+        }
+
+        // Determine the type of the source
+        let source_type = layer.single_triple_sp(source_id, rdf_type).map(|t| t.object);
+
+        match source_type {
+            Some(type_id) if context.shared_types.contains(&type_id) => {
+                // Source is itself @shared — recursively check if IT is live
+                if is_shared_target_live_memo(layer, context, rdf_type, source_id, visited, memo) {
+                    memo.insert(target_id, true);
+                    return true;
+                }
+            }
+            Some(_) => {
+                // Source is a non-@shared typed node — target is live!
+                memo.insert(target_id, true);
+                return true;
+            }
+            None => {
+                // Source has no type — could be an internal node (Set, List intermediate).
+                // Walk upward from this untyped node to find its owner.
+                if is_shared_target_live_memo(layer, context, rdf_type, source_id, visited, memo) {
+                    memo.insert(target_id, true);
+                    return true;
+                }
+            }
+        }
+    }
+
+    // No live path found — target is orphaned
+    memo.insert(target_id, false);
+    false
+}
+
 pub fn unlink_id_document<L: Layer + Clone>(
     context: &DocumentContext<L>,
     builder: &mut dyn LayerBuilder,
@@ -204,6 +380,33 @@ pub fn unlink_id_document<L: Layer + Clone>(
         if Some(triple.predicate) != rdf_first {
             builder.remove_id_triple(triple);
         }
+    }
+}
+
+/// Unlink a document, but skip backward references whose subject is in the
+/// orphan set — those triples are already being removed by the matching
+/// delete_id_document call for that orphan. Avoids redundant remove_id_triple
+/// calls during batch cascade deletion.
+fn unlink_id_document_filtered<L: Layer + Clone>(
+    context: &DocumentContext<L>,
+    builder: &mut dyn LayerBuilder,
+    id: u64,
+    orphan_set: &HashSet<u64>,
+) {
+    let layer = context.layer();
+    let rdf_first = context.rdf.first();
+
+    for triple in layer.triples_o(id) {
+        // Skip list references (not supported for unlink)
+        if Some(triple.predicate) == rdf_first {
+            continue;
+        }
+        // Skip references from other orphans — their delete_id_document call
+        // already removes those triples via triples_s traversal
+        if orphan_set.contains(&triple.subject) {
+            continue;
+        }
+        builder.remove_id_triple(triple);
     }
 }
 
@@ -489,7 +692,7 @@ predicates! {
 
     /// Delete multiple JSON documents using pre-computed root IDs from Prolog.
     /// This properly handles layer stacking across multiple transactions.
-    /// 
+    ///
     /// Parameters:
     /// - document_context_term: Document context blob
     /// - transaction_term: Transaction object
@@ -497,9 +700,9 @@ predicates! {
     /// - all_root_ids_term: List of ALL document root IDs (from Prolog's id_triple/4)
     #[module("$doc")]
     semidet fn delete_documents_bulk_with_roots(
-        context, 
-        document_context_term, 
-        transaction_term, 
+        context,
+        document_context_term,
+        transaction_term,
         iris_term,
         all_root_ids_term
     ) {
@@ -508,20 +711,20 @@ predicates! {
             // no layer means nothing to delete.
             return Ok(())
         }
-        
+
         let builder = transaction_instance_builder(context, transaction_term)?;
         if builder.is_none() {
             return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
         }
         let builder = builder.unwrap();
-        
+
         // Parse list of IRIs to delete
         let iris_list: Vec<PrologText> = iris_term.get_ex()?;
-        
+
         // Parse list of all root IDs (from Prolog)
         let all_root_ids_vec: Vec<u64> = all_root_ids_term.get_ex()?;
         let all_root_ids: HashSet<u64> = all_root_ids_vec.into_iter().collect();
-        
+
         // Convert IRIs to internal IDs
         let layer = document_context.layer();
         let mut document_ids = HashSet::new();
@@ -530,16 +733,90 @@ predicates! {
                 document_ids.insert(id);
             }
         }
-        
+
         // Perform bulk deletion with reference counting
         context.try_or_die(builder.with_builder(|builder| {
             delete_multiple_documents_with_roots(
-                &document_context, 
-                &mut **builder, 
+                &document_context,
+                &mut **builder,
                 &document_ids,
                 &all_root_ids
             )
         }))
+    }
+
+    /// Cascade-delete orphaned @shared documents.
+    ///
+    /// Called from Prolog after initial deletions have been committed.
+    /// The DocumentContext is built from the committed layer, so it reflects
+    /// the post-deletion state.
+    ///
+    /// Candidate collection happens entirely in Rust: iterates over the
+    /// layer's triple_removals() (negative delta), identifies objects that
+    /// are instances of @shared types, and checks only those for liveness.
+    /// This avoids the expensive Prolog findall/xrdf_deleted round-trip.
+    ///
+    /// Parameters:
+    /// - document_context_term: DocumentContext blob (post-deletion layer)
+    /// - transaction_term: Transaction with builder for writing deletions
+    /// - count_term: Output — number of cascade-deleted documents
+    ///
+    /// The caller (Prolog) should commit the builder and re-invoke until count == 0.
+    #[module("$doc")]
+    semidet fn cascade_shared(
+        context,
+        document_context_term,
+        transaction_term,
+        count_term
+    ) {
+        let document_context: DocumentContextBlob = document_context_term.get_ex()?;
+        if document_context.layer.is_none() {
+            count_term.unify(0_u64)?;
+            return Ok(())
+        }
+
+        let builder = transaction_instance_builder(context, transaction_term)?;
+        if builder.is_none() {
+            return context.raise_exception(&term! {context: error(builder_not_initialized, _)}?);
+        }
+        let builder = builder.unwrap();
+
+        // Collect candidates from layer's negative delta (triple removals).
+        // A candidate is an object of a removed triple that is an instance of a @shared type.
+        let layer = document_context.layer();
+        let rdf_type = document_context.rdf.type_();
+        let candidate_ids = if let Some(rdf_type_id) = rdf_type {
+            if document_context.shared_types.is_empty() {
+                Vec::new()
+            } else {
+                let mut candidates: HashSet<u64> = HashSet::new();
+                if let Ok(removals) = layer.triple_removals() {
+                    for triple in removals {
+                        let object_id = triple.object;
+                        // Check if the object is a node (not a value/literal)
+                        if let Some(true) = layer.id_object_is_node(object_id) {
+                            // Check if it still has a type triple pointing to a @shared type
+                            if let Some(type_triple) = layer.single_triple_sp(object_id, rdf_type_id) {
+                                if document_context.shared_types.contains(&type_triple.object) {
+                                    candidates.insert(object_id);
+                                }
+                            }
+                        }
+                    }
+                }
+                candidates.into_iter().collect()
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Perform cascade deletion on the collected candidates only
+        let cascaded_count = context.try_or_die(builder.with_builder(|builder| {
+            cascade_shared_deletes(&document_context, &mut **builder, &candidate_ids)
+        }))?;
+
+        count_term.unify(cascaded_count as u64)?;
+        Ok(())
     }
 }
 
@@ -549,4 +826,5 @@ pub fn register() {
     register_delete_documents_by_type();
     register_delete_all();
     register_delete_documents_bulk_with_roots();
+    register_cascade_shared();
 }
