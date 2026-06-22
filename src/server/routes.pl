@@ -4092,9 +4092,21 @@ http_read_json_stream_for_documents_body(Stream, Request) :-
         read_string(Uncompressed_Stream, _, BufferedString),
         close(Uncompressed_Stream)
     ;   % Uncompressed request - read directly
-        http_read_data(Request, BufferedString, [to(string)])
+        http_read_data(Request, BufferedString, [to(string), input_encoding(utf8)])
     ),
-    open_string(BufferedString, Stream).
+    % open_string/2 creates an iso_latin_1 stream. The Rust JSON parser reads
+    % bytes via Sfread, so non-ASCII Unicode code points (e.g. ü = 252) arrive
+    % as a single invalid byte 0xFC rather than the two-byte UTF-8 sequence
+    % 0xC3 0xBC. set_stream/2 cannot change the encoding of a string stream.
+    % Instead, re-encode the Prolog string (Unicode code points) back to raw
+    % UTF-8 bytes via a memory file, then open that as an octet stream.
+    new_memory_file(MF),
+    setup_call_cleanup(
+        open_memory_file(MF, write, WriteStream, [encoding(utf8)]),
+        write(WriteStream, BufferedString),
+        close(WriteStream)
+    ),
+    open_memory_file(MF, read, Stream, [encoding(octet), free_on_close(true)]).
 
 /*
  * http_read_utf8(-Output, Request) is det.
