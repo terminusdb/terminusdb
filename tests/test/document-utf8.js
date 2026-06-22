@@ -4,23 +4,17 @@ const { Agent, api, db, document } = require('../lib')
 // Regression tests for: non-ASCII characters silently rejected by document API.
 //
 // Root cause: http_read_json_stream_for_documents_body in routes.pl calls
-// open_string/2, which creates an iso_latin_1 stream by default. When the
+// open_string/2, which created an iso_latin_1 stream by default. When the
 // HTTP client declares "Content-Type: application/json; charset=utf-8",
-// SWI-Prolog's http_read_data decodes the payload as UTF-8 into a Prolog
+// SWI-Prolog's http_read_data decoded the payload as UTF-8 into a Prolog
 // string, then open_string re-encodes it as iso_latin_1. Multi-byte UTF-8
 // sequences (e.g. ü = 0xC3 0xBC) become the single Latin-1 byte 0xFC, which
 // is invalid UTF-8. The Rust serde_json parser throws, the blanket
 // catch(_Error, fail) in json_read_dict_stream silently converts the error to
 // EOF, and the document is dropped — returning [] with no error.
 //
-// Trigger condition: the bug fires when Content-Type includes "; charset=utf-8".
-// Without it, http_read_data takes a different internal path and the bytes
-// arrive correctly. Conforming HTTP clients (including curl and many libraries)
-// correctly declare charset=utf-8 when sending UTF-8 JSON.
-//
-// Note: mitmproxy (used in the dev stack on port 6363) masks this bug because
-// Python's json.dumps re-encodes non-ASCII as \uXXXX escape sequences before
-// forwarding. These tests must run against a direct TDB server, not the proxy.
+// Now with octet (and thus no charset decoding) encoding, the bytes arrive
+// correctly.
 
 describe('document-utf8', function () {
   let agent
