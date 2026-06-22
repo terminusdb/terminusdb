@@ -35,6 +35,7 @@
 :- use_module(library(yall)).
 :- use_module(library(zlib)).
 :- use_module(library(uuid)).
+:- use_module(library(memfile)).
 
 % unit tests
 :- use_module(library(plunit)).
