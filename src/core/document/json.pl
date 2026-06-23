@@ -1735,6 +1735,14 @@ json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
 json_schema_predicate_value('@unfold',true,_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfold, P).
+json_schema_predicate_value('@shared',[],_,_,P,[]) :-
+    !,
+    global_prefix_expand(sys:shared, P).
+json_schema_predicate_value('@shared',V,_,_,_,_) :-
+    % Non-list value for @shared — reject with bad_shared_value witness
+    !,
+    throw(error(schema_check_failure([witness{ '@type': bad_shared_value,
+                                               value: V }]),_)).
 json_schema_predicate_value('@base',V,_,_,P,Value) :-
     !,
     global_prefix_expand(sys:base, P),
@@ -1863,6 +1871,15 @@ check_schema_document_restrictions(Elaborated) :-
     global_prefix_expand(sys:subdocument, SubP),
     \+ get_dict(SubP, Elaborated, _),
     !.
+check_schema_document_restrictions(Elaborated) :-
+    % Reject @shared + @subdocument before checking key requirements
+    global_prefix_expand(sys:shared, SharedP),
+    get_dict(SharedP, Elaborated, _),
+    global_prefix_expand(sys:subdocument, SubP2),
+    get_dict(SubP2, Elaborated, _),
+    !,
+    throw(error(schema_check_failure([witness{ '@type': incompatible_class_annotations,
+                                               annotations: ["shared", "subdocument"] }]),_)).
 check_schema_document_restrictions(Elaborated) :-
     global_prefix_expand(sys:abstract, AbsP),
     get_dict(AbsP, Elaborated, _),
@@ -2758,6 +2775,9 @@ schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@subdocument',[]) :-
     global_prefix_expand(sys:subdocument,P),
+    !.
+schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@shared',[]) :-
+    global_prefix_expand(sys:shared,P),
     !.
 schema_subject_predicate_object_key_value(_,_,_Id,P,_,'@unfoldable',[]) :-
     global_prefix_expand(sys:unfoldable,P),
@@ -3695,8 +3715,12 @@ schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
     (   schema_is_unfoldable(Schema, Class_Ex)
     ->  Pairs10 = ['@unfoldable'-[]|Pairs9]
     ;   Pairs10 = Pairs9),
+    % Shared
+    (   schema_is_shared(Schema, Class_Ex)
+    ->  Pairs11 = ['@shared'-[]|Pairs10]
+    ;   Pairs11 = Pairs10),
 
-    sort(Pairs10, Sorted_Pairs),
+    sort(Pairs11, Sorted_Pairs),
     catch(
         json_dict_create(Frame,Sorted_Pairs),
         error(duplicate_key(Predicate),_),
@@ -13212,6 +13236,96 @@ test(double_capture,
                    _Dependencies_2,
                    _,
                    _Out_2).
+
+capture_with_tagged_union_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type": "Class",
+  "@id": "Source",
+  "@key": {"@type":"Lexical","@fields":["name"]},
+  "name": "xsd:string",
+  "links": {"@type":"Set","@class":"Link"} }
+
+{ "@type": "Class",
+  "@id": "Link",
+  "@subdocument": [],
+  "@key": {"@type":"ValueHash"},
+  "@inherits": ["Choice"] }
+
+{ "@type": "TaggedUnion",
+  "@id": "Choice",
+  "node": "Node" }
+
+{ "@type": "Class",
+  "@id": "Node",
+  "@key": {"@type":"Hash","@fields":["origin","label"]},
+  "label": "xsd:string",
+  "origin": {"@type":"Optional","@class":"Source"} }
+').
+
+% Regression test for capture-resolved @ref pointing to a Hash-keyed Node
+% reached through a TaggedUnion variant (here: Link.node -> Node).
+% Before the fix to process_choices_/6, the inner findall used copy_term on
+% the Result and captures assoc, severing the shared Capture_Var identity
+% between the @id slot inside the elaborated dict and the captures assoc
+% entry. update_captures/3 then bound a copy of Capture_Var, leaving the
+% outer @ref slot unbound, which crashed idgen_suffix/2 with
+% instantiation_error during Hash key generation.
+test(capture_ref_through_tagged_union,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(capture_with_tagged_union_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_prefixes(DB, Context),
+    empty_assoc(In),
+
+    Document =
+    _{ '@type' : "Source",
+       '@capture' : "SourceRef",
+       name : "main",
+       links : [
+           _{ '@type' : "Link",
+              node : _{ '@type' : "Node",
+                        label : "first",
+                        origin : _{ '@ref' : "SourceRef" } } },
+           _{ '@type' : "Link",
+              node : _{ '@type' : "Node",
+                        label : "second",
+                        origin : _{ '@ref' : "SourceRef" } } }
+       ] },
+
+    once(json_elaborate(DB,
+                        Document,
+                        Context,
+                        In,
+                        Elaborated,
+                        _Ids,
+                        _Dependencies,
+                        _,
+                        Out)),
+
+    % After a single self-resolving elaboration the captures assoc must be
+    % fully ground: every @ref encountered must resolve to a bound id.
+    % Before the fix, the @ref slots reached through the TaggedUnion variant
+    % were left referencing a copy of Capture_Var that update_captures/3
+    % never bound, and the embedded json_assign_ids_/4 inside json_elaborate
+    % would crash with instantiation_error during Hash key generation.
+    ground(Out),
+
+    % Sanity-check: the captured Source @id propagated into the inner @ref
+    % slot reached via the TaggedUnion variant (Link.node -> Node.origin).
+    once(( Source_Id = (Elaborated.'@id'),
+           Links = (Elaborated.'terminusdb:///schema#links'.'@value'),
+           nth0(0, Links, Link),
+           Origin_Ref = (Link.'terminusdb:///schema#node'.'terminusdb:///schema#origin'),
+           Origin_Id = (Origin_Ref.'@id')
+         )),
+    Source_Id == Origin_Id.
 
 :- end_tests(id_capture).
 

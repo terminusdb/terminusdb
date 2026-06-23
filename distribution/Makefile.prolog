@@ -34,6 +34,36 @@ SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
 TARGET := terminusdb
 RUST_TARGET := src/rust/librust.$(DYLIB_EXT)
 
+# DIST-tracking stamp.
+#
+# librust.$(DYLIB_EXT) is a single fixed path regardless of distribution, but
+# the community and enterprise dylibs export different Prolog FFI.
+#
+# The $(RUST_TARGET) rule below has no prerequisites, so once the file exists
+# make never re-runs distribution/Makefile.rust, and switching DIST silently
+# leaves the previous distribution's dylib in place. That manifests as
+# "Unknown procedure" errors during tests.
+#
+# To make DIST switches transparent (no `make clean` required), we record the
+# last DIST used to produce $(RUST_TARGET) in a stamp file. When the current
+# DIST differs, we remove $(RUST_TARGET) at parse time so the normal rule
+# fires and rebuilds it from the correct cargo build directory. Same logic
+# also lives in distribution/Makefile.rust for direct `make rust` invocations.
+#
+# Important: this is only safe when distribution/Makefile.rust is actually
+# present so the rebuild path exists. In the Docker base stage we ship a
+# pre-built dylib and never copy Makefile.rust — removing the dylib there
+# would leave the build with no way to recreate it. So we make the
+# destructive part of the stamp logic conditional on Makefile.rust existing.
+LAST_DIST_FILE := src/rust/.last-dist
+LAST_DIST := $(shell cat $(LAST_DIST_FILE) 2>/dev/null)
+ifneq ($(wildcard distribution/Makefile.rust),)
+  ifneq ($(LAST_DIST),$(DIST))
+    $(shell rm -f $(RUST_TARGET))
+    $(shell printf '%s' '$(DIST)' > $(LAST_DIST_FILE))
+  endif
+endif
+
 ################################################################################
 
 .PHONY: default
