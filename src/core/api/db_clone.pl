@@ -71,13 +71,26 @@ clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predic
     % Create DB
     create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, false, Public, _{'@base' : 'http://example.com/', '@schema' : 'http://example.com#'}, Db_Uri),
 
-    catch_with_backtrace(do_clone_(Auth,Account,DB,Remote,Source,Fetch_Predicate,Meta_Data),
-                         Error,
-                         true),
-
-    (   var(Error)
-    ->  finalize_db(Db_Uri)
-    ;   force_delete_db(Account, DB),
-        throw(Error)).
+    text_to_string(Account, Account_String),
+    text_to_string(DB, DB_String),
+    % Mark as creating so other threads are blocked by the gate in open_descriptor.
+    % Wrapped in setup_call_cleanup to guarantee retraction even if finalize_db throws.
+    setup_call_cleanup(
+        assert(db_currently_creating(Account_String, DB_String)),
+        (   setup_call_cleanup(
+                assert(db_creation_bypass(Account_String, DB_String)),
+                catch_with_backtrace(do_clone_(Auth,Account,DB,Remote,Source,Fetch_Predicate,Meta_Data),
+                                     Error,
+                                     true),
+                retract(db_creation_bypass(Account_String, DB_String))
+            ),
+            (   var(Error)
+            ->  finalize_db(Db_Uri)
+            ;   force_delete_db(Account, DB),
+                throw(Error)
+            )
+        ),
+        ignore(retract(db_currently_creating(Account_String, DB_String)))
+    ).
 
 

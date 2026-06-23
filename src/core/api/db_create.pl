@@ -141,11 +141,10 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
         ),
         _),
 
-    % create repo graph - it has name as label
-    % This is outside of the transaction because it has side-effects that cannot be rolled back.
-    create_repo_graph(Organization_Name_String, Database_Name_String),
-
-    % create ref layer with master branch
+    % Steps 2-4 are outside the system graph transaction because they have
+    % side-effects that cannot be rolled back. We assert a thread-local bypass
+    % so that open_descriptor can open this database while it is still in
+    % 'creating' state. The bypass is retracted on completion or exception.
     Repository_Descriptor = repository_descriptor{
                                 database_descriptor:
                                 database_descriptor{
@@ -154,13 +153,17 @@ create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, 
                                 },
                                 repository_name: "local"
                             },
-
-    create_ref_layer(Repository_Descriptor),
-
     Branch_Descriptor = branch_descriptor{
                             repository_descriptor:Repository_Descriptor,
                             branch_name: "main" },
-    create_schema(Branch_Descriptor, Auth, Schema, Prefixes).
+    setup_call_cleanup(
+        assert(db_creation_bypass(Organization_Name_String, Database_Name_String)),
+        (   create_repo_graph(Organization_Name_String, Database_Name_String),
+            create_ref_layer(Repository_Descriptor),
+            create_schema(Branch_Descriptor, Auth, Schema, Prefixes)
+        ),
+        retract(db_creation_bypass(Organization_Name_String, Database_Name_String))
+    ).
 
 create_schema(Branch_Desc, Schema, Prefixes) :-
     create_schema(Branch_Desc, _Auth, Schema, Prefixes).
@@ -198,11 +201,20 @@ create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Sch
     create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, _).
 
 create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri) :-
-    create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
-
-    % update system with finalized
-    % This reopens system graph internally, as it was advanced
-    finalize_db(Db_Uri).
+    text_to_string(Organization_Name, Org_S),
+    text_to_string(Database_Name, DB_S),
+    setup_call_cleanup(
+        true,
+        (   create_db_unfinalized(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Schema, Public, Prefixes, Db_Uri),
+            % Mark as creating so other threads are blocked by the gate in
+            % open_descriptor. The flag is retracted in cleanup.
+            assert(db_currently_creating(Org_S, DB_S)),
+            % update system with finalized
+            % This reopens system graph internally, as it was advanced
+            finalize_db(Db_Uri)
+        ),
+        ignore(retract(db_currently_creating(Org_S, DB_S)))
+    ).
 
 :- begin_tests(database_creation).
 :- use_module(core(util/test_utils)).
@@ -210,7 +222,8 @@ create_db(System_DB, Auth, Organization_Name, Database_Name, Label, Comment, Sch
 
 test(create_db_and_check_master_branch, [
          setup(setup_temp_store(State)),
-         cleanup(teardown_temp_store(State)),
+         cleanup((ignore(retract(descriptor:db_currently_creating(_,_))),
+                  teardown_temp_store(State))),
 
          true((once(ask(Repo_Descriptor, t(_,name,"main"^^xsd:string))),
                \+ ask(Branch_Descriptor, t(_,_,_)),
@@ -232,5 +245,62 @@ test(create_db_and_check_master_branch, [
     Branch_Descriptor = branch_descriptor{
                             repository_descriptor: Repo_Descriptor,
                             branch_name: "main" }.
+
+test(open_descriptor_rejects_creating_db, [
+         setup(setup_temp_store(State)),
+         cleanup((ignore(retract(descriptor:db_currently_creating("admin","testdb"))),
+                  teardown_temp_store(State))),
+         error(database_not_finalized("admin","testdb"))
+     ])
+:-
+    Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
+    open_descriptor(system_descriptor{}, System),
+    create_db_unfinalized(System, 'User/admin', admin, testdb, 'testdb', 'a test db', false, false, Prefixes, _Db_Uri),
+    % Simulate the creating-state gate: callers (create_db, clone_) assert this
+    % after create_db_unfinalized. Here we assert it directly to test the gate.
+    assert(descriptor:db_currently_creating("admin", "testdb")),
+    % DB is now in 'creating' state — opening a descriptor should fail
+    Branch_Descriptor = branch_descriptor{
+                            repository_descriptor: repository_descriptor{
+                                database_descriptor: database_descriptor{
+                                    organization_name: "admin",
+                                    database_name: "testdb"
+                                },
+                                repository_name: "local"
+                            },
+                            branch_name: "main" },
+    open_descriptor(Branch_Descriptor, _Transaction).
+
+test(duplicate_create_db_rejected, [
+         setup(setup_temp_store(State)),
+         cleanup((ignore(retract(descriptor:db_currently_creating(_,_))),
+                  teardown_temp_store(State))),
+         error(database_already_exists(admin, testdb))
+     ])
+:-
+    Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
+    open_descriptor(system_descriptor{}, System),
+    create_db_unfinalized(System, 'User/admin', admin, testdb, 'testdb', 'a test db', false, false, Prefixes, _Db_Uri1),
+    % Second creation attempt for same DB should fail with database_already_exists
+    create_db(System, 'User/admin', admin, testdb, 'testdb2', 'another test db', false, false, Prefixes, _Db_Uri2).
+
+test(finalized_db_opens_normally, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    Prefixes = _{ '@base' : 'http://somewhere/document', '@schema' : 'http://somewhere/schema' },
+    open_descriptor(system_descriptor{}, System),
+    create_db(System, 'User/admin', admin, testdb, 'testdb', 'a test db', false, false, Prefixes),
+    Branch_Descriptor = branch_descriptor{
+                            repository_descriptor: repository_descriptor{
+                                database_descriptor: database_descriptor{
+                                    organization_name: "admin",
+                                    database_name: "testdb"
+                                },
+                                repository_name: "local"
+                            },
+                            branch_name: "main" },
+    open_descriptor(Branch_Descriptor, _Transaction).
 
 :- end_tests(database_creation).

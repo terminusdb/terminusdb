@@ -31,6 +31,8 @@
               collection_descriptor_graph_filter_graph_descriptor/3,
               ensure_transaction_has_builder/2,
               ensure_transaction_schema_written/1,
+              db_creation_bypass/2,
+              db_currently_creating/2,
 
               % validate.pl
               transaction_objects_to_validation_objects/2,

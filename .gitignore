@@ -24,6 +24,7 @@ terminusdb
 **/target/
 **/*.so
 **/*.dylib
+src/rust/.last-dist
 terminusdb-enterprise
 .env
 docs/terminusdb.1.ronn

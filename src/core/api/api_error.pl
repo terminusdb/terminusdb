@@ -2737,6 +2737,14 @@ generic_exception_jsonld(schema_check_failure(Witnesses),JSON) :-
     JSON = _{'api:message' : 'Schema check failure',
              'api:status' : 'api:failure',
              'system:witnesses' : Witnesses}.
+generic_exception_jsonld(database_not_finalized(Organization, Database), JSON) :-
+    format(string(Msg), "Database ~s/~s is currently being created and is not yet available.", [Organization, Database]),
+    JSON = _{'@type' : 'api:DatabaseNotFinalized',
+             'api:status' : 'api:failure',
+             'api:error' : _{'@type' : 'api:DatabaseNotFinalized',
+                             'api:organization_name' : Organization,
+                             'api:database_name' : Database},
+             'api:message' : Msg}.
 generic_exception_jsonld(database_not_found(DB),JSON) :-
     format(atom(MSG), 'Database ~s does not exist', [DB]),
     JSON = _{'api:message' : MSG,

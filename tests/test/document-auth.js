@@ -510,6 +510,38 @@ describe('document', function () {
       expect(docs.body).to.have.length(2)
     })
 
+    it('passes replace with duplicate documents when merge_repeats is true', async function () {
+      const className = util.randomString()
+      const schema = [{ '@id': className, '@type': 'Class', value: 'xsd:string' }]
+      await document.insert(agent, { schema })
+      const id = util.randomString()
+      const instance = [{ '@type': className, '@id': `${className}/${id}`, value: 'original' }]
+      await document.insert(agent, { instance })
+      const replaceDocs = [
+        { '@type': className, '@id': `${className}/${id}`, value: 'updated' },
+        { '@type': className, '@id': `${className}/${id}`, value: 'updated' },
+      ]
+      const result = await document.replace(agent, { instance: replaceDocs, merge_repeats: true }).unverified()
+      expect(result.status).to.equal(200)
+      expect(result.body).to.have.length(2)
+    })
+
+    it('fails replace with duplicate documents when merge_repeats is false', async function () {
+      const className = util.randomString()
+      const schema = [{ '@id': className, '@type': 'Class', value: 'xsd:string' }]
+      await document.insert(agent, { schema })
+      const id = util.randomString()
+      const instance = [{ '@type': className, '@id': `${className}/${id}`, value: 'original' }]
+      await document.insert(agent, { instance })
+      const replaceDocs = [
+        { '@type': className, '@id': `${className}/${id}`, value: 'updated' },
+        { '@type': className, '@id': `${className}/${id}`, value: 'updated' },
+      ]
+      const result = await document.replace(agent, { instance: replaceDocs }).unverified()
+      expect(result.status).to.equal(400)
+      expect(result.body['api:error']['@type']).to.equal('api:SameDocumentIdsMutatedInOneTransaction')
+    })
+
     describe('tests cardinality in schema', function () {
       let card
       let min
