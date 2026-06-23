@@ -4091,8 +4091,8 @@ http_read_json_stream_for_documents_body(Stream, Request) :-
         zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
         read_string(Uncompressed_Stream, _, BufferedString),
         close(Uncompressed_Stream)
-    ;   % Uncompressed request - read directly
-        http_read_data(Request, BufferedString, [to(string)])
+    ;   % Uncompressed request - read raw bytes, no charset decoding.
+        http_read_data(Request, BufferedString, [to(string), input_encoding(octet)])
     ),
     open_string(BufferedString, Stream).
 

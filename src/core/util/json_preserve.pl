@@ -65,9 +65,9 @@ json_read_dict(Stream, Dict, Options) :-
 json_read_dict_stream(Stream, Dict, Options) :-
     % Use Rust parser for one-at-a-time streaming
     % All streams are now string streams (buffered from HTTP)
-    (   catch('$json_preserve':json_read_one_from_stream(Stream, Value), _Error, fail)
+    (   '$json_preserve':json_read_one_from_stream(Stream, Value)
     ->  Dict = Value
-    ;   % Rust parser returned nothing or failed - must be EOF
+    ;   % Rust parser returned nothing - must be EOF
         handle_eof(Options, Dict)
     ).
 

@@ -111,6 +111,19 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff,
 % In Prolog, atoms and strings don't unify even with identical characters,
 % so we convert both to atoms before comparison.
 %
+% Dicts (subdocument objects), lists, and numbers are compared
+% structurally — only atoms and strings use coerced comparison.
+%
+values_equal(V1, V2) :-
+    (   is_dict(V1)
+    ;   is_dict(V2)
+    ;   is_list(V1)
+    ;   is_list(V2)
+    ;   number(V1)
+    ;   number(V2)
+    ),
+    !,
+    V1 = V2.
 values_equal(V1, V2) :-
     % Convert both to atoms for comparison
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
@@ -958,6 +971,107 @@ test(star_wars_films_patch, []) :-
 		                    ],
 	                   url:"http://swapi.co/api/starships/12/"
 	                 }).
+
+% ------------------------------------------------------------------
+% Tests for values_equal/2 with dicts, lists, and numbers
+% (Regression: atom_string/2 crashes on dict arguments)
+% ------------------------------------------------------------------
+
+test(swap_null_to_subdocument, []) :-
+    %% SwapValue from null to a subdocument dict — the original crash case.
+    Before = _{ '@id' : "Entity/e1",
+                '@type' : "Entity",
+                quantity : null
+              },
+    SubDoc = json{ '@id' : "Entity/e1/quantity/Quantity/1",
+                   '@type' : "Quantity",
+                   value : 42
+                 },
+    Patch = _{ quantity : _{ '@op' : "SwapValue",
+                             '@before' : null,
+                             '@after' : SubDoc }
+             },
+    After = _{ '@id' : "Entity/e1",
+               '@type' : "Entity",
+               quantity : SubDoc
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_subdocument_to_null, []) :-
+    %% SwapValue from a subdocument dict back to null.
+    SubDoc = json{ '@id' : "Entity/e1/quantity/Quantity/1",
+                   '@type' : "Quantity",
+                   value : 42
+                 },
+    Before = _{ '@id' : "Entity/e1",
+                '@type' : "Entity",
+                quantity : SubDoc
+              },
+    Patch = _{ quantity : _{ '@op' : "SwapValue",
+                             '@before' : SubDoc,
+                             '@after' : null }
+             },
+    After = _{ '@id' : "Entity/e1",
+               '@type' : "Entity",
+               quantity : null
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_between_subdocuments, []) :-
+    %% SwapValue between two different subdocument dicts.
+    SubDoc1 = json{ '@id' : "Entity/e1/quantity/Quantity/1",
+                    '@type' : "Quantity",
+                    value : 42
+                  },
+    SubDoc2 = json{ '@id' : "Entity/e1/quantity/Quantity/2",
+                    '@type' : "Quantity",
+                    value : 99
+                  },
+    Before = _{ '@id' : "Entity/e1",
+                '@type' : "Entity",
+                quantity : SubDoc1
+              },
+    Patch = _{ quantity : _{ '@op' : "SwapValue",
+                             '@before' : SubDoc1,
+                             '@after' : SubDoc2 }
+             },
+    After = _{ '@id' : "Entity/e1",
+               '@type' : "Entity",
+               quantity : SubDoc2
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_string_value_regression, []) :-
+    %% Regression: normal string SwapValue must still work.
+    Before = _{ '@id' : "Person/1",
+                '@type' : "Person",
+                name : "alice"
+              },
+    Patch = _{ name : _{ '@op' : "SwapValue",
+                         '@before' : "alice",
+                         '@after' : "bob" }
+             },
+    After = _{ '@id' : "Person/1",
+               '@type' : "Person",
+               name : "bob"
+             },
+    simple_patch(Patch, Before, success(After), []).
+
+test(values_equal_dict_identity, []) :-
+    %% Direct unit test: equal dicts should unify.
+    D = json{ '@type' : "Quantity", value : 1 },
+    values_equal(D, D).
+
+test(values_equal_dict_not_equal, [fail]) :-
+    %% Direct unit test: different dicts must fail.
+    D1 = json{ '@type' : "Quantity", value : 1 },
+    D2 = json{ '@type' : "Quantity", value : 2 },
+    values_equal(D1, D2).
+
+test(values_equal_null_vs_dict, [fail]) :-
+    %% Direct unit test: null (atom) vs dict must fail, NOT throw.
+    D = json{ '@type' : "Quantity", value : 1 },
+    values_equal(null, D).
 
 :- end_tests(simple_patch).
 
