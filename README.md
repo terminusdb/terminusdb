@@ -13,13 +13,15 @@
 [![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Project Overview
+## Project Overview (Updated May 2026)
 
 **TerminusDB is a distributed database with a collaboration model — git for data.**
 
 If you find this project useful, please consider **starring the repo** ⭐
 
-TerminusDB allows you to link JSON documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.org/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
+TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.org/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
+
+Now with new maintainers and an enterprise version. 
 
 ### Key Features
 
@@ -31,10 +33,15 @@ TerminusDB allows you to link JSON documents in a semantic knowledge graph throu
 - **Multimodal**: Support for REST API, GraphQL, WOQL and with Closed World RDF
 - **Goal seeking**: Built in unification, path queries, and a datalog logic engine
 
-### What's New in Version 11
+### What's New in Version 12
 
-[TerminusDB 11](https://github.com/terminusdb/terminusdb/releases/tag/v11.0.0) features a fast Rust storage backend which reduces storage overhead and latency, improves search performance, and simplifies interchange. Version 11 includes:
+[TerminusDB 12](https://github.com/terminusdb/terminusdb/releases/tag/v12.0.5) features performance, stability and precision provided by the new [DFRNT](https://dfrnt.com?utm_source=github_terminusdb) maintainers. Now engineered for industrial and financial use cases with high precision math, temporal reasoning, and stability under load. Version 12 includes:
 
+- **[Arbitrary Precision xsd:decimal]()**: Arbitrary rational precision xsd:decimal mathematics, including high precision JSON decimals over the wire for JSON, GraphQL and WOQL, see [ISO/IEC 21778:2017](https://www.iso.org/standard/71616.html)
+- **[Allen Integer Algebra and Temporal Reasoning](https://terminusdb.org/docs/woql-interval-algebra/)**: Reason about ISO8601 date, time and durations with high precision rational math
+- **[Range Queries over Succinct Data](https://terminusdb.org/docs/woql-triple-slice/)**: Extremely fast range queries with constant time retrieval over arbitrary size ordered data, which is great for knowledge graph processing over timestamp, numeric, and interval ranges; with strong temporal reasoning and classification
+- **[ISO8601 Allen Interval Algebra](https://terminusdb.org/docs/woql-interval-algebra/)**: Support for temporal reasoning and storage of XSD time datatypes including temporal interval classification, storage and life cycle management with datalog reasoning
+- **[JSON Git-for-Data (Linked Data)](https://terminusdb.org/docs/git-for-data-reference/)**: Git for data for JSON, JSON-LD, XML and Turtle documents with schema control (and also for deduplicated schemaless JSON documents)
 - **[REST API](https://terminusdb.org/docs/rest-api)**: Use REST API as a proper graph query language with deep link discovery, path queries and linked data
 - **[GraphQL Support](https://terminusdb.org/docs/graphql-basics)**: Use GraphQL as a proper graph query language with deep link discovery and path queries
 - **[WOQL Datalog](https://terminusdb.org/docs/what-is-datalog)**: Use WOQL as a goal-seeking problem-solving toolbox, complete with triples across and within documents, path queries and variables unification
@@ -44,10 +51,9 @@ TerminusDB allows you to link JSON documents in a semantic knowledge graph throu
 
 ## Getting Started
 
-The easiest way to install TerminusDB as a developer is by using the [Docker TerminusDB Image](https://hub.docker.com/r/terminusdb/terminusdb-server). It can be joined by using [Snap](https://snapcraft.io/terminusdb) locally as a git-for-data client to perform push and pull. Docker brings the server component, and snap the ability to try TerminusDB on the command line, for example for ML/Ops.
+The easiest way to install TerminusDB as a developer is by following the [10-minutes docker getting started manual](https://terminusdb.org/docs/get-started/) with the latest [Docker TerminusDB Image](https://hub.docker.com/r/terminusdb/terminusdb-server). It can be installed locally using [Snap](https://snapcraft.io/terminusdb) as both git-for-data client and server to perform push and pull. Docker brings the server component, and snap the ability to try TerminusDB on the command line, for example for ML/Ops and AI use cases requiring deterministic symbolic AI processing.
 
-
-For deployments, copy the docker-compose.yml file from the repository. For a complete modeller user interface, create an account for the [DFRNT Studio](https://studio.dfrnt.com) which can also be used to model TerminusDB on localhost! There is still the possibility to run the deprecated (buggy) dashboard, by following a [couple of instructions](https://terminusdb.org/docs/dashboard).
+For deployments, copy the docker-compose.yml file from the repository. For a complete modeller user interface, create an account for the [DFRNT Studio](https://studio.dfrnt.com) which can also be used to model TerminusDB on localhost! There is still the possibility to run the now deprecated (buggy) dashboard, by following a [the instructions for the TerminusDB dashboard](https://terminusdb.org/docs/dashboard).
 
 1. Add the following to a `.env` file in the source directory:
 
@@ -65,7 +71,7 @@ Notes:
 
 You should be able to view TerminusDB running by default at `localhost:6363`
 
-> If you're installing TerminusDB on Windows with Docker, our friends at DFRNT wrote this [comprehensive guide](https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/).
+> If you're installing TerminusDB on Windows with Docker, follow the comprehensive guide for [TerminusDB on Windows with Docker]([https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/](https://terminusdb.org/docs/install-terminusdb-docker-windows/)).
 
 You can also install TerminusDB from [Source Code](https://terminusdb.org/docs/install-terminusdb-from-source-code).
 
@@ -73,7 +79,7 @@ You can also install TerminusDB from [Source Code](https://terminusdb.org/docs/i
 
 ### Quick Start with CLI
 
-Once installed, you can start using TerminusDB immediately. Here's a simple example creating a person with friends:
+Once installed, you can start using TerminusDB immediately. Here's a simple example creating a person with friends (or use the [Manual and more in-depth 15-minutes Getting Started Guide](https://terminusdb.org/docs/first-15-minutes/)):
 
 ```shell
 terminusdb db create admin/example1
@@ -94,21 +100,23 @@ EOF
 
 TerminusDB provides official client libraries for multiple languages:
 
-- 🐍 **[Python Client](https://pypi.org/project/terminusdb-client/)**: Full-featured Python library for TerminusDB
-- 🌐 **[JavaScript Client](https://www.npmjs.com/package/@terminusdb/terminusdb-client)**: Browser and Node.js support
-- **[Rust Client](https://github.com/ParapluOU/terminusdb-rs)**: Full-featured Rust library for TerminusDB, developed by the community
+- 🐍 **[Python Client (v12)](https://pypi.org/project/terminusdb/)**: Full-featured Python library for TerminusDB
+- 🌐 **[JavaScript Client (v12)](https://www.npmjs.com/package/terminusdb)**: Browser and Node.js support
+- **[Rust Client](https://github.com/ParapluOU/terminusdb-rs)**: Full-featured Rust library for TerminusDB, community contribution
 
 ## Documentation
 
-Full documentation is available at **[terminusdb.org/docs](https://terminusdb.org/docs/get-started-with-terminusdb/)**.
+Full documentation is available at **[https://terminusdb.org/docs](https://terminusdb.org/docs/get-started-with-terminusdb/)**.
 
 ### Key Resources
 
-- **[Getting Started Guide](https://terminusdb.org/docs/get-started-with-terminusdb/)**: Complete onboarding tutorial
+- **[What is TerminusDB](https://terminusdb.org/docs/terminusdb-explanation/)**: Why TerminusDB is a unique Graph Database
+- **[Getting Started Guide](https://terminusdb.org/docs/get-started/)**: Complete onboarding tutorial
 - **[Document API](https://terminusdb.org/docs/document-insertion)**: Working with JSON documents
 - **[GraphQL Guide](https://terminusdb.org/docs/graphql-basics)**: Query your knowledge graph with GraphQL
 - **[WOQL](https://terminusdb.org/docs/what-is-datalog/)**: Web Object Query Language fundamentals
 - **[Release Notes](docs/RELEASE_NOTES.md)**: Latest changes and version history
+- **[TerminusDB Enterprise]()**: Full JSON-LD, Turtle, and RDF/XML documents, enterprise features, very fast commit history queries, higher write performance, clustering, API for data product backup and restore (beyond command line tools) 
 
 Found an issue in the docs? Please [open an issue or pull request](https://github.com/dfrnt-labs/terminusdb-docs-static) in our documentation repo or here.
 
