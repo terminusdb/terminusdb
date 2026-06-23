@@ -63,6 +63,7 @@
 
               % instance.pl
               is_instance/3,
+              is_instance_class/3,
 
               % schema.pl
               class_subsumed/3,

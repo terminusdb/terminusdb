@@ -16,7 +16,7 @@
 :- use_module(library(http/json)).
 :- use_module(library(http/http_client)).
 :- use_module(core(api/api_graphql)).
-:- use_module(core(triple), [super_user_authority/1]).
+:- use_module(core(triple), [super_user_authority/1, database_schema/2, xrdf/4]).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(yall)).
