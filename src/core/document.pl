@@ -63,6 +63,7 @@
 
               % instance.pl
               is_instance/3,
+              is_instance_class/3,
 
               % schema.pl
               class_subsumed/3,
@@ -71,6 +72,7 @@
               all_class_frames/2,
               all_class_frames/3,
               is_schemaless/1,
+              schema_metadata_descriptor/3,
 
               % query.pl
               match_query_document_uri/4,

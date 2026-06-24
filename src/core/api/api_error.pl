@@ -2626,6 +2626,31 @@ api_document_error_jsonld(Type, error(json_id_not_provided(Document), _),JSON) :
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(embedding_only_supported_for_instance_graphs, _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Embedding output format is only supported for instance graphs.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddingOnlyForInstanceGraphs'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(no_embedding_queries_defined, _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "No embedding queries are defined in the schema.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoEmbeddingQueriesDefined'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(no_embedding_query_for_type(DocType), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "No embedding query is defined for type: ~q", [DocType]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:NoEmbeddingQueryForType',
+                              'api:document_type' : DocType },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.
