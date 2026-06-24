@@ -152,19 +152,27 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
     put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
     check_type_(Schema,Merged_Prefixes,Value,Type,Annotated,Captures).
 
-check_type_(Schema,_Prefixes,Value,Type,_Annotated,_Captures) :-
+check_type_(Schema,Prefixes,Value,Type,Annotated,Captures) :-
     schema_is_abstract(Schema, Type),
     !,
-    (   is_dict(Value),
-        get_dict('@id', Value, Id)
-    ->  true
-    ;   Id = unknown
-    ),
-    throw(error(schema_check_failure([witness{
-        '@type': reifying_abstract_class,
-        class: Type,
-        subject: Id
-    }]), _)).
+    (   schema_is_schemaless(Schema)
+    ->  no_captures(Captures),
+        (   is_dict(Value)
+        ->  expand_dictionary_keys(Value, Prefixes, Expanded)
+        ;   Expanded = Value
+        ),
+        Annotated = success(Expanded)
+    ;   (   is_dict(Value),
+            get_dict('@id', Value, Id)
+        ->  true
+        ;   Id = unknown
+        ),
+        throw(error(schema_check_failure([witness{
+            '@type': reifying_abstract_class,
+            class: Type,
+            subject: Id
+        }]), _))
+    ).
 check_type_(Schema,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-SubT, Out)) :-
     update_document_links(Value, ValueOut, Schema, Prefixes, Type, captures(In, DepH-DepMid, SubH-SubMid, Mid)),
     NextCaptures = captures(Mid, DepMid-DepT, SubMid-SubT, Out),
@@ -172,7 +180,8 @@ check_type_(Schema,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-Su
     schema_class_frame(Schema, Prefixes, Type_Ex, Frame, [expand_abstract(false),
                                                           compress_ids(false)]),
     (   is_dict(Value),
-        shape_mismatch_(Schema,Type,ValueOut,Properties)
+        shape_mismatch_(Schema,Type,ValueOut,Properties),
+        \+ schema_is_schemaless(Schema)
     ->  no_captures(NextCaptures),
         missing_property_witness(ValueOut,Properties,Type,Annotated)
     ;   check_frame_(Frame,Schema,Prefixes,ValueOut,Type,Annotated,NextCaptures)
@@ -339,21 +348,33 @@ check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
             ;   Annotated_Value = witness(Witness_Value)
-            ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-                Annotated = witness(Witness)
+            ->  (   schema_is_schemaless(Schema)
+                ->  no_captures(Captures),
+                    Annotated = success(Dictionary)
+                ;   dict_pairs(Witness, json, [Key-Witness_Value]),
+                    Annotated = witness(Witness)
+                )
             )
-        ;   no_captures(Captures),
-            Annotated = witness(json{ '@type' : value_invalid_at_type,
-                                      document : Dictionary,
-                                      value : Value,
-                                      type : Type_Ex })
+        ;   (   schema_is_schemaless(Schema)
+            ->  no_captures(Captures),
+                Annotated = success(Dictionary)
+            ;   no_captures(Captures),
+                Annotated = witness(json{ '@type' : value_invalid_at_type,
+                                          document : Dictionary,
+                                          value : Value,
+                                          type : Type_Ex })
+            )
         )
-    ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
-                                  document : Dictionary,
-                                  field : Key })
+    ;   (   schema_is_schemaless(Schema)
+        ->  no_captures(Captures),
+            Annotated = success(Dictionary)
+        ;   no_captures(Captures),
+            Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                      document : Dictionary,
+                                      field : Key })
+        )
     ).
-check_type_pair_(Key,Range,_Schema,_Prefixes,success(Dictionary),Annotated,Captures),
+check_type_pair_(Key,Range,Schema,_Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
    '@values' : Enums} :< Range =>
     no_captures(Captures),
@@ -363,12 +384,18 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
         ;   Annotated_Value = witness(Witness_Value)
-        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-            Annotated = witness(Witness)
+        ->  (   schema_is_schemaless(Schema)
+            ->  Annotated = success(Dictionary)
+            ;   dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            )
         )
-    ;   Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
-                                  document : Dictionary,
-                                  field : Key })
+    ;   (   schema_is_schemaless(Schema)
+        ->  Annotated = success(Dictionary)
+        ;   Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                      document : Dictionary,
+                                      field : Key })
+        )
     ).
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@subdocument' : [], '@class' : Type} :< Range =>
@@ -378,13 +405,20 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
         ;   Annotated_Value = witness(Witness_Value)
-        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-            Annotated = witness(Witness)
+        ->  (   schema_is_schemaless(Schema)
+            ->  Annotated = success(Dictionary)
+            ;   dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            )
         )
-    ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
-                                  document : Dictionary,
-                                  field : Key })
+    ;   (   schema_is_schemaless(Schema)
+        ->  no_captures(Captures),
+            Annotated = success(Dictionary)
+        ;   no_captures(Captures),
+            Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                      document : Dictionary,
+                                      field : Key })
+        )
     ).
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@unfoldable' : [], '@class' : Type} :< Range =>
@@ -394,13 +428,20 @@ _{ '@unfoldable' : [], '@class' : Type} :< Range =>
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
         ;   Annotated_Value = witness(Witness_Value)
-        ->  dict_pairs(Witness, json, [Key-Witness_Value]),
-            Annotated = witness(Witness)
+        ->  (   schema_is_schemaless(Schema)
+            ->  Annotated = success(Dictionary)
+            ;   dict_pairs(Witness, json, [Key-Witness_Value]),
+                Annotated = witness(Witness)
+            )
         )
-    ;   no_captures(Captures),
-        Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
-                                  document : Dictionary,
-                                  field : Key })
+    ;   (   schema_is_schemaless(Schema)
+        ->  no_captures(Captures),
+            Annotated = success(Dictionary)
+        ;   no_captures(Captures),
+            Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
+                                      document : Dictionary,
+                                      field : Key })
+        )
     ).
 
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
@@ -723,7 +764,7 @@ Type = 'http://terminusdb.com/schema/sys#JSON',
     no_captures(Captures),
     Annotated = success(json{'@type' : Type,
                              '@value' : Value }).
-check_value_type_(_Schema,_Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(Schema,_Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
     catch(
@@ -732,9 +773,13 @@ is_base_type(Type) =>
                                      '@value' : Value })
         ),
         error(casting_error(Val, Type), _),
-        Annotated = witness(json{'@type':could_not_interpret_as_type,
-                                 'value': Val,
-                                 'type' : Type })
+        (   schema_is_schemaless(Schema)
+        ->  Annotated = success(json{'@type': 'http://www.w3.org/2001/XMLSchema#string',
+                                    '@value': Val })
+        ;   Annotated = witness(json{'@type':could_not_interpret_as_type,
+                                      'value': Val,
+                                      'type' : Type })
+        )
     ).
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_schema_enum(Schema,Type) =>
