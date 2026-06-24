@@ -155,7 +155,7 @@ check_type(Database,Prefixes,Value,Type,Annotated,Captures) :-
 check_type_(Schema,Prefixes,Value,Type,Annotated,Captures) :-
     schema_is_abstract(Schema, Type),
     !,
-    (   schema_is_schemaless(Schema)
+    (   schemaless_shape_check_disabled(Schema)
     ->  no_captures(Captures),
         (   is_dict(Value)
         ->  expand_dictionary_keys(Value, Prefixes, Expanded)
@@ -181,7 +181,7 @@ check_type_(Schema,Prefixes,Value,Type,Annotated,captures(In, DepH-DepT, SubH-Su
                                                           compress_ids(false)]),
     (   is_dict(Value),
         shape_mismatch_(Schema,Type,ValueOut,Properties),
-        \+ schema_is_schemaless(Schema)
+        \+ schemaless_shape_check_disabled(Schema)
     ->  no_captures(NextCaptures),
         missing_property_witness(ValueOut,Properties,Type,Annotated)
     ;   check_frame_(Frame,Schema,Prefixes,ValueOut,Type,Annotated,NextCaptures)
@@ -348,14 +348,14 @@ check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures
             ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
                 Annotated = success(Annotated_Success)
             ;   Annotated_Value = witness(Witness_Value)
-            ->  (   schema_is_schemaless(Schema)
+            ->  (   schemaless_shape_check_disabled(Schema)
                 ->  no_captures(Captures),
                     Annotated = success(Dictionary)
                 ;   dict_pairs(Witness, json, [Key-Witness_Value]),
                     Annotated = witness(Witness)
                 )
             )
-        ;   (   schema_is_schemaless(Schema)
+        ;   (   schemaless_shape_check_disabled(Schema)
             ->  no_captures(Captures),
                 Annotated = success(Dictionary)
             ;   no_captures(Captures),
@@ -365,7 +365,7 @@ check_type_pair_(Key,Type,Schema,Prefixes,success(Dictionary),Annotated,Captures
                                           type : Type_Ex })
             )
         )
-    ;   (   schema_is_schemaless(Schema)
+    ;   (   schemaless_shape_check_disabled(Schema)
         ->  no_captures(Captures),
             Annotated = success(Dictionary)
         ;   no_captures(Captures),
@@ -384,13 +384,13 @@ _{ '@type':'http://terminusdb.com/schema/sys#Enum', '@id' : Enum,
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
         ;   Annotated_Value = witness(Witness_Value)
-        ->  (   schema_is_schemaless(Schema)
+        ->  (   schemaless_shape_check_disabled(Schema)
             ->  Annotated = success(Dictionary)
             ;   dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
             )
         )
-    ;   (   schema_is_schemaless(Schema)
+    ;   (   schemaless_shape_check_disabled(Schema)
         ->  Annotated = success(Dictionary)
         ;   Annotated = witness(json{ '@type' : required_field_does_not_exist_in_document,
                                       document : Dictionary,
@@ -405,13 +405,13 @@ _{ '@subdocument' : [], '@class' : Type} :< Range =>
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
         ;   Annotated_Value = witness(Witness_Value)
-        ->  (   schema_is_schemaless(Schema)
+        ->  (   schemaless_shape_check_disabled(Schema)
             ->  Annotated = success(Dictionary)
             ;   dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
             )
         )
-    ;   (   schema_is_schemaless(Schema)
+    ;   (   schemaless_shape_check_disabled(Schema)
         ->  no_captures(Captures),
             Annotated = success(Dictionary)
         ;   no_captures(Captures),
@@ -428,13 +428,13 @@ _{ '@unfoldable' : [], '@class' : Type} :< Range =>
         ->  put_dict(Key,Dictionary,Success_Value,Annotated_Success),
             Annotated = success(Annotated_Success)
         ;   Annotated_Value = witness(Witness_Value)
-        ->  (   schema_is_schemaless(Schema)
+        ->  (   schemaless_shape_check_disabled(Schema)
             ->  Annotated = success(Dictionary)
             ;   dict_pairs(Witness, json, [Key-Witness_Value]),
                 Annotated = witness(Witness)
             )
         )
-    ;   (   schema_is_schemaless(Schema)
+    ;   (   schemaless_shape_check_disabled(Schema)
         ->  no_captures(Captures),
             Annotated = success(Dictionary)
         ;   no_captures(Captures),
@@ -773,7 +773,7 @@ is_base_type(Type) =>
                                      '@value' : Value })
         ),
         error(casting_error(Val, Type), _),
-        (   schema_is_schemaless(Schema)
+        (   schemaless_shape_check_disabled(Schema)
         ->  Annotated = success(json{'@type': 'http://www.w3.org/2001/XMLSchema#string',
                                     '@value': Val })
         ;   Annotated = witness(json{'@type':could_not_interpret_as_type,

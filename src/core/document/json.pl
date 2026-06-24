@@ -16604,3 +16604,85 @@ test(foreign_card_schema_change_after_instance,
     ).
 
 :- end_tests(foreign_families).
+
+:- begin_tests(schemaless_shape_check, []).
+:- use_module(core(util/test_utils)).
+
+schemaless_shape_test_schema('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+{ "@id" : "Moo",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+').
+
+% When the per-DB schema toggle is on but the shape-check flag is off,
+% the original inference behaviour is retained: schema violations are still
+% rejected.
+test(rejected_when_schemaless_but_shape_check_enabled,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 schemaless_shape_test_schema(Schema),
+                 write_schema_string(Schema, Desc),
+                 set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false)
+             )),
+         cleanup(
+             (   set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false),
+                 teardown_temp_store(State)
+             )),
+         error(
+             schema_check_failure(
+                 [json{'@type':required_field_does_not_exist_in_document,
+                       document:_,
+                       field:'http://s/name'}]),
+             _)
+     ]) :-
+    toggle_schema_off(Desc),
+    Document = _{ '@id' : "Moo/doug",
+                  '@type' : "Moo"},
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "shape check enabled" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
+% When the shape-check flag is flipped, the inference layer treats the
+% database as fully schemaless and accepts schema-violating documents.
+test(accepted_when_schemaless_shape_check_disabled,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 schemaless_shape_test_schema(Schema),
+                 write_schema_string(Schema, Desc),
+                 set_prolog_flag(terminusdb_schemaless_shape_check_disabled, true)
+             )),
+         cleanup(
+             (   set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false),
+                 teardown_temp_store(State)
+             ))
+     ]) :-
+    toggle_schema_off(Desc),
+    Document = _{ '@id' : "Moo/doug",
+                  '@type' : "Moo"},
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "shape check disabled" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, Id),
+        _
+    ),
+    get_document(Desc, Id, _).
+
+toggle_schema_off(Desc) :-
+    with_test_transaction(Desc, C,
+        ask(C,
+            insert('terminusdb://data/Schema', rdf:type, rdf:nil, schema))
+    ).
+
+:- end_tests(schemaless_shape_check).
