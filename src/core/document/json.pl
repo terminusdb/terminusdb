@@ -26,6 +26,7 @@
               insert_document/3,
               insert_document/7,
               insert_document/8,
+              insert_document_expanded/3,
               insert_document_unsafe/8,
               replace_document/2,
               replace_document/3,
