@@ -831,18 +831,8 @@ type_context(DB,Type,Prefixes,Context) :-
 
 prefix_expand_schema(Node,Context,NodeEx) :-
     is_dict(Context),
-    rust_prefix_expand_available,
     !,
     '$doc':rust_expand_prefix_schema(Context, Node, NodeEx).
-prefix_expand_schema(Node,Context,NodeEx) :-
-    (   get_dict('@schema', Context, Schema),
-        put_dict(_{'@base' : Schema}, Context, New_Context)
-    ->  true
-    ;   Context = New_Context),
-    prefix_expand(Node, New_Context, NodeEx).
-
-rust_prefix_expand_available :-
-    current_predicate('$doc':rust_expand_prefix_schema/3).
 
 property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     get_dict(Prop, Context, Full_Expansion),

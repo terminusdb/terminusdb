@@ -225,34 +225,11 @@ prefix_expand('',_,_) :-
     throw(error(empty_key, _)).
 prefix_expand("",_,_) :-
     throw(error(empty_key, _)).
-prefix_expand(K,Context,Key) :-
+
+prefix_expand(K, Context, Key) :-
     is_dict(Context),
-    rust_prefix_expand_available,
     !,
     '$doc':rust_expand_prefix(Context, K, Key).
-prefix_expand(K,Context,Key) :-
-    %   Is already qualified
-    (   uri_has_protocol(K)
-    ->  K = Key
-    %   Is prefixed (but does not check for protocol)
-    ;   uri_has_prefix_unsafe(K, Groups)
-    ->  atom_string(Prefix, Groups.prefix),
-        (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,(Groups.suffix),Key)
-        ;   throw(error(key_has_unknown_prefix(K), _)))
-    ;   is_at(K)
-    ->  K = Key
-    ;   (   get_dict('@base', Context, Base)
-        ->  true
-        ;   Base = ''),
-        (   get_dict('@vocab', Context, Vocab)
-        ->  true
-        ;   Vocab = ''),
-        atomic_list_concat([Base,Vocab,K],Key)
-    ).
-
-rust_prefix_expand_available :-
-    current_predicate('$doc':rust_expand_prefix/3).
 
 /*
  * expand_context(+Context,-Context_Expanded) is det.
