@@ -382,16 +382,16 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
         ),
         Values).
 
-get_field_values_(JSON,Schema,Context,Fields,Values) :-
+get_field_values_(JSON,Schema,_Context,Fields,Values) :-
     findall(
         Value,
         (   member(Field,Fields),
-            prefix_expand_schema(Field,Context,Field_Ex),
+            prefix_expand_schema(Field,Schema,Field_Ex),
             (   get_dict(Field_Ex,JSON,Value)
             ->  true
             ;   get_dict('@type',JSON,Type),
-                prefix_expand_schema(Type, Context, Type_Ex),
-                prefix_expand_schema(Field, Context, Field_Ex),
+                prefix_expand_schema(Type, Schema, Type_Ex),
+                prefix_expand_schema(Field, Schema, Field_Ex),
                 schema_class_predicate_type(Schema, Type_Ex, Field_Ex, Field_Type),
                 memberchk(Field_Type, [optional(_), set(_), array(_,_)])
             ->  Value = optional(none)
@@ -833,6 +833,15 @@ prefix_expand_schema(Node,Context,NodeEx) :-
     is_dict(Context),
     !,
     '$doc':rust_expand_prefix_schema(Context, Node, NodeEx).
+prefix_expand_schema(Node,Layer,NodeEx) :-
+    blob(Layer, layer),
+    !,
+    '$doc':rust_expand_prefix_schema_layer(Layer, Node, NodeEx).
+prefix_expand_schema(Node,Schema,NodeEx) :-
+    is_list(Schema),
+    schema_read_layer(Schema, Layer),
+    !,
+    '$doc':rust_expand_prefix_schema_layer(Layer, Node, NodeEx).
 
 property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     get_dict(Prop, Context, Full_Expansion),
@@ -3850,7 +3859,7 @@ insert_schema_document(Transaction, Document) :-
     check_json_string('@id', Id),
     database_prefixes(Transaction, Prefixes),
     database_schema(Transaction, Schema),
-    prefix_expand_schema(Id,Prefixes,Id_Ex),
+    prefix_expand_schema(Id,Schema,Id_Ex),
     do_or_die(
         valid_schema_name(Prefixes,Id_Ex),
         error(can_not_insert_class_with_reserve_name(Id), _)),
