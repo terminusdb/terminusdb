@@ -11,12 +11,16 @@
 :- use_module(core(util)).
 :- use_module(core(util/test_utils)).
 
+:- use_module(config(terminus_config), [worker_amount/1]).
+
 :- use_module(library(apply)).
 :- use_module(library(assoc)).
 :- use_module(library(gensym)).
 :- use_module(library(lists)).
 :- use_module(library(option)).
+:- use_module(library(pairs)).
 :- use_module(library(plunit)).
+:- use_module(library(yall)).
 
 :- dynamic request_queue/5.
 % request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks).
@@ -165,7 +169,22 @@ return_chunk(OwnerId, chunk(Index, Docs)) :-
                    assertz(request_queue(OwnerId, Descriptor, DB, [chunk(Index, Docs)|Pending], Total))
                )).
 
-process_chunk(DB, Docs, Elaborated) :-
+rust_elaboration_available :-
+    current_predicate('$doc':rust_elaborate_simple_documents/3).
+
+rust_elaborate_chunk(DB, Docs, Elaborated) :-
+    rust_elaboration_available,
+    !,
+    catch(
+        (   '$doc':get_document_context(DB, Context),
+            '$doc':rust_elaborate_simple_documents(Context, Docs, Elaborated)
+        ),
+        Error,
+        (   format(user_error, 'rust elaboration failed: ~q~n', [Error]),
+            fail
+        )
+    ).
+rust_elaborate_chunk(DB, Docs, Elaborated) :-
     maplist({DB}/[Doc, Elab]>>(
                 empty_assoc(Captures_In),
                 json_elaborate(DB, Doc, Captures_In, Elab,
@@ -173,6 +192,9 @@ process_chunk(DB, Docs, Elaborated) :-
             ),
             Docs,
             Elaborated).
+
+process_chunk(DB, Docs, Elaborated) :-
+    rust_elaborate_chunk(DB, Docs, Elaborated).
 
 collect_results(RequestId, TotalChunks, Elaborated) :-
     collect_results(RequestId, TotalChunks, [], Pairs),
@@ -405,5 +427,63 @@ test(single_worker, [
     helper_docs(100, Docs),
     elaborate_insert_request(Desc, Docs, Elaborated, [workers(1)]),
     length(Elaborated, 100), !.
+
+elaboration_without_id(Elab, Normalized) :-
+    put_dict('@id', Elab, '<id>', Normalized).
+
+id_prefix_matches(Id, Prefix) :-
+    atom_concat(Prefix, _, Id).
+
+test(rust_elaboration_matches_prolog_simple, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = json{'@type':'Person', name:'Alice', age:30},
+    open_descriptor(Desc, DB),
+    json_elaborate(DB, Doc, Prolog_Elaborated),
+    (   rust_elaboration_available
+    ->  '$doc':get_document_context(DB, Context),
+        '$doc':rust_elaborate_simple_documents(Context, [Doc], [Rust_Elaborated]),
+        elaboration_without_id(Prolog_Elaborated, Prolog_Normalized),
+        elaboration_without_id(Rust_Elaborated, Rust_Normalized),
+        Prolog_Normalized = Rust_Normalized,
+        get_dict('@id', Prolog_Elaborated, Prolog_Id),
+        get_dict('@id', Rust_Elaborated, Rust_Id),
+        id_prefix_matches(Prolog_Id, 'terminusdb:///data/Person/'),
+        id_prefix_matches(Rust_Id, 'terminusdb:///data/Person/')
+    ;   true
+    ),
+    !.
+
+test(rust_elaboration_matches_prolog_list, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    helper_docs(50, Docs),
+    open_descriptor(Desc, DB),
+    maplist(json_elaborate(DB), Docs, Prolog_Elaborated),
+    (   rust_elaboration_available
+    ->  '$doc':get_document_context(DB, Context),
+        '$doc':rust_elaborate_simple_documents(Context, Docs, Rust_Elaborated),
+        maplist(elaboration_without_id, Prolog_Elaborated, Prolog_Normalized),
+        maplist(elaboration_without_id, Rust_Elaborated, Rust_Normalized),
+        Prolog_Normalized = Rust_Normalized,
+        forall(member(E, Prolog_Elaborated),
+               (   get_dict('@id', E, Id),
+                   id_prefix_matches(Id, 'terminusdb:///data/Person/')
+               )),
+        forall(member(E, Rust_Elaborated),
+               (   get_dict('@id', E, Id),
+                   id_prefix_matches(Id, 'terminusdb:///data/Person/')
+               ))
+    ;   true
+    ),
+    !.
 
 :- end_tests(parallel_elaboration).
