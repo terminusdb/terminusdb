@@ -26,6 +26,7 @@
 :- use_module(core(util)).
 :- use_module(core(util/syntax)).
 :- use_module(core(triple)).
+:- use_module(core(document/schema), [schema_read_layer/2]).
 :- use_module(core(triple/literals), [object_storage/2]).
 :- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
 :- use_module(core(document)).
@@ -230,6 +231,15 @@ prefix_expand(K, Context, Key) :-
     is_dict(Context),
     !,
     '$doc':rust_expand_prefix(Context, K, Key).
+prefix_expand(K, Layer, Key) :-
+    blob(Layer, layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
+prefix_expand(K, Schema, Key) :-
+    is_list(Schema),
+    schema_read_layer(Schema, Layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
 
 /*
  * expand_context(+Context,-Context_Expanded) is det.
