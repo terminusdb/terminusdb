@@ -2200,6 +2200,7 @@ dependencies = [
  "rug",
  "serde",
  "serde_json",
+ "smallvec",
  "swipl",
  "tdb-succinct",
  "terminusdb-store-prolog",

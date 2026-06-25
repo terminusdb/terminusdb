@@ -52,12 +52,16 @@ fn has_protocol(name: &str) -> bool {
     false
 }
 
+/// A flat-vector prefix map.  For the small sets of prefixes typical in
+/// TerminusDB (global defaults plus a handful of custom prefixes), linear
+/// scan beats `HashMap` on lookup and has better cache locality.
+pub type PrefixMap = Vec<(String, String)>;
+
 lazy_static! {
-    /// Global LRU cache of prefix maps built from Prolog context dictionaries.
-    /// The key is a deterministic hash of the sorted (key, value) pairs.
+    /// Global LRU cache of prefix maps keyed by deterministic content hash.
     /// The cache is bounded to prevent unbounded growth across long-running
     /// processes that encounter many different schemas.
-    static ref PREFIX_MAP_CACHE: Mutex<LruCache<u64, Arc<HashMap<String, String>>>> =
+    static ref PREFIX_MAP_CACHE: Mutex<LruCache<u64, Arc<PrefixMap>>> =
         Mutex::new(LruCache::new(NonZeroUsize::new(PREFIX_MAP_CACHE_CAPACITY).unwrap()));
 }
 
@@ -139,7 +143,80 @@ pub fn build_prefix_map<L: Layer + Clone>(doc_context: &DocumentContext<L>) -> H
 /// - Prefixed names and base+vocab concatenation are always atoms, matching
 ///   Prolog's `atom_concat/3` and `atomic_list_concat/3` behavior.
 fn prefix_expand_raw(
+    prefixes: &PrefixMap,
+    name: &str,
+    input_is_atom: bool,
+) -> Option<(String, bool)> {
+    prefix_expand_with_base(prefixes, None, name, input_is_atom)
+}
+
+/// Expand a schema name.  Mirrors Prolog `prefix_expand_schema`: temporarily
+/// treats `@base` as `@schema` so that unprefixed class/property names resolve
+/// into the schema namespace.
+fn prefix_expand_schema_raw(
+    prefixes: &PrefixMap,
+    name: &str,
+    input_is_atom: bool,
+) -> Option<(String, bool)> {
+    let schema_base = prefixes
+        .iter()
+        .find(|(k, _)| k == "@schema")
+        .map(|(_, v)| v.as_str());
+    prefix_expand_with_base(prefixes, schema_base, name, input_is_atom)
+}
+
+/// Expand a schema name using a `HashMap` prefix map.
+fn hashmap_prefix_expand_schema_raw(
     prefixes: &HashMap<String, String>,
+    name: &str,
+    input_is_atom: bool,
+) -> Option<(String, bool)> {
+    let schema_base = prefixes.get("@schema").map(|s| s.as_str());
+    hashmap_prefix_expand_with_base(prefixes, schema_base, name, input_is_atom)
+}
+
+/// Internal helper that avoids cloning the prefix map for schema expansion.
+/// `base_override` is used by the schema path so that `@base` resolves to
+/// `@schema` without allocating a new `HashMap`.
+fn prefix_expand_with_base(
+    prefixes: &PrefixMap,
+    base_override: Option<&str>,
+    name: &str,
+    input_is_atom: bool,
+) -> Option<(String, bool)> {
+    if has_protocol(name) {
+        return Some((name.to_string(), input_is_atom));
+    }
+    if name.is_empty() {
+        return None;
+    }
+
+    if let Some(idx) = name.find(':') {
+        let prefix = &name[..idx];
+        let suffix = &name[idx + 1..];
+        let expanded = prefixes.iter().find(|(k, _)| k == prefix).map(|(_, v)| v)?;
+        Some((format!("{}{}", expanded, suffix), true))
+    } else if name.starts_with('@') {
+        // Bare @-keywords (e.g. '@type', '@base') are returned unchanged.
+        Some((name.to_string(), input_is_atom))
+    } else {
+        let base = base_override
+            .or_else(|| prefixes.iter().find(|(k, _)| k == "@base").map(|(_, v)| v.as_str()))
+            .unwrap_or_default();
+        let vocab = prefixes
+            .iter()
+            .find(|(k, _)| k == "@vocab")
+            .map(|(_, v)| v.as_str())
+            .unwrap_or_default();
+        Some((format!("{}{}{}", base, vocab, name), true))
+    }
+}
+
+/// Lookup a prefix in a `HashMap`-backed prefix map.  Used by the
+/// `DocumentContext` lifecycle-bound cache and the internal Rust elaboration path.
+fn hashmap_prefix_expand_with_base(
+    prefixes: &HashMap<String, String>,
+    base_override: Option<&str>,
     name: &str,
     input_is_atom: bool,
 ) -> Option<(String, bool)> {
@@ -159,25 +236,12 @@ fn prefix_expand_raw(
         // Bare @-keywords (e.g. '@type', '@base') are returned unchanged.
         Some((name.to_string(), input_is_atom))
     } else {
-        let base = prefixes.get("@base").cloned().unwrap_or_default();
-        let vocab = prefixes.get("@vocab").cloned().unwrap_or_default();
+        let base = base_override
+            .or_else(|| prefixes.get("@base").map(|s| s.as_str()))
+            .unwrap_or_default();
+        let vocab = prefixes.get("@vocab").map(|s| s.as_str()).unwrap_or_default();
         Some((format!("{}{}{}", base, vocab, name), true))
     }
-}
-
-/// Expand a schema name.  Mirrors Prolog `prefix_expand_schema`: temporarily
-/// treats `@base` as `@schema` so that unprefixed class/property names resolve
-/// into the schema namespace.
-fn prefix_expand_schema_raw(
-    prefixes: &HashMap<String, String>,
-    name: &str,
-    input_is_atom: bool,
-) -> Option<(String, bool)> {
-    let mut schema_context = prefixes.clone();
-    if let Some(schema) = prefixes.get("@schema") {
-        schema_context.insert("@base".to_string(), schema.clone());
-    }
-    prefix_expand_raw(&schema_context, name, input_is_atom)
 }
 
 /// Read a Prolog atom or string term as a Rust String.
@@ -189,28 +253,65 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
     }
 }
 
+/// Hash the content of a Prolog term without allocating a String.  Atoms and
+/// strings in SWI-Prolog are both backed by interned atoms, so we hash the atom
+/// pointer when possible; otherwise we fall back to hashing the contents.
+fn hash_term(term: &Term) -> u64 {
+    use std::cell::RefCell;
+    let hasher = RefCell::new(DefaultHasher::new());
+    if let Ok(atom) = term.get::<Atom>() {
+        (atom.atom_ptr() as usize).hash(&mut *hasher.borrow_mut());
+    } else if term.is_atom() {
+        let _ = term.get_atom_name(|opt| {
+            let mut h = hasher.borrow_mut();
+            if let Some(s) = opt {
+                s.hash(&mut *h);
+            } else {
+                "".hash(&mut *h);
+            }
+            0
+        });
+    } else {
+        let _ = term.get_str(|opt| {
+            let mut h = hasher.borrow_mut();
+            if let Some(s) = opt {
+                s.hash(&mut *h);
+            } else {
+                "".hash(&mut *h);
+            }
+            0
+        });
+    }
+    hasher.into_inner().finish()
+}
+
 /// Parse a Prolog context dictionary into a sorted prefix map and compute a
 /// deterministic hash for caching.  The dictionary is expected to already
 /// contain all relevant prefixes (global defaults plus schema-specific ones).
 fn parse_prefix_context<'a, C: QueryableContextType>(
     context: &'a Context<'a, C>,
     dict_term: &Term<'a>,
-) -> PrologResult<(u64, Arc<HashMap<String, String>>)> {
-    let mut pairs: Vec<(String, String)> = Vec::new();
+) -> PrologResult<(u64, Arc<PrefixMap>)> {
+    // Collect entries as (key, value hash, value term).  We only allocate the
+    // key string here; value strings are hashed without allocating and are only
+    // materialized as owned Strings on a cache miss.  `SmallVec` keeps the
+    // common case (<= 32 dict entries) on the stack.
+    let mut entries: smallvec::SmallVec<[(String, u64, Term<'a>); 32]> =
+        smallvec::SmallVec::new();
     for (key, val_term) in context.dict_entries(dict_term) {
         let key_str = match key {
             Key::Atom(a) => a.to_string(),
             Key::Int(i) => i.to_string(),
         };
-        let val_str = term_to_string(&val_term)?;
-        pairs.push((key_str, val_str));
+        let val_hash = hash_term(&val_term);
+        entries.push((key_str, val_hash, val_term));
     }
-    pairs.sort();
+    entries.sort_by(|(a, _, _), (b, _, _)| a.cmp(b));
 
     let mut hasher = DefaultHasher::new();
-    for (k, v) in &pairs {
-        k.hash(&mut hasher);
-        v.hash(&mut hasher);
+    for (key, val_hash, _) in &entries {
+        key.hash(&mut hasher);
+        val_hash.hash(&mut hasher);
     }
     let hash = hasher.finish();
 
@@ -219,10 +320,13 @@ fn parse_prefix_context<'a, C: QueryableContextType>(
         return Ok((hash, cached.clone()));
     }
 
-    let mut map = HashMap::with_capacity(pairs.len());
-    for (k, v) in pairs {
-        map.insert(k, v);
+    let mut map: smallvec::SmallVec<[(String, String); 32]> =
+        smallvec::SmallVec::with_capacity(entries.len());
+    for (key, _, val_term) in entries {
+        let val_str = term_to_string(&val_term)?;
+        map.push((key, val_str));
     }
+    let map: PrefixMap = map.into_vec();
     let map = Arc::new(map);
     cache.put(hash, map.clone());
     Ok((hash, map))
@@ -275,7 +379,7 @@ pub fn expand_prefixed_name<L: Layer + Clone>(
     name: &str,
 ) -> Option<String> {
     let prefixes = doc_context.prefix_map();
-    prefix_expand_schema_raw(prefixes, name, true)
+    hashmap_prefix_expand_schema_raw(prefixes, name, true)
         .map(|(expanded, _)| expanded)
 }
 
