@@ -226,6 +226,11 @@ prefix_expand('',_,_) :-
 prefix_expand("",_,_) :-
     throw(error(empty_key, _)).
 prefix_expand(K,Context,Key) :-
+    is_dict(Context),
+    rust_prefix_expand_available,
+    !,
+    '$doc':rust_expand_prefix(Context, K, Key).
+prefix_expand(K,Context,Key) :-
     %   Is already qualified
     (   uri_has_protocol(K)
     ->  K = Key
@@ -245,6 +250,9 @@ prefix_expand(K,Context,Key) :-
         ;   Vocab = ''),
         atomic_list_concat([Base,Vocab,K],Key)
     ).
+
+rust_prefix_expand_available :-
+    current_predicate('$doc':rust_expand_prefix/3).
 
 /*
  * expand_context(+Context,-Context_Expanded) is det.
