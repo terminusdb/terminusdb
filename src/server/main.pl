@@ -15,6 +15,7 @@
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
 :- use_module(core(api)).
+:- use_module(core(document/parallel_elaboration), [start_elaboration_workers/1]).
 :- use_module(core(plugins)).
 
 % configuration predicates
@@ -66,6 +67,7 @@ terminus_server(Argv,Wait) :-
     server(Server),
     server_port(Port),
     worker_amount(Workers),
+    start_elaboration_workers(Workers),
     load_jwt_conditionally,
     HTTPOptions = [port(Port), workers(Workers), silent(true)],
     foreach(pre_server_startup_hook(Port),true),
