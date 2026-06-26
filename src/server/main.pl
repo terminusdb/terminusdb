@@ -15,7 +15,10 @@
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
 :- use_module(core(api)).
-:- use_module(core(document/parallel_elaboration), [start_elaboration_workers/1]).
+:- use_module(core(document/parallel_elaboration), [
+                  start_elaboration_workers/1,
+                  stop_elaboration_workers/0
+              ]).
 :- use_module(core(plugins)).
 
 % configuration predicates
@@ -105,7 +108,8 @@ terminus_server(Argv,Wait) :-
         ->  http_current_worker(Port,ThreadID),
             thread_join(ThreadID, _Status)
         ;   true
-        )
+        ),
+        stop_elaboration_workers
     ).
 
 

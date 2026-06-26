@@ -1,8 +1,10 @@
 :- module(parallel_elaboration, [
               elaborate_insert_request/4,
               elaborate_insert_request_db/4,
+              elaborate_insert_request_db_with_contracts/4,
               maybe_help_with_elaboration/0,
               start_elaboration_workers/1,
+              stop_elaboration_workers/0,
               with_processing_token/1,
               acquire_processing_token/0,
               release_processing_token/0,
@@ -29,11 +31,14 @@
 :- use_module(library(plunit)).
 :- use_module(library(yall)).
 
-:- dynamic request_queue/5.
-% request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks).
+:- dynamic request_queue/6.
+% request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks, WrapApiErrors).
 
 :- dynamic chunk_size/1.
 chunk_size(100).
+
+:- dynamic elaboration_workers_should_stop/0.
+:- dynamic elaboration_worker_thread/1.
 
 :- mutex_create(elaboration_queue_mutex).
 
@@ -49,24 +54,37 @@ chunk_size(100).
  * chunks fall back to the Prolog elaboration path.  The decision is made per
  * chunk by the worker that processes it.
  */
-elaborate_insert_request(Descriptor, Docs, Elaborated, _Options) :-
+elaborate_insert_request(Descriptor, Docs, Elaborated, Options) :-
     chunk_size(ChunkSize),
     chunks_from_documents(Docs, ChunkSize, Chunks),
     length(Chunks, TotalChunks),
     open_descriptor(Descriptor, DB),
+    option(wrap_api_errors(Wrap), Options, false),
     setup_call_cleanup(
-        create_request_queue(Descriptor, DB, Chunks, TotalChunks, RequestId),
+        create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap, RequestId),
         collect_and_process(RequestId, TotalChunks, Elaborated),
         cleanup_request(RequestId)
     ).
 
-elaborate_insert_request_db(DB, Docs, Elaborated, _Options) :-
+elaborate_insert_request_db(DB, Docs, Elaborated, Options) :-
     chunk_size(ChunkSize),
     chunks_from_documents(Docs, ChunkSize, Chunks),
     length(Chunks, TotalChunks),
+    option(wrap_api_errors(Wrap), Options, false),
     setup_call_cleanup(
-        create_request_queue(none, DB, Chunks, TotalChunks, RequestId),
+        create_request_queue(none, DB, Chunks, TotalChunks, Wrap, RequestId),
         collect_and_process(RequestId, TotalChunks, Elaborated),
+        cleanup_request(RequestId)
+    ).
+
+elaborate_insert_request_db_with_contracts(DB, Docs, Pairs, Options) :-
+    chunk_size(ChunkSize),
+    chunks_from_documents(Docs, ChunkSize, Chunks),
+    length(Chunks, TotalChunks),
+    option(wrap_api_errors(Wrap), Options, false),
+    setup_call_cleanup(
+        create_request_queue(none, DB, Chunks, TotalChunks, Wrap, RequestId),
+        collect_and_process_pairs(RequestId, TotalChunks, Pairs),
         cleanup_request(RequestId)
     ).
 
@@ -82,10 +100,10 @@ chunks_from_documents(Docs, ChunkSize, Index, [chunk(Index, Chunk)|Rest]) :-
     chunks_from_documents(Remainder, ChunkSize, NextIndex, Rest).
 chunks_from_documents(Remainder, _, Index, [chunk(Index, Remainder)]).
 
-create_request_queue(Descriptor, DB, Chunks, TotalChunks, RequestId) :-
+create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap, RequestId) :-
     gensym(request, RequestId),
     message_queue_create(RequestId, [alias(RequestId)]),
-    assertz(request_queue(RequestId, Descriptor, DB, Chunks, TotalChunks)),
+    assertz(request_queue(RequestId, Descriptor, DB, Chunks, TotalChunks, Wrap)),
     init_worker_wakeup_queue,
     wake_elaboration_workers.
 
@@ -113,15 +131,19 @@ init_worker_wakeup_queue :-
     ).
 
 collect_and_process(RequestId, TotalChunks, Elaborated) :-
-    collect_and_process_(RequestId, TotalChunks, [], Pairs),
-    sort(Pairs, Sorted),
+    collect_and_process_pairs(RequestId, TotalChunks, Pairs),
+    pairs_keys(Pairs, Elaborated).
+
+collect_and_process_pairs(RequestId, TotalChunks, Pairs) :-
+    collect_and_process_(RequestId, TotalChunks, [], SortedPairs),
+    sort(SortedPairs, Sorted),
     pairs_values(Sorted, ChunkList),
-    append(ChunkList, Elaborated).
+    append(ChunkList, Pairs).
 
 collect_and_process_(_, 0, Pairs, Pairs) :- !.
 collect_and_process_(RequestId, Remaining, Pairs, FinalPairs) :-
-    (   take_chunk(RequestId, _OwnerId, DB, chunk(Index, Docs))
-    ->  (   process_chunk(DB, Docs, Elaborated)
+    (   take_chunk(RequestId, _OwnerId, DB, Wrap, chunk(Index, Docs))
+    ->  (   process_chunk(DB, Wrap, Docs, Elaborated)
         ->  Remaining1 is Remaining - 1,
             collect_and_process_(RequestId, Remaining1, [Index-Elaborated|Pairs], FinalPairs)
         ;   throw(error(parallel_elaboration_failed(chunk(Index, Docs)), _))
@@ -144,49 +166,49 @@ send_chunk_done(OwnerId, Index, Elaborated) :-
 send_chunk_error(OwnerId, Index) :-
     catch(thread_send_message(OwnerId, chunk_error(Index)), _, true).
 
-take_chunk(RequestId, OwnerId, DB, Chunk) :-
+take_chunk(RequestId, OwnerId, DB, Wrap, Chunk) :-
     with_mutex(elaboration_queue_mutex,
-               (   request_queue(RequestId, _, DB0, [Chunk|Rest], Total)
+               (   request_queue(RequestId, _, DB0, [Chunk|Rest], Total, Wrap)
                ->  OwnerId = RequestId,
                    DB = DB0,
-                   retractall(request_queue(RequestId, _, _, _, _)),
-                   assertz(request_queue(RequestId, _, DB0, Rest, Total))
-               ;   request_queue(OwnerId, _, DB0, [Chunk|Rest], Total),
+                   retractall(request_queue(RequestId, _, _, _, _, _)),
+                   assertz(request_queue(RequestId, _, DB0, Rest, Total, Wrap))
+               ;   request_queue(OwnerId, _, DB0, [Chunk|Rest], Total, Wrap),
                    OwnerId \= RequestId
                ->  DB = DB0,
-                   retractall(request_queue(OwnerId, _, _, _, _)),
-                   assertz(request_queue(OwnerId, _, DB0, Rest, Total))
+                   retractall(request_queue(OwnerId, _, _, _, _, _)),
+                   assertz(request_queue(OwnerId, _, DB0, Rest, Total, Wrap))
                ;   fail
                )).
 
 rust_elaboration_available :-
     current_predicate('$doc':rust_elaborate_simple_documents/3).
 
-rust_elaborate_chunk(DB, Docs, Elaborated) :-
-    rust_elaboration_available,
-    !,
-    (   catch(
-            (   '$doc':get_document_context(DB, Context),
-                '$doc':rust_elaborate_simple_documents(Context, Docs, Elaborated)
-            ),
-            Error,
-            (   format(user_error, 'rust chunk elaboration failed: ~q~n', [Error]),
-                fail
-            ))
-    ->  true
-    ;   prolog_elaborate_chunk(DB, Docs, Elaborated)
+% TODO: once rust_elaborate_simple_documents emits verification contracts,
+% switch this back to the Rust fast path for eligible documents.
+process_chunk(DB, Wrap, Docs, Elaborated) :-
+    rust_elaborate_chunk(DB, Wrap, Docs, Elaborated).
+
+rust_elaborate_chunk(DB, Wrap, Docs, Elaborated) :-
+    prolog_elaborate_chunk(DB, Wrap, Docs, Elaborated).
+
+prolog_elaborate_chunk(DB, Wrap, Docs, Pairs) :-
+    maplist(elaborate_with_contract(DB, Wrap), Docs, Pairs).
+
+elaborate_with_contract(DB, Wrap, Doc, Elaborated-Contract) :-
+    catch(
+        json_elaborate_with_contract(DB, Doc, Elaborated, Contract),
+        Error,
+        (   Wrap = true,
+            current_predicate(api_document:api_document_error_wrapper/3)
+        ->  api_document:api_document_error_wrapper(Error, Doc, Wrapped),
+            throw(Wrapped)
+        ;   throw(Error)
+        )
     ).
-rust_elaborate_chunk(DB, Docs, Elaborated) :-
-    prolog_elaborate_chunk(DB, Docs, Elaborated).
-
-process_chunk(DB, Docs, Elaborated) :-
-    rust_elaborate_chunk(DB, Docs, Elaborated).
-
-prolog_elaborate_chunk(DB, Docs, Elaborated) :-
-    maplist(json_elaborate(DB), Docs, Elaborated).
 
 cleanup_request(RequestId) :-
-    retractall(request_queue(RequestId, _, _, _, _)),
+    retractall(request_queue(RequestId, _, _, _, _, _)),
     message_queue_destroy(RequestId).
 
 /**
@@ -197,10 +219,10 @@ cleanup_request(RequestId) :-
  * is available.
  */
 maybe_help_with_elaboration :-
-    request_queue(RequestId, _, _, _, _),
-    take_chunk(RequestId, OwnerId, DB, chunk(Index, Docs)),
+    request_queue(RequestId, _, _, _, _, _),
+    take_chunk(RequestId, OwnerId, DB, Wrap, chunk(Index, Docs)),
     with_processing_token(
-        (   catch(process_chunk(DB, Docs, Elaborated), Error,
+        (   catch(process_chunk(DB, Wrap, Docs, Elaborated), Error,
                    (   format(user_error, 'help chunk ~d error: ~q~n', [Index, Error]),
                        fail
                    ))
@@ -211,6 +233,7 @@ maybe_help_with_elaboration :-
 start_elaboration_workers(0) :- !.
 start_elaboration_workers(N) :-
     N > 0,
+    stop_elaboration_workers,
     TokenCount is N + 1,
     token_pool_init(TokenCount),
     init_worker_wakeup_queue,
@@ -220,16 +243,33 @@ start_elaboration_workers_(0) :- !.
 start_elaboration_workers_(N) :-
     N > 0,
     format(atom(Alias), 'elaboration_worker_~d', [N]),
-    thread_create(elaboration_worker_loop, _, [alias(Alias)]),
+    thread_create(elaboration_worker_loop, Thread, [alias(Alias)]),
+    assertz(elaboration_worker_thread(Thread)),
     N1 is N - 1,
     start_elaboration_workers_(N1).
 
 elaboration_worker_loop :-
-    (   maybe_help_with_elaboration
+    (   elaboration_workers_should_stop
     ->  true
-    ;   thread_get_message(worker_wakeup_queue, wake)
-    ),
-    elaboration_worker_loop.
+    ;   (   maybe_help_with_elaboration
+        ->  true
+        ;   thread_get_message(worker_wakeup_queue, wake, [timeout(5)])
+        ),
+        elaboration_worker_loop
+    ).
+
+stop_elaboration_workers :-
+    retractall(elaboration_workers_should_stop),
+    assertz(elaboration_workers_should_stop),
+    worker_amount(Workers),
+    forall(between(1, Workers, _),
+           catch(thread_send_message(worker_wakeup_queue, wake), _, true)),
+    forall(retract(elaboration_worker_thread(Thread)),
+           catch(thread_join(Thread, _), _, true)),
+    catch(message_queue_destroy(elaboration_tokens), _, true),
+    catch(message_queue_destroy(worker_wakeup_queue), _, true),
+    retractall(elaboration_worker_thread(_)).
+
 
 token_pool_init(N) :-
     (   catch(message_queue_property(elaboration_tokens, _), _, fail)
@@ -304,6 +344,12 @@ test_document_schema_string(Schema) :-
     atomics_to_string(
         [ '{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n',
           '{"@id":"Person","@type":"Class","@key":{"@type":"Random"},"name":"xsd:string","age":"xsd:integer"}\n' ],
+        Schema).
+
+lexical_person_schema_string(Schema) :-
+    atomics_to_string(
+        [ '{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n',
+          '{"@id":"Person","@type":"Class","@key":{"@type":"Lexical","@fields":["name"]},"name":"xsd:string","age":"xsd:integer"}\n' ],
         Schema).
 
 parallel_subdocument_schema(Schema) :-
@@ -533,32 +579,133 @@ test(rust_elaboration_matches_prolog_simple, [
     ),
     !.
 
-test(rust_elaboration_matches_prolog_list, [
+test(parallel_replace_contract, [
          setup((setup_temp_store(State),
                 test_document_label_descriptor(Desc),
                 test_document_schema_string(Schema),
                 write_schema_string(Schema, Desc))),
          cleanup(teardown_temp_store(State))
      ]) :-
-    helper_docs(50, Docs),
-    open_descriptor(Desc, DB),
-    maplist(json_elaborate(DB), Docs, Prolog_Elaborated),
-    (   rust_elaboration_available
-    ->  '$doc':get_document_context(DB, Context),
-        '$doc':rust_elaborate_simple_documents(Context, Docs, Rust_Elaborated),
-        maplist(elaboration_without_id, Prolog_Elaborated, Prolog_Normalized),
-        maplist(elaboration_without_id, Rust_Elaborated, Rust_Normalized),
-        Prolog_Normalized = Rust_Normalized,
-        forall(member(E, Prolog_Elaborated),
-               (   get_dict('@id', E, Id),
-                   id_prefix_matches(Id, 'terminusdb:///data/Person/')
-               )),
-        forall(member(E, Rust_Elaborated),
-               (   get_dict('@id', E, Id),
-                   id_prefix_matches(Id, 'terminusdb:///data/Person/')
-               ))
-    ;   true
+    helper_docs(10, InsertDocs),
+    findall(ExplicitDoc,
+            (   nth1(I, InsertDocs, D),
+                format(atom(ExplicitId), 'Person/explicit~|~`0t~d~3+', [I]),
+                put_dict('@id', D, ExplicitId, ExplicitDoc)
+            ),
+            ExplicitDocs),
+    with_test_transaction(Desc, C1,
+        (   query_default_collection(C1, TO1),
+            elaborate_insert_request_db(TO1, ExplicitDocs, Elaborated, [workers(4)]),
+            forall(member(E, Elaborated),
+                   insert_document_expanded(TO1, E, _))
+        ), _),
+    findall(ReplaceDoc,
+            (   member(E, Elaborated),
+                get_dict('@id', E, Id),
+                get_dict('terminusdb:///schema#name', E, NameObj),
+                get_dict('@value', NameObj, OldName),
+                get_dict('terminusdb:///schema#age', E, AgeObj),
+                get_dict('@value', AgeObj, Age),
+                atom_concat(OldName, '_replaced', NewName),
+                put_dict('@id', json{'@type':'Person', name: NewName, age: Age}, Id, ReplaceDoc)
+            ),
+            ReplaceDocs),
+    with_test_transaction(Desc, C2,
+        (   query_default_collection(C2, TO2),
+            elaborate_insert_request_db_with_contracts(TO2, ReplaceDocs, Pairs, [workers(4)]),
+            forall(member(Doc-Contract, Pairs),
+                   replace_document_expanded(TO2, Doc, Contract, false, _))
+        ), _),
+    findall(Name,
+            (   between(1, 10, I),
+                format(atom(ExplicitId), 'Person/explicit~|~`0t~d~3+', [I]),
+                get_document(Desc, ExplicitId, Doc, [compress_ids(true)]),
+                get_dict(name, Doc, Name)
+            ),
+            Names),
+    length(Names, 10),
+    forall(member(Name, Names), sub_atom(Name, _, _, 0, '_replaced')),
+    !.
+
+test(sync_replace_contract_comparison, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    helper_docs(1, [InsertDoc]),
+    put_dict('@id', InsertDoc, 'Person/sync', SyncDoc),
+    with_test_transaction(Desc, C1,
+        (   query_default_collection(C1, TO1),
+            elaborate_insert_request_db(TO1, [SyncDoc], [Elaborated], [workers(4)]),
+            insert_document_expanded(TO1, Elaborated, _)
+        ), _),
+    get_dict('terminusdb:///schema#name', Elaborated, NameObj),
+    get_dict('@value', NameObj, OldName),
+    get_dict('terminusdb:///schema#age', Elaborated, AgeObj),
+    get_dict('@value', AgeObj, Age),
+    atom_concat(OldName, '_sync', NewName),
+    ReplaceDoc = json{'@id':'Person/sync', '@type':'Person', name: NewName, age: Age},
+    with_test_transaction(Desc, C2,
+        (   query_default_collection(C2, TO2),
+            replace_document(TO2, ReplaceDoc, false, false, _)
+        ), _),
+    get_document(Desc, 'terminusdb:///data/Person/sync', Doc, [compress_ids(true)]),
+    get_dict(name, Doc, Name),
+    sub_atom(Name, _, _, 0, '_sync'),
+    !.
+
+test(parallel_replace_contract_rejects_mismatched_id, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                lexical_person_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    InsertDoc = json{'@type':'Person', name:'Alice', age:30},
+    with_test_transaction(Desc, C1,
+        (   query_default_collection(C1, TO1),
+            elaborate_insert_request_db(TO1, [InsertDoc], [Elaborated], [workers(4)]),
+            insert_document_expanded(TO1, Elaborated, _)
+        ), _),
+    MismatchReplace = json{'@id':'Person/Alice', '@type':'Person', name:'Bob', age:30},
+    catch(
+        with_test_transaction(Desc, C2,
+            (   query_default_collection(C2, TO2),
+                elaborate_insert_request_db_with_contracts(TO2, [MismatchReplace], [Doc-Contract], [workers(4)]),
+                replace_document_expanded(TO2, Doc, Contract, false, _)
+            ), _),
+        Error,
+        true
     ),
+    Error = error(submitted_id_does_not_match_generated_id(_,_), _),
+    !.
+
+test(parallel_replace_contract_rejects_missing_document, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    helper_docs(1, [InsertDoc]),
+    with_test_transaction(Desc, C1,
+        (   query_default_collection(C1, TO1),
+            elaborate_insert_request_db(TO1, [InsertDoc], [Elaborated], [workers(4)]),
+            insert_document_expanded(TO1, Elaborated, _)
+        ), _),
+    MissingReplace = json{'@id':'Person/missing', '@type':'Person', name:'Missing', age:99},
+    with_test_transaction(Desc, C2,
+        (   query_default_collection(C2, TO2),
+            elaborate_insert_request_db_with_contracts(TO2, [MissingReplace], [Doc-Contract], [workers(4)]),
+            catch(
+                replace_document_expanded(TO2, Doc, Contract, false, _),
+                Error,
+                true
+            ),
+            Error = error(document_not_found('terminusdb:///data/Person/missing', _), _)
+        ), _),
     !.
 
 :- end_tests(parallel_elaboration).

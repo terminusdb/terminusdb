@@ -8,6 +8,7 @@
               api_nuke_documents/6,
               api_generate_document_ids/4,
               call_catch_document_mutation/2,
+              api_document_error_wrapper/3,
               api_read_document_selector/12,
               api_generate_document_ids/4,
               api_get_documents/4,
@@ -37,11 +38,14 @@
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(document/json), [
-                  insert_document_expanded/3,
-                  replace_document_expanded/4
+                  insert_document_expanded/4,
+                  insert_document_expanded/5,
+                  replace_document_expanded/5,
+                  insert_backlinks/2
               ]).
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
+                  elaborate_insert_request_db_with_contracts/4,
                   chunk_size/1,
                   acquire_processing_token/0,
                   release_processing_token/0,
@@ -303,6 +307,14 @@ known_document_error(invalid_jsondocument_at_id_must_be_iri(_)).
 known_document_error(unable_to_elaborate_schema_document(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
+api_document_error_wrapper(error(E, Context), Document, error(New_E, Context)) :-
+    !,
+    (   known_document_error(E)
+    ->  embed_document_in_error(E, Document, New_E)
+    ;   New_E = E
+    ).
+api_document_error_wrapper(Error, _, Error).
+
 call_catch_document_mutation(Document, Goal) :-
     catch_with_backtrace(Goal,
           error(E, Context),
@@ -434,7 +446,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(input_format(InputFormat), Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         (   parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options)
+                         (   parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream)
                          ->  setup_call_cleanup(
                                  parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
                                  (   CoreStream = queue(Queue),
@@ -459,29 +471,68 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options) :-
+parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream) :-
     Graph_Type = instance,
     Raw_JSON = false,
     Full_Replace = false,
     option(input_format(json), Options),
     current_predicate(parallel_elaboration:elaborate_insert_request_db/4),
-    \+ parallel_elaboration_disabled.
+    \+ parallel_elaboration_disabled,
+    stream_property(Stream, position(Pos)),
+    setup_call_cleanup(
+        set_stream_position(Stream, Pos),
+        (   stream_to_lazy_docs(Stream, LazyDocs),
+            docs_parallel_eligible(LazyDocs)
+        ),
+        set_stream_position(Stream, Pos)
+    ).
 
-parallel_replace_enabled(Graph_Type, Raw_JSON, Options) :-
+parallel_replace_enabled(Graph_Type, Raw_JSON, Options, Stream) :-
     Graph_Type = instance,
     Raw_JSON = false,
     option(input_format(json), Options),
     current_predicate(parallel_elaboration:elaborate_insert_request_db/4),
-    \+ parallel_elaboration_disabled.
+    \+ parallel_elaboration_disabled,
+    stream_property(Stream, position(Pos)),
+    setup_call_cleanup(
+        set_stream_position(Stream, Pos),
+        (   stream_to_lazy_docs(Stream, LazyDocs),
+            docs_parallel_eligible(LazyDocs)
+        ),
+        set_stream_position(Stream, Pos)
+    ).
+
+docs_parallel_eligible([]).
+docs_parallel_eligible([Doc|Rest]) :-
+    doc_parallel_eligible(Doc),
+    docs_parallel_eligible(Rest).
+
+doc_parallel_eligible(Doc) :-
+    \+ contains_ineligible_marker(Doc).
+
+contains_ineligible_marker(Doc) :-
+    is_dict(Doc),
+    !,
+    (   get_dict('@capture', Doc, _)
+    ;   get_dict('@linked-by', Doc, _)
+    ;   get_dict('@id', Doc, _)
+    ;   dict_pairs(Doc, _, Pairs),
+        member(_Key-Value, Pairs),
+        contains_ineligible_marker(Value)
+    ).
+contains_ineligible_marker(List) :-
+    is_list(List),
+    member(Item, List),
+    contains_ineligible_marker(Item).
 
 parallel_elaboration_disabled :-
     (   getenv('TERMINUSDB_PARALLEL_ELABORATION', Value)
     ->  (   atom(Value)
         ->  downcase_atom(Value, Lower),
-            \+ member(Lower, ['1', true, on])
-        ;   Value \= 1
+            member(Lower, ['0', false, off])
+        ;   Value = 0
         )
-    ;   true
+    ;   false
     ).
 
 parallel_elaborate_stream(DB, Stream, Queue, Thread) :-
@@ -510,21 +561,29 @@ elaborate_stream_producer(DB, LazyDocs, Queue) :-
     take_chunk_lazy(LazyDocs, ChunkSize, Chunk, Rest),
     (   Chunk == []
     ->  thread_send_message(Queue, done)
-    ;   (   parallel_elaboration:elaborate_insert_request_db(DB, Chunk, Elaborated, [workers(4)])
-        ->  thread_send_message(Queue, docs(Elaborated)),
-            elaborate_stream_producer(DB, Rest, Queue)
-        ;   thread_send_message(Queue, error)
+    ;   catch(
+            parallel_elaboration:elaborate_insert_request_db_with_contracts(DB, Chunk, Pairs, [workers(4), wrap_api_errors(true)]),
+            Error,
+            (   thread_send_message(Queue, error(Error)),
+                throw(Error)
+            )
         )
+    ->  thread_send_message(Queue, docs(Pairs)),
+        elaborate_stream_producer(DB, Rest, Queue)
+    ;   % Fallback: the catch above re-throws detailed errors, but if a
+        % failure path reaches here without a detailed error, send a bare
+        % error message so the consumer's defensive guard can react.
+        thread_send_message(Queue, error)
     ).
 
-consume_elaborated_queue(Queue, _Graph_Type, _Raw_JSON, _Overwrite, Transaction, Captures, Captures, Ids) :-
+consume_elaborated_queue(Queue, Transaction, Overwrite, Ids, Captures_Out) :-
     (   has_processing_token
     ->  WaitForToken = true
     ;   WaitForToken = false
     ),
-    consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids).
+    consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids, Captures_Out).
 
-consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids) :-
+consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids, Captures_Out) :-
     (   WaitForToken = true
     ->  release_processing_token
     ;   true
@@ -535,23 +594,68 @@ consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids) :-
     ;   true
     ),
     (   Message = done
-    ->  Ids = []
+    ->  Ids = [],
+        empty_assoc(Captures_Out)
     ;   Message = error
+    % Defensive guard: the producer's fallback branch (taken when the
+    % catch around chunk elaboration fails without re-throwing a detailed
+    % error) can still send a bare `error` message. Keep this clause so
+    % the consumer does not hang on an unexpected queue message.
     ->  throw(error(parallel_elaboration_failed, _))
-    ;   Message = docs(Docs)
-    ->  findall([Id], (member(Doc, Docs), insert_document_expanded(Transaction, Doc, Id)), Ids_Mid),
-        consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids_Tail),
-        append(Ids_Mid, Ids_Tail, Ids)
+    ;   Message = error(Error)
+    ->  throw(Error)
+    ;   Message = docs(Pairs)
+    ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids_Mid, Captures_Mid),
+        consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids_Tail, Captures_Tail),
+        append(Ids_Mid, Ids_Tail, Ids),
+        merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
 
-consume_replaced_queue(Queue, Transaction, Create, Ids) :-
+pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out).
+
+pairs_to_insert_ids_and_captures_([], _, _, [], empty_assoc).
+pairs_to_insert_ids_and_captures_([Doc-Contract], Transaction, Overwrite, [[Id]], Captures_Out) :-
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Id),
+    is_dict(Contract, verification_contract),
+    get_dict(captures_out, Contract, Captures_Out).
+pairs_to_insert_ids_and_captures_([Doc-Contract|Rest], Transaction, Overwrite, [[Id]|Ids], Captures_Out) :-
+    Rest \= [],
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Id),
+    is_dict(Contract, verification_contract),
+    get_dict(captures_out, Contract, Captures_First),
+    pairs_to_insert_ids_and_captures_(Rest, Transaction, Overwrite, Ids, Captures_Rest),
+    merge_captures(Captures_First, Captures_Rest, Captures_Out).
+
+merge_captures(Captures1, Captures2, Merged) :-
+    (   empty_assoc(Captures1)
+    ->  Merged = Captures2
+    ;   empty_assoc(Captures2)
+    ->  Merged = Captures1
+    ;   assoc_to_list(Captures2, Pairs2),
+        foldl(merge_capture_pair, Pairs2, Captures1, Merged)
+    ).
+
+merge_capture_pair(Key-Value, Captures_In, Captures_Out) :-
+    (   get_assoc(Key, Captures_In, Existing)
+    ->  (   Existing == Value
+        ->  Captures_Out = Captures_In
+        ;   (   unify_with_occurs_check(Existing, Value)
+            ->  Captures_Out = Captures_In
+            ;   throw(error(capture_already_bound(Key, Existing), _))
+            )
+        )
+    ;   put_assoc(Key, Captures_In, Value, Captures_Out)
+    ).
+
+consume_replaced_queue(Queue, Transaction, Create, Ids, Captures_Out) :-
     (   has_processing_token
     ->  WaitForToken = true
     ;   WaitForToken = false
     ),
-    consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids).
+    consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids, Captures_Out).
 
-consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids) :-
+consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids, Captures_Out) :-
     (   WaitForToken = true
     ->  release_processing_token
     ;   true
@@ -562,30 +666,48 @@ consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids) :-
     ;   true
     ),
     (   Message = done
-    ->  Ids = []
+    ->  Ids = [],
+        empty_assoc(Captures_Out)
     ;   Message = error
+    % Defensive guard: see the matching clause in consume_elaborated_queue_/6.
+    % The producer's fallback branch can still send a bare `error` message,
+    % so this clause prevents the consumer from hanging silently.
     ->  throw(error(parallel_elaboration_failed, _))
-    ;   Message = docs(Docs)
-    ->  findall([Id], (member(Doc, Docs), replace_document_expanded(Transaction, Doc, Create, Id)), Ids_Mid),
-        consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids_Tail),
-        append(Ids_Mid, Ids_Tail, Ids)
+    ;   Message = error(Error)
+    ->  throw(Error)
+    ;   Message = docs(Pairs)
+    ->  pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids_Mid, Captures_Mid),
+        consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids_Tail, Captures_Tail),
+        append(Ids_Mid, Ids_Tail, Ids),
+        merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
 
-api_insert_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, Ids) :-
+pairs_to_replace_ids_and_captures([], _, _, [], empty_assoc).
+pairs_to_replace_ids_and_captures([Doc-Contract], Transaction, Create, [[Id]], Captures_Out) :-
+    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
+    is_dict(Contract, verification_contract),
+    get_dict(captures_out, Contract, Captures_Out).
+pairs_to_replace_ids_and_captures([Doc-Contract|Rest], Transaction, Create, [[Id]|Ids], Captures_Out) :-
+    Rest \= [],
+    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
+    is_dict(Contract, verification_contract),
+    get_dict(captures_out, Contract, Captures_First),
+    pairs_to_replace_ids_and_captures(Rest, Transaction, Create, Ids, Captures_Rest),
+    merge_captures(Captures_First, Captures_Rest, Captures_Out).
+
+api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, Ids) :-
     !,
-    empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    consume_elaborated_queue(Queue, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, Ids_List),
+    consume_elaborated_queue(Queue, Transaction, Overwrite, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
-    database_instance(Transaction, [Instance]),
-    insert_backlinks([], Instance),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
     (   Doc_Merge = true
     ->  true
     ;   die_if(Duplicates \= [],
                error(same_ids_in_one_transaction(Duplicates), _))
     ).
+
 api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
@@ -617,15 +739,6 @@ idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
     ;   has_duplicates(All_Ids, Duplicates)
     ),
     maplist([[Id|_],Id]>>true, Ids, Toplevel).
-
-insert_backlinks(Links, Graph) :-
-    nb_link_dict(backlinks,Graph,Links),
-    insert_backlinks_(Links, Graph).
-
-insert_backlinks_([], _).
-insert_backlinks_([link(S,P,O)|T], Instance) :-
-    insert(Instance, S, P, O, _),
-    insert_backlinks_(T, Instance).
 
 nonground_captures(Captures, Nonground) :-
     findall(Ref,
@@ -777,7 +890,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          ->  ReplaceStream = Stream
                          ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
                          ),
-                         (   parallel_replace_enabled(Graph_Type, Raw_JSON, Options)
+                         (   parallel_replace_enabled(Graph_Type, Raw_JSON, Options, ReplaceStream)
                          ->  setup_call_cleanup(
                                  parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
                                  api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, Ids),
@@ -792,7 +905,9 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
 api_replace_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, Create, Doc_Merge, Ids) :-
     !,
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    consume_replaced_queue(Queue, Transaction, Create, Ids_List),
+    consume_replaced_queue(Queue, Transaction, Create, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
     (   Doc_Merge = true
     ->  true
@@ -1169,7 +1284,6 @@ test(delete_objects_with_stream,
             (   get_document_uri(Context, true, Id),
                 compress_dict_uri(Id, Context.prefixes, Id_Compressed)),
             Ids),
-
     Ids = ['City/Utrecht'].
 
 test(delete_objects_with_string,
