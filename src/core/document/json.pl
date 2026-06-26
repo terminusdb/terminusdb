@@ -28,6 +28,7 @@
               insert_document/8,
               insert_document_expanded/3,
               insert_document_unsafe/8,
+              replace_document_expanded/4,
               replace_document/2,
               replace_document/3,
               replace_document/5,
@@ -3418,6 +3419,18 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
+
+replace_document_expanded(Transaction, Elaborated, Create, ID) :-
+    get_dict('@id', Elaborated, ID),
+    catch(
+        delete_document(Transaction, false, ID),
+        error(document_not_found(_), _),
+        (   Create = true
+        ->  true
+        ;   throw(error(document_not_found(ID, Elaborated), _))
+        )
+    ),
+    insert_document_expanded(Transaction, Elaborated, ID).
 
 run_insert_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),

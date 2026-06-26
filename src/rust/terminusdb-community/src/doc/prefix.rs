@@ -195,11 +195,15 @@ fn get_layer_prefix_map(layer: &SyncStoreLayer) -> Arc<PrefixMap> {
 ///   preserve the input type.
 /// - Prefixed names and base+vocab concatenation are always atoms, matching
 ///   Prolog's `atom_concat/3` and `atomic_list_concat/3` behavior.
+///
+/// Returns `Ok(None)` for empty keys, and `Err(name)` when a prefixed name
+/// uses an unknown prefix so that the Prolog caller can throw
+/// `error(key_has_unknown_prefix(Name), _)`.
 fn prefix_expand_raw(
     prefixes: &PrefixMap,
     name: &str,
     input_is_atom: bool,
-) -> Option<(String, bool)> {
+) -> Result<Option<(String, bool)>, String> {
     prefix_expand_with_base(prefixes, None, name, input_is_atom)
 }
 
@@ -210,7 +214,7 @@ fn prefix_expand_schema_raw(
     prefixes: &PrefixMap,
     name: &str,
     input_is_atom: bool,
-) -> Option<(String, bool)> {
+) -> Result<Option<(String, bool)>, String> {
     let schema_base = prefixes
         .iter()
         .find(|(k, _)| k == "@schema")
@@ -228,6 +232,44 @@ fn hashmap_prefix_expand_schema_raw(
     hashmap_prefix_expand_with_base(prefixes, schema_base, name, input_is_atom)
 }
 
+/// Check whether `name` has the shape of a prefixed name (`prefix:suffix`).
+/// Mirrors the Prolog regex used in `uri_has_prefix_unsafe/2`:
+///
+///     ^(?<prefix>(\p{L}|@)((\p{Xwd}|-|\.)*(\p{Xwd}|-))?):(?<suffix>.*)$
+///
+/// Only names that look like a prefix reference are treated as one; names such
+/// as `Node/prefix:node/...` (with a `/` before the colon) are not prefixed.
+fn split_prefixed_name(name: &str) -> Option<(&str, &str)> {
+    let idx = name.find(':')?;
+    let prefix = &name[..idx];
+    let suffix = &name[idx + 1..];
+    if prefix.is_empty() {
+        return None;
+    }
+    let mut chars = prefix.chars();
+    let first = chars.next().unwrap();
+    if !first.is_alphabetic() && first != '@' {
+        return None;
+    }
+    // The prefix body may contain letters, digits, '-', '_', and '.', but the
+    // last character before the colon must be alphanumeric, '-' or '_' (not '.').
+    if let Some(last) = prefix.chars().last() {
+        if last == '.' {
+            return None;
+        }
+        if !last.is_alphanumeric() && last != '-' && last != '_' && last != '@' {
+            return None;
+        }
+    }
+    // Intermediate characters must be alphanumeric, '-', '_', or '.'.
+    for c in chars {
+        if !c.is_alphanumeric() && c != '-' && c != '_' && c != '.' && c != '@' {
+            return None;
+        }
+    }
+    Some((prefix, suffix))
+}
+
 /// Internal helper that avoids cloning the prefix map for schema expansion.
 /// `base_override` is used by the schema path so that `@base` resolves to
 /// `@schema` without allocating a new `HashMap`.
@@ -236,29 +278,27 @@ fn prefix_expand_with_base(
     base_override: Option<&str>,
     name: &str,
     input_is_atom: bool,
-) -> Option<(String, bool)> {
+) -> Result<Option<(String, bool)>, String> {
     if has_protocol(name) {
-        return Some((name.to_string(), input_is_atom));
+        return Ok(Some((name.to_string(), input_is_atom)));
     }
     if name.is_empty() {
-        return None;
+        return Ok(None);
     }
 
-    if let Some(idx) = name.find(':') {
-        let prefix = &name[..idx];
-        let suffix = &name[idx + 1..];
+    if let Some((prefix, suffix)) = split_prefixed_name(name) {
         for (k, v) in prefixes {
             if k.as_str() == prefix {
                 let mut result = String::with_capacity(v.len() + suffix.len());
                 result.push_str(v);
                 result.push_str(suffix);
-                return Some((result, true));
+                return Ok(Some((result, true)));
             }
         }
-        None
+        Err(name.to_string())
     } else if name.starts_with('@') {
         // Bare @-keywords (e.g. '@type', '@base') are returned unchanged.
-        Some((name.to_string(), input_is_atom))
+        Ok(Some((name.to_string(), input_is_atom)))
     } else {
         let base = base_override.unwrap_or_else(|| {
             for (k, v) in prefixes {
@@ -279,7 +319,7 @@ fn prefix_expand_with_base(
         result.push_str(base);
         result.push_str(vocab);
         result.push_str(name);
-        Some((result, true))
+        Ok(Some((result, true)))
     }
 }
 
@@ -298,9 +338,7 @@ fn hashmap_prefix_expand_with_base(
         return None;
     }
 
-    if let Some(idx) = name.find(':') {
-        let prefix = &name[..idx];
-        let suffix = &name[idx + 1..];
+    if let Some((prefix, suffix)) = split_prefixed_name(name) {
         let expanded = prefixes.get(prefix)?;
         Some((format!("{}{}", expanded, suffix), true))
     } else if name.starts_with('@') {
@@ -466,30 +504,33 @@ fn unify_expanded(
 /// Expand a name by borrowing its string contents directly from the Prolog
 /// term, avoiding an intermediate `String` allocation.  The `expand` callback
 /// receives the name and a flag indicating whether the input is an atom.
-fn expand_with_name(
+///
+/// The callback returns `Ok(Some(...))` on success, `Ok(None)` for failure
+/// cases such as an empty key, and `Err(name)` when the prefix is unknown so
+/// that the Prolog exception `error(key_has_unknown_prefix(name), _)` can be
+/// raised.
+fn expand_with_name<C: QueryableContextType>(
+    context: &Context<C>,
     name_term: &Term,
     expanded_term: &Term,
-    expand: impl Fn(&str, bool) -> Option<(String, bool)>,
+    expand: impl Fn(&str, bool) -> Result<Option<(String, bool)>, String>,
 ) -> PrologResult<()> {
     let input_is_atom = name_term.is_atom();
-    if input_is_atom {
-        name_term.get_atom_name(|opt| {
-            let name = opt.unwrap_or("");
-            expand(name, input_is_atom)
-                .ok_or(PrologError::Failure)
-                .and_then(|(expanded, output_is_atom)| {
-                    unify_expanded(&expanded, output_is_atom, expanded_term)
-                })
-        })?
+    let name = if input_is_atom {
+        name_term.get_atom_name(|opt| opt.unwrap_or("").to_string())?
     } else {
-        name_term.get_str(|opt| {
-            let name = opt.unwrap_or("");
-            expand(name, input_is_atom)
-                .ok_or(PrologError::Failure)
-                .and_then(|(expanded, output_is_atom)| {
-                    unify_expanded(&expanded, output_is_atom, expanded_term)
-                })
-        })?
+        name_term.get_str(|opt| opt.unwrap_or("").to_string())?
+    };
+    match expand(&name, input_is_atom) {
+        Ok(Some((expanded, output_is_atom))) => {
+            unify_expanded(&expanded, output_is_atom, expanded_term)
+        }
+        Ok(None) => Err(PrologError::Failure),
+        Err(unknown_name) => {
+            let name_atom = Atom::new(&unknown_name);
+            let error_term = term! {context: error(key_has_unknown_prefix(#name_atom), _)}?;
+            context.raise_exception(&error_term)
+        }
     }
 }
 
@@ -516,7 +557,7 @@ predicates! {
     #[module("$doc")]
     pub semidet fn rust_expand_prefix(context, context_term, name_term, expanded_term) {
         let (_, map) = parse_prefix_context(context, context_term)?;
-        expand_with_name(name_term, expanded_term, |name, input_is_atom| {
+        expand_with_name(context, name_term, expanded_term, |name, input_is_atom| {
             prefix_expand_raw(map.as_ref(), name, input_is_atom)
         })
     }
@@ -524,25 +565,25 @@ predicates! {
     #[module("$doc")]
     pub semidet fn rust_expand_prefix_schema(context, context_term, name_term, expanded_term) {
         let (_, map) = parse_prefix_context(context, context_term)?;
-        expand_with_name(name_term, expanded_term, |name, input_is_atom| {
+        expand_with_name(context, name_term, expanded_term, |name, input_is_atom| {
             prefix_expand_schema_raw(map.as_ref(), name, input_is_atom)
         })
     }
 
     #[module("$doc")]
-    pub semidet fn rust_expand_prefix_layer(_context, layer_term, name_term, expanded_term) {
+    pub semidet fn rust_expand_prefix_layer(context, layer_term, name_term, expanded_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let map = get_layer_prefix_map(&layer);
-        expand_with_name(name_term, expanded_term, |name, input_is_atom| {
+        expand_with_name(context, name_term, expanded_term, |name, input_is_atom| {
             prefix_expand_raw(map.as_ref(), name, input_is_atom)
         })
     }
 
     #[module("$doc")]
-    pub semidet fn rust_expand_prefix_schema_layer(_context, layer_term, name_term, expanded_term) {
+    pub semidet fn rust_expand_prefix_schema_layer(context, layer_term, name_term, expanded_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let map = get_layer_prefix_map(&layer);
-        expand_with_name(name_term, expanded_term, |name, input_is_atom| {
+        expand_with_name(context, name_term, expanded_term, |name, input_is_atom| {
             prefix_expand_schema_raw(map.as_ref(), name, input_is_atom)
         })
     }

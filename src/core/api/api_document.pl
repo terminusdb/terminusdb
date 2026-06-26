@@ -36,6 +36,17 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
+:- use_module(core(document/json), [
+                  insert_document_expanded/3,
+                  replace_document_expanded/4
+              ]).
+:- use_module(core(document/parallel_elaboration), [
+                  elaborate_insert_request_db/4,
+                  chunk_size/1,
+                  acquire_processing_token/0,
+                  release_processing_token/0,
+                  has_processing_token/0
+              ]).
 :- use_module(core(account)).
 :- use_module(config(terminus_config)).
 
@@ -417,25 +428,162 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     ),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
-    % Transaction replay for conflict resolution:
-    % Save stream position before transaction, reset it on retry.
-    % REQUIRES: Stream must be seekable (string stream, not raw HTTP socket).
-    % See routes.pl where HTTP body is buffered into string stream for this reason.
-    % Reset stream to beginning for each transaction attempt (retry on conflict)
     stream_property(Stream, position(Pos)),
     option(input_format(InputFormat), Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
-                         (   InputFormat = json
-                         ->  InsertStream = Stream
-                         ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, InsertStream)
-                         ),
-                         api_insert_documents_core(Transaction, InsertStream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                         (   parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options)
+                         ->  setup_call_cleanup(
+                                 parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
+                                 (   CoreStream = queue(Queue),
+                                     CoreRaw_JSON = true,
+                                     (   InputFormat = json
+                                     ->  InsertStream = CoreStream
+                                     ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                     ),
+                                     api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                                 ),
+                                 cleanup_parallel_stream(Queue, Thread))
+                         ;   CoreStream = Stream,
+                             CoreRaw_JSON = Raw_JSON,
+                             (   InputFormat = json
+                             ->  InsertStream = CoreStream
+                             ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                             ),
+                             api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                         )
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
+parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options) :-
+    Graph_Type = instance,
+    Raw_JSON = false,
+    Full_Replace = false,
+    option(input_format(json), Options),
+    current_predicate(parallel_elaboration:elaborate_insert_request_db/4),
+    \+ parallel_elaboration_disabled.
+
+parallel_replace_enabled(Graph_Type, Raw_JSON, Options) :-
+    Graph_Type = instance,
+    Raw_JSON = false,
+    option(input_format(json), Options),
+    current_predicate(parallel_elaboration:elaborate_insert_request_db/4),
+    \+ parallel_elaboration_disabled.
+
+parallel_elaboration_disabled :-
+    (   getenv('TERMINUSDB_PARALLEL_ELABORATION', Value)
+    ->  (   atom(Value)
+        ->  downcase_atom(Value, Lower),
+            \+ member(Lower, ['1', true, on])
+        ;   Value \= 1
+        )
+    ;   true
+    ).
+
+parallel_elaborate_stream(DB, Stream, Queue, Thread) :-
+    stream_to_lazy_docs(Stream, LazyDocs),
+    message_queue_create(Queue, []),
+    thread_create(elaborate_stream_producer(DB, LazyDocs, Queue), Thread, []).
+
+cleanup_parallel_stream(Queue, Thread) :-
+    catch(thread_signal(Thread, abort), _, true),
+    catch(thread_join(Thread, _), _, true),
+    catch(message_queue_destroy(Queue), _, true).
+
+take_chunk_lazy(_, 0, [], Rest) :- !, Rest = [].
+take_chunk_lazy(LazyDocs, N, Chunk, Rest) :-
+    N > 0,
+    (   LazyDocs = [Doc|Rest0]
+    ->  N1 is N - 1,
+        Chunk = [Doc|ChunkRest],
+        take_chunk_lazy(Rest0, N1, ChunkRest, Rest)
+    ;   Chunk = [],
+        Rest = LazyDocs
+    ).
+
+elaborate_stream_producer(DB, LazyDocs, Queue) :-
+    chunk_size(ChunkSize),
+    take_chunk_lazy(LazyDocs, ChunkSize, Chunk, Rest),
+    (   Chunk == []
+    ->  thread_send_message(Queue, done)
+    ;   (   parallel_elaboration:elaborate_insert_request_db(DB, Chunk, Elaborated, [workers(4)])
+        ->  thread_send_message(Queue, docs(Elaborated)),
+            elaborate_stream_producer(DB, Rest, Queue)
+        ;   thread_send_message(Queue, error)
+        )
+    ).
+
+consume_elaborated_queue(Queue, _Graph_Type, _Raw_JSON, _Overwrite, Transaction, Captures, Captures, Ids) :-
+    (   has_processing_token
+    ->  WaitForToken = true
+    ;   WaitForToken = false
+    ),
+    consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids).
+
+consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids) :-
+    (   WaitForToken = true
+    ->  release_processing_token
+    ;   true
+    ),
+    thread_get_message(Queue, Message),
+    (   WaitForToken = true
+    ->  acquire_processing_token
+    ;   true
+    ),
+    (   Message = done
+    ->  Ids = []
+    ;   Message = error
+    ->  throw(error(parallel_elaboration_failed, _))
+    ;   Message = docs(Docs)
+    ->  findall([Id], (member(Doc, Docs), insert_document_expanded(Transaction, Doc, Id)), Ids_Mid),
+        consume_elaborated_queue_(Queue, Transaction, WaitForToken, Ids_Tail),
+        append(Ids_Mid, Ids_Tail, Ids)
+    ).
+
+consume_replaced_queue(Queue, Transaction, Create, Ids) :-
+    (   has_processing_token
+    ->  WaitForToken = true
+    ;   WaitForToken = false
+    ),
+    consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids).
+
+consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids) :-
+    (   WaitForToken = true
+    ->  release_processing_token
+    ;   true
+    ),
+    thread_get_message(Queue, Message),
+    (   WaitForToken = true
+    ->  acquire_processing_token
+    ;   true
+    ),
+    (   Message = done
+    ->  Ids = []
+    ;   Message = error
+    ->  throw(error(parallel_elaboration_failed, _))
+    ;   Message = docs(Docs)
+    ->  findall([Id], (member(Doc, Docs), replace_document_expanded(Transaction, Doc, Create, Id)), Ids_Mid),
+        consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids_Tail),
+        append(Ids_Mid, Ids_Tail, Ids)
+    ).
+
+api_insert_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, Ids) :-
+    !,
+    empty_assoc(Captures_In),
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    consume_elaborated_queue(Queue, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, Ids_List),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    database_instance(Transaction, [Instance]),
+    insert_backlinks([], Instance),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
 api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
@@ -627,12 +775,28 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          ->  ReplaceStream = Stream
                          ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
                          ),
-                         api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
+                         (   parallel_replace_enabled(Graph_Type, Raw_JSON, Options)
+                         ->  setup_call_cleanup(
+                                 parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
+                                 api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, Ids),
+                                 cleanup_parallel_stream(Queue, Thread))
+                         ;   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
+                         )
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
+api_replace_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, Create, Doc_Merge, Ids) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    consume_replaced_queue(Queue, Transaction, Create, Ids_List),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
 api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
     empty_assoc(Captures),
     ensure_transaction_has_builder(Graph_Type, Transaction),
