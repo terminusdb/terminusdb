@@ -48,26 +48,28 @@ cli_toplevel :-
     update_system_graphs,
     load_plugins,
     % Better error handling here...
-    catch_with_backtrace(
-        (   set_prolog_flag(verbose, true),
-            run(Argv),
-            set_prolog_flag(verbose, false),
-            halt(0)
-        ),
-        Exception,
-        (   Exception = unwind(halt(Code))
-        ->  halt(Code)
-        ;   Exception = error(io_error(write,user_output),_)
-        ->  halt(0)
-        ;   Exception = error(rust_io_error('WriteZero',_),_)
-        ->  halt(0)
-        ;   Exception = error(Error,context(prolog_stack(Stack),_)),
-            print_prolog_backtrace(user_error, Stack)
-        ->  format(user_error, "~NError: ~q~n~n", [Error]),
-            halt(1)
-        ;   format(user_error, "~NError: ~q~n~n", [Exception]),
-            halt(1)
-        )).
+    (   catch_with_backtrace(
+            (   set_prolog_flag(verbose, true),
+                run(Argv),
+                set_prolog_flag(verbose, false)
+            ),
+            Exception,
+            (   Exception = unwind(halt(Code))
+            ->  halt(Code)
+            ;   Exception = error(io_error(write,user_output),_)
+            ->  halt(0)
+            ;   Exception = error(rust_io_error('WriteZero',_),_)
+            ->  halt(0)
+            ;   Exception = error(Error,context(prolog_stack(Stack),_)),
+                print_prolog_backtrace(user_error, Stack)
+            ->  format(user_error, "~NError: ~q~n~n", [Error]),
+                halt(1)
+            ;   format(user_error, "~NError: ~q~n~n", [Exception]),
+                halt(1)
+            ))
+    ->  halt(0)
+    ;   halt(1)
+    ).
 
 % commands
 opt_spec(help,'terminusdb help',
@@ -2887,6 +2889,7 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  ~s~n~n', [Help]).
 
 format_doc_id_list(Ids) :-
+    is_list(Ids),
     length(Ids, Id_Count),
     (   Id_Count > 0
     ->  Column_Width is floor(log10(Id_Count)) + 2,
