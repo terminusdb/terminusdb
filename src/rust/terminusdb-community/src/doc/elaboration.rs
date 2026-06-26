@@ -202,7 +202,7 @@ fn elaborate_simple_document<L: Layer + Clone>(
         .ok_or_else(|| ElaborationError::Ineligible("missing @type".to_string()))?;
 
     let type_full = expand_prefixed_name(doc_context, type_short)
-        .ok_or_else(|| ElaborationError::SchemaError(format!("cannot expand type {}", type_short)))?;
+        .map_err(|e| ElaborationError::SchemaError(format!("unknown prefix in type {}: {}", type_short, e)))?;
 
     let class_id = schema
         .subject_id(&type_full)
@@ -321,8 +321,8 @@ fn elaborate_simple_document<L: Layer + Clone>(
             }
         };
         let range_type = expand_prefixed_name(doc_context, &range_type_short)
-            .ok_or_else(|| ElaborationError::SchemaError(format!(
-                "cannot expand range type {}", range_type_short
+            .map_err(|e| ElaborationError::SchemaError(format!(
+                "unknown prefix in range type {}: {}", range_type_short, e
             )))?;
 
         properties.insert(predicate, range_type);
@@ -339,7 +339,7 @@ fn elaborate_simple_document<L: Layer + Clone>(
             continue;
         }
         let expanded_key = expand_prefixed_name(doc_context, key)
-            .ok_or_else(|| ElaborationError::SchemaError(format!("cannot expand property key {}", key)))?;
+            .map_err(|e| ElaborationError::SchemaError(format!("unknown prefix in property key {}: {}", key, e)))?;
         let range_type = properties.get(&expanded_key).ok_or_else(|| {
             ElaborationError::Ineligible(format!("unknown property {}", key))
         })?;

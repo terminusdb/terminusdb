@@ -227,7 +227,7 @@ fn hashmap_prefix_expand_schema_raw(
     prefixes: &HashMap<String, String>,
     name: &str,
     input_is_atom: bool,
-) -> Option<(String, bool)> {
+) -> Result<Option<(String, bool)>, String> {
     let schema_base = prefixes.get("@schema").map(|s| s.as_str());
     hashmap_prefix_expand_with_base(prefixes, schema_base, name, input_is_atom)
 }
@@ -257,13 +257,13 @@ fn split_prefixed_name(name: &str) -> Option<(&str, &str)> {
         if last == '.' {
             return None;
         }
-        if !last.is_alphanumeric() && last != '-' && last != '_' && last != '@' {
+        if !last.is_alphanumeric() && last != '-' && last != '_' {
             return None;
         }
     }
     // Intermediate characters must be alphanumeric, '-', '_', or '.'.
     for c in chars {
-        if !c.is_alphanumeric() && c != '-' && c != '_' && c != '.' && c != '@' {
+        if !c.is_alphanumeric() && c != '-' && c != '_' && c != '.' {
             return None;
         }
     }
@@ -330,26 +330,28 @@ fn hashmap_prefix_expand_with_base(
     base_override: Option<&str>,
     name: &str,
     input_is_atom: bool,
-) -> Option<(String, bool)> {
+) -> Result<Option<(String, bool)>, String> {
     if has_protocol(name) {
-        return Some((name.to_string(), input_is_atom));
+        return Ok(Some((name.to_string(), input_is_atom)));
     }
     if name.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     if let Some((prefix, suffix)) = split_prefixed_name(name) {
-        let expanded = prefixes.get(prefix)?;
-        Some((format!("{}{}", expanded, suffix), true))
+        match prefixes.get(prefix) {
+            Some(expanded) => Ok(Some((format!("{}{}", expanded, suffix), true))),
+            None => Err(name.to_string()),
+        }
     } else if name.starts_with('@') {
         // Bare @-keywords (e.g. '@type', '@base') are returned unchanged.
-        Some((name.to_string(), input_is_atom))
+        Ok(Some((name.to_string(), input_is_atom)))
     } else {
         let base = base_override
             .or_else(|| prefixes.get("@base").map(|s| s.as_str()))
             .unwrap_or_default();
         let vocab = prefixes.get("@vocab").map(|s| s.as_str()).unwrap_or_default();
-        Some((format!("{}{}{}", base, vocab, name), true))
+        Ok(Some((format!("{}{}{}", base, vocab, name), true)))
     }
 }
 
@@ -537,13 +539,20 @@ fn expand_with_name<C: QueryableContextType>(
 /// Convenience wrapper used by the Rust elaboration path for class names and
 /// property keys.  Uses the `DocumentContext` lifecycle-bound prefix map and
 /// then expands as a schema name.
+///
+/// Returns `Ok(expanded)` on success, or `Err(name)` when the prefix is unknown
+/// so callers can include the offending name in their error messages instead of
+/// discarding the diagnostic.
 pub fn expand_prefixed_name<L: Layer + Clone>(
     doc_context: &DocumentContext<L>,
     name: &str,
-) -> Option<String> {
+) -> Result<String, String> {
     let prefixes = doc_context.prefix_map();
-    hashmap_prefix_expand_schema_raw(prefixes, name, true)
-        .map(|(expanded, _)| expanded)
+    match hashmap_prefix_expand_schema_raw(prefixes, name, true) {
+        Ok(Some((expanded, _))) => Ok(expanded),
+        Ok(None) => Err(name.to_string()),
+        Err(unknown_name) => Err(unknown_name),
+    }
 }
 
 pub fn register() {

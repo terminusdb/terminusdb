@@ -6,6 +6,7 @@
               context_triple/2,
               json_elaborate/3,
               json_elaborate/8,
+              json_elaborate_with_contract/4,
               json_schema_triple/3,
               json_schema_elaborate/3,
               database_context_object/2,
@@ -27,8 +28,11 @@
               insert_document/7,
               insert_document/8,
               insert_document_expanded/3,
+              insert_document_expanded/4,
+              insert_document_expanded/5,
               insert_document_unsafe/8,
-              replace_document_expanded/4,
+              replace_document_expanded/5,
+              insert_backlinks/2,
               replace_document/2,
               replace_document/3,
               replace_document/5,
@@ -862,6 +866,40 @@ json_elaborate(DB,JSON,Elaborated) :-
 json_elaborate(DB,JSON,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
     database_prefixes(DB,Context),
     json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out).
+
+/**
+ * json_elaborate_with_contract(+DB, +JSON, -Elaborated, -Contract) is semidet.
+ *
+ * Elaborate a JSON document and produce a verification contract that the
+ * transaction layer can use to enforce the same checks as the synchronous
+ * insert/replace paths.  This contract is independent of the elaboration
+ * implementation, so a future Rust elaboration path can emit the same shape.
+ *
+ * Contract fields:
+ *   - submitted_id: the @id from the raw input (or none)
+ *   - generated_id: the @id in the elaborated document
+ *   - id_pairs: list of Id-Variety pairs produced by elaboration
+ *   - dependencies: list of terms that must be ground before insertion
+ *   - backlinks: list of backlink triples to insert
+ *   - captures_out: final capture association after elaboration
+ */
+json_elaborate_with_contract(DB, JSON, Elaborated, Contract) :-
+    (   get_dict('@id', JSON, SubmittedId)
+    ->  true
+    ;   SubmittedId = none
+    ),
+    empty_assoc(Captures_In),
+    json_elaborate(DB, JSON, Captures_In, Elaborated, Id_Pairs, Dependencies,
+                   Backlinks-[], Captures_Out),
+    get_dict('@id', Elaborated, GeneratedId),
+    Contract = verification_contract{
+        submitted_id: SubmittedId,
+        generated_id: GeneratedId,
+        id_pairs: Id_Pairs,
+        dependencies: Dependencies,
+        backlinks: Backlinks,
+        captures_out: Captures_Out
+    }.
 
 :- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
@@ -3420,17 +3458,115 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
             insert(Instance, S, P, OC, _))
     ).
 
-replace_document_expanded(Transaction, Elaborated, Create, ID) :-
+/**
+ * insert_document_expanded(+Transaction, +Elaborated, +Contract, +Overwrite, -ID) is semidet.
+ *
+ * Same as insert_document_expanded/4 but accepts the Overwrite flag used by the
+ * API queue consumer.
+ */
+insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
     get_dict('@id', Elaborated, ID),
-    catch(
-        delete_document(Transaction, false, ID),
-        error(document_not_found(_), _),
-        (   Create = true
-        ->  true
-        ;   throw(error(document_not_found(ID, Elaborated), _))
+    is_dict(Contract, verification_contract),
+    get_dict(id_pairs, Contract, Id_Pairs),
+    get_dict(dependencies, Contract, Dependencies),
+    get_dict(backlinks, Contract, Backlinks),
+    do_or_die(
+        get_dict('@type', Elaborated, Type),
+        error(missing_field('@type', Elaborated), _)),
+    die_if(
+        (   is_subdocument(Transaction, Type),
+            \+ get_dict('@linked-by', Elaborated, _)),
+        error(inserted_subdocument_as_document, _)),
+    database_instance(Transaction, [Instance]),
+    (   ground(Dependencies)
+    ->  forall(
+            member(ExistingId-Variety, Id_Pairs),
+            (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
+                (   Overwrite = false
+                ->  die_if(Status = present,
+                           error(can_not_insert_existing_object_with_id(ExistingId), _))
+                ;   true
+                )
+            )
+        ),
+        insert_document_expanded(Transaction, Elaborated, ID),
+        insert_backlinks(Backlinks, Instance)
+    ;   when(ground(Dependencies),
+             (
+                 forall(
+                     member(ExistingId-Variety, Id_Pairs),
+                     (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
+                         (   Overwrite = false
+                         ->  die_if(Status = present,
+                                    error(can_not_insert_existing_object_with_id(ExistingId), _))
+                         ;   true
+                         )
+                     )
+                 ),
+                 insert_document_expanded(Transaction, Elaborated, ID),
+                 insert_backlinks(Backlinks, Instance)
+             ))
+    ).
+
+/**
+ * insert_document_expanded(+Transaction, +Elaborated, +Contract, -ID) is semidet.
+ *
+ * Insert an elaborated document using the verification contract produced by
+ * json_elaborate_with_contract.  This delegates to insert_document_expanded/5 with
+ * Overwrite = false, so the contract checks are applied without allowing
+ * existing documents to be overwritten.
+ */
+insert_document_expanded(Transaction, Elaborated, Contract, ID) :-
+    insert_document_expanded(Transaction, Elaborated, Contract, false, ID).
+
+/**
+ * replace_document_expanded(+Transaction, +Elaborated, +Contract, +Create, -ID) is semidet.
+ *
+ * Replace an elaborated document using the verification contract.  Performs the
+ * same checks as the synchronous replace_document/7 path: submitted/generated ID
+ * match, backlink rejection, deletion of old documents, and dependency deferral.
+ */
+replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
+    get_dict('@id', Elaborated, ID),
+    is_dict(Contract, verification_contract),
+    get_dict(submitted_id, Contract, SubmittedId),
+    get_dict(generated_id, Contract, GeneratedId),
+    get_dict(id_pairs, Contract, Id_Pairs),
+    get_dict(dependencies, Contract, Dependencies),
+    get_dict(backlinks, Contract, Backlinks),
+    database_prefixes(Transaction, Context),
+    (   SubmittedId \= none
+    ->  check_submitted_id_against_generated_id(Context, GeneratedId, SubmittedId)
+    ;   true
+    ),
+    die_if(Backlinks \= [],
+           error(back_links_not_supported_in_replace, _)),
+    include([_-normal]>>true, Id_Pairs, Deletions),
+    forall(
+        member(DeletionId-_, Deletions),
+        catch(
+            delete_document(Transaction, false, DeletionId),
+            error(document_not_found(_), _),
+            (   Create = true
+            ->  true
+            ;   throw(error(document_not_found(DeletionId, Elaborated), _))
+            )
         )
     ),
-    insert_document_expanded(Transaction, Elaborated, ID).
+    (   ground(Dependencies)
+    ->  insert_document_expanded(Transaction, Elaborated, ID)
+    ;   when(ground(Dependencies),
+             insert_document_expanded(Transaction, Elaborated, ID))
+    ).
+
+insert_backlinks(Links, Graph) :-
+    nb_link_dict(backlinks, Graph, Links),
+    insert_backlinks_(Links, Graph).
+
+insert_backlinks_([], _).
+insert_backlinks_([link(S,P,O)|T], Instance) :-
+    insert(Instance, S, P, O, _),
+    insert_backlinks_(T, Instance).
 
 run_insert_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
