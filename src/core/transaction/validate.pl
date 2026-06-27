@@ -44,7 +44,8 @@
 :- use_module(core(plugins), [enrich_commit_info/3]).
 
 /*
- * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool }
+ * graph_validation_obj { descriptor: graph_descriptor, read: layer, changed: bool,
+ *                        layer_changes: AddedIRIs-RemovedIRIs }
  *
  * validation_object{ descriptor: collection_descriptor,
  *                    <parent>: transaction_obj % we still keep it a transaction obj and transform it later
@@ -67,19 +68,24 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
                                                  read: New_Layer,
                                                  triple_update: Triple_Update,
                                                  backlinks: BL,
-                                                 changed: Changed },
+                                                 changed: Changed,
+                                                 layer_changes: Layer_Changes },
 
     (   var(Layer_Builder)
     ->  New_Layer = Layer,
+        Layer_Changes = []-[],
         (   Force_Write = true
         ->  Changed = true
         ;   Changed = false)
     %   NOTE: This seems wasteful - we should ignore this layer not commit it if it is empty.
     ;   nb_commit(Layer_Builder, New_Layer),
+        '$change_window':layer_changes(New_Layer, Added, Removed),
+        Layer_Changes = Added-Removed,
         graph_inserts_deletes(Graph_Validation_Obj, N, M),
         \+ (N = 0, M = 0)
     ->  Changed = true
     ;   Changed = false,
+        Layer_Changes = []-[],
         New_Layer = Layer ).
 
 graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map, Map) :-
@@ -305,7 +311,6 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
 
     branch_descriptor{branch_name : Branch_Name} :< Descriptor,
     !,
-
     (   exists(validation_object_changed, [Instance_Object, Schema_Object])
     ->  Commit_Info0 = (Validation_Object.commit_info),
         (   enrich_commit_info(Validation_Object, Commit_Info0, Commit_Info)
@@ -320,8 +325,13 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                                              Commit_Info,
                                              Branch_Name,
                                              Instance_Object,
-                                             Schema_Object)
-        ;   insert_rwo_layer(Parent_Transaction,
+                                             Schema_Object,
+                                             Commit_Id),
+            ParentCommitId = none
+        ;   (   branch_head_commit(Parent_Context, Branch_Name, Old_Commit_Uri)
+            ->  commit_id_uri(Parent_Context, ParentCommitId, Old_Commit_Uri)
+            ;   ParentCommitId = none),
+            insert_rwo_layer(Parent_Transaction,
                              Schema_Object,
                              Schema_Layer_Uri),
             insert_rwo_layer(Parent_Transaction,
@@ -332,8 +342,11 @@ commit_validation_object(Validation_Object, [Parent_Transaction]) :-
                                            Instance_Layer_Uri,
                                            Commit_Info,
                                            Branch_Name,
-                                           _Commit_Id,
-                                           _Commit_Uri))
+                                           Commit_Id,
+                                           _Commit_Uri)
+        ),
+        register_commit_in_change_window(Descriptor, ParentCommitId, Commit_Id,
+                                         Instance_Object, Schema_Object)
     ;   true).
 
 insert_rwo_layer(Transaction, RWO, Layer_Uri) :-
@@ -342,7 +355,7 @@ insert_rwo_layer(Transaction, RWO, Layer_Uri) :-
     ;   layer_to_id(RWO.read, Layer_Id),
         insert_layer_object(Transaction, Layer_Id, Layer_Uri)).
 
-replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Instance_Object, Schema_Object) :-
+replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, Instance_Object, Schema_Object, New_Commit_Id) :-
     % delete_document(Parent_Transaction, Commit_Uri),
     Schema_Layer = (Schema_Object.read),
     (   parent(Schema_Layer, _)
@@ -352,10 +365,36 @@ replace_initial_commit_on_branch(Parent_Transaction, Commit_Info, Branch_Name, I
 
     insert_rwo_layer(Parent_Transaction, Final_Schema_Object, Schema_Layer_Uri),
     insert_rwo_layer(Parent_Transaction, Instance_Object, Instance_Layer_Uri),
-    insert_base_commit_object(Parent_Transaction, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, _, New_Commit_Uri),
+    insert_base_commit_object(Parent_Transaction, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, New_Commit_Id, New_Commit_Uri),
 
     branch_name_uri(Parent_Transaction, Branch_Name, Branch_Uri),
     reset_branch_head(Parent_Transaction, Branch_Uri, New_Commit_Uri).
+
+register_commit_in_change_window(_Descriptor, _ParentCommitId, none, _Instance_Object, _Schema_Object) :-
+    !.
+register_commit_in_change_window(Descriptor, ParentCommitId, CommitId, Instance_Object, Schema_Object) :-
+    branch_descriptor{} :< Descriptor,
+    !,
+    get_dict(layer_changes, Instance_Object, InstanceAdded-InstanceRemoved),
+    (   ParentCommitId = none
+    ->  ParentCommitIdArg = none
+    ;   atom_string(ParentCommitIdArg, ParentCommitId)
+    ),
+    (   var(Schema_Object.read)
+    ->  SchemaLayerId = none
+    ;   layer_to_id(Schema_Object.read, SchemaLayerIdString),
+        atom_string(SchemaLayerId, SchemaLayerIdString)
+    ),
+    (   var(Instance_Object.read)
+    ->  InstanceLayerId = none
+    ;   layer_to_id(Instance_Object.read, InstanceLayerIdString),
+        atom_string(InstanceLayerId, InstanceLayerIdString)
+    ),
+    term_string(Descriptor, BranchKey),
+    '$change_window':register_commit(BranchKey, CommitId, ParentCommitIdArg, SchemaLayerId, InstanceLayerId,
+                                     InstanceAdded, InstanceRemoved).
+register_commit_in_change_window(Descriptor, _ParentCommitId, _CommitId, _Instance_Object, _Schema_Object) :-
+    throw(error(unknown_validation_descriptor_for_branch_key(Descriptor), _)).
 
 commit_commit_validation_object(Commit_Validation_Object, [Parent_Transaction], New_Commit_Id, New_Commit_Uri) :-
     validation_object{
@@ -868,3 +907,4 @@ test(query_empty_database,
                      _).
 
 :- end_tests(query_without_commit).
+
