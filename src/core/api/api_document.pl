@@ -59,6 +59,7 @@
 :- use_module(core(account)).
 :- use_module(config(terminus_config)).
 
+:- use_module(library(terminus_store)).
 :- use_module(library(option)).
 :- use_module(library(assoc)).
 :- use_module(library(lists)).
@@ -309,6 +310,7 @@ known_document_error(at_prefixed_properties_not_supported(_)).
 known_document_error(at_prefixed_properties_not_supported(_,_)).
 known_document_error(invalid_jsondocument_at_id_must_be_iri(_)).
 known_document_error(unable_to_elaborate_schema_document(_)).
+known_document_error(elaboration_stale(_)).
 
 :- meta_predicate call_catch_document_mutation(+, :).
 api_document_error_wrapper(error(E, Context), Document, error(New_E, Context)) :-
@@ -450,18 +452,34 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(input_format(InputFormat), Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
+                         branch_key_from_transaction(Transaction, BranchKey),
                          (   parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream)
-                         ->  setup_call_cleanup(
-                                 parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
-                                 (   CoreStream = queue(Queue),
-                                     CoreRaw_JSON = true,
-                                     (   InputFormat = json
-                                     ->  InsertStream = CoreStream
-                                     ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
-                                     ),
-                                     api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                         ->  (   branch_descriptor{} :< Transaction.descriptor
+                             ->  with_commit_window_guard(
+                                     Transaction, BranchKey, PreBranchCommitId,
+                                     setup_call_cleanup(
+                                         parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
+                                         (   CoreStream = queue(Queue),
+                                             CoreRaw_JSON = true,
+                                             (   InputFormat = json
+                                             ->  InsertStream = CoreStream
+                                             ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                             ),
+                                             api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, PreBranchCommitId, Ids)
+                                         ),
+                                         cleanup_parallel_stream(Queue, Thread)))
+                             ;   % Non-branch descriptors (e.g. system_descriptor) have no
+                                 % advancing branch commit, so a commit-window guard is
+                                 % neither applicable nor acquireable. Fall back to the
+                                 % synchronous path without a guard.
+                                 CoreStream = Stream,
+                                 CoreRaw_JSON = Raw_JSON,
+                                 (   InputFormat = json
+                                 ->  InsertStream = CoreStream
+                                 ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
                                  ),
-                                 cleanup_parallel_stream(Queue, Thread))
+                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                             )
                          ;   CoreStream = Stream,
                              CoreRaw_JSON = Raw_JSON,
                              (   InputFormat = json
@@ -587,21 +605,23 @@ elaborate_stream_producer(DB, LazyDocs, Queue) :-
         thread_send_message(Queue, error)
     ).
 
-consume_elaborated_queue(Queue, Transaction, Overwrite, Ids, Captures_Out) :-
-    (   has_processing_token
-    ->  WaitForToken = true
-    ;   WaitForToken = false
+consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids, Captures_Out) :-
+    (   has_commit_window_guard
+    ->  WaitForGuard = true
+    ;   WaitForGuard = false
     ),
-    consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids, Captures_Out).
+    consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids, Captures_Out).
 
-consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids, Captures_Out) :-
-    (   WaitForToken = true
-    ->  release_processing_token
+consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids, Captures_Out) :-
+    (   WaitForGuard = true,
+        \+ first_commit_candidate(Transaction, CommitId)
+    ->  release_commit_window_guard
     ;   true
     ),
     thread_get_message(Queue, Message),
-    (   WaitForToken = true
-    ->  acquire_processing_token
+    (   WaitForGuard = true
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        acquire_commit_window_guard(BranchKey, CommitId)
     ;   true
     ),
     (   Message = done
@@ -617,7 +637,7 @@ consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids, Capt
     ->  throw(Error)
     ;   Message = docs(Pairs)
     ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids_Mid, Captures_Mid),
-        consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids_Tail, Captures_Tail),
+        consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
         append(Ids_Mid, Ids_Tail, Ids),
         merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
@@ -625,13 +645,44 @@ consume_elaborated_queue_(Queue, Transaction, Overwrite, WaitForToken, Ids, Capt
 pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
     pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out).
 
+verify_contract(Transaction, Contract) :-
+    is_dict(Contract, verification_contract),
+    (   get_dict(pre_schema_layer_id, Contract, PreSchemaLayerId),
+        PreSchemaLayerId \= none
+    ->  [SchemaObject] = Transaction.schema_objects,
+        layer_to_id(SchemaObject.read, CurrentSchemaLayerId),
+        (   CurrentSchemaLayerId \= PreSchemaLayerId
+        ->  throw(error(elaboration_stale(schema_layer_changed), _))
+        ;   true)
+    ;   true),
+    (   get_dict(pre_branch_commit_id, Contract, PreBranchCommitId),
+        branch_key_from_transaction(Transaction, BranchKey),
+        get_dict(must_exist, Contract, MustExist),
+        get_dict(must_not_exist, Contract, MustNotExist),
+        (   catch(transaction_data_version(Transaction, data_version(branch, CurrentBranchCommitId)),
+                  error(data_version_not_found(_), _),
+                  fail)
+        ->  true
+        ;   CurrentBranchCommitId = none),
+        (   CurrentBranchCommitId == PreBranchCommitId
+        ->  true
+        ;   CurrentBranchCommitId \= none,
+            '$change_window':intersects(BranchKey, PreBranchCommitId, CurrentBranchCommitId,
+                                        MustExist, MustNotExist, _)
+        ->  throw(fail_transaction)
+        ;   true
+        )
+    ;   true).
+
 pairs_to_insert_ids_and_captures_([], _, _, [], empty_assoc).
 pairs_to_insert_ids_and_captures_([Doc-Contract], Transaction, Overwrite, [[Id]], Captures_Out) :-
+    verify_contract(Transaction, Contract),
     insert_document_expanded(Transaction, Doc, Contract, Overwrite, Id),
     is_dict(Contract, verification_contract),
     get_dict(captures_out, Contract, Captures_Out).
 pairs_to_insert_ids_and_captures_([Doc-Contract|Rest], Transaction, Overwrite, [[Id]|Ids], Captures_Out) :-
     Rest \= [],
+    verify_contract(Transaction, Contract),
     insert_document_expanded(Transaction, Doc, Contract, Overwrite, Id),
     is_dict(Contract, verification_contract),
     get_dict(captures_out, Contract, Captures_First),
@@ -659,21 +710,23 @@ merge_capture_pair(Key-Value, Captures_In, Captures_Out) :-
     ;   put_assoc(Key, Captures_In, Value, Captures_Out)
     ).
 
-consume_replaced_queue(Queue, Transaction, Create, Ids, Captures_Out) :-
-    (   has_processing_token
-    ->  WaitForToken = true
-    ;   WaitForToken = false
+consume_replaced_queue(Queue, Transaction, Create, CommitId, Ids, Captures_Out) :-
+    (   has_commit_window_guard
+    ->  WaitForGuard = true
+    ;   WaitForGuard = false
     ),
-    consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids, Captures_Out).
+    consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids, Captures_Out).
 
-consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids, Captures_Out) :-
-    (   WaitForToken = true
-    ->  release_processing_token
+consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids, Captures_Out) :-
+    (   WaitForGuard = true,
+        \+ first_commit_candidate(Transaction, CommitId)
+    ->  release_commit_window_guard
     ;   true
     ),
     thread_get_message(Queue, Message),
-    (   WaitForToken = true
-    ->  acquire_processing_token
+    (   WaitForGuard = true
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        acquire_commit_window_guard(BranchKey, CommitId)
     ;   true
     ),
     (   Message = done
@@ -688,28 +741,29 @@ consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids, Captures_
     ->  throw(Error)
     ;   Message = docs(Pairs)
     ->  pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids_Mid, Captures_Mid),
-        consume_replaced_queue_(Queue, Transaction, Create, WaitForToken, Ids_Tail, Captures_Tail),
+        consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
         append(Ids_Mid, Ids_Tail, Ids),
         merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
 
 pairs_to_replace_ids_and_captures([], _, _, [], empty_assoc).
 pairs_to_replace_ids_and_captures([Doc-Contract], Transaction, Create, [[Id]], Captures_Out) :-
+    verify_contract(Transaction, Contract),
     replace_document_expanded(Transaction, Doc, Contract, Create, Id),
     is_dict(Contract, verification_contract),
     get_dict(captures_out, Contract, Captures_Out).
 pairs_to_replace_ids_and_captures([Doc-Contract|Rest], Transaction, Create, [[Id]|Ids], Captures_Out) :-
     Rest \= [],
+    verify_contract(Transaction, Contract),
     replace_document_expanded(Transaction, Doc, Contract, Create, Id),
     is_dict(Contract, verification_contract),
     get_dict(captures_out, Contract, Captures_First),
     pairs_to_replace_ids_and_captures(Rest, Transaction, Create, Ids, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
-api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, Ids) :-
-    !,
+api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, CommitId, Ids) :-
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    consume_elaborated_queue(Queue, Transaction, Overwrite, Ids_List, Captures_Out),
+    consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -897,15 +951,18 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
+                         branch_key_from_transaction(Transaction, BranchKey),
                          (   InputFormat = json
                          ->  ReplaceStream = Stream
                          ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
                          ),
                          (   parallel_replace_enabled(Graph_Type, Raw_JSON, Options, ReplaceStream)
-                         ->  setup_call_cleanup(
-                                 parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
-                                 api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, Ids),
-                                 cleanup_parallel_stream(Queue, Thread))
+                         ->  with_commit_window_guard(
+                                 Transaction, BranchKey, PreBranchCommitId,
+                                 setup_call_cleanup(
+                                     parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
+                                     api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, PreBranchCommitId, Ids),
+                                     cleanup_parallel_stream(Queue, Thread)))
                          ;   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
                          )
                      ),
@@ -913,10 +970,10 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_replace_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, Create, Doc_Merge, Ids) :-
+api_replace_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, Create, Doc_Merge, CommitId, Ids) :-
     !,
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    consume_replaced_queue(Queue, Transaction, Create, Ids_List, Captures_Out),
+    consume_replaced_queue(Queue, Transaction, Create, CommitId, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -2087,6 +2144,7 @@ test(accept_to_format_text_plain) :-
 
 :- end_tests(document_format_detection).
 
+<<<<<<< HEAD
 :- begin_tests(document_embedding, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -2313,3 +2371,102 @@ test(embedding_api_end_to_end, [
 
 :- end_tests(document_embedding).
 
+:- begin_tests(parallel_initial_writes, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(triple), [with_triple_store/2]).
+
+insert_and_report(Store, SystemDB, Auth, Path, Stream, Options, Queue) :-
+    catch(
+        (   with_triple_store(Store,
+                              api_insert_documents(SystemDB, Auth, Path, Stream, no_data_version, _New_Data_Version, Ids, Options))
+        ->  thread_send_message(Queue, done(Ids))
+        ;   thread_send_message(Queue, error(failure))
+        ),
+        Error,
+        thread_send_message(Queue, error(Error))
+    ).
+
+test(two_parallel_initial_writes_are_serialised, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema(admin, foo))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    State = Store-_,
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    Doc1 = '{"@type":"City","name":"Alice"}',
+    Doc2 = '{"@type":"City","name":"Bob"}',
+    open_string(Doc1, Stream1),
+    open_string(Doc2, Stream2),
+    message_queue_create(Queue, []),
+    thread_create(insert_and_report(Store, SystemDB, Auth, 'admin/foo', Stream1, Options, Queue), Thread1),
+    thread_create(insert_and_report(Store, SystemDB, Auth, 'admin/foo', Stream2, Options, Queue), Thread2),
+    thread_get_message(Queue, Result1, [timeout(5)]),
+    thread_get_message(Queue, Result2, [timeout(5)]),
+    thread_join(Thread1, _),
+    thread_join(Thread2, _),
+    Result1 = done(Ids1),
+    Result2 = done(Ids2),
+    append(Ids1, Ids2, Ids),
+    length(Ids, 2),
+    with_triple_store(Store,
+                      (   resolve_absolute_string_descriptor('admin/foo', Desc),
+                          open_descriptor(Desc, T),
+                          forall(member(Id, Ids), get_document(T, Id, _))
+                      )),
+    Ids = [Id1, Id2],
+    Id1 \= Id2.
+
+:- end_tests(parallel_initial_writes).
+
+:- begin_tests(system_document_inserts, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(triple), [with_triple_store/2]).
+
+system_document_inserts_setup_low_retry_limit :-
+    nb_setval(test_old_max_retries, ''),
+    (   getenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', OldRetries)
+    ->  nb_setval(test_old_max_retries, OldRetries)
+    ;   true),
+    setenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', '2'),
+    abolish_table_subgoals(max_transaction_retries(_)).
+
+system_document_inserts_restore_retry_limit :-
+    nb_getval(test_old_max_retries, OldRetries),
+    (   OldRetries = ''
+    ->  unsetenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES')
+    ;   setenv('TERMINUSDB_SERVER_MAX_TRANSACTION_RETRIES', OldRetries)
+    ),
+    abolish_table_subgoals(max_transaction_retries(_)).
+
+% Regression test for the integration-test hang after the
+% "lists organization users" capability test. Sequential system
+% document inserts must not hold a commit-window guard across
+% transactions and must not exhaust the transaction retry budget.
+% We cap the retry budget to 2 so that a guard leak fails fast and
+% deterministically, instead of waiting for the default retry ceiling.
+test(sequential_system_document_inserts_release_commit_window_guard, [
+         setup((setup_temp_store(State),
+                system_document_inserts_setup_low_retry_limit)),
+         cleanup((system_document_inserts_restore_retry_limit,
+                  teardown_temp_store(State)))
+     ]) :-
+    State = Store-_,
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    User1 = '{"@type":"User","name":"Alice"}',
+    User2 = '{"@type":"User","name":"Bob"}',
+    open_string(User1, Stream1),
+    open_string(User2, Stream2),
+    with_triple_store(Store,
+                      (   api_insert_documents(SystemDB, Auth, '_system', Stream1, no_data_version, _DV1, Ids1, Options),
+                          api_insert_documents(SystemDB, Auth, '_system', Stream2, no_data_version, _DV2, Ids2, Options)
+                      )),
+    append(Ids1, Ids2, Ids),
+    length(Ids, 2).
+
+:- end_tests(system_document_inserts).

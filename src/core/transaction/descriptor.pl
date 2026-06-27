@@ -885,7 +885,7 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                     commit: Commit}.
 
 %! branch_key_from_descriptor(+Descriptor, -BranchKey) is det.
-%
+% Builds GRAPH_SPEC
 branch_key_from_descriptor(Descriptor, BranchKey) :-
     (   branch_descriptor{} :< Descriptor
     ->  resolve_absolute_string_descriptor(BranchKey, Descriptor)

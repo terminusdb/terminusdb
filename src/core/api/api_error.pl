@@ -1946,6 +1946,15 @@ api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids), _), JSON
                               'api:duplicate_ids' : Ids},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(elaboration_stale(Reason), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Elaboration is stale: ~w", [Reason]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:conflict",
+             'api:error' : _{ '@type' : 'api:ElaborationStale',
+                              'api:reason' : Reason},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(document_access_impossible(Descriptor, Graph_Type, Read_Write), _), JSON) :-
     document_error_type(Type, JSON_Type),
     resolve_absolute_string_descriptor(Descriptor_String, Descriptor),
