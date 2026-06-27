@@ -4,6 +4,7 @@ mod log;
 #[macro_use]
 mod dict_lookup;
 
+mod change_window;
 mod changes;
 mod consts;
 mod doc;
@@ -120,5 +121,6 @@ pub fn install() {
     json_preserve::register();
     template::register();
     changes::register();
+    change_window::register();
     embedding::register();
 }
