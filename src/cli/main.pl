@@ -1665,7 +1665,7 @@ run_command(query,[Path,Query],Opts) :-
                          data_version: no_data_version,
                          library: Library,
                          all_witnesses: false },
-            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, Response, Options),
+            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, _, Response, Options),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Response, [])
             ;   get_dict(prefixes, Context, Context_Prefixes),
@@ -2224,19 +2224,19 @@ run_command(doc,delete, [Path], Opts) :-
     api_report_errors(
         delete_documents,
         (   Nuke = true
-        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, Opts),
+        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, _, Opts),
             format("Documents nuked~n", [])
         ;   (   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
+            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, _, Opts),
                 Ids = [Id]
             ;   ground(Type)
-            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, Opts),
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, _, Opts),
                 format(atom(Msg), 'All documents of type ~q', [Type]),
                 Ids = [Msg] % silly
             ;   (   var(Data)
                 ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts))
                 ;   open_string(Data, Stream),
-                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts)
                 )
             ),
             format(current_output, "Documents deleted:~n", []),
@@ -2253,7 +2253,7 @@ run_command(doc,replace, [Path], Opts) :-
         (   (   var(Data)
             ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts))
             ;   open_string(Data, Stream),
-                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts)
             ),
             format(current_output, "Documents replaced:~n", []),
             format_doc_id_list(Ids)
@@ -2689,7 +2689,7 @@ doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_replace_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
+    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts).
 
 doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     % Copy stdin to a memory file.
@@ -2698,7 +2698,7 @@ doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_delete_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
+    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts).
 
 doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
     % Copy stdin to a memory file.
@@ -2709,7 +2709,7 @@ doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
 doc_insert_stream(System_DB, Auth, Path, Ids, Options, Stream) :-
     api_insert_documents(
         System_DB, Auth, Path, Stream,
-        no_data_version, _New_Data_Version, Ids, Options).
+        no_data_version, _New_Data_Version, _, Ids, Options).
 
 create_authorization(Opts,Authorization) :-
     option(token(Token), Opts),
