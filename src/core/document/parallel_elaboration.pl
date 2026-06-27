@@ -5,19 +5,26 @@
               maybe_help_with_elaboration/0,
               start_elaboration_workers/1,
               stop_elaboration_workers/0,
-              with_processing_token/1,
-              acquire_processing_token/0,
-              release_processing_token/0,
-              has_processing_token/0,
+              with_commit_window_guard/4,
+              acquire_commit_window_guard/3,
+              acquire_commit_window_guard/2,
+              release_commit_window_guard/0,
+              has_commit_window_guard/0,
+              branch_key_from_transaction/2,
+              first_commit_candidate/2,
               chunk_size/1
           ]).
 
-:- meta_predicate with_processing_token(0).
+:- meta_predicate with_commit_window_guard(+, +, -, 0).
 
 :- use_module(core(document)).
 :- use_module(core(document/json)).
+:- use_module(core(api/api_document), [pre_branch_commit_id/2]).
 :- use_module(core(transaction)).
+:- use_module(core(query)).
+:- use_module(core(transaction/ref_entity)).
 :- use_module(core(util)).
+:- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
 :- use_module(config(terminus_config), [worker_amount/1]).
@@ -31,8 +38,9 @@
 :- use_module(library(plunit)).
 :- use_module(library(yall)).
 
-:- dynamic request_queue/6.
-% request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks, WrapApiErrors).
+:- dynamic request_queue/8.
+% request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks, WrapApiErrors,
+%                 PreBranchCommitId, PreSchemaLayerId).
 
 :- dynamic chunk_size/1.
 chunk_size(100).
@@ -100,10 +108,31 @@ chunks_from_documents(Docs, ChunkSize, Index, [chunk(Index, Chunk)|Rest]) :-
     chunks_from_documents(Remainder, ChunkSize, NextIndex, Rest).
 chunks_from_documents(Remainder, _, Index, [chunk(Index, Remainder)]).
 
+snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId) :-
+    (   catch(transaction_data_version(DB, data_version(branch, PreBranchCommitId)),
+              error(data_version_not_found(_), _),
+              fail)
+    ->  true
+    ;   PreBranchCommitId = none),
+    (   DB = transaction_object{schema_objects: [SchemaObject]},
+        layer_to_id(SchemaObject.read, PreSchemaLayerId)
+    ->  true
+    ;   PreSchemaLayerId = none).
+
+branch_key_from_transaction(Transaction, BranchKey) :-
+    term_string(Transaction.descriptor, BranchKey).
+
 create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap, RequestId) :-
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId).
+
+create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap,
+                     PreBranchCommitId, PreSchemaLayerId, RequestId) :-
     gensym(request, RequestId),
     message_queue_create(RequestId, [alias(RequestId)]),
-    assertz(request_queue(RequestId, Descriptor, DB, Chunks, TotalChunks, Wrap)),
+    assertz(request_queue(RequestId, Descriptor, DB, Chunks, TotalChunks, Wrap,
+                          PreBranchCommitId, PreSchemaLayerId)),
     init_worker_wakeup_queue,
     wake_elaboration_workers.
 
@@ -142,8 +171,9 @@ collect_and_process_pairs(RequestId, TotalChunks, Pairs) :-
 
 collect_and_process_(_, 0, Pairs, Pairs) :- !.
 collect_and_process_(RequestId, Remaining, Pairs, FinalPairs) :-
-    (   take_chunk(RequestId, _OwnerId, DB, Wrap, chunk(Index, Docs))
-    ->  (   process_chunk(DB, Wrap, Docs, Elaborated)
+    (   take_chunk(RequestId, _OwnerId, DB, Wrap, chunk(Index, Docs),
+                   PreBranchCommitId, PreSchemaLayerId)
+    ->  (   process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated)
         ->  Remaining1 is Remaining - 1,
             collect_and_process_(RequestId, Remaining1, [Index-Elaborated|Pairs], FinalPairs)
         ;   throw(error(parallel_elaboration_failed(chunk(Index, Docs)), _))
@@ -166,18 +196,26 @@ send_chunk_done(OwnerId, Index, Elaborated) :-
 send_chunk_error(OwnerId, Index) :-
     catch(thread_send_message(OwnerId, chunk_error(Index)), _, true).
 
-take_chunk(RequestId, OwnerId, DB, Wrap, Chunk) :-
+take_chunk(RequestId, OwnerId, DB, Wrap, Chunk, PreBranchCommitId, PreSchemaLayerId) :-
     with_mutex(elaboration_queue_mutex,
-               (   request_queue(RequestId, _, DB0, [Chunk|Rest], Total, Wrap)
+               (   request_queue(RequestId, _, DB0, [Chunk|Rest], Total, Wrap,
+                                 PreBranchCommitId0, PreSchemaLayerId0)
                ->  OwnerId = RequestId,
                    DB = DB0,
-                   retractall(request_queue(RequestId, _, _, _, _, _)),
-                   assertz(request_queue(RequestId, _, DB0, Rest, Total, Wrap))
-               ;   request_queue(OwnerId, _, DB0, [Chunk|Rest], Total, Wrap),
+                   PreBranchCommitId = PreBranchCommitId0,
+                   PreSchemaLayerId = PreSchemaLayerId0,
+                   retractall(request_queue(RequestId, _, _, _, _, _, _, _)),
+                   assertz(request_queue(RequestId, _, DB0, Rest, Total, Wrap,
+                                          PreBranchCommitId0, PreSchemaLayerId0))
+               ;   request_queue(OwnerId, _, DB0, [Chunk|Rest], Total, Wrap,
+                                 PreBranchCommitId0, PreSchemaLayerId0),
                    OwnerId \= RequestId
                ->  DB = DB0,
-                   retractall(request_queue(OwnerId, _, _, _, _, _)),
-                   assertz(request_queue(OwnerId, _, DB0, Rest, Total, Wrap))
+                   PreBranchCommitId = PreBranchCommitId0,
+                   PreSchemaLayerId = PreSchemaLayerId0,
+                   retractall(request_queue(OwnerId, _, _, _, _, _, _, _)),
+                   assertz(request_queue(OwnerId, _, DB0, Rest, Total, Wrap,
+                                          PreBranchCommitId0, PreSchemaLayerId0))
                ;   fail
                )).
 
@@ -186,29 +224,34 @@ rust_elaboration_available :-
 
 % TODO: once rust_elaborate_simple_documents emits verification contracts,
 % switch this back to the Rust fast path for eligible documents.
-process_chunk(DB, Wrap, Docs, Elaborated) :-
-    rust_elaborate_chunk(DB, Wrap, Docs, Elaborated).
+process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated) :-
+    rust_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated).
 
-rust_elaborate_chunk(DB, Wrap, Docs, Elaborated) :-
-    prolog_elaborate_chunk(DB, Wrap, Docs, Elaborated).
+rust_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated) :-
+    prolog_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated).
 
-prolog_elaborate_chunk(DB, Wrap, Docs, Pairs) :-
-    maplist(elaborate_with_contract(DB, Wrap), Docs, Pairs).
+prolog_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs) :-
+    maplist(elaborate_with_contract(DB, Wrap, PreBranchCommitId, PreSchemaLayerId), Docs, Pairs).
 
-elaborate_with_contract(DB, Wrap, Doc, Elaborated-Contract) :-
+elaborate_with_contract(DB, Wrap, PreBranchCommitId, PreSchemaLayerId, Doc, Elaborated-Contract) :-
     catch(
-        json_elaborate_with_contract(DB, Doc, Elaborated, Contract),
+        json_elaborate_with_contract(DB, Doc, Elaborated, Contract0),
         Error,
-        (   Wrap = true,
-            current_predicate(api_document:api_document_error_wrapper/3)
-        ->  api_document:api_document_error_wrapper(Error, Doc, Wrapped),
-            throw(Wrapped)
-        ;   throw(Error)
+        (   (   Wrap = true,
+                current_predicate(api_document:api_document_error_wrapper/3)
+            ->  api_document:api_document_error_wrapper(Error, Doc, Wrapped),
+                throw(Wrapped)
+            ;   throw(Error)
+            )
         )
-    ).
+    ),
+    Contract = Contract0.put(_{
+        pre_branch_commit_id: PreBranchCommitId,
+        pre_schema_layer_id: PreSchemaLayerId
+    }).
 
 cleanup_request(RequestId) :-
-    retractall(request_queue(RequestId, _, _, _, _, _)),
+    retractall(request_queue(RequestId, _, _, _, _, _, _, _)),
     message_queue_destroy(RequestId).
 
 /**
@@ -219,23 +262,31 @@ cleanup_request(RequestId) :-
  * is available.
  */
 maybe_help_with_elaboration :-
-    request_queue(RequestId, _, _, _, _, _),
-    take_chunk(RequestId, OwnerId, DB, Wrap, chunk(Index, Docs)),
-    with_processing_token(
-        (   catch(process_chunk(DB, Wrap, Docs, Elaborated), Error,
-                   (   format(user_error, 'help chunk ~d error: ~q~n', [Index, Error]),
-                       fail
-                   ))
-        ->  send_chunk_done(OwnerId, Index, Elaborated)
-        ;   send_chunk_error(OwnerId, Index)
-        )).
+    request_queue(RequestId, _, _, _, _, _, _, _),
+    take_chunk(RequestId, OwnerId, DB, Wrap, chunk(Index, Docs),
+               PreBranchCommitId, PreSchemaLayerId),
+    branch_key_from_transaction(DB, BranchKey),
+    (   first_commit_candidate(DB, PreBranchCommitId)
+    ->  process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
+                                  OwnerId, Index)
+    ;   with_commit_window_guard(
+            DB, BranchKey, PreBranchCommitId,
+            process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
+                                      OwnerId, Index))
+    ).
+
+process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
+                          OwnerId, Index) :-
+    (   catch(process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated), _Error,
+              fail)
+    ->  send_chunk_done(OwnerId, Index, Elaborated)
+    ;   send_chunk_error(OwnerId, Index)
+    ).
 
 start_elaboration_workers(0) :- !.
 start_elaboration_workers(N) :-
     N > 0,
     stop_elaboration_workers,
-    TokenCount is N + 1,
-    token_pool_init(TokenCount),
     init_worker_wakeup_queue,
     start_elaboration_workers_(N).
 
@@ -266,67 +317,106 @@ stop_elaboration_workers :-
            catch(thread_send_message(worker_wakeup_queue, wake), _, true)),
     forall(retract(elaboration_worker_thread(Thread)),
            catch(thread_join(Thread, _), _, true)),
-    catch(message_queue_destroy(elaboration_tokens), _, true),
     catch(message_queue_destroy(worker_wakeup_queue), _, true),
     retractall(elaboration_worker_thread(_)).
 
 
-token_pool_init(N) :-
-    (   catch(message_queue_property(elaboration_tokens, _), _, fail)
-    ->  true
-    ;   message_queue_create(elaboration_tokens, []),
-        fill_tokens(N)
+:- thread_local commit_window_guard_depth/2.
+
+with_commit_window_guard(Transaction, BranchKey, CommitId, Goal) :-
+    (   acquire_commit_window_guard(Transaction, BranchKey, CommitId)
+    ->  (   catch(Goal, Exception,
+                    (   release_all_commit_window_guards,
+                        throw(Exception)
+                    ))
+        ->  release_all_commit_window_guards
+        ;   release_all_commit_window_guards,
+            fail
+        )
+    ;   throw(fail_transaction)
     ).
 
-fill_tokens(0) :- !.
-fill_tokens(N) :-
-    N > 0,
-    thread_send_message(elaboration_tokens, token),
-    N1 is N - 1,
-    fill_tokens(N1).
-
-:- thread_local processing_token_depth/1.
-
-with_processing_token(Goal) :-
-    setup_call_cleanup(
-        acquire_processing_token,
-        Goal,
-        release_all_processing_tokens
-    ).
-
-acquire_processing_token :-
-    (   retract(processing_token_depth(D))
+acquire_commit_window_guard(Transaction, BranchKey, CommitId) :-
+    (   retract(commit_window_guard_depth(D, Info))
     ->  D1 is D + 1,
-        assertz(processing_token_depth(D1))
-    ;   thread_get_message(elaboration_tokens, _),
-        assertz(processing_token_depth(1))
+        assertz(commit_window_guard_depth(D1, Info))
+    ;   open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, 200, GuardId),
+        reset_transaction_object_graph_descriptors(Transaction),
+        assertz(commit_window_guard_depth(1, (BranchKey, CommitId, GuardId)))
     ).
 
-release_processing_token :-
-    (   retract(processing_token_depth(D))
+acquire_commit_window_guard(BranchKey, CommitId) :-
+    (   retract(commit_window_guard_depth(D, Info))
+    ->  D1 is D + 1,
+        assertz(commit_window_guard_depth(D1, Info))
+    ;   open_commit_window_with_retry(BranchKey, CommitId, 200, GuardId),
+        assertz(commit_window_guard_depth(1, (BranchKey, CommitId, GuardId)))
+    ).
+
+open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, Retries, GuardId) :-
+    pre_branch_commit_id(Transaction, CommitId),
+    (   first_commit_candidate(Transaction, CommitId)
+    ->  open_first_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId)
+    ;   open_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId)
+    ).
+
+first_commit_candidate(_Transaction, none) :- !.
+first_commit_candidate(Transaction, _CommitId) :-
+    (   get_dict(parent, Transaction, Repo_Transaction)
+    ->  true
+    ;   Repo_Transaction = Transaction
+    ),
+    create_context(Repo_Transaction, Context),
+    get_dict(descriptor, Transaction, Descriptor),
+    branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+    branch_head_commit(Context, Branch_Name, Head_Uri),
+    (   atom(Head_Uri)
+    ->  Head_Uri_Atom = Head_Uri
+    ;   atom_string(Head_Uri_Atom, Head_Uri)
+    ),
+    \+ ref_entity:commit_uri_to_parent_uri(Context, Head_Uri_Atom, _).
+
+open_first_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
+    text_to_string(CommitId, CommitIdString),
+    (   '$change_window':open_first_commit_window(BranchKey, CommitIdString, GuardId, _CurrentCommitId)
+    ->  true
+    ;   Retries > 0
+    ->  sleep(0.05),
+        Retries1 is Retries - 1,
+        open_first_commit_window_with_retry(BranchKey, CommitId, Retries1, GuardId)
+    ;   fail
+    ).
+
+open_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
+    (   '$change_window':open_commit_window(BranchKey, CommitId, GuardId, _CurrentCommitId)
+    ->  true
+    ;   Retries > 0
+    ->  sleep(0.05),
+        Retries1 is Retries - 1,
+        open_commit_window_with_retry(BranchKey, CommitId, Retries1, GuardId)
+    ;   fail
+    ).
+
+release_commit_window_guard :-
+    (   retract(commit_window_guard_depth(D, Info))
     ->  D1 is D - 1,
         (   D1 > 0
-        ->  assertz(processing_token_depth(D1))
-        ;   thread_send_message(elaboration_tokens, _)
+        ->  assertz(commit_window_guard_depth(D1, Info))
+        ;   Info = (_, _, GuardId),
+            '$change_window':close_commit_window(GuardId)
         )
     ;   true
     ).
 
-release_all_processing_tokens :-
-    (   retract(processing_token_depth(D))
-    ->  release_all_processing_tokens_(D)
+release_all_commit_window_guards :-
+    (   retract(commit_window_guard_depth(_, Info))
+    ->  Info = (_, _, GuardId),
+        '$change_window':close_commit_window(GuardId)
     ;   true
     ).
 
-release_all_processing_tokens_(0) :- !.
-release_all_processing_tokens_(D) :-
-    D > 0,
-    thread_send_message(elaboration_tokens, _),
-    D1 is D - 1,
-    release_all_processing_tokens_(D1).
-
-has_processing_token :-
-    processing_token_depth(D),
+has_commit_window_guard :-
+    commit_window_guard_depth(D, _),
     D > 0.
 
 
@@ -707,5 +797,25 @@ test(parallel_replace_contract_rejects_missing_document, [
             Error = error(document_not_found('terminusdb:///data/Person/missing', _), _)
         ), _),
     !.
+
+test(helper_elaboration_produces_ground_contract, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    helper_docs(1, [Doc]),
+    open_descriptor(Desc, DB),
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    create_request_queue(none, DB, [chunk(0, [Doc])], 1, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId),
+    maybe_help_with_elaboration,
+    thread_get_message(RequestId, chunk_done(0, [_Doc-Contract])),
+    cleanup_request(RequestId),
+    get_dict(pre_schema_layer_id, Contract, GotSchemaLayerId),
+    assertion(ground(GotSchemaLayerId)),
+    get_dict(pre_branch_commit_id, Contract, GotBranchCommitId),
+    assertion(ground(GotBranchCommitId)).
 
 :- end_tests(parallel_elaboration).

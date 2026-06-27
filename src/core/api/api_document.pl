@@ -28,6 +28,7 @@
               convert_input_to_json_stream/4,
               document_stream_headers/3,
               document_stream_start/3,
+              pre_branch_commit_id/2,
               document_stream_write/4,
               document_stream_end/2
           ]).
@@ -47,9 +48,13 @@
                   elaborate_insert_request_db/4,
                   elaborate_insert_request_db_with_contracts/4,
                   chunk_size/1,
-                  acquire_processing_token/0,
-                  release_processing_token/0,
-                  has_processing_token/0
+                  with_commit_window_guard/4,
+                  acquire_commit_window_guard/3,
+                  acquire_commit_window_guard/2,
+                  release_commit_window_guard/0,
+                  has_commit_window_guard/0,
+                  branch_key_from_transaction/2,
+                  first_commit_candidate/2
               ]).
 :- use_module(core(account)).
 :- use_module(config(terminus_config)).
@@ -140,7 +145,6 @@ before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context,
     do_or_die(
         query_default_collection(Context, Transaction),
         error(query_default_collection_failed_unexpectedly(Context), _)),
-
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version).
 
@@ -470,6 +474,13 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
+
+pre_branch_commit_id(Transaction, CommitId) :-
+    (   catch(transaction_data_version(Transaction, data_version(branch, CommitId)),
+              error(data_version_not_found(_), _),
+              fail)
+    ->  true
+    ;   CommitId = none).
 
 parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream) :-
     Graph_Type = instance,
