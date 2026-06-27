@@ -21,6 +21,7 @@
 :- use_module(core(document/json)).
 :- use_module(core(api/api_document), [pre_branch_commit_id/2]).
 :- use_module(core(transaction)).
+:- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
 :- use_module(core(query)).
 :- use_module(core(transaction/ref_entity)).
 :- use_module(core(util)).
@@ -120,7 +121,7 @@ snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId) :-
     ;   PreSchemaLayerId = none).
 
 branch_key_from_transaction(Transaction, BranchKey) :-
-    term_string(Transaction.descriptor, BranchKey).
+    branch_key_from_descriptor(Transaction.descriptor, BranchKey).
 
 create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap, RequestId) :-
     snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
@@ -323,6 +324,18 @@ stop_elaboration_workers :-
 
 :- thread_local commit_window_guard_depth/2.
 
+% True when the commit-window guard is actually useful. The server starts
+% its elaboration worker pool, so it has concurrent transactions in the same
+% process that need to be serialized via the process-local change window.
+% The CLI runs each command in a fresh process, so its change window is
+% always empty and the guard would deadlock.
+commit_window_guard_applicable :-
+    elaboration_worker_thread(_).
+
+with_commit_window_guard(_Transaction, _BranchKey, _CommitId, Goal) :-
+    \+ commit_window_guard_applicable,
+    !,
+    Goal.
 with_commit_window_guard(Transaction, BranchKey, CommitId, Goal) :-
     (   acquire_commit_window_guard(Transaction, BranchKey, CommitId)
     ->  (   catch(Goal, Exception,
@@ -360,24 +373,13 @@ open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, Retries, Gu
     ;   open_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId)
     ).
 
-first_commit_candidate(_Transaction, none) :- !.
-first_commit_candidate(Transaction, _CommitId) :-
-    (   get_dict(parent, Transaction, Repo_Transaction)
-    ->  true
-    ;   Repo_Transaction = Transaction
-    ),
-    create_context(Repo_Transaction, Context),
-    get_dict(descriptor, Transaction, Descriptor),
-    branch_descriptor{branch_name: Branch_Name} :< Descriptor,
-    branch_head_commit(Context, Branch_Name, Head_Uri),
-    (   atom(Head_Uri)
-    ->  Head_Uri_Atom = Head_Uri
-    ;   atom_string(Head_Uri_Atom, Head_Uri)
-    ),
-    \+ ref_entity:commit_uri_to_parent_uri(Context, Head_Uri_Atom, _).
+first_commit_candidate(_Transaction, none).
 
 open_first_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
-    text_to_string(CommitId, CommitIdString),
+    (   string(CommitId)
+    ->  CommitIdString = CommitId
+    ;   atom_string(CommitId, CommitIdString)
+    ),
     (   '$change_window':open_first_commit_window(BranchKey, CommitIdString, GuardId, _CurrentCommitId)
     ->  true
     ;   Retries > 0
@@ -388,7 +390,11 @@ open_first_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
     ).
 
 open_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
-    (   '$change_window':open_commit_window(BranchKey, CommitId, GuardId, _CurrentCommitId)
+    (   atom(CommitId)
+    ->  CommitIdAtom = CommitId
+    ;   atom_string(CommitIdAtom, CommitId)
+    ),
+    (   '$change_window':open_commit_window(BranchKey, CommitIdAtom, GuardId, _CurrentCommitId)
     ->  true
     ;   Retries > 0
     ->  sleep(0.05),
@@ -411,7 +417,8 @@ release_commit_window_guard :-
 release_all_commit_window_guards :-
     (   retract(commit_window_guard_depth(_, Info))
     ->  Info = (_, _, GuardId),
-        '$change_window':close_commit_window(GuardId)
+        '$change_window':close_commit_window(GuardId),
+        release_all_commit_window_guards
     ;   true
     ).
 
