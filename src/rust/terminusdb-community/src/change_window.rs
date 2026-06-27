@@ -353,19 +353,42 @@ impl ChangeWindow {
             None => return,
         };
 
-        // Remove contiguous oldest commits that are no longer active, but
-        // always keep the newest real commit in the window so that the next
-        // transaction can open from it.
+        // Determine which commits must be retained. A commit is kept if it is
+        // active, or if it is the newest commit on the branch, or if it is an
+        // ancestor of any kept commit. This ensures that intersects can walk
+        // the parent chain from the current head back to any ancestor that a
+        // transaction may have started from.
+        let mut keep = HashSet::new();
+        for commit in branch.commits.iter() {
+            if commit.active_count > 0 {
+                keep.insert(commit.commit_id.clone());
+            }
+        }
+        if let Some(back) = branch.commits.back() {
+            keep.insert(back.commit_id.clone());
+        }
+        let mut to_walk: Vec<String> = keep.iter().cloned().collect();
+        while let Some(commit_id) = to_walk.pop() {
+            if let Some(commit) = branch.get_commit(&commit_id) {
+                if let Some(parent) = &commit.parent_commit_id {
+                    if keep.insert(parent.clone()) {
+                        to_walk.push(parent.clone());
+                    }
+                }
+            }
+        }
+
+        // Remove contiguous oldest commits that are not in the keep set.
         while branch.len() > 1 {
             let front = branch.commits.front().unwrap();
-            if front.active_count > 0 {
+            if keep.contains(&front.commit_id) {
                 break;
             }
             branch.pop_front();
         }
 
-        // If the only remaining commit is the synthetic "none" sentinel with no
-        // active work, clean it up as well.
+        // If the only remaining commit is the synthetic "none" sentinel with
+        // no active work, clean it up as well.
         if branch.len() == 1 {
             let front = branch.commits.front().unwrap();
             if front.active_count == 0 && front.commit_id == NONE_COMMIT_ID {
@@ -383,12 +406,13 @@ impl ChangeWindow {
         );
 
         for (branch_key, branch) in &self.branches {
+            let active_count: usize = branch.commits.iter().map(|c| c.active_count).sum();
             assert!(
-                branch.is_empty(),
-                "change window shutdown: branch {} still has {} commit(s); \
+                active_count == 0,
+                "change window shutdown: branch {} still has {} active guard(s); \
                  this is a bug in the change window lifecycle, please report it",
                 branch_key,
-                branch.len()
+                active_count
             );
         }
     }
@@ -571,4 +595,43 @@ pub fn register() {
     register_close_commit_window();
     register_intersects();
     register_change_window_assert_empty();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intersects_walks_parent_chain() {
+        let mut window = ChangeWindow::new();
+        let branch = window.branch_window_mut("branch");
+
+        let mut added = HashSet::new();
+        added.insert("http://example.com/data/world/Person/Duke".to_string());
+        branch.push_back(CommitChanges {
+            commit_id: "a".to_string(),
+            parent_commit_id: None,
+            schema_layer_id: None,
+            instance_layer_id: None,
+            added_iris: added,
+            removed_iris: HashSet::new(),
+            active_count: 0,
+        });
+
+        branch.push_back(CommitChanges {
+            commit_id: "b".to_string(),
+            parent_commit_id: Some("a".to_string()),
+            schema_layer_id: None,
+            instance_layer_id: None,
+            added_iris: HashSet::new(),
+            removed_iris: HashSet::new(),
+            active_count: 0,
+        });
+
+        let mut must_not_exist = HashSet::new();
+        must_not_exist.insert("http://example.com/data/world/Person/Duke".to_string());
+
+        let result = window.intersects("branch", "none", "b", &HashSet::new(), &must_not_exist);
+        assert_eq!(result, Some("a".to_string()));
+    }
 }

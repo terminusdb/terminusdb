@@ -908,3 +908,56 @@ test(query_empty_database,
 
 :- end_tests(query_without_commit).
 
+:- begin_tests(change_window_parent_capture).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+
+test(parent_commit_is_captured_before_new_head,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema('admin','test'))),
+      cleanup((teardown_temp_store(State),
+               '$change_window':change_window_assert_empty))]) :-
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Repo_Descriptor = Descriptor.repository_descriptor,
+
+    % First commit: insert a Person.
+    create_context(Descriptor, commit_info{author:"test",message:"commit a"}, Context1),
+    with_transaction(Context1,
+                     insert_document(Context1,
+                                     _{'@type':"Person",
+                                       '@id':"Person/Duke",
+                                       'name':"Duke",
+                                       'address':"Here"},
+                                     _),
+                     _),
+    branch_head_commit(Repo_Descriptor, "main", CommitA_Uri),
+    commit_id_uri(Repo_Descriptor, CommitA, CommitA_Uri),
+
+    % Second commit: insert another Person.
+    create_context(Descriptor, commit_info{author:"test",message:"commit b"}, Context2),
+    with_transaction(Context2,
+                     insert_document(Context2,
+                                     _{'@type':"Person",
+                                       '@id':"Person/Earl",
+                                       'name':"Earl",
+                                       'address':"There"},
+                                     _),
+                     _),
+    branch_head_commit(Repo_Descriptor, "main", CommitB_Uri),
+    commit_id_uri(Repo_Descriptor, CommitB, CommitB_Uri),
+
+    % If validate.pl captured the new head as the parent, the change window
+    % would register B as its own parent and intersects could not walk back to
+    % A. With the fix, asking for an IRI that A added returns A.
+    term_string(Descriptor, BranchKey),
+    '$change_window':intersects(BranchKey, "none", CommitB, [],
+                                ["http://example.com/data/world/Person/Duke"],
+                                IntersectingCommit),
+    IntersectingCommit = CommitA.
+
+:- end_tests(change_window_parent_capture).
+

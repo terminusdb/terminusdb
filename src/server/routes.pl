@@ -20,7 +20,7 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 :- use_module(core(document)).
-:- use_module(core(document/parallel_elaboration), [maybe_help_with_elaboration/0, with_processing_token/1]).
+:- use_module(core(document/parallel_elaboration), [maybe_help_with_elaboration/0]).
 :- use_module(core(api/api_init)).
 
 :- use_module(config(terminus_config)).
@@ -3403,37 +3403,34 @@ cors_handler(_Old_Method, Goal, Options, Request) :-
     downcase_atom(Method,Mapped),
     cors_handler(Mapped, Goal, Options, New_Request).
 cors_handler(Method, Goal, Options, R) :-
-    with_processing_token(
-        (   cors_catch(
-                R,
-                (
-                    (   memberchk(Method, [post, put, delete]),
-                        \+ memberchk(add_payload(false), Options)
-                    ->  add_payload_to_request(R,Request)
-                    ;   Request = R),
+    cors_catch(
+        R,
+        (
+                (   memberchk(Method, [post, put, delete]),
+                    \+ memberchk(add_payload(false), Options)
+                ->  add_payload_to_request(R,Request)
+                ;   Request = R),
 
-                    open_descriptor(system_descriptor{}, System_Database),
-                    catch((   (   option(skip_authentication(true), Options)
-                              ->  true
-                              ;   authenticate(System_Database, Request, Auth)),
-                              call_http_handler(Method, Goal, Request, System_Database, Auth)),
+                open_descriptor(system_descriptor{}, System_Database),
+                catch((   (   option(skip_authentication(true), Options)
+                          ->  true
+                          ;   authenticate(System_Database, Request, Auth)),
+                          call_http_handler(Method, Goal, Request, System_Database, Auth)),
 
-                          error(authentication_incorrect(Reason),_),
+                      error(authentication_incorrect(Reason),_),
 
-                          (   write_cors_headers(Request),
-                              % SECURITY: Sanitize reason to avoid leaking credentials in logs
-                              sanitize_auth_reason(Reason, SafeReason),
-                              json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [SafeReason]),
-                              reply_json(_{'@type' : 'api:ErrorResponse',
-                                           'api:status' : 'api:failure',
-                                           'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
-                                           'api:message' : 'Incorrect authentication information'
-                                          },
-                                         [width(0), status(401)]))))),
-            abolish_private_tables,
-            ignore(maybe_help_with_elaboration),
-            !
-        )),
+                      (   write_cors_headers(Request),
+                          % SECURITY: Sanitize reason to avoid leaking credentials in logs
+                          sanitize_auth_reason(Reason, SafeReason),
+                          json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [SafeReason]),
+                          reply_json(_{'@type' : 'api:ErrorResponse',
+                                       'api:status' : 'api:failure',
+                                       'api:error' : _{'@type' : 'api:IncorrectAuthenticationError'},
+                                       'api:message' : 'Incorrect authentication information'
+                                      },
+                                     [width(0), status(401)]))))),
+    abolish_private_tables,
+    ignore(maybe_help_with_elaboration),
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
