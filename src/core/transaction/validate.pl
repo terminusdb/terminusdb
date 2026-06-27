@@ -96,7 +96,8 @@ graph_validation_obj_to_read_write_obj(Graph_Validation_Obj, Read_Write_Obj, Map
                                                  read: Layer,
                                                  triple_update: Triple_Update,
                                                  backlinks: BL,
-                                                 changed: _Changed },
+                                                 changed: _Changed,
+                                                 layer_changes: _Layer_Changes },
     Read_Write_Obj = read_write_obj{ descriptor: Descriptor,
                                      read: Layer,
                                      triple_update: Triple_Update,
@@ -390,8 +391,12 @@ register_commit_in_change_window(Descriptor, ParentCommitId, CommitId, Instance_
     ;   layer_to_id(Instance_Object.read, InstanceLayerIdString),
         atom_string(InstanceLayerId, InstanceLayerIdString)
     ),
-    term_string(Descriptor, BranchKey),
-    '$change_window':register_commit(BranchKey, CommitId, ParentCommitIdArg, SchemaLayerId, InstanceLayerId,
+    branch_key_from_descriptor(Descriptor, BranchKey),
+    (   string(CommitId)
+    ->  CommitIdString = CommitId
+    ;   atom_string(CommitId, CommitIdString)
+    ),
+    '$change_window':register_commit(BranchKey, CommitIdString, ParentCommitIdArg, SchemaLayerId, InstanceLayerId,
                                      InstanceAdded, InstanceRemoved).
 register_commit_in_change_window(Descriptor, _ParentCommitId, _CommitId, _Instance_Object, _Schema_Object) :-
     throw(error(unknown_validation_descriptor_for_branch_key(Descriptor), _)).
