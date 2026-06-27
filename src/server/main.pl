@@ -109,7 +109,8 @@ terminus_server(Argv,Wait) :-
             thread_join(ThreadID, _Status)
         ;   true
         ),
-        stop_elaboration_workers
+        stop_elaboration_workers,
+        '$change_window':change_window_assert_empty
     ).
 
 
