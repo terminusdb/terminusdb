@@ -1,4 +1,4 @@
-:- module(api_graphql, [handle_graphql_request/8]).
+:- module(api_graphql, [handle_graphql_request/10]).
 
 :- use_module(core(util)).
 :- use_module(core(transaction)).
@@ -37,7 +37,7 @@ post_process_graphql_decimals(ResponseIn, ResponseOut) :-
     % Continue with any other decimal-like fields
     re_replace('"([a-zA-Z_][a-zA-Z0-9_]*)":"([0-9]+\\.[0-9]+)"'/g, '"\\1":\\2', Temp, ResponseOut).
 
-handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length) :-
+handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data) :-
     atom_string(Path_Atom, Path),
     (   Path == ""
     %->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
@@ -96,9 +96,11 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
                                  ;   true)
                              ),
 
-                             _),
+                             Meta_Data),
             response(ResponseRaw),
             json_log_info_formatted("intercepted a failing graphql, not committing", [])),
+        Transaction_Meta_Data = Meta_Data,
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
         % Post-process: convert decimal strings to JSON numbers
         post_process_graphql_decimals(ResponseRaw, Response)
     ).

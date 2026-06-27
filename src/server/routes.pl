@@ -562,10 +562,12 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           overwrite: Overwrite,
                           input_format: InputFormat
                       },
-            api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
+            api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
 
+            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
+            write_transaction_retry_count_header(Transaction_Retry_Count),
             reply_json(Ids, [width(0)]),
             nl
         )).
@@ -598,18 +600,20 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
                       },
 
             (   Nuke = true
-            ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
             ;   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
             ;   ground(Type)
-            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
             ;   http_read_json_semidet(stream(Stream), Request)
-            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, _Ids, Options)
+            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, _Ids, Options)
             ;   throw(error(missing_targets, _))
             ),
 
+            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
+            write_transaction_retry_count_header(Transaction_Retry_Count),
             format("Status: 204~n~n")
         )).
 
@@ -644,10 +648,12 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 merge_repeats: Merge_Repeats,
                 input_format: InputFormat
             },
-            api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
+            api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
 
+            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
+            write_transaction_retry_count_header(Transaction_Retry_Count),
             reply_json(Ids, [width(0)]),
             nl
         )).
@@ -822,9 +828,11 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
                 format('Content-Type: application/json~n'),
                 format("Transfer-Encoding: chunked~n~n"),
                 woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
-            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Response, Options),
+            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Transaction_Meta_Data, Response, Options),
+                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                 write_cors_headers(Request),
                 write_data_version_header(New_Data_Version),
+                write_transaction_retry_count_header(Transaction_Retry_Count),
                 reply_json_dict(Response, [width(0)])
             )
         )).
@@ -3295,8 +3303,11 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     memberchk(content_length(Content_Length), Request),
 
     catch((      authenticate(System_DB, Request, Auth),
-                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length),
+                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data),
+                 transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                  write_cors_headers(Request),
+                 write_data_version_header(New_Data_Version),
+                 write_transaction_retry_count_header(Transaction_Retry_Count),
                  write('Status: 200'),nl,
                  write('Content-Type: application/json'),nl,
                  nl,
