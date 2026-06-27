@@ -958,7 +958,7 @@ test(parent_commit_is_captured_before_new_head,
     % If validate.pl captured the new head as the parent, the change window
     % would register B as its own parent and intersects could not walk back to
     % A. With the fix, asking for an IRI that A added returns A.
-    term_string(Descriptor, BranchKey),
+    branch_key_from_descriptor(Descriptor, BranchKey),
     '$change_window':intersects(BranchKey, "none", CommitB, [],
                                 ["http://example.com/data/world/Person/Duke"],
                                 IntersectingCommit),

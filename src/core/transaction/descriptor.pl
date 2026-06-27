@@ -885,13 +885,15 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                     commit: Commit}.
 
 %! branch_key_from_descriptor(+Descriptor, -BranchKey) is det.
-% Builds GRAPH_SPEC as a string for stable use as a dict key or registry key.
+% Builds a stable string key for a descriptor. Branch descriptors use the
+% descriptor path so the key is human-readable and stable; other descriptors
+% fall back to term_string.
 branch_key_from_descriptor(Descriptor, BranchKey) :-
     (   branch_descriptor{} :< Descriptor
-    ->  resolve_absolute_string_descriptor(BranchKey0, Descriptor),
-        atom_string(BranchKey0, BranchKey)
-    ;   throw(error(branch_key_requires_branch_descriptor(Descriptor), _))
-    ).
+    ->  resolve_absolute_string_descriptor(BranchKey0, Descriptor)
+    ;   term_string(Descriptor, BranchKey0)
+    ),
+    atom_string(BranchKey0, BranchKey).
 
 graph_descriptor_find_read_write_object(_, [], _) :-
         !,
