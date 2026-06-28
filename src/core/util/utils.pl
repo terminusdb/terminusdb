@@ -976,7 +976,7 @@ json_read_term(Stream, Term) :-
     (   Term = eof
     ->  !,
         fail
-    ;   true
+    ;   !
     ).
 
 % Read a JSON Term from Stream. Repeat with backtracking until eof. Fail if no

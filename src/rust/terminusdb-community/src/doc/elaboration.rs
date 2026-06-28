@@ -112,7 +112,7 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(
         }
         Value::String(s) => {
             let term = context.new_term_ref();
-            term.unify(Atom::new(s.as_str()))?;
+            term.unify(s.as_str())?;
             Ok(term)
         }
         Value::Array(arr) => {
