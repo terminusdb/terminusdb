@@ -103,6 +103,7 @@
               status_http_code/2,
               status_cli_code/2,
               generic_exception_jsonld/2,
+              generic_exception_jsonld/3,
               json_http_code/2,
               json_cli_code/2,
 

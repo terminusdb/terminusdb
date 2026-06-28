@@ -459,7 +459,8 @@ predicates! {
         removed_iris_term,
     ) {
         let branch_key: String = branch_key_term.get_ex()?;
-        let commit_id: String = commit_id_term.get_ex()?;
+        let commit_id: Atom = commit_id_term.get_ex()?;
+        let commit_id = commit_id.to_string();
         let parent_commit_id: Option<String> = option_string_from_atom(parent_commit_id_term)?;
         let schema_layer_id: Option<String> = option_string_from_atom(schema_layer_id_term)?;
         let instance_layer_id: Option<String> = option_string_from_atom(instance_layer_id_term)?;
@@ -558,13 +559,15 @@ predicates! {
         intersecting_commit_id_term,
     ) {
         let branch_key: String = branch_key_term.get_ex()?;
-        let pre_commit_id: String = pre_commit_id_term.get_ex()?;
-        let current_commit_id: String = current_commit_id_term.get_ex()?;
-        let must_exist: Vec<String> = must_exist_term.get_ex()?;
-        let must_not_exist: Vec<String> = must_not_exist_term.get_ex()?;
+        let pre_commit_id: Atom = pre_commit_id_term.get_ex()?;
+        let current_commit_id: Atom = current_commit_id_term.get_ex()?;
+        let pre_commit_id = pre_commit_id.to_string();
+        let current_commit_id = current_commit_id.to_string();
+        let must_exist: Vec<Atom> = must_exist_term.get_ex()?;
+        let must_not_exist: Vec<Atom> = must_not_exist_term.get_ex()?;
 
-        let must_exist: HashSet<String> = must_exist.into_iter().collect();
-        let must_not_exist: HashSet<String> = must_not_exist.into_iter().collect();
+        let must_exist: HashSet<String> = must_exist.into_iter().map(|a| a.to_string()).collect();
+        let must_not_exist: HashSet<String> = must_not_exist.into_iter().map(|a| a.to_string()).collect();
 
         let window = ChangeWindow::lock();
         match window.intersects(
@@ -574,7 +577,7 @@ predicates! {
             &must_exist,
             &must_not_exist,
         ) {
-            Some(commit_id) => intersecting_commit_id_term.unify(commit_id),
+            Some(commit_id) => intersecting_commit_id_term.unify(Atom::new(&commit_id)),
             None => Err(PrologError::Failure),
         }
     }

@@ -3,6 +3,7 @@
               idgen_random/3,
               idgen_hash/3,
               idgen_lexical/3,
+              extract_return_ids/2,
               context_triple/2,
               json_elaborate/3,
               json_elaborate/8,
@@ -3448,7 +3449,11 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
          insert_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
-    get_dict('@id', Elaborated, ID),
+    get_dict('@id', Elaborated, ID0),
+    (   atom(ID0)
+    ->  ID = ID0
+    ;   atom_string(ID, ID0)
+    ),
     database_instance(Transaction, [Instance]),
     database_prefixes(Transaction, Prefixes),
     % insert
@@ -3465,7 +3470,11 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
  * API queue consumer.
  */
 insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
-    get_dict('@id', Elaborated, ID),
+    get_dict('@id', Elaborated, ID0),
+    (   atom(ID0)
+    ->  ID = ID0
+    ;   atom_string(ID, ID0)
+    ),
     is_dict(Contract, verification_contract),
     get_dict(id_pairs, Contract, Id_Pairs),
     get_dict(dependencies, Contract, Dependencies),
@@ -3527,7 +3536,11 @@ insert_document_expanded(Transaction, Elaborated, Contract, ID) :-
  * match, backlink rejection, deletion of old documents, and dependency deferral.
  */
 replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
-    get_dict('@id', Elaborated, ID),
+    get_dict('@id', Elaborated, ID0),
+    (   atom(ID0)
+    ->  ID = ID0
+    ;   atom_string(ID, ID0)
+    ),
     is_dict(Contract, verification_contract),
     get_dict(submitted_id, Contract, SubmittedId),
     get_dict(generated_id, Contract, GeneratedId),
