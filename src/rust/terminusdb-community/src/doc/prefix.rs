@@ -555,6 +555,20 @@ pub fn expand_prefixed_name<L: Layer + Clone>(
     }
 }
 
+/// Expand a name in the data namespace, using the `@base` prefix.
+/// This is the expansion used for document IDs, as opposed to schema IRIs.
+pub fn expand_prefixed_name_data<L: Layer + Clone>(
+    doc_context: &DocumentContext<L>,
+    name: &str,
+) -> Result<String, String> {
+    let prefixes = doc_context.prefix_map();
+    match hashmap_prefix_expand_with_base(prefixes, None, name, true) {
+        Ok(Some((expanded, _))) => Ok(expanded),
+        Ok(None) => Err(name.to_string()),
+        Err(unknown_name) => Err(unknown_name),
+    }
+}
+
 pub fn register() {
     register_rust_expand_prefix();
     register_rust_expand_prefix_schema();

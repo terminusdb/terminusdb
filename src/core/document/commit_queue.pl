@@ -18,8 +18,6 @@
               maybe_help_with_commit/1,
               multi_purpose_worker_thread/1,
               multi_purpose_workers_should_stop/0,
-              init_worker_wakeup_queue/0,
-              worker_wakeup_queue/1,
               branch_commit_queue/2,
               branch_commit_lock/2,
               active_branch/2,
@@ -30,6 +28,7 @@
 :- use_module(core(util)).
 :- use_module(core(triple), [triple_store/1, with_triple_store/2]).
 :- use_module(library(apply)).
+:- use_module(library(aggregate), [aggregate_all/3]).
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 
@@ -47,40 +46,15 @@
 
 :- mutex_create(commit_scheduler_mutex).
 :- mutex_create(branch_registry_mutex).
-:- mutex_create(worker_wakeup_queue_mutex).
-
-:- dynamic worker_wakeup_queue_handle/1.
-
-init_worker_wakeup_queue :-
-    (   worker_wakeup_queue_handle(_)
-    ->  true
-    ;   with_mutex(worker_wakeup_queue_mutex,
-                   (   worker_wakeup_queue_handle(_)
-                   ->  true
-                   ;   message_queue_create(Queue, [alias(worker_wakeup_queue)]),
-                       assertz(worker_wakeup_queue_handle(Queue))
-                   ))
-    ).
-
-worker_wakeup_queue(Queue) :-
-    worker_wakeup_queue_handle(Queue),
-    !.
-worker_wakeup_queue(Queue) :-
-    init_worker_wakeup_queue,
-    worker_wakeup_queue_handle(Queue).
 
 wake_workers :-
-    QueueAlias = worker_wakeup_queue,
-    !,
     (   multi_purpose_worker_thread(_)
     ->  forall(
             multi_purpose_worker_thread(Thread),
-            catch(thread_send_message(QueueAlias, wake(Thread)), _, true)
+            catch(thread_send_message(Thread, wake(Thread)), _, true)
         )
     ;   true
     ).
-
-wake_workers.
 
 ensure_branch_queue(BranchKey, Queue) :-
     (   branch_commit_queue(BranchKey, Queue)
@@ -243,7 +217,6 @@ start_workers(N) :-
     N > 0,
     stop_workers,
     retractall(multi_purpose_workers_should_stop),
-    init_worker_wakeup_queue,
     start_workers_(N).
 
 start_workers_(0) :- !.
@@ -261,11 +234,10 @@ start_workers_(N) :-
 stop_workers :-
     retractall(multi_purpose_workers_should_stop),
     assertz(multi_purpose_workers_should_stop),
-    worker_wakeup_queue(Queue),
     (   multi_purpose_worker_thread(_)
     ->  forall(
-            multi_purpose_worker_thread(_Thread),
-            catch(thread_send_message(Queue, wake), _, true)
+            multi_purpose_worker_thread(Thread),
+            catch(thread_send_message(Thread, stop), _, true)
         )
     ;   true
     ),
@@ -273,8 +245,6 @@ stop_workers :-
         retract(multi_purpose_worker_thread(Thread)),
         catch(thread_join(Thread, _), _, true)
     ),
-    catch(message_queue_destroy(Queue), _, true),
-    retractall(worker_wakeup_queue_handle(_)),
     retractall(multi_purpose_worker_thread(_)).
 
 % Unit tests for the scheduler and registry.
@@ -360,4 +330,184 @@ test(cleanup_active_branches_for_worker) :-
             retractall(commit_queue:active_branch(_, _))
         )).
 
+% Test that enqueue_commit places the package on the branch queue and
+% registers it as pending, without requiring workers or a full commit.
+test(enqueue_commit_puts_package_in_queue) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_enqueue'),
+    ensure_branch_queue('test_enqueue', Queue),
+    Package = package{branch_key: 'test_enqueue'},
+    enqueue_commit('test_enqueue', Package),
+    assertion(message_queue_property(Queue, size(1))),
+    thread_get_message(Queue, RetrievedPackage, [timeout(0)]),
+    assertion(RetrievedPackage = Package),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _))
+        )),
+    destroy_branch_queue('test_enqueue').
+
+% Test that process_one_commit invokes the commit handler and delivers a
+% success result back to the reply queue.
+test(process_one_commit_delivers_success, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_process'),
+    ensure_branch_queue('test_process', Queue),
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_process',
+        all_branches: ['test_process'],
+        reply_queue: ReplyQueue,
+        request_id: req_1,
+        test_marker: true
+    },
+    thread_send_message(Queue, Package),
+    process_one_commit('test_process'),
+    thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_1), [timeout(1)]),
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_process').
+
+% Test that process_one_commit catches errors from the commit handler and
+% delivers them as error results.
+test(process_one_commit_delivers_error, [setup(asserta(api_document:commit_package_test_handler(commit_queue:error_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_process_error'),
+    ensure_branch_queue('test_process_error', Queue),
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_process_error',
+        all_branches: ['test_process_error'],
+        reply_queue: ReplyQueue,
+        request_id: req_2,
+        test_marker_error: true
+    },
+    thread_send_message(Queue, Package),
+    process_one_commit('test_process_error'),
+    thread_get_message(ReplyQueue, commit_result(error(test_error), req_2), [timeout(1)]),
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_process_error').
+
+% Test that try_commit_work picks up an enqueued commit and delivers the
+% result to the reply queue, using the current thread as the worker.
+test(try_commit_work_processes_enqueued_commit, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_try'),
+    ensure_branch_queue('test_try', _Queue),
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_try',
+        all_branches: ['test_try'],
+        reply_queue: ReplyQueue,
+        request_id: req_3,
+        test_marker: true
+    },
+    enqueue_commit('test_try', Package),
+    try_commit_work,
+    thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_3), [timeout(1)]),
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_try').
+
+% Test that start_workers and stop_workers create and terminate the
+% worker pool correctly.
+test(start_and_stop_workers) :-
+    cleanup_workers_and_branches,
+    start_workers(2),
+    aggregate_all(count, multi_purpose_worker_thread(_), Count),
+    assertion(Count == 2),
+    stop_workers,
+    aggregate_all(count, multi_purpose_worker_thread(_), Count2),
+    assertion(Count2 == 0).
+
+% Test that a real worker thread picks up an enqueued commit and delivers
+% the result to the reply queue.
+test(worker_processes_enqueued_commit, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_worker'),
+    ensure_branch_queue('test_worker', _Queue),
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_worker',
+        all_branches: ['test_worker'],
+        reply_queue: ReplyQueue,
+        request_id: req_4,
+        test_marker: true
+    },
+    start_workers(1),
+    enqueue_commit('test_worker', Package),
+    thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_4), [timeout(2)]),
+    stop_workers,
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_worker').
+
+% Test that wake_workers can wake a worker that is blocked in
+% idle_worker_wait. The worker loop should continue and the worker should
+% be stoppable afterwards.
+test(wake_workers_wakes_idle_worker) :-
+    cleanup_workers_and_branches,
+    start_workers(1),
+    sleep(0.05),
+    wake_workers,
+    stop_workers.
+
+% Test that the SWI-Prolog thread communication primitives used by the
+% queue design continue to work: a thread can wait on its own message
+% queue and be woken by thread_send_message to its thread id.
+test(thread_send_message_to_thread_id_reaches_own_queue) :-
+    message_queue_create(Barrier, []),
+    thread_create(commit_queue:test_receive_thread(Barrier, hello), Thread, [alias(test_receiver)]),
+    thread_send_message(Thread, hello),
+    thread_get_message(Barrier, done, [timeout(1)]),
+    thread_join(Thread, true),
+    message_queue_destroy(Barrier).
+
+% Test that thread_get_message with a short timeout returns without a
+% message and does not hang indefinitely. This protects against SWI-Prolog
+% changes that alter timeout semantics.
+test(thread_get_message_short_timeout_returns) :-
+    message_queue_create(Q, []),
+    (   thread_get_message(Q, _, [timeout(0.001)])
+    ->  fail
+    ;   true
+    ),
+    message_queue_destroy(Q).
+
+% Test that a shared message queue can be used to wake multiple workers
+% from a single broadcast.
+test(shared_queue_wakes_multiple_workers) :-
+    message_queue_create(SharedQueue, [alias(shared_queue_test)]),
+    thread_create(commit_queue:test_shared_queue_worker(SharedQueue, 1), Thread1, [alias(shared_worker_1)]),
+    thread_create(commit_queue:test_shared_queue_worker(SharedQueue, 2), Thread2, [alias(shared_worker_2)]),
+    sleep(0.05),
+    thread_send_message(SharedQueue, wake),
+    thread_send_message(SharedQueue, wake),
+    thread_join(Thread1, true),
+    thread_join(Thread2, true),
+    message_queue_destroy(SharedQueue).
+
 :- end_tests(commit_queue).
+
+% Test helpers. These live in the commit_queue module so they can be
+% passed as handlers to api_document:execute_commit_package/2 and invoked
+% from worker threads created by tests.
+
+cleanup_workers_and_branches :-
+    stop_workers,
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _))
+        )).
+
+success_handler(P, success(test_meta, [test_id])) :-
+    get_dict(test_marker, P, true).
+
+error_handler(P, error(test_error)) :-
+    get_dict(test_marker_error, P, true).
+
+test_receive_thread(Barrier, Expected) :-
+    thread_self(Me),
+    thread_get_message(Me, Expected, []),
+    thread_send_message(Barrier, done).
+
+test_shared_queue_worker(Queue, _Id) :-
+    thread_get_message(Queue, wake, [timeout(1)]),
+    assertion(wake == wake).

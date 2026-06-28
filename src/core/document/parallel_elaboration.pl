@@ -150,7 +150,6 @@ create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap,
     message_queue_create(RequestId, [alias(RequestId)]),
     assertz(request_queue(RequestId, Descriptor, DB, Chunks, TotalChunks, Wrap,
                           PreBranchCommitId, PreSchemaLayerId)),
-    commit_queue:init_worker_wakeup_queue,
     commit_queue:wake_workers.
 
 collect_and_process(RequestId, TotalChunks, Elaborated) :-
@@ -181,14 +180,14 @@ handle_chunk_message(RequestId, chunk_done(Index, Elaborated), Remaining, Pairs,
     !,
     Remaining1 is Remaining - 1,
     collect_and_process_(RequestId, Remaining1, [Index-Elaborated|Pairs], FinalPairs).
-handle_chunk_message(_RequestId, chunk_error(_Index), _Remaining, _Pairs, _FinalPairs) :-
-    throw(error(parallel_elaboration_failed, _)).
+handle_chunk_message(_RequestId, chunk_error(_Index, Error), _Remaining, _Pairs, _FinalPairs) :-
+    throw(Error).
 
 send_chunk_done(OwnerId, Index, Elaborated) :-
     catch(thread_send_message(OwnerId, chunk_done(Index, Elaborated)), _, true).
 
-send_chunk_error(OwnerId, Index) :-
-    catch(thread_send_message(OwnerId, chunk_error(Index)), _, true).
+send_chunk_error(OwnerId, Index, Error) :-
+    catch(thread_send_message(OwnerId, chunk_error(Index, Error)), _, true).
 
 take_chunk(RequestId, OwnerId, DB, Wrap, Chunk, PreBranchCommitId, PreSchemaLayerId) :-
     with_mutex(elaboration_queue_mutex,
@@ -214,15 +213,22 @@ take_chunk(RequestId, OwnerId, DB, Wrap, Chunk, PreBranchCommitId, PreSchemaLaye
                )).
 
 rust_elaboration_available :-
-    current_predicate('$doc':rust_elaborate_simple_documents/3).
+    current_predicate('$doc':rust_elaborate_simple_documents/5).
 
-% TODO: once rust_elaborate_simple_documents emits verification contracts,
-% switch this back to the Rust fast path for eligible documents.
 process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated) :-
     rust_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated).
 
-rust_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated) :-
-    prolog_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated).
+rust_elaborate_chunk(DB, _Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs) :-
+    rust_elaboration_available,
+    '$doc':get_document_context(DB, Context),
+    catch(
+        '$doc':rust_elaborate_simple_documents(Context, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs),
+        _Error,
+        fail
+    ),
+    !.
+rust_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs) :-
+    prolog_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs).
 
 prolog_elaborate_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs) :-
     maplist(elaborate_with_contract(DB, Wrap, PreBranchCommitId, PreSchemaLayerId), Docs, Pairs).
@@ -264,10 +270,19 @@ maybe_help_with_elaboration :-
 
 process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
                           OwnerId, Index) :-
-    (   catch(process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated), _Error,
-              fail)
-    ->  send_chunk_done(OwnerId, Index, Elaborated)
-    ;   send_chunk_error(OwnerId, Index)
+    (   process_chunk_caught(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated, Error)
+    ->  (   var(Error)
+        ->  send_chunk_done(OwnerId, Index, Elaborated)
+        ;   send_chunk_error(OwnerId, Index, Error)
+        )
+    ;   send_chunk_error(OwnerId, Index, unknown_error)
+    ).
+
+process_chunk_caught(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated, Error) :-
+    catch(
+        process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated),
+        Error,
+        true
     ).
 
 start_elaboration_workers(N) :-
@@ -302,11 +317,8 @@ worker_prefers_elaboration :-
     X < P.
 
 idle_worker_wait :-
-    QueueAlias = worker_wakeup_queue,
-    (   thread_get_message(QueueAlias, _, [timeout(0)])
-    ->  true
-    ;   sleep(0.05)
-    ).
+    thread_self(Me),
+    thread_get_message(Me, _, []).
 
 :- thread_local commit_window_guard_depth/2.
 
@@ -707,9 +719,7 @@ test(rust_elaboration_matches_prolog_simple, [
     json_elaborate(DB, Doc, Prolog_Elaborated),
     (   rust_elaboration_available
     ->  '$doc':get_document_context(DB, Context),
-        '$doc':rust_elaborate_simple_documents(Context, [Doc], [Rust_Elaborated]),
-        format(user_error, "[rust_elab] Prolog: ~q~n", [Prolog_Elaborated]),
-        format(user_error, "[rust_elab] Rust:   ~q~n", [Rust_Elaborated]),
+        '$doc':rust_elaborate_simple_documents(Context, [Doc], none, none, [Rust_Elaborated-_Rust_Contract]),
         elaboration_for_comparison(Prolog_Elaborated, Prolog_Normalized),
         elaboration_for_comparison(Rust_Elaborated, Rust_Normalized),
         Prolog_Normalized = Rust_Normalized,
@@ -717,6 +727,68 @@ test(rust_elaboration_matches_prolog_simple, [
         get_dict('@id', Rust_Elaborated, Rust_Id),
         id_prefix_matches(Prolog_Id, 'terminusdb:///data/Person/'),
         id_prefix_matches(Rust_Id, 'terminusdb:///data/Person/')
+    ;   true
+    ),
+    !.
+
+test(rust_elaboration_contract_for_simple_doc, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    (   rust_elaboration_available
+    ->  Doc = json{'@type':'Person', name:'Alice', age:30},
+        open_descriptor(Desc, DB),
+        elaborate_insert_request_db_with_contracts(DB, [Doc], [Elaborated-Contract], [workers(1)]),
+        is_dict(Contract, verification_contract),
+        get_dict(submitted_id, Contract, none),
+        get_dict(generated_id, Contract, GeneratedId),
+        atom(GeneratedId),
+        get_dict(id_pairs, Contract, [GeneratedId-normal]),
+        get_dict(dependencies, Contract, []),
+        get_dict(backlinks, Contract, []),
+        is_dict(Elaborated, json),
+        get_dict('@type', Elaborated, 'terminusdb:///schema#Person'),
+        get_dict('terminusdb:///schema#age', Elaborated, AgeObj),
+        get_dict('@type', AgeObj, 'http://www.w3.org/2001/XMLSchema#integer'),
+        get_dict('@value', AgeObj, 30),
+        get_dict('terminusdb:///schema#name', Elaborated, NameObj),
+        get_dict('@type', NameObj, 'http://www.w3.org/2001/XMLSchema#string'),
+        get_dict('@value', NameObj, 'Alice')
+    ;   true
+    ),
+    !.
+
+test(rust_vs_prolog_elaboration_performance, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    (   rust_elaboration_available
+    ->  DocCount = 10000,
+        helper_docs(DocCount, Docs),
+        open_descriptor(Desc, DB),
+        '$doc':get_document_context(DB, Context),
+        % Warm-up to avoid cold-start effects.
+        '$doc':rust_elaborate_simple_documents(Context, [json{'@type':'Person', name:'Warm', age:1}], none, none, _),
+        forall(member(D, Docs), json_elaborate(DB, D, _)),
+        % Prolog path timing.
+        statistics(walltime, [PrologT0, _]),
+        forall(member(D, Docs), json_elaborate(DB, D, _)),
+        statistics(walltime, [PrologT1, _]),
+        PrologMs is PrologT1 - PrologT0,
+        PrologDocsPerS is (DocCount * 1000) / max(PrologMs, 1),
+        % Rust path timing.
+        statistics(walltime, [RustT0, _]),
+        '$doc':rust_elaborate_simple_documents(Context, Docs, none, none, _),
+        statistics(walltime, [RustT1, _]),
+        RustMs is RustT1 - RustT0,
+        RustDocsPerS is (DocCount * 1000) / max(RustMs, 1),
+        assertion(RustDocsPerS > PrologDocsPerS)
     ;   true
     ),
     !.

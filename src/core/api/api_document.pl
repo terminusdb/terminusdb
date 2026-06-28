@@ -32,7 +32,9 @@
               document_stream_write/4,
               document_stream_end/2,
 
-              run_commit_package/1
+              run_commit_package/1,
+              execute_commit_package/2,
+              commit_package_test_handler/1
           ]).
 
 :- use_module(core(util)).
@@ -1478,7 +1480,18 @@ default_schema_insert_options(Options) :-
 % Commit-queue worker support
 % ---------------------------------------------------------------------------
 
+:- dynamic execute_commit_package/2.
+:- dynamic commit_package_test_handler/1.
+
 run_commit_package(Package) :-
+    execute_commit_package(Package, Result),
+    deliver_commit_result(Package, Result).
+
+execute_commit_package(Package, Result) :-
+    commit_package_test_handler(Handler),
+    !,
+    once(call(Handler, Package, Result)).
+execute_commit_package(Package, Result) :-
     Package.all_branches = [_BranchKey],
     !,
     reset_transaction_objects_graph_descriptors(Package.transaction_objects),
@@ -1509,11 +1522,9 @@ run_commit_package(Package) :-
         schema_change_in_package(Package)
     ->  commit_queue:invalidate_pending_after_schema_change(Package.branch_key)
     ;   true
-    ),
-    deliver_commit_result(Package, Result).
-
-run_commit_package(_Package) :-
-    throw(error(multi_branch_commit_not_implemented, _)).
+    ).
+execute_commit_package(_Package, Result) :-
+    Result = error(error(multi_branch_commit_not_implemented, _)).
 
 % run_synchronous_reelaboration_and_commit/2 is called from run_commit_package
 % when the worker already holds the branch lock, so it must NOT re-acquire it.
@@ -2645,6 +2656,11 @@ test(sequential_system_document_inserts_release_commit_window_guard, [
 :- end_tests(system_document_inserts).
 
 
+api_document_test_handler(P, success(test_meta, [test_id])) :-
+    get_dict(test_marker, P, true).
+api_document_test_handler(P, error(test_error)) :-
+    get_dict(test_marker_error, P, true).
+
 :- begin_tests(commit_queue_helpers, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -2816,6 +2832,59 @@ test(collect_stream_docs_preserves_simple_string_names, [
     get_dict(name, Doc, Name),
     string(Name),
     Name = "Simple/w0-d0-abc123-xyz456".
+
+% run_commit_package/1 tests. These verify that the package is routed to a
+% handler and that the result is delivered to the reply queue, without
+% requiring a real transaction commit.
+
+test(run_commit_package_delivers_success, [
+         setup(asserta(api_document:commit_package_test_handler(api_document:api_document_test_handler))),
+         cleanup(retractall(api_document:commit_package_test_handler(_)))
+     ]) :-
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        reply_queue: ReplyQueue,
+        request_id: req_success,
+        test_marker: true
+    },
+    run_commit_package(Package),
+    thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_success), [timeout(1)]),
+    message_queue_destroy(ReplyQueue).
+
+test(run_commit_package_delivers_error, [
+         setup(asserta(api_document:commit_package_test_handler(api_document:api_document_test_handler))),
+         cleanup(retractall(api_document:commit_package_test_handler(_)))
+     ]) :-
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        reply_queue: ReplyQueue,
+        request_id: req_error,
+        test_marker_error: true
+    },
+    run_commit_package(Package),
+    thread_get_message(ReplyQueue, commit_result(error(test_error), req_error), [timeout(1)]),
+    message_queue_destroy(ReplyQueue).
+
+test(execute_commit_package_default_rejects_multi_branch) :-
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["branch1", "branch2"],
+        reply_queue: _,
+        request_id: req_multi
+    },
+    execute_commit_package(Package, Result),
+    Result = error(error(multi_branch_commit_not_implemented, _)).
+
+test(deliver_commit_result_ignores_missing_reply_queue) :-
+    Package = commit_package{
+        reply_queue: missing_reply_queue,
+        request_id: req_missing
+    },
+    deliver_commit_result(Package, success(test_meta, [test_id])).
 
 :- end_tests(commit_queue_helpers).
 

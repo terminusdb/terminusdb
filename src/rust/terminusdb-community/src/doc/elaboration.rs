@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::consts::*;
 use super::DocumentContext;
 use super::DocumentContextBlob;
-use super::prefix::expand_prefixed_name;
+use super::prefix::{expand_prefixed_name, expand_prefixed_name_data};
 
 use crate::terminus_store::layer::*;
 use swipl::prelude::*;
@@ -16,6 +16,16 @@ pub enum ElaborationError {
     SchemaError(String),
     ValueError(String),
 }
+
+/// Range types supported by the simple-document fast path.
+const SIMPLE_RANGE_TYPES: &[&str] = &[
+    "http://www.w3.org/2001/XMLSchema#string",
+    "http://www.w3.org/2001/XMLSchema#integer",
+    "http://www.w3.org/2001/XMLSchema#decimal",
+    "http://www.w3.org/2001/XMLSchema#double",
+    "http://www.w3.org/2001/XMLSchema#float",
+    "http://www.w3.org/2001/XMLSchema#boolean",
+];
 
 /// Convert a Prolog term to a serde_json::Value.
 ///
@@ -112,7 +122,7 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(
         }
         Value::String(s) => {
             let term = context.new_term_ref();
-            term.unify(s.as_str())?;
+            term.unify(Atom::new(s.as_str()))?;
             Ok(term)
         }
         Value::Array(arr) => {
@@ -128,7 +138,7 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(
             let mut builder = DictBuilder::new().tag("json");
             for (key, val) in map.iter() {
                 let val_term = json_value_to_prolog_term(context, val)?;
-                builder = builder.entry(key.as_str(), val_term);
+                builder = builder.entry(Atom::new(key.as_str()), val_term);
             }
             let term = context.new_term_ref();
             term.put(&builder)?;
@@ -165,7 +175,7 @@ fn random_id_suffix(length: usize) -> String {
 pub fn elaborate_simple_documents<L: Layer + Clone>(
     doc_context: &DocumentContext<L>,
     docs: &[Value],
-) -> Result<Vec<Value>, ElaborationError> {
+) -> Result<Vec<(Option<String>, Value)>, ElaborationError> {
     let schema = doc_context
         .schema
         .as_ref()
@@ -173,8 +183,8 @@ pub fn elaborate_simple_documents<L: Layer + Clone>(
 
     let mut result = Vec::with_capacity(docs.len());
     for doc in docs {
-        let elaborated = elaborate_simple_document(doc_context, schema, doc)?;
-        result.push(elaborated);
+        let pair = elaborate_simple_document(doc_context, schema, doc)?;
+        result.push(pair);
     }
 
     Ok(result)
@@ -184,15 +194,15 @@ fn elaborate_simple_document<L: Layer + Clone>(
     doc_context: &DocumentContext<L>,
     schema: &L,
     doc: &Value,
-) -> Result<Value, ElaborationError> {
+) -> Result<(Option<String>, Value), ElaborationError> {
     let obj = doc
         .as_object()
         .ok_or_else(|| ElaborationError::Ineligible("document is not a json object".to_string()))?;
 
-    // Must have @type and no @id or @capture.
-    if obj.get("@id").is_some() || obj.get("@capture").is_some() {
+    // Must have @type and no @capture.
+    if obj.get("@capture").is_some() {
         return Err(ElaborationError::Ineligible(
-            "explicit @id or @capture not supported".to_string(),
+            "@capture not supported".to_string(),
         ));
     }
 
@@ -223,6 +233,18 @@ fn elaborate_simple_document<L: Layer + Clone>(
         return Err(ElaborationError::Ineligible(
             "type is not a simple Class".to_string(),
         ));
+    }
+
+    // Reject subdocuments: the fast path only handles top-level documents.
+    if let Some(subdocument_id) = doc_context.schema_sys.subdocument() {
+        if schema
+            .triples_p(subdocument_id)
+            .any(|t| t.subject == class_id)
+        {
+            return Err(ElaborationError::Ineligible(
+                "subdocument class".to_string(),
+            ));
+        }
     }
 
     // Verify the key is Random and obtain the base.
@@ -292,6 +314,25 @@ fn elaborate_simple_document<L: Layer + Clone>(
         format!("{}{}/", context_base, type_local)
     };
 
+    // Capture an explicit submitted @id (if any) for the contract.
+    let submitted_id = obj.get("@id").and_then(Value::as_str).map(|s| s.to_string());
+
+    // Determine the document ID. Use an explicit @id if present,
+    // otherwise generate a random suffix.
+    let id = if let Some(id_value) = obj.get("@id") {
+        let id_short = id_value.as_str().ok_or_else(|| {
+            ElaborationError::Ineligible("@id must be a string".to_string())
+        })?;
+        expand_prefixed_name_data(doc_context, id_short).map_err(|e| {
+            ElaborationError::SchemaError(format!(
+                "unknown prefix in @id {}: {}",
+                id_short, e
+            ))
+        })?
+    } else {
+        format!("{}{}", base, random_id_suffix(16))
+    };
+
     // Read property descriptors from the schema layer.
     let mut properties: HashMap<String, String> = HashMap::new();
     for triple in schema.triples_s(class_id) {
@@ -330,12 +371,11 @@ fn elaborate_simple_document<L: Layer + Clone>(
 
     // Build the elaborated document.
     let mut elaborated = Map::new();
-    let id = format!("{}{}", base, random_id_suffix(16));
     elaborated.insert("@id".to_string(), Value::String(id));
     elaborated.insert("@type".to_string(), Value::String(type_full));
 
     for (key, value) in obj.iter() {
-        if key == "@type" {
+        if key == "@type" || key == "@id" {
             continue;
         }
         let expanded_key = expand_prefixed_name(doc_context, key)
@@ -353,7 +393,7 @@ fn elaborate_simple_document<L: Layer + Clone>(
         elaborated.insert(expanded_key, wrapped);
     }
 
-    Ok(Value::Object(elaborated))
+    Ok((submitted_id, Value::Object(elaborated)))
 }
 
 fn convert_value(value: &Value, range_type: &str) -> Result<Value, ElaborationError> {
@@ -419,9 +459,67 @@ pub fn register() {
     super::prefix::register();
 }
 
+/// Build a Prolog verification_contract{} dict for an elaborated document.
+fn build_simple_contract<'a, C: QueryableContextType>(
+    context: &'a Context<'a, C>,
+    submitted_id: &Option<String>,
+    elaborated: &Value,
+    pre_branch_commit_id_term: Term<'a>,
+    pre_schema_layer_id_term: Term<'a>,
+) -> PrologResult<Term<'a>> {
+    let generated_id = elaborated
+        .get("@id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| PrologError::Failure)?;
+
+    let submitted_id_term = context.new_term_ref();
+    match submitted_id {
+        Some(id) => submitted_id_term.unify(Atom::new(id.as_str()))?,
+        None => submitted_id_term.unify(atom!("none"))?,
+    }
+
+    let generated_id_term = context.new_term_ref();
+    generated_id_term.unify(Atom::new(generated_id))?;
+
+    let normal_term = context.new_term_ref();
+    normal_term.unify(Atom::new("normal"))?;
+
+    let id_pair_term = context.new_term_ref();
+    let pair_functor = Functor::new(Atom::new("-"), 2);
+    id_pair_term.unify(pair_functor)?;
+    id_pair_term.unify_arg(1, &generated_id_term)?;
+    id_pair_term.unify_arg(2, &normal_term)?;
+
+    let id_pairs_term = context.new_term_ref();
+    id_pairs_term.unify([id_pair_term].as_slice())?;
+
+    let dependencies_term = context.new_term_ref();
+    dependencies_term.unify(&[] as &[Term])?;
+    let backlinks_term = context.new_term_ref();
+    backlinks_term.unify(&[] as &[Term])?;
+
+    let captures_out_term = context.new_term_ref();
+    captures_out_term.unify(Atom::new("t"))?;
+
+    let contract = DictBuilder::new()
+        .tag("verification_contract")
+        .entry(Atom::new("submitted_id"), submitted_id_term)
+        .entry(Atom::new("generated_id"), generated_id_term)
+        .entry(Atom::new("id_pairs"), id_pairs_term)
+        .entry(Atom::new("dependencies"), dependencies_term)
+        .entry(Atom::new("backlinks"), backlinks_term)
+        .entry(Atom::new("captures_out"), captures_out_term)
+        .entry(Atom::new("pre_branch_commit_id"), pre_branch_commit_id_term)
+        .entry(Atom::new("pre_schema_layer_id"), pre_schema_layer_id_term);
+
+    let term = context.new_term_ref();
+    term.unify(contract)?;
+    Ok(term)
+}
+
 predicates! {
     #[module("$doc")]
-    pub semidet fn rust_elaborate_simple_documents(context, document_context_term, docs_term, elaborated_term) {
+    pub semidet fn rust_elaborate_simple_documents(context, document_context_term, docs_term, pre_branch_commit_id_term, pre_schema_layer_id_term, pairs_term) {
         let doc_context: DocumentContextBlob = document_context_term.get()?;
 
         // Read the input list of json{} documents into serde_json::Value.
@@ -430,16 +528,30 @@ predicates! {
             docs.push(prolog_term_to_json_value(context, &doc_term)?);
         }
 
-        let elaborated = elaborate_simple_documents(&doc_context, &docs)
+        let results = elaborate_simple_documents(&doc_context, &docs)
             .map_err(|_| PrologError::Failure)?;
 
-        // Build the output list of json{} elaborated documents.
-        let mut out_terms = Vec::with_capacity(elaborated.len());
-        for val in &elaborated {
-            out_terms.push(json_value_to_prolog_term(context, val)?);
+        // Build the output list of Elaborated-Contract pairs.
+        let mut pair_terms = Vec::with_capacity(results.len());
+        for (submitted_id, elaborated) in &results {
+            let elaborated_term = json_value_to_prolog_term(context, elaborated)?;
+            let contract_term = build_simple_contract(
+                context,
+                submitted_id,
+                elaborated,
+                pre_branch_commit_id_term.clone(),
+                pre_schema_layer_id_term.clone(),
+            )?;
+            let pair_term = context.new_term_ref();
+            let pair_functor = Functor::new(Atom::new("-"), 2);
+            pair_term.unify(pair_functor)?;
+            pair_term.unify_arg(1, &elaborated_term)?;
+            pair_term.unify_arg(2, &contract_term)?;
+            pair_terms.push(pair_term);
         }
+
         let term = context.new_term_ref();
-        term.unify(out_terms.as_slice())?;
-        elaborated_term.unify(&term)
+        term.unify(pair_terms.as_slice())?;
+        pairs_term.unify(&term)
     }
 }
