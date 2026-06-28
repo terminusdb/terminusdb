@@ -6,7 +6,8 @@
               with_transaction/3,
               with_transaction/4,
               graph_inserts_deletes/3,
-              reset_transaction_object_graph_descriptors/1
+              reset_transaction_object_graph_descriptors/1,
+              reset_transaction_objects_graph_descriptors/1
           ]).
 
 /** <module> Implementation of database graph management
