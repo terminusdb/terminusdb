@@ -3527,7 +3527,7 @@ customise_exception(error(E)) :-
     json_http_code(JSON,Status),
     reply_json(JSON,[status(Status), width(0)]).
 customise_exception(error(E,Context)) :-
-    generic_exception_jsonld(E,JSON),
+    generic_exception_jsonld(E, Context, JSON),
     (   get_dict('@type', JSON, 'api:UnhandledErrorResponse')
     ->  log_unhandled_error_backtrace(E, Context)
     ;   true

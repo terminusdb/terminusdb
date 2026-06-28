@@ -30,19 +30,27 @@
               document_stream_start/3,
               pre_branch_commit_id/2,
               document_stream_write/4,
-              document_stream_end/2
+              document_stream_end/2,
+
+              run_commit_package/1
           ]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(transaction/database), [
+                  reset_transaction_objects_graph_descriptors/1,
+                  query_context_transaction_objects/2
+              ]).
 :- use_module(core(document)).
+:- use_module(core(document/commit_queue)).
 :- use_module(core(document/json), [
                   insert_document_expanded/4,
                   insert_document_expanded/5,
                   replace_document_expanded/5,
-                  insert_backlinks/2
+                  insert_backlinks/2,
+                  extract_return_ids/2
               ]).
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
@@ -56,6 +64,7 @@
                   branch_key_from_transaction/2,
                   first_commit_candidate/2
               ]).
+:- use_module(core(util/json_preserve), [close_list_tails/1]).
 :- use_module(core(account)).
 :- use_module(config(terminus_config)).
 
@@ -440,39 +449,62 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(raw_json(Raw_JSON), Options),
     option(merge_repeats(Doc_Merge), Options),
     option(overwrite(Overwrite), Options),
+    option(input_format(InputFormat), Options),
     die_if(
         (   Graph_Type = schema,
             Raw_JSON = true
         ),
         error(raw_json_and_schema_disallowed,_)
     ),
-    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
-    stream_property(Stream, position(Pos)),
-    option(input_format(InputFormat), Options),
-    with_transaction(Context,
-                     (   set_stream_position(Stream, Pos),
-                         branch_key_from_transaction(Transaction, BranchKey),
-                         (   parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream)
-                         ->  (   branch_descriptor{} :< Transaction.descriptor
-                             ->  with_commit_window_guard(
-                                     Transaction, BranchKey, PreBranchCommitId,
-                                     setup_call_cleanup(
-                                         parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
-                                         (   CoreStream = queue(Queue),
-                                             CoreRaw_JSON = true,
-                                             (   InputFormat = json
-                                             ->  InsertStream = CoreStream
-                                             ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+    (   commit_queue_available,
+        Graph_Type = instance,
+        Raw_JSON = false,
+        Full_Replace = false,
+        InputFormat = json,
+        stream_property(Stream, position(Pos)),
+        setup_call_cleanup(
+            set_stream_position(Stream, Pos),
+            (   stream_to_lazy_docs(Stream, LazyDocs),
+                docs_parallel_eligible(LazyDocs)
+            ),
+            set_stream_position(Stream, Pos)
+        )
+    ->  api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                                   New_Data_Version, Transaction_Meta_Data, Ids, Options)
+    ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+        before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+        stream_property(Stream, position(Pos)),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             branch_key_from_transaction(Transaction, BranchKey),
+                             (   parallel_elaboration_enabled(Graph_Type, Raw_JSON, Full_Replace, Options, Stream)
+                             ->  (   branch_descriptor{} :< Transaction.descriptor
+                                 ->  with_commit_window_guard(
+                                         Transaction, BranchKey, PreBranchCommitId,
+                                         setup_call_cleanup(
+                                             parallel_elaborate_stream(Transaction, Stream, Queue, Thread),
+                                             (   CoreStream = queue(Queue),
+                                                 CoreRaw_JSON = true,
+                                                 (   InputFormat = json
+                                                 ->  InsertStream = CoreStream
+                                                 ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                                 ),
+                                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, PreBranchCommitId, Ids)
                                              ),
-                                             api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, PreBranchCommitId, Ids)
-                                         ),
-                                         cleanup_parallel_stream(Queue, Thread)))
-                             ;   % Non-branch descriptors (e.g. system_descriptor) have no
-                                 % advancing branch commit, so a commit-window guard is
-                                 % neither applicable nor acquireable. Fall back to the
-                                 % synchronous path without a guard.
-                                 CoreStream = Stream,
+                                             cleanup_parallel_stream(Queue, Thread)))
+                                 ;   % Non-branch descriptors (e.g. system_descriptor) have no
+                                     % advancing branch commit, so a commit-window guard is
+                                     % neither applicable nor acquireable. Fall back to the
+                                     % synchronous path without a guard.
+                                     CoreStream = Stream,
+                                     CoreRaw_JSON = Raw_JSON,
+                                     (   InputFormat = json
+                                     ->  InsertStream = CoreStream
+                                     ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
+                                     ),
+                                     api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                                 )
+                             ;   CoreStream = Stream,
                                  CoreRaw_JSON = Raw_JSON,
                                  (   InputFormat = json
                                  ->  InsertStream = CoreStream
@@ -480,19 +512,12 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                                  ),
                                  api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
                              )
-                         ;   CoreStream = Stream,
-                             CoreRaw_JSON = Raw_JSON,
-                             (   InputFormat = json
-                             ->  InsertStream = CoreStream
-                             ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
-                             ),
-                             api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
-                         )
-                     ),
-                     Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version),
-    Transaction_Meta_Data = Meta_Data.
+                         ),
+                         Meta_Data,
+                         Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
 
 pre_branch_commit_id(Transaction, CommitId) :-
     (   catch(transaction_data_version(Transaction, data_version(branch, CommitId)),
@@ -532,6 +557,11 @@ parallel_replace_enabled(Graph_Type, Raw_JSON, Options, Stream) :-
         set_stream_position(Stream, Pos)
     ).
 
+commit_queue_available :-
+    current_predicate(commit_queue:start_workers/1),
+    current_predicate(commit_queue:enqueue_commit/2),
+    commit_queue:multi_purpose_worker_thread(_).
+
 docs_parallel_eligible([]).
 docs_parallel_eligible([Doc|Rest]) :-
     doc_parallel_eligible(Doc),
@@ -545,7 +575,6 @@ contains_ineligible_marker(Doc) :-
     !,
     (   get_dict('@capture', Doc, _)
     ;   get_dict('@linked-by', Doc, _)
-    ;   get_dict('@id', Doc, _)
     ;   dict_pairs(Doc, _, Pairs),
         member(_Key-Value, Pairs),
         contains_ineligible_marker(Value)
@@ -676,18 +705,24 @@ verify_contract(Transaction, Contract) :-
     ;   true).
 
 pairs_to_insert_ids_and_captures_([], _, _, [], empty_assoc).
-pairs_to_insert_ids_and_captures_([Doc-Contract], Transaction, Overwrite, [[Id]], Captures_Out) :-
-    verify_contract(Transaction, Contract),
-    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Id),
-    is_dict(Contract, verification_contract),
-    get_dict(captures_out, Contract, Captures_Out).
-pairs_to_insert_ids_and_captures_([Doc-Contract|Rest], Transaction, Overwrite, [[Id]|Ids], Captures_Out) :-
+pairs_to_insert_ids_and_captures_([Doc-Contract], Transaction, Overwrite, [Ids], Captures_Out) :-
+    enrich_pair_for_operation(insert, Contract, EnrichedContract),
+    verify_contract(Transaction, EnrichedContract),
+    insert_document_expanded(Transaction, Doc, EnrichedContract, Overwrite, _),
+    is_dict(EnrichedContract, verification_contract),
+    get_dict(id_pairs, EnrichedContract, Id_Pairs),
+    extract_return_ids(Id_Pairs, Ids),
+    get_dict(captures_out, EnrichedContract, Captures_Out).
+pairs_to_insert_ids_and_captures_([Doc-Contract|Rest], Transaction, Overwrite, [Ids|Ids_Rest], Captures_Out) :-
     Rest \= [],
-    verify_contract(Transaction, Contract),
-    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Id),
-    is_dict(Contract, verification_contract),
-    get_dict(captures_out, Contract, Captures_First),
-    pairs_to_insert_ids_and_captures_(Rest, Transaction, Overwrite, Ids, Captures_Rest),
+    enrich_pair_for_operation(insert, Contract, EnrichedContract),
+    verify_contract(Transaction, EnrichedContract),
+    insert_document_expanded(Transaction, Doc, EnrichedContract, Overwrite, _),
+    is_dict(EnrichedContract, verification_contract),
+    get_dict(id_pairs, EnrichedContract, Id_Pairs),
+    extract_return_ids(Id_Pairs, Ids),
+    get_dict(captures_out, EnrichedContract, Captures_First),
+    pairs_to_insert_ids_and_captures_(Rest, Transaction, Overwrite, Ids_Rest, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
 merge_captures(Captures1, Captures2, Merged) :-
@@ -749,22 +784,40 @@ consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids,
 
 pairs_to_replace_ids_and_captures([], _, _, [], empty_assoc).
 pairs_to_replace_ids_and_captures([Doc-Contract], Transaction, Create, [[Id]], Captures_Out) :-
-    verify_contract(Transaction, Contract),
-    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
-    is_dict(Contract, verification_contract),
-    get_dict(captures_out, Contract, Captures_Out).
+    enrich_pair_for_operation(replace, Contract, EnrichedContract),
+    verify_contract(Transaction, EnrichedContract),
+    replace_document_expanded(Transaction, Doc, EnrichedContract, Create, Id),
+    is_dict(EnrichedContract, verification_contract),
+    get_dict(captures_out, EnrichedContract, Captures_Out).
 pairs_to_replace_ids_and_captures([Doc-Contract|Rest], Transaction, Create, [[Id]|Ids], Captures_Out) :-
     Rest \= [],
-    verify_contract(Transaction, Contract),
-    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
-    is_dict(Contract, verification_contract),
-    get_dict(captures_out, Contract, Captures_First),
+    enrich_pair_for_operation(replace, Contract, EnrichedContract),
+    verify_contract(Transaction, EnrichedContract),
+    replace_document_expanded(Transaction, Doc, EnrichedContract, Create, Id),
+    is_dict(EnrichedContract, verification_contract),
+    get_dict(captures_out, EnrichedContract, Captures_First),
     pairs_to_replace_ids_and_captures(Rest, Transaction, Create, Ids, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
 api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, CommitId, Ids) :-
     ensure_transaction_has_builder(Graph_Type, Transaction),
     consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+
+api_insert_documents_core(Transaction, pairs([]), Graph_Type, _Raw_JSON, _Full_Replace, _Doc_Merge, _Overwrite, []) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction).
+api_insert_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, Ids) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -950,36 +1003,63 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option(message(Message),Options),
     option(raw_json(Raw_JSON),Options,false),
     option(merge_repeats(Doc_Merge), Options),
-    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
-    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     option(input_format(InputFormat), Options),
-    stream_property(Stream, position(Pos)),
-    with_transaction(Context,
-                     (   set_stream_position(Stream, Pos),
-                         branch_key_from_transaction(Transaction, BranchKey),
-                         (   InputFormat = json
-                         ->  ReplaceStream = Stream
-                         ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
+    (   commit_queue_available,
+        Graph_Type = instance,
+        Raw_JSON = false,
+        InputFormat = json,
+        stream_property(Stream, position(Pos)),
+        setup_call_cleanup(
+            set_stream_position(Stream, Pos),
+            (   stream_to_lazy_docs(Stream, LazyDocs),
+                docs_parallel_eligible(LazyDocs)
+            ),
+            set_stream_position(Stream, Pos)
+        )
+    ->  api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                                    New_Data_Version, Transaction_Meta_Data, Ids, Options)
+    ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+        before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+        stream_property(Stream, position(Pos)),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             branch_key_from_transaction(Transaction, BranchKey),
+                             (   InputFormat = json
+                             ->  ReplaceStream = Stream
+                             ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
+                             ),
+                             (   parallel_replace_enabled(Graph_Type, Raw_JSON, Options, ReplaceStream)
+                             ->  with_commit_window_guard(
+                                     Transaction, BranchKey, PreBranchCommitId,
+                                     setup_call_cleanup(
+                                         parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
+                                         api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, PreBranchCommitId, Ids),
+                                         cleanup_parallel_stream(Queue, Thread)))
+                             ;   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
+                             )
                          ),
-                         (   parallel_replace_enabled(Graph_Type, Raw_JSON, Options, ReplaceStream)
-                         ->  with_commit_window_guard(
-                                 Transaction, BranchKey, PreBranchCommitId,
-                                 setup_call_cleanup(
-                                     parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
-                                     api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, PreBranchCommitId, Ids),
-                                     cleanup_parallel_stream(Queue, Thread)))
-                         ;   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
-                         )
-                     ),
-                     Meta_Data,
-                     Options),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version),
-    Transaction_Meta_Data = Meta_Data.
+                         Meta_Data,
+                         Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
 
 api_replace_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, Create, Doc_Merge, CommitId, Ids) :-
     !,
     ensure_transaction_has_builder(Graph_Type, Transaction),
     consume_replaced_queue(Queue, Transaction, Create, CommitId, Ids_List, Captures_Out),
+    die_if(nonground_captures(Captures_Out, Nonground),
+           error(not_all_captures_found(Nonground), _)),
+    idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
+    (   Doc_Merge = true
+    ->  true
+    ;   die_if(Duplicates \= [],
+               error(same_ids_in_one_transaction(Duplicates), _))
+    ).
+api_replace_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, Create, Doc_Merge, Ids) :-
+    !,
+    ensure_transaction_has_builder(Graph_Type, Transaction),
+    pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -1014,6 +1094,211 @@ api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Cre
     api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
+
+api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                            New_Data_Version, Transaction_Meta_Data, Ids, Options) :-
+    option(graph_type(Graph_Type), Options),
+    option_or_die(author(Author), Options),
+    option_or_die(message(Message), Options),
+    option(overwrite(Overwrite), Options),
+    option(input_format(InputFormat), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    (   branch_descriptor{} :< Transaction.descriptor
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        stream_property(Stream, position(Pos)),
+        set_stream_position(Stream, Pos),
+        (   InputFormat = json
+        ->  DocsStream = Stream
+        ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, DocsStream)
+        ),
+        stream_to_lazy_docs(DocsStream, LazyDocs),
+        collect_stream_docs(LazyDocs, Docs),
+        ElaborationOptions = [workers(4), wrap_api_errors(true)],
+        parallel_elaboration:elaborate_insert_request_db_with_contracts(Transaction, Docs, Pairs, ElaborationOptions),
+        query_context_transaction_objects(Context, TransactionObjects),
+        message_queue_create(ReplyQueue, []),
+        gensym(request, RequestId),
+        producer_timeout(ProducerTimeout),
+        setup_call_cleanup(
+            true,
+            (   Package = commit_package{
+                    branch_key: BranchKey,
+                    all_branches: [BranchKey],
+                    transaction_objects: TransactionObjects,
+                    operation: insert,
+                    branch_operations: [branch_operation{
+                                           branch_key: BranchKey,
+                                           doc_contract_pairs: Pairs,
+                                           delete_ids: [],
+                                           raw_docs: Docs
+                                       }],
+                    commit_info: Context.commit_info,
+                    options: options{overwrite: Overwrite, merge_repeats: Doc_Merge},
+                    graph_type: Graph_Type,
+                    reply_queue: ReplyQueue,
+                    request_id: RequestId
+                },
+                commit_queue:enqueue_commit(BranchKey, Package),
+                (   catch(thread_get_message(ReplyQueue,
+                                            commit_result(Result, RequestId),
+                                            [timeout(ProducerTimeout)]),
+                          error(existence_error(message_queue, _), _),
+                          (Result = timeout))
+                ->  true
+                ;   Result = timeout
+                )
+            ),
+            catch(message_queue_destroy(ReplyQueue), _, true)
+        ),
+        (   Result = success(Meta_Data, Ids)
+        ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
+            Transaction_Meta_Data = Meta_Data
+        ;   handle_commit_result(Result, _Meta_Data, Ids)
+        )
+    ;   % Non-branch descriptors (e.g. system_descriptor) have no advancing
+        % branch commit, so the commit queue cannot serialize them. Fall back
+        % to the synchronous path inside the already-open transaction.
+        stream_property(Stream, position(Pos)),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             (   InputFormat = json
+                             ->  CoreStream = Stream
+                             ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, CoreStream)
+                             ),
+                             api_insert_documents_core(Transaction, CoreStream, Graph_Type, false, false,
+                                                       Doc_Merge, Overwrite, Ids)
+                         ),
+                         Meta_Data,
+                         Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
+
+api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
+                             New_Data_Version, Transaction_Meta_Data, Ids, Options) :-
+    option(graph_type(Graph_Type), Options),
+    option_or_die(create(Create), Options),
+    option_or_die(author(Author), Options),
+    option_or_die(message(Message), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    option(input_format(InputFormat), Options),
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    (   branch_descriptor{} :< Transaction.descriptor
+    ->  branch_key_from_transaction(Transaction, BranchKey),
+        stream_property(Stream, position(Pos)),
+        set_stream_position(Stream, Pos),
+        (   InputFormat = json
+        ->  ReplaceStream = Stream
+        ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
+        ),
+        stream_to_lazy_docs(ReplaceStream, LazyDocs),
+        collect_stream_docs(LazyDocs, Docs),
+        ElaborationOptions = [workers(4), wrap_api_errors(true)],
+        parallel_elaboration:elaborate_insert_request_db_with_contracts(Transaction, Docs, Pairs, ElaborationOptions),
+        query_context_transaction_objects(Context, TransactionObjects),
+        message_queue_create(ReplyQueue, []),
+        gensym(request, RequestId),
+        producer_timeout(ProducerTimeout),
+        setup_call_cleanup(
+            true,
+            (   Package = commit_package{
+                    branch_key: BranchKey,
+                    all_branches: [BranchKey],
+                    transaction_objects: TransactionObjects,
+                    operation: replace,
+                    branch_operations: [branch_operation{
+                                           branch_key: BranchKey,
+                                           doc_contract_pairs: Pairs,
+                                           delete_ids: [],
+                                           raw_docs: Docs
+                                       }],
+                    commit_info: Context.commit_info,
+                    options: options{create: Create, merge_repeats: Doc_Merge},
+                    graph_type: Graph_Type,
+                    reply_queue: ReplyQueue,
+                    request_id: RequestId
+                },
+                commit_queue:enqueue_commit(BranchKey, Package),
+                (   catch(thread_get_message(ReplyQueue,
+                                            commit_result(Result, RequestId),
+                                            [timeout(ProducerTimeout)]),
+                          error(existence_error(message_queue, _), _),
+                          (Result = timeout))
+                ->  true
+                ;   Result = timeout
+                )
+            ),
+            catch(message_queue_destroy(ReplyQueue), _, true)
+        ),
+        (   Result = success(Meta_Data, Ids)
+        ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
+            Transaction_Meta_Data = Meta_Data
+        ;   handle_commit_result(Result, _Meta_Data, Ids)
+        )
+    ;   % Non-branch descriptors have no advancing branch commit; fall back to
+        % the synchronous path.
+        stream_property(Stream, position(Pos)),
+        with_transaction(Context,
+                         (   set_stream_position(Stream, Pos),
+                             (   InputFormat = json
+                             ->  CoreStream = Stream
+                             ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, CoreStream)
+                             ),
+                             api_replace_documents_core(Transaction, CoreStream, Graph_Type, false, Create,
+                                                       Doc_Merge, Ids)
+                         ),
+                         Meta_Data,
+                         Options),
+        meta_data_version(Transaction, Meta_Data, New_Data_Version),
+        Transaction_Meta_Data = Meta_Data
+    ).
+
+producer_timeout(Timeout) :-
+    (   getenv('TERMINUSDB_COMMIT_QUEUE_TIMEOUT', Value),
+        catch(number_string(Timeout, Value), _, fail)
+    ->  (   Timeout > 0
+        ->  true
+        ;   Timeout = 30
+        )
+    ;   Timeout = 30
+    ).
+
+handle_commit_result(success(Meta_Data, Ids), Meta_Data, Ids).
+handle_commit_result(reject(Reason), _Meta_Data, _Ids) :-
+    throw(error(commit_rejected(Reason), _)).
+handle_commit_result(error(Exception), _Meta_Data, _Ids) :-
+    throw(error(Exception, _)).
+handle_commit_result(timeout, _Meta_Data, _Ids) :-
+    throw(error(commit_queue_timeout, _)).
+
+collect_stream_docs(LazyDocs, Docs) :-
+    (   get_attr(LazyDocs, 'util/lazy_docs', lazy_input(Stream, _))
+    ->  read_all_docs_from_stream(Stream, Docs)
+    ;   collect_stream_docs_(LazyDocs, Docs)
+    ).
+
+collect_stream_docs_([], []) :- !.
+collect_stream_docs_([Doc|Rest], [Doc|Docs]) :-
+    collect_stream_docs_(Rest, Docs).
+
+read_all_docs_from_stream(Stream, Docs) :-
+    read_all_docs_from_stream_(Stream, Docs).
+
+read_all_docs_from_stream_(Stream, Docs) :-
+    (   json_preserve:json_read_dict(Stream, Doc, [default_tag(json), end_of_file(eof)])
+    ->  (   Doc = eof
+        ->  Docs = []
+        ;   is_list(Doc)
+        ->  append(Doc, Rest, Docs),
+            read_all_docs_from_stream_(Stream, Rest)
+        ;   Docs = [Doc|Rest],
+            read_all_docs_from_stream_(Stream, Rest)
+        )
+    ;   Docs = []
+    ).
 
 api_can_read_document(System_DB, Auth, Path, Graph_Type, Requested_Data_Version, Actual_Data_Version) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
@@ -1315,6 +1600,161 @@ default_schema_insert_options(Options) :-
                merge_repeats(false)
               ].
 
+% ---------------------------------------------------------------------------
+% Commit-queue worker support
+% ---------------------------------------------------------------------------
+
+run_commit_package(Package) :-
+    Package.all_branches = [_BranchKey],
+    !,
+    reset_transaction_objects_graph_descriptors(Package.transaction_objects),
+    open_commit_windows_for_transactions(Package.transaction_objects, GuardIds),
+    (   catch(
+            (   apply_package_changes(Package, Ids),
+                run_transactions(Package.transaction_objects, _Witnesses, MetaData, Package.options),
+                Result = success(MetaData, Ids)
+            ),
+            Exception,
+            (   (   Exception = fail_transaction
+                ->  catch(
+                        run_synchronous_reelaboration_and_commit(Package, Result),
+                        SyncError,
+                        Result = error(SyncError)
+                    )
+                ;   Exception = error(elaboration_stale(_), _)
+                ->  Result = reject(schema_changed)
+                ;   Result = error(Exception)
+                )
+            )
+        )
+    ->  true
+    ;   Result = error(unexpected_commit_failure)
+    ),
+    close_commit_windows(GuardIds),
+    (   Result = success(_, _),
+        schema_change_in_package(Package)
+    ->  commit_queue:invalidate_pending_after_schema_change(Package.branch_key)
+    ;   true
+    ),
+    deliver_commit_result(Package, Result).
+
+run_commit_package(_Package) :-
+    throw(error(multi_branch_commit_not_implemented, _)).
+
+% run_synchronous_reelaboration_and_commit/2 is called from run_commit_package
+% when the worker already holds the branch lock, so it must NOT re-acquire it.
+run_synchronous_reelaboration_and_commit(Package, Result) :-
+    get_dict(branch_operations, Package, BranchOperations),
+    BranchOperations = [BranchOp],
+    get_dict(raw_docs, BranchOp, RawDocs),
+    get_dict(transaction_objects, Package, TransactionObjects),
+    [Transaction] = TransactionObjects,
+    get_dict(operation, Package, Operation),
+    get_dict(options, Package, Options),
+    get_dict(graph_type, Package, Graph_Type),
+    reset_transaction_objects_graph_descriptors(TransactionObjects),
+    parallel_elaboration:elaborate_insert_request_db_with_contracts(Transaction, RawDocs, NewPairs,
+                                                                    [workers(4), wrap_api_errors(true)]),
+    (   Operation = insert
+    ->  option(overwrite(Overwrite), Options, false),
+        option(merge_repeats(Doc_Merge), Options, false),
+        api_insert_documents_core(Transaction, pairs(NewPairs), Graph_Type, false, false, Doc_Merge, Overwrite, Ids)
+    ;   Operation = replace
+    ->  option(create(Create), Options, false),
+        option(merge_repeats(Doc_Merge), Options, false),
+        api_replace_documents_core(Transaction, pairs(NewPairs), Graph_Type, false, Create, Doc_Merge, Ids)
+    ),
+    run_transactions([Transaction], _Witnesses, MetaData, Options),
+    Result = success(MetaData, Ids).
+
+apply_package_changes(Package, Ids) :-
+    get_dict(operation, Package, Operation),
+    get_dict(transaction_objects, Package, TransactionObjects),
+    get_dict(branch_operations, Package, BranchOperations),
+    get_dict(options, Package, Options),
+    get_dict(graph_type, Package, Graph_Type),
+    put_dict(_{graph_type: Graph_Type}, Options, BranchOptions),
+    [Transaction] = TransactionObjects,
+    BranchOperations = [BranchOperation],
+    get_dict(doc_contract_pairs, BranchOperation, Pairs),
+    get_dict(delete_ids, BranchOperation, DeleteIds),
+    apply_branch_operation(Operation, Transaction, Pairs, DeleteIds, BranchOptions, Ids).
+
+apply_branch_operation(insert, Transaction, Pairs, [], Options, Ids) :- !,
+    option(graph_type(Graph_Type), Options),
+    option(overwrite(Overwrite), Options, false),
+    option(merge_repeats(Doc_Merge), Options, false),
+    enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
+    api_insert_documents_core(Transaction, pairs(EnrichedPairs), Graph_Type, false, false, Doc_Merge, Overwrite, Ids).
+apply_branch_operation(replace, Transaction, Pairs, [], Options, Ids) :- !,
+    option(graph_type(Graph_Type), Options),
+    option(create(Create), Options, false),
+    option(merge_repeats(Doc_Merge), Options, false),
+    enrich_pairs_for_operation(Pairs, replace, EnrichedPairs),
+    api_replace_documents_core(Transaction, pairs(EnrichedPairs), Graph_Type, false, Create, Doc_Merge, Ids).
+apply_branch_operation(delete, Transaction, [], DeleteIds, _Options, Ids) :- !,
+    findall(Id, (member(Id, DeleteIds), delete_document(Transaction, Id)), Ids).
+
+enrich_pairs_for_operation(Pairs, Operation, EnrichedPairs) :-
+    maplist({Operation}/[Doc-Contract, Doc-EnrichedContract]>>(
+                enrich_pair_for_operation(Operation, Contract, EnrichedContract)
+            ),
+            Pairs, EnrichedPairs).
+
+enrich_pair_for_operation(insert, Contract, EnrichedContract) :-
+    !,
+    contract_conflict_sets(insert, Contract, MustNotExist, MustExist),
+    EnrichedContract = Contract.put(_{must_exist: MustExist, must_not_exist: MustNotExist}).
+enrich_pair_for_operation(replace, Contract, EnrichedContract) :-
+    !,
+    contract_conflict_sets(replace, Contract, MustNotExist, MustExist),
+    EnrichedContract = Contract.put(_{must_exist: MustExist, must_not_exist: MustNotExist}).
+enrich_pair_for_operation(delete, Contract, Contract).
+
+contract_conflict_sets(insert, Contract, MustNotExist, []) :-
+    get_dict(id_pairs, Contract, IdPairs),
+    maplist([Id-_, Id]>>true, IdPairs, MustNotExist).
+contract_conflict_sets(replace, Contract, MustNotExist, MustExist) :-
+    get_dict(id_pairs, Contract, IdPairs),
+    include([_-normal]>>true, IdPairs, NormalPairs),
+    maplist([Id-_, Id]>>true, NormalPairs, MustExist),
+    created_ids(IdPairs, MustNotExist).
+contract_conflict_sets(delete, _Contract, [], []).
+
+created_ids(IdPairs, CreatedIds) :-
+    include([_-Variety]>>(member(Variety, [created, value_hash])), IdPairs, CreatedPairs),
+    maplist([Id-_, Id]>>true, CreatedPairs, CreatedIds).
+
+branch_transaction_object(TransactionObjects, BranchKey, Transaction) :-
+    member(Transaction, TransactionObjects),
+    branch_key_from_transaction(Transaction, BranchKey),
+    !.
+
+open_commit_windows_for_transactions([], []).
+open_commit_windows_for_transactions([Transaction|Rest], [GuardId|GuardIds]) :-
+    branch_key_from_transaction(Transaction, BranchKey),
+    pre_branch_commit_id(Transaction, CommitId),
+    parallel_elaboration:open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, 200, GuardId),
+    open_commit_windows_for_transactions(Rest, GuardIds).
+
+close_commit_windows(GuardIds) :-
+    forall(member(GuardId, GuardIds),
+           catch('$change_window':close_commit_window(GuardId), _, true)).
+
+deliver_commit_result(Package, Result) :-
+    get_dict(reply_queue, Package, ReplyQueue),
+    get_dict(request_id, Package, RequestId),
+    !,
+    catch(thread_send_message(ReplyQueue,
+                             commit_result(Result, RequestId)),
+          error(existence_error(message_queue, _), _),
+          true).
+deliver_commit_result(_Package, _Result).
+
+schema_change_in_package(Package) :-
+    Package.graph_type = schema,
+    !.
+
 :- begin_tests(delete_document, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -1499,6 +1939,50 @@ test(replace_duplicate_documents_without_merge_repeats,
                create(false)],
     api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, _Ids, Options).
 
+test(replace_document_with_explicit_id_for_no_key_class, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "Simple",
+              name: "xsd:string"})
+    ),
+
+    open_string('{"@type":"Simple","@id":"Simple/doc1","name":"original"}', Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version,
+                         _New_Data_Version_1, _, Ids, Options),
+    Ids = [Id],
+
+    atom_string(Id, Id_String),
+    format(string(Replace_JSON), '{"@type":"Simple","@id":"~s","name":"replaced"}', [Id_String]),
+    open_string(Replace_JSON, Stream_2),
+
+    Options1 = [graph_type(instance),
+                author("author"),
+                message("message"),
+                create(false)],
+    api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version,
+                          _New_Data_Version_2, _, [Id], Options1),
+
+    open_descriptor(Desc, T),
+    get_document(T, Id, Doc),
+    get_dict(name, Doc, "replaced").
+
+test(explicit_id_document_is_parallel_eligible_for_replace) :-
+    Doc = json{'@id': "Simple/doc1", '@type': "Simple", name: "original"},
+    docs_parallel_eligible([Doc]).
+
 :- end_tests(replace_document).
 
 
@@ -1559,6 +2043,51 @@ test(key_missing, [
                                     field:'http://somewhere.for.now/schema#field'}]},
              'api:message':"Schema check failure",
              'api:status':"api:failure"}.
+
+test(back_links_not_supported_in_replace, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"),
+                resolve_absolute_string_descriptor("admin/testdb", Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(
+            C1,
+            _{'@type': "Class",
+              '@id': "CycleDoc",
+              other: _{'@type': "Set",
+                       '@class': "CycleDoc"}})
+    ),
+
+    open_string('{"@type": "CycleDoc"}', Stream_1),
+
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    default_insert_options(Options),
+    api_insert_documents(SystemDB, Auth, "admin/testdb", Stream_1, no_data_version,
+                         _New_Data_Version_1, _, Ids, Options),
+    Ids = [Id],
+
+    atom_string(Id, Id_String),
+    format(string(Replace_JSON), '[{"@type":"CycleDoc","@id":"~s","@linked-by":{"@id":"~s","@property":"other"}}]', [Id_String, Id_String]),
+    open_string(Replace_JSON, Stream_2),
+
+    catch(
+        api_replace_documents(SystemDB, Auth, "admin/testdb", Stream_2, no_data_version,
+                              _New_Data_Version_2, _, _, [graph_type(instance),
+                                                           author("author"),
+                                                           message("message"),
+                                                           create(false)]),
+        Error,
+        api_error_jsonld(replace_documents, Error, JSON)
+    ),
+
+    get_dict('@type', JSON, 'api:ReplaceDocumentErrorResponse'),
+    get_dict('api:error', JSON, ErrorDict),
+    get_dict('@type', ErrorDict, 'api:LinksInReplaceError'),
+    get_dict('api:status', JSON, "api:failure").
 
 :- end_tests(document_error_reporting).
 :- begin_tests(document_id_capture, []).
@@ -2150,7 +2679,6 @@ test(accept_to_format_text_plain) :-
 
 :- end_tests(document_format_detection).
 
-<<<<<<< HEAD
 :- begin_tests(document_embedding, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
@@ -2476,3 +3004,178 @@ test(sequential_system_document_inserts_release_commit_window_guard, [
     length(Ids, 2).
 
 :- end_tests(system_document_inserts).
+
+
+:- begin_tests(commit_queue_helpers, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+
+% Regression test: enrich_pairs_for_operation must preserve the elaborated
+% document in the output pair, not replace it with an anonymous variable.
+% Otherwise the worker-side insert path loses the document and returns no IDs.
+test(enrich_pairs_for_operation_preserves_doc) :-
+    Doc = json{'@id': "http://example.com/Person/1",
+               '@type': "Person",
+               'http://example.com/schema#name': "Alice"},
+    Contract = verification_contract{
+        submitted_id: "http://example.com/Person/1",
+        generated_id: "http://example.com/Person/1",
+        id_pairs: ["http://example.com/Person/1"-normal],
+        dependencies: [],
+        backlinks: [],
+        captures_out: t
+    },
+    Pairs = [Doc-Contract],
+    enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
+    EnrichedPairs = [OutDoc-OutContract],
+    OutDoc == Doc,
+    is_dict(OutContract, verification_contract),
+    get_dict(must_exist, OutContract, []),
+    get_dict(must_not_exist, OutContract, ["http://example.com/Person/1"]).
+
+test(enrich_pairs_for_operation_preserves_doc_replace) :-
+    Doc = json{'@id': "http://example.com/Person/1",
+               '@type': "Person",
+               'http://example.com/schema#name': "Alice"},
+    Contract = verification_contract{
+        submitted_id: "http://example.com/Person/1",
+        generated_id: "http://example.com/Person/1",
+        id_pairs: ["http://example.com/Person/1"-normal],
+        dependencies: [],
+        backlinks: [],
+        captures_out: t
+    },
+    Pairs = [Doc-Contract],
+    enrich_pairs_for_operation(Pairs, replace, EnrichedPairs),
+    EnrichedPairs = [OutDoc-OutContract],
+    OutDoc == Doc,
+    is_dict(OutContract, verification_contract),
+    get_dict(must_exist, OutContract, ["http://example.com/Person/1"]),
+    get_dict(must_not_exist, OutContract, []).
+
+test(contract_conflict_sets_insert) :-
+    Contract = verification_contract{
+        id_pairs: ["http://example.com/Person/1"-created,
+                   "http://example.com/Person/2"-normal,
+                   "http://example.com/Person/3"-value_hash]
+    },
+    contract_conflict_sets(insert, Contract, MustNotExist, MustExist),
+    MustNotExist = ["http://example.com/Person/1", "http://example.com/Person/2", "http://example.com/Person/3"],
+    MustExist = [].
+
+test(contract_conflict_sets_replace) :-
+    Contract = verification_contract{
+        id_pairs: ["http://example.com/Person/1"-normal,
+                   "http://example.com/Person/2"-created]
+    },
+    contract_conflict_sets(replace, Contract, MustNotExist, MustExist),
+    MustExist = ["http://example.com/Person/1"],
+    MustNotExist = ["http://example.com/Person/2"].
+
+test(collect_stream_docs_preserves_nested_list) :-
+    JSON = '{"@type":"Group","@id":"Group/0","people":[{"@type":"Person","name":"Immanuel Kant","age":"79","order":"3"},{"@type":"Person","name":"Karl Popper","age":"92","order":"5"}]}',
+    open_string(JSON, Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [Doc],
+    get_dict(people, Doc, People),
+    People = [Person1, Person2],
+    get_dict(name, Person1, "Immanuel Kant"),
+    get_dict(name, Person2, "Karl Popper"),
+    \+ contains_ineligible_marker(People).
+
+test(collect_stream_docs_handles_empty_object) :-
+    JSON = '{}',
+    open_string(JSON, Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [Doc],
+    is_dict(Doc, json).
+
+test(collect_stream_docs_handles_empty_stream) :-
+    open_string('', Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [].
+
+test(apply_package_changes_empty_pairs, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Thing","@type":"Class"}\n', Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, Transaction),
+    create_context(Transaction, commit_info{author: "test", message: "test"}, Context),
+    query_context_transaction_objects(Context, TransactionObjects),
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        transaction_objects: TransactionObjects,
+        operation: insert,
+        branch_operations: [branch_operation{
+            branch_key: "test_branch",
+            doc_contract_pairs: [],
+            delete_ids: [],
+            raw_docs: []
+        }],
+        commit_info: Context.commit_info,
+        options: options{overwrite: false, merge_repeats: false},
+        graph_type: instance,
+        reply_queue: _,
+        request_id: empty_test
+    },
+    apply_package_changes(Package, Ids),
+    Ids = [].
+
+test(apply_package_changes_duplicate_ids, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Thing","@type":"Class","@key":{"@type":"Lexical","@fields":["name"]},"name":"xsd:string"}\n', Desc),
+                open_descriptor(Desc, Transaction),
+                create_context(Transaction, commit_info{author: "test", message: "test"}, Context),
+                query_context_transaction_objects(Context, TransactionObjects),
+                Doc = _{'@type':'Thing', name:"A"},
+                parallel_elaboration:json_elaborate_with_contract(Transaction, Doc, Elaborated, Contract),
+                Pairs = [Elaborated-Contract, Elaborated-Contract])),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Package = commit_package{
+        branch_key: "test_branch",
+        all_branches: ["test_branch"],
+        transaction_objects: TransactionObjects,
+        operation: insert,
+        branch_operations: [branch_operation{
+            branch_key: "test_branch",
+            doc_contract_pairs: Pairs,
+            delete_ids: [],
+            raw_docs: [Doc, Doc]
+        }],
+        commit_info: Context.commit_info,
+        options: options{overwrite: false, merge_repeats: false},
+        graph_type: instance,
+        reply_queue: _,
+        request_id: duplicate_test
+    },
+    catch(
+        apply_package_changes(Package, _),
+        error(same_ids_in_one_transaction([DuplicateId]), _),
+        true
+    ),
+    DuplicateId = 'terminusdb:///data/Thing/A'.
+
+test(collect_stream_docs_preserves_simple_string_names, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Simple","@type":"Class","name":"xsd:string"}\n', Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    JSON = '[{"@type":"Simple","@id":"Simple/w0-d0-abc123","name":"Simple/w0-d0-abc123-xyz456"}]',
+    open_string(JSON, Stream),
+    stream_to_lazy_docs(Stream, LazyDocs),
+    collect_stream_docs(LazyDocs, Docs),
+    Docs = [Doc],
+    get_dict(name, Doc, Name),
+    string(Name),
+    Name = "Simple/w0-d0-abc123-xyz456".
+
+:- end_tests(commit_queue_helpers).

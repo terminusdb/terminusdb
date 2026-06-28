@@ -392,11 +392,11 @@ register_commit_in_change_window(Descriptor, ParentCommitId, CommitId, Instance_
         atom_string(InstanceLayerId, InstanceLayerIdString)
     ),
     branch_key_from_descriptor(Descriptor, BranchKey),
-    (   string(CommitId)
-    ->  CommitIdString = CommitId
-    ;   atom_string(CommitId, CommitIdString)
+    (   atom(CommitId)
+    ->  CommitIdAtom = CommitId
+    ;   atom_string(CommitIdAtom, CommitId)
     ),
-    '$change_window':register_commit(BranchKey, CommitIdString, ParentCommitIdArg, SchemaLayerId, InstanceLayerId,
+    '$change_window':register_commit(BranchKey, CommitIdAtom, ParentCommitIdArg, SchemaLayerId, InstanceLayerId,
                                      InstanceAdded, InstanceRemoved).
 register_commit_in_change_window(Descriptor, _ParentCommitId, _CommitId, _Instance_Object, _Schema_Object) :-
     throw(error(unknown_validation_descriptor_for_branch_key(Descriptor), _)).
@@ -959,10 +959,12 @@ test(parent_commit_is_captured_before_new_head,
     % would register B as its own parent and intersects could not walk back to
     % A. With the fix, asking for an IRI that A added returns A.
     branch_key_from_descriptor(Descriptor, BranchKey),
-    '$change_window':intersects(BranchKey, "none", CommitB, [],
-                                ["http://example.com/data/world/Person/Duke"],
+    atom_string(CommitB_Atom, CommitB),
+    atom_string(CommitA_Atom, CommitA),
+    '$change_window':intersects(BranchKey, none, CommitB_Atom, [],
+                                ['http://example.com/data/world/Person/Duke'],
                                 IntersectingCommit),
-    IntersectingCommit = CommitA.
+    IntersectingCommit = CommitA_Atom.
 
 :- end_tests(change_window_parent_capture).
 
