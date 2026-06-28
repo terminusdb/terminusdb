@@ -40,7 +40,8 @@
               expose_stack_traces/0,
               is_memory_mode/0,
               set_memory_mode/0,
-              cache_eviction_probability/1
+              cache_eviction_probability/1,
+              worker_elaboration_preference/1
 ]).
 
 :- use_module(library(pcre)).
@@ -366,6 +367,14 @@ semantic_indexer_endpoint(Endpoint) :-
 doc_work_limit(Limit) :-
     % This env var is actually read from rust so this default is ignored
     getenv_default('TERMINUSDB_DOC_WORK_LIMIT', Limit, 500_000).
+
+:- table worker_elaboration_preference/1.
+worker_elaboration_preference(Preference) :-
+    getenv_default_number('TERMINUSDB_WORKER_ELABORATION_PREFERENCE', 0.5, Preference),
+    Preference >= 0.0,
+    Preference =< 1.0,
+    !.
+worker_elaboration_preference(0.5).
 
 /**
  * is_memory_mode is semidet.

@@ -12,7 +12,10 @@
               has_commit_window_guard/0,
               branch_key_from_transaction/2,
               first_commit_candidate/2,
-              chunk_size/1
+              open_commit_window_for_branch_head/5,
+              chunk_size/1,
+              start_workers/1,
+              stop_workers/0
           ]).
 
 :- meta_predicate with_commit_window_guard(+, +, -, 0).
@@ -28,9 +31,12 @@
 :- use_module(library(terminus_store)).
 :- use_module(core(util/test_utils)).
 
-:- use_module(config(terminus_config), [worker_amount/1]).
+:- use_module(config(terminus_config), [worker_amount/1,
+                                          worker_elaboration_preference/1]).
+:- use_module(core(document/commit_queue)).
 
 :- use_module(library(apply)).
+:- use_module(library(random)).
 :- use_module(library(assoc)).
 :- use_module(library(gensym)).
 :- use_module(library(lists)).
@@ -64,7 +70,8 @@ chunk_size(100).
  * chunk by the worker that processes it.
  */
 elaborate_insert_request(Descriptor, Docs, Elaborated, Options) :-
-    chunk_size(ChunkSize),
+    length(Docs, DocCount),
+    chunk_size_for_request(DocCount, ChunkSize),
     chunks_from_documents(Docs, ChunkSize, Chunks),
     length(Chunks, TotalChunks),
     open_descriptor(Descriptor, DB),
@@ -76,7 +83,8 @@ elaborate_insert_request(Descriptor, Docs, Elaborated, Options) :-
     ).
 
 elaborate_insert_request_db(DB, Docs, Elaborated, Options) :-
-    chunk_size(ChunkSize),
+    length(Docs, DocCount),
+    chunk_size_for_request(DocCount, ChunkSize),
     chunks_from_documents(Docs, ChunkSize, Chunks),
     length(Chunks, TotalChunks),
     option(wrap_api_errors(Wrap), Options, false),
@@ -87,7 +95,8 @@ elaborate_insert_request_db(DB, Docs, Elaborated, Options) :-
     ).
 
 elaborate_insert_request_db_with_contracts(DB, Docs, Pairs, Options) :-
-    chunk_size(ChunkSize),
+    length(Docs, DocCount),
+    chunk_size_for_request(DocCount, ChunkSize),
     chunks_from_documents(Docs, ChunkSize, Chunks),
     length(Chunks, TotalChunks),
     option(wrap_api_errors(Wrap), Options, false),
@@ -95,6 +104,13 @@ elaborate_insert_request_db_with_contracts(DB, Docs, Pairs, Options) :-
         create_request_queue(none, DB, Chunks, TotalChunks, Wrap, RequestId),
         collect_and_process_pairs(RequestId, TotalChunks, Pairs),
         cleanup_request(RequestId)
+    ).
+
+chunk_size_for_request(DocCount, ChunkSize) :-
+    chunk_size(DefaultChunkSize),
+    (   DocCount > DefaultChunkSize
+    ->  ChunkSize = DocCount
+    ;   ChunkSize = DefaultChunkSize
     ).
 
 chunks_from_documents(Docs, ChunkSize, Chunks) :-
@@ -134,31 +150,8 @@ create_request_queue(Descriptor, DB, Chunks, TotalChunks, Wrap,
     message_queue_create(RequestId, [alias(RequestId)]),
     assertz(request_queue(RequestId, Descriptor, DB, Chunks, TotalChunks, Wrap,
                           PreBranchCommitId, PreSchemaLayerId)),
-    init_worker_wakeup_queue,
-    wake_elaboration_workers.
-
-wake_elaboration_workers :-
-    (   queue_exists(worker_wakeup_queue)
-    ->  worker_amount(Workers),
-        wake_elaboration_workers_(Workers)
-    ;   true
-    ).
-
-wake_elaboration_workers_(0) :- !.
-wake_elaboration_workers_(N) :-
-    N > 0,
-    thread_send_message(worker_wakeup_queue, wake),
-    N1 is N - 1,
-    wake_elaboration_workers_(N1).
-
-queue_exists(Queue) :-
-    catch(message_queue_property(Queue, _), _, fail).
-
-init_worker_wakeup_queue :-
-    (   queue_exists(worker_wakeup_queue)
-    ->  true
-    ;   catch(message_queue_create(worker_wakeup_queue, []), _, true)
-    ).
+    commit_queue:init_worker_wakeup_queue,
+    commit_queue:wake_workers.
 
 collect_and_process(RequestId, TotalChunks, Elaborated) :-
     collect_and_process_pairs(RequestId, TotalChunks, Pairs),
@@ -266,15 +259,8 @@ maybe_help_with_elaboration :-
     request_queue(RequestId, _, _, _, _, _, _, _),
     take_chunk(RequestId, OwnerId, DB, Wrap, chunk(Index, Docs),
                PreBranchCommitId, PreSchemaLayerId),
-    branch_key_from_transaction(DB, BranchKey),
-    (   first_commit_candidate(DB, PreBranchCommitId)
-    ->  process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
-                                  OwnerId, Index)
-    ;   with_commit_window_guard(
-            DB, BranchKey, PreBranchCommitId,
-            process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
-                                      OwnerId, Index))
-    ).
+    process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
+                              OwnerId, Index).
 
 process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
                           OwnerId, Index) :-
@@ -284,43 +270,43 @@ process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
     ;   send_chunk_error(OwnerId, Index)
     ).
 
-start_elaboration_workers(0) :- !.
 start_elaboration_workers(N) :-
-    N > 0,
-    stop_elaboration_workers,
-    init_worker_wakeup_queue,
-    start_elaboration_workers_(N).
-
-start_elaboration_workers_(0) :- !.
-start_elaboration_workers_(N) :-
-    N > 0,
-    format(atom(Alias), 'elaboration_worker_~d', [N]),
-    thread_create(elaboration_worker_loop, Thread, [alias(Alias)]),
-    assertz(elaboration_worker_thread(Thread)),
-    N1 is N - 1,
-    start_elaboration_workers_(N1).
-
-elaboration_worker_loop :-
-    (   elaboration_workers_should_stop
-    ->  true
-    ;   (   maybe_help_with_elaboration
-        ->  true
-        ;   thread_get_message(worker_wakeup_queue, wake, [timeout(5)])
-        ),
-        elaboration_worker_loop
-    ).
+    start_workers(N).
 
 stop_elaboration_workers :-
-    retractall(elaboration_workers_should_stop),
-    assertz(elaboration_workers_should_stop),
-    worker_amount(Workers),
-    forall(between(1, Workers, _),
-           catch(thread_send_message(worker_wakeup_queue, wake), _, true)),
-    forall(retract(elaboration_worker_thread(Thread)),
-           catch(thread_join(Thread, _), _, true)),
-    catch(message_queue_destroy(worker_wakeup_queue), _, true),
-    retractall(elaboration_worker_thread(_)).
+    stop_workers.
 
+multi_purpose_worker_loop :-
+    (   multi_purpose_workers_should_stop
+    ->  true
+    ;   (   worker_prefers_elaboration
+        ->  (   maybe_help_with_elaboration
+            ->  true
+            ;   commit_queue:try_commit_work
+            ->  true
+            ;   idle_worker_wait
+            )
+        ;   (   commit_queue:try_commit_work
+            ->  true
+            ;   maybe_help_with_elaboration
+            ->  true
+            ;   idle_worker_wait
+            )
+        ),
+        multi_purpose_worker_loop
+    ).
+
+worker_prefers_elaboration :-
+    config:worker_elaboration_preference(P),
+    random(X),
+    X < P.
+
+idle_worker_wait :-
+    QueueAlias = worker_wakeup_queue,
+    (   thread_get_message(QueueAlias, _, [timeout(0)])
+    ->  true
+    ;   sleep(0.05)
+    ).
 
 :- thread_local commit_window_guard_depth/2.
 
@@ -330,7 +316,7 @@ stop_elaboration_workers :-
 % The CLI runs each command in a fresh process, so its change window is
 % always empty and the guard would deadlock.
 commit_window_guard_applicable :-
-    elaboration_worker_thread(_).
+    multi_purpose_worker_thread(_).
 
 with_commit_window_guard(_Transaction, _BranchKey, _CommitId, Goal) :-
     \+ commit_window_guard_applicable,
@@ -646,11 +632,68 @@ test(single_worker, [
     elaborate_insert_request(Desc, Docs, Elaborated, [workers(1)]),
     length(Elaborated, 100), !.
 
+group_set_of_people_schema_string(Schema) :-
+    atomics_to_string(
+        [ '{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n',
+          '{"@id":"Person","@type":"Class","@key":{"@type":"Lexical","@fields":["name"]},"name":"xsd:string","age":"xsd:decimal","order":"xsd:integer"}\n',
+          '{"@id":"Group","@type":"Class","people":{"@type":"Set","@class":"Person"}}\n' ],
+        Schema).
+
+test(set_of_people_elaborates, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                group_set_of_people_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Kant = _{'@type':'Person', name:"Immanuel Kant", age:"79", order:"3"},
+    Popper = _{'@type':'Person', name:"Karl Popper", age:"92", order:"5"},
+    Godel = _{'@type':'Person', name:"Kurt Gödel", age:"71", order:"5"},
+    Docs = [_{'@id':'Group/0', '@type':'Group', people:[Kant, Popper, Godel]},
+            _{'@id':'Group/1', '@type':'Group', people:[]},
+            _{'@id':'Group/2', '@type':'Group'}],
+    open_descriptor(Desc, Transaction),
+    elaborate_insert_request_db_with_contracts(Transaction, Docs, Pairs, [workers(4), wrap_api_errors(true)]),
+    length(Pairs, 3),
+    Pairs = [_-KantContract|_],
+    get_dict(id_pairs, KantContract, KantIdPairs),
+    member('terminusdb:///data/Person/Immanuel%20Kant'-normal, KantIdPairs).
+
 elaboration_without_id(Elab, Normalized) :-
-    put_dict('@id', Elab, '<id>', Normalized).
+    put_dict('@id', Elab, "<id>", Normalized).
+
+% Normalize a value to a string for comparison. Prolog elaboration
+% returns atoms for IRIs and string literals; Rust elaboration returns
+% strings. Both are semantically equivalent, so we compare in a common
+% representation.
+stringify_value(Value, String) :-
+    (   atom(Value)
+    ->  atom_string(Value, String)
+    ;   string(Value)
+    ->  String = Value
+    ;   Value = String
+    ).
+
+stringify_json_value(Value, Stringified) :-
+    (   is_dict(Value)
+    ->  dict_pairs(Value, Tag, Pairs),
+        maplist([Key-Orig, Key-Str]>>(stringify_json_value(Orig, Str)),
+                Pairs, NormalizedPairs),
+        dict_pairs(Stringified, Tag, NormalizedPairs)
+    ;   is_list(Value)
+    ->  maplist(stringify_json_value, Value, Stringified)
+    ;   stringify_value(Value, Stringified)
+    ).
+
+elaboration_for_comparison(Elab, Compared) :-
+    elaboration_without_id(Elab, WithoutId),
+    stringify_json_value(WithoutId, Compared).
 
 id_prefix_matches(Id, Prefix) :-
-    atom_concat(Prefix, _, Id).
+    (   atom(Id)
+    ->  atom_concat(Prefix, _, Id)
+    ;   sub_atom(Id, 0, _, _, Prefix)
+    ).
 
 test(rust_elaboration_matches_prolog_simple, [
          setup((setup_temp_store(State),
@@ -665,8 +708,10 @@ test(rust_elaboration_matches_prolog_simple, [
     (   rust_elaboration_available
     ->  '$doc':get_document_context(DB, Context),
         '$doc':rust_elaborate_simple_documents(Context, [Doc], [Rust_Elaborated]),
-        elaboration_without_id(Prolog_Elaborated, Prolog_Normalized),
-        elaboration_without_id(Rust_Elaborated, Rust_Normalized),
+        format(user_error, "[rust_elab] Prolog: ~q~n", [Prolog_Elaborated]),
+        format(user_error, "[rust_elab] Rust:   ~q~n", [Rust_Elaborated]),
+        elaboration_for_comparison(Prolog_Elaborated, Prolog_Normalized),
+        elaboration_for_comparison(Rust_Elaborated, Rust_Normalized),
         Prolog_Normalized = Rust_Normalized,
         get_dict('@id', Prolog_Elaborated, Prolog_Id),
         get_dict('@id', Rust_Elaborated, Rust_Id),
