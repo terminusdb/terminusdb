@@ -11,12 +11,12 @@ describe('In-Memory Mode', function () {
     it.skip('skipped: requires local terminusdb binary (set SKIP_MEMORY_MODE_TESTS=true)', function () {})
     return
   }
-  this.timeout(30000)
+  this.timeout(15000)
 
   const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
-  async function waitForServer (maxRetries = 40) {
+  async function waitForServer (maxRetries = 10) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const res = await new Promise((resolve, reject) => {

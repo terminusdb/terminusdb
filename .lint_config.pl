@@ -18,6 +18,14 @@ ignore_predicate("assertion/2").
 
 % thread library predicates linter can't resolve
 ignore_predicate("mutex_trylock/1").
+ignore_predicate("thread_at_exit/1").
+
+% gensym library predicates linter can't resolve
+ignore_predicate("gensym/2").
+
+% Module-qualified calls such as commit_queue:enqueue_commit/2 are sometimes
+% misread by the linter as a call to commit_queue/0.
+ignore_predicate("commit_queue/0").
 
 % Predicates from library(http/json) - linter can't follow re-exports in SWI-Prolog 10
 % These predicates exist in both SWI-Prolog 9 and 10, but prolog_xref doesn't resolve them

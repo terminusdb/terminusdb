@@ -20,16 +20,6 @@ pub enum ElaborationError {
 /// Namespace for system schema predicates that are not document properties.
 const SYS_NAMESPACE: &str = "http://terminusdb.com/schema/sys#";
 
-/// Range types supported by the simple-document fast path.
-const SIMPLE_RANGE_TYPES: &[&str] = &[
-    "http://www.w3.org/2001/XMLSchema#string",
-    "http://www.w3.org/2001/XMLSchema#integer",
-    "http://www.w3.org/2001/XMLSchema#decimal",
-    "http://www.w3.org/2001/XMLSchema#double",
-    "http://www.w3.org/2001/XMLSchema#float",
-    "http://www.w3.org/2001/XMLSchema#boolean",
-];
-
 /// Convert a Prolog term to a serde_json::Value.
 ///
 /// This is a minimal converter that handles the shapes expected for simple
