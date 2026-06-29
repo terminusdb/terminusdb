@@ -1321,3 +1321,4 @@ local_memoize(State, Template, Goal) :-
                                do_local_memoize(State, Template)),
                            finalize_memoization(State))
     ;   get_local_memoized(State, Template)).
+

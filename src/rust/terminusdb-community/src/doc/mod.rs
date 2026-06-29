@@ -1,6 +1,7 @@
 mod delete;
 mod elaboration;
 mod prefix;
+mod verify;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -1418,6 +1419,7 @@ pub fn register() {
 
     delete::register();
     elaboration::register();
+    verify::register();
 }
 
 #[cfg(test)]

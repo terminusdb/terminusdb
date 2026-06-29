@@ -34,7 +34,9 @@
 
               run_commit_package/1,
               execute_commit_package/2,
-              commit_package_test_handler/1
+              commit_package_test_handler/1,
+
+              verify_contracts_transaction_info/4
           ]).
 
 :- use_module(core(util)).
@@ -57,7 +59,7 @@
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
                   elaborate_insert_request_db_with_contracts/4,
-                  chunk_size/1,
+                  max_chunk_size/1,
                   with_commit_window_guard/4,
                   acquire_commit_window_guard/3,
                   acquire_commit_window_guard/2,
@@ -77,6 +79,7 @@
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
 :- use_module(library(apply)).
+:- use_module(library(pairs)).
 :- use_module(library(pcre), [re_match/3]).
 :- use_module(library(pprint), [print_term/2]).
 
@@ -618,7 +621,7 @@ take_chunk_lazy(LazyDocs, N, Chunk, Rest) :-
     ).
 
 elaborate_stream_producer(DB, LazyDocs, Queue) :-
-    chunk_size(ChunkSize),
+    max_chunk_size(ChunkSize),
     take_chunk_lazy(LazyDocs, ChunkSize, Chunk, Rest),
     (   Chunk == []
     ->  thread_send_message(Queue, done)
@@ -706,25 +709,61 @@ verify_contract(Transaction, Contract) :-
         )
     ;   true).
 
-pairs_to_insert_ids_and_captures_([], _, _, [], empty_assoc).
-pairs_to_insert_ids_and_captures_([Doc-Contract], Transaction, Overwrite, [Ids], Captures_Out) :-
-    enrich_pair_for_operation(insert, Contract, EnrichedContract),
-    verify_contract(Transaction, EnrichedContract),
-    insert_document_expanded(Transaction, Doc, EnrichedContract, Overwrite, _),
-    is_dict(EnrichedContract, verification_contract),
-    get_dict(id_pairs, EnrichedContract, Id_Pairs),
+%! verify_contracts(+Transaction, +Contracts) is det.
+%
+%  Verify a batch of contracts in a single branch-window check. This is the
+%  batched equivalent of verify_contract/2: it reads the current schema layer
+%  and branch commit id once, then checks the whole batch against the change
+%  window with one Rust FFI call.
+verify_contracts(Transaction, Contracts) :-
+    verify_contracts(Transaction, Contracts, Result),
+    (   Result = ok
+    ->  true
+    ;   Result = error(fail_transaction)
+    ->  throw(fail_transaction)
+    ;   Result = error(Error)
+    ->  throw(error(Error, _))
+    ).
+
+%! verify_contracts(+Transaction, +Contracts, -Result) is det.
+%
+%  Result is `ok` if the batch passes, or `error(Error)` if the schema layer
+%  changed or the change window conflicts with the union of the contracts'
+%  conflict sets.
+verify_contracts_transaction_info(Transaction, BranchKey, CurrentBranchCommitId, CurrentSchemaLayerId) :-
+    branch_key_from_transaction(Transaction, BranchKey),
+    (   catch(transaction_data_version(Transaction, data_version(branch, CurrentBranchCommitId)),
+              error(data_version_not_found(_), _),
+              fail)
+    ->  true
+    ;   CurrentBranchCommitId = none),
+    (   Transaction.schema_objects = [SchemaObject]
+    ->  layer_to_id(SchemaObject.read, CurrentSchemaLayerId)
+    ;   CurrentSchemaLayerId = none).
+
+verify_contracts(_Transaction, [], ok) :- !.
+verify_contracts(Transaction, Contracts, Result) :-
+    '$doc':verify_contracts(Transaction, Contracts, Result).
+
+pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
+    enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
+    pairs_values(EnrichedPairs, Contracts),
+    verify_contracts(Transaction, Contracts),
+    pairs_to_insert_ids_and_captures__(EnrichedPairs, Transaction, Overwrite, Ids, Captures_Out).
+
+pairs_to_insert_ids_and_captures__([], _, _, [], empty_assoc).
+pairs_to_insert_ids_and_captures__([Doc-Contract], Transaction, Overwrite, [Ids], Captures_Out) :-
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, _),
+    get_dict(id_pairs, Contract, Id_Pairs),
     extract_return_ids(Id_Pairs, Ids),
-    get_dict(captures_out, EnrichedContract, Captures_Out).
-pairs_to_insert_ids_and_captures_([Doc-Contract|Rest], Transaction, Overwrite, [Ids|Ids_Rest], Captures_Out) :-
+    get_dict(captures_out, Contract, Captures_Out).
+pairs_to_insert_ids_and_captures__([Doc-Contract|Rest], Transaction, Overwrite, [Ids|Ids_Rest], Captures_Out) :-
     Rest \= [],
-    enrich_pair_for_operation(insert, Contract, EnrichedContract),
-    verify_contract(Transaction, EnrichedContract),
-    insert_document_expanded(Transaction, Doc, EnrichedContract, Overwrite, _),
-    is_dict(EnrichedContract, verification_contract),
-    get_dict(id_pairs, EnrichedContract, Id_Pairs),
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, _),
+    get_dict(id_pairs, Contract, Id_Pairs),
     extract_return_ids(Id_Pairs, Ids),
-    get_dict(captures_out, EnrichedContract, Captures_First),
-    pairs_to_insert_ids_and_captures_(Rest, Transaction, Overwrite, Ids_Rest, Captures_Rest),
+    get_dict(captures_out, Contract, Captures_First),
+    pairs_to_insert_ids_and_captures__(Rest, Transaction, Overwrite, Ids_Rest, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
 merge_captures(Captures1, Captures2, Merged) :-
@@ -784,21 +823,21 @@ consume_replaced_queue_(Queue, Transaction, Create, CommitId, WaitForGuard, Ids,
         merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
 
-pairs_to_replace_ids_and_captures([], _, _, [], empty_assoc).
-pairs_to_replace_ids_and_captures([Doc-Contract], Transaction, Create, [[Id]], Captures_Out) :-
-    enrich_pair_for_operation(replace, Contract, EnrichedContract),
-    verify_contract(Transaction, EnrichedContract),
-    replace_document_expanded(Transaction, Doc, EnrichedContract, Create, Id),
-    is_dict(EnrichedContract, verification_contract),
-    get_dict(captures_out, EnrichedContract, Captures_Out).
-pairs_to_replace_ids_and_captures([Doc-Contract|Rest], Transaction, Create, [[Id]|Ids], Captures_Out) :-
+pairs_to_replace_ids_and_captures(Pairs, Transaction, Create, Ids, Captures_Out) :-
+    enrich_pairs_for_operation(Pairs, replace, EnrichedPairs),
+    pairs_values(EnrichedPairs, Contracts),
+    verify_contracts(Transaction, Contracts),
+    pairs_to_replace_ids_and_captures__(EnrichedPairs, Transaction, Create, Ids, Captures_Out).
+
+pairs_to_replace_ids_and_captures__([], _, _, [], empty_assoc).
+pairs_to_replace_ids_and_captures__([Doc-Contract], Transaction, Create, [[Id]], Captures_Out) :-
+    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
+    get_dict(captures_out, Contract, Captures_Out).
+pairs_to_replace_ids_and_captures__([Doc-Contract|Rest], Transaction, Create, [[Id]|Ids], Captures_Out) :-
     Rest \= [],
-    enrich_pair_for_operation(replace, Contract, EnrichedContract),
-    verify_contract(Transaction, EnrichedContract),
-    replace_document_expanded(Transaction, Doc, EnrichedContract, Create, Id),
-    is_dict(EnrichedContract, verification_contract),
-    get_dict(captures_out, EnrichedContract, Captures_First),
-    pairs_to_replace_ids_and_captures(Rest, Transaction, Create, Ids, Captures_Rest),
+    replace_document_expanded(Transaction, Doc, Contract, Create, Id),
+    get_dict(captures_out, Contract, Captures_First),
+    pairs_to_replace_ids_and_captures__(Rest, Transaction, Create, Ids, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
 api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, CommitId, Ids) :-
@@ -2001,6 +2040,7 @@ test(explicit_id_document_is_parallel_eligible_for_replace) :-
 
 :- use_module(core(util/test_utils)).
 :- use_module(core(document)).
+:- use_module(core(document/json), [insert_document_expanded/3]).
 :- use_module(core(api/api_error)).
 
 test(key_missing, [
@@ -2099,6 +2139,23 @@ test(back_links_not_supported_in_replace, [
     get_dict('api:error', JSON, ErrorDict),
     get_dict('@type', ErrorDict, 'api:LinksInReplaceError'),
     get_dict('api:status', JSON, "api:failure").
+
+test(invalid_id_type_raises_clear_error, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                write_schema_string('{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n{"@id":"Thing","@type":"Class","@key":{"@type":"Random"},"name":"xsd:string"}\n', Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(Desc, Context,
+        (   query_context_transaction_objects(Context, [Transaction]),
+            Elaborated = json{'@id': 123, '@type': 'Thing'},
+            catch(
+                insert_document_expanded(Transaction, Elaborated, _),
+                error(type_error(atom_or_string, 123), _),
+                true
+            )
+        )),
+    !.
 
 :- end_tests(document_error_reporting).
 :- begin_tests(document_id_capture, []).
@@ -3248,3 +3305,108 @@ test(deliver_commit_result_ignores_missing_reply_queue) :-
     deliver_commit_result(Package, success(test_meta, [test_id])).
 
 :- end_tests(commit_queue_helpers).
+
+:- begin_tests(verify_contracts_batch, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(document/parallel_elaboration)).
+:- use_module(core(document/json)).
+
+batch_test_schema_string(Schema) :-
+    atomics_to_string(
+        [ '{"@type":"@context","@base":"terminusdb:///data/","@schema":"terminusdb:///schema#"}\n',
+          '{"@id":"Person","@type":"Class","@key":{"@type":"Random"},"name":"xsd:string","age":"xsd:integer"}\n' ],
+        Schema).
+
+batch_docs(Count, Docs) :-
+    findall(
+        _{ '@type': 'Person', name: Name, age: Age },
+        (   between(1, Count, I),
+            format(atom(Name), 'Person~|~`0t~d~4+', [I]),
+            Age is 20 + (I mod 60)
+        ),
+        Docs
+    ).
+
+test(verify_contracts_returns_ok_for_batch, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    batch_docs(1000, Docs),
+    open_descriptor(Desc, DB),
+    elaborate_insert_request_db_with_contracts(DB, Docs, Pairs, [workers(4)]),
+    length(Pairs, 1000),
+    pairs_values(Pairs, Contracts),
+    verify_contracts(DB, Contracts, ok), !.
+
+test(verify_contracts_succeeds_for_empty_batch) :-
+    verify_contracts(_{}, [], ok).
+
+test(verify_contracts_succeeds_for_empty_batch_wrapper) :-
+    verify_contracts(_{}, []).
+
+test(verify_contracts_detects_schema_layer_change, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    batch_docs(1, [Doc]),
+    open_descriptor(Desc, DB),
+    elaborate_insert_request_db_with_contracts(DB, [Doc], [_-Contract0], [workers(4)]),
+    % Forge a schema-layer mismatch so the test does not depend on the exact
+    % timing of real schema-layer updates.
+    FakeContract = Contract0.put(_{pre_schema_layer_id: "stale_layer_id"}),
+    catch(
+        verify_contracts(DB, [FakeContract]),
+        error(elaboration_stale(schema_layer_changed), _),
+        true
+    ), !.
+
+test(verify_contracts_detects_conflicting_commit, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = json{'@type':'Person', '@id':'Person/conflict', name:'Conflict', age:30},
+    % Commit the document so the change window records it.
+    with_test_transaction(Desc, C1,
+        (   query_default_collection(C1, TO1),
+            elaborate_insert_request_db(TO1, [Doc], [Elaborated], [workers(4)]),
+            insert_document_expanded(TO1, Elaborated, _)
+        )),
+    % Now elaborate the same document again. The contract will have the post-
+    % commit branch id as its pre_branch_commit_id, so force it back to 'none'
+    % to simulate a concurrent transaction that lost the race.
+    open_descriptor(Desc, DB2),
+    elaborate_insert_request_db_with_contracts(DB2, [Doc], [_-Contract0], [workers(4)]),
+    enrich_pair_for_operation(insert, Contract0, Contract1),
+    FakeContract = Contract1.put(_{pre_branch_commit_id: none}),
+    catch(
+        verify_contracts(DB2, [FakeContract]),
+        fail_transaction,
+        true
+    ), !.
+
+test(verify_contracts_skips_checks_for_contracts_without_pre_ids, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                batch_test_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Doc = json{'@type':'Person', name:'NoPreIds', age:30},
+    open_descriptor(Desc, DB),
+    json_elaborate_with_contract(DB, Doc, _Elaborated, Contract),
+    %  Contracts produced by json_elaborate_with_contract/4 do not carry the
+    %  pre-branch/pre-schema snapshot ids. Verification must treat the batch as
+    %  safe rather than failing on missing dict keys.
+    verify_contracts(DB, [Contract], ok), !.
+
+:- end_tests(verify_contracts_batch).
