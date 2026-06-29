@@ -27,17 +27,16 @@
  * Binds JSON to an appropriate JSON-LD object for the given error and API.
  *
  */
-api_error_jsonld(API, Error, JSON) :-
+% The queued parallel-elaboration path can deliver errors wrapped as
+% error(error(Inner, _), Context). Unwrap one level and re-wrap as
+% error(Inner, _) so the existing API-specific clauses match.
+api_error_jsonld(API, error(error(Inner, _), _), JSON) :- !,
+    api_error_jsonld(API, error(Inner, _), JSON).
+api_error_jsonld(API, Error, JSON) :- !,
     (   api_global_error_jsonld(Error, API, JSON)
     ->  true
     ;   api_error_jsonld_(API, Error, JSON)
     ).
-% The queued parallel-elaboration path can deliver errors wrapped as
-% error(error(Inner, _), Context). Unwrap one level and re-wrap as
-% error(Inner, _) so the existing API-specific clauses match.
-api_error_jsonld(API, error(error(Inner, _), _), JSON) :-
-    !,
-    api_error_jsonld(API, error(Inner, _), JSON).
 
 %% Errors that are common to all error types
 api_global_error_jsonld(error(missing_parameter(Param), _), Type, JSON) :-

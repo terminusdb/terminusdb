@@ -606,7 +606,8 @@ test(result_ordering, [
              get_dict('terminusdb:///schema#name', E, NameObj),
              get_dict('@value', NameObj, Name)),
             OutputNames),
-    InputNames = OutputNames.
+    InputNames = OutputNames,
+    !.
 
 test(no_duplicate_ids, [
          setup((setup_temp_store(State),
@@ -705,7 +706,8 @@ test(set_of_people_elaborates, [
     length(Pairs, 3),
     Pairs = [_-KantContract|_],
     get_dict(id_pairs, KantContract, KantIdPairs),
-    member('terminusdb:///data/Person/Immanuel%20Kant'-normal, KantIdPairs).
+    member('terminusdb:///data/Person/Immanuel%20Kant'-normal, KantIdPairs),
+    !.
 
 elaboration_without_id(Elab, Normalized) :-
     put_dict('@id', Elab, "<id>", Normalized).
