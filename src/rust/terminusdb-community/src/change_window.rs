@@ -49,14 +49,14 @@ impl BranchWindow {
     }
 
     fn get_commit(&self, commit_id: &str) -> Option<&CommitChanges> {
-        let idx = self.index.get(commit_id)?;
-        let pos = idx - self.start_index;
+        let idx = *self.index.get(commit_id)?;
+        let pos = idx.checked_sub(self.start_index)?;
         self.commits.get(pos)
     }
 
     fn get_commit_mut(&mut self, commit_id: &str) -> Option<&mut CommitChanges> {
         let idx = *self.index.get(commit_id)?;
-        let pos = idx - self.start_index;
+        let pos = idx.checked_sub(self.start_index)?;
         self.commits.get_mut(pos)
     }
 
@@ -304,13 +304,32 @@ impl ChangeWindow {
     ) -> Option<String> {
         let branch = self.branch_window(branch_key)?;
 
-        let mut current = current_commit_id.to_string();
+        // Fast path: if pre and current are the same, there is no change
+        // window to traverse.
+        if pre_commit_id == current_commit_id {
+            return None;
+        }
+
+        // Look up the target commits by index once, then walk backward
+        // through the VecDeque by position. This avoids a string-key HashMap
+        // lookup for every commit in the chain and avoids repeated string
+        // clones of the parent commit id.
+        let current_idx = *branch.index.get(current_commit_id)?;
+        let pre_idx = branch.index.get(pre_commit_id).copied();
+        let stop_before = pre_idx.unwrap_or(branch.start_index);
+
+        // Defensive: a stale index entry could theoretically point to a commit
+        // that is no longer in the window. Treat that as "no conflict" rather
+        // than panicking on an underflow.
+        let mut pos = current_idx.checked_sub(branch.start_index)?;
         loop {
-            if current == pre_commit_id {
+            // Stop if we have reached the pre commit. The pre commit itself is
+            // not part of the change window relative to the transaction.
+            if pre_idx.is_some() && pos + branch.start_index == stop_before {
                 return None;
             }
 
-            let commit = branch.get_commit(&current)?;
+            let commit = branch.commits.get(pos)?;
 
             if commit
                 .added_iris
@@ -318,7 +337,7 @@ impl ChangeWindow {
                 .next()
                 .is_some()
             {
-                return Some(current);
+                return Some(commit.commit_id.clone());
             }
             if commit
                 .removed_iris
@@ -326,24 +345,20 @@ impl ChangeWindow {
                 .next()
                 .is_some()
             {
-                return Some(current);
+                return Some(commit.commit_id.clone());
             }
 
-            match &commit.parent_commit_id {
-                Some(parent) => current = parent.clone(),
-                None => {
-                    // Reached the root. If pre_commit_id is the synthetic
-                    // "none" sentinel, the current commit is a descendant of
-                    // the empty branch, so there is no intersection.
-                    if pre_commit_id == NONE_COMMIT_ID {
-                        return None;
-                    }
-                    // Otherwise, pre_commit_id is not an ancestor of the
-                    // current commit; the window has been pruned or the
-                    // branch was reset.
-                    return Some(current_commit_id.to_string());
+            // Move to the parent commit. If we are at the front of the window,
+            // there is no parent: the synthetic "none" sentinel represents the
+            // empty branch, while any other pre_commit_id means the window was
+            // pruned or the branch was reset.
+            if pos == 0 {
+                if pre_commit_id == NONE_COMMIT_ID {
+                    return None;
                 }
+                return Some(current_commit_id.to_string());
             }
+            pos -= 1;
         }
     }
 
@@ -416,6 +431,19 @@ impl ChangeWindow {
             );
         }
     }
+}
+
+pub fn verify_contracts(
+    branch_key: &str,
+    pre_commit_id: &str,
+    current_commit_id: &str,
+    must_exist: &[String],
+    must_not_exist: &[String],
+) -> Option<String> {
+    let must_exist: HashSet<String> = must_exist.iter().cloned().collect();
+    let must_not_exist: HashSet<String> = must_not_exist.iter().cloned().collect();
+    let window = ChangeWindow::lock();
+    window.intersects(branch_key, pre_commit_id, current_commit_id, &must_exist, &must_not_exist)
 }
 
 fn layer_subject_changes(layer: &WrappedLayer) -> io::Result<(HashSet<String>, HashSet<String>)> {

@@ -9,13 +9,13 @@
               register_pending_branch/1,
               cleanup_active_branches_for_worker/1,
               try_commit_work/0,
-              process_one_commit/1,
+              process_one_commit/2,
+              process_commit_batch/3,
               wake_workers/0,
               invalidate_pending_after_schema_change/1,
               destroy_branch_queue/1,
               start_workers/1,
               stop_workers/0,
-              maybe_help_with_commit/1,
               multi_purpose_worker_thread/1,
               multi_purpose_workers_should_stop/0,
               branch_commit_queue/2,
@@ -39,10 +39,19 @@
 % Round-robin scheduler state.
 :- dynamic pending_branches/1.
 :- dynamic active_branch/2.
+% pending_branch_age(BranchKey, Timestamp) records when BranchKey was first
+% registered as having queued commits. It is used to detect starving commits.
+:- dynamic pending_branch_age/2.
 
 % Worker pool state.
 :- dynamic multi_purpose_worker_thread/1.
 :- dynamic multi_purpose_workers_should_stop/0.
+
+% Commit batch size: number of queued packages processed while holding a branch
+% lock. Hardcoded to 1: benchmarks showed no meaningful throughput gain from
+% larger batch sizes, so we favor smooth latency/fairness across branches over
+% lock-amortization.
+commit_batch_size(1).
 
 :- mutex_create(commit_scheduler_mutex).
 :- mutex_create(branch_registry_mutex).
@@ -112,14 +121,20 @@ enqueue_commit(BranchKey, Package) :-
 
 register_pending_branch(BranchKey) :-
     with_mutex(commit_scheduler_mutex,
-        (   pending_branches(Branches)
-        ->  (   member(BranchKey, Branches)
+        (   (   pending_branch_age(BranchKey, _)
             ->  true
-            ;   retract(pending_branches(Branches)),
-                append(Branches, [BranchKey], NewBranches),
-                assertz(pending_branches(NewBranches))
+            ;   get_time(Now),
+                assertz(pending_branch_age(BranchKey, Now))
+            ),
+            (   pending_branches(Branches)
+            ->  (   member(BranchKey, Branches)
+                ->  true
+                ;   retract(pending_branches(Branches)),
+                    append(Branches, [BranchKey], NewBranches),
+                    assertz(pending_branches(NewBranches))
+                )
+            ;   assertz(pending_branches([BranchKey]))
             )
-        ;   assertz(pending_branches([BranchKey]))
         )).
 
 pick_next_branch(BranchKey, WorkerId) :-
@@ -147,21 +162,42 @@ requeue_branch(BranchKey) :-
             ),
             (   pending_branches(Branches)
             ->  (   member(BranchKey, Branches)
-                ->  true
+                ->  Requeued = true
                 ;   branch_commit_queue(BranchKey, Queue),
                     \+ queue_empty(Queue)
                 ->  retract(pending_branches(Branches)),
                     append(Branches, [BranchKey], NewBranches),
-                    assertz(pending_branches(NewBranches))
-                ;   true  % queue is empty; do not requeue
+                    assertz(pending_branches(NewBranches)),
+                    Requeued = true
+                ;   Requeued = false
                 )
             ;   (   branch_commit_queue(BranchKey, Queue),
                     \+ queue_empty(Queue)
-                ->  assertz(pending_branches([BranchKey]))
-                ;   true
+                ->  assertz(pending_branches([BranchKey])),
+                    Requeued = true
+                ;   Requeued = false
                 )
+            ),
+            (   Requeued == true
+            ->  (   pending_branch_age(BranchKey, _)
+                ->  true
+                ;   get_time(Now),
+                    assertz(pending_branch_age(BranchKey, Now))
+                )
+            ;   retractall(pending_branch_age(BranchKey, _))
             )
         )).
+
+% pending_commit_stale(+ThresholdSeconds) is semidet.
+%
+% True if any pending branch has been waiting for longer than ThresholdSeconds.
+% This is used by elaboration workers to force a commit attempt before taking
+% elaboration work, preventing commit starvation.
+pending_commit_stale(ThresholdSeconds) :-
+    pending_branch_age(_, Timestamp),
+    get_time(Now),
+    Now - Timestamp > ThresholdSeconds,
+    !.
 
 cleanup_active_branches_for_worker(WorkerId) :-
     with_mutex(commit_scheduler_mutex,
@@ -170,10 +206,15 @@ cleanup_active_branches_for_worker(WorkerId) :-
 try_commit_work :-
     thread_self(WorkerId),
     pick_next_branch(BranchKey, WorkerId),
+    commit_batch_size(BatchSize),
     (   acquire_branch_lock(BranchKey, [timeout(0)])
     ->  setup_call_cleanup(
             true,
-            process_one_commit(BranchKey),
+            % Batch size: number of queued commit packages to process while
+            % holding the branch lock before releasing it and letting another
+            % worker pick up any remaining work. This amortizes lock-acquisition
+            % cost over multiple commits without starving other branches.
+            process_commit_batch(BranchKey, BatchSize, true),
             (   release_branch_lock(BranchKey),
                 requeue_branch(BranchKey)
             )
@@ -182,20 +223,41 @@ try_commit_work :-
         fail
     ).
 
-process_one_commit(BranchKey) :-
+process_one_commit(BranchKey, true) :-
     branch_commit_queue(BranchKey, Queue),
     thread_get_message(Queue, Package, [timeout(0)]),
+    !,
     catch(
         api_document:run_commit_package(Package),
         Error,
-        (   get_dict(reply_queue, Package, ReplyQueue),
-            get_dict(request_id, Package, RequestId),
-            catch(thread_send_message(ReplyQueue,
-                                     commit_result(error(Error), RequestId)),
-                  error(existence_error(message_queue, _), _),
-                  true)
-        )
+        deliver_commit_error(Package, Error)
     ).
+process_one_commit(_, false).
+
+process_commit_batch(BranchKey, Max, true) :-
+    Max > 0,
+    branch_commit_queue(BranchKey, Queue),
+    thread_get_message(Queue, Package, [timeout(0)]),
+    !,
+    catch(
+        api_document:run_commit_package(Package),
+        Error,
+        deliver_commit_error(Package, Error)
+    ),
+    Max1 is Max - 1,
+    process_commit_batch(BranchKey, Max1, _).
+process_commit_batch(_, _, false).
+
+% Send an error result back to the original requester's reply queue. The queue
+% may already be gone if the requester has exited, in which case the failure is
+% ignored so that the worker can continue with the next commit.
+deliver_commit_error(Package, Error) :-
+    get_dict(reply_queue, Package, ReplyQueue),
+    get_dict(request_id, Package, RequestId),
+    catch(thread_send_message(ReplyQueue,
+                              commit_result(error(Error), RequestId)),
+          error(existence_error(message_queue, _), _),
+          true).
 
 invalidate_pending_after_schema_change(BranchKey) :-
     branch_commit_queue(BranchKey, Queue),
@@ -207,10 +269,6 @@ invalidate_pending_after_schema_change(BranchKey) :-
         invalidate_pending_after_schema_change(BranchKey)
     ;   true
     ).
-
-maybe_help_with_commit(Package) :-
-    try_commit_work,
-    Package = _.
 
 start_workers(0) :- !.
 start_workers(N) :-
@@ -243,7 +301,9 @@ stop_workers :-
     ),
     forall(
         retract(multi_purpose_worker_thread(Thread)),
-        catch(thread_join(Thread, _), _, true)
+        (   catch(thread_join(Thread, _), _, true),
+            cleanup_active_branches_for_worker(Thread)
+        )
     ),
     retractall(multi_purpose_worker_thread(_)).
 
@@ -330,6 +390,84 @@ test(cleanup_active_branches_for_worker) :-
             retractall(commit_queue:active_branch(_, _))
         )).
 
+test(register_pending_branch_records_age) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    register_pending_branch('age_b1'),
+    assertion(commit_queue:pending_branch_age('age_b1', _)),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )).
+
+test(requeue_branch_preserves_age_when_not_empty) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    ensure_branch_queue('age_b1', Queue),
+    register_pending_branch('age_b1'),
+    commit_queue:pending_branch_age('age_b1', OriginalAge),
+    thread_self(Self),
+    assertz(commit_queue:active_branch('age_b1', Self)),
+    thread_send_message(Queue, dummy),
+    requeue_branch('age_b1'),
+    commit_queue:pending_branch_age('age_b1', NewAge),
+    assertion(NewAge == OriginalAge),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    destroy_branch_queue('age_b1').
+
+test(requeue_branch_retracts_age_when_empty) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    ensure_branch_queue('age_b2', _Queue),
+    register_pending_branch('age_b2'),
+    thread_self(Self),
+    pick_next_branch('age_b2', Self),
+    assertion(commit_queue:pending_branch_age('age_b2', _)),
+    % Queue is empty, so requeue_branch should not requeue and should retract age.
+    requeue_branch('age_b2'),
+    assertion(\+ commit_queue:pending_branch_age('age_b2', _)),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    destroy_branch_queue('age_b2').
+
+test(pending_commit_stale_detects_old_commit) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    get_time(Now),
+    OldTime is Now - 3.0,
+    assertz(commit_queue:pending_branch_age('stale_b', OldTime)),
+    assertion(pending_commit_stale(2.0)),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branch_age(_, _))
+        )).
+
+test(pending_commit_stale_ignores_fresh_commit) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    get_time(Now),
+    assertz(commit_queue:pending_branch_age('fresh_b', Now)),
+    assertion(\+ pending_commit_stale(2.0)),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branch_age(_, _))
+        )).
+
 % Test that enqueue_commit places the package on the branch queue and
 % registers it as pending, without requiring workers or a full commit.
 test(enqueue_commit_puts_package_in_queue) :-
@@ -362,7 +500,7 @@ test(process_one_commit_delivers_success, [setup(asserta(api_document:commit_pac
         test_marker: true
     },
     thread_send_message(Queue, Package),
-    process_one_commit('test_process'),
+    process_one_commit('test_process', true),
     thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_1), [timeout(1)]),
     message_queue_destroy(ReplyQueue),
     destroy_branch_queue('test_process').
@@ -382,7 +520,7 @@ test(process_one_commit_delivers_error, [setup(asserta(api_document:commit_packa
         test_marker_error: true
     },
     thread_send_message(Queue, Package),
-    process_one_commit('test_process_error'),
+    process_one_commit('test_process_error', true),
     thread_get_message(ReplyQueue, commit_result(error(test_error), req_2), [timeout(1)]),
     message_queue_destroy(ReplyQueue),
     destroy_branch_queue('test_process_error').
@@ -406,6 +544,73 @@ test(try_commit_work_processes_enqueued_commit, [setup(asserta(api_document:comm
     thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), req_3), [timeout(1)]),
     message_queue_destroy(ReplyQueue),
     destroy_branch_queue('test_try').
+
+% Test that process_commit_batch processes multiple queued packages in one go.
+test(process_commit_batch_processes_multiple_commits, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_batch_multi'),
+    ensure_branch_queue('test_batch_multi', Queue),
+    message_queue_create(ReplyQueue, []),
+    forall(
+        between(1, 3, N),
+        (   atom_concat(req_multi_, N, ReqId),
+            Package = commit_package{
+                branch_key: 'test_batch_multi',
+                all_branches: ['test_batch_multi'],
+                reply_queue: ReplyQueue,
+                request_id: ReqId,
+                test_marker: true
+            },
+            thread_send_message(Queue, Package)
+        )
+    ),
+    process_commit_batch('test_batch_multi', 10, true),
+    forall(
+        between(1, 3, N),
+        (   atom_concat(req_multi_, N, ReqId),
+            thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), ReqId), [timeout(1)])
+        )
+    ),
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_batch_multi').
+
+% Test that process_commit_batch respects the Max limit and leaves excess packages on the queue.
+test(process_commit_batch_respects_max, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_batch_max'),
+    ensure_branch_queue('test_batch_max', Queue),
+    message_queue_create(ReplyQueue, []),
+    forall(
+        between(1, 5, N),
+        (   atom_concat(req_max_, N, ReqId),
+            Package = commit_package{
+                branch_key: 'test_batch_max',
+                all_branches: ['test_batch_max'],
+                reply_queue: ReplyQueue,
+                request_id: ReqId,
+                test_marker: true
+            },
+            thread_send_message(Queue, Package)
+        )
+    ),
+    process_commit_batch('test_batch_max', 2, true),
+    forall(
+        between(1, 2, N),
+        (   atom_concat(req_max_, N, ReqId),
+            thread_get_message(ReplyQueue, commit_result(success(test_meta, [test_id]), ReqId), [timeout(1)])
+        )
+    ),
+    assertion(message_queue_property(Queue, size(3))),
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_batch_max').
+
+% Test that process_commit_batch returns false when the queue is empty.
+test(process_commit_batch_empty_returns_false, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_batch_empty'),
+    ensure_branch_queue('test_batch_empty', _Queue),
+    process_commit_batch('test_batch_empty', 10, false),
+    destroy_branch_queue('test_batch_empty').
 
 % Test that start_workers and stop_workers create and terminate the
 % worker pool correctly.

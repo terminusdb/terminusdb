@@ -1,6 +1,6 @@
 use rand::{thread_rng, Rng};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::consts::*;
 use super::DocumentContext;
@@ -16,6 +16,9 @@ pub enum ElaborationError {
     SchemaError(String),
     ValueError(String),
 }
+
+/// Namespace for system schema predicates that are not document properties.
+const SYS_NAMESPACE: &str = "http://terminusdb.com/schema/sys#";
 
 /// Range types supported by the simple-document fast path.
 const SIMPLE_RANGE_TYPES: &[&str] = &[
@@ -344,6 +347,12 @@ fn elaborate_simple_document<L: Layer + Clone>(
             .id_predicate(predicate_id)
             .ok_or_else(|| ElaborationError::SchemaError("invalid predicate id".to_string()))?;
 
+        // Skip system predicates (base, documentation, inherits, etc.); they are
+        // not document properties and must not participate in required-field checks.
+        if predicate.starts_with(SYS_NAMESPACE) {
+            continue;
+        }
+
         let range_type_short = match schema.id_object(triple.object) {
             Some(ObjectType::Value(v)) => v.as_val::<String, String>(),
             Some(ObjectType::Node(_)) => {
@@ -374,6 +383,7 @@ fn elaborate_simple_document<L: Layer + Clone>(
     elaborated.insert("@id".to_string(), Value::String(id));
     elaborated.insert("@type".to_string(), Value::String(type_full));
 
+    let mut present_keys: HashSet<String> = HashSet::new();
     for (key, value) in obj.iter() {
         if key == "@type" || key == "@id" {
             continue;
@@ -390,7 +400,20 @@ fn elaborate_simple_document<L: Layer + Clone>(
             m.insert("@value".to_string(), converted);
             Value::Object(m)
         };
-        elaborated.insert(expanded_key, wrapped);
+        elaborated.insert(expanded_key.clone(), wrapped);
+        present_keys.insert(expanded_key);
+    }
+
+    // Every schema property on a simple class is required. If a property is
+    // missing, fall back to Prolog inference so it can generate the standard
+    // required_field_does_not_exist_in_document witness.
+    for (property, _) in properties.iter() {
+        if !present_keys.contains(property) {
+            return Err(ElaborationError::ValueError(format!(
+                "missing required property {}",
+                property
+            )));
+        }
     }
 
     Ok((submitted_id, Value::Object(elaborated)))
@@ -501,6 +524,14 @@ fn build_simple_contract<'a, C: QueryableContextType>(
     let captures_out_term = context.new_term_ref();
     captures_out_term.unify(Atom::new("t"))?;
 
+    // Conflict sets for simple inserts: the generated ID must not exist.
+    let must_exist_term = context.new_term_ref();
+    must_exist_term.unify(&[] as &[Term])?;
+    let must_not_exist_id_term = context.new_term_ref();
+    must_not_exist_id_term.unify(Atom::new(generated_id))?;
+    let must_not_exist_term = context.new_term_ref();
+    must_not_exist_term.unify([must_not_exist_id_term].as_slice())?;
+
     let contract = DictBuilder::new()
         .tag("verification_contract")
         .entry(Atom::new("submitted_id"), submitted_id_term)
@@ -509,6 +540,8 @@ fn build_simple_contract<'a, C: QueryableContextType>(
         .entry(Atom::new("dependencies"), dependencies_term)
         .entry(Atom::new("backlinks"), backlinks_term)
         .entry(Atom::new("captures_out"), captures_out_term)
+        .entry(Atom::new("must_exist"), must_exist_term)
+        .entry(Atom::new("must_not_exist"), must_not_exist_term)
         .entry(Atom::new("pre_branch_commit_id"), pre_branch_commit_id_term)
         .entry(Atom::new("pre_schema_layer_id"), pre_schema_layer_id_term);
 

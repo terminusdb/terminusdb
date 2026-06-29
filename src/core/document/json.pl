@@ -3452,7 +3452,9 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     get_dict('@id', Elaborated, ID0),
     (   atom(ID0)
     ->  ID = ID0
-    ;   atom_string(ID, ID0)
+    ;   string(ID0)
+    ->  atom_string(ID, ID0)
+    ;   throw(error(type_error(atom_or_string, ID0), _))
     ),
     database_instance(Transaction, [Instance]),
     database_prefixes(Transaction, Prefixes),
@@ -3539,7 +3541,9 @@ replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
     get_dict('@id', Elaborated, ID0),
     (   atom(ID0)
     ->  ID = ID0
-    ;   atom_string(ID, ID0)
+    ;   string(ID0)
+    ->  atom_string(ID, ID0)
+    ;   throw(error(type_error(atom_or_string, ID0), _))
     ),
     is_dict(Contract, verification_contract),
     get_dict(submitted_id, Contract, SubmittedId),

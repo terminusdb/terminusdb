@@ -13,7 +13,7 @@
               branch_key_from_transaction/2,
               first_commit_candidate/2,
               open_commit_window_for_branch_head/5,
-              chunk_size/1,
+              max_chunk_size/1,
               start_workers/1,
               stop_workers/0
           ]).
@@ -49,8 +49,24 @@
 % request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks, WrapApiErrors,
 %                 PreBranchCommitId, PreSchemaLayerId).
 
-:- dynamic chunk_size/1.
-chunk_size(100).
+:- dynamic max_chunk_size/1.
+% max_chunk_size is the maximum number of documents that may be grouped into
+% one parallel elaboration chunk. A large insert request is split into chunks
+% no larger than this value, and each chunk is elaborated independently
+% (potentially by different worker threads). A smaller default ensures more
+% chunks per request and therefore better use of multiple workers for typical
+% document counts; a very large request still gets many chunks. The default
+% can be overridden at module load time via TERMINUSDB_CHUNK_SIZE.
+max_chunk_size(1000).
+
+:- (   getenv('TERMINUSDB_CHUNK_SIZE', ChunkSizeString),
+       catch(atom_number(ChunkSizeString, ChunkSize), _, fail),
+       integer(ChunkSize),
+       ChunkSize > 0
+   ->  retractall(max_chunk_size(_)),
+       assertz(max_chunk_size(ChunkSize))
+   ;   true
+   ).
 
 :- dynamic elaboration_workers_should_stop/0.
 :- dynamic elaboration_worker_thread/1.
@@ -107,10 +123,10 @@ elaborate_insert_request_db_with_contracts(DB, Docs, Pairs, Options) :-
     ).
 
 chunk_size_for_request(DocCount, ChunkSize) :-
-    chunk_size(DefaultChunkSize),
-    (   DocCount > DefaultChunkSize
-    ->  ChunkSize = DocCount
-    ;   ChunkSize = DefaultChunkSize
+    max_chunk_size(MaxChunkSize),
+    (   DocCount > MaxChunkSize
+    ->  ChunkSize = MaxChunkSize
+    ;   ChunkSize = DocCount
     ).
 
 chunks_from_documents(Docs, ChunkSize, Chunks) :-
@@ -292,9 +308,14 @@ stop_elaboration_workers :-
     stop_workers.
 
 multi_purpose_worker_loop :-
+    thread_self(Me),
+    thread_at_exit(commit_queue:cleanup_active_branches_for_worker(Me)),
+    multi_purpose_worker_loop_body.
+
+multi_purpose_worker_loop_body :-
     (   multi_purpose_workers_should_stop
     ->  true
-    ;   (   worker_prefers_elaboration
+    ;   (   worker_should_commit_first
         ->  (   maybe_help_with_elaboration
             ->  true
             ;   commit_queue:try_commit_work
@@ -308,8 +329,15 @@ multi_purpose_worker_loop :-
             ;   idle_worker_wait
             )
         ),
-        multi_purpose_worker_loop
+        multi_purpose_worker_loop_body
     ).
+
+% worker_should_commit_first is true when the worker is allowed to prefer
+% elaboration over commit work. If a commit has been pending for more than 2
+% seconds, we force commit work first to avoid starvation of queued commits.
+worker_should_commit_first :-
+    worker_prefers_elaboration,
+    \+ commit_queue:pending_commit_stale(2.0).
 
 worker_prefers_elaboration :-
     config:worker_elaboration_preference(P),
@@ -477,6 +505,14 @@ helper_subdocs(Count, Docs) :-
             format(atom(Street), 'Street~|~`0t~d~4+', [I])
         ),
         Docs).
+
+test(chunk_size_for_request_caps_at_default, [setup(assertz(max_chunk_size(1000))),
+                                                cleanup(retractall(max_chunk_size(_)))]) :-
+    chunk_size_for_request(10000, 1000), !.
+
+test(chunk_size_for_request_uses_doc_count_below_default, [setup(assertz(max_chunk_size(1000))),
+                                                            cleanup(retractall(max_chunk_size(_)))]) :-
+    chunk_size_for_request(100, 100), !.
 
 test(simple_docs_elaborate, [
          setup((setup_temp_store(State),
@@ -757,6 +793,26 @@ test(rust_elaboration_contract_for_simple_doc, [
         get_dict('terminusdb:///schema#name', Elaborated, NameObj),
         get_dict('@type', NameObj, 'http://www.w3.org/2001/XMLSchema#string'),
         get_dict('@value', NameObj, 'Alice')
+    ;   true
+    ),
+    !.
+
+test(rust_elaboration_fails_on_missing_required_field, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    (   rust_elaboration_available
+    ->  Doc = json{'@type':'Person', age:30},
+        open_descriptor(Desc, DB),
+        '$doc':get_document_context(DB, Context),
+        % The Rust fast path must refuse to elaborate a document that is
+        % missing a required schema property, so the Prolog inference fallback
+        % can generate the standard required_field_does_not_exist_in_document
+        % witness.
+        \+ '$doc':rust_elaborate_simple_documents(Context, [Doc], none, none, _)
     ;   true
     ),
     !.
