@@ -26,6 +26,7 @@
 
 :- use_module(config(terminus_config), [worker_amount/1]).
 :- use_module(core(util)).
+:- use_module(core(util/test_utils), [setup_temp_store/1, teardown_temp_store/1]).
 :- use_module(core(triple), [triple_store/1, with_triple_store/2]).
 :- use_module(library(apply)).
 :- use_module(library(aggregate), [aggregate_all/3]).
@@ -614,7 +615,7 @@ test(process_commit_batch_empty_returns_false, [setup(asserta(api_document:commi
 
 % Test that start_workers and stop_workers create and terminate the
 % worker pool correctly.
-test(start_and_stop_workers) :-
+test(start_and_stop_workers, [setup(setup_temp_store(State)), cleanup(teardown_temp_store(State))]) :-
     cleanup_workers_and_branches,
     start_workers(2),
     aggregate_all(count, multi_purpose_worker_thread(_), Count),
@@ -625,7 +626,10 @@ test(start_and_stop_workers) :-
 
 % Test that a real worker thread picks up an enqueued commit and delivers
 % the result to the reply queue.
-test(worker_processes_enqueued_commit, [setup(asserta(api_document:commit_package_test_handler(commit_queue:success_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+test(worker_processes_enqueued_commit, [setup((setup_temp_store(State),
+                                              asserta(api_document:commit_package_test_handler(commit_queue:success_handler)))),
+                                          cleanup((retractall(api_document:commit_package_test_handler(_)),
+                                                   teardown_temp_store(State)))]) :-
     cleanup_workers_and_branches,
     destroy_branch_queue('test_worker'),
     ensure_branch_queue('test_worker', _Queue),
@@ -647,7 +651,7 @@ test(worker_processes_enqueued_commit, [setup(asserta(api_document:commit_packag
 % Test that wake_workers can wake a worker that is blocked in
 % idle_worker_wait. The worker loop should continue and the worker should
 % be stoppable afterwards.
-test(wake_workers_wakes_idle_worker) :-
+test(wake_workers_wakes_idle_worker, [setup(setup_temp_store(State)), cleanup(teardown_temp_store(State))]) :-
     cleanup_workers_and_branches,
     start_workers(1),
     sleep(0.05),
