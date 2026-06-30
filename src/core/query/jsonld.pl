@@ -321,6 +321,15 @@ test(expand_prefix_with_colon, []) :-
     prefix_expand("@schema:foo:bar", Prefixes, 'terminusdb:///schema#foo:bar'),
     prefix_expand("a:foo:bar", Prefixes, 'http://example.org/a/foo:bar').
 
+test(expand_hyphenated_prefix, []) :-
+    Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
+    prefix_expand("dfrnt-bom:Item", Prefixes, 'https://example.com/dfrnt-bom/Item'),
+    prefix_expand("dfrnt-bom:instance/123", Prefixes, 'https://example.com/dfrnt-bom/instance/123').
+
+test(expand_hyphenated_prefix_with_colon_in_local, []) :-
+    Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
+    prefix_expand("dfrnt-bom:Foo:Bar", Prefixes, 'https://example.com/dfrnt-bom/Foo:Bar').
+
 :- end_tests(jsonld_expand).
 
 /*
@@ -437,6 +446,23 @@ test(compress_base, [])
     compress(Document, Context, Compressed),
 
     json{'@type':'scm:Fact','scm:your_face':json{'@id':'is_ugly'}} :< Compressed.
+
+test(compress_hyphenated_prefix, [])
+:-
+    Context = json{ 'dfrnt-bom' : "https://example.com/dfrnt-bom/"},
+    Document = json{ '@type' : "https://example.com/dfrnt-bom/Item",
+                     '@id' : "https://example.com/dfrnt-bom/instance/123"},
+    compress(Document, Context, Compressed),
+
+    json{'@type':'dfrnt-bom:Item','@id':'dfrnt-bom:instance/123'} :< Compressed.
+
+test(compress_hyphenated_prefix_property, [])
+:-
+    Context = json{ 'dfrnt-bom' : "https://example.com/dfrnt-bom/"},
+    Document = json{ 'https://example.com/dfrnt-bom/weight' : 42},
+    compress(Document, Context, Compressed),
+
+    json{'dfrnt-bom:weight':42} :< Compressed.
 
 :- end_tests(jsonld_compress).
 

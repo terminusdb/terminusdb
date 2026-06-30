@@ -1321,3 +1321,33 @@ local_memoize(State, Template, Goal) :-
                                do_local_memoize(State, Template)),
                            finalize_memoization(State))
     ;   get_local_memoized(State, Template)).
+
+:- begin_tests(utils_uri_prefix).
+
+test(uri_has_prefix_hyphenated, []) :-
+    uri_has_prefix('dfrnt-bom:Item', Match),
+    get_dict(prefix, Match, "dfrnt-bom"),
+    get_dict(suffix, Match, "Item").
+
+test(uri_has_prefix_hyphenated_empty_suffix, []) :-
+    uri_has_prefix('dfrnt-bom:', Match),
+    get_dict(prefix, Match, "dfrnt-bom"),
+    get_dict(suffix, Match, "").
+
+test(uri_has_prefix_hyphenated_with_digit, []) :-
+    uri_has_prefix('a1:b', Match),
+    get_dict(prefix, Match, "a1"),
+    get_dict(suffix, Match, "b").
+
+test(uri_has_prefix_no_colon_fails, [fail]) :-
+    uri_has_prefix('dfrnt-bom-name', _).
+
+test(uri_has_prefix_leading_hyphen_fails, [fail]) :-
+    uri_has_prefix('-bom:Item', _).
+
+test(uri_has_prefix_unsafe_hyphenated, []) :-
+    uri_has_prefix_unsafe('dfrnt-bom:Item', Match),
+    get_dict(prefix, Match, "dfrnt-bom"),
+    get_dict(suffix, Match, "Item").
+
+:- end_tests(utils_uri_prefix).
