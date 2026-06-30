@@ -12,6 +12,21 @@ ignore_predicate("woql_compile/3").
 % Module prefix used in meta-calls (query_response:(...)) - not an actual predicate
 ignore_predicate("query_response/0").
 
+% plunit assertions
+ignore_predicate("assertion/1").
+ignore_predicate("assertion/2").
+
+% thread library predicates linter can't resolve
+ignore_predicate("mutex_trylock/1").
+ignore_predicate("thread_at_exit/1").
+
+% gensym library predicates linter can't resolve
+ignore_predicate("gensym/2").
+
+% Module-qualified calls such as commit_queue:enqueue_commit/2 are sometimes
+% misread by the linter as a call to commit_queue/0.
+ignore_predicate("commit_queue/0").
+
 % Predicates from library(http/json) - linter can't follow re-exports in SWI-Prolog 10
 % These predicates exist in both SWI-Prolog 9 and 10, but prolog_xref doesn't resolve them
 ignore_predicate("atom_json_dict/3").

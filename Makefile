@@ -84,7 +84,11 @@ lint:
 
 .PHONY: clippy
 clippy:
+ifeq "$(shell uname)" "Darwin"
+	cargo clippy --message-format=json --no-default-features --manifest-path=src/rust/Cargo.toml
+else
 	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
+endif
 
 .PHONY: lint-mocha
 lint-mocha:
@@ -193,4 +197,4 @@ $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
 .PHONY: pr
-pr: lint lint-mocha lint-openapi clean dev restart test test-int
+pr: lint lint-mocha lint-openapi clippy clean dev restart test test-int

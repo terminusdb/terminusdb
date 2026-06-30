@@ -267,6 +267,8 @@
               read_data_version_header/2,
               read_data_version/2,
               write_data_version_header/1,
+              write_transaction_retry_count_header/1,
+              transaction_retry_count_from_meta_data/2,
               serialize_data_version/2,
               transaction_data_version/2,
               validation_data_version/3,

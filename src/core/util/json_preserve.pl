@@ -1,7 +1,8 @@
 :- module(json_preserve, [
     json_read_dict/3,
     json_read_dict_stream/3,
-    sys_json_parse_value/2
+    sys_json_parse_value/2,
+    close_list_tails/1
 ]).
 
 :- use_module(library(option)).
@@ -65,10 +66,37 @@ json_read_dict(Stream, Dict, Options) :-
 json_read_dict_stream(Stream, Dict, Options) :-
     % Use Rust parser for one-at-a-time streaming
     % All streams are now string streams (buffered from HTTP)
-    (   '$json_preserve':json_read_one_from_stream(Stream, Value)
-    ->  Dict = Value
-    ;   % Rust parser returned nothing - must be EOF
+    (   catch('$json_preserve':json_read_one_from_stream(Stream, Value), _Error, fail)
+    ->  (   Value = eof
+        ->  Dict = eof
+        ;   % The streaming parser may leave array tails as variables.
+            % JSON values never contain real variables, so close any
+            % remaining tails to make nested arrays proper lists.
+            close_list_tails(Value),
+            Dict = Value
+        )
+    ;   % Rust parser returned nothing or failed - must be EOF
         handle_eof(Options, Dict)
+    ).
+
+% close_list_tails(+Term) is det.
+% Recursively close any remaining variable tails on lists that appear
+% inside a parsed JSON value. The Rust streaming parser can leave nested
+% array tails as variables.
+close_list_tails(Term) :-
+    (   var(Term)
+    ->  Term = []
+    ;   is_dict(Term)
+    ->  dict_pairs(Term, _, Pairs),
+        forall(member(_-Value, Pairs), close_list_tails(Value))
+    ;   is_list(Term)
+    ->  (   Term = []
+        ->  true
+        ;   Term = [Head|Tail]
+        ->  close_list_tails(Head),
+            close_list_tails(Tail)
+        )
+    ;   true
     ).
 
 %! handle_eof(+Options, -Dict) is det.
@@ -109,6 +137,39 @@ assertion(Goal) :- call(Goal).
 :- endif.
 
 :- begin_tests(json_preserve).
+
+test(stream_returns_strings_not_atoms) :-
+    JSON = '{"@type":"Simple","name":"abc123"}',
+    open_string(JSON, Stream),
+    json_read_dict(Stream, Dict, [default_tag(json), end_of_file(eof)]),
+    Dict \= eof,
+    get_dict(name, Dict, Name),
+    string(Name),
+    Name = "abc123".
+
+test(stream_returns_id_as_string) :-
+    JSON = '{"@type":"Simple","@id":"Simple/foo","name":"abc123"}',
+    open_string(JSON, Stream),
+    json_read_dict(Stream, Dict, [default_tag(json), end_of_file(eof)]),
+    Dict \= eof,
+    get_dict('@id', Dict, Id),
+    string(Id),
+    Id = "Simple/foo",
+    get_dict(name, Dict, Name),
+    string(Name),
+    Name = "abc123".
+
+test(stream_returns_strings_in_array) :-
+    JSON = '[{"@type":"Simple","@id":"Simple/foo","name":"abc123"}]',
+    open_string(JSON, Stream),
+    json_read_dict(Stream, Dict, [default_tag(json), end_of_file(eof)]),
+    Dict = [First],
+    get_dict('@id', First, Id),
+    string(Id),
+    Id = "Simple/foo",
+    get_dict(name, First, Name),
+    string(Name),
+    Name = "abc123".
 
 test(basic_object) :-
     JSON = '{"name": "Alice", "age": 30}',
