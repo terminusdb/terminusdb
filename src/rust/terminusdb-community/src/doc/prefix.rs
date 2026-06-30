@@ -235,7 +235,9 @@ fn hashmap_prefix_expand_schema_raw(
 /// Check whether `name` has the shape of a prefixed name (`prefix:suffix`).
 /// Mirrors the Prolog regex used in `uri_has_prefix_unsafe/2`:
 ///
-///     ^(?<prefix>(\p{L}|@)((\p{Xwd}|-|\.)*(\p{Xwd}|-))?):(?<suffix>.*)$
+/// ```text
+/// ^(?<prefix>(\p{L}|@)((\p{Xwd}|-|\.)*(\p{Xwd}|-))?):(?<suffix>.*)$
+/// ```
 ///
 /// Only names that look like a prefix reference are treated as one; names such
 /// as `Node/prefix:node/...` (with a `/` before the colon) are not prefixed.
