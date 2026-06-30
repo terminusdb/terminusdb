@@ -103,6 +103,8 @@ TerminusDB provides official client libraries for multiple languages:
 - 🐍 **[Python Client (v12)](https://pypi.org/project/terminusdb/)**: Full-featured Python library for TerminusDB
 - 🌐 **[JavaScript Client (v12)](https://www.npmjs.com/package/terminusdb)**: Browser and Node.js support
 - **[Rust Client](https://github.com/ParapluOU/terminusdb-rs)**: Full-featured Rust library for TerminusDB, community contribution
+- 🔮 **[Elixir Client](https://hex.pm/packages/terminusdb_client)**: An idiomatic Elixir client
+
 
 ## Documentation
 
