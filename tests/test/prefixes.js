@@ -46,5 +46,19 @@ describe('prefixes', function () {
       // Delete the created database
       await db.delete(agent)
     })
+
+    it('passes create with a hyphenated prefix', async function () {
+      const prefixes = {
+        '@base': 'http://a.me/b',
+        '@schema': 'https://b.is/schema#',
+        'dfrnt-bom': 'https://example.com/dfrnt-bom/',
+      }
+      await db.create(agent, { prefixes })
+      const r = await agent.get(api.path.prefixes(agent))
+      expect(r.status).to.equal(200)
+      prefixes['@type'] = 'Context'
+      expect(r.body).to.deep.equal(prefixes)
+      await db.delete(agent)
+    })
   })
 })
