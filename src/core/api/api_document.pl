@@ -2791,7 +2791,7 @@ test(embedding_type_queries_from_transaction, [
                full_replace(true),
                graph_type(schema),
                message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
 
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
     open_descriptor(TestDB, Transaction),
@@ -2834,7 +2834,7 @@ test(embedding_metadata_stored, [
                full_replace(true),
                graph_type(schema),
                message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
 
     % Get the transaction and check metadata is stored
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
@@ -2888,7 +2888,7 @@ test(embedding_document_types_single, [
                full_replace(true),
                graph_type(schema),
                message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _, _, Options),
 
     % Insert an instance document
     open_string('
@@ -2900,7 +2900,7 @@ test(embedding_document_types_single, [
     InstanceOptions = [author("test"),
                         graph_type(instance),
                         message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, [Id], InstanceOptions),
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
 
     % Test embedding_document_types
     resolve_absolute_string_descriptor("admin/testdb", TestDB),
@@ -2940,7 +2940,7 @@ test(embedding_api_end_to_end, [
                      full_replace(true),
                      graph_type(schema),
                      message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, SchemaOptions),
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
 
     % Insert instance document
     open_string('
@@ -2949,7 +2949,7 @@ test(embedding_api_end_to_end, [
     InstanceOptions = [author("test"),
                        graph_type(instance),
                        message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, [Id], InstanceOptions),
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
 
     % Call the API selector with format=embedding and capture output
     Config = config{ format: embedding,
