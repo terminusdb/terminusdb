@@ -1262,15 +1262,13 @@ schema_key_descriptor_(Schema, Prefixes, Type, Obj, random(Base)) :-
 :- create_prolog_flag(terminusdb_schemaless_shape_check_disabled, false,
                       [type(boolean), keep(true)]).
 
-:- initialization
-    (   getenv('TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED', Value)
-    ->  atom_string(Value_Atom, Value),
-        (   memberchk(Value_Atom, [true, 'true', '1', yes])
-        ->  set_prolog_flag(terminusdb_schemaless_shape_check_disabled, true)
-        ;   true
-        )
-    ;   true
-    ).
+:- initialization(
+    (   getenv('TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED', Value),
+        atom_string(Value_Atom, Value),
+        memberchk(Value_Atom, [true, 'true', '1', yes])
+    ->  set_prolog_flag(terminusdb_schemaless_shape_check_disabled, true)
+    ;   set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false)
+    ), program).
 
 schema_is_schemaless(Schema) :-
     xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
