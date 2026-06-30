@@ -330,6 +330,10 @@ test(expand_hyphenated_prefix_with_colon_in_local, []) :-
     Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
     prefix_expand("dfrnt-bom:Foo:Bar", Prefixes, 'https://example.com/dfrnt-bom/Foo:Bar').
 
+test(expand_hyphenated_scheme_unchanged, []) :-
+    Prefixes = _{},
+    prefix_expand('dfrnt-bom:///schema#BomClass', Prefixes, 'dfrnt-bom:///schema#BomClass').
+
 :- end_tests(jsonld_expand).
 
 /*

@@ -819,11 +819,12 @@ whole_arg(_, _) :-
  *
  * Tests to see if a URI has a protocol.
  *
- * This performs a very simple check and does not support the full URI
- * specification. We can always improve on this if needed.
+ * Matches RFC 3986 \u00a73.1 scheme syntax:
+ *   ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+ * followed by "://". Keeps the existing Unicode-friendly property escapes.
  */
 uri_has_protocol(K) :-
-    re_match('^\\p{L}\\p{Xan}*://.+', K).
+    re_match('^\\p{L}[\\p{Xan}+\\-.]*://.+', K).
 
 /*
  * uri_has_prefix(K) is semidet.
@@ -1349,5 +1350,24 @@ test(uri_has_prefix_unsafe_hyphenated, []) :-
     uri_has_prefix_unsafe('dfrnt-bom:Item', Match),
     get_dict(prefix, Match, "dfrnt-bom"),
     get_dict(suffix, Match, "Item").
+
+test(uri_has_protocol_standard, []) :-
+    uri_has_protocol('http://example.com/'),
+    uri_has_protocol('https://example.com/path').
+
+test(uri_has_protocol_hyphenated_bom_scheme, []) :-
+    uri_has_protocol('dfrnt-bom:///schema#BomClass').
+
+test(uri_has_protocol_plus_scheme, []) :-
+    uri_has_protocol('coap+tcp:///path').
+
+test(uri_has_protocol_dot_scheme, []) :-
+    uri_has_protocol('my.scheme:///path').
+
+test(uri_has_protocol_rejects_prefixed_name, [fail]) :-
+    uri_has_protocol('dfrnt-bom:Item').
+
+test(uri_has_protocol_rejects_bare_string, [fail]) :-
+    uri_has_protocol('notaprotocol').
 
 :- end_tests(utils_uri_prefix).
