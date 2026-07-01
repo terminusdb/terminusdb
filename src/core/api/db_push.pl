@@ -8,6 +8,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 :- use_module(core(document)).
+:- use_module(core(document/meta_commit_queue)).
 :- use_module(core(util)).
 :- use_module(config(terminus_config), [terminusdb_version/1]).
 :- use_module(core(triple)).
@@ -143,8 +144,16 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
             [Read_Obj] = (Remote_Transaction_Object.instance_objects),
             Layer = (Read_Obj.read),
             layer_to_id(Layer, Current_Head_Id),
-            update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-            run_transactions([Database_Transaction_Object], true, _),
+            database_descriptor{organization_name: Organization,
+                              database_name: Database} :< Database_Transaction_Object.descriptor,
+            organization_database_name(Organization, Database, Database_Key),
+            meta_commit_queue:with_meta_commit_lock(
+                Database_Key,
+                db_push:(
+                    update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
+                    run_transactions([Database_Transaction_Object], true, _)
+                )
+            ),
             Result = new(Current_Head_Id)
         )
     % We are using a shared store
@@ -155,10 +164,18 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
         [Read_Obj] = (Remote_Transaction_Object.instance_objects),
         Layer = (Read_Obj.read),
         layer_to_id(Layer, Current_Head_Id),
+        database_descriptor{organization_name: Organization2,
+                          database_name: Database2} :< Database_Transaction_Object.descriptor,
+        organization_database_name(Organization2, Database2, Database_Key),
 
         local_push(System_DB, Auth, Organization, DB, Current_Head_Id),
-        update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-        run_transactions([Database_Transaction_Object], true, _),
+        meta_commit_queue:with_meta_commit_lock(
+            Database_Key,
+            db_push:(
+                update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
+                run_transactions([Database_Transaction_Object], true, _)
+            )
+        ),
         Result = new(Current_Head_Id)
     ).
 

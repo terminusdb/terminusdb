@@ -8,6 +8,7 @@
 :- use_module(library(plunit)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
+:- use_module(core(document/meta_commit_queue)).
 
 % Does some crazy-magic unspecified optimizations
 api_optimize(SystemDB, Auth, Path) :-
@@ -35,17 +36,22 @@ api_optimize(SystemDB, Auth, Path) :-
     descriptor_optimize(Descriptor).
 
 named_graph_optimize(Graph_Name) :-
-    storage(Store),
-    safe_open_named_graph(Store,Graph_Name,Graph),
-    (   head(Graph, Layer, Version)
-    ->  (   parent(Layer, _)
-        ->  squash(Layer,New_Layer),
-            do_or_die(
-                nb_force_set_head(Graph,New_Layer,Version),
-                error(label_version_changed(Graph_Name,Version),_))
-        ;   true  % Already a base layer, nothing to squash
+    meta_commit_queue:with_meta_commit_lock(
+        Graph_Name,
+        api_optimize:(
+            storage(Store),
+            safe_open_named_graph(Store,Graph_Name,Graph),
+            (   head(Graph, Layer, Version)
+            ->  (   parent(Layer, _)
+                ->  squash(Layer,New_Layer),
+                    do_or_die(
+                        nb_force_set_head(Graph,New_Layer,Version),
+                        error(label_version_changed(Graph_Name,Version),_))
+                ;   true  % Already a base layer, nothing to squash
+                )
+            ;   true)
         )
-    ;   true).
+    ).
 
 descriptor_optimize(system_descriptor{}) :-
     system_instance_name(Graph_Name),
@@ -522,6 +528,5 @@ test(optimize_db_idempotent,
 
     % Head layer must be unchanged
     Layer1_Id = Layer2_Id.
-
 
 :- end_tests(optimize).

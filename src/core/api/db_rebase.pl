@@ -11,6 +11,21 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(core(api/api_optimize)).
+:- use_module(core(document/meta_commit_queue)).
+
+:- dynamic rebase_pre_database_commit_hook/1.
+:- dynamic rebase_optimize_thread/1.
+
+% Default hook used by the race regression test. It is a no-op unless the
+% current test has registered an optimizer thread via rebase_optimize_thread/1.
+rebase_pre_database_commit_hook(_Database_Transaction_Object) :-
+    rebase_optimize_thread(OptimizeThread),
+    !,
+    thread_send_message(OptimizeThread, optimize_now),
+    sleep(0.05).
+rebase_pre_database_commit_hook(_) :- fail.
 
 cycle_context(Context, New_Context, New_Transaction_Object, Validation_Object) :-
     [Transaction_Object] = Context.transaction_objects,
@@ -249,12 +264,32 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     Layer = Read_Write_Obj.read,
     layer_to_id(Layer, Layer_Id),
     Database_Transaction_Object = (Transaction_Object.parent),
+    database_descriptor{organization_name: Organization,
+                        database_name: Database} :< Database_Transaction_Object.descriptor,
+    organization_database_name(Organization, Database, Database_Key),
 
-    update_repository_head(Database_Transaction_Object, Repo_Name, Layer_Id),
+    % Hold the meta commit lock across the repository head update and the
+    % database commit. This prevents the auto-optimizer from changing the _meta
+    % head while the rebase is in its commit window.
+    meta_commit_queue:with_meta_commit_lock(
+        Database_Key,
+        db_rebase:(
+            update_repository_head(Database_Transaction_Object, Repo_Name, Layer_Id),
 
-    benchmark(after_repository_head_update),
+            benchmark(after_repository_head_update),
 
-    run_transactions([Database_Transaction_Object], true, _),
+            % Test hook: allows unit tests to interleave an optimization between
+            % the repository head update and the database commit, which is the
+            % exact window in which the auto-optimizer races with the rebase's
+            % _meta commit.
+            (   rebase_pre_database_commit_hook(Database_Transaction_Object)
+            ->  true
+            ;   true
+            ),
+
+            run_transactions([Database_Transaction_Object], true, _)
+        )
+    ),
     benchmark_subject_stop('rebase on branch').
 
 :- begin_tests(rebase, [concurrent(true)]).
@@ -692,3 +727,80 @@ test(rebase_conflict,
 
 
 :- end_tests(rebase).
+
+optimize_thread_loop(Store, Auth, Master_Meta_Path) :-
+    thread_get_message(Message),
+    (   Message == optimize_now
+    ->  api_optimize(system_descriptor{}, Auth, Master_Meta_Path)
+    ;   true
+    ),
+    (   Message == stop
+    ->  true
+    ;   optimize_thread_loop(Store, Auth, Master_Meta_Path)
+    ).
+
+:- begin_tests(rebase_race, [concurrent(false)]).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+:- use_module(db_create).
+:- use_module(db_branch).
+
+% Regression test for the race between rebase's database commit and a
+% concurrent optimization that squashes the _meta head. Before the fix, the
+% rebase fails because the new _meta layer is a child of the pre-squash head,
+% not the post-squash head. After the fix, the meta commit lock serializes the
+% two operations.
+%
+% The rebase path calls run_transactions/3 directly, without the retry that
+% can mask the race in with_transaction/4.
+test(rebase_races_with_database_optimize,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo")
+            )),
+      cleanup((retractall(db_rebase:rebase_optimize_thread(_)),
+               teardown_temp_store(State)))
+     ])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    super_user_authority(Auth),
+
+    % Commit on main so _meta has a parent layer to squash.
+    create_context(Master_Descriptor, commit_info{author:"test", message:"commit a"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+
+    % Create a feature branch with a commit to rebase.
+    Feature_Path = "admin/foo/local/branch/feature",
+    branch_create(system_descriptor{}, Auth, Feature_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Feature_Path, Feature_Descriptor),
+    create_context(Feature_Descriptor, commit_info{author:"test", message:"feature commit"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
+
+    triple_store(Store),
+    Master_Meta_Path = "admin/foo/_meta",
+
+    % Start the optimizer thread before the rebase. The permanent hook in
+    % db_rebase.pl sends optimize_now to the registered thread exactly in the
+    % window between the repository head update and the database commit.
+    setup_call_cleanup(
+        (   thread_create(
+                with_triple_store(Store,
+                                  optimize_thread_loop(Store, Auth, Master_Meta_Path)),
+                OptimizeThread,
+                []
+            ),
+            assertz(db_rebase:rebase_optimize_thread(OptimizeThread))
+        ),
+        rebase_on_branch(system_descriptor{}, Auth, Master_Path, Feature_Path, "rebaser", [], some(_), _, []),
+        (   db_rebase:rebase_optimize_thread(OptimizeThread),
+            thread_send_message(OptimizeThread, stop),
+            thread_join(OptimizeThread, OptimizeResult),
+            assertion(OptimizeResult == true)
+        )
+    ).
+
+:- end_tests(rebase_race).

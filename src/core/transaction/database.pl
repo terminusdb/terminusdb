@@ -25,6 +25,7 @@
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 :- use_module(core(plugins)).
 :- use_module(core(document/migration)).
+:- use_module(core(document/meta_commit_queue)).
 
 :- use_module(config(terminus_config), [max_transaction_retries/1]).
 
@@ -297,6 +298,16 @@ Options include
 * allow_destructive_migration: whether we should allow strengthening migrations
 
  */
+transaction_object_database_key(Transaction_Object, Key) :-
+    get_dict(descriptor, Transaction_Object, Descriptor),
+    (   database_descriptor{organization_name: _,
+                          database_name: _} = Descriptor
+    ->  meta_commit_queue:database_descriptor_key(Descriptor, Key)
+    ;   get_dict(parent, Transaction_Object, Parent)
+    ->  transaction_object_database_key(Parent, Key)
+    ;   fail
+    ).
+
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     (   option(inside_migration(true), Options)
@@ -317,7 +328,20 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     ->  true
     ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
 
-    commit_validation_objects(Validations0, Committed),
+    findall(Key,
+            (   member(Transaction, Transactions),
+                transaction_object_database_key(Transaction, Key)
+            ),
+            Keys),
+    sort(Keys, Sorted_Keys),
+
+    % Serialize the actual _meta commits and graph head updates. The lock is
+    % released before post_commit_hook so that plugins (such as the auto-
+    % optimizer) do not deadlock trying to acquire the same lock.
+    meta_commit_queue:with_meta_commit_locks(
+        Sorted_Keys,
+        database:commit_validation_objects(Validations0, Committed)
+    ),
     % Use the original validations before any potential schema migration
     collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),
