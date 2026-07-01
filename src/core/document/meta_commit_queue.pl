@@ -1,7 +1,9 @@
 :- module(meta_commit_queue, [
               with_meta_commit_lock/2,
               with_meta_commit_locks/2,
-              database_descriptor_key/2
+              database_descriptor_key/2,
+              graph_label_to_lock_key/2,
+              system_meta_lock_key/1
           ]).
 
 /** <module> Meta commit queue
@@ -19,6 +21,11 @@
 
 :- use_module(core(util)).
 :- use_module(core(triple/database_utils), [organization_database_name/3]).
+:- use_module(core(triple/constants), [system_instance_name/1,
+                                       system_schema_name/1,
+                                       system_inference_name/1]).
+:- use_module(library(lists)).
+:- use_module(library(plunit)).
 
 :- dynamic meta_commit_lock/2.
 :- thread_local held_meta_commit_lock/1.
@@ -73,3 +80,55 @@ with_meta_commit_locks_([Key|Keys], Goal) :-
             retract(held_meta_commit_lock(Key))
         )
     ).
+
+system_meta_lock_key(system_meta).
+
+graph_label_to_lock_key(Graph_Label, Lock_Key) :-
+    (   system_graph_label(Graph_Label)
+    ->  system_meta_lock_key(Lock_Key)
+    ;   atom(Graph_Label),
+        atomic_list_concat(Parts, '|', Graph_Label),
+        Parts = [Organization, DB|_]
+    ->  organization_database_name(Organization, DB, Lock_Key)
+    ;   Lock_Key = Graph_Label
+    ).
+
+system_graph_label(Graph_Label) :-
+    (   system_instance_name(Graph_Label)
+    ;   system_schema_name(Graph_Label)
+    ;   system_inference_name(Graph_Label)
+    ),
+    !.
+
+:- begin_tests(meta_commit_queue).
+
+test(system_instance_label_maps_to_system_meta) :-
+    system_instance_name(Graph_Label),
+    graph_label_to_lock_key(Graph_Label, system_meta).
+
+test(system_schema_label_maps_to_system_meta) :-
+    system_schema_name(Graph_Label),
+    graph_label_to_lock_key(Graph_Label, system_meta).
+
+test(database_meta_label_maps_to_itself) :-
+    organization_database_name(admin, test, Key),
+    graph_label_to_lock_key(Key, Key).
+
+test(repo_commits_label_maps_to_database_key) :-
+    organization_database_name(admin, test, DBKey),
+    atomic_list_concat([admin, test, local, '_commits'], '|', RepoLabel),
+    graph_label_to_lock_key(RepoLabel, DBKey).
+
+test(branch_instance_label_maps_to_database_key) :-
+    organization_database_name(admin, test, DBKey),
+    atomic_list_concat([admin, test, local, branch, main, instance], '|', BranchLabel),
+    graph_label_to_lock_key(BranchLabel, DBKey).
+
+test(lock_is_recursive_within_same_thread) :-
+    Key = recursive_test_key,
+    with_meta_commit_lock(
+        Key,
+        meta_commit_queue:(with_meta_commit_lock(Key, true))
+    ).
+
+:- end_tests(meta_commit_queue).

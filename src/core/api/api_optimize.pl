@@ -36,8 +36,9 @@ api_optimize(SystemDB, Auth, Path) :-
     descriptor_optimize(Descriptor).
 
 named_graph_optimize(Graph_Name) :-
+    meta_commit_queue:graph_label_to_lock_key(Graph_Name, Lock_Key),
     meta_commit_queue:with_meta_commit_lock(
-        Graph_Name,
+        Lock_Key,
         api_optimize:(
             storage(Store),
             safe_open_named_graph(Store,Graph_Name,Graph),

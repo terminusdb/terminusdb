@@ -303,6 +303,8 @@ transaction_object_database_key(Transaction_Object, Key) :-
     (   database_descriptor{organization_name: _,
                           database_name: _} = Descriptor
     ->  meta_commit_queue:database_descriptor_key(Descriptor, Key)
+    ;   system_descriptor{} = Descriptor
+    ->  meta_commit_queue:system_meta_lock_key(Key)
     ;   get_dict(parent, Transaction_Object, Parent)
     ->  transaction_object_database_key(Parent, Key)
     ;   fail
