@@ -320,9 +320,13 @@ multi_purpose_worker_loop_body :-
             ->  true
             ;   commit_queue:try_commit_work
             ->  true
+            ;   commit_queue:try_global_optimization
+            ->  true
             ;   idle_worker_wait
             )
         ;   (   commit_queue:try_commit_work
+            ->  true
+            ;   commit_queue:try_global_optimization
             ->  true
             ;   maybe_help_with_elaboration
             ->  true

@@ -80,6 +80,7 @@
 
               % api_optimize.pl
               api_optimize/3,
+              api_optimize_queued/3,
 
               % api_prefixes
               get_prefixes/4,

@@ -128,7 +128,7 @@ test(lock_is_recursive_within_same_thread) :-
     Key = recursive_test_key,
     with_meta_commit_lock(
         Key,
-        meta_commit_queue:(with_meta_commit_lock(Key, true))
+        with_meta_commit_lock(Key, true)
     ).
 
 :- end_tests(meta_commit_queue).

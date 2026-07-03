@@ -121,7 +121,7 @@ api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Timed out waiting for the commit queue to process the request", []),
     JSON = _{'@type' : Type_Displayed,
-             'api:status' : "api:server_error",
+             'api:status' : "api:service_unavailable",
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
              'api:message' : Msg
             }.
@@ -971,6 +971,14 @@ api_error_jsonld_(rebase,error(rebase_commit_application_failed(fixup_error(Thei
                               'api:witness' : Fixup_Witnesses},
              'api:message' : Msg
             }.
+api_error_jsonld_(rebase,error(rebase_target_branch_changed(Path),_), JSON) :-
+    format(string(Msg), "Rebase target branch head changed during the operation: ~q", [Path]),
+    JSON = _{'@type' : 'api:RebaseErrorResponse',
+             'api:status' : 'api:conflict',
+             'api:error' : _{ '@type' : 'api:RebaseTargetBranchChanged',
+                              'api:absolute_descriptor' : Path},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(pack,error(unresolvable_collection(Descriptor),_), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The following descriptor (which should be a repository) could not be resolved to a resource: ~q", [Path]),
@@ -1811,6 +1819,7 @@ error_type_(access_documents, 'api:AccessDocumentErrorResponse').
 error_type_(get_documents, 'api:GetDocumentErrorResponse').
 error_type_(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type_(optimize, 'api:OptimizeErrorResponse').
+error_type_(rebase, 'api:RebaseErrorResponse').
 error_type_(pack, 'api:PackErrorResponse').
 error_type_(prefix, 'api:PrefixErrorResponse').
 error_type_(pull, 'api:PullErrorResponse').
@@ -2986,6 +2995,7 @@ status_http_code('api:forbidden',403).
 status_http_code('api:not_found',404).
 status_http_code('api:method_not_allowed',405).
 status_http_code('api:conflict',409).
+status_http_code('api:service_unavailable',503).
 status_http_code('api:server_error',500).
 
 status_cli_code('api:success',0).

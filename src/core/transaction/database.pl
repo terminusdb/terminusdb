@@ -6,6 +6,7 @@
               with_transaction/3,
               with_transaction/4,
               graph_inserts_deletes/3,
+              transaction_object_database_key/2,
               reset_transaction_object_graph_descriptors/1,
               reset_transaction_objects_graph_descriptors/1
           ]).
@@ -144,11 +145,11 @@ compute_backoff(Count, Time) :-
     Time is This_Slot * Slot_Time.
 
 reset_read_write_obj(Read_Write_Obj, Map, New_Map) :-
+    Descriptor = (Read_Write_Obj.descriptor),
     nb_set_dict(read, Read_Write_Obj, _),
     nb_set_dict(write, Read_Write_Obj, _),
     nb_set_dict(backlinks, Read_Write_Obj, []),
     nb_set_dict(triple_update, Read_Write_Obj, false),
-    Descriptor = (Read_Write_Obj.descriptor),
     (   get_dict(commit_type, Descriptor, _)
     ->  nb_set_dict(commit_type, Descriptor, _)
     ;   true),
@@ -340,9 +341,9 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     % Serialize the actual _meta commits and graph head updates. The lock is
     % released before post_commit_hook so that plugins (such as the auto-
     % optimizer) do not deadlock trying to acquire the same lock.
-    meta_commit_queue:with_meta_commit_locks(
+    with_meta_commit_locks(
         Sorted_Keys,
-        database:commit_validation_objects(Validations0, Committed)
+        commit_validation_objects(Validations0, Committed)
     ),
     % Use the original validations before any potential schema migration
     collect_validations_metadata(Validations, Validation_Meta_Data),

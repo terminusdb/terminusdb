@@ -2582,7 +2582,7 @@ optimize_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         optimize,
         Request,
-        (   api_optimize(System_DB, Auth, Path),
+        (   api_optimize_queued(System_DB, Auth, Path),
             cors_reply_json(Request, _{'@type' : 'api:OptimizeResponse',
                                        'api:status' : "api:success"}))).
 
