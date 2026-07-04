@@ -93,7 +93,7 @@ download-lint: $(SWIPL_LINT_PATH)
 
 .PHONY: lint
 lint: $(SWIPL_LINT_PATH)
-	$(SWIPL) -f src/load_paths.pl src/core/query/expansions.pl $(SWIPL_LINT_PATH)
+	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -s $(SWIPL_LINT_PATH) -g lint_files -t halt
 
 .PHONY: clean
 clean:
@@ -131,3 +131,7 @@ $(RUST_TARGET):
 
 $(SWIPL_LINT_PATH):
 	curl -L --create-dirs -o $@ "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$(SWIPL_LINT_VERSION)/pl_lint.pl"
+	# Fix the broken config loader and avoid halt/1 inside :- initialization/1,
+	# which no longer terminates the process in SWI-Prolog 10.
+	sed -i.bak -e "s#catch(\['\./\.lint_config\.pl'\], _, true)#catch(consult('./.lint_config.pl'), _, true)#" $@
+	sed -i.bak -e "s/:- initialization(lint_files)./:- export(lint_files\/0)./" $@

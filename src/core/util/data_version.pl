@@ -3,6 +3,8 @@
               read_data_version_header/2,
               read_data_version/2,
               write_data_version_header/1,
+              write_transaction_retry_count_header/1,
+              transaction_retry_count_from_meta_data/2,
               serialize_data_version/2,
               transaction_data_version/2,
               validation_data_version/3,
@@ -90,6 +92,20 @@ write_data_version_header(no_data_version) :-
     !.
 write_data_version_header(Data_Version) :-
     throw(error(unexpected_argument_instantiation(write_data_version_header, Data_Version), _)).
+
+write_transaction_retry_count_header(Retry_Count) :-
+    integer(Retry_Count),
+    !,
+    format("TerminusDB-Transaction-Retry-Count: ~d~n", [Retry_Count]).
+write_transaction_retry_count_header(Retry_Count) :-
+    throw(error(unexpected_argument_instantiation(write_transaction_retry_count_header, Retry_Count), _)).
+
+transaction_retry_count_from_meta_data(Meta_Data, Transaction_Retry_Count) :-
+    (   is_dict(Meta_Data),
+        get_dict(transaction_retry_count, Meta_Data, Transaction_Retry_Count)
+    ->  true
+    ;   Transaction_Retry_Count = 0
+    ).
 
 serialize_data_version(data_version(Data_Version_Label, Data_Version_Value), String) :-
     format(string(String), "~s:~s", [Data_Version_Label, Data_Version_Value]).

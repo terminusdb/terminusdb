@@ -1,4 +1,4 @@
-:- module(api_optimize, [api_optimize/3]).
+:- module(api_optimize, [api_optimize/3, api_optimize_queued/3, descriptor_optimize/1, run_queued_optimize/1]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -8,6 +8,15 @@
 :- use_module(library(plunit)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple)).
+:- use_module(core(document/meta_commit_queue)).
+:- use_module(core(document/commit_queue), [
+                  enqueue_commit/2
+              ]).
+:- use_module(core(api/api_document), [
+                  producer_timeout/1,
+                  get_commit_result/4,
+                  deliver_commit_result/2
+              ]).
 
 % Does some crazy-magic unspecified optimizations
 api_optimize(SystemDB, Auth, Path) :-
@@ -32,20 +41,157 @@ api_optimize(SystemDB, Auth, Path) :-
         ),
         error(not_a_valid_descriptor_for_optimization(Descriptor),_)),
 
-    descriptor_optimize(Descriptor).
+    descriptor_lock_key(Descriptor, Lock_Key),
+    with_meta_commit_lock(
+        Lock_Key,
+        descriptor_optimize(Descriptor)
+    ).
+
+% api_optimize_queued/3 is the API entry point that routes the optimization
+% through the branch commit queue for branch descriptors. Non-branch descriptors
+% (system, database, repository) fall back to the synchronous api_optimize/3
+% because they have no branch queue to serialize on. This removes the direct
+% meta_commit_lock acquisition from the request thread for branch optimizes.
+api_optimize_queued(SystemDB, Auth, Path) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_absolute_path(Path),_)),
+    check_optimize_auth(SystemDB, Auth, Descriptor),
+    (   branch_descriptor{} :< Descriptor
+    ->  submit_queued_optimize(Descriptor, Path, Result),
+        handle_optimize_result(Result)
+    ;   descriptor_lock_key(Descriptor, Lock_Key),
+        with_meta_commit_lock(Lock_Key, descriptor_optimize(Descriptor))
+    ).
+
+check_optimize_auth(SystemDB, Auth, Descriptor) :-
+    do_or_die(
+        (   system_descriptor{} :< Descriptor,
+            do_or_die(is_super_user(Auth),
+                      error(requires_super_user,_))
+        ;   database_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  '@schema':'Action/meta_write_access', Auth)
+        ;   repository_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  '@schema':'Action/meta_write_access', Auth)
+        ;   branch_descriptor{} :< Descriptor,
+            check_descriptor_auth(SystemDB, Descriptor,
+                                  '@schema':'Action/meta_write_access', Auth)
+        ),
+        error(not_a_valid_descriptor_for_optimization(Descriptor),_)).
+
+submit_queued_optimize(Descriptor, Path, Result) :-
+    descriptor_lock_key(Descriptor, Database_Key),
+    message_queue_create(ReplyQueue, []),
+    gensym(request, RequestId),
+    Package = optimize_contract{
+        package_type: optimize_when_idle,
+        branch_key: Path,
+        database_key: Database_Key,
+        descriptor: Descriptor,
+        reply_queue: ReplyQueue,
+        request_id: RequestId
+    },
+    commit_queue:enqueue_commit(Path, Package),
+    producer_timeout(ProducerTimeout),
+    (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
+    ->  true
+    ;   Result = timeout
+    ),
+    catch(message_queue_destroy(ReplyQueue), _, true).
+
+handle_optimize_result(optimize_success) :- !.
+handle_optimize_result(error(Error)) :- throw(error(Error, _)).
+handle_optimize_result(timeout) :- throw(error(commit_queue_timeout, _)).
+
+% run_queued_optimize(+Package) is det.
+%
+% Called by the commit worker when it dequeues an optimize_contract. The worker
+% already holds the branch lock; this predicate acquires the meta_commit_lock,
+% runs the optimization, and retries immediately once if the first attempt fails
+% because the label version changed. The result is sent back to the reply queue.
+run_queued_optimize(Package) :-
+    get_dict(database_key, Package, Database_Key),
+    catch(
+        (   with_meta_commit_lock(
+                Database_Key,
+                (   run_queued_optimize_with_retry(Package, Result, 2)
+                ->  true
+                ;   Result = error(unknown_optimize_failure)
+                )
+            ),
+            deliver_commit_result(Package, Result)
+        ),
+        Error,
+        deliver_commit_result(Package, error(Error))
+    ).
+
+run_queued_optimize_with_retry(Package, Result, _Retries) :-
+    try_descriptor_optimize(Package, _LastError),
+    !,
+    Result = optimize_success.
+run_queued_optimize_with_retry(Package, Result, Retries) :-
+    try_descriptor_optimize(Package, LastError),
+    LastError = error(label_version_changed(_Name, _Version), _),
+    Retries > 1,
+    !,
+    New_Retries is Retries - 1,
+    run_queued_optimize_with_retry(Package, Result, New_Retries).
+run_queued_optimize_with_retry(Package, Result, _Retries) :-
+    try_descriptor_optimize(Package, LastError),
+    LastError = error(label_version_changed(Name, Version), _),
+    !,
+    Result = error(label_version_changed(Name, Version)).
+run_queued_optimize_with_retry(_Package, Result, _Retries) :-
+    Result = error(unknown_optimize_failure).
+
+try_descriptor_optimize(Package, LastError) :-
+    get_dict(descriptor, Package, Descriptor),
+    catch(
+        descriptor_optimize(Descriptor),
+        Error,
+        (   LastError = Error,
+            (   Error = error(label_version_changed(_, _), _)
+            ->  fail
+            ;   throw(Error)
+            )
+        )
+    ).
+
+% descriptor_lock_key(+Descriptor, -Lock_Key) maps any optimize-able descriptor
+% to the meta_commit_lock key of the database it belongs to. This ensures the
+% synchronous /api/optimize endpoint is serialized with commits and with
+% scheduled auto-optimizations on the same database.
+descriptor_lock_key(Descriptor, Key) :-
+    (   system_descriptor{} :< Descriptor
+    ->  meta_commit_queue:system_meta_lock_key(Key)
+    ;   database_descriptor{} :< Descriptor
+    ->  meta_commit_queue:database_descriptor_key(Descriptor, Key)
+    ;   repository_descriptor{database_descriptor: DB_Desc} :< Descriptor
+    ->  descriptor_lock_key(DB_Desc, Key)
+    ;   branch_descriptor{repository_descriptor: Repo_Desc} :< Descriptor
+    ->  descriptor_lock_key(Repo_Desc, Key)
+    ).
 
 named_graph_optimize(Graph_Name) :-
-    storage(Store),
-    safe_open_named_graph(Store,Graph_Name,Graph),
-    (   head(Graph, Layer, Version)
-    ->  (   parent(Layer, _)
-        ->  squash(Layer,New_Layer),
-            do_or_die(
-                nb_force_set_head(Graph,New_Layer,Version),
-                error(label_version_changed(Graph_Name,Version),_))
-        ;   true  % Already a base layer, nothing to squash
+    graph_label_to_lock_key(Graph_Name, Lock_Key),
+    with_meta_commit_lock(
+        Lock_Key,
+        (
+            storage(Store),
+            safe_open_named_graph(Store,Graph_Name,Graph),
+            (   head(Graph, Layer, Version)
+            ->  (   parent(Layer, _)
+                ->  squash(Layer,New_Layer),
+                    do_or_die(
+                        nb_force_set_head(Graph,New_Layer,Version),
+                        error(label_version_changed(Graph_Name,Version),_))
+                ;   true  % Already a base layer, nothing to squash
+                )
+            ;   true)
         )
-    ;   true).
+    ).
 
 descriptor_optimize(system_descriptor{}) :-
     system_instance_name(Graph_Name),
@@ -523,5 +669,25 @@ test(optimize_db_idempotent,
     % Head layer must be unchanged
     Layer1_Id = Layer2_Id.
 
+test(optimize_branch_queued,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup((commit_queue:stop_workers,
+               teardown_temp_store(State)))
+     ])
+:-
+    Path = 'admin/testdb/local/branch/main',
+    super_user_authority(Auth),
+
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    create_context(Descriptor, commit_info{author:"test", message:"commit 1"}, Context1),
+    with_transaction(Context1, ask(Context1, insert(a,b,c)), _),
+    create_context(Descriptor, commit_info{author:"test", message:"commit 2"}, Context2),
+    with_transaction(Context2, ask(Context2, insert(d,e,f)), _),
+
+    commit_queue:start_workers(1),
+    api_optimize_queued(system_descriptor{}, Auth, Path),
+    commit_queue:stop_workers.
 
 :- end_tests(optimize).

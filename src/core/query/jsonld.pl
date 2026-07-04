@@ -26,6 +26,7 @@
 :- use_module(core(util)).
 :- use_module(core(util/syntax)).
 :- use_module(core(triple)).
+:- use_module(core(document/schema), [schema_read_layer/2]).
 :- use_module(core(triple/literals), [object_storage/2]).
 :- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
 :- use_module(core(document)).
@@ -225,26 +226,20 @@ prefix_expand('',_,_) :-
     throw(error(empty_key, _)).
 prefix_expand("",_,_) :-
     throw(error(empty_key, _)).
-prefix_expand(K,Context,Key) :-
-    %   Is already qualified
-    (   uri_has_protocol(K)
-    ->  K = Key
-    %   Is prefixed (but does not check for protocol)
-    ;   uri_has_prefix_unsafe(K, Groups)
-    ->  atom_string(Prefix, Groups.prefix),
-        (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,(Groups.suffix),Key)
-        ;   throw(error(key_has_unknown_prefix(K), _)))
-    ;   is_at(K)
-    ->  K = Key
-    ;   (   get_dict('@base', Context, Base)
-        ->  true
-        ;   Base = ''),
-        (   get_dict('@vocab', Context, Vocab)
-        ->  true
-        ;   Vocab = ''),
-        atomic_list_concat([Base,Vocab,K],Key)
-    ).
+
+prefix_expand(K, Context, Key) :-
+    is_dict(Context),
+    !,
+    '$doc':rust_expand_prefix(Context, K, Key).
+prefix_expand(K, Layer, Key) :-
+    blob(Layer, layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
+prefix_expand(K, Schema, Key) :-
+    is_list(Schema),
+    schema_read_layer(Schema, Layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
 
 /*
  * expand_context(+Context,-Context_Expanded) is det.

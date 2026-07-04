@@ -24,15 +24,15 @@
 % This must be loaded AFTER library(http/json) to ensure the multifile hook is registered
 :- use_module(core(document/json)).
 
-run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON) :-
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, Binding_JSON) :-
     Options = _{ optimize: true, all_witnesses: false, streaming: false},
-    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options).
+    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, Binding_JSON, Options).
 
 /** <module> Query Response
  *
  * Code to generate bindings for query response in JSON-LD
  */
-run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, Binding_JSON, Options) :-
+run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, Binding_JSON, Options) :-
     compile_query(AST,Prog,Context,Output_Context,Options),
     do_or_die(
         query_default_collection(Output_Context, Transaction),
@@ -52,7 +52,7 @@ run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_V
         ),
         Meta_Data
     ),
-    meta_data_version(Transaction, Meta_Data, New_Data_Version),
+    Transaction_Meta_Data = Meta_Data,
     context_variable_names(Output_Context, Names),
     Binding_JSON = json{'@type' : 'api:WoqlResponse',
                         'api:status' : 'api:success',

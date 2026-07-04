@@ -36,6 +36,7 @@ chrono = { version="0.4", features=["serde"]}
 handlebars = "4.3"
 thiserror = "1.0"
 lru = "0.16"
+smallvec = "1"
 tdb-succinct = "0.1.2"
 # Security fix: Force upgrade of transitive dependencies to fix CVE in idna 0.5.0
 # Punycode domain masking vulnerability - upgrade to idna 1.0.3+

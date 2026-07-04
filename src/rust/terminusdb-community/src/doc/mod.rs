@@ -1,4 +1,7 @@
 mod delete;
+mod elaboration;
+mod prefix;
+mod verify;
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -28,6 +31,7 @@ pub struct DocumentContext<L: Layer + Clone> {
     layer: Option<L>,
     prefixes: Lazy<PrefixContracter>,
     default_prefixes: Lazy<PrefixContracter>,
+    prefix_map: Lazy<HashMap<String, String>>,
     types: HashSet<u64>,
     subtypes: HashMap<String, HashSet<u64>>,
     document_types: HashSet<u64>,
@@ -178,6 +182,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
 
             prefixes: Lazy::new(),
             default_prefixes: Lazy::new(),
+            prefix_map: Lazy::new(),
             types,
             subtypes,
             document_types,
@@ -202,6 +207,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
 
             default_prefixes: Lazy::new(),
             prefixes: Lazy::new(),
+            prefix_map: Lazy::new(),
             types: HashSet::with_capacity(0),
             subtypes: HashMap::with_capacity(0),
             document_types: HashSet::with_capacity(0),
@@ -233,6 +239,12 @@ impl<L: Layer + Clone> DocumentContext<L> {
             self.default_prefixes
                 .get_or_create(PrefixContracter::default)
         }
+    }
+
+    fn prefix_map(&self) -> &HashMap<String, String> {
+        self.prefix_map.get_or_create(|| {
+            prefix::build_prefix_map(self)
+        })
     }
 
     pub fn get_document(
@@ -1406,6 +1418,8 @@ pub fn register() {
     register_par_print_documents_json_by_id();
 
     delete::register();
+    elaboration::register();
+    verify::register();
 }
 
 #[cfg(test)]
