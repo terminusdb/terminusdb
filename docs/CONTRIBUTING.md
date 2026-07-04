@@ -253,6 +253,19 @@ swipl -g "run_tests(graphql_numeric_serialization)" -t halt src/interactive.pl
 swipl -g "run_tests(woql:group_by_single_element_list_template)" -t halt src/interactive.pl
 ```
 
+> **Important:** Always terminate `swipl` properly. Use `-t halt` or include
+> `halt(0)` in your `-g` goal. If the goal fails or throws an exception before
+> reaching `halt(0)`, the process will hang. Do **not** pipe `swipl` output
+> through `tail` or `head`—it hides errors and can mask hanging processes.
+>
+> ```bash
+> # Good: explicit halt
+> swipl -g "run_tests(json), halt(0)" -t halt src/interactive.pl
+>
+> # Bad: no halt, will hang on failure or if the goal is not fully deterministic
+> swipl -g "run_tests(json)" -f src/interactive.pl | tail -n 20
+> ```
+
 ### Test Server Management
 
 Before running JavaScript tests, ensure the test server is running:

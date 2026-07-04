@@ -69,7 +69,7 @@
               api_filled_frame/5,
 
               % api_woql.pl
-              woql_query_json/8,
+              woql_query_json/9,
               woql_query_streaming_json/5,
 
               % api_squash.pl
@@ -103,6 +103,7 @@
               status_http_code/2,
               status_cli_code/2,
               generic_exception_jsonld/2,
+              generic_exception_jsonld/3,
               json_http_code/2,
               json_cli_code/2,
 
@@ -128,12 +129,12 @@
 
               % api_document.pl
               api_can_read_document/6,
-              api_insert_documents/8,
-              api_delete_documents/8,
-              api_delete_documents_by_type/7,
-              api_delete_document/7,
-              api_replace_documents/8,
-              api_nuke_documents/6,
+              api_insert_documents/9,
+              api_delete_documents/9,
+              api_delete_documents_by_type/8,
+              api_delete_document/8,
+              api_replace_documents/9,
+              api_nuke_documents/7,
               api_generate_document_ids/4,
               api_read_document_selector/12,
               api_generate_document_ids/4,
@@ -200,7 +201,7 @@
               api_db_update/6,
 
               % api_graphql.pl
-              handle_graphql_request/8,
+              handle_graphql_request/10,
 
               % api_history.pl
               api_document_history/6,

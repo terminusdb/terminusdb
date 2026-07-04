@@ -15,6 +15,10 @@
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
 :- use_module(core(api)).
+:- use_module(core(document/parallel_elaboration), [
+                  start_elaboration_workers/1,
+                  stop_elaboration_workers/0
+              ]).
 :- use_module(core(plugins)).
 
 % configuration predicates
@@ -67,6 +71,21 @@ terminus_server(Argv,Wait) :-
     server_port(Port),
     worker_amount(Workers),
     load_jwt_conditionally,
+    % initialize the global store as an in-memory store if the memory flag is set.
+    % This must happen before start_elaboration_workers/1, because worker threads
+    % call triple_store/1 and would otherwise fall back to the file-based
+    % default_triple_store, which fails when no disk store has been initialized.
+    (   option(memory(Memory_Password),Argv),
+        ground(Memory_Password)
+    ->  memory_triple_store(Store),
+        global_triple_store(Store),
+        (   Memory_Password = ''
+        ->  Password = root
+        ;   Password = Memory_Password),
+        initialize_database_with_store(Password, Store),
+        set_memory_mode
+    ;   true),
+    start_elaboration_workers(Workers),
     HTTPOptions = [port(Port), workers(Workers), silent(true)],
     foreach(pre_server_startup_hook(Port),true),
     catch(http_server(http_dispatch, HTTPOptions),
@@ -83,17 +102,6 @@ terminus_server(Argv,Wait) :-
                    time_limit(infinite),
                    prefix
                  ]),
-    % initialize the global store as an in-memory store if the memory flag is set
-    (   option(memory(Memory_Password),Argv),
-        ground(Memory_Password)
-    ->  memory_triple_store(Store),
-        (   Memory_Password = ''
-        ->  Password = root
-        ;   Password = Memory_Password),
-        initialize_database_with_store(Password, Store),
-        global_triple_store(Store),
-        set_memory_mode
-    ;   true),
 
     (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
         http_delete_handler(id(busy_loading)),
@@ -103,7 +111,9 @@ terminus_server(Argv,Wait) :-
         ->  http_current_worker(Port,ThreadID),
             thread_join(ThreadID, _Status)
         ;   true
-        )
+        ),
+        stop_elaboration_workers,
+        '$change_window':change_window_assert_empty
     ).
 
 

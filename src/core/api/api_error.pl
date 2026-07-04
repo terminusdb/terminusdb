@@ -4,7 +4,8 @@
                       json_cli_code/2,
                       status_http_code/2,
                       status_cli_code/2,
-                      generic_exception_jsonld/2
+                      generic_exception_jsonld/2,
+                      generic_exception_jsonld/3
                      ]).
 
 :- use_module(core(util)).
@@ -13,6 +14,10 @@
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(prolog_stack), [get_prolog_backtrace/2, print_prolog_backtrace/2]).
+
+:- discontiguous generic_exception_jsonld/2.
+:- discontiguous generic_exception_jsonld/3.
 
 :- use_module(core(query)).
 
@@ -22,7 +27,12 @@
  * Binds JSON to an appropriate JSON-LD object for the given error and API.
  *
  */
-api_error_jsonld(API, Error, JSON) :-
+% The queued parallel-elaboration path can deliver errors wrapped as
+% error(error(Inner, _), Context). Unwrap one level and re-wrap as
+% error(Inner, _) so the existing API-specific clauses match.
+api_error_jsonld(API, error(error(Inner, _), _), JSON) :- !,
+    api_error_jsonld(API, error(Inner, _), JSON).
+api_error_jsonld(API, Error, JSON) :- !,
     (   api_global_error_jsonld(Error, API, JSON)
     ->  true
     ;   api_error_jsonld_(API, Error, JSON)
@@ -96,6 +106,23 @@ api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadDataVersion',
                               'api:data_version' : Data_Version_String },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_rejected(Reason), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Commit could not be applied: ~w", [Reason]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:conflict",
+             'api:error' : _{ '@type' : 'api:CommitRejected',
+                              'api:reason' : Reason },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out waiting for the commit queue to process the request", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(data_version_mismatch(
@@ -1813,6 +1840,7 @@ error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
 error_type_(concat, 'api:ConcatErrorResponse').
 error_type_(index, 'api:IndexErrorResponse').
+error_type_(server, 'api:ServerErrorResponse').
 
 % Info endpoint errors
 api_error_jsonld_(info, error(no_database_store_version, _), JSON) :-
@@ -1944,6 +1972,15 @@ api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids), _), JSON
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SameDocumentIdsMutatedInOneTransaction',
                               'api:duplicate_ids' : Ids},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(elaboration_stale(Reason), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Elaboration is stale: ~w", [Reason]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:conflict",
+             'api:error' : _{ '@type' : 'api:ElaborationStale',
+                              'api:reason' : Reason},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(document_access_impossible(Descriptor, Graph_Type, Read_Write), _), JSON) :-
@@ -2588,6 +2625,16 @@ api_document_error_jsonld(Type, error(embedded_subdocument_has_linked_by(Documen
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(back_links_not_supported_in_replace, _),JSON) :-
+    !,
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LinksInReplaceError',
+                              'api:document' : json{}},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(back_links_not_supported_in_replace(Document), _),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
@@ -2729,6 +2776,34 @@ generic_exception_jsonld(woql_syntax_error(JSON,Path,Element),JSON) :-
              'api:message' : Message,
              'vio:path' : Director,
              'vio:query' : JSON}.
+generic_exception_jsonld(type_error(T,O),Context,JSON) :-
+    !,
+    log_type_error_backtrace(T, O, Context),
+    generic_exception_jsonld(type_error(T,O),JSON).
+
+log_type_error_backtrace(T, O, Context) :-
+    catch(
+        (   nonvar(Context),
+            Context = context(prolog_stack(Frames), _),
+            is_list(Frames)
+        ->  with_output_to(string(Stack_String),
+                           print_prolog_backtrace(current_output, Frames))
+        ;   with_output_to(string(Stack_String),
+                           format(current_output, "context: ~q", [Context]))
+        ),
+        _,
+        Stack_String = "backtrace unavailable"
+    ),
+    catch(
+        json_log_error_formatted(
+            'Unexpected type_error: expected ~q, got ~q, backtrace: ~s',
+            [T, O, Stack_String]),
+        _,
+        format(user_error,
+               '[ERROR] Unexpected type_error: expected ~q, got ~q, backtrace: ~s~n',
+               [T, O, Stack_String])
+    ).
+
 generic_exception_jsonld(type_error(T,O),JSON) :-
     format(atom(M),'Type error for ~q which should be ~q', [O,T]),
     format(atom(OA), '~q', [O]),
@@ -2879,6 +2954,10 @@ generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(Error, _Context, JSON) :-
+    !,
+    generic_exception_jsonld(Error, JSON).
+
 generic_exception_jsonld(Error, JSON) :-
     % Catch-all for unhandled errors - log the full error but return sanitized message
     % This prevents information leakage in 500 errors
