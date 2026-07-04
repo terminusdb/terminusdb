@@ -8784,6 +8784,24 @@ test(interval_start_duration_explicit_nanos_roundtrip, [
     Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"},
     Binding.d = _{'@type': 'xsd:duration', '@value': "PT0.123456789S"}.
 
+test(interval_start_duration_timezone_nanos_roundtrip, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00.000+02:00/2025-01-01T09:00:00.123456789+02:00"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T07:00:00Z"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT0.123456789S"}.
+
 test(day_after_mid_month, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),

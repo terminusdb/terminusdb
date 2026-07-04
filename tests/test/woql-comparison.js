@@ -1355,6 +1355,19 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT8H30M')
     })
+    it('extracts nanosecond duration from timezone-offset interval', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        interval: { '@type': 'DataValue', data: intervalVal('2025-01-01T09:00:00.000+02:00/2025-01-01T09:00:00.123456789+02:00') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
+      expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T07:00:00Z')
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT0.123456789S')
+    })
   })
 
   describe('IntervalDurationEnd', function () {
