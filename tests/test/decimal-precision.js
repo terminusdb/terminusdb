@@ -2151,4 +2151,66 @@ describe('decimal-precision', function () {
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
     })
   })
+
+  describe('Patch and Diff Precision', function () {
+    it('should preserve high precision decimals through diff and patch', async function () {
+      const id = 'HighPrecision/patch-diff'
+
+      const beforeDoc = {
+        '@type': 'HighPrecision',
+        '@id': id,
+        value20digits: '1.23456789012345678901',
+        value15digits: '3.141592653589793',
+        calculation: '0.33333333333333',
+      }
+
+      const afterDoc = {
+        '@type': 'HighPrecision',
+        '@id': id,
+        value20digits: '9.87654321098765432109',
+        value15digits: '2.718281828459045',
+        calculation: '0.66666666666666',
+      }
+
+      // Add the first document
+      const r1 = await document.insert(agent, { instance: beforeDoc })
+      expect(r1.status).to.equal(200)
+      const docId = r1.body[0]
+      const dv1 = r1.header['terminusdb-data-version']
+
+      // Compute the diff between the stored first document and the second target document
+      const diffRes = await agent.post(api.path.versionDiff(agent)).send({
+        before_data_version: dv1,
+        document_id: docId,
+        after: afterDoc,
+      })
+      expect(diffRes.status).to.equal(200)
+
+      // Verify the raw diff JSON preserves the full 20-digit precision (superagent
+      // parsing would lose digits beyond double precision, so use the raw text).
+      const diffValue20Before = diffRes.text.match(/"value20digits"\s*:\s*\{[^}]*"@before"\s*:\s*([0-9.eE+-]+)/)[1]
+      const diffValue20After = diffRes.text.match(/"value20digits"\s*:\s*\{[^}]*"@after"\s*:\s*([0-9.eE+-]+)/)[1]
+      expect(new Decimal(diffValue20Before).equals(new Decimal('1.23456789012345678901'))).to.be.true
+      expect(new Decimal(diffValue20After).equals(new Decimal('9.87654321098765432109'))).to.be.true
+
+      // Wrap the raw diff JSON so the patch endpoint sees the exact wire-level decimals.
+      const patchBody = `{"patch":${diffRes.text},"author":"decimal-patch-test","message":"apply high precision patch"}`
+
+      // Apply the patch to the stored document
+      const patchRes = await agent.post(api.path.patchDb(agent))
+        .type('json')
+        .send(patchBody)
+      expect(patchRes.status).to.equal(200)
+
+      // Retrieve the patched document and verify exact decimal values
+      const response = await document.get(agent, { body: { id } })
+      const value20Raw = response.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]
+      const value15Raw = response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]
+      const calculationRaw = response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]
+
+      expect(new Decimal(value20Raw).equals(new Decimal('9.87654321098765432109'))).to.be.true
+      expect(new Decimal(value15Raw).equals(new Decimal('2.718281828459045'))).to.be.true
+      expect(new Decimal(calculationRaw).equals(new Decimal('0.66666666666666'))).to.be.true
+    })
+  })
 })

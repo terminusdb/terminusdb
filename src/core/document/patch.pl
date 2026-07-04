@@ -111,16 +111,20 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff,
 % In Prolog, atoms and strings don't unify even with identical characters,
 % so we convert both to atoms before comparison.
 %
-% Dicts (subdocument objects), lists, and numbers are compared
-% structurally — only atoms and strings use coerced comparison.
+% Numbers are compared by numeric equality so that representations such
+% as a stored xsd:decimal rational (e.g. 11r10) and a JSON float (e.g. 1.1)
+% are treated as equal.  Dicts and lists are compared structurally.
 %
+values_equal(V1, V2) :-
+    number(V1),
+    number(V2),
+    !,
+    V1 =:= V2.
 values_equal(V1, V2) :-
     (   is_dict(V1)
     ;   is_dict(V2)
     ;   is_list(V1)
     ;   is_list(V2)
-    ;   number(V1)
-    ;   number(V2)
     ),
     !,
     V1 = V2.
@@ -1072,6 +1076,45 @@ test(values_equal_null_vs_dict, [fail]) :-
     %% Direct unit test: null (atom) vs dict must fail, NOT throw.
     D = json{ '@type' : "Quantity", value : 1 },
     values_equal(null, D).
+
+test(values_equal_rational_and_float, []) :-
+    %% xsd:decimal is stored as a rational, but JSON supplies a float.
+    values_equal(11r10, 1.1).
+
+test(values_equal_float_and_integer, []) :-
+    values_equal(1.0, 1).
+
+test(values_equal_integer_and_decimal, []) :-
+    values_equal(1, 1r1).
+
+test(swap_decimal_value, []) :-
+    %% Regression: patching a decimal property with a float SwapValue
+    %% must not produce a conflict when the stored value is equal.
+    Before = _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 11r10 },
+    Patch = _{ weight : _{ '@op' : "SwapValue",
+                           '@before' : 1.1,
+                           '@after' : 1.2 } },
+    After =  _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 1.2 },
+    simple_patch(Patch, Before, success(After), []).
+
+test(swap_decimal_value_json_preserve, []) :-
+    %% Verify the Rust parser path: wire decimals become rationals, so
+    %% a patch parsed from JSON matches the stored rational exactly.
+    JSON = '{ "patch": { "weight": { "@op": "SwapValue",
+                                      "@before": 1.1,
+                                      "@after": 1.2 } } }',
+    json_preserve:json_read_dict(JSON, Document, []),
+    Patch = Document.patch,
+    Before = _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 11r10 },
+    simple_patch(Patch, Before, success(_{ '@id' : "Test/1",
+                                             '@type' : "Test",
+                                             weight : 6r5 }), []).
 
 :- end_tests(simple_patch).
 
