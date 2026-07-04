@@ -109,22 +109,39 @@ ensure_branch_queue(BranchKey, Queue) :-
             ->  true
             ;   atom_string(BranchKeyAtom, BranchKey),
                 atom_concat('commit_queue_', BranchKeyAtom, QueueAlias),
-                message_queue_create(Queue, [alias(QueueAlias)]),
-                assertz(branch_commit_queue(BranchKey, Queue)),
                 atom_concat('commit_lock_', BranchKeyAtom, LockAlias),
-                mutex_create(Mutex, [alias(LockAlias)]),
+                (   catch(message_queue_create(Queue, [alias(QueueAlias)]),
+                          error(permission_error(create, message_queue, _), _),
+                          message_queue_property(Queue, alias(QueueAlias)))
+                ->  true
+                ;   throw(error(unable_to_create_branch_queue(BranchKey), _))
+                ),
+                (   catch(mutex_create(Mutex, [alias(LockAlias)]),
+                          error(permission_error(create, mutex, _), _),
+                          mutex_property(Mutex, alias(LockAlias)))
+                ->  true
+                ;   catch(message_queue_destroy(Queue), _, true),
+                    throw(error(unable_to_create_branch_lock(BranchKey), _))
+                ),
+                assertz(branch_commit_queue(BranchKey, Queue)),
                 assertz(branch_commit_lock(BranchKey, Mutex))
             ))
     ).
 
 destroy_branch_queue(BranchKey) :-
     with_mutex(branch_registry_mutex,
-        (   (   retract(branch_commit_queue(BranchKey, Queue))
-            ->  catch(message_queue_destroy(Queue), _, true)
+        (   (   branch_commit_queue(BranchKey, Queue)
+            ->  (   catch(message_queue_destroy(Queue), _, fail)
+                ->  retract(branch_commit_queue(BranchKey, _))
+                ;   true
+                )
             ;   true
             ),
-            (   retract(branch_commit_lock(BranchKey, Mutex))
-            ->  catch(mutex_destroy(Mutex), _, true)
+            (   branch_commit_lock(BranchKey, Mutex)
+            ->  (   catch(mutex_destroy(Mutex), _, fail)
+                ->  retract(branch_commit_lock(BranchKey, _))
+                ;   true
+                )
             ;   true
             )
         )).
@@ -536,13 +553,19 @@ run_queued_job_of_type(optimize_when_idle, Package) :-
     !,
     get_dict(branch_key, Package, BranchKey),
     branch_commit_queue(BranchKey, Queue),
-    (   queue_empty(Queue)
+    (   % Synchronous optimize requests from HTTP handlers carry a reply queue.
+        % Run them immediately: if two such optimizes are queued on the same
+        % branch, the deferral logic would otherwise livelock by repeatedly
+        % re-enqueueing each optimize behind the other.
+        get_dict(reply_queue, Package, _)
     ->  api_optimize:run_queued_optimize(Package)
-    ;   % More commits are pending on this branch. Defer the optimization so
-        % inserts are not blocked by the (potentially slow) optimize work. The
-        % branch will be requeued by the caller after the current package is
-        % processed, and the optimizer will be picked up again when the queue
-        % drains.
+    ;   queue_empty(Queue)
+    ->  api_optimize:run_queued_optimize(Package)
+    ;   % More commits are pending on this branch. Defer the scheduler-initiated
+        % optimization so inserts are not blocked by the (potentially slow)
+        % optimize work. The branch will be requeued by the caller after the
+        % current package is processed, and the optimizer will be picked up
+        % again when the queue drains.
         thread_send_message(Queue, Package),
         register_pending_branch(BranchKey),
         wake_workers
@@ -620,6 +643,19 @@ test(ensure_branch_queue_creates_queue_and_lock) :-
     assertion(message_queue_property(Queue, alias(_))),
     assertion(message_queue_property(Queue, size(0))),
     assertion(mutex_property(Mutex, alias(_))),
+    destroy_branch_queue('test_branch').
+
+test(ensure_branch_queue_reuses_existing_queue_when_fact_missing) :-
+    destroy_branch_queue('test_branch'),
+    ensure_branch_queue('test_branch', Queue1),
+    with_mutex(branch_registry_mutex,
+               (   retract(commit_queue:branch_commit_queue('test_branch', _)),
+                   retract(commit_queue:branch_commit_lock('test_branch', _))
+               )),
+    ensure_branch_queue('test_branch', Queue2),
+    assertion(Queue1 == Queue2),
+    branch_commit_queue('test_branch', Queue2),
+    branch_commit_lock('test_branch', _),
     destroy_branch_queue('test_branch').
 
 test(register_and_pick_pending_branch) :-

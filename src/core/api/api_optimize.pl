@@ -113,11 +113,19 @@ handle_optimize_result(timeout) :- throw(error(commit_queue_timeout, _)).
 % because the label version changed. The result is sent back to the reply queue.
 run_queued_optimize(Package) :-
     get_dict(database_key, Package, Database_Key),
-    with_meta_commit_lock(
-        Database_Key,
-        run_queued_optimize_with_retry(Package, Result, 2)
-    ),
-    deliver_commit_result(Package, Result).
+    catch(
+        (   with_meta_commit_lock(
+                Database_Key,
+                (   run_queued_optimize_with_retry(Package, Result, 2)
+                ->  true
+                ;   Result = error(unknown_optimize_failure)
+                )
+            ),
+            deliver_commit_result(Package, Result)
+        ),
+        Error,
+        deliver_commit_result(Package, error(Error))
+    ).
 
 run_queued_optimize_with_retry(Package, Result, _Retries) :-
     try_descriptor_optimize(Package, _LastError),

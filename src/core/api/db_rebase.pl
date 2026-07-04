@@ -23,9 +23,15 @@
                   enqueue_commit/2
               ]).
 :- use_module(core(document/meta_commit_queue)).
+:- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
+:- use_module(core(transaction/ref_entity), [
+                  commit_id_uri/3,
+                  commit_uri_to_parent_uri/3
+              ]).
 
 :- dynamic rebase_pre_database_commit_hook/1.
 :- dynamic rebase_optimize_thread/1.
+:- dynamic rebase_insert_thread/1.
 
 % Default hook used by the race regression test. It is a no-op unless the
 % current test has registered an optimizer thread via rebase_optimize_thread/1.
@@ -35,8 +41,7 @@ rebase_pre_database_commit_hook(_Database_Transaction_Object) :-
     % stale thread fact from affecting production rebases.
     catch(thread_property(OptimizeThread, status(running)), _, fail),
     !,
-    thread_send_message(OptimizeThread, optimize_now),
-    sleep(0.05).
+    thread_send_message(OptimizeThread, optimize_now).
 rebase_pre_database_commit_hook(_) :- fail.
 
 cycle_context(Context, New_Context, New_Transaction_Object, Validation_Object) :-
@@ -355,11 +360,19 @@ submit_rebase_contract_queued(Contract, Result) :-
 % executes the final commit window, and sends the result back to the reply queue.
 run_rebase_contract(Package) :-
     get_dict(database_key, Package, Database_Key),
-    with_meta_commit_lock(
-        Database_Key,
-        execute_rebase_contract(Package, Result)
-    ),
-    deliver_commit_result(Package, Result).
+    catch(
+        (   with_meta_commit_lock(
+                Database_Key,
+                (   execute_rebase_contract(Package, Result)
+                ->  true
+                ;   Result = error(unexpected_rebase_failure)
+                )
+            ),
+            deliver_commit_result(Package, Result)
+        ),
+        Error,
+        deliver_commit_result(Package, error(Error))
+    ).
 
 execute_rebase_contract(Package, Result) :-
     get_dict(our_repo_descriptor, Package, Our_Repo_Descriptor),
@@ -378,6 +391,42 @@ execute_rebase_contract(Package, Result) :-
         ),
         error(rebase_target_branch_changed(_), _),
         Result = reject(rebase_target_branch_changed)
+    ).
+
+% register_rebase_head_in_change_window(+BranchDescriptor, +RepoContext, +HeadCommitUri)
+%
+% Rebase creates new commits on the target branch outside the normal commit
+% validation path, so the change window does not see them. The change window enables
+% verification of writes against what changed recently. Without this, the
+% next commit to the branch tries to open a commit window with a parent that
+% is not present in the window, falls into a retry loop, and
+% effectively stalls the database. We register the new head (with an
+% empty change set) so the window knows the current branch head and commits
+% can open their guards immediately.
+register_rebase_head_in_change_window(BranchDescriptor, RepoContext, HeadCommitUri) :-
+    branch_key_from_descriptor(BranchDescriptor, BranchKey),
+    commit_id_uri(RepoContext, HeadCommitId, HeadCommitUri),
+    (   commit_uri_to_parent_uri(RepoContext, HeadCommitUri, ParentCommitUri)
+    ->  commit_id_uri(RepoContext, ParentCommitId, ParentCommitUri)
+    ;   ParentCommitId = none
+    ),
+    (   atom(HeadCommitId)
+    ->  HeadCommitIdAtom = HeadCommitId
+    ;   atom_string(HeadCommitIdAtom, HeadCommitId)
+    ),
+    (   ParentCommitId = none
+    ->  ParentCommitIdArg = none
+    ;   atom_string(ParentCommitIdArg, ParentCommitId)
+    ),
+    (   catch(
+            '$change_window':register_commit(BranchKey, HeadCommitIdAtom, ParentCommitIdArg,
+                                             none, none, [], []),
+            Error,
+            json_log_error_formatted("register_rebase_head_in_change_window failed for ~w: ~w",
+                                     [BranchKey, Error])
+        )
+    ->  true
+    ;   fail
     ).
 
 rebase_commit_window(Our_Repo_Descriptor, Our_Branch_Descriptor, Our_Branch_Path,
@@ -399,6 +448,9 @@ rebase_commit_window(Our_Repo_Descriptor, Our_Branch_Descriptor, Our_Branch_Path
     ignore(unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri)),
 
     link_commit_object_to_branch(Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
+
+    register_rebase_head_in_change_window(Our_Branch_Descriptor, Semifinal_Context,
+                                          Final_Commit_Uri),
 
     cycle_context(Semifinal_Context, _Final_Context, Transaction_Object, _),
 

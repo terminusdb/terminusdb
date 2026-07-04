@@ -383,7 +383,7 @@ acquire_commit_window_guard(Transaction, BranchKey, CommitId) :-
     (   retract(commit_window_guard_depth(D, Info))
     ->  D1 is D + 1,
         assertz(commit_window_guard_depth(D1, Info))
-    ;   open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, 200, GuardId),
+    ;   open_commit_window_for_branch_head(Transaction, BranchKey, CommitId, 50, GuardId),
         reset_transaction_object_graph_descriptors(Transaction),
         assertz(commit_window_guard_depth(1, (BranchKey, CommitId, GuardId)))
     ).
@@ -392,7 +392,7 @@ acquire_commit_window_guard(BranchKey, CommitId) :-
     (   retract(commit_window_guard_depth(D, Info))
     ->  D1 is D + 1,
         assertz(commit_window_guard_depth(D1, Info))
-    ;   open_commit_window_with_retry(BranchKey, CommitId, 200, GuardId),
+    ;   open_commit_window_with_retry(BranchKey, CommitId, 50, GuardId),
         assertz(commit_window_guard_depth(1, (BranchKey, CommitId, GuardId)))
     ).
 
@@ -413,7 +413,7 @@ open_first_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
     (   '$change_window':open_first_commit_window(BranchKey, CommitIdString, GuardId, _CurrentCommitId)
     ->  true
     ;   Retries > 0
-    ->  sleep(0.05),
+    ->  sleep(0.01),
         Retries1 is Retries - 1,
         open_first_commit_window_with_retry(BranchKey, CommitId, Retries1, GuardId)
     ;   fail
@@ -427,7 +427,7 @@ open_commit_window_with_retry(BranchKey, CommitId, Retries, GuardId) :-
     (   '$change_window':open_commit_window(BranchKey, CommitIdAtom, GuardId, _CurrentCommitId)
     ->  true
     ;   Retries > 0
-    ->  sleep(0.05),
+    ->  sleep(0.01),
         Retries1 is Retries - 1,
         open_commit_window_with_retry(BranchKey, CommitId, Retries1, GuardId)
     ;   fail

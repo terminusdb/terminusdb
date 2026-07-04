@@ -88,9 +88,9 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
 delete_database_label(Organization, DB_Name) :-
     triple_store(Store),
     organization_database_name(Organization, DB_Name, Named_Graph_Name),
-    meta_commit_queue:with_meta_commit_lock(
+    with_meta_commit_lock(
         Named_Graph_Name,
-        db_delete:safe_delete_named_graph(Store, Named_Graph_Name)
+        safe_delete_named_graph(Store, Named_Graph_Name)
     ).
 
 /**
