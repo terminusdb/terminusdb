@@ -20,6 +20,7 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 :- use_module(core(document)).
+:- use_module(core(util/json_preserve), []).
 :- use_module(core(api/api_init)).
 
 :- use_module(config(terminus_config)).
@@ -2685,11 +2686,11 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(patch), cors_handler(Method, patch_handler),
+:- http_handler(api(patch), cors_handler(Method, patch_handler, [add_payload(json_preserve)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path)),
+:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path), [add_payload(json_preserve)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2755,11 +2756,11 @@ patch_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
+:- http_handler(api(diff), cors_handler(Method, diff_handler(none{}), [add_payload(json_preserve)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path)),
+:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path), [add_payload(json_preserve)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -3407,7 +3408,11 @@ cors_handler(Method, Goal, Options, R) :-
         (
             (   memberchk(Method, [post, put, delete]),
                 \+ memberchk(add_payload(false), Options)
-            ->  add_payload_to_request(R,Request)
+            ->  (   memberchk(add_payload(json_preserve), Options)
+                ->  do_or_die(http_read_json_preserve_semidet(json_dict(Document), R),
+                              error(bad_api_document(R, [payload]), _)),
+                    Request = [payload(Document)|R]
+                ;   add_payload_to_request(R, Request))
             ;   Request = R),
 
             open_descriptor(system_descriptor{}, System_Database),
@@ -4150,6 +4155,10 @@ http_read_json_semidet(Output, Request) :-
     json_content_type(Request),
     memberchk(content_length(_Len), Request),
     http_read_utf8(Output, Request).
+
+http_read_json_preserve_semidet(json_dict(JSON), Request) :-
+    http_read_json_stream_for_documents(Stream, Request),
+    json_preserve:json_read_dict_stream(Stream, JSON, []).
 
 % WOQL-specific JSON reader that preserves numeric string precision
 http_read_woql_json_semidet(Output, Request) :-
