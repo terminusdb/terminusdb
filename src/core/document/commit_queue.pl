@@ -131,17 +131,41 @@ ensure_branch_queue(BranchKey, Queue) :-
 destroy_branch_queue(BranchKey) :-
     with_mutex(branch_registry_mutex,
         (   (   branch_commit_queue(BranchKey, Queue)
-            ->  (   catch(message_queue_destroy(Queue), _, fail)
-                ->  retract(branch_commit_queue(BranchKey, _))
-                ;   true
-                )
+            ->  drain_message_queue(Queue),
+                catch(message_queue_destroy(Queue), _, true),
+                retractall(branch_commit_queue(BranchKey, _))
             ;   true
             ),
             (   branch_commit_lock(BranchKey, Mutex)
-            ->  (   catch(mutex_destroy(Mutex), _, fail)
-                ->  retract(branch_commit_lock(BranchKey, _))
-                ;   true
+            ->  catch(mutex_unlock(Mutex), _, true),
+                catch(mutex_destroy(Mutex), _, true),
+                retractall(branch_commit_lock(BranchKey, _))
+            ;   true
+            )
+        )),
+    cleanup_scheduler_state_for_branch(BranchKey).
+
+drain_message_queue(Queue) :-
+    catch(thread_get_message(Queue, _, [timeout(0)]), _, fail),
+    !,
+    drain_message_queue(Queue).
+drain_message_queue(_).
+
+cleanup_scheduler_state_for_branch(BranchKey) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(pending_branch_age(BranchKey, _)),
+            (   retract(pending_branches(Branches))
+            ->  (   select(BranchKey, Branches, Remaining)
+                ->  (   Remaining = []
+                    ->  true
+                    ;   assertz(pending_branches(Remaining))
+                    )
+                ;   assertz(pending_branches(Branches))
                 )
+            ;   true
+            ),
+            (   retract(active_branch(BranchKey, _))
+            ->  decrement_database_active_branch_count(BranchKey, _)
             ;   true
             )
         )).
@@ -816,6 +840,35 @@ test(requeue_branch_retracts_age_when_empty) :-
             retractall(commit_queue:pending_branch_age(_, _))
         )),
     destroy_branch_queue('age_b2').
+
+test(destroy_branch_queue_cleans_scheduler_state) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    cleanup_active_branch_counts,
+    BranchKey = 'admin/db/local/branch/main',
+    ensure_branch_queue(BranchKey, Queue),
+    thread_send_message(Queue, dummy),
+    register_pending_branch(BranchKey),
+    thread_self(Self),
+    assertz(commit_queue:active_branch(BranchKey, Self)),
+    organization_database_name(admin, db, DBKey),
+    assertz(commit_queue:database_active_branch_count(DBKey, 1)),
+    destroy_branch_queue(BranchKey),
+    assertion(\+ commit_queue:branch_commit_queue(BranchKey, _)),
+    assertion(\+ commit_queue:branch_commit_lock(BranchKey, _)),
+    assertion(\+ commit_queue:pending_branch_age(BranchKey, _)),
+    assertion(\+ commit_queue:active_branch(BranchKey, _)),
+    assertion(\+ commit_queue:pending_branches([BranchKey])),
+    assertion(commit_queue:database_active_branch_count(DBKey, 0)),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:active_branch(_, _)),
+            retractall(commit_queue:pending_branch_age(_, _))
+        )),
+    cleanup_active_branch_counts.
 
 test(pending_commit_stale_detects_old_commit) :-
     with_mutex(commit_scheduler_mutex,
