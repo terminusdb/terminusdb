@@ -36,6 +36,10 @@
               execute_commit_package/2,
               commit_package_test_handler/1,
 
+              producer_timeout/1,
+              get_commit_result/4,
+              deliver_commit_result/2,
+
               verify_contracts_transaction_info/4
           ]).
 
@@ -45,10 +49,12 @@
 :- use_module(core(transaction)).
 :- use_module(core(transaction/database), [
                   reset_transaction_objects_graph_descriptors/1,
-                  query_context_transaction_objects/2
+                  query_context_transaction_objects/2,
+                  transaction_object_database_key/2
               ]).
 :- use_module(core(document)).
 :- use_module(core(document/commit_queue)).
+:- use_module(core(document/meta_commit_queue)).
 :- use_module(core(document/json), [
                   insert_document_expanded/4,
                   insert_document_expanded/5,
@@ -1182,11 +1188,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
                     request_id: RequestId
                 },
                 commit_queue:enqueue_commit(BranchKey, Package),
-                (   catch(thread_get_message(ReplyQueue,
-                                            commit_result(Result, RequestId),
-                                            [timeout(ProducerTimeout)]),
-                          error(existence_error(message_queue, _), _),
-                          (Result = timeout))
+                (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
                 ->  true
                 ;   Result = timeout
                 )
@@ -1263,11 +1265,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
                     request_id: RequestId
                 },
                 commit_queue:enqueue_commit(BranchKey, Package),
-                (   catch(thread_get_message(ReplyQueue,
-                                            commit_result(Result, RequestId),
-                                            [timeout(ProducerTimeout)]),
-                          error(existence_error(message_queue, _), _),
-                          (Result = timeout))
+                (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
                 ->  true
                 ;   Result = timeout
                 )
@@ -1299,19 +1297,38 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
 
 producer_timeout(Timeout) :-
     (   getenv('TERMINUSDB_COMMIT_QUEUE_TIMEOUT', Value),
-        catch(number_string(Timeout, Value), _, fail)
-    ->  (   Timeout > 0
-        ->  true
-        ;   Timeout = 30
+        catch(atom_number(Value, Parsed), _, fail)
+    ->  (   Parsed > 0
+        ->  Timeout = Parsed
+        ;   Timeout = infinite
         )
-    ;   Timeout = 30
+    ;   Timeout = infinite
     ).
+
+% Wait for the commit worker to reply on ReplyQueue. If Timeout is infinite,
+% block forever; otherwise use the supplied timeout. If the reply queue is
+% destroyed before a reply arrives (e.g. worker crash), treat it as a timeout.
+get_commit_result(ReplyQueue, RequestId, infinite, Result) :-
+    !,
+    catch(thread_get_message(ReplyQueue,
+                            commit_result(Result, RequestId)),
+          error(existence_error(message_queue, _), _),
+          (Result = timeout)).
+get_commit_result(ReplyQueue, RequestId, Timeout, Result) :-
+    catch(thread_get_message(ReplyQueue,
+                            commit_result(Result, RequestId),
+                            [timeout(Timeout)]),
+          error(existence_error(message_queue, _), _),
+          (Result = timeout)).
 
 handle_commit_result(success(Meta_Data, Ids), Meta_Data, Ids).
 handle_commit_result(reject(Reason), _Meta_Data, _Ids) :-
     throw(error(commit_rejected(Reason), _)).
 handle_commit_result(error(Exception), _Meta_Data, _Ids) :-
-    throw(error(Exception, _)).
+    (   Exception = error(_, _)
+    ->  throw(Exception)
+    ;   throw(error(Exception, _))
+    ).
 handle_commit_result(timeout, _Meta_Data, _Ids) :-
     throw(error(commit_queue_timeout, _)).
 
@@ -1659,6 +1676,16 @@ execute_commit_package(Package, Result) :-
 execute_commit_package(Package, Result) :-
     Package.all_branches = [_BranchKey],
     !,
+    [Transaction] = Package.transaction_objects,
+    transaction_object_database_key(Transaction, Key),
+    with_meta_commit_lock(
+        Key,
+        do_execute_commit_package(Package, Result)
+    ).
+execute_commit_package(_Package, Result) :-
+    Result = error(error(multi_branch_commit_not_implemented, _)).
+
+do_execute_commit_package(Package, Result) :-
     reset_transaction_objects_graph_descriptors(Package.transaction_objects),
     open_commit_windows_for_transactions(Package.transaction_objects, GuardIds),
     (   catch(
@@ -1667,11 +1694,18 @@ execute_commit_package(Package, Result) :-
                 Result = success(MetaData, Ids)
             ),
             Exception,
-            (   (   Exception = fail_transaction
+            (   json_log_error_formatted("execute_commit_package caught exception for ~w: ~w", [Package.branch_key, Exception]),
+                (   Exception = fail_transaction
                 ->  catch(
-                        run_synchronous_reelaboration_and_commit(Package, Result),
+                        (   run_synchronous_reelaboration_and_commit(Package, Result)
+                        ->  true
+                        ;   json_log_error_formatted("run_synchronous_reelaboration_and_commit failed silently", []),
+                            fail
+                        ),
                         SyncError,
-                        Result = error(SyncError)
+                        (   json_log_error_formatted("run_synchronous_reelaboration_and_commit error: ~w", [SyncError]),
+                            Result = error(SyncError)
+                        )
                     )
                 ;   Exception = error(elaboration_stale(_), _)
                 ->  Result = reject(schema_changed)
@@ -1680,7 +1714,8 @@ execute_commit_package(Package, Result) :-
             )
         )
     ->  true
-    ;   Result = error(unexpected_commit_failure)
+    ;   json_log_error_formatted("execute_commit_package catch block failed", []),
+        Result = error(unexpected_commit_failure)
     ),
     close_commit_windows(GuardIds),
     (   Result = success(_, _),
@@ -1688,8 +1723,6 @@ execute_commit_package(Package, Result) :-
     ->  commit_queue:invalidate_pending_after_schema_change(Package.branch_key)
     ;   true
     ).
-execute_commit_package(_Package, Result) :-
-    Result = error(error(multi_branch_commit_not_implemented, _)).
 
 % run_synchronous_reelaboration_and_commit/2 is called from run_commit_package
 % when the worker already holds the branch lock, so it must NOT re-acquire it.

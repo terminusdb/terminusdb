@@ -6,6 +6,7 @@
               with_transaction/3,
               with_transaction/4,
               graph_inserts_deletes/3,
+              transaction_object_database_key/2,
               reset_transaction_object_graph_descriptors/1,
               reset_transaction_objects_graph_descriptors/1
           ]).
@@ -25,6 +26,7 @@
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 :- use_module(core(plugins)).
 :- use_module(core(document/migration)).
+:- use_module(core(document/meta_commit_queue)).
 
 :- use_module(config(terminus_config), [max_transaction_retries/1]).
 
@@ -143,11 +145,11 @@ compute_backoff(Count, Time) :-
     Time is This_Slot * Slot_Time.
 
 reset_read_write_obj(Read_Write_Obj, Map, New_Map) :-
+    Descriptor = (Read_Write_Obj.descriptor),
     nb_set_dict(read, Read_Write_Obj, _),
     nb_set_dict(write, Read_Write_Obj, _),
     nb_set_dict(backlinks, Read_Write_Obj, []),
     nb_set_dict(triple_update, Read_Write_Obj, false),
-    Descriptor = (Read_Write_Obj.descriptor),
     (   get_dict(commit_type, Descriptor, _)
     ->  nb_set_dict(commit_type, Descriptor, _)
     ;   true),
@@ -297,6 +299,18 @@ Options include
 * allow_destructive_migration: whether we should allow strengthening migrations
 
  */
+transaction_object_database_key(Transaction_Object, Key) :-
+    get_dict(descriptor, Transaction_Object, Descriptor),
+    (   database_descriptor{organization_name: _,
+                          database_name: _} = Descriptor
+    ->  meta_commit_queue:database_descriptor_key(Descriptor, Key)
+    ;   system_descriptor{} = Descriptor
+    ->  meta_commit_queue:system_meta_lock_key(Key)
+    ;   get_dict(parent, Transaction_Object, Parent)
+    ->  transaction_object_database_key(Parent, Key)
+    ;   fail
+    ).
+
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     (   option(inside_migration(true), Options)
@@ -317,7 +331,20 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     ->  true
     ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
 
-    commit_validation_objects(Validations0, Committed),
+    findall(Key,
+            (   member(Transaction, Transactions),
+                transaction_object_database_key(Transaction, Key)
+            ),
+            Keys),
+    sort(Keys, Sorted_Keys),
+
+    % Serialize the actual _meta commits and graph head updates. The lock is
+    % released before post_commit_hook so that plugins (such as the auto-
+    % optimizer) do not deadlock trying to acquire the same lock.
+    with_meta_commit_locks(
+        Sorted_Keys,
+        commit_validation_objects(Validations0, Committed)
+    ),
     % Use the original validations before any potential schema migration
     collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),

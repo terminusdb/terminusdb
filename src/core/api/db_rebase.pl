@@ -1,5 +1,6 @@
 :- module(db_rebase, [
               rebase_on_branch/9,
+              run_rebase_contract/1,
               cycle_context/4
           ]).
 :- use_module(library(terminus_store)).
@@ -11,6 +12,37 @@
 :- use_module(core(account)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(core(api/api_optimize)).
+:- use_module(core(api/api_document), [
+                  producer_timeout/1,
+                  get_commit_result/4,
+                  deliver_commit_result/2
+              ]).
+:- use_module(core(document/commit_queue), [
+                  enqueue_commit/2
+              ]).
+:- use_module(core(document/meta_commit_queue)).
+:- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
+:- use_module(core(transaction/ref_entity), [
+                  commit_id_uri/3,
+                  commit_uri_to_parent_uri/3
+              ]).
+
+:- dynamic rebase_pre_database_commit_hook/1.
+:- dynamic rebase_pre_lock_hook/1.
+:- dynamic rebase_optimize_thread/1.
+
+% Default hook used by the race regression test. It is a no-op unless the
+% current test has registered an optimizer thread via rebase_optimize_thread/1.
+rebase_pre_database_commit_hook(_Database_Transaction_Object) :-
+    rebase_optimize_thread(OptimizeThread),
+    % Guard: only fire if the registered thread is still alive. This prevents a
+    % stale thread fact from affecting production rebases.
+    catch(thread_property(OptimizeThread, status(running)), _, fail),
+    !,
+    thread_send_message(OptimizeThread, optimize_now).
+rebase_pre_database_commit_hook(_) :- fail.
 
 cycle_context(Context, New_Context, New_Transaction_Object, Validation_Object) :-
     [Transaction_Object] = Context.transaction_objects,
@@ -135,8 +167,40 @@ create_strategies([Commit_ID|Their_Branch_Path], Strategy_Map, [Strategy|Strateg
     create_strategies(Their_Branch_Path, Strategy_Map, Strategies).
 
 rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, Strategy_Map, Optional_Common_Commit_Id, Their_Branch_History, Reports) :-
-    benchmark_subject_start('rebase on branch'),
+    do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
+                         Author, Strategy_Map, Optional_Common_Commit_Id,
+                         Their_Branch_History, Reports, 10).
 
+% do_rebase_with_retry/10 submits a prepared rebase contract to the branch
+% commit queue and retries synchronously if the worker rejects it because the
+% target branch head changed. This follows the same contract-and-retry pattern
+% used by regular document commits.
+do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
+                     Author, Strategy_Map, Optional_Common_Commit_Id,
+                     Their_Branch_History, Reports, Retries) :-
+    rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
+                           Author, Strategy_Map, Optional_Common_Commit_Id,
+                           Their_Branch_History, Contract),
+    submit_rebase_contract(Contract, Result),
+    (   Result = rebase_success(Reports)
+    ->  true
+    ;   Result = reject(rebase_target_branch_changed),
+        Retries > 1
+    ->  New_Retries is Retries - 1,
+        do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
+                             Author, Strategy_Map, Optional_Common_Commit_Id,
+                             Their_Branch_History, Reports, New_Retries)
+    ;   Result = reject(rebase_target_branch_changed)
+    ->  throw(error(rebase_target_branch_changed(Our_Branch_Path), _))
+    ;   Result = error(Error)
+    ->  throw(error(Error, _))
+    ;   Result = timeout
+    ->  throw(error(commit_queue_timeout, _))
+    ).
+
+rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
+                       Author, Strategy_Map, Optional_Common_Commit_Id,
+                       Their_Branch_History, Contract) :-
     do_or_die(
         resolve_absolute_string_descriptor(Our_Branch_Path, Our_Branch_Descriptor),
         error(invalid_target_absolute_path(Our_Branch_Path),_)),
@@ -164,14 +228,27 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     Our_Repo_Descriptor = (Our_Branch_Descriptor.repository_descriptor),
     Their_Repo_Descriptor = (Their_Ref_Descriptor.repository_descriptor),
 
+    prepare_rebase_contract(Auth, Our_Branch_Descriptor, Their_Ref_Descriptor,
+                            Our_Repo_Descriptor, Their_Repo_Descriptor,
+                            Our_Branch_Path, Their_Branch_Path, Author,
+                            Strategy_Map, Optional_Common_Commit_Id,
+                            Contract, Their_Branch_History).
+
+% prepare_rebase_contract/12 does all the rebase work that can safely happen
+% outside the branch lock: history computation, commit copying, and replay.
+% It returns a rebase_contract dict that the worker will verify and commit.
+prepare_rebase_contract(Auth, Our_Branch_Descriptor, Their_Ref_Descriptor,
+                        Our_Repo_Descriptor, Their_Repo_Descriptor,
+                        Our_Branch_Path, Their_Branch_Path, Author,
+                        Strategy_Map, Optional_Common_Commit_Id,
+                        Contract, Their_Branch_History) :-
+
     do_or_die(
         create_context(Our_Repo_Descriptor, Our_Repo_Context),
         error(unresolvable_target_descriptor(Our_Repo_Descriptor))),
     do_or_die(
         create_context(Their_Repo_Descriptor, Their_Repo_Context),
         error(unresolvable_source_descriptor(Their_Repo_Descriptor))),
-
-    benchmark(after_checks),
 
     do_or_die(
         branch_name_uri(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Branch_Uri),
@@ -183,28 +260,23 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
     (   branch_head_commit(Our_Repo_Context, Our_Branch_Descriptor.branch_name, Our_Commit_Uri),
         commit_id_uri(Our_Repo_Context, Our_Commit_Id, Our_Commit_Uri),
         commit_type(Our_Repo_Context, Our_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit')
-    ->  (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Optional_Common_Commit_Id, Our_Branch_History, Their_Branch_History),
-            benchmark(after_ancestor_lookup)
+    ->  Original_Our_Head = some(Our_Commit_Id),
+        (   most_recent_common_ancestor(Our_Repo_Context, Their_Repo_Context, Our_Commit_Id, Their_Commit_Id, Optional_Common_Commit_Id, Our_Branch_History, Their_Branch_History)
         ->  true
         % We have no common history
         ;   Optional_Common_Commit_Id = none,
             commit_uri_to_history_commit_ids(Our_Repo_Context, Our_Commit_Uri, Our_Branch_History),
-            benchmark(history_lookup_1),
-            commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History),
-            benchmark(history_lookup_2))
+            commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History))
     % Branch head commit may not exist if our branch is empty...
     ;   Optional_Common_Commit_Id = none,
+        Original_Our_Head = none,
         Our_Branch_History = [],
         commit_uri_to_history_commit_ids(Their_Repo_Context, Their_Commit_Uri, Their_Branch_History)
     ),
 
-    benchmark(before_copy),
-
     % copy commits from their repo into ours, ensuring we got the latest
     copy_commits(Their_Repo_Context, Our_Repo_Context, Their_Commit_Id),
-    benchmark(after_copy),
     cycle_context(Our_Repo_Context, Our_Repo_Context2, _, _),
-    benchmark(after_first_cycle),
 
     % take their commit uri as the top on which we're gonna apply_commit_chain
     % list of commits to apply is ours since common
@@ -232,17 +304,156 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
         )
     ),
 
-    benchmark(after_application),
+    Database_Descriptor = Our_Branch_Descriptor.repository_descriptor.database_descriptor,
+    database_descriptor_key(Database_Descriptor, Database_Key),
+
+    Contract = rebase_contract{
+        package_type: rebase,
+        branch_key: Our_Branch_Path,
+        database_key: Database_Key,
+        our_repo_descriptor: Our_Repo_Descriptor,
+        our_branch_descriptor: Our_Branch_Descriptor,
+        our_branch_path: Our_Branch_Path,
+        original_head: Original_Our_Head,
+        semifinal_context: Semifinal_Context,
+        our_branch_uri: Our_Branch_Uri,
+        final_commit_uri: Final_Commit_Uri,
+        reports: Reports
+    }.
+
+% submit_rebase_contract/2 submits a rebase contract to the branch commit queue
+% and waits for the worker result. If the commit worker pool is not running
+% (e.g. during PLUnit tests), the contract is executed synchronously in the
+% request thread as a fallback. The result uses the same commit_result envelope
+% as regular commits when queued, or the raw result term when synchronous.
+submit_rebase_contract(Contract, Result) :-
+    (   commit_queue:multi_purpose_worker_thread(_)
+    ->  submit_rebase_contract_queued(Contract, Result)
+    ;   % No worker pool is running (e.g. PLUnit tests). Run the final commit
+        % window synchronously in the request thread, but still under the
+        % meta_commit_lock so the branch relink and repository head update are
+        % serialized. Ignore the result of the hook (used when race testing).
+        get_dict(database_key, Contract, Database_Key),
+        ignore(rebase_pre_lock_hook(Contract)),
+        with_meta_commit_lock(
+            Database_Key,
+            execute_rebase_contract(Contract, Result)
+        )
+    ).
+
+submit_rebase_contract_queued(Contract, Result) :-
+    get_dict(branch_key, Contract, BranchKey),
+    message_queue_create(ReplyQueue, []),
+    gensym(request, RequestId),
+    ContractWithReply = Contract.put(_{reply_queue: ReplyQueue, request_id: RequestId}),
+    commit_queue:enqueue_commit(BranchKey, ContractWithReply),
+    producer_timeout(ProducerTimeout),
+    (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
+    ->  true
+    ;   Result = timeout
+    ),
+    catch(message_queue_destroy(ReplyQueue), _, true).
+
+% run_rebase_contract(+Package) is det.
+%
+% Called by the commit worker when it dequeues a rebase_contract. The worker
+% already holds the branch lock; this predicate acquires the meta_commit_lock,
+% executes the final commit window, and sends the result back to the reply queue.
+run_rebase_contract(Package) :-
+    get_dict(database_key, Package, Database_Key),
+    catch(
+        (   with_meta_commit_lock(
+                Database_Key,
+                (   execute_rebase_contract(Package, Result)
+                ->  true
+                ;   Result = error(unexpected_rebase_failure)
+                )
+            ),
+            deliver_commit_result(Package, Result)
+        ),
+        Error,
+        deliver_commit_result(Package, error(Error))
+    ).
+
+execute_rebase_contract(Package, Result) :-
+    get_dict(our_repo_descriptor, Package, Our_Repo_Descriptor),
+    get_dict(our_branch_descriptor, Package, Our_Branch_Descriptor),
+    get_dict(our_branch_path, Package, Our_Branch_Path),
+    get_dict(original_head, Package, Original_Our_Head),
+    get_dict(semifinal_context, Package, Semifinal_Context),
+    get_dict(our_branch_uri, Package, Our_Branch_Uri),
+    get_dict(final_commit_uri, Package, Final_Commit_Uri),
+    get_dict(reports, Package, Reports),
+    catch(
+        (   rebase_commit_window(Our_Repo_Descriptor, Our_Branch_Descriptor,
+                                 Our_Branch_Path, Original_Our_Head,
+                                 Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
+            Result = rebase_success(Reports)
+        ),
+        error(rebase_target_branch_changed(_), _),
+        Result = reject(rebase_target_branch_changed)
+    ).
+
+% register_rebase_head_in_change_window(+BranchDescriptor, +RepoContext, +HeadCommitUri)
+%
+% Rebase creates new commits on the target branch outside the normal commit
+% validation path, so the change window does not see them. The change window enables
+% verification of writes against what changed recently. Without this, the
+% next commit to the branch tries to open a commit window with a parent that
+% is not present in the window, falls into a retry loop, and
+% effectively stalls the database. We register the new head (with an
+% empty change set) so the window knows the current branch head and commits
+% can open their guards immediately.
+register_rebase_head_in_change_window(BranchDescriptor, RepoContext, HeadCommitUri) :-
+    branch_key_from_descriptor(BranchDescriptor, BranchKey),
+    commit_id_uri(RepoContext, HeadCommitId, HeadCommitUri),
+    (   commit_uri_to_parent_uri(RepoContext, HeadCommitUri, ParentCommitUri)
+    ->  commit_id_uri(RepoContext, ParentCommitId, ParentCommitUri)
+    ;   ParentCommitId = none
+    ),
+    (   atom(HeadCommitId)
+    ->  HeadCommitIdAtom = HeadCommitId
+    ;   atom_string(HeadCommitIdAtom, HeadCommitId)
+    ),
+    (   ParentCommitId = none
+    ->  ParentCommitIdArg = none
+    ;   atom_string(ParentCommitIdArg, ParentCommitId)
+    ),
+    (   catch(
+            '$change_window':register_commit(BranchKey, HeadCommitIdAtom, ParentCommitIdArg,
+                                             none, none, [], []),
+            Error,
+            json_log_error_formatted("register_rebase_head_in_change_window failed for ~w: ~w",
+                                     [BranchKey, Error])
+        )
+    ->  true
+    ;   fail
+    ).
+
+rebase_commit_window(Our_Repo_Descriptor, Our_Branch_Descriptor, Our_Branch_Path,
+                     Original_Our_Head, Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri) :-
+    % The target branch head may have moved between our history computation and
+    % the moment we acquired the lock. Re-read it here and fail with a
+    % structured error so the caller can retry with the new head.
+    (   branch_head_commit(Our_Repo_Descriptor, Our_Branch_Descriptor.branch_name, Current_Our_Commit_Uri),
+        commit_id_uri(Our_Repo_Descriptor, Current_Our_Commit_Id, Current_Our_Commit_Uri),
+        commit_type(Our_Repo_Descriptor, Current_Our_Commit_Uri, 'http://terminusdb.com/schema/ref#ValidCommit')
+    ->  Current_Our_Head = some(Current_Our_Commit_Id)
+    ;   Current_Our_Head = none
+    ),
+    (   Current_Our_Head = Original_Our_Head
+    ->  true
+    ;   throw(error(rebase_target_branch_changed(Our_Branch_Path), _))
+    ),
 
     ignore(unlink_commit_object_from_branch(Semifinal_Context, Our_Branch_Uri)),
 
     link_commit_object_to_branch(Semifinal_Context, Our_Branch_Uri, Final_Commit_Uri),
 
-    benchmark(after_commit_branch_relink),
+    register_rebase_head_in_change_window(Our_Branch_Descriptor, Semifinal_Context,
+                                          Final_Commit_Uri),
 
     cycle_context(Semifinal_Context, _Final_Context, Transaction_Object, _),
-
-    benchmark(after_second_cycle),
 
     Repo_Name = Transaction_Object.descriptor.repository_name,
     [Read_Write_Obj] = Transaction_Object.instance_objects,
@@ -252,10 +463,17 @@ rebase_on_branch(System_DB, Auth, Our_Branch_Path, Their_Branch_Path, Author, St
 
     update_repository_head(Database_Transaction_Object, Repo_Name, Layer_Id),
 
-    benchmark(after_repository_head_update),
+    % Test hook: allows unit tests to interleave an optimization between
+    % the repository head update and the database commit, which is the
+    % exact window in which the auto-optimizer races with the rebase's
+    % _meta commit. The lock is recursive, so the inner run_transactions
+    % can acquire it again safely.
+    (   rebase_pre_database_commit_hook(Database_Transaction_Object)
+    ->  true
+    ;   true
+    ),
 
-    run_transactions([Database_Transaction_Object], true, _),
-    benchmark_subject_stop('rebase on branch').
+    run_transactions([Database_Transaction_Object], true, _).
 
 :- begin_tests(rebase, [concurrent(true)]).
 :- use_module(core(util/test_utils)).
@@ -690,5 +908,181 @@ test(rebase_conflict,
 
     rebase_on_branch(system_descriptor{}, Auth, "admin/foo", Path, "me", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports).
 
-
 :- end_tests(rebase).
+
+:- begin_tests(rebase_queue, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+:- use_module(db_create).
+:- use_module(db_branch).
+
+test(rebase_through_commit_queue,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup((commit_queue:stop_workers,
+               teardown_temp_store(State)))
+     ])
+:-
+    Master_Path = "admin/foo",
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test", message:"commit a"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+    create_context(Second_Descriptor, commit_info{author:"test", message:"commit b"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
+
+    commit_queue:start_workers(1),
+    rebase_on_branch(system_descriptor{}, Auth, Master_Path, Second_Path, "rebaser", [], _Common_Commit_Id, _Their_Commit_Ids, _Reports),
+    commit_queue:stop_workers.
+
+:- end_tests(rebase_queue).
+
+optimize_thread_loop(Store, Auth, Master_Meta_Path) :-
+    thread_get_message(Message),
+    (   Message == optimize_now
+    ->  api_optimize(system_descriptor{}, Auth, Master_Meta_Path)
+    ;   true
+    ),
+    (   Message == stop
+    ->  true
+    ;   optimize_thread_loop(Store, Auth, Master_Meta_Path)
+    ).
+
+insert_race_doc(_Auth, Master_Path) :-
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test", message:"race insert"}, Ctx),
+    with_transaction(Ctx, ask(Ctx, insert(race,g,h)), _).
+
+% Guard used by rebase_races_with_target_branch_insert to ensure the pre-lock
+% hook inserts exactly once, producing a deterministic single retry.
+:- dynamic rebase_race_insert_done/0.
+
+rebase_race_insert_once(Contract, Auth) :-
+    (   rebase_race_insert_done
+    ->  true
+    ;   get_dict(our_branch_path, Contract, Master_Path),
+        insert_race_doc(Auth, Master_Path),
+        assertz(rebase_race_insert_done)
+    ).
+
+:- begin_tests(rebase_race, [concurrent(false)]).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+:- use_module(db_create).
+:- use_module(db_branch).
+
+% Regression test for the race between rebase's database commit and a
+% concurrent optimization that squashes the _meta head. Before the fix, the
+% rebase fails because the new _meta layer is a child of the pre-squash head,
+% not the post-squash head. After the fix, the meta commit lock serializes the
+% two operations.
+%
+% The rebase path calls run_transactions/3 directly, without the retry that
+% can mask the race in with_transaction/4.
+test(rebase_races_with_database_optimize,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo")
+            )),
+      cleanup((retractall(db_rebase:rebase_optimize_thread(_)),
+               teardown_temp_store(State)))
+     ])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    super_user_authority(Auth),
+
+    % Commit on main so _meta has a parent layer to squash.
+    create_context(Master_Descriptor, commit_info{author:"test", message:"commit a"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+
+    % Create a feature branch with a commit to rebase.
+    Feature_Path = "admin/foo/local/branch/feature",
+    branch_create(system_descriptor{}, Auth, Feature_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Feature_Path, Feature_Descriptor),
+    create_context(Feature_Descriptor, commit_info{author:"test", message:"feature commit"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
+
+    triple_store(Store),
+    Master_Meta_Path = "admin/foo/_meta",
+
+    % Start the optimizer thread before the rebase. The permanent hook in
+    % db_rebase.pl sends optimize_now to the registered thread exactly in the
+    % window between the repository head update and the database commit.
+    setup_call_cleanup(
+        (   thread_create(
+                with_triple_store(Store,
+                                  optimize_thread_loop(Store, Auth, Master_Meta_Path)),
+                OptimizeThread,
+                []
+            ),
+            assertz(db_rebase:rebase_optimize_thread(OptimizeThread))
+        ),
+        rebase_on_branch(system_descriptor{}, Auth, Master_Path, Feature_Path, "rebaser", [], some(_), _, []),
+        (   db_rebase:rebase_optimize_thread(OptimizeThread),
+            thread_send_message(OptimizeThread, stop),
+            thread_join(OptimizeThread, OptimizeResult),
+            assertion(OptimizeResult == true)
+        )
+    ).
+
+% Regression test for the race between rebase's history computation and a
+% concurrent insert on the target branch. Before the fix, the rebase failed
+% silently because the target branch head moved after the history was computed
+% and before the database commit, producing a final commit that was not a
+% descendant of the current head. After the fix, the rebase detects the change
+% inside the meta commit lock and retries once.
+%
+% The race is triggered deterministically via the rebase_pre_lock_hook/1 test
+% hook: it runs after the rebase history has been computed but before the meta
+% commit lock is acquired, so the inserted document is guaranteed to move the
+% target branch head exactly once.
+test(rebase_races_with_target_branch_insert,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo")
+            )),
+      cleanup((retractall(db_rebase:rebase_pre_lock_hook(_)),
+               retractall(db_rebase:rebase_race_insert_done),
+               teardown_temp_store(State)))
+     ])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    super_user_authority(Auth),
+
+    % Commit on main so the target branch has a history to race with.
+    create_context(Master_Descriptor, commit_info{author:"test", message:"commit a"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+
+    % Create a feature branch with a commit so the rebase has work to do.
+    Feature_Path = "admin/foo/local/branch/feature",
+    branch_create(system_descriptor{}, Auth, Feature_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Feature_Path, Feature_Descriptor),
+    create_context(Feature_Descriptor, commit_info{author:"test", message:"feature commit"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
+
+    setup_call_cleanup(
+        (   retractall(db_rebase:rebase_race_insert_done),
+            assertz((db_rebase:rebase_pre_lock_hook(Contract) :-
+                        db_rebase:rebase_race_insert_once(Contract, Auth)))
+        ),
+        rebase_on_branch(system_descriptor{}, Auth, Master_Path, Feature_Path,
+                         "rebaser", [], some(_), _, _Reports),
+        (   retractall(db_rebase:rebase_pre_lock_hook(_)),
+            retractall(db_rebase:rebase_race_insert_done)
+        )
+    ).
+
+:- end_tests(rebase_race).

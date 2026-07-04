@@ -32,7 +32,6 @@ function create (agent, params) {
   return {
     then (resolve) {
       resolve(request.then(api.response.verify(api.response.db.createSuccess)).then(async (result) => {
-        // Auto-optimize database after successful creation
         try {
           const dbPath = params.string('path', `${agent.orgName}/${agent.dbName}`)
           await optimizeDatabase(agent, dbPath, 'main')
