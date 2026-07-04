@@ -214,7 +214,7 @@ date_time_stamp_string(Date_Time,String) :-
     !,
     atom_codes(String,Codes),
     phrase(dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
-    remove_date_time_offset(Y,M,D,HH,MM,SS,Offset,NS,Date_Time).
+    remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,Date_Time).
 
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
     date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),

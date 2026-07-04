@@ -40,6 +40,25 @@ describe('In-Memory Mode', function () {
     throw new Error('Server did not start in time')
   }
 
+  async function waitForApi (auth, maxRetries = 20) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await httpRequest({
+          hostname: '127.0.0.1',
+          port: PORT,
+          path: '/api/',
+          method: 'GET',
+          headers: { Authorization: `Basic ${auth}` },
+        })
+        if (res.status === 200) return res
+      } catch (e) {
+        // Endpoint not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+    throw new Error('/api/ did not return 200 in time')
+  }
+
   async function waitForJsonEndpoint (path, auth, maxRetries = 10) {
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -113,13 +132,7 @@ describe('In-Memory Mode', function () {
 
       // Verify we can authenticate with the custom password
       const auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
-      const response = await httpRequest({
-        hostname: '127.0.0.1',
-        port: PORT,
-        path: '/api/',
-        method: 'GET',
-        headers: { Authorization: `Basic ${auth}` },
-      })
+      const response = await waitForApi(auth)
 
       expect(response.status).to.equal(200)
     })
@@ -134,13 +147,7 @@ describe('In-Memory Mode', function () {
 
       // Verify we can authenticate with the default password 'root'
       const auth = Buffer.from('admin:root').toString('base64')
-      const response = await httpRequest({
-        hostname: '127.0.0.1',
-        port: PORT,
-        path: '/api/',
-        method: 'GET',
-        headers: { Authorization: `Basic ${auth}` },
-      })
+      const response = await waitForApi(auth)
 
       expect(response.status).to.equal(200)
     })
