@@ -30,8 +30,8 @@
               ]).
 
 :- dynamic rebase_pre_database_commit_hook/1.
+:- dynamic rebase_pre_lock_hook/1.
 :- dynamic rebase_optimize_thread/1.
-:- dynamic rebase_insert_thread/1.
 
 % Default hook used by the race regression test. It is a no-op unless the
 % current test has registered an optimizer thread via rebase_optimize_thread/1.
@@ -332,8 +332,9 @@ submit_rebase_contract(Contract, Result) :-
     ;   % No worker pool is running (e.g. PLUnit tests). Run the final commit
         % window synchronously in the request thread, but still under the
         % meta_commit_lock so the branch relink and repository head update are
-        % serialized.
+        % serialized. Ignore the result of the hook (used when race testing).
         get_dict(database_key, Contract, Database_Key),
+        ignore(rebase_pre_lock_hook(Contract)),
         with_meta_commit_lock(
             Database_Key,
             execute_rebase_contract(Contract, Result)
@@ -961,13 +962,16 @@ insert_race_doc(_Auth, Master_Path) :-
     create_context(Master_Descriptor, commit_info{author:"test", message:"race insert"}, Ctx),
     with_transaction(Ctx, ask(Ctx, insert(race,g,h)), _).
 
-insert_thread_loop(Store, Auth, Master_Path) :-
-    (   thread_peek_message(stop)
-    ->  thread_get_message(stop),
-        true
-    ;   catch(insert_race_doc(Auth, Master_Path), _, true),
-        sleep(0.01),
-        insert_thread_loop(Store, Auth, Master_Path)
+% Guard used by rebase_races_with_target_branch_insert to ensure the pre-lock
+% hook inserts exactly once, producing a deterministic single retry.
+:- dynamic rebase_race_insert_done/0.
+
+rebase_race_insert_once(Contract, Auth) :-
+    (   rebase_race_insert_done
+    ->  true
+    ;   get_dict(our_branch_path, Contract, Master_Path),
+        insert_race_doc(Auth, Master_Path),
+        assertz(rebase_race_insert_done)
     ).
 
 :- begin_tests(rebase_race, [concurrent(false)]).
@@ -1040,11 +1044,17 @@ test(rebase_races_with_database_optimize,
 % and before the database commit, producing a final commit that was not a
 % descendant of the current head. After the fix, the rebase detects the change
 % inside the meta commit lock and retries once.
+%
+% The race is triggered deterministically via the rebase_pre_lock_hook/1 test
+% hook: it runs after the rebase history has been computed but before the meta
+% commit lock is acquired, so the inserted document is guaranteed to move the
+% target branch head exactly once.
 test(rebase_races_with_target_branch_insert,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo")
             )),
-      cleanup((retractall(db_rebase:rebase_insert_thread(_)),
+      cleanup((retractall(db_rebase:rebase_pre_lock_hook(_)),
+               retractall(db_rebase:rebase_race_insert_done),
                teardown_temp_store(State)))
      ])
 :-
@@ -1063,23 +1073,15 @@ test(rebase_races_with_target_branch_insert,
     create_context(Feature_Descriptor, commit_info{author:"test", message:"feature commit"}, Ctx2),
     with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
 
-    triple_store(Store),
-
-    % Start an insert thread that repeatedly commits on main until the rebase finishes.
     setup_call_cleanup(
-        (   thread_create(
-                with_triple_store(Store,
-                                  insert_thread_loop(Store, Auth, Master_Path)),
-                InsertThread,
-                []
-            ),
-            assertz(db_rebase:rebase_insert_thread(InsertThread))
+        (   retractall(db_rebase:rebase_race_insert_done),
+            assertz((db_rebase:rebase_pre_lock_hook(Contract) :-
+                        db_rebase:rebase_race_insert_once(Contract, Auth)))
         ),
-        rebase_on_branch(system_descriptor{}, Auth, Master_Path, Feature_Path, "rebaser", [], some(_), _, []),
-        (   db_rebase:rebase_insert_thread(InsertThread),
-            thread_send_message(InsertThread, stop),
-            thread_join(InsertThread, InsertResult),
-            assertion(InsertResult == true)
+        rebase_on_branch(system_descriptor{}, Auth, Master_Path, Feature_Path,
+                         "rebaser", [], some(_), _, _Reports),
+        (   retractall(db_rebase:rebase_pre_lock_hook(_)),
+            retractall(db_rebase:rebase_race_insert_done)
         )
     ).
 
