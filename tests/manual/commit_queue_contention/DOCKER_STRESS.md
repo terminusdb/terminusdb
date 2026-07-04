@@ -2,8 +2,9 @@
 
 This manual test runs the commit-queue contention stress test against a
 TerminusDB server in a CPU-throttled Docker container. The container is
-limited to half a CPU so commits and scheduled auto-optimizations overlap
-heavily, which is the scenario in which the original race was observed.
+limited to half a CPU or less so commits and scheduled auto-optimizations 
+overlap heavily, which is the scenario in which the original race was 
+observed.
 
 ## What it tests
 
