@@ -2107,8 +2107,8 @@ dependencies = [
 
 [[package]]
 name = "tdb-succinct"
-version = "0.1.2"
-source = "git+https://github.com/terminusdb-org/tdb-succinct#91a6096725c7e7031ed1724ea4939041cebe5456"
+version = "0.1.4"
+source = "git+https://github.com/terminusdb-org/tdb-succinct?branch=xbrl-json-iso-intervals#ec1519923e44e73cad17264f21534065855be6e0"
 dependencies = [
  "async-trait",
  "base64 0.21.7",

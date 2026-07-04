@@ -1947,7 +1947,7 @@ test(dateTimeStamp, []) :-
                                       "@type": "xsd:dateTimeStamp"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=date_time(2004,4,12,8,20,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
+    WOQL = (v('X')=date_time(2004,4,12,18,20,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
 
 test(gyear, []) :-
     JSON_Atom= '{"@type": "Equals",
