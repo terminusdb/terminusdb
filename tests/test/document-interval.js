@@ -50,7 +50,7 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/Q1-2025', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      expect(r.body[0].interval).to.equal('2025-01-01/2025-04-01')
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/2025-04-02T00:00:00Z')
     })
   })
 
@@ -65,7 +65,7 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/Q1-duration', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      expect(r.body[0].interval).to.equal('2025-01-01/P3M')
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P3M')
     })
   })
 
@@ -80,7 +80,7 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/Q1-durend', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      expect(r.body[0].interval).to.equal('P3M/2025-04-01')
+      expect(r.body[0].interval).to.equal('P3M/2025-04-02T00:00:00Z')
     })
   })
 
@@ -102,7 +102,7 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/updatable', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      expect(r.body[0].interval).to.equal('2025-06-01/2025-09-01')
+      expect(r.body[0].interval).to.equal('2025-06-01T00:00:00Z/2025-09-02T00:00:00Z')
     })
   })
 
@@ -129,7 +129,7 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'MaybeEvent/has-interval', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      expect(r.body[0].interval).to.equal('2025-01-01/P1Y')
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P1Y')
     })
   })
 
@@ -159,7 +159,7 @@ describe('document-interval', function () {
 
       const r = await document.get(agent, { query: { id: 'Event/hour-dur', as_list: true } })
       expect(r.body).to.have.lengthOf(1)
-      expect(r.body[0].interval).to.equal('2025-01-01/PT1H')
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/PT1H')
     })
   })
 })
