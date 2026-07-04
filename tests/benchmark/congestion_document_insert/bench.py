@@ -5,6 +5,10 @@ Based on the enterprise congestion_document_insert and api_simple_insert
 benchmarks. Measures the throughput of concurrent document writers against the
 same branch using the public /api/document endpoint with NDJSON bulk inserts.
 
+After the timed insertions, the benchmark verifies that every document ID
+returned by the server is queryable, raising an error if any inserted document
+is missing from the database.
+
 Default configuration:
   - 4 writers
   - 3 chunks per writer
@@ -137,10 +141,12 @@ def insert_chunk(db_name, writer_idx, chunk_idx, docs_per_chunk):
     )
     if status not in (200, 201):
         raise RuntimeError(f"Insert failed for writer {writer_idx} chunk {chunk_idx}: {status} {data!r}")
+    ids = json.loads(data)
     return {
         "writer": writer_idx,
         "chunk": chunk_idx,
         "inserts": docs_per_chunk,
+        "ids": ids,
     }
 
 
@@ -173,6 +179,61 @@ def run_sequential(db_name, writers, chunks_per_writer, docs_per_chunk):
         results.append(insert_chunk(db_name, 0, c, docs_per_chunk))
     elapsed = time.perf_counter() - start
     return elapsed, results
+
+
+def _normalize_id(doc_id):
+    """Return the short form of a document id.
+
+    Insert responses return full ids like 'terminusdb:///data/Simple/XXX' while
+    GET /api/document returns short ids like 'Simple/XXX'. We normalize to the
+    short form for comparison.
+    """
+    if doc_id.startswith("terminusdb:///data/"):
+        return doc_id[len("terminusdb:///data/"):]
+    return doc_id
+
+
+def verify_consistency(client, db_name, results):
+    """Verify that every id returned by the inserts can be queried back."""
+    expected_ids = {
+        _normalize_id(doc_id)
+        for result in results
+        for doc_id in result.get("ids", [])
+    }
+
+    status, data = client.request(
+        "GET",
+        f"/api/document/{db_name}?graph_type=instance",
+    )
+    if status != 200:
+        raise RuntimeError(f"Failed to list documents from {db_name}: {status} {data!r}")
+
+    found_ids = set()
+    for line in data.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            doc = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid document list response from {db_name}: {line!r}") from exc
+        if "@id" in doc:
+            found_ids.add(doc["@id"])
+
+    missing = expected_ids - found_ids
+    extra = found_ids - expected_ids
+    if missing:
+        raise RuntimeError(
+            f"Consistency check failed for {db_name}: {len(missing)} inserted documents missing "
+            f"(e.g. {next(iter(missing))}). Found {len(found_ids)} documents, expected {len(expected_ids)}."
+        )
+    if extra:
+        raise RuntimeError(
+            f"Consistency check failed for {db_name}: {len(extra)} unexpected documents found "
+            f"(e.g. {next(iter(extra))}). Found {len(found_ids)} documents, expected {len(expected_ids)}."
+        )
+
+    return len(expected_ids)
 
 
 def summarize_results(elapsed, results, docs_per_chunk):
@@ -208,10 +269,12 @@ def main():
         parallel_elapsed, parallel_results = run_parallel(
             parallel_db, writers, chunks_per_writer, docs_per_chunk
         )
+        parallel_verified = verify_consistency(setup_client, parallel_db, parallel_results)
     finally:
         delete_db(setup_client, parallel_db)
 
     parallel_metrics = summarize_results(parallel_elapsed, parallel_results, docs_per_chunk)
+    parallel_metrics["verified_documents"] = parallel_verified
 
     # Sequential scenario.
     delete_db(setup_client, sequential_db)
@@ -221,10 +284,12 @@ def main():
         sequential_elapsed, sequential_results = run_sequential(
             sequential_db, writers, chunks_per_writer, docs_per_chunk
         )
+        sequential_verified = verify_consistency(setup_client, sequential_db, sequential_results)
     finally:
         delete_db(setup_client, sequential_db)
 
     sequential_metrics = summarize_results(sequential_elapsed, sequential_results, docs_per_chunk)
+    sequential_metrics["verified_documents"] = sequential_verified
 
     congestion_ratio = (
         parallel_metrics["total_ms"] / sequential_metrics["total_ms"]

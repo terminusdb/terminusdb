@@ -10,8 +10,9 @@ It compares two execution modes:
 - **Sequential**: the same total number of chunks is inserted one at a time.
 
 The benchmark creates fresh databases, inserts a simple `Simple` schema, runs
-the timed insertions, and finally deletes the databases. No setup beyond a
-running TerminusDB server is required.
+the timed insertions, verifies that every returned document ID can be queried
+back, and finally deletes the databases. No setup beyond a running TerminusDB
+server is required.
 
 ## What you need
 
@@ -75,7 +76,7 @@ the per-commit fixed cost over many documents.
 Use environment variables to change the load:
 
 ```bash
-WRITERS=4 CHUNKS_PER_WRITER=1 DOCS_PER_CHUNK=10000 \
+WRITERS=2 CHUNKS_PER_WRITER=2 DOCS_PER_CHUNK=20000 \
   python3 bench.py
 ```
 
@@ -97,24 +98,26 @@ Available variables:
 {
   "benchmark": "congestion_document_insert",
   "metrics": {
-    "writers": 4,
-    "chunks_per_writer": 3,
-    "docs_per_chunk": 2000,
+    "writers": 2,
+    "chunks_per_writer": 2,
+    "docs_per_chunk": 20000,
     "parallel": {
-      "total_ms": 2150.88,
-      "documents": 24000,
-      "chunks": 12,
-      "documents_per_second": 11158.23,
-      "ms_per_document": 0.0896
+      "total_ms": 3280.27,
+      "documents": 80000,
+      "chunks": 4,
+      "documents_per_second": 24388.20,
+      "ms_per_document": 0.0410,
+      "verified_documents": 80000
     },
     "sequential": {
-      "total_ms": 1829.43,
-      "documents": 24000,
-      "chunks": 12,
-      "documents_per_second": 13118.83,
-      "ms_per_document": 0.0762
+      "total_ms": 4085.87,
+      "documents": 80000,
+      "chunks": 4,
+      "documents_per_second": 19579.67,
+      "ms_per_document": 0.0511,
+      "verified_documents": 80000
     },
-    "congestion_ratio": 1.18
+    "congestion_ratio": 0.80
   }
 }
 ```
@@ -125,6 +128,10 @@ Available variables:
 - **`congestion_ratio`** is `parallel_total_ms / sequential_total_ms`. A value
   close to 1 means parallel writes on the same branch add little overhead; a
   much larger value would mean contention is dominating the runtime.
+- **`verified_documents`** is the number of inserted IDs that were successfully
+  queried back from the database. It must equal `documents`; if it is lower, the
+  benchmark raises an error because the insert response reported documents that
+  were not persisted.
 - On a single branch, TerminusDB serializes commits, so adding more writers
   does not always increase throughput. The bottleneck is the per-commit fixed
   cost.
