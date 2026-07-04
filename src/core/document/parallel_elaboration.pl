@@ -43,11 +43,18 @@
 :- use_module(library(option)).
 :- use_module(library(pairs)).
 :- use_module(library(plunit)).
+:- use_module(library(time)).
 :- use_module(library(yall)).
 
 :- dynamic request_queue/8.
 % request_queue(RequestId, Descriptor, DB, PendingChunks, TotalChunks, WrapApiErrors,
 %                 PreBranchCommitId, PreSchemaLayerId).
+
+:- dynamic handler_message_timeout/1.
+% handler_message_timeout is the maximum time (in seconds) the request handler
+% will wait for a worker to send back an elaborated chunk. It is a safety net
+% against a worker that took a chunk but never produced a result.
+handler_message_timeout(30.0).
 
 :- dynamic max_chunk_size/1.
 % max_chunk_size is the maximum number of documents that may be grouped into
@@ -180,16 +187,22 @@ collect_and_process_pairs(RequestId, TotalChunks, Pairs) :-
 
 collect_and_process_(_, 0, Pairs, Pairs) :- !.
 collect_and_process_(RequestId, Remaining, Pairs, FinalPairs) :-
-    (   take_chunk(RequestId, _OwnerId, DB, Wrap, chunk(Index, Docs),
-                   PreBranchCommitId, PreSchemaLayerId)
-    ->  (   process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated)
+    (   take_own_chunk(RequestId, DB, Wrap, chunk(Index, Docs),
+                       PreBranchCommitId, PreSchemaLayerId)
+    ->
+        (   process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated)
         ->  Remaining1 is Remaining - 1,
             collect_and_process_(RequestId, Remaining1, [Index-Elaborated|Pairs], FinalPairs)
         ;   throw(error(parallel_elaboration_failed(chunk(Index, Docs)), _))
         )
     ;   % No local chunks left; wait for idle HTTP workers to send results.
-        thread_get_message(RequestId, Message),
-        handle_chunk_message(RequestId, Message, Remaining, Pairs, FinalPairs)
+        % Use a bounded wait so a worker that took a chunk but never produced a
+        % result cannot leave the handler thread stuck forever.
+        handler_message_timeout(Timeout),
+        (   thread_get_message(RequestId, Message, [timeout(Timeout)])
+        ->  handle_chunk_message(RequestId, Message, Remaining, Pairs, FinalPairs)
+        ;   throw(error(parallel_elaboration_timeout(RequestId, Remaining), _))
+        )
     ).
 
 handle_chunk_message(RequestId, chunk_done(Index, Elaborated), Remaining, Pairs, FinalPairs) :-
@@ -204,6 +217,19 @@ send_chunk_done(OwnerId, Index, Elaborated) :-
 
 send_chunk_error(OwnerId, Index, Error) :-
     catch(thread_send_message(OwnerId, chunk_error(Index, Error)), _, true).
+
+take_own_chunk(RequestId, DB, Wrap, Chunk, PreBranchCommitId, PreSchemaLayerId) :-
+    with_mutex(elaboration_queue_mutex,
+               (   request_queue(RequestId, Descriptor, DB0, [Chunk|Rest], Total, Wrap,
+                                 PreBranchCommitId0, PreSchemaLayerId0)
+               ->  DB = DB0,
+                   PreBranchCommitId = PreBranchCommitId0,
+                   PreSchemaLayerId = PreSchemaLayerId0,
+                   retractall(request_queue(RequestId, _, _, _, _, _, _, _)),
+                   assertz(request_queue(RequestId, Descriptor, DB0, Rest, Total, Wrap,
+                                          PreBranchCommitId0, PreSchemaLayerId0))
+               ;   fail
+               )).
 
 take_chunk(RequestId, OwnerId, DB, Wrap, Chunk, PreBranchCommitId, PreSchemaLayerId) :-
     with_mutex(elaboration_queue_mutex,
@@ -286,12 +312,11 @@ maybe_help_with_elaboration :-
 
 process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
                           OwnerId, Index) :-
-    (   process_chunk_caught(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated, Error)
-    ->  (   var(Error)
-        ->  send_chunk_done(OwnerId, Index, Elaborated)
-        ;   send_chunk_error(OwnerId, Index, Error)
-        )
-    ;   send_chunk_error(OwnerId, Index, unknown_error)
+    process_chunk_caught(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
+                         Elaborated, Error),
+    (   var(Error)
+    ->  send_chunk_done(OwnerId, Index, Elaborated)
+    ;   send_chunk_error(OwnerId, Index, Error)
     ).
 
 process_chunk_caught(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated, Error) :-
@@ -337,11 +362,11 @@ multi_purpose_worker_loop_body :-
     ).
 
 % worker_should_commit_first is true when the worker is allowed to prefer
-% elaboration over commit work. If a commit has been pending for more than 2
-% seconds, we force commit work first to avoid starvation of queued commits.
+% elaboration over commit work. If any commit is pending, we force commit work
+% first to avoid starvation of queued commits.
 worker_should_commit_first :-
     worker_prefers_elaboration,
-    \+ commit_queue:pending_commit_stale(2.0).
+    \+ commit_queue:pending_commit_stale(0.0).
 
 worker_prefers_elaboration :-
     config:worker_elaboration_preference(P),
@@ -460,7 +485,7 @@ has_commit_window_guard :-
 % Tests
 % -----
 
-:- begin_tests(parallel_elaboration, [concurrent(true)]).
+:- begin_tests(parallel_elaboration).
 
 :- use_module(core(document)).
 :- use_module(core(document/json)).
@@ -1003,5 +1028,232 @@ test(helper_elaboration_produces_ground_contract, [
     assertion(ground(GotSchemaLayerId)),
     get_dict(pre_branch_commit_id, Contract, GotBranchCommitId),
     assertion(ground(GotBranchCommitId)).
+
+% Regression test for the handler blocking forever when a chunk is stolen by a
+% worker that never sends the result. The handler must return with an error
+% after the configured timeout instead of hanging.
+test(collect_and_process_handler_returns_on_missing_worker_message, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc),
+                retractall(parallel_elaboration:handler_message_timeout(_)),
+                assertz(parallel_elaboration:handler_message_timeout(0.1)))),
+         cleanup((retractall(parallel_elaboration:handler_message_timeout(_)),
+                  assertz(parallel_elaboration:handler_message_timeout(30.0)),
+                  teardown_temp_store(State)))
+     ]) :-
+    helper_docs(1, [Doc]),
+    open_descriptor(Desc, DB),
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    create_request_queue(none, DB, [chunk(0, [Doc])], 1, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId),
+    % Steal the chunk so the handler has nothing to take itself.
+    take_chunk(RequestId, _OwnerId, _DB, _Wrap, _Chunk, _, _),
+    get_time(Start),
+    catch(
+        call_with_time_limit(2.0, collect_and_process_(RequestId, 1, [], _)),
+        Error,
+        true
+    ),
+    get_time(End),
+    % Must return well before the call_with_time_limit outer bound.
+    assertion(End - Start < 1.5),
+    % Must fail, not succeed, because the chunk was never produced.
+    assertion(nonvar(Error)),
+    cleanup_request(RequestId).
+
+% Regression test for fair work stealing. When three requests all have chunks
+% available, three consecutive calls to maybe_help_with_elaboration should help
+% one chunk from each request, not three chunks from the first request.
+test(work_stealing_rotates_across_requests, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    helper_docs(3, [Doc1, Doc2, Doc3]),
+    open_descriptor(Desc, DB),
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    findall(chunk(I, [Doc1]), between(0, 9, I), Chunks1),
+    findall(chunk(I, [Doc2]), between(0, 9, I), Chunks2),
+    findall(chunk(I, [Doc3]), between(0, 9, I), Chunks3),
+    create_request_queue(none, DB, Chunks1, 10, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId1),
+    create_request_queue(none, DB, Chunks2, 10, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId2),
+    create_request_queue(none, DB, Chunks3, 10, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId3),
+    maybe_help_with_elaboration,
+    maybe_help_with_elaboration,
+    maybe_help_with_elaboration,
+    message_queue_property(RequestId1, size(Size1)),
+    message_queue_property(RequestId2, size(Size2)),
+    message_queue_property(RequestId3, size(Size3)),
+    assertion(Size1 == 1),
+    assertion(Size2 == 1),
+    assertion(Size3 == 1),
+    cleanup_request(RequestId1),
+    cleanup_request(RequestId2),
+    cleanup_request(RequestId3).
+
+% Regression test for chunk atomicity. Many workers racing to take chunks from
+% the same request must each get a distinct chunk, and every chunk must be
+% accounted for (no lost or duplicate takes).
+test(concurrent_take_chunk_is_atomic, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    helper_docs(5, Docs),
+    open_descriptor(Desc, DB),
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    findall(chunk(I, [Doc]), nth0(I, Docs, Doc), Chunks),
+    length(Chunks, N),
+    create_request_queue(none, DB, Chunks, N, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestId),
+    % Spawn more workers than chunks to stress the mutex, plus a handler thread
+    % that tries to take its own chunks like collect_and_process_ does.
+    NumWorkers is N * 3,
+    findall(ThreadId,
+            (   between(1, NumWorkers, _),
+                thread_create(
+                    (   take_chunk(RequestId, OwnerId, _DB2, _Wrap, chunk(Index, _Docs),
+                                   _PreBranchCommitId, _PreSchemaLayerId)
+                    ->  thread_send_message(main, taken(OwnerId, Index))
+                    ;   thread_send_message(main, none)
+                    ),
+                    ThreadId,
+                    [])
+            ),
+            WorkerIds),
+    thread_create(
+        (   repeat,
+            (   take_chunk(RequestId, OwnerId, _DB2, _Wrap, chunk(Index, _Docs),
+                           _PreBranchCommitId, _PreSchemaLayerId)
+            ->  thread_send_message(main, taken(OwnerId, Index)),
+                fail
+            ;   !
+            )
+        ),
+        HandlerThread,
+        []),
+    forall(member(T, WorkerIds), thread_join(T, _)),
+    thread_join(HandlerThread, _),
+    TotalReplies is NumWorkers + N,
+    % Collect all worker replies.
+    findall(Reply,
+            (   between(1, TotalReplies, _),
+                thread_get_message(main, Reply, [timeout(1)])
+            ),
+            Replies),
+    findall(Index, member(taken(RequestId, Index), Replies), TakenIndices),
+    sort(TakenIndices, SortedTaken),
+    N1 is N - 1,
+    numlist(0, N1, Expected),
+    assertion(SortedTaken == Expected),
+    cleanup_request(RequestId).
+
+% Stress test: 4 concurrent handlers with 5 chunks each, plus a pool of workers
+% that try to help. All 4 requests must complete without any chunk being lost.
+test(concurrent_requests_all_complete, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc),
+                start_elaboration_workers(4))),
+         cleanup((stop_elaboration_workers,
+                  teardown_temp_store(State)))
+     ]) :-
+    helper_docs(5000, Docs),
+    open_descriptor(Desc, DB),
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    % Split into 5 chunks of 1000 documents each.
+    chunks_from_documents(Docs, 1000, Chunks),
+    length(Chunks, N),
+    % Create 4 request queues.
+    findall(RequestId,
+            (   between(1, 4, _),
+                create_request_queue(none, DB, Chunks, N, false,
+                                     PreBranchCommitId, PreSchemaLayerId, RequestId)
+            ),
+            RequestIds),
+    % Give workers a brief moment to steal chunks before handlers start.
+    sleep(0.1),
+    % Start 4 handler threads.
+    findall(HandlerThread,
+            (   member(RequestId, RequestIds),
+                thread_create(
+                    (   catch(
+                            collect_and_process_pairs(RequestId, N, Pairs),
+                            Error,
+                            (   Error = error(parallel_elaboration_timeout(_,_),_)
+                            ->  Pairs = timeout
+                            ;   throw(Error)
+                            )
+                        )
+                    ->  thread_send_message(main, request_done(RequestId, Pairs))
+                    ;   thread_send_message(main, request_failed(RequestId))
+                    ),
+                    HandlerThread,
+                    [])
+            ),
+            HandlerThreads),
+    forall(member(T, HandlerThreads), thread_join(T, _)),
+    % Collect results.
+    findall(RequestId-Done,
+            (   between(1, 4, _),
+                thread_get_message(main, request_done(RequestId, Done), [timeout(10)])
+            ),
+            Results),
+    sort(RequestIds, ExpectedIds),
+    findall(Id, member(Id-Done, Results), DoneIds),
+    sort(DoneIds, SortedDoneIds),
+    assertion(SortedDoneIds == ExpectedIds),
+    % No request may have timed out.
+    \+ member(_-timeout, Results),
+    forall(member(RequestId, RequestIds), cleanup_request(RequestId)).
+
+% Regression test for the handler-side chunk-stealing bug. When a handler's own
+% queue has been drained by workers but results are still in flight, the handler
+% must NOT steal a chunk from another request queue.
+test(handler_does_not_steal_foreign_chunks, [
+         setup((setup_temp_store(State),
+                test_document_label_descriptor(Desc),
+                test_document_schema_string(Schema),
+                write_schema_string(Schema, Desc),
+                retractall(parallel_elaboration:handler_message_timeout(_)),
+                assertz(parallel_elaboration:handler_message_timeout(0.1)))),
+         cleanup((retractall(parallel_elaboration:handler_message_timeout(_)),
+                  assertz(parallel_elaboration:handler_message_timeout(30.0)),
+                  teardown_temp_store(State)))
+     ]) :-
+    helper_docs(2, [DocA, DocB]),
+    open_descriptor(Desc, DB),
+    snapshot_ids(DB, PreBranchCommitId, PreSchemaLayerId),
+    create_request_queue(none, DB, [chunk(0, [DocA])], 1, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestA),
+    create_request_queue(none, DB, [chunk(0, [DocB])], 1, false,
+                         PreBranchCommitId, PreSchemaLayerId, RequestB),
+    % Simulate a worker draining A's queue without sending a result yet.
+    take_chunk(RequestA, OwnerA, _DB, _Wrap, _Chunk, _, _),
+    assertion(OwnerA == RequestA),
+    % A's own queue is now empty. A's handler must wait for the result and then
+    % time out, NOT steal B's chunk.
+    catch(
+        collect_and_process_(RequestA, 1, [], _),
+        Error,
+        true
+    ),
+    assertion(nonvar(Error)),
+    assertion(Error = error(parallel_elaboration_timeout(RequestA, 1), _)),
+    % B's chunk must remain pending in B's queue.
+    request_queue(RequestB, _, _, PendingB, _, _, _, _),
+    assertion(PendingB = [chunk(0, _)]),
+    cleanup_request(RequestA),
+    cleanup_request(RequestB).
 
 :- end_tests(parallel_elaboration).
