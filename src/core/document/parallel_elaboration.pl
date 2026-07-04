@@ -1121,8 +1121,8 @@ test(concurrent_take_chunk_is_atomic, [
     findall(ThreadId,
             (   between(1, NumWorkers, _),
                 thread_create(
-                    (   take_chunk(RequestId, OwnerId, _DB2, _Wrap, chunk(Index, _Docs),
-                                   _PreBranchCommitId, _PreSchemaLayerId)
+                    (   take_chunk(RequestId, OwnerId, _, _, chunk(Index, _),
+                                   _, _)
                     ->  thread_send_message(main, taken(OwnerId, Index))
                     ;   thread_send_message(main, none)
                     ),
@@ -1132,8 +1132,8 @@ test(concurrent_take_chunk_is_atomic, [
             WorkerIds),
     thread_create(
         (   repeat,
-            (   take_chunk(RequestId, OwnerId, _DB2, _Wrap, chunk(Index, _Docs),
-                           _PreBranchCommitId, _PreSchemaLayerId)
+            (   take_chunk(RequestId, OwnerId, _, _, chunk(Index, _),
+                           _, _)
             ->  thread_send_message(main, taken(OwnerId, Index)),
                 fail
             ;   !
