@@ -26,6 +26,7 @@
                                        jwt_jwks_endpoint/1,
                                        server/1,
                                        server_port/1,
+                                       server_enabled/0,
                                        log_format/1,
                                        worker_amount/1,
                                        is_enterprise/0,
@@ -86,15 +87,19 @@ terminus_server(Argv,Wait) :-
         set_memory_mode
     ;   true),
     start_elaboration_workers(Workers),
-    HTTPOptions = [port(Port), workers(Workers), silent(true)],
-    foreach(pre_server_startup_hook(Port),true),
-    catch(http_server(http_dispatch, HTTPOptions),
-          E,
-          (
-              writeq(E),
-              format(user_error, "Error: Port ~d is already in use.", [Port]),
-              halt(98) % EADDRINUSE
-          )),
+    (   server_enabled
+    ->  HTTPOptions = [port(Port), workers(Workers), silent(true)],
+        foreach(pre_server_startup_hook(Port),true),
+        catch(http_server(http_dispatch, HTTPOptions),
+              E,
+              (
+                  writeq(E),
+                  format(user_error, "Error: Port ~d is already in use.", [Port]),
+                  halt(98) % EADDRINUSE
+              ))
+    ;   format(user_error, "Main SWI-Prolog HTTP server disabled (TERMINUSDB_SERVER_PORT=false).~n", []),
+        true
+    ),
     http_handler(root(.), busy_loading,
                  [ priority(1000),
                    hide_children(true),
@@ -108,8 +113,12 @@ terminus_server(Argv,Wait) :-
         welcome_banner(Server,Argv),
         foreach(post_server_startup_hook(Port),true),
         (   Wait = true
-        ->  http_current_worker(Port,ThreadID),
-            thread_join(ThreadID, _Status)
+        ->  (   server_enabled
+            ->  http_current_worker(Port,ThreadID),
+                thread_join(ThreadID, _Status)
+            ;   % No main HTTP server to wait on; block forever so the Rust appserver stays alive
+                thread_get_message(_)
+            )
         ;   true
         ),
         stop_elaboration_workers,

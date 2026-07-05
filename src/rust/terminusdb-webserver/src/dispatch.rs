@@ -347,6 +347,8 @@ pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
 
         router = match method.as_str() {
             "get" => router.route(&path, axum::routing::get(route_handler)),
+            "head" => router.route(&path, axum::routing::head(route_handler)),
+            "options" => router.route(&path, axum::routing::options(route_handler)),
             "post" => router.route(&path, axum::routing::post(route_handler)),
             "put" => router.route(&path, axum::routing::put(route_handler)),
             "delete" => router.route(&path, axum::routing::delete(route_handler)),
@@ -1010,10 +1012,12 @@ async fn dispatch_stream_request(
 
             let body_value = response.get("body").cloned().unwrap_or(json!("stream"));
             if body_value == json!("stream") {
-                response_headers.insert(
-                    header::CONTENT_TYPE,
-                    "application/x-ndjson".parse().unwrap(),
-                );
+                if !response_headers.contains_key(header::CONTENT_TYPE) {
+                    response_headers.insert(
+                        header::CONTENT_TYPE,
+                        "application/x-ndjson".parse().unwrap(),
+                    );
+                }
                 let stream = GuardedReceiverStream {
                     inner: ReceiverStream::new(rx),
                     _guard: StreamGuard { id: stream_id },
@@ -1029,7 +1033,11 @@ async fn dispatch_stream_request(
                 for (key, value) in response_headers.iter() {
                     builder = builder.header(key, value);
                 }
-                builder.body(Body::from(body_value.to_string())).unwrap()
+                if let Some(body_str) = body_value.as_str() {
+                    builder.body(Body::from(body_str.to_string()))
+                } else {
+                    builder.body(Body::from(body_value.to_string()))
+                }.unwrap()
             }
         }
         Err(_) => {

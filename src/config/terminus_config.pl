@@ -4,6 +4,7 @@
               server/1,
               server_name/1,
               server_port/1,
+              server_enabled/0,
               worker_amount/1,
               max_transaction_retries/1,
               db_path/1,
@@ -75,7 +76,20 @@ server_name(Value) :-
     ;   random_string(Value)).
 
 server_port(Value) :-
-    getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
+    (   getenv_number('TERMINUSDB_SWIPL_PORT', Value)
+    ->  true
+    ;   getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value)
+    ).
+
+server_enabled :-
+    (   getenv('TERMINUSDB_SWIPL_PORT', Value)
+    ->  Value \= 'false',
+        Value \= '0'
+    ;   getenv('TERMINUSDB_SERVER_PORT', Value)
+    ->  Value \= 'false',
+        Value \= '0'
+    ;   true
+    ).
 
 worker_amount(Value) :-
     current_prolog_flag(cpu_count,Integer),
