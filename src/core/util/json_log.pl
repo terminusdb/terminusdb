@@ -184,7 +184,22 @@ json_log(Operation_Id, Request_Id, Severity, Loggable) :-
     json_log(Operation_Id, Request_Id, Severity, Dict).
 json_log(Operation_Id, Request_Id, Severity, Dict) :-
     expand_json_log(Dict, Operation_Id, Request_Id, Severity, Output),
-    json_log_raw(Output).
+    json_log_raw(Output),
+    broadcast_log(Output).
+
+%% broadcast_log(+LogEntry) is det.
+%
+%  Forward the log entry to any connected Rust webserver broadcast stream on
+%  the 'actions' channel. Failures are ignored so logging never breaks because
+%  of the webserver.
+broadcast_log(Output) :-
+    ignore(
+        catch(
+            '$webserver':rust_webserver_broadcast_send(actions, Output),
+            _Error,
+            true
+        )
+    ).
 
 json_log(Severity, Loggable) :-
     generate_operation_id(Operation_Id),

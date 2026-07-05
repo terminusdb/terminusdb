@@ -15,6 +15,7 @@ use-system-gmp = ["gmp-mpfr-sys/use-system-libs"]
 lcs = "0.2.0"
 swipl = {version="0.3.16", features=["serde"]}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+terminusdb-webserver = {path="../terminusdb-webserver"}
 itertools = "0.10.3"
 serde_json = {version="1", features=["preserve_order", "arbitrary_precision"]}
 lazy_static = "1.4"

@@ -123,4 +123,5 @@ pub fn install() {
     changes::register();
     change_window::register();
     embedding::register();
+    terminusdb_webserver::install();
 }

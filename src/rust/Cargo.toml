@@ -1,5 +1,5 @@
 [workspace]
-members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib"]
+members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib", "terminusdb-webserver"]
 resolver = "1"
 
 [profile.release]
