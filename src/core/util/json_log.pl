@@ -195,7 +195,7 @@ json_log(Operation_Id, Request_Id, Severity, Dict) :-
 broadcast_log(Output) :-
     ignore(
         catch(
-            '$webserver':rust_webserver_broadcast_send(actions, Output),
+            '$appserver':appserver_broadcast_send(actions, Output),
             _Error,
             true
         )

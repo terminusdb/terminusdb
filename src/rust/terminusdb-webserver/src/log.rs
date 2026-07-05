@@ -1,8 +1,17 @@
+use std::cell::RefCell;
 use swipl::prelude::*;
 
+thread_local! {
+    static LOG_ENGINE: RefCell<Option<Engine>> = const { RefCell::new(None) };
+}
+
 fn log(severity: &str, msg: &str) {
-    let result: PrologResult<()> = (|| {
-        let engine = Engine::new();
+    let result: PrologResult<()> = LOG_ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        if engine_ref.is_none() {
+            *engine_ref = Some(Engine::new());
+        }
+        let engine = engine_ref.as_ref().unwrap();
         let activation = engine.activate();
         let context: Context<_> = activation.into();
         let f = context.open_frame();
@@ -13,7 +22,7 @@ fn log(severity: &str, msg: &str) {
         f.call_once(p, [&severity_term, &msg_term])?;
         f.close();
         Ok(())
-    })();
+    });
     if let Err(e) = result {
         panic!(
             "terminusdb-webserver: unable to log message ({severity}: {msg}): {e:?}"

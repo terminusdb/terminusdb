@@ -209,19 +209,19 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
 }
 
 /// Collect routes registered by Prolog plugins through the
-/// `webserver_hooks:rust_webserver_route/3` hook.
+/// `appserver_hooks:appserver_route/3` hook.
 ///
 /// Each handler must be specified as `Module:Handler`, where `Handler` is a
 /// predicate with arity two (`+Request, -Response`).
 ///
-/// This is called from the `rust_webserver_start` Prolog predicate,
+/// This is called from the `appserver_start` Prolog predicate,
 /// so a Prolog engine is active.
 pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologResult<Vec<PluginRoute>> {
     let frame = context.open_frame();
     let [method_term, path_term, handler_term] = frame.new_term_refs();
 
     let open_call = frame.open(
-        pred!("webserver_hooks:rust_webserver_route/3"),
+        pred!("appserver_hooks:appserver_route/3"),
         [&method_term, &path_term, &handler_term],
     );
 
@@ -246,9 +246,9 @@ pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologRes
 
 /// Collect static file serving endpoints registered by Prolog plugins.
 ///
-/// Plugins register via `webserver_hooks:rust_webserver_static_path/3` with
+/// Plugins register via `appserver_hooks:appserver_static_path/3` with
 /// an option list. Prolog normalizes these into
-/// `webserver_hooks:rust_webserver_static_path_normalized/4`, which this
+/// `appserver_hooks:appserver_static_path_normalized/4`, which this
 /// function reads.
 ///
 /// Arguments are: prefix, directory, fallback file, auth style.
@@ -259,7 +259,7 @@ pub fn collect_static_paths(
     let [prefix_term, directory_term, fallback_term, auth_term] = frame.new_term_refs();
 
     let open_call = frame.open(
-        pred!("webserver_hooks:rust_webserver_static_path_normalized/4"),
+        pred!("appserver_hooks:appserver_static_path_normalized/4"),
         [&prefix_term, &directory_term, &fallback_term, &auth_term],
     );
 
@@ -291,7 +291,7 @@ pub fn collect_static_paths(
 }
 
 /// Collect streaming endpoints registered by Prolog plugins through the
-/// `webserver_hooks:rust_webserver_stream/3` hook.
+/// `appserver_hooks:appserver_stream/3` hook.
 ///
 /// Each registration is: method, path, handler (as `Module:Handler`).
 /// The handler must have arity 3 and accept `+Request`, `+StreamId`, `-Response`.
@@ -300,7 +300,7 @@ pub fn collect_streams(context: &Context<impl QueryableContextType>) -> PrologRe
     let [method_term, path_term, handler_term] = frame.new_term_refs();
 
     let open_call = frame.open(
-        pred!("webserver_hooks:rust_webserver_stream/3"),
+        pred!("appserver_hooks:appserver_stream/3"),
         [&method_term, &path_term, &handler_term],
     );
 
@@ -770,6 +770,7 @@ async fn dispatch_plugin_request(
         "body": body_string,
         "params": params,
     });
+    crate::log::log_info(format!("{} {} (plugin)", method, path));
 
     let result = tokio::task::spawn_blocking(move || {
         let engine = Engine::new();
@@ -910,7 +911,7 @@ impl Stream for GuardedReceiverStream {
 ///
 /// The handler receives a request dict (with a UTF-8 body string) and a
 /// `StreamId`. It returns a response dict. When the response body is the atom
-/// `stream`, the response is an NDJSON stream fed by `rust_webserver_stream_send/2`.
+/// `stream`, the response is an NDJSON stream fed by `appserver_stream_send/2`.
 async fn dispatch_stream_request(
     module: String,
     handler: String,
@@ -952,6 +953,7 @@ async fn dispatch_stream_request(
         "body": body_string,
         "params": params,
     });
+    crate::log::log_info(format!("{} {} (stream)", method, path));
 
     let result = tokio::task::spawn_blocking(move || {
         let engine = Engine::new();
