@@ -21,6 +21,10 @@
               ]).
 :- use_module(core(plugins)).
 
+% Load the Rust appserver and its built-in route modules. These are now core
+% server components rather than optional plugins.
+:- use_module(server(srv)).
+
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,

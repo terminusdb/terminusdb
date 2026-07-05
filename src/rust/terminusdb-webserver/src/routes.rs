@@ -7,7 +7,7 @@ use axum::{
 ///
 /// TODO: move this to a configuration module once the design is finalized.
 pub fn root_redirect_target() -> String {
-    std::env::var("TERMINUSDB_ROOT_REDIRECT").unwrap_or_else(|_| "/app/admin".to_string())
+    std::env::var("TERMINUSDB_ROOT_REDIRECT").unwrap_or_else(|_| "/app/alpha".to_string())
 }
 
 /// Redirect `/` to the configured root redirect target.
