@@ -174,7 +174,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["api:status"], "api:not_found");
         assert_eq!(json["api:path"], "/api/unknown");

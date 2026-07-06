@@ -14,6 +14,7 @@
 :- use_module(server(routes/srv_http)).
 
 :- multifile appserver_hooks:appserver_route/3.
+:- multifile appserver_hooks:appserver_route/4.
 :- multifile appserver_hooks:appserver_stream/3.
 
 :- meta_predicate tdb_http_handler(+, 2, +).
@@ -39,6 +40,10 @@ tdb_http_handler(Path, Handler, Options) :-
 
 register_rust_routes(Path, Options) :-
     resolve_rust_path(Path, Options, SubPathRust, RustPath),
+    (   option(tdb_binary, Options)
+    ->  Binary = true
+    ;   Binary = false
+    ),
     member(methods(Methods), Options),
     member(Method, Methods),
     (   option(tdb_stream, Options),
@@ -366,12 +371,13 @@ test(resolve_alias_multiple_variables_prefix, [setup(asserta(http:location(test_
     resolve_rust_path(test_api(db/_Org/_DB), [prefix], '/test/db/:seg1/*path').
 
 % register_rust_routes/2 asserts both a wildcard route and an exact route
-% for multi-segment prefix handlers so Axum matches empty tails.
+% for multi-segment prefix handlers so Axum matches empty tails. The fourth
+% argument is the binary flag (false by default).
 test(register_routes_includes_exact_for_multi_segment_prefix, [setup(asserta(http:location(test_api, '/test', []))),
                                                              cleanup(retractall(http:location(test_api, _, _)))]) :-
-    retractall(appserver_hooks:appserver_route(_, _, _)),
+    retractall(appserver_hooks:appserver_route(_, _, _, _)),
     register_rust_routes(test_api(organizations/_Name/users/_Rest), [methods([get]), prefix]),
-    findall(P, appserver_hooks:appserver_route(get, P, _), Paths),
+    findall(P, appserver_hooks:appserver_route(get, P, _, _), Paths),
     sort(Paths, Sorted),
     maplist(atom_string, Sorted, SortedStrings),
     assertion(SortedStrings == ["/test/organizations/:seg1/users", "/test/organizations/:seg1/users/*path"]).
@@ -381,11 +387,21 @@ test(register_routes_includes_exact_for_multi_segment_prefix, [setup(asserta(htt
 % instead of falling through to the parent 404.
 test(register_routes_includes_exact_slash_for_single_segment_prefix, [setup(asserta(http:location(test_api, '/test', []))),
                                                                   cleanup(retractall(http:location(test_api, _, _)))]) :-
-    retractall(appserver_hooks:appserver_route(_, _, _)),
+    retractall(appserver_hooks:appserver_route(_, _, _, _)),
     register_rust_routes(test_api(branch/_Path), [methods([get, post]), prefix]),
-    findall(P, appserver_hooks:appserver_route(get, P, _), Paths),
+    findall(P, appserver_hooks:appserver_route(get, P, _, _), Paths),
     sort(Paths, Sorted),
     maplist(atom_string, Sorted, SortedStrings),
     assertion(SortedStrings == ["/test/branch/", "/test/branch/*path"]).
+
+% The tdb_binary option is propagated to the fourth argument of appserver_route/4.
+test(register_routes_binary_flag, [setup(asserta(http:location(test_api, '/test', []))),
+                                    cleanup(retractall(http:location(test_api, _, _)))]) :-
+    retractall(appserver_hooks:appserver_route(_, _, _, _)),
+    register_rust_routes(test_api(blob), [methods([get]), tdb_binary]),
+    findall(P, appserver_hooks:appserver_route(get, P, _, true), Paths),
+    sort(Paths, Sorted),
+    maplist(atom_string, Sorted, SortedStrings),
+    assertion(SortedStrings == ["/test/blob"]).
 
 :- end_tests(tdb_http_handler).

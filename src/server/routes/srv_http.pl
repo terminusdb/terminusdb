@@ -54,6 +54,41 @@ capture_http_output(Request, Goal, Text) :-
     ),
     utf8_bytes_to_string(ByteString, Text).
 
+%% capture_http_output_utf8(+Request, :Goal, -Text) is det.
+%%
+%%  Run Goal with current_output redirected to a fresh CGI stream backed by a
+%%  temporary file whose encoding is UTF-8. This captures the full response text
+%%  (headers and body) as a Prolog string, preserving Unicode characters that
+%%  are written by foreign predicates which bypass the CGI stream encoding when
+%%  the backing store is a binary/octet memory file.
+%%
+%%  This is intended for the streaming document path, which always produces
+%%  text (JSON or NDJSON) and never binary payloads.
+capture_http_output_utf8(Request, Goal, Text) :-
+    tmp_file('cgi', File),
+    setup_call_cleanup(
+        open(File, write, OutStream, [encoding(utf8)]),
+        setup_call_cleanup(
+            cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(Request)]),
+            (   set_stream(CGI, encoding(utf8)),
+                set_stream(OutStream, encoding(utf8)),
+                with_output_to(
+                    CGI,
+                    call(Goal)
+                )
+            ),
+            close(CGI)
+        ),
+        close(OutStream)
+    ),
+    setup_call_cleanup(
+        open(File, read, ReadStream, [encoding(utf8)]),
+        read_string(ReadStream, _, Text),
+        (   close(ReadStream),
+            catch(delete_file(File), _, true)
+        )
+    ).
+
 %% capture_http_output_raw(+Request, :Goal, -OctetBytes) is det.
 %%
 %%  Run Goal with current_output redirected to a fresh CGI stream backed by a
@@ -308,5 +343,128 @@ test(parse_http_response) :-
     Response = _{status: 200, body: "{\"ok\":true}", headers: Headers},
     \+ get_dict('Transfer-Encoding', Headers, _),
     get_dict('Content-Type', Headers, 'application/json').
+
+%% --- Segment 5: Stream path CGI capture encoding ---
+
+test(capture_http_output_utf8_simple_ascii) :-
+    SimpleGoal = (format(current_output, 'Status: 200 OK~n', []),
+                  format(current_output, 'Content-Type: application/json~n~n', []),
+                  format(current_output, '{"ok":true}', [])),
+    capture_http_output([], SimpleGoal, Text),
+    assertion(sub_string(Text, _, _, _, 'Status: 200 OK')),
+    assertion(sub_string(Text, _, _, _, '{"ok":true}')).
+
+test(capture_http_output_utf8_multibyte_body) :-
+    %% Handler writes a body containing the character \u00f6 (o with diaeresis)
+    Utf8Goal = (format(current_output, 'Status: 200 OK~n', []),
+                format(current_output, 'Content-Type: application/json~n~n', []),
+                format(current_output, '"Kurt G\u00f6del"', [])),
+    capture_http_output([], Utf8Goal, Text),
+    parse_http_response(Text, Response),
+    get_dict(body, Response, Body),
+    assertion(string(Body)),
+    assertion(Body == "\"Kurt Gödel\"").
+
+test(capture_http_output_utf8_japanese_body) :-
+    JapaneseGoal = (format(current_output, 'Status: 200 OK~n', []),
+                    format(current_output, 'Content-Type: application/json~n~n', []),
+                    format(current_output, '"\u65e5\u672c\u8a9e"', [])),
+    capture_http_output([], JapaneseGoal, Text),
+    parse_http_response(Text, Response),
+    get_dict(body, Response, Body),
+    assertion(Body == "\"日本語\"").
+
+test(capture_http_output_preserves_utf8_in_text) :-
+    %% Directly verify that capture_http_output preserves the \u00f6 character
+    %% in the captured Text string (before parse_http_response).
+    Utf8Goal = (format(current_output, 'Status: 200 OK~n', []),
+                format(current_output, 'Content-Type: application/json~n~n', []),
+                format(current_output, 'G\u00f6del', [])),
+    capture_http_output([], Utf8Goal, Text),
+    %% The Text should contain the character \u00f6, not \ufffd
+    assertion(sub_string(Text, _, _, _, "Gödel")),
+    assertion(\+ sub_string(Text, _, _, _, "\ufffd")).
+
+test(utf8_bytes_to_string_roundtrip_multibyte) :-
+    %% Verify the utf8_bytes_to_string conversion itself works
+    Original = "Gödel",
+    string_to_utf8_bytes(Original, Bytes, _),
+    utf8_bytes_to_string(Bytes, Result),
+    assertion(Result == Original).
+
+test(utf8_bytes_to_string_roundtrip_japanese) :-
+    Original = "日本語",
+    string_to_utf8_bytes(Original, Bytes, _),
+    utf8_bytes_to_string(Bytes, Result),
+    assertion(Result == Original).
+
+test(parse_http_response_utf8_body) :-
+    %% parse_http_response should preserve UTF-8 characters in the body
+    Text = "Status: 200 OK\nContent-Type: application/json\n\n\"Kurt Gödel\"",
+    parse_http_response(Text, Response),
+    get_dict(body, Response, Body),
+    assertion(Body == "\"Kurt Gödel\"").
+
+test(parse_http_response_japanese_body) :-
+    Text = "Status: 200 OK\nContent-Type: application/json\n\n\"日本語\"",
+    parse_http_response(Text, Response),
+    get_dict(body, Response, Body),
+    assertion(Body == "\"日本語\"").
+
+test(capture_http_output_reply_json_utf8) :-
+    %% Test with reply_json which is what the actual document API uses.
+    %% reply_json writes JSON with UTF-8 characters directly (not \uXXXX escapes)
+    %% when the stream encoding is utf8.
+    JsonGoal = (reply_json(_{name: "Kurt Gödel"}, [status(200)])),
+    capture_http_output([], JsonGoal, Text),
+    parse_http_response(Text, Response),
+    get_dict(body, Response, Body),
+    assertion(string(Body)),
+    assertion(sub_string(Body, _, _, _, "Gödel")),
+    assertion(\+ sub_string(Body, _, _, _, "\ufffd")).
+
+test(capture_http_output_reply_json_japanese) :-
+    JsonGoal = (reply_json(_{name: "日本語"}, [status(200)])),
+    capture_http_output([], JsonGoal, Text),
+    parse_http_response(Text, Response),
+    get_dict(body, Response, Body),
+    assertion(string(Body)),
+    assertion(sub_string(Body, _, _, _, "日本語")),
+    assertion(\+ sub_string(Body, _, _, _, "\ufffd")).
+
+test(send_response_json_serialization_preserves_utf8) :-
+    %% Test the JSON serialization step that send_response uses.
+    %% The response dict has a body string containing ö (U+00F6).
+    %% json_write_dict with as(string) should preserve the character.
+    Response = _{status: 200, body: "{\"name\":\"Kurt Gödel\"}", headers: _{'Content-Type': 'application/json'}},
+    with_output_to(string(JsonString), json_write_dict(current_output, Response, [as(string)])),
+    assertion(string(JsonString)),
+    assertion(sub_string(JsonString, _, _, _, "Gödel")),
+    assertion(\+ sub_string(JsonString, _, _, _, "\ufffd")),
+    %% Also check that ö is not escaped as \u00f6 in the JSON
+    assertion(\+ sub_string(JsonString, _, _, _, "\\u00f6")).
+
+test(send_response_json_serialization_japanese) :-
+    Response = _{status: 200, body: "{\"name\":\"日本語\"}", headers: _{'Content-Type': 'application/json'}},
+    with_output_to(string(JsonString), json_write_dict(current_output, Response, [as(string)])),
+    assertion(string(JsonString)),
+    assertion(sub_string(JsonString, _, _, _, "日本語")),
+    assertion(\+ sub_string(JsonString, _, _, _, "\ufffd")).
+
+test(json_string_byte_representation) :-
+    %% Check the actual bytes in the JsonString to understand what
+    %% appserver_stream_send will see.
+    Response = _{status: 200, body: "{\"name\":\"Kurt Gödel\"}", headers: _{'Content-Type': 'application/json'}},
+    with_output_to(string(JsonString), json_write_dict(current_output, Response, [as(string)])),
+    %% Convert to UTF-8 bytes and check that ö is encoded as 0xC3 0xB6
+    string_to_utf8_bytes(JsonString, Bytes, _),
+    format(user_error, 'DEBUG JsonString bytes around G: ~w~n', [Bytes]),
+    %% Find the ö byte sequence (0xC3 0xB6) in the byte list
+    assertion(memberchk(0xC3, Bytes)),
+    assertion(memberchk(0xB6, Bytes)),
+    %% Also check via string_codes what Prolog sees
+    string_codes(JsonString, Codes),
+    format(user_error, 'DEBUG JsonString codes: ~w~n', [Codes]),
+    assertion(memberchk(246, Codes)).
 
 :- end_tests(srv_http).
