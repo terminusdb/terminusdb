@@ -12,9 +12,11 @@ swipl = { version = "0.3.16", features = ["serde"] }
 futures = "0.3.31"
 lazy_static = "1.4.0"
 tokio-stream = "0.1.18"
-tower-http = { version = "0.4.4", features = ["cors"] }
+tower-http = { version = "0.4.4", features = ["cors", "decompression-gzip", "decompression-deflate"] }
 percent-encoding = "2.3.1"
 hyper = "0.14.32"
+flate2 = "1.0"
+uuid = { version = "1.11.0", features = ["v4"] }
 
 [dev-dependencies]
 tower = { version = "0.4.13", features = ["util"] }

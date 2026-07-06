@@ -10,13 +10,15 @@ use futures::Stream;
 use percent_encoding::percent_decode_str;
 use serde_json::json;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    io::Read,
     path::{Component, Path as StdPath, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
     },
 };
+use flate2::read::{GzDecoder, ZlibDecoder};
 use swipl::prelude::*;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -53,23 +55,40 @@ fn is_catchall_pattern(pattern: &str) -> bool {
     pattern.split('/').any(|seg| seg.starts_with('*'))
 }
 
-/// Percent-decode a request path, trim a trailing slash, and restore the
-/// trailing slash for root aliases (e.g., `/api`) so that SWI-Prolog's
-/// `http_dispatch` matches the root handler registered at `/api/` instead of
-/// falling back to the `/api` prefix 404 handler.
+/// Percent-decode the request path. Trailing slashes are preserved so that
+/// SWI-Prolog's `http_dispatch` can match its registered prefix and exact
+/// handlers exactly as it does in the native SWI-Prolog backend.
 fn normalize_dispatch_path(raw_path: &str) -> String {
-    let path = percent_decode_str(raw_path).decode_utf8_lossy().to_string();
-    let path = if path.len() > 1 && path.ends_with('/') {
-        path[..path.len() - 1].to_string()
-    } else {
-        path
-    };
-    // Root aliases are registered with a trailing slash in SWI-Prolog, so a
-    // request to `/api` must be presented as `/api/` to the dispatcher.
-    if path.len() > 1 && path.matches('/').count() == 1 {
-        format!("{}/", path)
-    } else {
-        path
+    percent_decode_str(raw_path).decode_utf8_lossy().to_string()
+}
+
+/// Decompress a request body according to the `Content-Encoding` header.
+///
+/// SWI-Prolog's native HTTP server handles `Content-Encoding` automatically.
+/// tower-http 0.4 does not include request decompression, so we perform it
+/// inline before handing the body to the Prolog dispatcher.
+fn decompress_request_body(content_encoding: Option<&str>, body: &[u8]) -> Result<Vec<u8>, String> {
+    match content_encoding {
+        Some("gzip") => {
+            let mut decoder = GzDecoder::new(body);
+            let mut out = Vec::new();
+            decoder
+                .read_to_end(&mut out)
+                .map_err(|e| format!("gzip decompression failed: {}", e))?;
+            Ok(out)
+        }
+        Some("deflate") => {
+            // Node.js's zlib.deflateSync produces zlib-wrapped deflate (RFC 1950),
+            // so we use ZlibDecoder rather than raw DeflateDecoder.
+            let mut decoder = ZlibDecoder::new(body);
+            let mut out = Vec::new();
+            decoder
+                .read_to_end(&mut out)
+                .map_err(|e| format!("deflate decompression failed: {}", e))?;
+            Ok(out)
+        }
+        Some(encoding) => Err(format!("unsupported Content-Encoding: {}", encoding)),
+        None => Ok(body.to_vec()),
     }
 }
 
@@ -384,22 +403,11 @@ pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
             _ => router,
         };
 
-        // The SWI-Prolog dispatcher registers root aliases like api(.) as an
-        // absolute path ending in a slash, so clients that include the trailing
-        // slash need a matching Axum route. Add a trailing slash variant for
-        // exact routes that are not already catch-all patterns.
-        if !path.ends_with('/') && !is_catchall_pattern(&path) {
-            let trailing = format!("{}/", path);
-            router = match method.as_str() {
-                "get" => router.route(&trailing, axum::routing::get(make_handler())),
-                "head" => router.route(&trailing, axum::routing::head(make_handler())),
-                "options" => router.route(&trailing, axum::routing::options(make_handler())),
-                "post" => router.route(&trailing, axum::routing::post(make_handler())),
-                "put" => router.route(&trailing, axum::routing::put(make_handler())),
-                "delete" => router.route(&trailing, axum::routing::delete(make_handler())),
-                _ => router,
-            };
-        }
+        // Trailing slash variants are intentionally not added here. The Prolog
+        // registration already emits the exact routes it needs (e.g., `/api/`
+        // for root aliases and `/api/optimize/` for single-segment prefixes),
+        // and adding a blanket slash variant would overlap with those prefix
+        // exact routes.
     }
 
     router
@@ -791,6 +799,14 @@ async fn dispatch_plugin_request(
         Ok(bytes) => bytes,
         Err(_) => return plugin_error_response("failed to read request body").into_response(),
     };
+    let content_encoding = parts
+        .headers
+        .get(header::CONTENT_ENCODING)
+        .and_then(|v| v.to_str().ok());
+    let body_bytes = match decompress_request_body(content_encoding, &body_bytes) {
+        Ok(bytes) => bytes,
+        Err(msg) => return plugin_error_response(&msg).into_response(),
+    };
     let body_string = String::from_utf8_lossy(&body_bytes).to_string();
 
     let method = parts.method.to_string();
@@ -971,6 +987,14 @@ async fn dispatch_stream_request(
         Ok(bytes) => bytes,
         Err(_) => return plugin_error_response("failed to read request body"),
     };
+    let content_encoding = parts
+        .headers
+        .get(header::CONTENT_ENCODING)
+        .and_then(|v| v.to_str().ok());
+    let body_bytes = match decompress_request_body(content_encoding, &body_bytes) {
+        Ok(bytes) => bytes,
+        Err(msg) => return plugin_error_response(&msg),
+    };
     let body_string = String::from_utf8_lossy(&body_bytes).to_string();
 
     let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
@@ -1110,7 +1134,7 @@ fn plugin_error_response(message: &str) -> Response<Body> {
 
 #[cfg(test)]
 mod path_tests {
-    use super::{is_catchall_pattern, normalize_dispatch_path};
+    use super::{decompress_request_body, is_catchall_pattern, normalize_dispatch_path};
 
     #[test]
     fn normalize_decodes_percent_encoding() {
@@ -1118,8 +1142,10 @@ mod path_tests {
     }
 
     #[test]
-    fn normalize_trims_trailing_slash() {
-        assert_eq!(normalize_dispatch_path("/api/db/admin/"), "/api/db/admin");
+    fn normalize_preserves_trailing_slash() {
+        // Trailing slashes are preserved so that SWI-Prolog's http_dispatch
+        // can match prefix and exact handlers exactly as in the native backend.
+        assert_eq!(normalize_dispatch_path("/api/db/admin/"), "/api/db/admin/");
     }
 
     #[test]
@@ -1128,16 +1154,43 @@ mod path_tests {
     }
 
     #[test]
-    fn normalize_restores_root_alias_trailing_slash() {
-        // Root aliases like api(.) are registered at /api/ in SWI-Prolog.
-        assert_eq!(normalize_dispatch_path("/api"), "/api/");
+    fn normalize_does_not_modify_root_alias_slashes() {
+        // The connect handler is registered at `/api/` and the 404 handler at
+        // `/api`; the raw path is preserved for http_dispatch to resolve.
+        assert_eq!(normalize_dispatch_path("/api"), "/api");
         assert_eq!(normalize_dispatch_path("/api/"), "/api/");
     }
 
     #[test]
     fn normalize_does_not_restore_slash_for_nested_paths() {
         assert_eq!(normalize_dispatch_path("/api/info"), "/api/info");
-        assert_eq!(normalize_dispatch_path("/api/info/"), "/api/info");
+        assert_eq!(normalize_dispatch_path("/api/info/"), "/api/info/");
+    }
+
+    #[test]
+    fn decompresses_gzip_request_body() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+        let original = b"{\"hello\":\"world\"}";
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(original).unwrap();
+        let compressed = encoder.finish().unwrap();
+        let out = decompress_request_body(Some("gzip"), &compressed).unwrap();
+        assert_eq!(out, original);
+    }
+
+    #[test]
+    fn decompresses_deflate_request_body() {
+        use flate2::write::ZlibEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+        let original = b"{\"hello\":\"world\"}";
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(original).unwrap();
+        let compressed = encoder.finish().unwrap();
+        let out = decompress_request_body(Some("deflate"), &compressed).unwrap();
+        assert_eq!(out, original);
     }
 
     #[test]

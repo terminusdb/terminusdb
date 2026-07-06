@@ -1,4 +1,6 @@
 use axum::{
+    http::StatusCode,
+    response::IntoResponse,
     routing::get,
     Json, Router,
 };
@@ -27,6 +29,24 @@ pub fn app() -> Router {
 /// Health-check handler.
 async fn health_handler() -> Json<serde_json::Value> {
     Json(json!({"status": "ok"}))
+}
+
+/// Fallback handler for unmatched routes.
+///
+/// Prolog's `/api` prefix 404 handler handles paths that match its wildcard,
+/// but Axum 0.6 refuses to match less-specific wildcards when a more specific
+/// prefix route exists (e.g., `/api/branch` does not fall back to `/api/*path`
+/// because `/api/branch/` is registered). This fallback produces the same JSON
+/// 404 response so that the behavior is consistent with the SWI-Prolog backend.
+async fn fallback_not_found(uri: axum::http::Uri) -> impl IntoResponse {
+    let path = uri.path().to_string();
+    let msg = format!("Path not found: {}", path);
+    let body = Json(json!({
+        "api:status": "api:not_found",
+        "api:path": path,
+        "api:message": msg,
+    }));
+    (StatusCode::NOT_FOUND, body)
 }
 
 /// Start the webserver on the given port.
@@ -81,7 +101,8 @@ pub fn start_with_routes(
             let app = app()
                 .merge(plugin_router)
                 .merge(static_router)
-                .merge(stream_router);
+                .merge(stream_router)
+                .fallback(fallback_not_found);
             match axum::Server::from_tcp(listener) {
                 Ok(server) => {
                     tx.send(Ok(())).ok();
@@ -140,5 +161,20 @@ mod tests {
             response.headers().get("location").unwrap().to_str().unwrap(),
             "/app/alpha"
         );
+    }
+
+    #[tokio::test]
+    async fn fallback_returns_api_not_found() {
+        let app = app().fallback(fallback_not_found);
+        let response = app
+            .oneshot(Request::builder().uri("/api/unknown").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["api:status"], "api:not_found");
+        assert_eq!(json["api:path"], "/api/unknown");
     }
 }
