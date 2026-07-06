@@ -49,10 +49,15 @@ predicates! {
     /// is the identifier given to the stream handler and Data is either a string
     /// (sent as raw bytes) or any term serializable to JSON (sent as NDJSON).
     /// A trailing newline is added automatically.
+    ///
+    /// For Prolog strings containing raw octets (non-UTF-8), the bytes are
+    /// extracted via PL_get_string which preserves all 8-bit values.
     #[module("$appserver")]
     pub semidet fn appserver_stream_send(context, stream_id_term, data_term) {
         let stream_id: u64 = stream_id_term.get_ex()?;
-        let mut bytes = if let Ok(data) = data_term.get_ex::<String>() {
+        let mut bytes = if let Ok(data) = data_term.get_ex::<Vec<u8>>() {
+            data
+        } else if let Ok(data) = data_term.get_ex::<String>() {
             data.into_bytes()
         } else {
             let data: serde_json::Value = context
@@ -61,6 +66,23 @@ predicates! {
             data.to_string().into_bytes()
         };
         bytes.push(b'\n');
+        crate::dispatch::stream_registry()
+            .lock()
+            .unwrap()
+            .send(stream_id, axum::body::Bytes::from(bytes))
+            .map_err(|_| PrologError::Failure)
+    }
+
+    /// Send raw bytes to an active streaming response without a trailing newline.
+    ///
+    /// Signature: `appserver_stream_send_raw(+StreamId, +Data)` where StreamId
+    /// is the identifier given to the stream handler and Data is a Prolog string
+    /// containing raw octets. The bytes are extracted via PL_get_string which
+    /// preserves all 8-bit values. No trailing newline is added.
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_send_raw(_context, stream_id_term, data_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        let bytes: Vec<u8> = data_term.get_ex()?;
         crate::dispatch::stream_registry()
             .lock()
             .unwrap()
@@ -123,12 +145,60 @@ predicates! {
             .broadcast(&channel, axum::body::Bytes::from(bytes), &mut stream_registry)
             .map_err(|_| PrologError::Failure)
     }
+
+    /// Receive the next chunk from an input stream.
+    ///
+    /// Signature: `appserver_stream_recv(+StreamId, -Data)`. Data is a Prolog
+    /// string containing the raw bytes of the next chunk of the request body,
+    /// or the atom `end_of_stream` if the input stream has been closed.
+    /// Fails if the stream id is unknown.
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_recv(context, stream_id_term, data_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        let registry_arc = crate::dispatch::input_stream_registry();
+        let mut registry = registry_arc.lock().unwrap();
+        let mut receiver = registry
+            .take(stream_id)
+            .ok_or(PrologError::Failure)?;
+        // Release the registry lock while waiting for the next chunk.
+        drop(registry);
+        let result = receiver.blocking_recv();
+        let mut registry = registry_arc.lock().unwrap();
+        match result {
+            Some(bytes) => {
+                // Put the receiver back so the worker can read the next chunk.
+                registry.replace(stream_id, receiver);
+                // Use unify instead of put — PL_unify_* works with term refs
+                // from the Prolog call frame, while PL_put_* requires a
+                // foreign frame which the semidet trampoline doesn't open.
+                let f = context.open_frame();
+                let tmp = f.new_term_ref();
+                tmp.put(&bytes[..]).map_err(|_| PrologError::Failure)?;
+                let result = data_term.unify(&tmp);
+                f.close();
+                result
+            }
+            None => {
+                // Stream is closed and fully consumed. Leave the receiver out
+                // of the registry.
+                let f = context.open_frame();
+                let tmp = f.new_term_ref();
+                tmp.put(&Atom::new("end_of_stream")).map_err(|_| PrologError::Failure)?;
+                let result = data_term.unify(&tmp);
+                f.close();
+                result
+            }
+        }
+        .map_err(|_| PrologError::Failure)
+    }
 }
 
 pub fn register() {
     register_appserver_start();
     register_appserver_stream_send();
+    register_appserver_stream_send_raw();
     register_appserver_stream_close();
     register_appserver_broadcast_subscribe();
     register_appserver_broadcast_send();
+    register_appserver_stream_recv();
 }

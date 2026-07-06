@@ -269,19 +269,21 @@ stream_ndjson_body(Body, StreamId) :-
         ),
         Error,
         (   json_log_error_formatted("Stream send failed: ~q", [Error]),
-            '$appserver':appserver_stream_close(StreamId)
+            catch('$appserver':appserver_stream_close(StreamId), _, true)
         )
     ).
 
 stream_ndjson_lines(Stream, StreamId) :-
     read_line_to_string(Stream, Line),
     (   Line == end_of_file
-    ->  '$appserver':appserver_stream_close(StreamId)
+    ->  catch('$appserver':appserver_stream_close(StreamId), _, true)
     ;   (   Line \= ""
-        ->  '$appserver':appserver_stream_send(StreamId, Line)
-        ;   true
-        ),
-        stream_ndjson_lines(Stream, StreamId)
+        ->  (   '$appserver':appserver_stream_send(StreamId, Line)
+            ->  stream_ndjson_lines(Stream, StreamId)
+            ;   catch('$appserver':appserver_stream_close(StreamId), _, true)
+            )
+        ;   stream_ndjson_lines(Stream, StreamId)
+        )
     ).
 
 :- begin_tests(tdb_http_handler, [concurrent(false)]).

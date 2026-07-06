@@ -70,6 +70,8 @@ pub fn start_with_routes(
     plugin_static_paths: Vec<crate::dispatch::PluginStaticPath>,
     plugin_streams: Vec<crate::dispatch::PluginStream>,
 ) -> Result<(), String> {
+    crate::dispatch::init_dispatcher();
+
     let (tx, rx) = std::sync::mpsc::channel();
 
     std::thread::spawn(move || {
@@ -103,23 +105,23 @@ pub fn start_with_routes(
                 .merge(static_router)
                 .merge(stream_router)
                 .fallback(fallback_not_found);
-            match axum::Server::from_tcp(listener) {
-                Ok(server) => {
-                    tx.send(Ok(())).ok();
-                    if let Err(e) = server.serve(app.into_make_service()).await {
-                        crate::log::log_error(format!(
-                            "[terminusdb-webserver] server error on port {}: {}",
-                            port, e
-                        ));
-                    }
-                }
+            let tokio_listener = match tokio::net::TcpListener::from_std(listener) {
+                Ok(listener) => listener,
                 Err(e) => {
                     tx.send(Err(format!(
                         "failed to configure server on port {}: {}",
                         port, e
                     )))
                     .ok();
+                    return;
                 }
+            };
+            tx.send(Ok(())).ok();
+            if let Err(e) = axum::serve(tokio_listener, app).await {
+                crate::log::log_error(format!(
+                    "[terminusdb-webserver] server error on port {}: {}",
+                    port, e
+                ));
             }
         });
     });

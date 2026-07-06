@@ -51,6 +51,7 @@
 % http libraries
 :- use_module(library(http/http_dispatch)).
 :- use_module(server(routes/tdb_http_handler)).
+:- use_module(server(routes/request_worker_pool)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
 :- use_module(library(http/http_path)).
@@ -107,7 +108,17 @@ http:location(root, '/', []).
 http:location(api, '/api', []).
 
 %%%%%%%%%%%%% Fallback Path %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler('/api', reply_404_not_found, [prefix]).
+% Wrapper that exposes the 404 handler through the Rust backend as well.
+% It must skip authentication so that unauthenticated missing-path requests
+% get the JSON 404 response instead of an auth challenge.
+:- tdb_http_handler('/api', cors_handler(Method, reply_404_not_found_handler),
+                [method(Method),
+                 methods([options,get,post,put,delete,patch]),
+                 prefix,
+                 skip_authentication(true)]).
+
+reply_404_not_found_handler(_Method, Request, _System_Database, _Auth) :-
+    reply_404_not_found(Request).
 
 reply_404_not_found(Request) :-
     member(path(Path), Request),

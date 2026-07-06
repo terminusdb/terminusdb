@@ -55,6 +55,28 @@ fn is_catchall_pattern(pattern: &str) -> bool {
     pattern.split('/').any(|seg| seg.starts_with('*'))
 }
 
+/// Convert Prolog-style route patterns to Axum 0.8 syntax.
+///
+/// Axum 0.8 changed:
+/// - `*name` to `{*name}` for catch-all wildcards
+/// - `:name` to `{name}` for capture groups
+///
+/// This function rewrites each segment accordingly.
+fn to_axum_pattern(path: &str) -> String {
+    path.split('/')
+        .map(|seg| {
+            if seg.starts_with('*') {
+                format!("{{{}}}", seg)
+            } else if seg.starts_with(':') {
+                format!("{{{}}}", &seg[1..])
+            } else {
+                seg.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Percent-decode the request path. Trailing slashes are preserved so that
 /// SWI-Prolog's `http_dispatch` can match its registered prefix and exact
 /// handlers exactly as it does in the native SWI-Prolog backend.
@@ -224,6 +246,238 @@ pub fn broadcast_registry() -> Arc<Mutex<BroadcastRegistry>> {
     BROADCAST_REGISTRY.clone()
 }
 
+/// Registry of active input stream receivers.
+///
+/// Input streams carry the HTTP request body from Rust to Prolog. Rust writes
+/// chunks; Prolog reads them via `appserver_stream_recv/2`.
+#[derive(Default)]
+pub struct InputStreamRegistry {
+    next_id: StreamId,
+    receivers: HashMap<StreamId, mpsc::Receiver<axum::body::Bytes>>,
+}
+
+impl InputStreamRegistry {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn add(&mut self, receiver: mpsc::Receiver<axum::body::Bytes>) -> StreamId {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.receivers.insert(id, receiver);
+        id
+    }
+
+    pub(crate) fn take(&mut self, id: StreamId) -> Option<mpsc::Receiver<axum::body::Bytes>> {
+        self.receivers.remove(&id)
+    }
+
+    pub(crate) fn replace(&mut self, id: StreamId, receiver: mpsc::Receiver<axum::body::Bytes>) {
+        self.receivers.insert(id, receiver);
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref INPUT_STREAM_REGISTRY: Arc<Mutex<InputStreamRegistry>> = Arc::new(Mutex::new(InputStreamRegistry::new()));
+}
+
+static REQUEST_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+fn next_request_id(method: &str, path: &str) -> String {
+    let n = REQUEST_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("{}-{}-{}", method, path, n)
+}
+
+/// Return a handle to the global input stream registry.
+pub fn input_stream_registry() -> Arc<Mutex<InputStreamRegistry>> {
+    INPUT_STREAM_REGISTRY.clone()
+}
+
+/// Request to be dispatched to the single SWI-Prolog engine.
+struct DispatchRequest {
+    request_json: serde_json::Value,
+    handler_module: String,
+    handler_name: String,
+    input_stream_id: u64,
+    response_stream_id: u64,
+    is_stream: bool,
+}
+
+impl DispatchRequest {
+    #[allow(dead_code)]
+    fn is_stream(&self) -> bool {
+        self.is_stream
+    }
+}
+
+/// Sender for the single-engine dispatcher queue.
+static DISPATCH_QUEUE: OnceLock<mpsc::Sender<DispatchRequest>> = OnceLock::new();
+
+/// In-flight request ids used to reject duplicate requests.
+static IN_FLIGHT_REQUESTS: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new();
+
+/// Return the dispatcher queue sender, panicking if the dispatcher is not
+/// initialized.
+fn dispatch_queue() -> mpsc::Sender<DispatchRequest> {
+    DISPATCH_QUEUE
+        .get()
+        .expect("request dispatcher not initialized")
+        .clone()
+}
+
+/// Return the in-flight request set, panicking if the dispatcher is not
+/// initialized.
+fn in_flight_requests() -> Arc<Mutex<HashSet<String>>> {
+    IN_FLIGHT_REQUESTS
+        .get()
+        .expect("request dispatcher not initialized")
+        .clone()
+}
+
+/// Initialize the single-engine request dispatcher. Must be called once
+/// before the webserver starts accepting requests.
+pub fn init_dispatcher() {
+    let (tx, mut rx) = mpsc::channel::<DispatchRequest>(1024);
+    DISPATCH_QUEUE.set(tx).ok();
+    IN_FLIGHT_REQUESTS.set(Arc::new(Mutex::new(HashSet::new()))).ok();
+    let log_rx = crate::log::init_log_channel();
+
+    std::thread::spawn(move || {
+        let engine = Engine::new();
+
+        let init_result = {
+            let activation = engine.activate();
+            let context: Context<_> = activation.into();
+            init_prolog_worker_pool(&context)
+        };
+
+        if let Err(e) = init_result {
+            crate::log::log_error(format!(
+                "[terminusdb-webserver] failed to initialize worker pool: {:?}",
+                e
+            ));
+            return;
+        }
+
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        // Drain any log messages that were queued before the engine was ready.
+        crate::log::drain_log_messages(&context, &log_rx);
+
+        while let Some(req) = rx.blocking_recv() {
+            // Process pending log messages before each dispatch.
+            crate::log::drain_log_messages(&context, &log_rx);
+            if let Err(e) = dispatch_to_prolog(&context, &req) {
+                crate::log::log_error(format!(
+                    "[terminusdb-webserver] dispatch failed for stream {}: {}",
+                    req.response_stream_id, e
+                ));
+                let error_response = json!({
+                    "status": 500,
+                    "body": {
+                        "@type": "api:ErrorResponse",
+                        "api:status": "api:failure",
+                        "api:error": {"@type": "api:InternalServerError"},
+                        "api:message": e.to_string()
+                    },
+                    "headers": {"Content-Type": "application/json"}
+                })
+                .to_string();
+                let _ = stream_registry()
+                    .lock()
+                    .unwrap()
+                    .send(req.response_stream_id, axum::body::Bytes::from(error_response));
+                stream_registry().lock().unwrap().remove(req.response_stream_id);
+            }
+        }
+    });
+}
+
+fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> PrologResult<()> {
+    let f = context.open_frame();
+    let workers_term = f.new_term_ref();
+    workers_term.put(&16u64).map_err(|_| PrologError::Failure)?;
+
+    let init_callable = CallablePredicate::new(Predicate::new(
+        Functor::new(Atom::new("init_request_worker_pool"), 1),
+        Module::new(Atom::new("request_worker_pool")),
+    ))
+    .map_err(|_| PrologError::Failure)?;
+    let result = f.call_once(init_callable, [&workers_term]);
+    f.close();
+    result
+}
+
+fn dispatch_to_prolog(
+    context: &Context<impl QueryableContextType>,
+    req: &DispatchRequest,
+) -> PrologResult<()> {
+    let request_term = context.new_term_ref();
+    context
+        .serialize_to_term(&request_term, &req.request_json)
+        .map_err(|_| PrologError::Failure)?;
+
+    let module_term = context.new_term_ref();
+    module_term
+        .put(&Atom::new(&req.handler_module))
+        .map_err(|_| PrologError::Failure)?;
+
+    let handler_term = context.new_term_ref();
+    handler_term
+        .put(&Atom::new(&req.handler_name))
+        .map_err(|_| PrologError::Failure)?;
+
+    let input_stream_id_term = context.new_term_ref();
+    input_stream_id_term
+        .put(&req.input_stream_id)
+        .map_err(|_| PrologError::Failure)?;
+
+    let response_stream_id_term = context.new_term_ref();
+    response_stream_id_term
+        .put(&req.response_stream_id)
+        .map_err(|_| PrologError::Failure)?;
+
+    let callable = CallablePredicate::new(Predicate::new(
+        Functor::new(Atom::new("dispatch_request"), 5),
+        Module::new(Atom::new("request_worker_pool")),
+    ))
+    .map_err(|_| PrologError::Failure)?;
+    context.call_once(callable, [
+        &request_term,
+        &module_term,
+        &handler_term,
+        &input_stream_id_term,
+        &response_stream_id_term,
+    ])
+}
+
+/// Register a new response stream and return its id and the receiver.
+fn create_response_stream() -> (u64, mpsc::Receiver<axum::body::Bytes>) {
+    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
+    let stream_id = stream_registry().lock().unwrap().add(tx);
+    (stream_id, rx)
+}
+
+/// Register a new input stream and return its id and the sender.
+fn create_input_stream() -> (u64, mpsc::Sender<axum::body::Bytes>) {
+    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
+    let stream_id = input_stream_registry().lock().unwrap().add(rx);
+    (stream_id, tx)
+}
+
+/// Guard that removes a request id from the in-flight set when dropped.
+struct InFlightRequestGuard {
+    id: String,
+    in_flight: Arc<Mutex<HashSet<String>>>,
+}
+
+impl Drop for InFlightRequestGuard {
+    fn drop(&mut self) {
+        self.in_flight.lock().unwrap().remove(&self.id);
+    }
+}
+
 /// Resolve a static directory path.
 ///
 /// Absolute paths are returned unchanged. Relative paths are resolved against
@@ -384,6 +638,7 @@ pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
     for ((method, path), handlers) in groups {
         let pool = Arc::new(HandlerPool::new(handlers));
         let pattern = path.clone();
+        let axum_path = to_axum_pattern(&path);
         let make_handler = || {
             let pool = pool.clone();
             let pattern = pattern.clone();
@@ -394,12 +649,12 @@ pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
         };
 
         router = match method.as_str() {
-            "get" => router.route(&path, axum::routing::get(make_handler())),
-            "head" => router.route(&path, axum::routing::head(make_handler())),
-            "options" => router.route(&path, axum::routing::options(make_handler())),
-            "post" => router.route(&path, axum::routing::post(make_handler())),
-            "put" => router.route(&path, axum::routing::put(make_handler())),
-            "delete" => router.route(&path, axum::routing::delete(make_handler())),
+            "get" => router.route(&axum_path, axum::routing::get(make_handler())),
+            "head" => router.route(&axum_path, axum::routing::head(make_handler())),
+            "options" => router.route(&axum_path, axum::routing::options(make_handler())),
+            "post" => router.route(&axum_path, axum::routing::post(make_handler())),
+            "put" => router.route(&axum_path, axum::routing::put(make_handler())),
+            "delete" => router.route(&axum_path, axum::routing::delete(make_handler())),
             _ => router,
         };
 
@@ -465,7 +720,7 @@ pub fn build_static_router(static_paths: Vec<PluginStaticPath>) -> Router {
         router = router
             .route(&static_path.prefix, get(root_handler.clone()))
             .route(&format!("{}/", static_path.prefix), get(root_handler))
-            .route(&format!("{}/*path", static_path.prefix), get(sub_handler));
+            .route(&format!("{}/{{*path}}", static_path.prefix), get(sub_handler));
     }
     router
 }
@@ -488,16 +743,17 @@ pub fn build_stream_router(streams: Vec<PluginStream>) -> Router {
     for ((method, path), handlers) in groups {
         let pool = Arc::new(HandlerPool::new(handlers));
         let pattern = path.clone();
+        let axum_path = to_axum_pattern(&path);
         let route_handler = move |req: Request<Body>| async move {
             let (module, handler) = pool.pick();
             dispatch_stream_request(module, handler, pattern.clone(), req).await
         };
 
         router = match method.as_str() {
-            "get" => router.route(&path, get(route_handler)),
-            "post" => router.route(&path, post(route_handler)),
-            "put" => router.route(&path, axum::routing::put(route_handler)),
-            "delete" => router.route(&path, axum::routing::delete(route_handler)),
+            "get" => router.route(&axum_path, get(route_handler)),
+            "post" => router.route(&axum_path, post(route_handler)),
+            "put" => router.route(&axum_path, axum::routing::put(route_handler)),
+            "delete" => router.route(&axum_path, axum::routing::delete(route_handler)),
             _ => router,
         };
     }
@@ -795,7 +1051,7 @@ async fn dispatch_plugin_request(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let (parts, body) = req.into_parts();
-    let body_bytes = match hyper::body::to_bytes(body).await {
+    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(_) => return plugin_error_response("failed to read request body").into_response(),
     };
@@ -807,7 +1063,6 @@ async fn dispatch_plugin_request(
         Ok(bytes) => bytes,
         Err(msg) => return plugin_error_response(&msg).into_response(),
     };
-    let body_string = String::from_utf8_lossy(&body_bytes).to_string();
 
     let method = parts.method.to_string();
     let path = normalize_dispatch_path(parts.uri.path());
@@ -831,50 +1086,73 @@ async fn dispatch_plugin_request(
         "path": path,
         "query": query,
         "headers": headers,
-        "body": body_string,
+        "body": "",
         "params": params,
     });
     crate::log::log_info(format!("{} {} (plugin)", method, path));
 
-    let result = tokio::task::spawn_blocking(move || {
-        let engine = Engine::new();
-        let activation = engine.activate();
-        let context: Context<_> = activation.into();
+    let (input_stream_id, input_tx) = create_input_stream();
+    let (response_stream_id, mut response_rx) = create_response_stream();
 
-        let request_term = context.new_term_ref();
-        context
-            .serialize_to_term(&request_term, &request_json)
-            .map_err(|_| PrologError::Failure)?;
+    let dispatch_req = DispatchRequest {
+        request_json,
+        handler_module: module,
+        handler_name: handler,
+        input_stream_id,
+        response_stream_id,
+        is_stream: false,
+    };
 
-        let response_term = context.new_term_ref();
-        let handler_atom = Atom::new(&handler);
-        let module_atom = Atom::new(&module);
-        let callable = CallablePredicate::new(Predicate::new(
-            Functor::new(handler_atom, 2),
-            Module::new(module_atom),
-        ))
-        .map_err(|_| PrologError::Failure)?;
-        context.call_once(callable, [&request_term, &response_term])?;
+    let dispatch_result = {
+        let queue = dispatch_queue();
+        let in_flight = in_flight_requests();
+        let request_id = next_request_id(&method, &path);
+        {
+            let mut set = in_flight.lock().unwrap();
+            if set.contains(&request_id) {
+                input_stream_registry().lock().unwrap().take(input_stream_id);
+                stream_registry().lock().unwrap().remove(response_stream_id);
+                return plugin_error_response("duplicate request id").into_response();
+            }
+            set.insert(request_id.clone());
+        }
+        let _guard = InFlightRequestGuard {
+            id: request_id,
+            in_flight,
+        };
 
-        let response: serde_json::Value = context
-            .deserialize_from_term(&response_term)
-            .map_err(|_| PrologError::Failure)?;
-        Ok(response)
-    })
-    .await
-    .unwrap_or(Err(PrologError::Failure));
+        let _ = queue.send(dispatch_req).await;
 
-    match result {
-        Ok(response) => {
+        let _ = input_tx.send(axum::body::Bytes::from(body_bytes)).await;
+        drop(input_tx);
+
+        tokio::task::spawn_blocking(move || {
+            let first = response_rx
+                .blocking_recv()
+                .ok_or(PrologError::Failure)?;
+            let response: serde_json::Value =
+                serde_json::from_slice(&first).map_err(|_| PrologError::Failure)?;
+
+            // If the response metadata has no body field, check for a second
+            // message containing the raw binary body.
+            if response.get("body").is_none() {
+                if let Some(raw_body) = response_rx.blocking_recv() {
+                    return Ok((response, Some(raw_body)));
+                }
+            }
+            Ok((response, None))
+        })
+        .await
+        .unwrap_or(Err(PrologError::Failure))
+    };
+
+    match dispatch_result {
+        Ok((response, raw_body)) => {
             let status = response
                 .get("status")
                 .and_then(|s| s.as_u64())
                 .unwrap_or(200) as u16;
             let status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
-            let body = response
-                .get("body")
-                .cloned()
-                .unwrap_or(json!({"error": "empty response"}));
             let mut headers = HeaderMap::new();
             if let Some(headers_map) = response.get("headers").and_then(|h| h.as_object()) {
                 for (key, value) in headers_map {
@@ -888,14 +1166,27 @@ async fn dispatch_plugin_request(
                 }
             }
 
-            if let Some(text) = body.as_str() {
+            if let Some(raw) = raw_body {
+                // Binary response: send raw bytes as the body
                 let mut builder = Response::builder().status(status);
                 for (key, value) in headers.iter() {
                     builder = builder.header(key, value);
                 }
-                builder.body(Body::from(text.to_string())).unwrap().into_response()
+                builder.body(Body::from(raw)).unwrap().into_response()
             } else {
-                (status, headers, Json(body)).into_response()
+                let body = response
+                    .get("body")
+                    .cloned()
+                    .unwrap_or(json!({"error": "empty response"}));
+                if let Some(text) = body.as_str() {
+                    let mut builder = Response::builder().status(status);
+                    for (key, value) in headers.iter() {
+                        builder = builder.header(key, value);
+                    }
+                    builder.body(Body::from(text.to_string())).unwrap().into_response()
+                } else {
+                    (status, headers, Json(body)).into_response()
+                }
             }
         }
         Err(_) => plugin_error_response("Plugin handler failed").into_response(),
@@ -983,7 +1274,7 @@ async fn dispatch_stream_request(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let (parts, body) = req.into_parts();
-    let body_bytes = match hyper::body::to_bytes(body).await {
+    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(_) => return plugin_error_response("failed to read request body"),
     };
@@ -995,10 +1286,6 @@ async fn dispatch_stream_request(
         Ok(bytes) => bytes,
         Err(msg) => return plugin_error_response(&msg),
     };
-    let body_string = String::from_utf8_lossy(&body_bytes).to_string();
-
-    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
-    let stream_id = stream_registry().lock().unwrap().add(tx);
 
     let method = parts.method.to_string();
     let path = normalize_dispatch_path(parts.uri.path());
@@ -1022,46 +1309,60 @@ async fn dispatch_stream_request(
         "path": path,
         "query": query,
         "headers": headers,
-        "body": body_string,
+        "body": "",
         "params": params,
     });
     crate::log::log_info(format!("{} {} (stream)", method, path));
 
-    let result = tokio::task::spawn_blocking(move || {
-        let engine = Engine::new();
-        let activation = engine.activate();
-        let context: Context<_> = activation.into();
+    let (input_stream_id, input_tx) = create_input_stream();
+    let (response_stream_id, mut response_rx) = create_response_stream();
 
-        let request_term = context.new_term_ref();
-        context
-            .serialize_to_term(&request_term, &request_json)
-            .map_err(|_| PrologError::Failure)?;
+    let dispatch_req = DispatchRequest {
+        request_json,
+        handler_module: module,
+        handler_name: handler,
+        input_stream_id,
+        response_stream_id,
+        is_stream: true,
+    };
 
-        let stream_id_term = context.new_term_ref();
-        stream_id_term
-            .put(&stream_id)
-            .map_err(|_| PrologError::Failure)?;
+    let dispatch_result = {
+        let queue = dispatch_queue();
+        let in_flight = in_flight_requests();
+        let request_id = next_request_id(&method, &path);
+        {
+            let mut set = in_flight.lock().unwrap();
+            if set.contains(&request_id) {
+                input_stream_registry().lock().unwrap().take(input_stream_id);
+                stream_registry().lock().unwrap().remove(response_stream_id);
+                return plugin_error_response("duplicate request id");
+            }
+            set.insert(request_id.clone());
+        }
+        let _guard = InFlightRequestGuard {
+            id: request_id,
+            in_flight,
+        };
 
-        let response_term = context.new_term_ref();
-        let handler_atom = Atom::new(&handler);
-        let module_atom = Atom::new(&module);
-        let callable = CallablePredicate::new(Predicate::new(
-            Functor::new(handler_atom, 3),
-            Module::new(module_atom),
-        ))
-        .map_err(|_| PrologError::Failure)?;
-        context.call_once(callable, [&request_term, &stream_id_term, &response_term])?;
+        let _ = queue.send(dispatch_req).await;
 
-        let response: serde_json::Value = context
-            .deserialize_from_term(&response_term)
-            .map_err(|_| PrologError::Failure)?;
-        Ok(response)
-    })
-    .await
-    .unwrap_or(Err(PrologError::Failure));
+        let _ = input_tx.send(axum::body::Bytes::from(body_bytes)).await;
+        drop(input_tx);
 
-    match result {
-        Ok(response) => {
+        tokio::task::spawn_blocking(move || {
+            let first = response_rx
+                .blocking_recv()
+                .ok_or(PrologError::Failure)?;
+            let response: serde_json::Value =
+                serde_json::from_slice(&first).map_err(|_| PrologError::Failure)?;
+            Ok((response, response_rx))
+        })
+        .await
+        .unwrap_or(Err(PrologError::Failure))
+    };
+
+    match dispatch_result {
+        Ok((response, response_rx)) => {
             let status = response
                 .get("status")
                 .and_then(|s| s.as_u64())
@@ -1089,16 +1390,16 @@ async fn dispatch_stream_request(
                     );
                 }
                 let stream = GuardedReceiverStream {
-                    inner: ReceiverStream::new(rx),
-                    _guard: StreamGuard { id: stream_id },
+                    inner: ReceiverStream::new(response_rx),
+                    _guard: StreamGuard { id: response_stream_id },
                 };
                 let mut builder = Response::builder().status(status);
                 for (key, value) in response_headers.iter() {
                     builder = builder.header(key, value);
                 }
-                builder.body(Body::wrap_stream(stream)).unwrap()
+                builder.body(Body::from_stream(stream)).unwrap()
             } else {
-                stream_registry().lock().unwrap().remove(stream_id);
+                stream_registry().lock().unwrap().remove(response_stream_id);
                 let mut builder = Response::builder().status(status);
                 for (key, value) in response_headers.iter() {
                     builder = builder.header(key, value);
@@ -1111,7 +1412,7 @@ async fn dispatch_stream_request(
             }
         }
         Err(_) => {
-            stream_registry().lock().unwrap().remove(stream_id);
+            stream_registry().lock().unwrap().remove(response_stream_id);
             plugin_error_response("Plugin stream handler failed")
         }
     }

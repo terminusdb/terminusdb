@@ -1,35 +1,37 @@
-use std::cell::RefCell;
+use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::OnceLock;
 use swipl::prelude::*;
 
-thread_local! {
-    static LOG_ENGINE: RefCell<Option<Engine>> = const { RefCell::new(None) };
+/// Channel for sending log messages from any thread to the dispatcher thread,
+/// which has a proper Prolog engine that can call json_log:json_log/2.
+static LOG_CHANNEL: OnceLock<Sender<(String, String)>> = OnceLock::new();
+
+/// Initialize the logging channel. The receiver end is returned to the
+/// dispatcher thread, which processes log messages alongside dispatch requests.
+pub fn init_log_channel() -> Receiver<(String, String)> {
+    let (tx, rx) = mpsc::channel::<(String, String)>();
+    LOG_CHANNEL.set(tx).ok();
+    rx
 }
 
 fn log(severity: &str, msg: &str) {
-    let result: PrologResult<()> = if Engine::some_engine_active() {
-        // We are already running in a Prolog context (e.g. the main thread during
-        // appserver_start). Use the active engine directly instead of creating a
-        // new one, which would fail to activate.
-        unsafe {
-            let context = unmanaged_engine_context();
-            log_to_context(&context, severity, msg)
+    if let Some(tx) = LOG_CHANNEL.get() {
+        // Send to the dispatcher thread's engine for proper Prolog logging.
+        // If the channel is closed, fall back to stderr.
+        if tx.send((severity.to_string(), msg.to_string())).is_err() {
+            eprintln!("[{}] {} (log channel closed)", severity, msg);
         }
     } else {
-        LOG_ENGINE.with(|engine_cell| {
-            let mut engine_ref = engine_cell.borrow_mut();
-            if engine_ref.is_none() {
-                *engine_ref = Some(Engine::new());
-            }
-            let engine = engine_ref.as_ref().unwrap();
-            let activation = engine.activate();
-            let context: Context<_> = activation.into();
-            log_to_context(&context, severity, msg)
-        })
-    };
-    if let Err(e) = result {
-        panic!(
-            "terminusdb-webserver: unable to log message ({severity}: {msg}): {e:?}"
-        );
+        // Channel not initialized yet — fall back to stderr.
+        eprintln!("[{}] {} (log channel not initialized)", severity, msg);
+    }
+}
+
+/// Process pending log messages using the given Prolog context.
+/// Called from the dispatcher thread's engine loop.
+pub fn drain_log_messages<CT: QueryableContextType>(context: &Context<CT>, rx: &Receiver<(String, String)>) {
+    while let Ok((severity, msg)) = rx.try_recv() {
+        let _ = log_to_context(context, &severity, &msg);
     }
 }
 
@@ -39,9 +41,9 @@ fn log_to_context<CT: QueryableContextType>(context: &Context<CT>, severity: &st
     let [severity_term, msg_term] = f.new_term_refs();
     severity_term.unify(Atom::new(severity))?;
     msg_term.unify(msg)?;
-    f.call_once(p, [&severity_term, &msg_term])?;
+    let result = f.call_once(p, [&severity_term, &msg_term]);
     f.close();
-    Ok(())
+    result
 }
 
 pub fn log_error(msg: String) {

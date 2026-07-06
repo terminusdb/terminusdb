@@ -1,5 +1,6 @@
 :- module(srv_http, [
                   build_swi_request/4,
+                  build_swi_headers/2,
                   capture_http_output/3,
                   parse_http_response/2,
                   cgi_capture_hook/2
@@ -23,16 +24,17 @@
 %% capture_http_output(+Request, :Goal, -Text) is det.
 %%
 %%  Run Goal with current_output redirected to a fresh CGI stream backed by a
-%%  UTF-8 memory file. The handler is expected to write a CGI-style response
+%%  memory file. The handler is expected to write a CGI-style response
 %%  (headers followed by a blank line and then the body). The captured text is
-%%  read back as raw UTF-8 bytes so Unicode characters are preserved.
+%%  read back as raw octet bytes — no encoding conversion is performed, so
+%%  binary payloads (e.g. pack/octets) are preserved 8-bit clean.
 capture_http_output(Request, Goal, Text) :-
     new_memory_file(MemFile),
     setup_call_cleanup(
-        open_memory_file(MemFile, write, OutStream, [encoding(utf8)]),
+        open_memory_file(MemFile, write, OutStream, [type(binary), encoding(octet)]),
         setup_call_cleanup(
             cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(Request)]),
-            (   set_stream(CGI, encoding(utf8)),
+            (   set_stream(CGI, encoding(octet)),
                 with_output_to(
                     CGI,
                     call(Goal)
@@ -44,10 +46,9 @@ capture_http_output(Request, Goal, Text) :-
     ),
     setup_call_cleanup(
         open_memory_file(MemFile, read, ReadStream, [type(binary), encoding(octet)]),
-        read_string(ReadStream, _, ByteString),
+        read_string(ReadStream, _, Text),
         close(ReadStream)
-    ),
-    utf8_bytes_to_string(ByteString, Text).
+    ).
 
 %% cgi_capture_hook(+Event, +CGI) is det.
 %%
