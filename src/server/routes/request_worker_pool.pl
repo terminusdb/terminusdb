@@ -150,14 +150,15 @@ handle_stream_work(Request, _HandlerModule, HandlerName, InputStreamId, Response
 %%  into a memory file, the SWI request is built, and the handler runs with a
 %%  CGI stream writing directly to the output pipe.
 handle_pipe_work(Request, _HandlerModule, _HandlerName, InputReadFd, OutputWriteFd, Binary) :-
-    (   InputReadFd >= 0
-    ->  '$appserver':appserver_open_fd_stream(InputReadFd, read, octet, InStream),
-        drain_pipe_to_memory_file(InStream, MemoryFile, BodyStream, BodyLen)
-    ;   empty_body_stream(MemoryFile, BodyStream, BodyLen)
-    ),
     (   Binary == true -> WriteEnc = octet ; WriteEnc = utf8 ),
     setup_call_cleanup(
-        '$appserver':appserver_open_fd_stream(OutputWriteFd, write, WriteEnc, OutStream),
+        (   (   InputReadFd >= 0
+            ->  '$appserver':appserver_open_fd_stream(InputReadFd, read, octet, InStream),
+                drain_pipe_to_memory_file(InStream, MemoryFile, BodyStream, BodyLen)
+            ;   empty_body_stream(MemoryFile, BodyStream, BodyLen)
+            ),
+            '$appserver':appserver_open_fd_stream(OutputWriteFd, write, WriteEnc, OutStream)
+        ),
         (   build_swi_request_from_dict(Request, BodyStream, BodyLen, SWIRequest),
             catch(
                 (   cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(SWIRequest)]),
@@ -180,7 +181,12 @@ handle_pipe_work(Request, _HandlerModule, _HandlerName, InputReadFd, OutputWrite
         (   catch(close(OutStream), _, true),
             (   InputReadFd >= 0 -> catch(close(InStream), _, true) ; true ),
             catch(close(BodyStream), _, true),
-            catch(free_memory_file(MemoryFile), _, true)
+            catch(free_memory_file(MemoryFile), _, true),
+            %% Safety net: close/1 on a stream may fail to close the
+            %% underlying FD if flushing buffered data encounters an error
+            %% (e.g. broken pipe). Explicitly close the FDs to prevent leaks.
+            catch('$appserver':appserver_close_fd(OutputWriteFd), _, true),
+            (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
         )
     ).
 

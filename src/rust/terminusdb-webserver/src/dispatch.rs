@@ -4,7 +4,7 @@ use axum::{
     http::{header, HeaderMap, Request, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 use futures::Stream;
 use percent_encoding::percent_decode_str;
@@ -19,9 +19,16 @@ use std::{
     },
 };
 use flate2::read::{GzDecoder, ZlibDecoder};
+use nix::unistd::pipe;
+use std::io::Write;
+use std::os::fd::{FromRawFd, IntoRawFd};
+use std::pin::Pin;
+use std::task::{Context as TaskContext, Poll};
 use swipl::prelude::*;
+use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio::net::unix::pipe::Receiver;
 
 /// A route registered by a Prolog plugin.
 #[derive(Clone, Debug)]
@@ -30,6 +37,7 @@ pub struct PluginRoute {
     pub path: String,
     pub module: String,
     pub handler: String,
+    pub binary: bool,
 }
 
 /// A static file serving endpoint registered by a Prolog plugin.
@@ -310,15 +318,31 @@ impl DispatchRequest {
     }
 }
 
+/// Request to be dispatched through OS pipes (plugin routes).
+struct PipeDispatchRequest {
+    request_json: serde_json::Value,
+    handler_module: String,
+    handler_name: String,
+    input_read_fd: Option<i32>,
+    output_write_fd: i32,
+    binary: bool,
+}
+
+/// Message sent to the single-engine dispatcher queue.
+enum DispatchMessage {
+    Pipe(PipeDispatchRequest),
+    Stream(DispatchRequest),
+}
+
 /// Sender for the single-engine dispatcher queue.
-static DISPATCH_QUEUE: OnceLock<mpsc::Sender<DispatchRequest>> = OnceLock::new();
+static DISPATCH_QUEUE: OnceLock<mpsc::Sender<DispatchMessage>> = OnceLock::new();
 
 /// In-flight request ids used to reject duplicate requests.
 static IN_FLIGHT_REQUESTS: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new();
 
 /// Return the dispatcher queue sender, panicking if the dispatcher is not
 /// initialized.
-fn dispatch_queue() -> mpsc::Sender<DispatchRequest> {
+fn dispatch_queue() -> mpsc::Sender<DispatchMessage> {
     DISPATCH_QUEUE
         .get()
         .expect("request dispatcher not initialized")
@@ -337,13 +361,24 @@ fn in_flight_requests() -> Arc<Mutex<HashSet<String>>> {
 /// Initialize the single-engine request dispatcher. Must be called once
 /// before the webserver starts accepting requests.
 pub fn init_dispatcher() {
-    let (tx, mut rx) = mpsc::channel::<DispatchRequest>(1024);
+    let (tx, mut rx) = mpsc::channel::<DispatchMessage>(1024);
     DISPATCH_QUEUE.set(tx).ok();
     IN_FLIGHT_REQUESTS.set(Arc::new(Mutex::new(HashSet::new()))).ok();
     let log_rx = crate::log::init_log_channel();
 
     std::thread::spawn(move || {
-        let engine = Engine::new();
+        // Create the Prolog engine with the same stack_limit that
+        // terminus_config.pl sets for the main engine (8 GB). Without this,
+        // PL_create_engine(null) uses the SWI-Prolog default of 1 GB, which
+        // is insufficient for heavy WOQL queries (e.g. 4M-solution cartesian
+        // products) and causes intermittent stack overflow errors.
+        // table_space is left at the SWI-Prolog default (1 GB) to match the
+        // main engine configuration.
+        let engine = Engine::with_options(
+            EngineOptions::default()
+                .stack_limit(8_589_934_592)
+                .alias("tdb_http"),
+        );
 
         let init_result = {
             let activation = engine.activate();
@@ -365,30 +400,46 @@ pub fn init_dispatcher() {
         // Drain any log messages that were queued before the engine was ready.
         crate::log::drain_log_messages(&context, &log_rx);
 
-        while let Some(req) = rx.blocking_recv() {
+        while let Some(msg) = rx.blocking_recv() {
             // Process pending log messages before each dispatch.
             crate::log::drain_log_messages(&context, &log_rx);
-            if let Err(e) = dispatch_to_prolog(&context, &req) {
-                crate::log::log_error(format!(
-                    "[terminusdb-webserver] dispatch failed for stream {}: {}",
-                    req.response_stream_id, e
-                ));
-                let error_response = json!({
-                    "status": 500,
-                    "body": {
-                        "@type": "api:ErrorResponse",
-                        "api:status": "api:failure",
-                        "api:error": {"@type": "api:InternalServerError"},
-                        "api:message": e.to_string()
-                    },
-                    "headers": {"Content-Type": "application/json"}
-                })
-                .to_string();
-                let _ = stream_registry()
-                    .lock()
-                    .unwrap()
-                    .send(req.response_stream_id, axum::body::Bytes::from(error_response));
-                stream_registry().lock().unwrap().remove(req.response_stream_id);
+            match msg {
+                DispatchMessage::Pipe(req) => {
+                    if let Err(e) = dispatch_pipe_to_prolog(&context, &req) {
+                        crate::log::log_error(format!(
+                            "[terminusdb-webserver] dispatch failed for pipe to {}:{}: {}",
+                            req.handler_module, req.handler_name, e
+                        ));
+                        let _ = write_cgi_error_to_pipe(
+                            req.output_write_fd,
+                            "Internal server error",
+                        );
+                    }
+                }
+                DispatchMessage::Stream(req) => {
+                    if let Err(e) = dispatch_stream_to_prolog(&context, &req) {
+                        crate::log::log_error(format!(
+                            "[terminusdb-webserver] dispatch failed for stream {}: {}",
+                            req.response_stream_id, e
+                        ));
+                        let error_response = json!({
+                            "status": 500,
+                            "body": {
+                                "@type": "api:ErrorResponse",
+                                "api:status": "api:failure",
+                                "api:error": {"@type": "api:InternalServerError"},
+                                "api:message": e.to_string()
+                            },
+                            "headers": {"Content-Type": "application/json"}
+                        })
+                        .to_string();
+                        let _ = stream_registry()
+                            .lock()
+                            .unwrap()
+                            .send(req.response_stream_id, axum::body::Bytes::from(error_response));
+                        stream_registry().lock().unwrap().remove(req.response_stream_id);
+                    }
+                }
             }
         }
     });
@@ -409,7 +460,75 @@ fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> Prol
     result
 }
 
-fn dispatch_to_prolog(
+/// Write a CGI-style 500 error response directly to the output pipe.
+fn write_cgi_error_to_pipe(output_write_fd: i32, message: &str) -> std::io::Result<()> {
+    let error_body = json!({
+        "@type": "api:ErrorResponse",
+        "api:status": "api:failure",
+        "api:error": {"@type": "api:InternalServerError"},
+        "api:message": message
+    })
+    .to_string();
+    let cgi_response = format!(
+        "Status: 500\nContent-Type: application/json\n\n{}",
+        error_body
+    );
+    // SAFETY: the FD was given to Prolog but was never opened as a stream,
+    // so Rust can still write to it and close it.
+    let mut file = unsafe { std::fs::File::from_raw_fd(output_write_fd) };
+    file.write_all(cgi_response.as_bytes())
+}
+
+fn dispatch_pipe_to_prolog(
+    context: &Context<impl QueryableContextType>,
+    req: &PipeDispatchRequest,
+) -> PrologResult<()> {
+    let request_term = context.new_term_ref();
+    context
+        .serialize_to_term(&request_term, &req.request_json)
+        .map_err(|_| PrologError::Failure)?;
+
+    let module_term = context.new_term_ref();
+    module_term
+        .put(&Atom::new(&req.handler_module))
+        .map_err(|_| PrologError::Failure)?;
+
+    let handler_term = context.new_term_ref();
+    handler_term
+        .put(&Atom::new(&req.handler_name))
+        .map_err(|_| PrologError::Failure)?;
+
+    let input_fd_term = context.new_term_ref();
+    input_fd_term
+        .put(&(req.input_read_fd.unwrap_or(-1) as i64))
+        .map_err(|_| PrologError::Failure)?;
+
+    let output_fd_term = context.new_term_ref();
+    output_fd_term
+        .put(&(req.output_write_fd as i64))
+        .map_err(|_| PrologError::Failure)?;
+
+    let binary_term = context.new_term_ref();
+    binary_term
+        .put(&Atom::new(if req.binary { "true" } else { "false" }))
+        .map_err(|_| PrologError::Failure)?;
+
+    let callable = CallablePredicate::new(Predicate::new(
+        Functor::new(Atom::new("dispatch_request"), 6),
+        Module::new(Atom::new("request_worker_pool")),
+    ))
+    .map_err(|_| PrologError::Failure)?;
+    context.call_once(callable, [
+        &request_term,
+        &module_term,
+        &handler_term,
+        &input_fd_term,
+        &output_fd_term,
+        &binary_term,
+    ])
+}
+
+fn dispatch_stream_to_prolog(
     context: &Context<impl QueryableContextType>,
     req: &DispatchRequest,
 ) -> PrologResult<()> {
@@ -507,20 +626,21 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
 }
 
 /// Collect routes registered by Prolog plugins through the
-/// `appserver_hooks:appserver_route/3` hook.
+/// `appserver_hooks:appserver_route/4` hook.
 ///
 /// Each handler must be specified as `Module:Handler`, where `Handler` is a
-/// predicate with arity two (`+Request, -Response`).
+/// predicate with arity two (`+Request, -Response`). The fourth argument is
+/// the atom `true` for binary routes and `false` for UTF-8 routes.
 ///
 /// This is called from the `appserver_start` Prolog predicate,
 /// so a Prolog engine is active.
 pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologResult<Vec<PluginRoute>> {
     let frame = context.open_frame();
-    let [method_term, path_term, handler_term] = frame.new_term_refs();
+    let [method_term, path_term, handler_term, binary_term] = frame.new_term_refs();
 
     let open_call = frame.open(
-        pred!("appserver_hooks:appserver_route/3"),
-        [&method_term, &path_term, &handler_term],
+        pred!("appserver_hooks:appserver_route/4"),
+        [&method_term, &path_term, &handler_term, &binary_term],
     );
 
     let mut routes = Vec::new();
@@ -529,6 +649,10 @@ pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologRes
         let path = term_to_string(&path_term)?;
         let module: Atom = handler_term.get_arg(1)?;
         let handler: Atom = handler_term.get_arg(2)?;
+        let binary = match binary_term.get_ex::<Atom>() {
+            Ok(atom) => atom.name() == "true",
+            Err(_) => false,
+        };
         let module = module.name();
         let handler = handler.name();
         routes.push(PluginRoute {
@@ -536,6 +660,7 @@ pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologRes
             path,
             module,
             handler,
+            binary,
         });
     }
 
@@ -626,25 +751,25 @@ pub fn collect_streams(context: &Context<impl QueryableContextType>) -> PrologRe
 /// plugin can register several workers for the same endpoint without needing
 /// its own load balancing.
 pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
-    let mut groups: HashMap<(String, String), Vec<(String, String)>> = HashMap::new();
+    let mut groups: HashMap<(String, String), (bool, Vec<(String, String)>)> = HashMap::new();
     for route in routes {
-        groups
+        let entry = groups
             .entry((route.method, route.path))
-            .or_default()
-            .push((route.module, route.handler));
+            .or_insert((route.binary, Vec::new()));
+        entry.1.push((route.module, route.handler));
     }
 
     let mut router = Router::new();
-    for ((method, path), handlers) in groups {
-        let pool = Arc::new(HandlerPool::new(handlers));
+    for ((method, path), (binary, handlers)) in groups {
+        let pool = Arc::new(HandlerPool::new(handlers, binary));
         let pattern = path.clone();
         let axum_path = to_axum_pattern(&path);
         let make_handler = || {
             let pool = pool.clone();
             let pattern = pattern.clone();
             move |req: Request<Body>| async move {
-                let (module, handler) = pool.pick();
-                dispatch_plugin_request(module, handler, pattern.clone(), req).await
+                let (module, handler, binary) = pool.pick();
+                dispatch_request_via_pipe(module, handler, pattern.clone(), binary, req).await
             }
         };
 
@@ -671,23 +796,27 @@ pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
 /// A pool of Prolog handlers for a single endpoint.
 ///
 /// Handlers are selected round-robin. This lets plugins register multiple
-/// workers for the same path and have Rust distribute the load.
+/// workers for the same path and have Rust distribute the load. The `binary`
+/// flag is shared by every handler in the pool (it is a property of the route).
 struct HandlerPool {
     handlers: Vec<(String, String)>,
+    binary: bool,
     next: AtomicUsize,
 }
 
 impl HandlerPool {
-    fn new(handlers: Vec<(String, String)>) -> Self {
+    fn new(handlers: Vec<(String, String)>, binary: bool) -> Self {
         Self {
             handlers,
+            binary,
             next: AtomicUsize::new(0),
         }
     }
 
-    fn pick(&self) -> (String, String) {
+    fn pick(&self) -> (String, String, bool) {
         let index = self.next.fetch_add(1, Ordering::Relaxed) % self.handlers.len();
-        self.handlers[index].clone()
+        let (module, handler) = self.handlers[index].clone();
+        (module, handler, self.binary)
     }
 }
 
@@ -741,11 +870,11 @@ pub fn build_stream_router(streams: Vec<PluginStream>) -> Router {
 
     let mut router = Router::new();
     for ((method, path), handlers) in groups {
-        let pool = Arc::new(HandlerPool::new(handlers));
+        let pool = Arc::new(HandlerPool::new(handlers, false));
         let pattern = path.clone();
         let axum_path = to_axum_pattern(&path);
         let route_handler = move |req: Request<Body>| async move {
-            let (module, handler) = pool.pick();
+            let (module, handler, _binary) = pool.pick();
             dispatch_stream_request(module, handler, pattern.clone(), req).await
         };
 
@@ -883,6 +1012,7 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
+    use futures::StreamExt;
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -956,11 +1086,14 @@ mod tests {
 
     #[test]
     fn handler_pool_distributes_round_robin() {
-        let pool = HandlerPool::new(vec![
-            ("a".to_string(), "h1".to_string()),
-            ("b".to_string(), "h2".to_string()),
-            ("c".to_string(), "h3".to_string()),
-        ]);
+        let pool = HandlerPool::new(
+            vec![
+                ("a".to_string(), "h1".to_string()),
+                ("b".to_string(), "h2".to_string()),
+                ("c".to_string(), "h3".to_string()),
+            ],
+            false,
+        );
         let picks: Vec<_> = (0..6).map(|_| pool.pick()).collect();
         assert_eq!(picks[0].0, "a");
         assert_eq!(picks[1].0, "b");
@@ -968,6 +1101,171 @@ mod tests {
         assert_eq!(picks[3].0, "a");
         assert_eq!(picks[4].0, "b");
         assert_eq!(picks[5].0, "c");
+        assert!(!picks[0].2);
+    }
+
+    #[test]
+    fn parse_cgi_headers_normal() {
+        let buf = b"Status: 200 OK\nContent-Type: application/json\n\n{\"ok\":true}";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(headers.get("content-type").unwrap(), "application/json");
+        assert_eq!(body_start, 47);
+        assert_eq!(&buf[body_start..], b"{\"ok\":true}");
+    }
+
+    #[test]
+    fn parse_cgi_headers_defaults_to_200() {
+        let buf = b"Content-Type: text/plain\n\nhello";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(headers.get("content-type").unwrap(), "text/plain");
+        assert_eq!(&buf[body_start..], b"hello");
+    }
+
+    #[test]
+    fn parse_cgi_headers_binary_content_type() {
+        let buf = b"Status: 200\nContent-Type: application/octet-stream\n\n\x00\x01\x02";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(headers.get("content-type").unwrap(), "application/octet-stream");
+        assert_eq!(&buf[body_start..], b"\x00\x01\x02");
+    }
+
+    #[test]
+    fn parse_cgi_headers_empty_body() {
+        let buf = b"Status: 204\n\n";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 204);
+        assert!(headers.is_empty());
+        assert_eq!(body_start, 13);
+    }
+
+    #[test]
+    fn parse_cgi_headers_crlf_separator() {
+        let buf = b"Status: 201 Created\r\nContent-Type: application/json\r\n\r\n{\"id\":1}";
+        let (status, _headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 201);
+        assert_eq!(body_start, 55);
+        assert_eq!(&buf[body_start..], b"{\"id\":1}");
+    }
+
+    #[test]
+    fn parse_cgi_headers_strips_hop_by_hop() {
+        let buf = b"Status: 200\nTransfer-Encoding: chunked\nConnection: close\nContent-Length: 5\nContent-Type: application/json\n\n{}";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert!(headers.get("transfer-encoding").is_none());
+        assert!(headers.get("connection").is_none());
+        // Content-Length is preserved from the CGI handler so hyper can
+        // use it for keep-alive when the handler sets it.
+        assert!(headers.get("content-length").is_some());
+        assert_eq!(headers.get("content-length").unwrap(), "5");
+        assert!(headers.get("content-type").is_some());
+        assert_eq!(&buf[body_start..], b"{}");
+    }
+
+    #[test]
+    fn parse_cgi_headers_no_separator() {
+        let buf = b"Status: 200\nContent-Type: application/json";
+        assert!(parse_cgi_headers(buf).is_none());
+    }
+
+    #[test]
+    fn parse_cgi_headers_utf8_body_preserved() {
+        // Body contains UTF-8 multibyte: "Kurt G\xc3\xb6del"
+        let buf = b"Status: 200 OK\nContent-Type: application/json\n\n\"Kurt G\xc3\xb6del\"";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(headers.get("content-type").unwrap(), "application/json");
+        assert_eq!(&buf[body_start..], b"\"Kurt G\xc3\xb6del\"");
+    }
+
+    #[test]
+    fn parse_cgi_headers_japanese_utf8_body_preserved() {
+        // Body contains Japanese UTF-8: E6 97 A5 E6 9C AC E8 AA 9E
+        let buf = b"Status: 200\nContent-Type: application/json\n\n\"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\"";
+        let (status, _headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(&buf[body_start..], b"\"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\"");
+    }
+
+    #[test]
+    fn parse_cgi_headers_binary_body_all_byte_values() {
+        // Body contains 0x00, 0xFF, 0x80, 0x42
+        let buf = b"Status: 200\nContent-Type: application/octet-stream\n\n\x00\xff\x80\x42";
+        let (status, headers, body_start) = parse_cgi_headers(buf).unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(
+            headers.get("content-type").unwrap(),
+            "application/octet-stream"
+        );
+        assert_eq!(&buf[body_start..], b"\x00\xff\x80\x42");
+    }
+
+    #[tokio::test]
+    async fn cgi_pipe_stream_yields_utf8_body_from_pipe() {
+        let (rx_fd, tx_fd) = pipe().unwrap();
+        let (read, mut write) = (
+            Receiver::from_owned_fd(rx_fd).unwrap(),
+            std::fs::File::from(tx_fd),
+        );
+
+        // Simulate CGI headers + body with UTF-8 multibyte content
+        let cgi_output: &[u8] =
+            b"Status: 200 OK\nContent-Type: application/json\n\n\"Kurt G\xc3\xb6del\"";
+        write.write_all(cgi_output).unwrap();
+        drop(write);
+
+        let stream = CgiPipeStream::new(read, Vec::new());
+        let collected: Vec<u8> = stream
+            .map(|chunk| chunk.unwrap().to_vec())
+            .concat()
+            .await;
+        assert_eq!(collected, cgi_output);
+    }
+
+    #[tokio::test]
+    async fn cgi_pipe_stream_yields_binary_body_from_pipe() {
+        let (rx_fd, tx_fd) = pipe().unwrap();
+        let (read, mut write) = (
+            Receiver::from_owned_fd(rx_fd).unwrap(),
+            std::fs::File::from(tx_fd),
+        );
+
+        // Simulate CGI headers + binary body with raw byte values
+        let cgi_output: &[u8] = b"Status: 200\nContent-Type: application/octet-stream\n\n\x00\xff\x80\x42";
+        write.write_all(cgi_output).unwrap();
+        drop(write);
+
+        let stream = CgiPipeStream::new(read, Vec::new());
+        let collected: Vec<u8> = stream
+            .map(|chunk| chunk.unwrap().to_vec())
+            .concat()
+            .await;
+        assert_eq!(collected, cgi_output);
+    }
+
+    #[tokio::test]
+    async fn cgi_pipe_stream_yields_leftover_then_pipe_bytes() {
+        let (rx_fd, tx_fd) = pipe().unwrap();
+        let (read, mut write) = (
+            Receiver::from_owned_fd(rx_fd).unwrap(),
+            std::fs::File::from(tx_fd),
+        );
+
+        let leftover = b"left".to_vec();
+        let mut stream = CgiPipeStream::new(read, leftover);
+
+        let first = stream.next().await.unwrap().unwrap();
+        assert_eq!(first, "left");
+
+        write.write_all(b"over").unwrap();
+        drop(write);
+
+        let second = stream.next().await.unwrap().unwrap();
+        assert_eq!(second, "over");
+        assert!(stream.next().await.is_none());
     }
 
     #[tokio::test]
@@ -1037,17 +1335,77 @@ mod tests {
         assert_eq!(received1, event);
         assert_eq!(received2, event);
     }
+
+    #[tokio::test]
+    async fn input_pipe_round_trips_ascii_bytes() {
+        let (read_fd, write_fd) = pipe().unwrap();
+        let mut write_file = std::fs::File::from(write_fd);
+        let body = b"Hello, world!";
+        write_file.write_all(body).unwrap();
+        drop(write_file);
+
+        let mut read = Receiver::from_owned_fd(read_fd).unwrap();
+        let mut buf = Vec::new();
+        use tokio::io::AsyncReadExt;
+        read.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, body);
+    }
+
+    #[tokio::test]
+    async fn input_pipe_round_trips_utf8_multibyte_bytes() {
+        let (read_fd, write_fd) = pipe().unwrap();
+        let mut write_file = std::fs::File::from(write_fd);
+        // "Kurt Gödel" in UTF-8 bytes
+        let body: &[u8] = b"Kurt G\xc3\xb6del";
+        write_file.write_all(body).unwrap();
+        drop(write_file);
+
+        let mut read = Receiver::from_owned_fd(read_fd).unwrap();
+        let mut buf = Vec::new();
+        use tokio::io::AsyncReadExt;
+        read.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, body);
+    }
+
+    #[tokio::test]
+    async fn input_pipe_round_trips_binary_octets() {
+        let (read_fd, write_fd) = pipe().unwrap();
+        let mut write_file = std::fs::File::from(write_fd);
+        // Raw bytes including 0x00, 0xFF, and other high-bit values
+        let body: &[u8] = &[0x00, 0x01, 0x7F, 0x80, 0xFF, 0xC3, 0xB6, 0xFE];
+        write_file.write_all(body).unwrap();
+        drop(write_file);
+
+        let mut read = Receiver::from_owned_fd(read_fd).unwrap();
+        let mut buf = Vec::new();
+        use tokio::io::AsyncReadExt;
+        read.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, body);
+    }
+
+    #[tokio::test]
+    async fn input_pipe_round_trips_empty_body() {
+        let (read_fd, write_fd) = pipe().unwrap();
+        drop(write_fd); // EOF immediately
+
+        let mut read = Receiver::from_owned_fd(read_fd).unwrap();
+        let mut buf = Vec::new();
+        use tokio::io::AsyncReadExt;
+        read.read_to_end(&mut buf).await.unwrap();
+        assert!(buf.is_empty());
+    }
 }
 
-/// Dispatch a plugin request to a Prolog handler.
+/// Dispatch a plugin request to a Prolog handler through OS pipes.
 ///
-/// The handler receives a request dict containing the HTTP method, path, query
-/// string, headers, body, and any captured route parameters (`:name` and
-/// `*name` wildcards). It returns a response dict.
-async fn dispatch_plugin_request(
+/// The handler receives a request dict and writes a CGI-style response
+/// directly to the output pipe. Rust parses the CGI headers and streams the
+/// body to the HTTP client. No JSON serialization of response metadata is used.
+async fn dispatch_request_via_pipe(
     module: String,
     handler: String,
     pattern: String,
+    binary: bool,
     req: Request<Body>,
 ) -> impl IntoResponse {
     let (parts, body) = req.into_parts();
@@ -1070,10 +1428,16 @@ async fn dispatch_plugin_request(
     let headers: serde_json::Map<String, serde_json::Value> = parts
         .headers
         .iter()
-        .map(|(k, v)| {
+        .filter_map(|(k, v)| {
+            // Strip Content-Encoding: the body has already been decompressed
+            // by the Rust server. If we leave it in, the Prolog handler will
+            // try to decompress the already-decompressed data.
+            if k == &header::CONTENT_ENCODING {
+                return None;
+            }
             let name = k.as_str().to_string();
             let value = v.to_str().unwrap_or("").to_string();
-            (name, json!(value))
+            Some((name, json!(value)))
         })
         .collect();
     let params: serde_json::Map<String, serde_json::Value> = extract_route_params(&pattern, &path)
@@ -1089,107 +1453,253 @@ async fn dispatch_plugin_request(
         "body": "",
         "params": params,
     });
-    crate::log::log_info(format!("{} {} (plugin)", method, path));
+    crate::log::log_info(format!("{} {} (plugin pipe)", method, path));
 
-    let (input_stream_id, input_tx) = create_input_stream();
-    let (response_stream_id, mut response_rx) = create_response_stream();
+    let (output_read, output_write) = match pipe() {
+        Ok(p) => p,
+        Err(e) => {
+            crate::log::log_error(format!("output pipe creation failed: {}", e));
+            return plugin_error_response("pipe creation failed").into_response();
+        }
+    };
 
-    let dispatch_req = DispatchRequest {
+    let output_write_fd = output_write.into_raw_fd();
+
+    let (input_read_fd, input_write) = if body_bytes.is_empty() {
+        (None, None)
+    } else {
+        match pipe() {
+            Ok((input_read, input_write)) => {
+                let input_read_fd = input_read.into_raw_fd();
+                let input_write_file = std::fs::File::from(input_write);
+                (Some(input_read_fd), Some(input_write_file))
+            }
+            Err(e) => {
+                crate::log::log_error(format!("input pipe creation failed: {}", e));
+                let _ = write_cgi_error_to_pipe(output_write_fd, "input pipe creation failed");
+                return plugin_error_response("pipe creation failed").into_response();
+            }
+        }
+    };
+
+    let dispatch_req = PipeDispatchRequest {
         request_json,
         handler_module: module,
         handler_name: handler,
-        input_stream_id,
-        response_stream_id,
-        is_stream: false,
+        input_read_fd,
+        output_write_fd,
+        binary,
     };
 
-    let dispatch_result = {
-        let queue = dispatch_queue();
-        let in_flight = in_flight_requests();
-        let request_id = next_request_id(&method, &path);
-        {
-            let mut set = in_flight.lock().unwrap();
-            if set.contains(&request_id) {
-                input_stream_registry().lock().unwrap().take(input_stream_id);
-                stream_registry().lock().unwrap().remove(response_stream_id);
-                return plugin_error_response("duplicate request id").into_response();
-            }
-            set.insert(request_id.clone());
+    let mut output_receiver = match Receiver::from_owned_fd(output_read) {
+        Ok(rx) => rx,
+        Err(e) => {
+            crate::log::log_error(format!("failed to create pipe receiver: {}", e));
+            let _ = write_cgi_error_to_pipe(output_write_fd, "failed to create pipe receiver");
+            return plugin_error_response("pipe creation failed").into_response();
         }
-        let _guard = InFlightRequestGuard {
-            id: request_id,
-            in_flight,
-        };
-
-        let _ = queue.send(dispatch_req).await;
-
-        let _ = input_tx.send(axum::body::Bytes::from(body_bytes)).await;
-        drop(input_tx);
-
-        tokio::task::spawn_blocking(move || {
-            let first = response_rx
-                .blocking_recv()
-                .ok_or(PrologError::Failure)?;
-            let response: serde_json::Value =
-                serde_json::from_slice(&first).map_err(|_| PrologError::Failure)?;
-
-            // If the response metadata has no body field, check for a second
-            // message containing the raw binary body.
-            if response.get("body").is_none() {
-                if let Some(raw_body) = response_rx.blocking_recv() {
-                    return Ok((response, Some(raw_body)));
-                }
-            }
-            Ok((response, None))
-        })
-        .await
-        .unwrap_or(Err(PrologError::Failure))
     };
 
-    match dispatch_result {
-        Ok((response, raw_body)) => {
-            let status = response
-                .get("status")
-                .and_then(|s| s.as_u64())
-                .unwrap_or(200) as u16;
-            let status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
-            let mut headers = HeaderMap::new();
-            if let Some(headers_map) = response.get("headers").and_then(|h| h.as_object()) {
-                for (key, value) in headers_map {
-                    if let Some(value_str) = value.as_str() {
-                        if let Ok(header_name) = key.parse::<header::HeaderName>() {
-                            if let Ok(header_value) = value_str.parse() {
-                                headers.insert(header_name, header_value);
-                            }
+    let queue = dispatch_queue();
+    let in_flight = in_flight_requests();
+    let request_id = next_request_id(&method, &path);
+    {
+        let mut set = in_flight.lock().unwrap();
+        if set.contains(&request_id) {
+            return plugin_error_response("duplicate request id").into_response();
+        }
+        set.insert(request_id.clone());
+    }
+    let _guard = InFlightRequestGuard {
+        id: request_id,
+        in_flight,
+    };
+
+    if let Err(e) = queue.send(DispatchMessage::Pipe(dispatch_req)).await {
+        crate::log::log_error(format!("dispatch queue send failed: {}", e));
+        let _ = write_cgi_error_to_pipe(output_write_fd, "dispatch queue send failed");
+        return plugin_error_response("Plugin handler failed").into_response();
+    }
+
+    if let Some(input_file) = input_write {
+        tokio::task::spawn_blocking(move || {
+            let mut file = input_file;
+            if let Err(e) = file.write_all(&body_bytes) {
+                crate::log::log_error(format!("failed to write request body to input pipe: {}", e));
+            }
+        });
+    }
+
+    let (status, response_headers, leftover) = match read_cgi_headers(&mut output_receiver).await {
+        Ok(result) => result,
+        Err(e) => {
+            crate::log::log_error(format!("failed to read CGI headers from pipe: {}", e));
+            return plugin_error_response("Plugin handler failed").into_response();
+        }
+    };
+
+    let mut builder = Response::builder().status(status);
+    for (key, value) in response_headers.iter() {
+        builder = builder.header(key, value);
+    }
+
+    // If the CGI handler set Content-Length, the body is fully buffered in
+    // the CGI stream and written to the pipe after the headers. Read it
+    // into a buffer and send it with Content-Length for HTTP keep-alive.
+    // If Content-Length is absent (streaming responses like NDJSON), use
+    // chunked transfer encoding via Body::from_stream.
+    if let Some(cl) = response_headers.get("content-length") {
+        if let Ok(cl_str) = cl.to_str() {
+            if let Ok(cl_len) = cl_str.parse::<usize>() {
+                // Read the body from the pipe into a buffer.
+                // The CGI stream has already written the full body to the
+                // pipe, so this is just I/O — no computation timeout risk.
+                let mut body = leftover;
+                let mut read = body.len();
+                if read < cl_len {
+                    body.resize(cl_len, 0u8);
+                    while read < cl_len {
+                        match output_receiver.read(&mut body[read..]).await {
+                            Ok(0) => break, // EOF (shouldn't happen before cl_len)
+                            Ok(n) => read += n,
+                            Err(_) => break,
                         }
                     }
                 }
+                body.truncate(read);
+                return builder
+                    .body(Body::from(axum::body::Bytes::from(body)))
+                    .unwrap()
+                    .into_response();
             }
+        }
+    }
 
-            if let Some(raw) = raw_body {
-                // Binary response: send raw bytes as the body
-                let mut builder = Response::builder().status(status);
-                for (key, value) in headers.iter() {
-                    builder = builder.header(key, value);
-                }
-                builder.body(Body::from(raw)).unwrap().into_response()
-            } else {
-                let body = response
-                    .get("body")
-                    .cloned()
-                    .unwrap_or(json!({"error": "empty response"}));
-                if let Some(text) = body.as_str() {
-                    let mut builder = Response::builder().status(status);
-                    for (key, value) in headers.iter() {
-                        builder = builder.header(key, value);
-                    }
-                    builder.body(Body::from(text.to_string())).unwrap().into_response()
-                } else {
-                    (status, headers, Json(body)).into_response()
+    // No Content-Length — stream with chunked transfer encoding.
+    let body_stream = CgiPipeStream::new(output_receiver, leftover);
+    builder.body(Body::from_stream(body_stream)).unwrap().into_response()
+}
+
+/// Read CGI headers from the pipe receiver, returning the parsed status, header
+/// map, and any bytes that were read past the header separator.
+async fn read_cgi_headers(
+    receiver: &mut Receiver,
+) -> Result<(u16, HeaderMap, Vec<u8>), String> {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let n = receiver
+            .read(&mut chunk)
+            .await
+            .map_err(|e| format!("read error: {}", e))?;
+        if n == 0 {
+            return Err("EOF before CGI header separator".to_string());
+        }
+        buf.extend_from_slice(&chunk[..n]);
+        if let Some((status, headers, body_start)) = parse_cgi_headers(&buf) {
+            let leftover = buf.split_off(body_start);
+            return Ok((status, headers, leftover));
+        }
+    }
+}
+
+/// Parse CGI headers from a byte buffer.
+/// Returns (status_code, headers, body_start_offset) or None if no separator found.
+/// Hop-by-hop headers stripped: Transfer-Encoding, Connection.
+/// Content-Length is preserved so that hyper can use it for keep-alive when
+/// the handler sets it (e.g. reply_json). When Content-Length is absent
+/// (streaming responses like NDJSON), hyper uses chunked transfer encoding.
+fn parse_cgi_headers(buf: &[u8]) -> Option<(u16, HeaderMap, usize)> {
+    let separator_pos = find_header_separator(buf)?;
+    let header_bytes = &buf[..separator_pos];
+    let body_start = if buf[separator_pos..].starts_with(b"\r\n\r\n") {
+        separator_pos + 4
+    } else {
+        separator_pos + 2
+    };
+    let header_str = std::str::from_utf8(header_bytes).ok()?;
+    let mut status: u16 = 200;
+    let mut headers = HeaderMap::new();
+    for line in header_str.lines() {
+        if let Some(colon_pos) = line.find(':') {
+            let key = line[..colon_pos].trim();
+            let value = line[colon_pos + 1..].trim();
+            if key.eq_ignore_ascii_case("status") {
+                let code_str = value.split_whitespace().next().unwrap_or("200");
+                status = code_str.parse().unwrap_or(200);
+            } else if key.eq_ignore_ascii_case("transfer-encoding")
+                || key.eq_ignore_ascii_case("connection")
+            {
+                continue;
+            } else if let Ok(name) = key.parse::<header::HeaderName>() {
+                if let Ok(val) = value.parse() {
+                    headers.insert(name, val);
                 }
             }
         }
-        Err(_) => plugin_error_response("Plugin handler failed").into_response(),
+    }
+    Some((status, headers, body_start))
+}
+
+fn find_header_separator(buf: &[u8]) -> Option<usize> {
+    for i in 0..buf.len().saturating_sub(1) {
+        if buf[i] == b'\n' && buf[i + 1] == b'\n' {
+            return Some(i);
+        }
+    }
+    for i in 0..buf.len().saturating_sub(3) {
+        if &buf[i..i + 4] == b"\r\n\r\n" {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// Stream that yields bytes from the pipe receiver, prefixed by the bytes that
+/// were read while parsing the CGI headers.
+struct CgiPipeStream {
+    receiver: Receiver,
+    leftover: Vec<u8>,
+    leftover_yielded: bool,
+}
+
+impl CgiPipeStream {
+    fn new(receiver: Receiver, leftover: Vec<u8>) -> Self {
+        Self {
+            receiver,
+            leftover,
+            leftover_yielded: false,
+        }
+    }
+}
+
+impl Stream for CgiPipeStream {
+    type Item = Result<axum::body::Bytes, std::convert::Infallible>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        if !this.leftover_yielded {
+            this.leftover_yielded = true;
+            if !this.leftover.is_empty() {
+                return Poll::Ready(Some(Ok(axum::body::Bytes::from(std::mem::take(
+                    &mut this.leftover,
+                )))));
+            }
+        }
+        let mut buf = [0u8; 8192];
+        let mut read_buf = ReadBuf::new(&mut buf);
+        match Pin::new(&mut this.receiver).poll_read(cx, &mut read_buf) {
+            Poll::Ready(Ok(())) => {
+                let n = read_buf.filled().len();
+                if n == 0 {
+                    Poll::Ready(None)
+                } else {
+                    Poll::Ready(Some(Ok(axum::body::Bytes::copy_from_slice(&buf[..n]))))
+                }
+            }
+            Poll::Ready(Err(_)) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
@@ -1293,10 +1803,16 @@ async fn dispatch_stream_request(
     let headers: serde_json::Map<String, serde_json::Value> = parts
         .headers
         .iter()
-        .map(|(k, v)| {
+        .filter_map(|(k, v)| {
+            // Strip Content-Encoding: the body has already been decompressed
+            // by the Rust server. If we leave it in, the Prolog handler will
+            // try to decompress the already-decompressed data.
+            if k == &header::CONTENT_ENCODING {
+                return None;
+            }
             let name = k.as_str().to_string();
             let value = v.to_str().unwrap_or("").to_string();
-            (name, json!(value))
+            Some((name, json!(value)))
         })
         .collect();
     let params: serde_json::Map<String, serde_json::Value> = extract_route_params(&pattern, &path)
@@ -1344,9 +1860,15 @@ async fn dispatch_stream_request(
             in_flight,
         };
 
-        let _ = queue.send(dispatch_req).await;
+        if queue.send(DispatchMessage::Stream(dispatch_req)).await.is_err() {
+            stream_registry().lock().unwrap().remove(response_stream_id);
+            return plugin_error_response("dispatch queue closed");
+        }
 
-        let _ = input_tx.send(axum::body::Bytes::from(body_bytes)).await;
+        if input_tx.send(axum::body::Bytes::from(body_bytes)).await.is_err() {
+            stream_registry().lock().unwrap().remove(response_stream_id);
+            return plugin_error_response("failed to send request body");
+        }
         drop(input_tx);
 
         tokio::task::spawn_blocking(move || {

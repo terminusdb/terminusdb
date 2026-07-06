@@ -54,15 +54,19 @@ predicates! {
     /// (sent as raw bytes) or any term serializable to JSON (sent as NDJSON).
     /// A trailing newline is added automatically.
     ///
-    /// For Prolog strings containing raw octets (non-UTF-8), the bytes are
-    /// extracted via PL_get_string which preserves all 8-bit values.
+    /// Strings are extracted via PL_get_nchars with REP_UTF8 to ensure the
+    /// bytes are always valid UTF-8, regardless of the internal string
+    /// representation (SWI-Prolog stores Latin-1-range strings as single
+    /// bytes internally, which would be invalid UTF-8 if passed through
+    /// directly). Binary data that is not valid UTF-8 falls back to
+    /// PL_get_string which preserves all 8-bit values.
     #[module("$appserver")]
     pub semidet fn appserver_stream_send(context, stream_id_term, data_term) {
         let stream_id: u64 = stream_id_term.get_ex()?;
-        let mut bytes = if let Ok(data) = data_term.get_ex::<Vec<u8>>() {
-            data
-        } else if let Ok(data) = data_term.get_ex::<String>() {
+        let mut bytes = if let Ok(data) = data_term.get_ex::<String>() {
             data.into_bytes()
+        } else if let Ok(data) = data_term.get_ex::<Vec<u8>>() {
+            data
         } else {
             let data: serde_json::Value = context
                 .deserialize_from_term(data_term)
@@ -195,6 +199,83 @@ predicates! {
         }
         .map_err(|_| PrologError::Failure)
     }
+
+    /// Open a POSIX file descriptor as a SWI-Prolog stream.
+    ///
+    /// Signature: `appserver_open_fd_stream(+Fd, +Mode, +Encoding, -Stream)`
+    /// where Fd is an integer, Mode is atom `read` or `write`,
+    /// Encoding is atom `octet` or `utf8`, and Stream is unified with
+    /// the resulting Prolog stream.
+    ///
+    /// Sfdopen takes ownership of the FD — Prolog's close/1 will close it.
+    #[module("$appserver")]
+    pub semidet fn appserver_open_fd_stream(
+        _context,
+        fd_term,
+        mode_term,
+        encoding_term,
+        stream_term,
+    ) {
+        let fd: i64 = fd_term.get_ex()?;
+        let fd = fd as i32;
+        let mode_atom: Atom = mode_term.get_ex()?;
+        let encoding_atom: Atom = encoding_term.get_ex()?;
+        let mode_str = mode_atom.name();
+        let enc_str = encoding_atom.name();
+
+        let c_mode = match mode_str.as_str() {
+            "read" => "r\0",
+            "write" => "w\0",
+            _ => return Err(PrologError::Failure),
+        };
+
+        let enc = match enc_str.as_str() {
+            "octet" => IOENC_ENC_OCTET,
+            "utf8" => IOENC_ENC_UTF8,
+            _ => return Err(PrologError::Failure),
+        };
+
+        let stream = unsafe { Sfdopen(fd, c_mode.as_ptr() as *const c_char) };
+        if stream.is_null() {
+            return Err(PrologError::Failure);
+        }
+
+        let enc_result = unsafe { Ssetenc(stream, enc, std::ptr::null_mut()) };
+        if (enc_result as i32) < 0 {
+            unsafe { Sclose(stream) };
+            return Err(PrologError::Failure);
+        }
+
+        let unify_result = unsafe { PL_unify_stream(stream_term.term_ptr(), stream) };
+        if !unify_result {
+            unsafe { Sclose(stream) };
+            return Err(PrologError::Failure);
+        }
+
+        Ok(())
+    }
+
+    /// Close a raw file descriptor directly, bypassing the Prolog stream layer.
+    ///
+    /// This is used as a safety net in pipe cleanup to guarantee that the FD
+    /// is closed even when `close/1` on the corresponding Prolog stream fails
+    /// (e.g. with a broken pipe error). `close/1` may skip closing the
+    /// underlying FD if flushing buffered data fails, which would leak the FD.
+    ///
+    /// Signature: `appserver_close_fd(+Fd)` where Fd is an integer.
+    #[module("$appserver")]
+    pub semidet fn appserver_close_fd(_context, fd_term) {
+        let fd: i64 = fd_term.get_ex()?;
+        let fd = fd as i32;
+        // unsafe justification: close() is safe to call on any valid FD.
+        // If the FD has already been closed, close() returns EBADF which
+        // is harmless. We ignore the return value because the purpose is
+        // purely to ensure the FD is not leaked.
+        unsafe {
+            libc::close(fd);
+        }
+        Ok(())
+    }
 }
 
 pub fn register() {
@@ -205,4 +286,6 @@ pub fn register() {
     register_appserver_broadcast_subscribe();
     register_appserver_broadcast_send();
     register_appserver_stream_recv();
+    register_appserver_open_fd_stream();
+    register_appserver_close_fd();
 }

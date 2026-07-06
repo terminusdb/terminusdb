@@ -209,6 +209,15 @@ rust_handler_safe(Request, Response) :-
 %%  current output, so this is called inside capture_http_output/3.
 http_dispatch_with_expansion(Request) :-
     http:request_expansion(Request, Expanded),
+    %% Clear the cached http_dispatch tree so that path_tree/1 rebuilds it
+    %% with fresh unbound variables. The tree caches handler closures and
+    %% '$extract' options that share variables (e.g. method(Method)). Once
+    %% a variable is bound by extract_from_request during one request, it
+    %% stays bound in the cached tree, causing subsequent requests with a
+    %% different method to fail. In the normal SWI HTTP server each request
+    %% runs in a fresh thread with its own nb_current copy, but the Rust
+    %% pipe path reuses worker threads.
+    nb_delete(http_dispatch_tree),
     http_dispatch:http_dispatch(Expanded).
 
 %% stream_handler(+RequestDict, +StreamId, -ResponseDict) is det.

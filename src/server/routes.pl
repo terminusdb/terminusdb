@@ -1396,8 +1396,10 @@ test(rebase_divergent_history, [
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
+                 prefix,
                  time_limit(infinite),
                  chunked,
+                 tdb_binary,
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -1513,8 +1515,10 @@ test(pack_nothing, [
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 prefix,
                  chunked,
                  time_limit(infinite),
+                 tdb_binary,
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
@@ -1548,7 +1552,8 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(files), tus_auth_wrapper(tus_dispatch),
                 [ methods([options,head,post,patch,delete]),
-                  prefix
+                  prefix,
+                  tdb_binary
                 ]).
 
 :- meta_predicate tus_auth_wrapper(2,?).
@@ -3996,6 +4001,58 @@ test(accept_nonzero_content_length) :-
 
 :- end_tests(content_length_validation).
 
+:- begin_tests(http_read_json_semidet).
+
+test(fails_on_empty_body_with_json_content_type) :-
+    %% A GET request with Content-Type: application/json and an empty
+    %% body (content_length(0)) should fail semidet, not throw.
+    %% This is the Rust webserver regression: the Rust dispatch always
+    %% adds content_length(0) for empty bodies, so the semidet check
+    %% must not attempt to JSON-parse an empty stream.
+    new_memory_file(MF),
+    open_memory_file(MF, read, EmptyStream, [type(binary), encoding(octet)]),
+    Request = [
+        method(get),
+        path('/api/document/admin/test'),
+        content_type('application/json'),
+        content_length(0),
+        input(EmptyStream)
+    ],
+    \+ http_read_json_semidet(json_dict(_JSON), Request),
+    close(EmptyStream),
+    free_memory_file(MF).
+
+test(fails_on_missing_content_length) :-
+    %% Without content_length, semidet should fail (no body to read).
+    new_memory_file(MF),
+    open_memory_file(MF, read, EmptyStream, [type(binary), encoding(octet)]),
+    Request = [
+        method(get),
+        path('/api/document/admin/test'),
+        content_type('application/json'),
+        input(EmptyStream)
+    ],
+    \+ http_read_json_semidet(json_dict(_JSON), Request),
+    close(EmptyStream),
+    free_memory_file(MF).
+
+test(fails_on_non_json_content_type) :-
+    %% Non-JSON content type should fail semidet.
+    new_memory_file(MF),
+    open_memory_file(MF, read, EmptyStream, [type(binary), encoding(octet)]),
+    Request = [
+        method(post),
+        path('/api/document/admin/test'),
+        content_type('text/plain'),
+        content_length(10),
+        input(EmptyStream)
+    ],
+    \+ http_read_json_semidet(json_dict(_JSON), Request),
+    close(EmptyStream),
+    free_memory_file(MF).
+
+:- end_tests(http_read_json_semidet).
+
 content_encoded(Request, Encoding) :-
     memberchk(content_encoding(Encoding), Request),
     do_or_die(
@@ -4186,7 +4243,8 @@ http_read_json_required(Output, Request) :-
  */
 http_read_json_semidet(Output, Request) :-
     json_content_type(Request),
-    memberchk(content_length(_Len), Request),
+    memberchk(content_length(Len), Request),
+    Len > 0,
     http_read_utf8(Output, Request).
 
 http_read_json_preserve_semidet(json_dict(JSON), Request) :-
@@ -4196,7 +4254,8 @@ http_read_json_preserve_semidet(json_dict(JSON), Request) :-
 % WOQL-specific JSON reader that preserves numeric string precision
 http_read_woql_json_semidet(Output, Request) :-
     json_content_type(Request),
-    memberchk(content_length(_Len), Request),
+    memberchk(content_length(Len), Request),
+    Len > 0,
     http_read_woql_utf8(Output, Request).
 
 /*
