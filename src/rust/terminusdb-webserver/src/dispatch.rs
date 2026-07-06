@@ -48,6 +48,31 @@ pub struct PluginStream {
     pub handler: String,
 }
 
+/// Return true if the Axum route pattern contains a catch-all wildcard segment.
+fn is_catchall_pattern(pattern: &str) -> bool {
+    pattern.split('/').any(|seg| seg.starts_with('*'))
+}
+
+/// Percent-decode a request path, trim a trailing slash, and restore the
+/// trailing slash for root aliases (e.g., `/api`) so that SWI-Prolog's
+/// `http_dispatch` matches the root handler registered at `/api/` instead of
+/// falling back to the `/api` prefix 404 handler.
+fn normalize_dispatch_path(raw_path: &str) -> String {
+    let path = percent_decode_str(raw_path).decode_utf8_lossy().to_string();
+    let path = if path.len() > 1 && path.ends_with('/') {
+        path[..path.len() - 1].to_string()
+    } else {
+        path
+    };
+    // Root aliases are registered with a trailing slash in SWI-Prolog, so a
+    // request to `/api` must be presented as `/api/` to the dispatcher.
+    if path.len() > 1 && path.matches('/').count() == 1 {
+        format!("{}/", path)
+    } else {
+        path
+    }
+}
+
 /// Unique identifier for an active streaming response.
 pub type StreamId = u64;
 
@@ -340,20 +365,41 @@ pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
     for ((method, path), handlers) in groups {
         let pool = Arc::new(HandlerPool::new(handlers));
         let pattern = path.clone();
-        let route_handler = move |req: Request<Body>| async move {
-            let (module, handler) = pool.pick();
-            dispatch_plugin_request(module, handler, pattern.clone(), req).await
+        let make_handler = || {
+            let pool = pool.clone();
+            let pattern = pattern.clone();
+            move |req: Request<Body>| async move {
+                let (module, handler) = pool.pick();
+                dispatch_plugin_request(module, handler, pattern.clone(), req).await
+            }
         };
 
         router = match method.as_str() {
-            "get" => router.route(&path, axum::routing::get(route_handler)),
-            "head" => router.route(&path, axum::routing::head(route_handler)),
-            "options" => router.route(&path, axum::routing::options(route_handler)),
-            "post" => router.route(&path, axum::routing::post(route_handler)),
-            "put" => router.route(&path, axum::routing::put(route_handler)),
-            "delete" => router.route(&path, axum::routing::delete(route_handler)),
+            "get" => router.route(&path, axum::routing::get(make_handler())),
+            "head" => router.route(&path, axum::routing::head(make_handler())),
+            "options" => router.route(&path, axum::routing::options(make_handler())),
+            "post" => router.route(&path, axum::routing::post(make_handler())),
+            "put" => router.route(&path, axum::routing::put(make_handler())),
+            "delete" => router.route(&path, axum::routing::delete(make_handler())),
             _ => router,
         };
+
+        // The SWI-Prolog dispatcher registers root aliases like api(.) as an
+        // absolute path ending in a slash, so clients that include the trailing
+        // slash need a matching Axum route. Add a trailing slash variant for
+        // exact routes that are not already catch-all patterns.
+        if !path.ends_with('/') && !is_catchall_pattern(&path) {
+            let trailing = format!("{}/", path);
+            router = match method.as_str() {
+                "get" => router.route(&trailing, axum::routing::get(make_handler())),
+                "head" => router.route(&trailing, axum::routing::head(make_handler())),
+                "options" => router.route(&trailing, axum::routing::options(make_handler())),
+                "post" => router.route(&trailing, axum::routing::post(make_handler())),
+                "put" => router.route(&trailing, axum::routing::put(make_handler())),
+                "delete" => router.route(&trailing, axum::routing::delete(make_handler())),
+                _ => router,
+            };
+        }
     }
 
     router
@@ -748,7 +794,7 @@ async fn dispatch_plugin_request(
     let body_string = String::from_utf8_lossy(&body_bytes).to_string();
 
     let method = parts.method.to_string();
-    let path = parts.uri.path().to_string();
+    let path = normalize_dispatch_path(parts.uri.path());
     let query = parts.uri.query().unwrap_or("").to_string();
     let headers: serde_json::Map<String, serde_json::Value> = parts
         .headers
@@ -931,7 +977,7 @@ async fn dispatch_stream_request(
     let stream_id = stream_registry().lock().unwrap().add(tx);
 
     let method = parts.method.to_string();
-    let path = parts.uri.path().to_string();
+    let path = normalize_dispatch_path(parts.uri.path());
     let query = parts.uri.query().unwrap_or("").to_string();
     let headers: serde_json::Map<String, serde_json::Value> = parts
         .headers
@@ -1060,4 +1106,44 @@ fn plugin_error_response(message: &str) -> Response<Body> {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap()
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::{is_catchall_pattern, normalize_dispatch_path};
+
+    #[test]
+    fn normalize_decodes_percent_encoding() {
+        assert_eq!(normalize_dispatch_path("/api/db/admin%20name"), "/api/db/admin name");
+    }
+
+    #[test]
+    fn normalize_trims_trailing_slash() {
+        assert_eq!(normalize_dispatch_path("/api/db/admin/"), "/api/db/admin");
+    }
+
+    #[test]
+    fn normalize_keeps_root_slash() {
+        assert_eq!(normalize_dispatch_path("/"), "/");
+    }
+
+    #[test]
+    fn normalize_restores_root_alias_trailing_slash() {
+        // Root aliases like api(.) are registered at /api/ in SWI-Prolog.
+        assert_eq!(normalize_dispatch_path("/api"), "/api/");
+        assert_eq!(normalize_dispatch_path("/api/"), "/api/");
+    }
+
+    #[test]
+    fn normalize_does_not_restore_slash_for_nested_paths() {
+        assert_eq!(normalize_dispatch_path("/api/info"), "/api/info");
+        assert_eq!(normalize_dispatch_path("/api/info/"), "/api/info");
+    }
+
+    #[test]
+    fn detect_catchall_pattern() {
+        assert!(is_catchall_pattern("/api/db/*path"));
+        assert!(!is_catchall_pattern("/api/organizations/:seg1"));
+        assert!(!is_catchall_pattern("/api"));
+    }
 }

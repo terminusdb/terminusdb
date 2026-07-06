@@ -50,6 +50,7 @@
 
 % http libraries
 :- use_module(library(http/http_dispatch)).
+:- use_module(server(routes/tdb_http_handler)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
 :- use_module(library(http/http_path)).
@@ -117,7 +118,7 @@ reply_404_not_found(Request) :-
                [status(404)]).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(.), cors_handler(Method, connect_handler),
+:- tdb_http_handler(api(.), cors_handler(Method, connect_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -135,7 +136,7 @@ connect_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
+:- tdb_http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
                 [method(Method),
                  methods([options,get])]).
 
@@ -155,7 +156,7 @@ log_handler(get, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(info), cors_handler(Method, info_handler),
+:- tdb_http_handler(api(info), cors_handler(Method, info_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -170,7 +171,7 @@ info_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Ping Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(ok), cors_handler(Method, ok_handler, [skip_authentication(true)]),
+:- tdb_http_handler(api(ok), cors_handler(Method, ok_handler, [skip_authentication(true)]),
                 [method(Method),
                  methods([options,get])]).
 
@@ -179,12 +180,12 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),
-                [method(Method),
-                 methods([options,get])]).
-:- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
-                [method(Method),
-                 methods([options,get,head,post,put,delete])]).
+:- tdb_http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),
+                    [method(Method),
+                     methods([options,get])]).
+:- tdb_http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
+                    [method(Method),
+                     methods([options,get,head,post,put,delete])]).
 
 db_handler(get, Organization, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -383,7 +384,7 @@ test(db_force_delete_unfinalized_system_and_label, [
 :- end_tests(db_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
+:- tdb_http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -446,11 +447,12 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
-                [method(Method),
-                 prefix,
-                 time_limit(infinite),
-                 methods([head,options,post,delete,get,put])]).
+:- tdb_http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
+                    [method(Method),
+                     prefix,
+                     time_limit(infinite),
+                     tdb_stream,
+                     methods([head,options,post,delete,get,put])]).
 
 
 document_handler(head, Path, Request, System_DB, Auth) :-
@@ -667,7 +669,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
         )).
 
 %%%%%%%%%%%%%%%%%%%% History %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
+:- tdb_http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
@@ -727,7 +729,7 @@ history_handler(get, Path, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
+:- tdb_http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,get,post])]).
@@ -771,11 +773,11 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),
+:- tdb_http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path), [add_payload(false)]),
+:- tdb_http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -847,7 +849,7 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
+:- tdb_http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
                 [method(Method),
                  methods([options,post])]).
 
@@ -995,7 +997,7 @@ test(clone_remote, [
 :- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
+:- tdb_http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1274,7 +1276,7 @@ test(fetch_second_time_with_change, [
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
+:- tdb_http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1381,7 +1383,7 @@ test(rebase_divergent_history, [
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
+:- tdb_http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
                  time_limit(infinite),
                  chunked,
@@ -1498,7 +1500,7 @@ test(pack_nothing, [
 :- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
+:- tdb_http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
                  chunked,
                  time_limit(infinite),
@@ -1533,7 +1535,7 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 %:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(files), tus_auth_wrapper(tus_dispatch),
+:- tdb_http_handler(api(files), tus_auth_wrapper(tus_dispatch),
                 [ methods([options,head,post,patch,delete]),
                   prefix
                 ]).
@@ -1563,7 +1565,7 @@ tus_auth_wrapper(Goal,Request) :-
     !.
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
+:- tdb_http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1896,7 +1898,7 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
 :- end_tests(push_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
+:- tdb_http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2232,7 +2234,7 @@ test(pull_from_something_to_something_equal_other_branch,
 :- end_tests(pull_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
+:- tdb_http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2266,7 +2268,7 @@ branch_handler(delete, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
+:- tdb_http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
@@ -2285,7 +2287,7 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% Individual Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(api(prefix/Path), cors_handler(Method, individual_prefix_handler(Path)),
+:- tdb_http_handler(api(prefix/Path), cors_handler(Method, individual_prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,get,post,put,delete])]).
@@ -2385,11 +2387,11 @@ resolve_prefix_path(Path, DB_Path, Prefix_Name) :-
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
-:- http_handler(api(user), cors_handler(Method, user_handler),
+:- tdb_http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(api(user/Name), cors_handler(Method, user_handler(Name)),
+:- tdb_http_handler(api(user/Name), cors_handler(Method, user_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2447,7 +2449,7 @@ user_handler(delete, Request, System_DB, Auth) :-
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
-:- http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
+:- tdb_http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
@@ -2466,11 +2468,11 @@ user_organizations_handler(get, Request, System_DB, Auth) :-
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
-:- http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
+:- tdb_http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
+:- tdb_http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,delete])]).
@@ -2515,7 +2517,7 @@ organization_handler(delete, Name, Request, System_DB, Auth) :-
                               'api:status' : "api:success"}))).
 
 %%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
+:- tdb_http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2548,7 +2550,7 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
+:- tdb_http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2575,7 +2577,7 @@ reset_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
+:- tdb_http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2625,7 +2627,7 @@ test(optimize_system, [
 
 
 %%%%%%%%%%%%%%%%%%%% Remote handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
+:- tdb_http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2702,11 +2704,11 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(patch), cors_handler(Method, patch_handler, [add_payload(json_preserve)]),
+:- tdb_http_handler(api(patch), cors_handler(Method, patch_handler, [add_payload(json_preserve)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path), [add_payload(json_preserve)]),
+:- tdb_http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path), [add_payload(json_preserve)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2772,11 +2774,11 @@ patch_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(diff), cors_handler(Method, diff_handler(none{}), [add_payload(json_preserve)]),
+:- tdb_http_handler(api(diff), cors_handler(Method, diff_handler(none{}), [add_payload(json_preserve)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path), [add_payload(json_preserve)]),
+:- tdb_http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path), [add_payload(json_preserve)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2844,7 +2846,7 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Apply handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
+:- tdb_http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2904,10 +2906,10 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Roles handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(roles), cors_handler(Method, roles_handler),
+:- tdb_http_handler(api(roles), cors_handler(Method, roles_handler),
                 [method(Method),
                  methods([options,post,put,get])]).
-:- http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
+:- tdb_http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
                 [method(Method),
                  methods([options,delete,get])]).
 
@@ -2989,23 +2991,23 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Organizations handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(organizations), cors_handler(Method, organizations_handler),
+:- tdb_http_handler(api(organizations), cors_handler(Method, organizations_handler),
                 [method(Method),
                  methods([options,get])]).
-:- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
+:- tdb_http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  methods([options,post,delete,get])]).
-:- http_handler(api(organizations/Org/users/Rest),
+:- tdb_http_handler(api(organizations/Org/users/Rest),
                 cors_handler(Method, organizations_users_handler(Org,Rest)),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
 /*
-:- http_handler(api(organizations/Org/users/User),
+:- tdb_http_handler(api(organizations/Org/users/User),
                 cors_handler(Method, organizations_users_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
-:- http_handler(api(organizations/Org/users/User/databases),
+:- tdb_http_handler(api(organizations/Org/users/User/databases),
                 cors_handler(Method, organizations_users_databases_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
@@ -3083,10 +3085,10 @@ organizations_users_handler(get, Org, Path, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(users), cors_handler(Method, users_handler),
+:- tdb_http_handler(api(users), cors_handler(Method, users_handler),
                 [method(Method),
                  methods([options,post,put,get])]).
-:- http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
+:- tdb_http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
                 [method(Method),
                  methods([options,delete,get])]).
 
@@ -3170,7 +3172,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Capabilities handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
+:- tdb_http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
                 [method(Method),
                  methods([options,post])]).
 
@@ -3215,7 +3217,7 @@ capabilities_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%% Schema Migration %%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
+:- tdb_http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -3257,7 +3259,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
+:- tdb_http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),

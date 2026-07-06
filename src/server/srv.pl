@@ -1,34 +1,16 @@
-:- module(srv, []).
+:- module(srv, [
+              start_server/1
+          ]).
 
 :- use_module(core(plugins)).
 :- use_module(core(appserver_hooks)).
 
-% Load the server route implementations so they register their routes
-% and streams. These are now core parts of the server rather than plugins.
-:- use_module(server(routes/srv_document)).
-:- use_module(server(routes/srv_db)).
-
-:- multifile plugins:post_server_startup_hook/1.
-
-%% plugins:post_server_startup_hook(+Port) is det.
+%% start_server(+Port) is det.
 %
-%  Start the Rust server on a separate port after the main Prolog
-%  server has finished starting up. The port is read from
-%  `TERMINUSDB_WEBSERVER_PORT` and defaults to 6362. Set the variable to
-%  `false` to disable the Rust server.
-plugins:post_server_startup_hook(_Port) :-
-    (   getenv('TERMINUSDB_WEBSERVER_PORT', Env_Value)
-    ->  (   Env_Value = 'false'
-        ->  true
-        ;   atom_number(Env_Value, Port)
-        ->  normalize_and_start(Port)
-        ;   format(user_error, "Error: TERMINUSDB_WEBSERVER_PORT must be a number or 'false', got: ~w~n", [Env_Value]),
-            true
-        )
-    ;   normalize_and_start(6362)
-    ).
-
-normalize_and_start(Port) :-
+%  Start the Rust webserver on Port. Static paths are normalized first, then
+%  appserver_start is called. This is used by the main server when
+%  TERMINUSDB_SERVER_BACKEND=rust.
+start_server(Port) :-
     appserver_hooks:normalize_static_paths,
     '$appserver':appserver_start(Port).
 
