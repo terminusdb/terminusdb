@@ -2,6 +2,7 @@
                   build_swi_request/4,
                   build_swi_headers/2,
                   capture_http_output/3,
+                  capture_http_output_raw/3,
                   parse_http_response/2,
                   cgi_capture_hook/2
               ]).
@@ -24,17 +25,19 @@
 %% capture_http_output(+Request, :Goal, -Text) is det.
 %%
 %%  Run Goal with current_output redirected to a fresh CGI stream backed by a
-%%  memory file. The handler is expected to write a CGI-style response
+%%  UTF-8 memory file. The handler is expected to write a CGI-style response
 %%  (headers followed by a blank line and then the body). The captured text is
-%%  read back as raw octet bytes — no encoding conversion is performed, so
-%%  binary payloads (e.g. pack/octets) are preserved 8-bit clean.
+%%  read back as raw octet bytes and then decoded via utf8_bytes_to_string,
+%%  which round-trips both Unicode text and binary payloads correctly:
+%%  UTF-8 encoding writes bytes 128-255 as 2-byte sequences, and
+%%  utf8_bytes_to_string reverses this to recover the original byte values.
 capture_http_output(Request, Goal, Text) :-
     new_memory_file(MemFile),
     setup_call_cleanup(
-        open_memory_file(MemFile, write, OutStream, [type(binary), encoding(octet)]),
+        open_memory_file(MemFile, write, OutStream, [encoding(utf8)]),
         setup_call_cleanup(
             cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(Request)]),
-            (   set_stream(CGI, encoding(octet)),
+            (   set_stream(CGI, encoding(utf8)),
                 with_output_to(
                     CGI,
                     call(Goal)
@@ -46,9 +49,47 @@ capture_http_output(Request, Goal, Text) :-
     ),
     setup_call_cleanup(
         open_memory_file(MemFile, read, ReadStream, [type(binary), encoding(octet)]),
-        read_string(ReadStream, _, Text),
+        read_string(ReadStream, _, ByteString),
         close(ReadStream)
-    ).
+    ),
+    utf8_bytes_to_string(ByteString, Text).
+
+%% capture_http_output_raw(+Request, :Goal, -OctetBytes) is det.
+%%
+%%  Run Goal with current_output redirected to a fresh CGI stream backed by a
+%%  UTF-8 memory file. The handler writes a CGI-style response (headers
+%%  followed by a blank line and then the body). The captured output is read
+%%  back as raw octet bytes with NO encoding conversion — the bytes are
+%%  exactly what the CGI stream produced. These bytes can be sent directly
+%%  via appserver_stream_send_raw/2 for 8-bit clean pass-through to the
+%%  HTTP client.
+%%
+%%  UTF-8 encoding on the write side ensures that reply_json writes raw
+%%  UTF-8 multibyte sequences (no \uXXXX escapes) for non-ASCII characters.
+%%  Octet encoding on the read side preserves every byte value 0-255
+%%  unchanged, including binary payloads like gzip data.
+capture_http_output_raw(Request, Goal, OctetBytes) :-
+    new_memory_file(MemFile),
+    setup_call_cleanup(
+        open_memory_file(MemFile, write, OutStream, [encoding(utf8)]),
+        setup_call_cleanup(
+            cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(Request)]),
+            (   set_stream(CGI, encoding(utf8)),
+                with_output_to(
+                    CGI,
+                    call(Goal)
+                )
+            ),
+            close(CGI)
+        ),
+        close(OutStream)
+    ),
+    setup_call_cleanup(
+        open_memory_file(MemFile, read, ReadStream, [type(binary), encoding(octet)]),
+        read_string(ReadStream, _, OctetBytes),
+        close(ReadStream)
+    ),
+    free_memory_file(MemFile).
 
 %% cgi_capture_hook(+Event, +CGI) is det.
 %%
@@ -170,7 +211,11 @@ build_swi_header(Key-Value, Term) :-
 %% parse_http_response(+Text, -ResponseDict) is det.
 %%
 %%  Parse the SWI-Prolog HTTP response text produced by a CGI-style handler into
-%%  a response dict with status, body, and headers keys.
+%%  a response dict with status, body, and headers keys. The input Text is a
+%%  Prolog string produced by capture_http_output's utf8_bytes_to_string, so
+%%  Unicode characters are proper code points and binary bytes are code points
+%%  0-255. For binary content types the body is converted back to raw octet
+%%  bytes so it can be sent via appserver_stream_send_raw without corruption.
 parse_http_response(Text, Response) :-
     open_string(Text, Stream),
     read_header_lines(Stream, 200, Status, HeaderPairs),
@@ -181,11 +226,23 @@ parse_http_response(Text, Response) :-
     ),
     strip_hop_headers(HeaderPairs, CleanPairs),
     dict_create(Headers, _, CleanPairs),
-    Response = _{
-        status: Status,
-        body: Body,
-        headers: Headers
-    }.
+    (   is_binary_content_type(Headers)
+    ->  string_to_utf8_bytes(Body, OctetBody, _),
+        Response = _{status: Status, body: OctetBody, headers: Headers}
+    ;   Response = _{status: Status, body: Body, headers: Headers}
+    ).
+
+%% is_binary_content_type(+Headers) is semidet.
+is_binary_content_type(Headers) :-
+    (   get_dict('Content-Type', Headers, ContentType)
+    ;   get_dict('Content-type', Headers, ContentType)
+    ;   get_dict('content-type', Headers, ContentType)
+    ),
+    downcase_atom(ContentType, Lower),
+    (   sub_atom(Lower, _, _, _, 'application/octets')
+    ;   sub_atom(Lower, _, _, _, 'application/octet-stream')
+    ;   sub_atom(Lower, _, _, _, 'application/x-gzip')
+    ).
 
 read_header_lines(Stream, DefaultStatus, Status, Pairs) :-
     read_line_to_string(Stream, Line),
@@ -201,8 +258,7 @@ read_header_lines(Stream, DefaultStatus, Status, Pairs) :-
         read_header_lines(Stream, DefaultStatus, _, Pairs)
     ;   re_matchsub("^(?<key>[^:]+):\\s*(?<value>.*)$", Line, HeaderDict, [])
     ->  atom_string(KeyAtom, HeaderDict.key),
-        atom_string(ValueAtom, HeaderDict.value),
-        Pairs = [KeyAtom-ValueAtom | Rest],
+        Pairs = [KeyAtom-HeaderDict.value | Rest],
         read_header_lines(Stream, DefaultStatus, Status, Rest)
     ;   read_header_lines(Stream, DefaultStatus, Status, Pairs)
     ).
