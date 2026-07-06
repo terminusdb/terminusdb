@@ -10,6 +10,7 @@
 :- use_module(library(http/http_open)).
 :- use_module(library(json)).
 :- use_module(library(http/http_client)).
+:- use_module(library(http/http_header)).
 :- use_module(library(http/http_stream)).
 :- use_module(library(base64)).
 :- use_module(library(memfile)).
@@ -152,6 +153,16 @@ build_swi_header(Key-Value, Term) :-
     ->  Term = terminusdb_data_version(ValueAtom)
     ;   KeyLower == 'x-terminusdb-data-version'
     ->  Term = terminusdb_data_version(ValueAtom)
+    ;   KeyLower == 'x-operation-id'
+    ->  Term = x_operation_id(ValueAtom)
+    ;   KeyLower == 'x-request-id'
+    ->  Term = x_request_id(ValueAtom)
+    ;   KeyLower == 'traceparent'
+    ->  Term = traceparent(ValueAtom)
+    ;   KeyLower == accept
+    ->  (   catch(http_parse_header_value(accept, ValueAtom, Parsed), _, fail)
+        ->  Term = accept(Parsed)
+        ;   Term = header(accept, ValueAtom))
     ;   Term = header(KeyAtom, ValueAtom)
     ).
 
@@ -218,7 +229,17 @@ test(build_swi_headers) :-
     Dict = _{accept: "application/json", 'content-type': "application/json"},
     build_swi_headers(Dict, Headers),
     memberchk(content_type('application/json'), Headers),
-    memberchk(header(accept, 'application/json'), Headers).
+    memberchk(accept([media(application/json, [], 1.0, [])]), Headers).
+
+test(build_swi_headers_traceparent) :-
+    Dict = _{traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+    build_swi_headers(Dict, Headers),
+    memberchk(traceparent('00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'), Headers).
+
+test(build_swi_headers_accept) :-
+    Dict = _{accept: "text/turtle"},
+    build_swi_headers(Dict, Headers),
+    memberchk(accept([media(text/turtle, [], 1.0, [])]), Headers).
 
 test(strip_hop_headers) :-
     strip_hop_headers(['Content-Type'-"application/json", 'Transfer-Encoding'-chunked], Clean),

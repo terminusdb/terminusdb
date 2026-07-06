@@ -38,7 +38,7 @@ tdb_http_handler(Path, Handler, Options) :-
     register_rust_routes(Path, Options).
 
 register_rust_routes(Path, Options) :-
-    resolve_rust_path(Path, Options, RustPath),
+    resolve_rust_path(Path, Options, SubPathRust, RustPath),
     member(methods(Methods), Options),
     member(Method, Methods),
     (   option(tdb_stream, Options),
@@ -186,13 +186,25 @@ rust_handler_safe(Request, Response) :-
     build_swi_request(Request, SWIRequest, BodyStream, MemoryFile),
     setup_call_cleanup(
         true,
-        (   capture_http_output(SWIRequest, http_dispatch:http_dispatch(SWIRequest), Captured),
+        (   capture_http_output(SWIRequest,
+                               tdb_http_handler:http_dispatch_with_expansion(SWIRequest),
+                               Captured),
             parse_http_response(Captured, Response)
         ),
         (   catch(close(BodyStream), _, true),
             catch(free_memory_file(MemoryFile), _, true)
         )
     ).
+
+%% http_dispatch_with_expansion(+Request) is det.
+%%
+%%  Run the SWI-Prolog `http:request_expansion/2` hook (used by the native
+%%  backend to capture request logging/correlation IDs) and then dispatch
+%%  the expanded request. The expansion must run with the CGI stream as
+%%  current output, so this is called inside capture_http_output/3.
+http_dispatch_with_expansion(Request) :-
+    http:request_expansion(Request, Expanded),
+    http_dispatch:http_dispatch(Expanded).
 
 %% stream_handler(+RequestDict, +StreamId, -ResponseDict) is det.
 %%
@@ -222,7 +234,9 @@ stream_handler_safe(Request, StreamId, Response) :-
     build_swi_request(Request, SWIRequest, BodyStream, MemoryFile),
     setup_call_cleanup(
         true,
-        (   capture_http_output(SWIRequest, http_dispatch:http_dispatch(SWIRequest), Captured),
+        (   capture_http_output(SWIRequest,
+                               tdb_http_handler:http_dispatch_with_expansion(SWIRequest),
+                               Captured),
             parse_http_response(Captured, Response0),
             Response0 = _{status: Status, body: Body, headers: Headers},
             (   string(Body),
@@ -317,10 +331,11 @@ test(resolve_atom_no_prefix) :-
 test(resolve_atom_prefix) :-
     resolve_rust_path('/api/db', [prefix], '/api/db/*path').
 
-% Alias with a '.' subpath resolves to the base location only.
+% Alias with a '.' subpath resolves to the base location with a trailing slash,
+% matching the way SWI-Prolog registers root aliases.
 test(resolve_alias_with_dot, [setup(asserta(http:location(test_api, '/test', []))),
                               cleanup(retractall(http:location(test_api, _, _)))]) :-
-    resolve_rust_path(test_api('.'), [], '/test').
+    resolve_rust_path(test_api('.'), [], '/test/').
 
 % Alias with a ground subpath appends the subpath.
 test(resolve_alias_ground, [setup(asserta(http:location(test_api, '/test', []))),
@@ -347,5 +362,28 @@ test(resolve_alias_multiple_variables, [setup(asserta(http:location(test_api, '/
 test(resolve_alias_multiple_variables_prefix, [setup(asserta(http:location(test_api, '/test', []))),
                                                cleanup(retractall(http:location(test_api, _, _)))]) :-
     resolve_rust_path(test_api(db/_Org/_DB), [prefix], '/test/db/:seg1/*path').
+
+% register_rust_routes/2 asserts both a wildcard route and an exact route
+% for multi-segment prefix handlers so Axum matches empty tails.
+test(register_routes_includes_exact_for_multi_segment_prefix, [setup(asserta(http:location(test_api, '/test', []))),
+                                                             cleanup(retractall(http:location(test_api, _, _)))]) :-
+    retractall(appserver_hooks:appserver_route(_, _, _)),
+    register_rust_routes(test_api(organizations/_Name/users/_Rest), [methods([get]), prefix]),
+    findall(P, appserver_hooks:appserver_route(get, P, _), Paths),
+    sort(Paths, Sorted),
+    maplist(atom_string, Sorted, SortedStrings),
+    assertion(SortedStrings == ["/test/organizations/:seg1/users", "/test/organizations/:seg1/users/*path"]).
+
+% Single-segment prefix handlers get an exact route WITH a trailing slash for
+% the empty tail (e.g., /test/optimize/), so GET /test/optimize/ returns 405
+% instead of falling through to the parent 404.
+test(register_routes_includes_exact_slash_for_single_segment_prefix, [setup(asserta(http:location(test_api, '/test', []))),
+                                                                  cleanup(retractall(http:location(test_api, _, _)))]) :-
+    retractall(appserver_hooks:appserver_route(_, _, _)),
+    register_rust_routes(test_api(branch/_Path), [methods([get, post]), prefix]),
+    findall(P, appserver_hooks:appserver_route(get, P, _), Paths),
+    sort(Paths, Sorted),
+    maplist(atom_string, Sorted, SortedStrings),
+    assertion(SortedStrings == ["/test/branch/", "/test/branch/*path"]).
 
 :- end_tests(tdb_http_handler).
