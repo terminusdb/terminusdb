@@ -20,7 +20,7 @@
 :- multifile appserver_hooks:appserver_route/4.
 :- multifile appserver_hooks:appserver_stream/3.
 
-:- meta_predicate tdb_http_handler(+, 2, +).
+:- meta_predicate tdb_http_handler(+, :, +).
 
 %% tdb_http_handler(+Path, +Handler, +Options) is det.
 %%
