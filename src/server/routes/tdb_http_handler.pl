@@ -52,10 +52,30 @@ register_rust_routes(Path, Options) :-
     (   option(tdb_stream, Options),
         Method == get
     ->  assertz(appserver_hooks:appserver_stream(Method, RustPath, tdb_http_handler:stream_handler))
-    ;   assertz(appserver_hooks:appserver_route(Method, RustPath, tdb_http_handler:rust_handler))
+    ;   assertz(appserver_hooks:appserver_route(Method, RustPath, tdb_http_handler:rust_handler, Binary))
+    ),
+    % Axum's `*name` wildcard does not match an empty tail, so for prefix
+    % handlers also register the exact route for the empty tail case.
+    (   option(prefix, Options),
+        string_concat(_, "/*path", RustPath)   % ends with wildcard?
+    ->  segments_before_wildcard(SubPathRust, SegmentCount),
+        exact_empty_tail_path(RustPath, SegmentCount, ExactPath),
+        assertz(appserver_hooks:appserver_route(Method, ExactPath, tdb_http_handler:rust_handler, Binary))
+    ;   true
     ),
     fail.
 register_rust_routes(_, _).
+
+%% exact_empty_tail_path(+RustPath, +SegmentCount, -ExactPath) is det.
+%%
+%%  Derive the exact route for the empty-tail case by stripping the
+%%  trailing wildcard from RustPath. For a single-segment prefix the
+%%  trailing slash is kept so the empty tail falls through to the
+%%  parent 404; for all other cases the wildcard is stripped entirely.
+exact_empty_tail_path(RustPath, 1, ExactPath) :- !,
+    string_concat(ExactPath, "*path", RustPath).  % keep the /
+exact_empty_tail_path(RustPath, _, ExactPath) :-
+    string_concat(ExactPath, "/*path", RustPath).
 
 %% resolve_rust_path(+Path, +Options, -RustPath) is det.
 %%
@@ -67,16 +87,30 @@ register_rust_routes(_, _).
 %%  - Variables in non-prefix subpaths are converted to :name.
 %%  - The trailing variable in a prefix subpath is converted to *name.
 resolve_rust_path(Path, Options, RustPath) :-
+    resolve_rust_path(Path, Options, _, RustPath).
+
+resolve_rust_path(Path, Options, SubPathRust, RustPath) :-
     (   atom(Path)
-    ->  resolve_atom_path(Path, Options, RustPath)
+    ->  SubPathRust = "",
+        resolve_atom_path(Path, Options, RustPath)
     ;   Path =.. [Alias, SubPath]
     ->  http:location(Alias, Base, _),
         subpath_to_rust(SubPath, Options, SubPathRust),
         (   string_length(SubPathRust, 0)
-        ->  RustPath = Base
+        ->  % Root aliases like api(.) are registered at /api/ in SWI-Prolog.
+            format(atom(RustPath), '~w/', [Base])
         ;   format(atom(RustPath), '~w/~w', [Base, SubPathRust])
         )
-    ;   RustPath = Path
+    ;   SubPathRust = "",
+        RustPath = Path
+    ).
+
+%% Count path segments before the trailing `/*path` wildcard.
+segments_before_wildcard(SubPathRust, Count) :-
+    (   string_concat(BeforeWildcard, "/*path", SubPathRust)
+    ->  split_string(BeforeWildcard, "/", "", Parts),
+        length(Parts, Count)
+    ;   Count = 0
     ).
 
 resolve_atom_path('/', _Options, '/') :- !.
