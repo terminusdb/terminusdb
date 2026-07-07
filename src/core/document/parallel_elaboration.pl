@@ -619,7 +619,7 @@ test(simple_random_insert_correctness, [
                                 insert_document_expanded(TO, E, _))
                      ),
                      _),
-    findall(Id, get_document_uri(Context, false, Id), Ids),
+    findall(Id, get_document_uri(Desc, false, Id), Ids),
     length(Ids, 100).
 
 test(result_ordering, [
