@@ -400,7 +400,16 @@ pub fn init_dispatcher() {
             crate::log::drain_log_messages(&context, &log_rx);
             match msg {
                 DispatchMessage::Pipe(req) => {
-                    if let Err(e) = dispatch_pipe_to_prolog(&context, &req) {
+                    let dispatch_start = std::time::Instant::now();
+                    let dispatch_result = dispatch_pipe_to_prolog(&context, &req);
+                    let dispatch_elapsed = dispatch_start.elapsed();
+                    if dispatch_elapsed > std::time::Duration::from_secs(2) {
+                        crate::log::log_error(format!(
+                            "SLOW_DISPATCH: dispatch_pipe_to_prolog took {:?} for {}:{}",
+                            dispatch_elapsed, req.handler_module, req.handler_name
+                        ));
+                    }
+                    if let Err(e) = dispatch_result {
                         crate::log::log_error(format!(
                             "[terminusdb-webserver] dispatch failed for pipe to {}:{}: {}",
                             req.handler_module, req.handler_name, e
@@ -1693,6 +1702,11 @@ impl Stream for CgiPipeStream {
             Poll::Pending => Poll::Pending,
         }
     }
+}
+
+/// Check if a route pattern contains a catch-all wildcard (`*name`).
+fn is_catchall_pattern(pattern: &str) -> bool {
+    pattern.split('/').any(|seg| seg.starts_with('*'))
 }
 
 /// Extract parameters from a URI given a route pattern.
