@@ -530,7 +530,8 @@ test(json_string_byte_representation) :-
     Response = _{status: 200, body: "{\"name\":\"Kurt Gödel\"}", headers: _{'Content-Type': 'application/json'}},
     with_output_to(string(JsonString), json_write_dict(current_output, Response, [as(string)])),
     %% Convert to UTF-8 bytes and check that ö is encoded as 0xC3 0xB6
-    string_to_utf8_bytes(JsonString, Bytes, _),
+    string_to_utf8_bytes(JsonString, ByteString, _),
+    string_codes(ByteString, Bytes),
     %% Find the ö byte sequence (0xC3 0xB6) in the byte list
     assertion(memberchk(0xC3, Bytes)),
     assertion(memberchk(0xB6, Bytes)),
