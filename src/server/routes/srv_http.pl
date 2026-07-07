@@ -365,7 +365,8 @@ read_header_lines(Stream, DefaultStatus, Status, Pairs) :-
         read_header_lines(Stream, DefaultStatus, _, Pairs)
     ;   re_matchsub("^(?<key>[^:]+):\\s*(?<value>.*)$", Line, HeaderDict, [])
     ->  atom_string(KeyAtom, HeaderDict.key),
-        Pairs = [KeyAtom-HeaderDict.value | Rest],
+        atom_string(ValueAtom, HeaderDict.value),
+        Pairs = [KeyAtom-ValueAtom | Rest],
         read_header_lines(Stream, DefaultStatus, Status, Rest)
     ;   read_header_lines(Stream, DefaultStatus, Status, Pairs)
     ).
