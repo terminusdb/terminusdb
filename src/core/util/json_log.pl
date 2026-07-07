@@ -206,6 +206,46 @@ json_log(Severity, Loggable) :-
     generate_request_id(Request_Id),
     json_log(Operation_Id, Request_Id, Severity, Loggable).
 
+%% json_log_rust(+Severity, +Loggable, +Timestamp) is det.
+%
+%  Entry point for log messages originating from the Rust webserver. The
+%  Timestamp is a float of seconds since UNIX_EPOCH, captured at the moment
+%  the log entry was created in Rust (send time), not when the dispatcher
+%  thread drains the channel. This ensures accurate timestamps even when
+%  the dispatcher is busy processing a request and log messages queue up.
+json_log_rust(Severity, Loggable, Timestamp) :-
+    (   \+ log_enabled_for_level(Severity)
+    ->  true
+    ;   (   is_dict(Loggable)
+        ->  Dict = Loggable
+        ;   format(string(Message), "~w", [Loggable]),
+            Dict = _{message: Message}
+        ),
+        generate_operation_id(Operation_Id),
+        generate_request_id(Request_Id),
+        expand_json_log_with_timestamp(Dict, Operation_Id, Request_Id, Severity, Timestamp, Output),
+        json_log_raw(Output),
+        broadcast_log(Output)
+    ).
+
+%% expand_json_log_with_timestamp(+Dict, +Operation_Id, +Request_Id,
+%%                                +Severity, +Timestamp, -Output) is det.
+%
+%  Like expand_json_log/5 but uses a pre-captured timestamp (float seconds
+%  since epoch) instead of calling generate_time/1 at processing time.
+expand_json_log_with_timestamp(Dict, Operation_Id, Request_Id, Severity, Timestamp, Output) :-
+    stamp_date_time(Timestamp, Date, 0),
+    format_time(string(Time), '%FT%T.%f%:z', Date),
+    expand_operation_id(Operation_Id, Operation_Dict),
+    include([_-V]>>(nonvar(V)), [severity-Severity,
+                                 timestamp-Time,
+                                 requestId-Request_Id,
+                                 'logging.googleapis.com/operation'-Operation_Dict
+                                ],
+            Aux_Pairs),
+    dict_create(Aux, json, Aux_Pairs),
+    put_dict(Dict, Aux, Output).
+
 json_log_error(Operation_Id, Request_Id, Loggable) :-
     json_log(Operation_Id, Request_Id, 'ERROR', Loggable).
 json_log_error(Loggable) :-

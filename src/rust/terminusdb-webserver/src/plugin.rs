@@ -207,7 +207,11 @@ predicates! {
     /// Encoding is atom `octet` or `utf8`, and Stream is unified with
     /// the resulting Prolog stream.
     ///
-    /// Sfdopen takes ownership of the FD — Prolog's close/1 will close it.
+    /// The FD is duplicated with `dup()` before being passed to `Sfdopen`.
+    /// This means Prolog's `close/1` closes the duplicate, not the original
+    /// FD. The caller retains ownership of the original FD and can safely
+    /// close it with `appserver_close_fd/1` as a safety net without any
+    /// risk of double-close or FD recycling races.
     #[module("$appserver")]
     pub semidet fn appserver_open_fd_stream(
         _context,
@@ -235,7 +239,16 @@ predicates! {
             _ => return Err(PrologError::Failure),
         };
 
-        let stream = unsafe { Sfdopen(fd, c_mode.as_ptr() as *const c_char) };
+        // Duplicate the FD so that Prolog's close/1 closes the duplicate,
+        // not the original. This prevents FD recycling races where the
+        // safety-net appserver_close_fd/1 could close an unrelated socket
+        // that the kernel assigned the same FD number after Prolog's close.
+        let dup_fd = unsafe { libc::dup(fd) };
+        if dup_fd < 0 {
+            return Err(PrologError::Failure);
+        }
+
+        let stream = unsafe { Sfdopen(dup_fd, c_mode.as_ptr() as *const c_char) };
         if stream.is_null() {
             return Err(PrologError::Failure);
         }
@@ -257,10 +270,12 @@ predicates! {
 
     /// Close a raw file descriptor directly, bypassing the Prolog stream layer.
     ///
-    /// This is used as a safety net in pipe cleanup to guarantee that the FD
-    /// is closed even when `close/1` on the corresponding Prolog stream fails
-    /// (e.g. with a broken pipe error). `close/1` may skip closing the
-    /// underlying FD if flushing buffered data fails, which would leak the FD.
+    /// This is used as a safety net in pipe cleanup to guarantee that the
+    /// original FD is closed even when `close/1` on the corresponding Prolog
+    /// stream fails (e.g. with a broken pipe error). Because
+    /// `appserver_open_fd_stream` duplicates the FD before handing it to
+    /// Prolog, this call closes the original FD — it is never a double-close
+    /// of the same FD that Prolog's `close/1` already closed.
     ///
     /// Signature: `appserver_close_fd(+Fd)` where Fd is an integer.
     #[module("$appserver")]
@@ -268,9 +283,9 @@ predicates! {
         let fd: i64 = fd_term.get_ex()?;
         let fd = fd as i32;
         // unsafe justification: close() is safe to call on any valid FD.
-        // If the FD has already been closed, close() returns EBADF which
-        // is harmless. We ignore the return value because the purpose is
-        // purely to ensure the FD is not leaked.
+        // The FD is the original (not the dup), so this is the first and
+        // only close of this FD. We ignore the return value because the
+        // purpose is purely to ensure the FD is not leaked.
         unsafe {
             libc::close(fd);
         }
