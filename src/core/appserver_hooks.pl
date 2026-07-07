@@ -1,5 +1,6 @@
 :- module(appserver_hooks, [
               appserver_route/3,
+              appserver_route/4,
               appserver_static_path/3,
               appserver_stream/3
           ]).
@@ -7,8 +8,12 @@
 :- use_module(library(lists)).
 
 :- multifile appserver_route/3.
+:- dynamic appserver_route/3.
+:- multifile appserver_route/4.
+:- dynamic appserver_route/4.
 :- multifile appserver_static_path/3.
 :- multifile appserver_stream/3.
+:- dynamic appserver_stream/3.
 
 :- dynamic appserver_hooks:appserver_static_path_normalized/4.
 :- multifile appserver_hooks:appserver_static_path_normalized/4.
