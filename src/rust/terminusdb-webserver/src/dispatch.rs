@@ -58,11 +58,6 @@ pub struct PluginStream {
     pub handler: String,
 }
 
-/// Return true if the Axum route pattern contains a catch-all wildcard segment.
-fn is_catchall_pattern(pattern: &str) -> bool {
-    pattern.split('/').any(|seg| seg.starts_with('*'))
-}
-
 /// Convert Prolog-style route patterns to Axum 0.8 syntax.
 ///
 /// Axum 0.8 changed:
@@ -75,8 +70,8 @@ fn to_axum_pattern(path: &str) -> String {
         .map(|seg| {
             if seg.starts_with('*') {
                 format!("{{{}}}", seg)
-            } else if seg.starts_with(':') {
-                format!("{{{}}}", &seg[1..])
+            } else if let Some(stripped) = seg.strip_prefix(':') {
+                format!("{{{}}}", stripped)
             } else {
                 seg.to_string()
             }
@@ -750,8 +745,10 @@ pub fn collect_streams(context: &Context<impl QueryableContextType>) -> PrologRe
 /// requests are distributed round-robin among the registered handlers, so a
 /// plugin can register several workers for the same endpoint without needing
 /// its own load balancing.
+type RouteGroup = (bool, Vec<(String, String)>);
+
 pub fn build_plugin_router(routes: Vec<PluginRoute>) -> Router {
-    let mut groups: HashMap<(String, String), (bool, Vec<(String, String)>)> = HashMap::new();
+    let mut groups: HashMap<(String, String), RouteGroup> = HashMap::new();
     for route in routes {
         let entry = groups
             .entry((route.method, route.path))
@@ -1432,7 +1429,7 @@ async fn dispatch_request_via_pipe(
             // Strip Content-Encoding: the body has already been decompressed
             // by the Rust server. If we leave it in, the Prolog handler will
             // try to decompress the already-decompressed data.
-            if k == &header::CONTENT_ENCODING {
+            if k == header::CONTENT_ENCODING {
                 return None;
             }
             let name = k.as_str().to_string();
@@ -1647,12 +1644,7 @@ fn find_header_separator(buf: &[u8]) -> Option<usize> {
             return Some(i);
         }
     }
-    for i in 0..buf.len().saturating_sub(3) {
-        if &buf[i..i + 4] == b"\r\n\r\n" {
-            return Some(i);
-        }
-    }
-    None
+    (0..buf.len().saturating_sub(3)).find(|&i| &buf[i..i + 4] == b"\r\n\r\n")
 }
 
 /// Stream that yields bytes from the pipe receiver, prefixed by the bytes that
@@ -1807,7 +1799,7 @@ async fn dispatch_stream_request(
             // Strip Content-Encoding: the body has already been decompressed
             // by the Rust server. If we leave it in, the Prolog handler will
             // try to decompress the already-decompressed data.
-            if k == &header::CONTENT_ENCODING {
+            if k == header::CONTENT_ENCODING {
                 return None;
             }
             let name = k.as_str().to_string();

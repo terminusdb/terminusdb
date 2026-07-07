@@ -1,7 +1,3 @@
-use terminusdb_community;
-use terminusdb_store_prolog;
-use terminusdb_webserver;
-
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
