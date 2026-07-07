@@ -3,7 +3,9 @@
               typecast_switch/5,
               string_decimal_to_rational/2,
               rational_to_decimal_string/3,
-              decimal_precision/1
+              decimal_precision/1,
+              normalise_interval_start/2,
+              normalise_interval_end/2
           ]).
 
 :- discontiguous typecast_switch/5.
@@ -390,6 +392,7 @@ interval_to_string_as(date_time_interval(_C1,C2,Dur,_Flag), duration_end, S) :-
 
 %% Normalise a start component: dates become date_time at 00:00:00 UTC (no bump).
 normalise_interval_start(date(Y,M,D,_Offset), date_time(Y,M,D,0,0,0,0)) :- !.
+normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS), date_time(Y,Mo,D,H,M,S,NS)) :- !.
 normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
 normalise_interval_start(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
@@ -401,6 +404,7 @@ normalise_interval_end(date(Y,M,D,_Offset), Norm) :- !,
     NextStamp is Stamp + 86400,
     stamp_date_time(NextStamp, date(NY,NM,ND,_H,_Mi,_S,_Off,'UTC',_DST), 'UTC'),
     Norm = date_time(NY,NM,ND,0,0,0,0).
+normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS), date_time(Y,Mo,D,H,M,S,NS)) :- !.
 normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
 normalise_interval_end(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
