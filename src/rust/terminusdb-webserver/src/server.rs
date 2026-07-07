@@ -88,6 +88,19 @@ pub fn start_with_routes(
             }
         };
 
+        // Tokio requires the socket to be in non-blocking mode before
+        // TcpListener::from_std. Without this, accept() can block a runtime
+        // worker thread, causing intermittent stalls where incoming
+        // connections are not serviced until the next connection arrives.
+        if let Err(e) = listener.set_nonblocking(true) {
+            tx.send(Err(format!(
+                "failed to set non-blocking on listener for port {}: {}",
+                port, e
+            )))
+            .ok();
+            return;
+        }
+
         let runtime = match tokio::runtime::Runtime::new() {
             Ok(runtime) => runtime,
             Err(e) => {
