@@ -34,6 +34,7 @@
 
 :- use_module(core(account)).
 :- use_module(core(triple)).
+:- use_module(core(triple/casting), [normalise_interval_start/2, normalise_interval_end/2]).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(api), [call_catch_document_mutation/2]).
@@ -1341,11 +1342,13 @@ woql_interval(Start, End, Interval) :-
     ;   nonvar(Start), nonvar(End)
     ->  Start = D1^^_,
         End = D2^^_,
-        interval_component_stamp(D1, S1),
-        interval_component_stamp(D2, S2),
+        normalise_interval_start(D1, N1),
+        normalise_interval_end(D2, N2),
+        interval_component_stamp(N1, S1),
+        interval_component_stamp(N2, S2),
         DiffSecs is S2 - S1,
         seconds_to_duration(DiffSecs, Dur),
-        Interval = date_time_interval(D1,D2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        Interval = date_time_interval(N1,N2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval), _))
     ).
 
@@ -1410,10 +1413,11 @@ woql_interval_start_duration(Start, Duration, Interval) :-
         interval_component_typed(C1, Start),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Start), nonvar(Duration)
-    ->  Start = C1^^_,
+    ->  Start = D1^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        add_duration_to_component(C1, Dur, C2),
-        Interval = date_time_interval(C1,C2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        normalise_interval_start(D1, N1),
+        add_duration_to_component(N1, Dur, N2),
+        Interval = date_time_interval(N1,N2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_start_duration), _))
     ).
 
@@ -1431,10 +1435,15 @@ woql_interval_duration_end(Duration, End, Interval) :-
         interval_component_typed(C2, End),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Duration), nonvar(End)
-    ->  End = C2^^_,
+    ->  End = D2^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        subtract_duration_from_component(C2, Dur, C1),
-        Interval = date_time_interval(C1,C2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        % Compute start from the unbumped end so that "P3M/2025-03-31"
+        % yields a start of 2024-12-31 (3 months before Mar 31), then
+        % bump the end for the exclusive endpoint.
+        normalise_interval_start(D2, D2N),
+        subtract_duration_from_component(D2N, Dur, N1),
+        normalise_interval_end(D2, N2),
+        Interval = date_time_interval(N1,N2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_duration_end), _))
     ).
 
