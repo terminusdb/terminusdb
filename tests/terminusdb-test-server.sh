@@ -38,9 +38,9 @@ function start_server() {
     fi
 
     # The server now uses a single port. The backend is selected by
-    # TERMINUSDB_SERVER_BACKEND (default: swipl).
+    # TERMINUSDB_SERVER_BACKEND (default: rust).
     local SERVER_PORT=${TERMINUSDB_SERVER_PORT:-6363}
-    local SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-swipl}
+    local SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-rust}
     if lsof -Pi :$SERVER_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
         echo "ERROR: Port $SERVER_PORT is already in use by another process:"
         lsof -Pi :$SERVER_PORT -sTCP:LISTEN
@@ -103,7 +103,7 @@ function start_server() {
     # Single-port server: TERMINUSDB_SERVER_BACKEND selects the implementation
     # (swipl or rust). TERMINUSDB_SERVER_PORT sets the listen port (default 6363).
     export TERMINUSDB_SERVER_PORT=${TERMINUSDB_SERVER_PORT:-6363}
-    export TERMINUSDB_SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-swipl}
+    export TERMINUSDB_SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-rust}
 
     # Start the server in a new session so it survives the script exiting.
     python3 -c "
