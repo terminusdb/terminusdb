@@ -428,7 +428,7 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
                 var(SubType)
             ->  cors_reply_json(Request, String)
             ;   memberchk(media(text/turtle,_,_,_), Accepted)
-            ->  format('Content-type: text/turtle~n', []),
+            ->  format('Content-type: text/turtle; charset=UTF-8~n', []),
                 format('Status: 200 OK~n~n', []),
                 format(String, [])
             ;   cors_reply_json(Request, String)))).
