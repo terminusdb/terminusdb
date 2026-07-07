@@ -91,6 +91,38 @@ terminus_server(Argv,Wait) :-
         set_memory_mode
     ;   true),
     start_elaboration_workers(Workers),
+    server_backend(Backend),
+    start_server_backend(Backend, Port, Workers),
+
+    (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
+        (   Backend == swipl
+        ->  http_delete_handler(id(busy_loading))
+        ;   true
+        ),
+        welcome_banner(Server,Argv),
+        run_post_server_startup_hooks(Backend, Port),
+        (   Wait = true
+        ->  wait_for_backend(Backend, Port)
+        ;   true
+        ),
+        stop_elaboration_workers,
+        '$change_window':change_window_assert_empty
+    ).
+
+%% server_backend(-Backend) is det.
+%%
+%  Read TERMINUSDB_SERVER_BACKEND (default `swipl`).
+server_backend(Backend) :-
+    (   getenv('TERMINUSDB_SERVER_BACKEND', BackendEnv)
+    ->  atom_string(BackendEnv, BackendAtom),
+        downcase_atom(BackendAtom, Backend)
+    ;   Backend = swipl
+    ).
+
+%% start_server_backend(+Backend, +Port, +Workers) is det.
+%%
+%  Start the selected HTTP server backend on Port.
+start_server_backend(swipl, Port, Workers) :-
     (   server_enabled
     ->  HTTPOptions = [port(Port), workers(Workers), silent(true)],
         foreach(pre_server_startup_hook(Port),true),
@@ -100,34 +132,45 @@ terminus_server(Argv,Wait) :-
                   writeq(E),
                   format(user_error, "Error: Port ~d is already in use.", [Port]),
                   halt(98) % EADDRINUSE
-              ))
+              )),
+        http_handler(root(.), busy_loading,
+                     [ priority(1000),
+                       hide_children(true),
+                       id(busy_loading),
+                       time_limit(infinite),
+                       prefix
+                     ])
     ;   format(user_error, "Main SWI-Prolog HTTP server disabled (TERMINUSDB_SERVER_PORT=false).~n", []),
         true
-    ),
-    http_handler(root(.), busy_loading,
-                 [ priority(1000),
-                   hide_children(true),
-                   id(busy_loading),
-                   time_limit(infinite),
-                   prefix
-                 ]),
-
-    (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
-        http_delete_handler(id(busy_loading)),
-        welcome_banner(Server,Argv),
-        foreach(post_server_startup_hook(Port),true),
-        (   Wait = true
-        ->  (   server_enabled
-            ->  http_current_worker(Port,ThreadID),
-                thread_join(ThreadID, _Status)
-            ;   % No main HTTP server to wait on; block forever so the Rust appserver stays alive
-                thread_get_message(_)
-            )
-        ;   true
-        ),
-        stop_elaboration_workers,
-        '$change_window':change_window_assert_empty
     ).
+start_server_backend(rust, Port, _Workers) :-
+    (   server_enabled
+    ->  srv:start_server(Port)
+    ;   format(user_error, "Main Rust HTTP server disabled (TERMINUSDB_SERVER_PORT=false).~n", []),
+        true
+    ).
+
+%% run_post_server_startup_hooks(+Backend, +Port) is det.
+%%
+%  Run the SWI-Prolog post-startup hooks only when the SWI-Prolog backend is
+%  active. The Rust backend performs its own startup in start_server_backend.
+run_post_server_startup_hooks(swipl, Port) :-
+    foreach(post_server_startup_hook(Port), true).
+run_post_server_startup_hooks(rust, _Port) :-
+    true.
+
+%% wait_for_backend(+Backend, +Port) is det.
+%%
+%  Block until the selected backend terminates. For the Rust backend there is no
+%  worker thread to join, so we block on a message queue.
+wait_for_backend(swipl, Port) :-
+    (   server_enabled
+    ->  http_current_worker(Port,ThreadID),
+        thread_join(ThreadID, _Status)
+    ;   thread_get_message(_)
+    ).
+wait_for_backend(rust, _Port) :-
+    thread_get_message(_).
 
 
 busy_loading(_) :-
