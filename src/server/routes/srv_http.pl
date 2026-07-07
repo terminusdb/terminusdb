@@ -18,6 +18,8 @@
 :- use_module(library(memfile)).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
+:- use_module(library(readutil)).
+:- use_module(library(pcre)).
 :- use_module(library(plunit)).
 :- use_module(core(util)).
 :- use_module(core(util/test_utils)).

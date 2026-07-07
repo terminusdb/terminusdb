@@ -15,6 +15,7 @@
 
 :- use_module(library(main)).
 :- use_module(library(settings)).
+:- use_module(library(filesex)).
 :- initialization(main).
 
 initialise_signals :-

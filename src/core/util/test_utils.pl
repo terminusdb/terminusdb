@@ -81,7 +81,7 @@
 
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).

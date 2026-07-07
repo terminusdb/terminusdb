@@ -10,7 +10,10 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(strings)).
+:- use_module(library(memfile)).
+:- use_module(library(readutil)).
 :- use_module(core(appserver_hooks)).
+:- use_module(core(util)).
 :- use_module(server(routes/srv_http)).
 
 :- multifile appserver_hooks:appserver_route/3.

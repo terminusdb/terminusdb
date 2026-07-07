@@ -16,7 +16,7 @@ start_server(Port) :-
 
 
 :- use_module(library(http/http_open)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(core(util/test_utils)).
 
 :- begin_tests(srv, [concurrent(false)]).

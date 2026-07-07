@@ -11,7 +11,7 @@
  *
  * The Terminus DB API interface.
  *
- * A RESTful endpoint inventory for weilding the full capabilities of the
+ * A RESTful endpoint inventory for wielding the full capabilities of the
  * terminusDB.
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -44,6 +44,7 @@
 :- use_module(library(yall)).
 :- use_module(library(zlib)).
 :- use_module(library(uuid)).
+:- use_module(library(memfile)).
 
 % unit tests
 :- use_module(library(plunit)).
@@ -61,8 +62,8 @@
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_header)).
 :- use_module(library(http/http_cors)).
-:- use_module(library(http/json)).
-:- use_module(library(http/json_convert)).
+:- use_module(library(json)).
+:- use_module(library(json_convert)).
 :- use_module(library(http/http_stream)).
 :- use_module(library(url)).
 :- use_module(library(uri)).

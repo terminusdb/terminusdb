@@ -8,12 +8,14 @@
 :- use_module(library(http/http_header)).
 :- use_module(library(http/http_path)).
 :- use_module(library(http/http_stream)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(option)).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(strings)).
 :- use_module(library(memfile)).
+:- use_module(library(readutil)).
+:- use_module(library(unix)).
 :- use_module(library(uri)).
 :- use_module(core(appserver_hooks)).
 :- use_module(core(util)).
