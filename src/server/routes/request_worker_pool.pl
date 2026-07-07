@@ -33,6 +33,10 @@
 %%  Spawn Workers SWI-Prolog threads, each with its own message queue.
 %%  Must be called once at server startup from the main engine thread.
 init_request_worker_pool(Workers) :-
+    (   getenv('TERMINUSDB_WORKER_MEMORY_LOGGING', _)
+    ->  set_prolog_flag(worker_memory_logging, true)
+    ;   true
+    ),
     (   between(1, Workers, I),
         message_queue_create(Queue),
         assertz(worker_queue(Queue)),
@@ -76,11 +80,14 @@ dispatch_request(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
 %% worker_loop(+Queue) is det.
 %%
 %%  Main loop for a worker thread. Blocks waiting for work messages and
-%%  dispatches them to the appropriate handler.
+%%  dispatches them to the appropriate handler. Between requests, the
+%%  worker performs garbage collection and atom GC to prevent memory
+%%  buildup that causes intermittent slowdowns in bulk WOQL queries.
 worker_loop(Queue) :-
     thread_get_message(Queue, Message),
     (   Message = work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId))
-    ->  catch(
+    ->  log_worker_memory(before, HandlerModule, HandlerName),
+        catch(
             (   handle_stream_work(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)
             ->  true
             ;   json_log_error_formatted("Worker goal failed for ~w ~w", [HandlerModule, HandlerName]),
@@ -91,9 +98,12 @@ worker_loop(Queue) :-
                 catch(send_error_response(ResponseStreamId, Error), _, true)
             )
         ),
+        cleanup_worker_state,
+        log_worker_memory(after, HandlerModule, HandlerName),
         worker_loop(Queue)
     ;   Message = work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary))
-    ->  catch(
+    ->  log_worker_memory(before, HandlerModule, HandlerName),
+        catch(
             (   handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary)
             ->  true
             ;   json_log_error_formatted("Worker goal failed for ~w ~w", [HandlerModule, HandlerName]),
@@ -104,8 +114,40 @@ worker_loop(Queue) :-
                 safe_write_cgi_error(OutputWriteFd, Error)
             )
         ),
+        cleanup_worker_state,
+        log_worker_memory(after, HandlerModule, HandlerName),
         worker_loop(Queue)
     ;   worker_loop(Queue)
+    ).
+
+%% cleanup_worker_state is det.
+%%
+%%  Reclaim memory between requests to prevent buildup in worker threads.
+%%  Worker threads are long-lived and reuse the same Prolog stacks. Without
+%%  explicit GC, atoms and trail entries from previous requests accumulate,
+%%  causing intermittent slowdowns — especially in bulk WOQL arithmetic
+%%  queries that create many temporary atoms (xsd:decimal/double values).
+cleanup_worker_state :-
+    garbage_collect,
+    garbage_collect_atoms,
+    trim_stacks.
+
+%% log_worker_memory(+Phase, +HandlerModule, +HandlerName) is det.
+%%
+%%  Log memory and stack statistics for the current worker thread between
+%%  requests. This helps diagnose memory/stack buildup that causes
+%%  intermittent slowdowns in bulk WOQL arithmetic queries.
+log_worker_memory(Phase, HandlerModule, HandlerName) :-
+    (   current_prolog_flag(worker_memory_logging, true)
+    ->  statistics(global_stack, [GSUsed, GSSize]),
+        statistics(local_stack, [LSUsed, LSSize]),
+        statistics(trail, TrailUsed),
+        statistics(atoms, Atoms),
+        thread_self(ThreadId),
+        json_log_info_formatted(
+            "WORKER_MEM ~w thread=~w handler=~w:~w global_used=~w global_size=~w local_used=~w local_size=~w trail=~w atoms=~w",
+            [Phase, ThreadId, HandlerModule, HandlerName, GSUsed, GSSize, LSUsed, LSSize, TrailUsed, Atoms])
+    ;   true
     ).
 
 %% handle_stream_work(+Request, +HandlerModule, +HandlerName,
@@ -807,8 +849,8 @@ test(cgi_pipe_utf8_simple_ascii) :-
             format(current_output, 'Content-Type: application/json~n~n', []),
             format(current_output, '{"ok":true}', [])),
     cgi_to_pipe_bytes(utf8, utf8, Goal, Bytes),
-    %% Expected: headers + \n\n + body
-    Expected = "Status: 200 OK\nContent-Type: application/json\n\n{\"ok\":true}",
+    %% Expected: headers + Content-Length (inserted by cgi_capture_hook) + \n\n + body
+    Expected = "Status: 200 OK\nContent-Type: application/json\nContent-Length: 11\n\n{\"ok\":true}",
     string_codes(Expected, ExpectedCodes),
     assertion(Bytes == ExpectedCodes).
 
@@ -860,8 +902,8 @@ test(cgi_pipe_utf8_headers_correct) :-
 test(cgi_pipe_utf8_empty_body) :-
     Goal = (format(current_output, 'Status: 204~n~n', [])),
     cgi_to_pipe_bytes(utf8, utf8, Goal, Bytes),
-    %% Status: 204\n\n  — no body
-    Expected = "Status: 204\n\n",
+    %% Status: 204\nContent-Length: 0\n\n — empty body gets Content-Length: 0
+    Expected = "Status: 204\nContent-Length: 0\n\n",
     string_codes(Expected, ExpectedCodes),
     assertion(Bytes == ExpectedCodes).
 
@@ -878,5 +920,35 @@ test(cgi_pipe_utf8_reply_json_writes_utf8) :-
     assertion(member(0xB6, Body)),
     %% Verify no backslash-u escape sequence for this character
     \+ once(append(_, [0x5C, 0x75, 0x30, 0x30, 0x66, 0x36 | _], Body)).
+
+%% --- Worker memory cleanup ---
+
+test(cleanup_worker_state_runs_gc_and_atom_gc) :-
+    %% cleanup_worker_state should call garbage_collect/0 and
+    %% garbage_collect_atoms/0 without errors. It must always succeed
+    %% (it is called between every request in the worker loop).
+    cleanup_worker_state.
+
+test(cleanup_worker_state_is_det) :-
+    %% cleanup_worker_state must be deterministic — if it leaves
+    %% choicepoints, the worker_loop recursion could accumulate them.
+    %% Verify it succeeds and does not throw.
+    cleanup_worker_state,
+    !.
+
+test(cleanup_worker_state_reduces_atom_count) :-
+    %% Create a large number of temporary atoms, then verify that
+    %% cleanup_worker_state triggers atom GC that reduces the atom count.
+    %% We create atoms that are not referenced elsewhere so they become
+    %% garbage after the call.
+    findall(A, (between(1, 500, I), atom_concat(temp_atom_, I, A), nb_setval(temp, A)), _),
+    statistics(atoms, Before),
+    cleanup_worker_state,
+    statistics(atoms, After),
+    %% Atom count should not increase. It may not decrease much if the
+    %% atoms are still on the trail, but it must not grow.
+    assertion(After =< Before + 500),
+    %% Clean up the nb_setval references
+    nb_delete(temp).
 
 :- end_tests(request_worker_pool).

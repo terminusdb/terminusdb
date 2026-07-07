@@ -128,15 +128,55 @@ capture_http_output_raw(Request, Goal, OctetBytes) :-
 
 %% cgi_capture_hook(+Event, +CGI) is det.
 %%
-%%  Minimal CGI hook for the capture memory file. The header text collected by
-%%  the CGI stream is written to the underlying memory file followed by a blank
-%%  line; the body is written by the CGI stream itself.
+%%  CGI hook for the capture memory file. The header text collected by
+%%  the CGI stream is written to the underlying memory file, with
+%%  Content-Length inserted from the CGI stream's content_length property
+%%  when the handler has not already set Transfer-Encoding: chunked or
+%%  Content-Length. This matches the SWI-Prolog built-in HTTP server
+%%  behavior, enabling HTTP keep-alive for regular JSON responses while
+%%  preserving chunked transfer encoding for streaming responses (NDJSON,
+%%  WOQL streaming).
 cgi_capture_hook(send_header, CGI) :-
-    cgi_property(CGI, header_codes(HeadText)),
+    cgi_property(CGI, header_codes(HeadCodes)),
     cgi_property(CGI, client(Out)),
-    format(Out, '~s', [HeadText]),
+    %% header_codes may return a list of codes or a string depending on
+    %% the SWI-Prolog version. Normalize to a string.
+    text_to_string(HeadCodes, HeadText),
+    (   \+ header_has_field(HeadText, 'transfer-encoding'),
+        \+ header_has_field(HeadText, 'content-length'),
+        cgi_property(CGI, content_length(Len))
+    ->  insert_content_length(HeadText, Len, FinalText),
+        format(Out, '~s', [FinalText])
+    ;   format(Out, '~s', [HeadText])
+    ),
     !.
 cgi_capture_hook(_, _).
+
+%% header_has_field(+HeadText, +FieldName) is semidet.
+%%
+%%  True if HeadText contains a header line whose name matches FieldName
+%%  (case-insensitive). FieldName is a lowercase atom. HeadText is a string.
+header_has_field(HeadText, FieldName) :-
+    string_lower(HeadText, Lower),
+    atom_string(FieldName, FieldStr),
+    string_concat(FieldStr, ":", Prefix),
+    sub_string(Lower, _, _, _, Prefix).
+
+%% insert_content_length(+HeadText, +Len, -FinalText) is det.
+%%
+%%  Insert a Content-Length header line before the blank line that
+%%  separates headers from body. HeadText is a string ending with \n\n
+%%  (or \r\n\r\n). The \n\n separator is: one \n terminates the last
+%%  header line, and the second \n is the blank line. So Before does
+%%  NOT include the last header's line terminator — we must add it
+%%  back before inserting Content-Length.
+insert_content_length(HeadText, Len, FinalText) :-
+    (   string_concat(Before, "\r\n\r\n", HeadText)
+    ->  format(string(FinalText), '~s\r\nContent-Length: ~w\r\n\r\n', [Before, Len])
+    ;   string_concat(Before, "\n\n", HeadText)
+    ->  format(string(FinalText), '~s\nContent-Length: ~w\n\n', [Before, Len])
+    ;   format(string(FinalText), '~sContent-Length: ~w\n\n', [HeadText, Len])
+    ).
 
 %% build_swi_request(+RequestDict, -SWIRequest, -BodyStream, -MemoryFile) is det.
 %%
@@ -207,8 +247,22 @@ write_bytes(Stream, [Byte | Rest]) :-
     write_bytes(Stream, Rest).
 
 build_swi_headers(HeadersDict, HeaderTerms) :-
-    dict_pairs(HeadersDict, _, Pairs),
+    dict_pairs(HeadersDict, _, Pairs0),
+    exclude(is_skip_header, Pairs0, Pairs),
     maplist(build_swi_header, Pairs, HeaderTerms).
+
+%% is_skip_header(+Pair) is semidet.
+%%
+%%  True for headers that are already provided separately in the SWI
+%%  request list and must not be duplicated as header terms. The body
+%%  length is added as content_length(BodyLen) by build_swi_request/4
+%%  and build_swi_request_from_dict/4, so a Content-Length header would
+%%  create a duplicate key that causes dict_create to fail.
+%%  Pair is a Key-Value pair from dict_pairs/3.
+is_skip_header(Key-_) :-
+    atom_string(KeyAtom, Key),
+    downcase_atom(KeyAtom, KeyLower),
+    KeyLower == 'content-length'.
 
 build_swi_header(Key-Value, Term) :-
     atom_string(KeyAtom, Key),
@@ -239,7 +293,21 @@ build_swi_header(Key-Value, Term) :-
     ;   KeyLower == accept
     ->  (   catch(http_parse_header_value(accept, ValueAtom, Parsed), _, fail)
         ->  Term = accept(Parsed)
-        ;   Term = header(accept, ValueAtom))
+        ;   Term = accept(ValueAtom))
+    ;   KeyLower == 'content-length'
+    ->  Term = content_length(ValueAtom)
+    ;   KeyLower == 'content-encoding'
+    ->  Term = content_encoding(ValueAtom)
+    ;   KeyLower == 'accept-encoding'
+    ->  Term = accept_encoding(ValueAtom)
+    ;   KeyLower == 'accept-language'
+    ->  Term = accept_language(ValueAtom)
+    ;   KeyLower == 'x-forwarded-for'
+    ->  Term = x_forwarded_for(ValueAtom)
+    ;   KeyLower == 'x-forwarded-proto'
+    ->  Term = x_forwarded_proto(ValueAtom)
+    ;   KeyLower == 'x-forwarded-host'
+    ->  Term = x_forwarded_host(ValueAtom)
     ;   Term = header(KeyAtom, ValueAtom)
     ).
 
@@ -458,13 +526,87 @@ test(json_string_byte_representation) :-
     with_output_to(string(JsonString), json_write_dict(current_output, Response, [as(string)])),
     %% Convert to UTF-8 bytes and check that ö is encoded as 0xC3 0xB6
     string_to_utf8_bytes(JsonString, Bytes, _),
-    format(user_error, 'DEBUG JsonString bytes around G: ~w~n', [Bytes]),
     %% Find the ö byte sequence (0xC3 0xB6) in the byte list
     assertion(memberchk(0xC3, Bytes)),
     assertion(memberchk(0xB6, Bytes)),
     %% Also check via string_codes what Prolog sees
     string_codes(JsonString, Codes),
-    format(user_error, 'DEBUG JsonString codes: ~w~n', [Codes]),
     assertion(memberchk(246, Codes)).
+
+%% --- Content-Length header handling in cgi_capture_hook ---
+
+test(header_has_field_case_insensitive) :-
+    header_has_field("Status: 200\nContent-Type: application/json\n\n", 'content-type'),
+    header_has_field("Status: 200\nCONTENT-TYPE: application/json\n\n", 'content-type'),
+    \+ header_has_field("Status: 200\nContent-Type: application/json\n\n", 'transfer-encoding').
+
+test(header_has_field_transfer_encoding) :-
+    header_has_field("Status: 200\nTransfer-Encoding: chunked\n\n", 'transfer-encoding'),
+    \+ header_has_field("Status: 200\nContent-Type: application/json\n\n", 'transfer-encoding').
+
+test(insert_content_length_before_blank_line) :-
+    HeadText = "Status: 200\nContent-Type: application/json\n\n",
+    insert_content_length(HeadText, 42, FinalText),
+    sub_string(FinalText, _, _, _, "Content-Length: 42\n\n"),
+    %% Content-Length must be on its own line, not concatenated to Content-Type
+    \+ sub_string(FinalText, _, _, _, "application/jsonContent-Length"),
+    %% The original headers must still be present
+    sub_string(FinalText, _, _, _, "Content-Type: application/json\n").
+
+test(insert_content_length_with_crlf_line_endings) :-
+    HeadText = "Status: 200\r\nContent-Type: application/json\r\n\r\n",
+    insert_content_length(HeadText, 42, FinalText),
+    sub_string(FinalText, _, _, _, "Content-Length: 42\r\n\r\n"),
+    \+ sub_string(FinalText, _, _, _, "application/jsonContent-Length").
+
+test(cgi_capture_hook_inserts_content_length_for_reply_json) :-
+    %% reply_json produces a CGI stream with content_length set.
+    %% The hook should insert Content-Length into the header output.
+    JsonGoal = (reply_json(_{ok: true}, [status(200)])),
+    capture_http_output([], JsonGoal, Text),
+    parse_http_response(Text, Response),
+    get_dict(headers, Response, Headers),
+    get_dict('Content-Length', Headers, _),
+    get_dict(body, Response, Body),
+    assertion(string(Body)).
+
+test(cgi_capture_hook_inserts_content_length_zero_for_empty_body) :-
+    %% A handler that writes only headers (no body) should get
+    %% Content-Length: 0 inserted by the hook.
+    EmptyGoal = (format(current_output, 'Status: 200 OK~n', []),
+                 format(current_output, 'Content-Type: application/octet-stream~n~n', [])),
+    capture_http_output([], EmptyGoal, Text),
+    parse_http_response(Text, Response),
+    get_dict(headers, Response, Headers),
+    get_dict('Content-Length', Headers, "0"),
+    get_dict(body, Response, Body),
+    assertion(Body == "").
+
+test(cgi_capture_hook_no_content_length_when_transfer_encoding_present) :-
+    %% When the handler sets Transfer-Encoding: chunked, the hook should
+    %% NOT insert Content-Length (chunked and Content-Length are mutually
+    %% exclusive per HTTP spec).
+    ChunkedGoal = (format(current_output, 'Status: 200 OK~n', []),
+                   format(current_output, 'Transfer-Encoding: chunked~n~n', []),
+                   format(current_output, '4\r\nWiki\r\n0\r\n\r\n', [])),
+    capture_http_output([], ChunkedGoal, Text),
+    %% The Transfer-Encoding header should be present in the raw output
+    sub_string(Text, _, _, _, 'Transfer-Encoding: chunked'),
+    %% Content-Length should NOT be inserted
+    \+ sub_string(Text, _, _, _, 'Content-Length').
+
+test(is_skip_header_content_length) :-
+    is_skip_header('Content-Length'-"42"),
+    is_skip_header('content-length'-"42"),
+    \+ is_skip_header('Content-Type'-"application/json").
+
+test(build_swi_headers_skips_content_length) :-
+    %% Content-Length is provided separately by build_swi_request as
+    %% content_length(BodyLen), so it must be excluded from the header
+    %% terms to avoid a duplicate key in dict_create.
+    Dict = _{'Content-Type': "application/json", 'Content-Length': "42"},
+    build_swi_headers(Dict, Headers),
+    \+ memberchk(content_length('42'), Headers),
+    memberchk(content_type('application/json'), Headers).
 
 :- end_tests(srv_http).
