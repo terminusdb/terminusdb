@@ -139,7 +139,8 @@ chunk_size_for_request(DocCount, ChunkSize) :-
 chunks_from_documents(Docs, ChunkSize, Chunks) :-
     chunks_from_documents(Docs, ChunkSize, 0, Chunks).
 
-chunks_from_documents([], _, _, []).
+% Make det: prevent base case from matching the final-chunk clause.
+chunks_from_documents([], _, _, []) :- !.
 chunks_from_documents(Docs, ChunkSize, Index, [chunk(Index, Chunk)|Rest]) :-
     length(Chunk, ChunkSize),
     append(Chunk, Remainder, Docs),
@@ -307,6 +308,9 @@ maybe_help_with_elaboration :-
     request_queue(RequestId, _, _, _, _, _, _, _),
     take_chunk(RequestId, OwnerId, DB, Wrap, chunk(Index, Docs),
                PreBranchCommitId, PreSchemaLayerId),
+    % Make semidet: commit to the first queue that yields a chunk.
+    % Cut after take_chunk so failed queues still backtrack to try the next.
+    !,
     process_chunk_with_result(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId,
                               OwnerId, Index).
 

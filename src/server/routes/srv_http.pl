@@ -162,7 +162,9 @@ header_has_field(HeadText, FieldName) :-
     string_lower(HeadText, Lower),
     atom_string(FieldName, FieldStr),
     string_concat(FieldStr, ":", Prefix),
-    sub_string(Lower, _, _, _, Prefix).
+    sub_string(Lower, _, _, _, Prefix),
+    % cut for semidet: we only need existence, not all match positions.
+    !.
 
 %% insert_content_length(+HeadText, +Len, -FinalText) is det.
 %%
@@ -174,9 +176,9 @@ header_has_field(HeadText, FieldName) :-
 %%  back before inserting Content-Length.
 insert_content_length(HeadText, Len, FinalText) :-
     (   string_concat(Before, "\r\n\r\n", HeadText)
-    ->  format(string(FinalText), '~s\r\nContent-Length: ~w\r\n\r\n', [Before, Len])
+    ->  !, format(string(FinalText), '~s\r\nContent-Length: ~w\r\n\r\n', [Before, Len])
     ;   string_concat(Before, "\n\n", HeadText)
-    ->  format(string(FinalText), '~s\nContent-Length: ~w\n\n', [Before, Len])
+    ->  !, format(string(FinalText), '~s\nContent-Length: ~w\n\n', [Before, Len])
     ;   format(string(FinalText), '~sContent-Length: ~w\n\n', [HeadText, Len])
     ).
 
@@ -549,11 +551,14 @@ test(header_has_field_transfer_encoding) :-
 test(insert_content_length_before_blank_line) :-
     HeadText = "Status: 200\nContent-Type: application/json\n\n",
     insert_content_length(HeadText, 42, FinalText),
+    % Make semidet: existence check only.
     sub_string(FinalText, _, _, _, "Content-Length: 42\n\n"),
+    !,
     %% Content-Length must be on its own line, not concatenated to Content-Type
     \+ sub_string(FinalText, _, _, _, "application/jsonContent-Length"),
     %% The original headers must still be present
-    sub_string(FinalText, _, _, _, "Content-Type: application/json\n").
+    sub_string(FinalText, _, _, _, "Content-Type: application/json\n"),
+    !.
 
 test(insert_content_length_with_crlf_line_endings) :-
     HeadText = "Status: 200\r\nContent-Type: application/json\r\n\r\n",
@@ -580,7 +585,7 @@ test(cgi_capture_hook_inserts_content_length_zero_for_empty_body) :-
     capture_http_output([], EmptyGoal, Text),
     parse_http_response(Text, Response),
     get_dict(headers, Response, Headers),
-    get_dict('Content-Length', Headers, "0"),
+    get_dict('Content-Length', Headers, '0'),
     get_dict(body, Response, Body),
     assertion(Body == "").
 
@@ -592,8 +597,10 @@ test(cgi_capture_hook_no_content_length_when_transfer_encoding_present) :-
                    format(current_output, 'Transfer-Encoding: chunked~n~n', []),
                    format(current_output, '4\r\nWiki\r\n0\r\n\r\n', [])),
     capture_http_output([], ChunkedGoal, Text),
-    %% The Transfer-Encoding header should be present in the raw output
+    %% The Transfer-Encoding header should be present in the raw output.
+    % Make semidet: existence check only.
     sub_string(Text, _, _, _, 'Transfer-Encoding: chunked'),
+    !,
     %% Content-Length should NOT be inserted
     \+ sub_string(Text, _, _, _, 'Content-Length').
 
