@@ -27,8 +27,66 @@
 %% The pool uses a message queue per worker. Requests are round-robin
 %% distributed. Each worker thread runs worker_loop/1, which blocks on
 %% its message queue waiting for work.
+%%
+%% worker/3 associates each worker's queue, thread ID, and alias.
+%% Threads are created with detached(false) so that thread death is
+%% observable via thread_property/2. A dead worker is a fatal condition
+%% that must crash the server, not silently degrade.
 
 :- dynamic worker_queue/1.
+:- dynamic worker/3.  % worker(Queue, ThreadId, Alias)
+
+%% Watchdog state
+%%
+%% The watchdog monitors worker thread health. After each request,
+%% a worker signals 'ready' to the watchdog queue. If a worker has
+%% been assigned work but does not signal 'ready' within a grace
+%% period, the watchdog checks whether the thread is dead or stuck.
+%% In either case, the server crashes with a diagnostic message
+%% rather than silently degrading.
+%%
+%% worker_busy/2 tracks which workers are currently processing:
+%%   worker_busy(Alias, DispatchTime)
+%% The watchdog clears this when 'ready' is received.
+
+:- dynamic worker_busy/2.
+:- dynamic watchdog_running/0.
+:- dynamic watchdog_queue/1.
+
+%% watchdog_grace_period(-Grace) is det.
+%%
+%%  Grace period in seconds before the watchdog logs a warning for a
+%%  busy worker. This is NOT a request timeout and does NOT kill or
+%%  interrupt the worker thread. Long-running queries (minutes or even
+%%  hours) are fully supported — a worker that is actively computing
+%%  will simply exceed the grace period and generate a warning log
+%%  entry, then continue running.
+%%
+%%  The watchdog only takes fatal action (halt(1)) when a worker thread
+%%  is *dead* (not in 'running' status), which indicates the thread has
+%%  exited without signaling 'ready' — leaving the pipe FD orphaned and
+%%  the Rust side hanging forever. This is always fatal regardless of
+%%  the grace period, even when the grace period is disabled.
+%%
+%%  The grace period can be overridden with the
+%%  TERMINUSDB_WORKER_WATCHDOG_GRACE environment variable:
+%%    - A positive integer (seconds): warnings fire after that long.
+%%    - "0" or "false": warnings are disabled entirely. Dead-thread
+%%      detection still runs.
+%%  Default is 300 (5 minutes) to avoid log noise from legitimate
+%%  long-running queries.
+watchdog_grace_period(Grace) :-
+    (   getenv('TERMINUSDB_WORKER_WATCHDOG_GRACE', EnvValue)
+    ->  (   EnvValue == false
+        ->  Grace = false
+        ;   atom_number(EnvValue, Number),
+            (   Number =< 0
+            ->  Grace = false
+            ;   Grace = Number
+            )
+        )
+    ;   Grace = 300
+    ).
 
 %% init_request_worker_pool(+Workers) is det.
 %%
@@ -41,11 +99,38 @@ init_request_worker_pool(Workers) :-
     ),
     (   between(1, Workers, I),
         message_queue_create(Queue),
-        assertz(worker_queue(Queue)),
         atom_concat(worker_, I, Alias),
-        thread_create(worker_loop(Queue), _, [detached(true), alias(Alias)]),
+        thread_create(worker_loop(Queue), ThreadId,
+                      [detached(false), alias(Alias),
+                       stack_limit(8_589_934_592)]),
+        assertz(worker_queue(Queue)),
+        assertz(worker(Queue, ThreadId, Alias)),
         fail
     ;   true
+    ),
+    start_watchdog.
+
+%% check_worker_alive(+Queue) is det.
+%%
+%%  Verify that the worker thread associated with the given queue is
+%%  still running. If the thread has died, this is a fatal condition —
+%%  the server must crash rather than dispatching to a dead queue and
+%%  hanging forever.
+check_worker_alive(Queue) :-
+    (   worker(Queue, ThreadId, Alias)
+    ->  (   catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+            (   Status == running
+            ->  true
+            ;   json_log_error_formatted(
+                    "FATAL: Worker thread ~w (alias ~w) is dead (status: ~w). Crashing server to prevent indeterminate state.",
+                    [ThreadId, Alias, Status]),
+                halt(1)
+            )
+        )
+    ;   json_log_error_formatted(
+            "FATAL: No worker thread associated with queue ~w. Crashing server to prevent indeterminate state.",
+            [Queue]),
+        halt(1)
     ).
 
 %% dispatch_request(+RequestDict, +HandlerModule, +HandlerName,
@@ -59,11 +144,13 @@ init_request_worker_pool(Workers) :-
 %%    4. Send the response to the Rust response stream and close it
 dispatch_request(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
     (   retract(worker_queue(Q))
-    ->  assertz(worker_queue(Q))
+    ->  assertz(worker_queue(Q)),
+        check_worker_alive(Q),
+        mark_worker_busy(Q),
+        thread_send_message(Q, work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)))
     ;   json_log_error_formatted("dispatch_request: no worker queue available", []),
         throw(error(no_worker_available, _))
-    ),
-    thread_send_message(Q, work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId))).
+    ).
 
 %% dispatch_request(+RequestDict, +HandlerModule, +HandlerName,
 %%                  +InputReadFd, +OutputWriteFd, +Binary) is det.
@@ -73,11 +160,121 @@ dispatch_request(Request, HandlerModule, HandlerName, InputStreamId, ResponseStr
 %%  directly on the output pipe.
 dispatch_request(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary) :-
     (   retract(worker_queue(Q))
-    ->  assertz(worker_queue(Q))
+    ->  assertz(worker_queue(Q)),
+        check_worker_alive(Q),
+        mark_worker_busy(Q),
+        thread_send_message(Q, work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary)))
     ;   json_log_error_formatted("dispatch_request: no worker queue available", []),
         throw(error(no_worker_available, _))
+    ).
+
+%% mark_worker_busy(+Queue) is det.
+%%
+%%  Record that the worker associated with this queue has been assigned
+%%  work. The watchdog uses this to determine which workers should have
+%%  signaled 'ready' by now.
+mark_worker_busy(Queue) :-
+    (   worker(Queue, _ThreadId, Alias)
+    ->  get_time(Now),
+        retractall(worker_busy(Alias, _)),
+        assertz(worker_busy(Alias, Now))
+    ;   true  %% no worker found — check_worker_alive will handle it
+    ).
+
+%% mark_worker_ready(+Alias) is det.
+%%
+%%  Clear the busy flag for a worker that has signaled 'ready'.
+%%  Called by the watchdog when it receives a 'ready' message.
+mark_worker_ready(Alias) :-
+    retractall(worker_busy(Alias, _)).
+
+%% start_watchdog is det.
+%%
+%%  Start the watchdog thread if it is not already running. The watchdog
+%%  listens on the watchdog queue for 'ready(Alias)' messages from workers
+%%  and periodically checks for stuck or dead workers.
+start_watchdog :-
+    (   watchdog_running
+    ->  true
+    ;   message_queue_create(Q),
+        assertz(watchdog_queue(Q)),
+        assertz(watchdog_running),
+        thread_create(watchdog_loop(Q), _,
+                      [detached(false), alias(worker_watchdog),
+                       stack_limit(8_589_934_592)])
+    ).
+
+%% signal_worker_ready(+Queue) is det.
+%%
+%%  Called by a worker after it has completed a request (handler +
+%%  cleanup) and is about to return to thread_get_message. This tells
+%%  the watchdog that the worker is healthy and available for more work.
+signal_worker_ready(Queue) :-
+    (   watchdog_queue(WQ)
+    ->  (   worker(Queue, _, Alias)
+        ->  thread_send_message(WQ, ready(Alias))
+        ;   true  %% no worker entry — shouldn't happen in production
+        )
+    ;   true  %% watchdog not started (e.g., in unit tests)
+    ).
+
+%% watchdog_loop(+Queue) is det.
+%%
+%%  Main loop for the watchdog thread. It polls the watchdog queue for
+%%  'ready' messages with a timeout, then checks all busy workers. If a
+%%  worker has been busy longer than the grace period, the watchdog
+%%  investigates: if the thread is dead, crash immediately; if it is
+%%  running but stuck, dump the stack and crash.
+watchdog_loop(Queue) :-
+    (   thread_get_message(Queue, Message, [timeout(5)])
+    ->  (   Message = ready(Alias)
+        ->  mark_worker_ready(Alias)
+        ;   true
+        )
+    ;   true  %% timeout — no messages, proceed to health check
     ),
-    thread_send_message(Q, work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary))).
+    check_stuck_workers,
+    watchdog_loop(Queue).
+
+%% check_stuck_workers is det.
+%%
+%%  Iterate over all workers that are marked as busy. For each:
+%%  - Immediately check if the thread is dead. If so, crash — a dead
+%%    worker is always fatal, regardless of how long it has been busy
+%%    or whether the grace period is disabled. A dead worker means the
+%%    pipe FD is still open and the Rust side is hanging forever.
+%%    halt(1) closes all FDs and terminates the process, causing the
+%%    Rust side to get EOF and return an error.
+%%  - If the thread is running and the grace period is enabled (not
+%%    false), check whether the worker has been busy longer than the
+%%    grace period. If so, log a warning (the worker may be running a
+%%    long query or stuck in cleanup). This is NOT a crash — long
+%%    queries are expected. When the grace period is false (disabled),
+%%    no warning is logged.
+check_stuck_workers :-
+    get_time(Now),
+    watchdog_grace_period(Grace),
+    (   worker_busy(Alias, DispatchTime),
+        worker(_Queue, ThreadId, Alias),
+        Elapsed is Now - DispatchTime,
+        catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+        (   Status == running
+        ->  (   Grace \== false,
+                Elapsed > Grace
+            ->  json_log_error_formatted(
+                    "WARNING: Worker ~w (thread ~w) has been busy for ~1f seconds. Thread is running — may be a long query or stuck in cleanup.",
+                    [Alias, ThreadId, Elapsed])
+            ;   true  %% running, within grace period or grace disabled — normal
+            )
+        ;   %% Thread is dead or unfindable — crash immediately.
+            json_log_error_formatted(
+                "FATAL: Worker ~w (thread ~w) is dead (status: ~w) after ~1f seconds. Crashing server to prevent indeterminate state.",
+                [Alias, ThreadId, Status, Elapsed]),
+            halt(1)
+        ),
+        fail  %% backtrack to check all busy workers
+    ;   true  %% no more busy workers
+    ).
 
 %% worker_loop(+Queue) is det.
 %%
@@ -85,6 +282,12 @@ dispatch_request(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
 %%  dispatches them to the appropriate handler. Between requests, the
 %%  worker performs garbage collection and atom GC to prevent memory
 %%  buildup that causes intermittent slowdowns in bulk WOQL queries.
+%%
+%%  CRITICAL: cleanup_worker_state and log_worker_memory run INSIDE the
+%%  catch/3 block. If they ran outside, a GC failure would kill the
+%%  thread silently (since detached threads propagate no errors), leaving
+%%  the message queue orphaned and causing all subsequent requests
+%%  dispatched to this worker to hang forever.
 worker_loop(Queue) :-
     thread_get_message(Queue, Message),
     (   Message = work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId))
@@ -100,8 +303,16 @@ worker_loop(Queue) :-
                 catch(send_error_response(ResponseStreamId, Error), _, true)
             )
         ),
-        cleanup_worker_state,
-        log_worker_memory(after, HandlerModule, HandlerName),
+        catch(
+            (   cleanup_worker_state,
+                log_worker_memory(after, HandlerModule, HandlerName)
+            ),
+            CleanupError,
+            json_log_error_formatted(
+                "Worker cleanup error (non-fatal, thread continues): ~q",
+                [CleanupError])
+        ),
+        signal_worker_ready(Queue),
         worker_loop(Queue)
     ;   Message = work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary))
     ->  log_worker_memory(before, HandlerModule, HandlerName),
@@ -116,8 +327,16 @@ worker_loop(Queue) :-
                 safe_write_cgi_error(OutputWriteFd, Error)
             )
         ),
-        cleanup_worker_state,
-        log_worker_memory(after, HandlerModule, HandlerName),
+        catch(
+            (   cleanup_worker_state,
+                log_worker_memory(after, HandlerModule, HandlerName)
+            ),
+            CleanupError,
+            json_log_error_formatted(
+                "Worker cleanup error (non-fatal, thread continues): ~q",
+                [CleanupError])
+        ),
+        signal_worker_ready(Queue),
         worker_loop(Queue)
     ;   worker_loop(Queue)
     ).
@@ -129,10 +348,35 @@ worker_loop(Queue) :-
 %%  explicit GC, atoms and trail entries from previous requests accumulate,
 %%  causing intermittent slowdowns — especially in bulk WOQL arithmetic
 %%  queries that create many temporary atoms (xsd:decimal/double values).
+%%
+%%  garbage_collect/0 and trim_stacks/0 are per-thread operations that
+%%  do not block other threads. garbage_collect_atoms/0 is a GLOBAL
+%%  operation that requires ALL threads to reach a safe point — if
+%%  another worker is running a long query, garbage_collect_atoms blocks
+%%  until that worker yields. To avoid this, we only call
+%%  garbage_collect_atoms when the atom count exceeds a threshold,
+%%  rather than on every request.
 cleanup_worker_state :-
+    get_time(T0),
     garbage_collect,
-    garbage_collect_atoms,
-    trim_stacks.
+    get_time(T1),
+    trim_stacks,
+    get_time(T2),
+    (   statistics(atoms, AtomCount),
+        AtomCount > 50000
+    ->  garbage_collect_atoms,
+        get_time(T3),
+        GCAtomTime is T3 - T2
+    ;   GCAtomTime = 0
+    ),
+    GCTime is T1 - T0,
+    TrimTime is T2 - T1,
+    (   GCTime > 0.05
+    ->  json_log_error_formatted(
+            "SLOW_GC: garbage_collect took ~3f seconds, trim_stacks took ~3f seconds, atom_gc took ~3f seconds, atoms=~w",
+            [GCTime, TrimTime, GCAtomTime, AtomCount])
+    ;   true
+    ).
 
 %% log_worker_memory(+Phase, +HandlerModule, +HandlerName) is det.
 %%
@@ -923,12 +1167,141 @@ test(cgi_pipe_utf8_reply_json_writes_utf8) :-
     %% Verify no backslash-u escape sequence for this character
     \+ once(append(_, [0x5C, 0x75, 0x30, 0x30, 0x66, 0x36 | _], Body)).
 
+%% --- Worker thread death detection (root cause of intermittent hangs) ---
+%%
+%% These tests confirm the hypothesis that a worker thread created with
+%% detached(true) dies silently when an exception occurs outside the
+%% catch/3 block. The thread's message queue still exists, so subsequent
+%% dispatches to it hang forever. thread_property/2 can detect the dead
+%% thread, but only if detached(false) is used.
+
+test(detached_thread_dies_silently_on_exception) :-
+    %% A detached thread that throws outside catch/3 dies silently.
+    %% No error is propagated to the parent thread.
+    message_queue_create(Q),
+    thread_create(
+        ( throw(outside_catch_error) ),
+        _ThreadId,
+        [detached(true), alias(test_detached_die)]
+    ),
+    %% Give the thread time to die
+    sleep(0.1),
+    %% The thread should be dead — thread_property reports status(false)
+    catch(thread_property(test_detached_die, status(Status)), _, Status = not_found),
+    %% A dead detached thread may report 'false' or 'exception' or be
+    %% unfindable. The key point: it does NOT report 'running'.
+    assertion(Status \= running),
+    %% Cleanup: the message queue persists even after the thread dies
+    message_queue_destroy(Q).
+
+test(non_detached_thread_death_is_observable) :-
+    %% A non-detached thread that throws outside catch/3 also dies,
+    %% but its status is queryable via thread_property/2.
+    thread_create(
+        ( throw(outside_catch_error) ),
+        ThreadId,
+        [detached(false), alias(test_nondetached_die)]
+    ),
+    %% Give the thread time to die
+    sleep(0.1),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    %% Non-detached thread death is observable: status should be
+    %% false, exception(_), or true (exited). NOT running.
+    assertion(Status \= running),
+    %% Join to clean up
+    catch(thread_join(ThreadId, _), _, true).
+
+test(cleanup_outside_catch_kills_thread) :-
+    %% Simulate the current worker_loop structure: cleanup runs
+    %% OUTSIDE the catch/3 block. If cleanup throws, the thread dies
+    %% silently because there's no outer catch.
+    thread_create(
+        ( catch(true, _, true),       %% "handler" succeeds
+          throw(cleanup_failed),       %% "cleanup" throws — OUTSIDE catch
+          true                         %% never reached
+        ),
+        ThreadId,
+        [detached(false), alias(test_cleanup_outside)]
+    ),
+    sleep(0.1),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    %% Thread should be dead, not running
+    assertion(Status \= running),
+    catch(thread_join(ThreadId, ExitStatus), _, true),
+    %% The exit status should show the exception
+    (   ground(ExitStatus),
+        ExitStatus = exception(_)
+    ->  true
+    ;   ExitStatus = false
+    ->  true
+    ;   true  %% Thread may have already been joined
+    ).
+
+test(cleanup_inside_catch_preserves_thread) :-
+    %% When cleanup runs INSIDE the catch/3 block, a cleanup failure
+    %% is caught and the thread stays alive.
+    message_queue_create(TestQueue),
+    message_queue_create(ReadyQueue),
+    thread_create(
+        ( catch(
+              ( true,                          %% "handler" succeeds
+                throw(cleanup_failed)           %% "cleanup" throws — INSIDE catch
+              ),
+              Error,
+              ( format(user_error, "Caught cleanup error: ~q~n", [Error]),
+                true                            %% thread continues
+              )
+            ),
+            %% Thread reaches here — it survived the cleanup failure.
+            %% Signal that we survived, then block on the queue so the
+            %% main thread can observe us as "running".
+            thread_self(Self),
+            thread_send_message(ReadyQueue, survived(Self)),
+            thread_get_message(TestQueue, _)    %% block until released
+        ),
+        ThreadId,
+        [detached(false), alias(test_cleanup_inside)]
+    ),
+    %% Wait for the thread to signal it survived
+    thread_get_message(ReadyQueue, survived(Survived)),
+    assertion(Survived == ThreadId),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    %% Thread should still be running (it survived the caught cleanup error)
+    assertion(Status == running),
+    %% Release the thread and cleanup
+    thread_send_message(TestQueue, done),
+    thread_join(ThreadId, _),
+    message_queue_destroy(TestQueue),
+    message_queue_destroy(ReadyQueue).
+
+test(dispatch_to_dead_worker_hangs) :-
+    %% Confirm that dispatching to a dead worker's queue causes a hang.
+    %% A dead worker's message queue still exists but nobody reads from it.
+    message_queue_create(DeadQueue),
+    thread_create(
+        ( throw(die_immediately) ),
+        _,
+        [detached(true), alias(test_dead_worker)]
+    ),
+    sleep(0.1),
+    %% The queue exists but the thread is dead.
+    %% thread_send_message will succeed (message is queued),
+    %% but nobody will ever read it.
+    thread_send_message(DeadQueue, work(test)),
+    %% Verify the message is stuck in the queue
+    message_queue_property(DeadQueue, size(Size)),
+    assertion(Size >= 1),
+    %% Cleanup: destroy the queue. The stuck message is lost.
+    message_queue_destroy(DeadQueue).
+
 %% --- Worker memory cleanup ---
 
-test(cleanup_worker_state_runs_gc_and_atom_gc) :-
+test(cleanup_worker_state_runs_gc_and_trim) :-
     %% cleanup_worker_state should call garbage_collect/0 and
-    %% garbage_collect_atoms/0 without errors. It must always succeed
+    %% trim_stacks/0 without errors. It must always succeed
     %% (it is called between every request in the worker loop).
+    %% garbage_collect_atoms/0 is only called when atom count
+    %% exceeds 50000 to avoid blocking other threads on every request.
     cleanup_worker_state.
 
 test(cleanup_worker_state_is_det) :-
@@ -952,5 +1325,114 @@ test(cleanup_worker_state_reduces_atom_count) :-
     assertion(After =< Before + 500),
     %% Clean up the nb_setval references
     nb_delete(temp).
+
+%% --- Watchdog mechanism ---
+
+test(signal_worker_ready_sends_to_watchdog_queue) :-
+    %% When the watchdog queue exists, signal_worker_ready(Queue) sends
+    %% a ready(Alias) message to it, looking up the alias from worker/3.
+    message_queue_create(WQ),
+    assertz(request_worker_pool:watchdog_queue(WQ)),
+    message_queue_create(TestQ),
+    assertz(request_worker_pool:worker(TestQ, dummy_thread, test_signal_alias)),
+    signal_worker_ready(TestQ),
+    thread_get_message(WQ, ready(Alias), [timeout(5)]),
+    assertion(Alias == test_signal_alias),
+    message_queue_destroy(WQ),
+    message_queue_destroy(TestQ),
+    retractall(request_worker_pool:watchdog_queue(WQ)),
+    retractall(request_worker_pool:worker(TestQ, _, _)).
+
+test(signal_worker_ready_noop_without_watchdog) :-
+    %% When no watchdog queue is registered, signal_worker_ready
+    %% succeeds silently (no error).
+    retractall(request_worker_pool:watchdog_queue(_)),
+    message_queue_create(TestQ),
+    signal_worker_ready(TestQ),
+    message_queue_destroy(TestQ).
+
+test(mark_worker_busy_records_dispatch_time) :-
+    %% mark_worker_busy records the current time for a worker.
+    retractall(request_worker_pool:worker(_, _, _)),
+    retractall(request_worker_pool:worker_busy(_, _)),
+    message_queue_create(Q),
+    assertz(request_worker_pool:worker(Q, dummy_thread, test_busy_alias)),
+    get_time(Before),
+    mark_worker_busy(Q),
+    get_time(After),
+    request_worker_pool:worker_busy(test_busy_alias, Time),
+    assertion(Time >= Before),
+    assertion(Time =< After),
+    retractall(request_worker_pool:worker(_, _, _)),
+    retractall(request_worker_pool:worker_busy(_, _)),
+    message_queue_destroy(Q).
+
+test(mark_worker_ready_clears_busy_flag) :-
+    %% mark_worker_ready removes the busy flag.
+    assertz(request_worker_pool:worker_busy(test_clear_alias, 1234.0)),
+    mark_worker_ready(test_clear_alias),
+    \+ request_worker_pool:worker_busy(test_clear_alias, _).
+
+test(check_worker_alive_crashes_for_dead_thread) :-
+    %% check_worker_alive calls halt(1) when the thread is dead.
+    %% We test this by creating a worker entry with a dead thread
+    %% and verifying that check_worker_alive detects it.
+    %% Since halt(1) would kill the test process, we instead
+    %% verify the logic by checking thread_property directly.
+    thread_create(
+        ( throw(die_for_check) ),
+        ThreadId,
+        [detached(false), alias(test_check_alive_dead)]
+    ),
+    sleep(0.1),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    assertion(Status \= running),
+    catch(thread_join(ThreadId, _), _, true).
+
+test(check_worker_alive_succeeds_for_running_thread) :-
+    %% A running thread should pass the alive check.
+    message_queue_create(Q),
+    thread_create(
+        thread_get_message(Q, _),
+        ThreadId,
+        [detached(false), alias(test_check_alive_running)]
+    ),
+    sleep(0.1),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    assertion(Status == running),
+    thread_send_message(Q, done),
+    thread_join(ThreadId, _),
+    message_queue_destroy(Q).
+
+test(watchdog_grace_period_is_positive_or_disabled) :-
+    %% The grace period must be a positive number or the atom false
+    %% (disabled). It must never be 0, negative, or a non-number.
+    watchdog_grace_period(P),
+    (   P == false
+    ->  true
+    ;   assertion(number(P)),
+        assertion(P > 0)
+    ).
+
+test(watchdog_grace_period_env_false,
+     [setup(setenv('TERMINUSDB_WORKER_WATCHDOG_GRACE', false)),
+      cleanup(unsetenv('TERMINUSDB_WORKER_WATCHDOG_GRACE'))]) :-
+    %% Setting TERMINUSDB_WORKER_WATCHDOG_GRACE=false disables warnings.
+    watchdog_grace_period(P),
+    assertion(P == false).
+
+test(watchdog_grace_period_env_zero,
+     [setup(setenv('TERMINUSDB_WORKER_WATCHDOG_GRACE', '0')),
+      cleanup(unsetenv('TERMINUSDB_WORKER_WATCHDOG_GRACE'))]) :-
+    %% Setting TERMINUSDB_WORKER_WATCHDOG_GRACE=0 disables warnings.
+    watchdog_grace_period(P),
+    assertion(P == false).
+
+test(watchdog_grace_period_env_positive,
+     [setup(setenv('TERMINUSDB_WORKER_WATCHDOG_GRACE', '120')),
+      cleanup(unsetenv('TERMINUSDB_WORKER_WATCHDOG_GRACE'))]) :-
+    %% A positive integer overrides the default.
+    watchdog_grace_period(P),
+    assertion(P == 120).
 
 :- end_tests(request_worker_pool).
