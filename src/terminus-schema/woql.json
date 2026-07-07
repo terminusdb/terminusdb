@@ -1249,7 +1249,7 @@
 }
 {
   "@documentation": {
-    "@comment":"Constructs or deconstructs a half-open xdd:dateTimeInterval [start, end) from two date or dateTime endpoints. Bidirectional: given start+end computes interval, given interval extracts start+end. Endpoints are stored in UTC canonical form for correct lexical ordering.",
+    "@comment":"Constructs or deconstructs a half-open xdd:dateTimeInterval [start, end] from two date or dateTime endpoints. Bidirectional: given start+end computes interval, given interval extracts start+end. Endpoints are stored in UTC canonical form for correct lexical ordering.",
     "@properties": {"start":"Inclusive start date or dateTime.", "end":"Exclusive end date or dateTime.", "interval":"The xdd:dateTimeInterval value."}
   },
   "@id":"Interval",
@@ -1425,7 +1425,7 @@
 }
 {
   "@documentation": {
-    "@comment":"Allen's Interval Algebra: classifies or validates the temporal relationship between two half-open intervals [x_start, x_end) and [y_start, y_end). When relation is ground, validates that the named relation holds. When relation is a variable, determines which of the 13 Allen relations holds (deterministic). Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@comment":"Allen's Interval Algebra: classifies or validates the temporal relationship between two half-open intervals [x_start, x_end] and [y_start, y_end]. When relation is ground, validates that the named relation holds. When relation is a variable, determines which of the 13 Allen relations holds (deterministic). Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
     "@properties": {"relation":"The Allen relation name (string) or variable.", "x_start":"Inclusive start of interval X.", "x_end":"Exclusive end of interval X.", "y_start":"Inclusive start of interval Y.", "y_end":"Exclusive end of interval Y."}
   },
   "@id":"IntervalRelation",

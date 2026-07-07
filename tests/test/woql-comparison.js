@@ -305,6 +305,13 @@ describe('woql-comparison', function () {
     })
   })
 
+  // ──────────────────────────────────────────────────────────────────
+  // Notation: [start, end) is standard mathematical half-open interval
+  // notation — start is inclusive, end is exclusive. The ')' is not a
+  // typo. For xdd:dateTimeInterval, both endpoints are materialised in
+  // the stored value, so we write [start, end] there instead.
+  // ──────────────────────────────────────────────────────────────────
+
   describe('InRange as matcher (half-open [Start, End))', function () {
     it('passes with value within range: 5 in [1, 10)', async function () {
       const query = {

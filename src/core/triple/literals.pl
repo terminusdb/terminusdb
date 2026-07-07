@@ -217,7 +217,12 @@ date_time_stamp_string(Date_Time,String) :-
     remove_date_time_offset(Y,M,D,HH,MM,SS,Offset,NS,Date_Time).
 
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
-    date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),
+    % SWI-Prolog's date_time_stamp interprets arg 7 as seconds *west* of
+    % Greenwich, but XSD offsets are seconds *east* (positive = east).  Negate
+    % so that e.g. +02:00 (7200s east) becomes -7200s west, yielding the
+    % correct UTC conversion.
+    Swipl_Offset is -Offset,
+    date_time_stamp(date(Y, M, D, HH, MM, SS, Swipl_Offset, -, -), TS),
     stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
     SS_Floor is floor(SS1).
 
@@ -266,9 +271,10 @@ subtract_duration_from_component(Component, duration(Sign,Y,Mo,D,H,M,S), Start) 
     add_duration_to_component(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
 
 % Normalize month overflow/underflow: e.g. month 0 or 13.
+% Uses floored division so that month 0 wraps to December of the previous year.
 duration_normalize_year_month(Y, M, NY, NM) :-
     NM0 is ((M - 1) mod 12) + 1,
-    NY is Y + ((M - 1) // 12),
+    NY is Y + div((M - 1), 12),
     NM = NM0.
 
 % Clamp day to the maximum valid day for a given year/month.
@@ -454,7 +460,7 @@ duration_string(Duration,String) :-
     (   D \= 0
     ->  format(atom(DP),'~wD',[D])
     ;   DP = ''),
-    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0.0)
+    (   \+ (HH =:= 0, MM =:= 0, SS =:= 0)
     ->  TP = 'T'
     ;   TP = ''),
     (   HH \= 0
@@ -463,7 +469,7 @@ duration_string(Duration,String) :-
     (   MM \= 0
     ->  format(atom(MMP),'~wM',[MM])
     ;   MMP = ''),
-    (   SS \= 0.0
+    (   SS =\= 0
     ->  format(atom(SSP),'~wS',[SS])
     ;   SSP = ''),
     atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom0),

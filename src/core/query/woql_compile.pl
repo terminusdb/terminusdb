@@ -797,6 +797,22 @@ woql_lte(AE,BE) :-
     ;   woql_equal(AE,BE)
     ).
 
+/* ──────────────────────────────────────────────────────────────────
+ * Notation convention for ranges and intervals
+ * ──────────────────────────────────────────────────────────────────
+ * Throughout this section we use the standard mathematical notation for
+ * half-open intervals:
+ *
+ *   [start, end)   means  start <= x < end   (start inclusive, end exclusive)
+ *
+ * The closing ')' is intentional, not a typo.  This is the convention used
+ * by InRange, seq, TripleSlice and the numeric Allen's relation tests.
+ *
+ * For xdd:dateTimeInterval the stored end is the exclusive boundary, so we
+ * write [start, end] to emphasise that both endpoints are materialised in
+ * the stored value (the end being the day-after bump for date-only ends).
+ * ────────────────────────────────────────────────────────────────── */
+
 /*
  * woql_in_range(VE,SE,EE) is semidet.
  *
@@ -1446,7 +1462,7 @@ days_in_month(_, 12, 31).
 /*
  * woql_interval_relation(Rel, Xs, Xe, Ys, Ye) is semidet.
  *
- * Allen's Interval Algebra for half-open intervals [start, end).
+ * Allen's Interval Algebra for half-open intervals [start, end].
  * When Rel is ground, validates the named relation holds.
  * When Rel is unbound, classifies which of the 13 Allen relations holds (deterministic).
  */
