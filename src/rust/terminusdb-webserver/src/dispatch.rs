@@ -1704,11 +1704,6 @@ impl Stream for CgiPipeStream {
     }
 }
 
-/// Check if a route pattern contains a catch-all wildcard (`*name`).
-fn is_catchall_pattern(pattern: &str) -> bool {
-    pattern.split('/').any(|seg| seg.starts_with('*'))
-}
-
 /// Extract parameters from a URI given a route pattern.
 ///
 /// Supports the Axum/React Router style syntax:
@@ -1963,7 +1958,7 @@ fn plugin_error_response(message: &str) -> Response<Body> {
 
 #[cfg(test)]
 mod path_tests {
-    use super::{decompress_request_body, is_catchall_pattern, normalize_dispatch_path};
+    use super::{decompress_request_body, normalize_dispatch_path};
 
     #[test]
     fn normalize_decodes_percent_encoding() {
@@ -2020,6 +2015,10 @@ mod path_tests {
         let compressed = encoder.finish().unwrap();
         let out = decompress_request_body(Some("deflate"), &compressed).unwrap();
         assert_eq!(out, original);
+    }
+
+    fn is_catchall_pattern(pattern: &str) -> bool {
+        pattern.split('/').any(|seg| seg.starts_with('*'))
     }
 
     #[test]
