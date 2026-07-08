@@ -792,7 +792,7 @@ test(deep_list_patch_conflict, []) :-
 		                       ]
                    }.
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(read_state, []) :-
 

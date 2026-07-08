@@ -197,16 +197,16 @@ time_offset(0) -->
 time_offset(S) -->
     "+",
     twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
-    { S is -((ZH * 3600) + (ZM * 60) + ZS) }.
-time_offset(S) -->
-    "+", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
-    { S is -((ZH * 3600) + (ZM * 60)) }.
-time_offset(S) -->
-    "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
     { S is (ZH * 3600) + (ZM * 60) + ZS }.
 time_offset(S) -->
-    "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
+    "+", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
     { S is (ZH * 3600) + (ZM * 60) }.
+time_offset(S) -->
+    "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM), ":", twoDigitNatural(ZS),
+    { S is (-1 * ((ZH * 3600) + (ZM * 60) + ZS)) }.
+time_offset(S) -->
+    "-", twoDigitNatural(ZH), ":", twoDigitNatural(ZM),
+    { S is (-1 * ((ZH * 3600) + (ZM * 60))) }.
 
 optional_time_offset(Offset) -->
     time_offset(Offset).

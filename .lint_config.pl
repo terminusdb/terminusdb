@@ -31,6 +31,7 @@ ignore_predicate("commit_queue/0").
 % These predicates exist in both SWI-Prolog 9 and 10, but prolog_xref doesn't resolve them
 ignore_predicate("atom_json_dict/3").
 ignore_predicate("atom_json_term/3").
+ignore_predicate("json_read/2").
 ignore_predicate("json_read_dict/2").
 ignore_predicate("json_read_dict/3").
 ignore_predicate("json_write/2").

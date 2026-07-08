@@ -9,7 +9,7 @@
                      ]).
 
 :- use_module(core(util)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).

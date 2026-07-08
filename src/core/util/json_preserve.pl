@@ -11,7 +11,7 @@
 
 /** <module> Fast JSON Parser using Rust
  *
- * Drop-in replacement for library(http/json) using serde_json via Rust FFI.
+ * Drop-in replacement for library(json) using serde_json via Rust FFI.
  * Provides significant performance improvements AND preserves numeric precision.
  *
  * CRITICAL: Must use Rust parser to preserve arbitrary precision decimals.
@@ -125,10 +125,10 @@ sys_json_parse_value(JSONString, Value) :-
     '$json_preserve':json_read_string(JSONText, Value).
 
 % ============================================================================
-% Unit Tests - Verify compatibility with library(http/json)
+% Unit Tests - Verify compatibility with library(json)
 % ============================================================================
 
-:- use_module(library(http/json), [atom_json_dict/3]).
+:- use_module(library(json), [atom_json_dict/3]).
 :- use_module(library(plunit)).
 
 % Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
