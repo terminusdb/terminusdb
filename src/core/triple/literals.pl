@@ -184,38 +184,6 @@ date_time_string(Date_Time,String) :-
     phrase(dateTime(Y,M,D,HH,MM,SS,NS,Offset),Codes),
     remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset, Date_Time).
 
-date_time_stamp_string(Date_Time,String) :-
-    nonvar(Date_Time),
-    !,
-    % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
-    Date_Time = date_time(Y,M,D,HH,MM,SS,NS),
-    (   NS = 0
-    ->  format(string(String),
-               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
-               [Y,M,D,HH,MM,SS])
-    ;   0 is NS mod 1 000 000
-    ->  MS is NS div 1 000 000,
-        format(string(String),
-               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
-               [Y,M,D,HH,MM,SS,MS])
-    ;   0 is NS mod 1 000
-    ->  MuS is NS div 1 000,
-        format(string(String),
-               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~6+Z',
-               [Y,M,D,HH,MM,SS,MuS])
-    ;   format(string(String),
-               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~9+Z',
-               [Y,M,D,HH,MM,SS,NS])
-
-    ).
-date_time_stamp_string(Date_Time,String) :-
-    % So expensive! Let's do this faster somehow.
-    nonvar(String),
-    !,
-    atom_codes(String,Codes),
-    phrase(dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
-    remove_date_time_offset(Y,M,D,HH,MM,SS,Offset,NS,Date_Time).
-
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
     % SWI-Prolog's date_time_stamp interprets arg 7 as seconds *west* of
     % Greenwich, but XSD offsets are seconds *east* (positive = east).  Negate
