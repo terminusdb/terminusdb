@@ -185,10 +185,11 @@ date_time_string(Date_Time,String) :-
     remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset, Date_Time).
 
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
-    % SWI-Prolog's date_time_stamp interprets arg 7 as seconds *west* of
-    % Greenwich, but XSD offsets are seconds *east* (positive = east).  Negate
-    % so that e.g. +02:00 (7200s east) becomes -7200s west, yielding the
-    % correct UTC conversion.
+    % The XSD parser (time_offset DCG in xsd_parser.pl) stores offsets in
+    % XSD convention: positive = seconds east of Greenwich. SWI-Prolog's
+    % date_time_stamp expects seconds *west* (negative = east).  Negate
+    % at this boundary so the rest of the codebase stays XSD-conformant.
+    % swipl processing is unix style, from mktime. TerminusDB uses standards.
     Swipl_Offset is -Offset,
     date_time_stamp(date(Y, M, D, HH, MM, SS, Swipl_Offset, -, -), TS),
     stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
@@ -206,28 +207,32 @@ add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
     duration_clamp_day(Y2, M2, D, D2),
-    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + DS),
+    DayNanos is Sign * (DD * 86400 * 1000000000 + DH * 3600 * 1000000000 + DMi * 60 * 1000000000 + round(DS * 1000000000)),
     date_time_stamp(date(Y2,M2,D2,0,0,0,0,-,-), BaseStamp),
-    EndStamp is BaseStamp + DaySecs,
-    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS,0,'UTC',-), 'UTC'),
-    ESSF is floor(ESS),
+    BaseNanos is floor(BaseStamp * 1000000000),
+    EndNanos is BaseNanos + DayNanos,
+    EndSeconds is EndNanos // 1000000000,
+    EndNanosRem is EndNanos mod 1000000000,
+    stamp_date_time(EndSeconds, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
+    ESSF is floor(ESS1),
     (   DH =:= 0, DMi =:= 0, DS =:= 0
     ->  End = date(EY,EM,ED,O)
-    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,0)
+    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,EndNanosRem)
     ).
 add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
     duration_clamp_day(Y2, M2, D, D2),
-    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + DS),
-    S is SS + NS / 1000000000,
-    date_time_stamp(date(Y2,M2,D2,HH,MM,S,0,-,-), BaseStamp),
-    EndStamp is BaseStamp + DaySecs,
-    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
+    DayNanos is Sign * (DD * 86400 * 1000000000 + DH * 3600 * 1000000000 + DMi * 60 * 1000000000 + round(DS * 1000000000)),
+    date_time_stamp(date(Y2,M2,D2,HH,MM,SS,0,-,-), BaseStamp),
+    BaseNanos is floor(BaseStamp * 1000000000) + NS,
+    EndNanos is BaseNanos + DayNanos,
+    EndSeconds is EndNanos // 1000000000,
+    EndNanosRem is EndNanos mod 1000000000,
+    stamp_date_time(EndSeconds, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
     ESSF is floor(ESS1),
-    ENS is floor((ESS1 - ESSF) * 1000000000),
-    End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS).
+    End = date_time(EY,EM,ED,EHH,EMM,ESSF,EndNanosRem).
 
 /*
  * subtract_duration_from_component(+Component, +Duration, -Result) is det.
@@ -409,8 +414,8 @@ time_string(time(HN,MN,SN),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(time(HH,MM,SS,_NS,Offset),Codes),
-    time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)).
+    phrase(time(HH,MM,SS,NS,Offset),Codes),
+    time_to_internal_time(time(HH,MM,SS,NS,Offset),time(HN,MN,SN)).
 
 duration_string(Duration,String) :-
     nonvar(Duration),

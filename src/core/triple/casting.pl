@@ -410,28 +410,32 @@ normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
 normalise_interval_end(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
 
 compute_duration_between(Start, End, duration(Sign, 0, 0, Days, Hours, Minutes, Seconds)) :-
-    component_to_timestamp(Start, T1),
-    component_to_timestamp(End, T2),
+    component_to_timestamp_ns(Start, T1),
+    component_to_timestamp_ns(End, T2),
     Diff is T2 - T1,
     (   Diff >= 0
     ->  Sign = 1, AbsDiff = Diff
     ;   Sign = -1, AbsDiff is abs(Diff)
     ),
-    Days is truncate(AbsDiff / 86400),
-    Rem1 is AbsDiff - Days * 86400,
-    Hours is truncate(Rem1 / 3600),
-    Rem2 is Rem1 - Hours * 3600,
-    Minutes is truncate(Rem2 / 60),
-    Seconds is Rem2 - Minutes * 60 * 1.0.
+    Days is AbsDiff // 86400000000000,
+    Rem1 is AbsDiff mod 86400000000000,
+    Hours is Rem1 // 3600000000000,
+    Rem2 is Rem1 mod 3600000000000,
+    Minutes is Rem2 // 60000000000,
+    Rem3 is Rem2 mod 60000000000,
+    (   Rem3 =:= 0
+    ->  Seconds = 0.0
+    ;   Seconds is Rem3 / 1000000000 * 1.0).
 
-component_to_timestamp(date(Y,M,D,_), T) :-
+component_to_timestamp_ns(date(Y,M,D,_), T) :-
     !,
-    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), T).
-component_to_timestamp(date_time(Y,Mo,D,H,Mi,S,NS), T) :-
-    Sec is S + NS / 1000000000,
-    date_time_stamp(date(Y,Mo,D,H,Mi,Sec,0,-,-), T).
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
+    T is floor(Stamp * 1000000000).
+component_to_timestamp_ns(date_time(Y,Mo,D,H,Mi,S,NS), T) :-
+    date_time_stamp(date(Y,Mo,D,H,Mi,S,0,-,-), Stamp),
+    T is floor(Stamp * 1000000000) + NS.
 
-interval_component_string(date(Y,M,D,Offset), S) :- !, date_string(date(Y,M,D,Offset), S).
+interval_component_string(date(Y,M,D,_Offset), S) :- !, date_time_string(date_time(Y,M,D,0,0,0,0), S).
 interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
 interval_component_string(DT, S) :- date_time_string(DT, S).
 %%% xsd:string => xdd:integerRange
@@ -1538,5 +1542,60 @@ test(interval_roundtrip_duration_with_hours, []) :-
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
     S = "2025-01-01T00:00:00Z/PT1H".
+
+test(dateTimeInterval_string_from_dates, []) :-
+    typecast(date_time_interval(date(2025,1,1,0), date(2025,4,1,0), duration(1,0,0,90,0,0,0.0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_from_datetimes, []) :-
+    typecast(date_time_interval(date_time(2025,1,1,10,30,0,0), date_time(2025,4,1,15,45,0,0), duration(1,0,0,90,5,15,0.0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T10:30:00Z/2025-04-01T15:45:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_mixed_date_datetime, []) :-
+    typecast(date_time_interval(date(2025,1,1,0), date_time(2025,4,1,12,0,0,0), duration(1,0,0,90,12,0,0.0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_from_dates_roundtrip, []) :-
+    typecast("2025-01-01/2025-04-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-02T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_to_next_year, []) :-
+    typecast("2019-01-01/2019-12-31"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2019-01-01T00:00:00Z/2020-01-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_over_leap_day, []) :-
+    typecast("2020-02-01/2020-02-29"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2020-02-01T00:00:00Z/2020-03-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_to_leap_day, []) :-
+    typecast("2020-02-27/2020-02-28"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2020-02-27T00:00:00Z/2020-02-29T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_datetime_end_is_not_bumped, []) :-
+    typecast("2019-01-01T00:00:00/2020-01-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2019-01-01T00:00:00Z/2020-01-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 
 :- end_tests(typecast).

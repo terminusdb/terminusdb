@@ -1309,7 +1309,9 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, q)
       expect(r.body.bindings).to.have.lengthOf(1)
       // Extracted components are normalized to xsd:dateTime
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T00:00:00Z')
+      expect(r.body.bindings[0]['v:e']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:e']['@value']).to.equal('2025-04-01T00:00:00Z')
     })
     it('validates matching start+end+interval', async function () {
@@ -1376,6 +1378,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       // Start is normalized to xsd:dateTime; end-of-quarter end bumps to
       // Apr 1 (exclusive), giving P90D (Jan 1 to Apr 1 in non-leap 2025)
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T00:00:00Z')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('P90D')
     })
@@ -1403,6 +1406,19 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT8H30M')
     })
+    it('extracts nanosecond duration from timezone-offset interval', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        interval: { '@type': 'DataValue', data: intervalVal('2025-01-01T09:00:00.000+02:00/2025-01-01T09:00:00.123456789+02:00') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
+      expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T07:00:00Z')
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT0.123456789S')
+    })
   })
 
   describe('IntervalDurationEnd', function () {
@@ -1420,6 +1436,7 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, q)
       expect(r.body.bindings).to.have.lengthOf(1)
       // End-of-quarter end bumps to Apr 1 (exclusive); P90D from Jan 1
+      expect(r.body.bindings[0]['v:e']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:e']['@value']).to.equal('2025-04-01T00:00:00Z')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('P90D')
     })
