@@ -795,6 +795,14 @@ send_error_response(ResponseStreamId, Error) :-
 
 :- begin_tests(request_worker_pool, [concurrent(false)]).
 
+%% Suppress SWI-Prolog's "Thread running ... died on exception" warnings
+%% for test threads that intentionally throw error(test_thread_death(_), _)
+%% to simulate worker death. Only messages carrying a test_thread_death/1
+%% error are suppressed — genuine thread deaths from other modules still
+%% produce warnings.
+:- multifile(user:message_hook/3).
+user:message_hook(abnormal_thread_completion(throw(error(test_thread_death(_), _)), _), _Kind, _Lines) :- !.
+
 test(write_cgi_error_format) :-
     with_output_to(string(Result),
                    write_cgi_error(current_output, 404, "Not found")),
@@ -1076,7 +1084,7 @@ cgi_to_pipe_bytes(WriteEnc, CgiEnc, Goal, Bytes) :-
                         close(CGI)
                     )
                 ->  true
-                ;   throw(goal_failed)
+                ;   throw(error(goal_failed, Goal))
                 ),
                 Error,
                 (   catch(close(CGI), _, true),
@@ -1180,7 +1188,7 @@ test(detached_thread_dies_silently_on_exception) :-
     %% No error is propagated to the parent thread.
     message_queue_create(Q),
     thread_create(
-        ( throw(outside_catch_error) ),
+        ( throw(error(test_thread_death(outside_catch_error), _)) ),
         _ThreadId,
         [detached(true), alias(test_detached_die)]
     ),
@@ -1198,7 +1206,7 @@ test(non_detached_thread_death_is_observable) :-
     %% A non-detached thread that throws outside catch/3 also dies,
     %% but its status is queryable via thread_property/2.
     thread_create(
-        ( throw(outside_catch_error) ),
+        ( throw(error(test_thread_death(outside_catch_error), _)) ),
         ThreadId,
         [detached(false), alias(test_nondetached_die)]
     ),
@@ -1217,7 +1225,7 @@ test(cleanup_outside_catch_kills_thread) :-
     %% silently because there's no outer catch.
     thread_create(
         ( catch(true, _, true),       %% "handler" succeeds
-          throw(cleanup_failed),       %% "cleanup" throws — OUTSIDE catch
+          throw(error(test_thread_death(cleanup_failed), _)),       %% "cleanup" throws — OUTSIDE catch
           true                         %% never reached
         ),
         ThreadId,
@@ -1245,11 +1253,10 @@ test(cleanup_inside_catch_preserves_thread) :-
     thread_create(
         ( catch(
               ( true,                          %% "handler" succeeds
-                throw(cleanup_failed)           %% "cleanup" throws — INSIDE catch
+                throw(error(test_thread_death(cleanup_failed), _))           %% "cleanup" throws — INSIDE catch
               ),
-              Error,
-              ( format(user_error, "Caught cleanup error: ~q~n", [Error]),
-                true                            %% thread continues
+              _Error,
+              ( true                            %% thread continues — error caught
               )
             ),
             %% Thread reaches here — it survived the cleanup failure.
@@ -1279,7 +1286,7 @@ test(dispatch_to_dead_worker_hangs) :-
     %% A dead worker's message queue still exists but nobody reads from it.
     message_queue_create(DeadQueue),
     thread_create(
-        ( throw(die_immediately) ),
+        ( throw(error(test_thread_death(die_immediately), _)) ),
         _,
         [detached(true), alias(test_dead_worker)]
     ),
@@ -1380,7 +1387,7 @@ test(check_worker_alive_crashes_for_dead_thread) :-
     %% Since halt(1) would kill the test process, we instead
     %% verify the logic by checking thread_property directly.
     thread_create(
-        ( throw(die_for_check) ),
+        ( throw(error(test_thread_death(die_for_check), _)) ),
         ThreadId,
         [detached(false), alias(test_check_alive_dead)]
     ),
