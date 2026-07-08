@@ -2836,9 +2836,11 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     % We could probably just feed the document in,
     % the default is dubious.
     (   get_dict(keep,Document,_)
-    ->  Options = Document
-    ;   put_dict(_{ keep : _{ '@id' : true, '_id' : true }},
-                 Document, Options)
+    ->  put_dict(Document, _{ unfold : true }, Options)
+    ;   put_dict(Document,
+                 _{ keep : _{ '@id' : true, '_id' : true },
+                    unfold : true },
+                 Options)
     ),
 
     api_report_errors(

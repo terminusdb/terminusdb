@@ -466,6 +466,12 @@ or two commits (path required).',
            shortflags([c]),
            default(false),
            help('Maintain explit copies of diffs in lists')],
+          [opt(unfold),
+           type(boolean),
+           longflags([unfold]),
+           shortflags([u]),
+           default(true),
+           help('Expand subdocuments inline when comparing documents from commits')],
           [opt(docid),
            type(atom),
            longflags([docid]),
@@ -1894,6 +1900,7 @@ run_command(diff, Args, Opts) :-
     option(before_commit(Before_Commit), Opts),
     option(after_commit(After_Commit), Opts),
     option(copy_value(Copy_Value), Opts),
+    option(unfold(Unfold), Opts, true),
 
     api_report_errors(
         diff,
@@ -1906,7 +1913,7 @@ run_command(diff, Args, Opts) :-
         ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            Options = [keep(Keep),copy_value(Copy_Value)],
+            Options = [keep(Keep),copy_value(Copy_Value),unfold(Unfold)],
             api_diff_id(System_DB, Auth, Path, Before_Commit,
                         After_Commit, DocId, Patch, Options)
         ;   \+ var(After_Commit), \+ var(Before_Commit),
@@ -1917,6 +1924,7 @@ run_command(diff, Args, Opts) :-
             negative_to_infinity(Count_With_Neg,Count),
             Options = [keep(Keep),
                        copy_value(Copy_Value),
+                       unfold(Unfold),
                        start(Start),
                        count(Count)],
             api_diff_all_documents(System_DB, Auth, Path,
@@ -1926,7 +1934,7 @@ run_command(diff, Args, Opts) :-
             [Path] = Args
         ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
             atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            Options = [keep(Keep),copy_value(Copy_Value)],
+            Options = [keep(Keep),copy_value(Copy_Value),unfold(Unfold)],
             api_diff_id_document(System_DB, Auth, Path,
                                  Before_Commit, After,
                                  DocId, Patch, Options)

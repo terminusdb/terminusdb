@@ -2329,6 +2329,10 @@ paths:
                 "keep":
                   type: object
                   example: { "@id" : true, "_id" : true }
+                "unfold":
+                  type: boolean
+                  default: true
+                  description: Expand subdocuments inline when retrieving documents from the specified commits. Set to false to compare documents without unfolding.
       responses:
         200:
           description: "Successful Diff"

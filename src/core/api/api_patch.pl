@@ -26,6 +26,7 @@
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
+:- use_module(library(error), [must_be/2]).
 :- use_module(library(assoc)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
@@ -123,6 +124,11 @@ coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
 
 document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
                      Map_In, Map_Out) :-
+    document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
+                         Map_In, Map_Out, options{}).
+
+document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
+                     Map_In, Map_Out, Options) :-
     resolve_relative_descriptor(Branch_Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
@@ -131,25 +137,28 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
         open_descriptor(Commit_Descriptor, commit_info{}, Transaction, Map_In, Map_Out),
         error(unresolvable_collection(Commit_Descriptor),_)),
 
-    Options = options{
+    option(unfold(Unfold), Options, true),
+    must_be(boolean, Unfold),
+
+    Get_Document_Options = options{
                   compress_ids : true,
-                  unfold: true,
+                  unfold: Unfold,
                   keep_json_type: true
               },
-    get_document(Transaction, Doc_Id, Document, Options).
+    get_document(Transaction, Doc_Id, Document, Get_Document_Options).
 
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
     coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
 
-    (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
-    ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
+    (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
+    ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
         ->  simple_diff(Before,After,Diff,Options)
         ;   Diff = json{ '@op' : 'Delete',
                          '@delete' : Before }
         )
-    ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+    ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
         ->  Diff = json{ '@op' : 'Insert',
                          '@insert' : After }
         ;   fail)
@@ -159,7 +168,7 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
 
-    document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _),
+    document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _, Options),
 
     normalize_document(Transaction, After_Document, Normal_Document),
     simple_diff(Before,Normal_Document,Diff,Options).
@@ -175,13 +184,13 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
         offset(
             Start,
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
-                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
-                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
+                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
+                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
                     ->  simple_diff(Before,After,Diff,Options)
                     ;   Diff = json{ '@op' : 'Delete',
                                      '@delete' : Before }
                     )
-                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
                     ->  Diff = json{ '@op' : 'Insert',
                                      '@insert' : After }
                     ;   fail)

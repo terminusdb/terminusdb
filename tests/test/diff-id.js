@@ -256,6 +256,75 @@ describe('diff-id', function () {
       expect(r3.body[0].b.c).to.deep.equal({ '@after': 4, '@before': 3, '@op': 'SwapValue' })
     })
 
+    it('diff a single document with explicit unfold', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, {
+          schema: [{ '@type': 'Class', '@id': class1, a: 'xsd:string', b: class2 },
+            {
+              '@type': 'Class',
+              '@id': class2,
+              c: 'xsd:integer',
+              '@subdocument': [],
+              '@key': { '@type': 'Lexical', '@fields': ['c'] },
+            },
+          ],
+        })
+      const r1 = await document
+        .insert(agent, {
+          instance: {
+            '@type': class1,
+            a: 'pickles and eggs',
+            b: {
+              '@type': class2,
+              c: 3,
+            },
+          },
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+      const [docIdLong] = r1.body
+      const r2 = await document
+        .replace(agent, {
+          instance: {
+            '@type': class1,
+            a: 'pickles and eggs',
+            '@id': docIdLong,
+            b: {
+              '@type': class2,
+              c: 4,
+            },
+          },
+        })
+      const dv2 = r2.header['terminusdb-data-version']
+      const path = api.path.versionDiff(agent)
+
+      const unfolded = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          after_data_version: dv2,
+          document_id: docIdLong,
+          unfold: true,
+        })
+      expect(unfolded.status).to.equal(200)
+      expect(unfolded.body.b).to.deep.equal({
+        c: { '@after': 4, '@before': 3, '@op': 'SwapValue' },
+      })
+
+      const folded = await agent.post(path).send(
+        {
+          before_data_version: dv1,
+          after_data_version: dv2,
+          document_id: docIdLong,
+          unfold: false,
+        })
+      expect(folded.status).to.equal(200)
+      expect(folded.body.b['@op']).to.equal('SwapValue')
+      expect(folded.body.b['@before']).to.be.a('string')
+      expect(folded.body.b['@after']).to.be.a('string')
+      expect(folded.body.b).to.not.have.property('c')
+    })
+
     it('diff inserted object', async function () {
       const class1 = util.randomString()
       const class2 = util.randomString()
