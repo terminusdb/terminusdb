@@ -202,7 +202,7 @@ function restart_server() {
 
 function status() {
     local SERVER_PORT=${TERMINUSDB_SERVER_PORT:-6363}
-    local SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-swipl}
+    local SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-rust}
     if [ -f "$PID_FILE" ]; then
         local pid=$(cat "$PID_FILE")
         if ps -p "$pid" > /dev/null 2>&1; then
@@ -277,13 +277,13 @@ case "${1:-}" in
         echo "  clean                  - Stop server and remove all test data"
         echo ""
         echo "Examples:"
-        echo "  $0 start               # SWI-Prolog backend on 6363"
+        echo "  $0 start               # Rust backend on 6363"
         echo "  $0 start --clean       # Start with fresh storage"
         echo "  $0 restart --clean     # Restart with fresh storage"
         echo ""
         echo "Environment variables:"
         echo "  TERMINUSDB_SERVER_PORT     - Listen port (default: 6363)"
-        echo "  TERMINUSDB_SERVER_BACKEND  - Server backend: swipl or rust (default: swipl)"
+        echo "  TERMINUSDB_SERVER_BACKEND  - Server backend: rust or swipl (default: rust)"
         echo "  TERMINUSDB_ADMIN_PASS      - Admin password (default: root)"
         exit 1
         ;;

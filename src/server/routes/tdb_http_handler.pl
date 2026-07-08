@@ -27,10 +27,9 @@
 %%  Drop-in replacement for library(http/http_dispatch):http_handler/3.
 %%
 %%  It registers the route with the SWI-Prolog HTTP dispatcher so that the
-%%  default server backend continues to work unchanged. It also registers the
-%%  route with the Rust webserver via appserver_hooks, so that when
-%%  TERMINUSDB_SERVER_BACKEND=rust is selected the Rust server can serve the
-%%  same route.
+%%  SWI-Prolog server backend continues to work when selected. It also
+%%  registers the route with the Rust webserver via appserver_hooks, so that
+%%  the Rust server (the default backend) can serve the same route.
 %%
 %%  Handler is the same closure that is normally passed to http_handler/3,
 %%  typically cors_handler(Method, Goal, ExtraOptions). Options is the same

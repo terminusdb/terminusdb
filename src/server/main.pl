@@ -111,12 +111,16 @@ terminus_server(Argv,Wait) :-
 
 %% server_backend(-Backend) is det.
 %%
-%  Read TERMINUSDB_SERVER_BACKEND (default `swipl`).
+%  Read TERMINUSDB_SERVER_BACKEND (default `rust`).
+%
+%  The Rust webserver is the default backend for both the community and
+%  enterprise builds. The traditional SWI-Prolog HTTP server remains
+%  available as an opt-in via TERMINUSDB_SERVER_BACKEND=swipl.
 server_backend(Backend) :-
     (   getenv('TERMINUSDB_SERVER_BACKEND', BackendEnv)
     ->  atom_string(BackendEnv, BackendAtom),
         downcase_atom(BackendAtom, Backend)
-    ;   Backend = swipl
+    ;   Backend = rust
     ).
 
 %% start_server_backend(+Backend, +Port, +Workers) is det.
@@ -203,3 +207,51 @@ welcome_banner(Server,Argv) :-
     ;   ProductName = "TerminusDB"
     ),
     print_welcome_banner(Version, ProductName, Argv, StrTime, Now, Server).
+
+:- begin_tests(server_backend_selection).
+
+% TERMINUSDB_SERVER_BACKEND may already be set in the environment that
+% launches the test process (e.g. the test server script exports it). Save
+% the current value in setup and restore it in cleanup so the tests are
+% hermetic regardless of the surrounding environment.
+
+setup :-
+    (   getenv('TERMINUSDB_SERVER_BACKEND', Current)
+    ->  assertz(saved_backend(Current))
+    ;   assertz(saved_backend(none))
+    ),
+    unsetenv('TERMINUSDB_SERVER_BACKEND').
+
+cleanup :-
+    (   retract(saved_backend(none))
+    ->  unsetenv('TERMINUSDB_SERVER_BACKEND')
+    ;   retract(saved_backend(Saved))
+    ->  setenv('TERMINUSDB_SERVER_BACKEND', Saved)
+    ;   true
+    ).
+
+test(default_is_rust, [setup(setup), cleanup(cleanup)]) :-
+    server_backend(Backend),
+    Backend == rust.
+
+test(explicit_rust, [setup(setup), cleanup(cleanup)]) :-
+    setenv('TERMINUSDB_SERVER_BACKEND', 'rust'),
+    server_backend(Backend),
+    Backend == rust.
+
+test(explicit_swipl, [setup(setup), cleanup(cleanup)]) :-
+    setenv('TERMINUSDB_SERVER_BACKEND', 'swipl'),
+    server_backend(Backend),
+    Backend == swipl.
+
+test(case_insensitive_rust, [setup(setup), cleanup(cleanup)]) :-
+    setenv('TERMINUSDB_SERVER_BACKEND', 'RUST'),
+    server_backend(Backend),
+    Backend == rust.
+
+test(case_insensitive_swipl, [setup(setup), cleanup(cleanup)]) :-
+    setenv('TERMINUSDB_SERVER_BACKEND', 'Swipl'),
+    server_backend(Backend),
+    Backend == swipl.
+
+:- end_tests(server_backend_selection).
