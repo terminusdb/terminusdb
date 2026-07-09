@@ -210,6 +210,8 @@ welcome_banner(Server,Argv) :-
 
 :- begin_tests(server_backend_selection).
 
+:- dynamic saved_backend/1.
+
 % TERMINUSDB_SERVER_BACKEND may already be set in the environment that
 % launches the test process (e.g. the test server script exports it). Save
 % the current value in setup and restore it in cleanup so the tests are
