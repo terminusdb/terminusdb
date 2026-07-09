@@ -148,6 +148,16 @@ impl StreamRegistry {
         self.senders.values().cloned().collect()
     }
 
+    /// Get a clone of a specific stream's sender, if it exists.
+    pub fn get_sender(&self, id: StreamId) -> Option<mpsc::Sender<axum::body::Bytes>> {
+        self.senders.get(&id).cloned()
+    }
+
+    /// Check if a stream with the given id exists in the registry.
+    pub fn contains(&self, id: StreamId) -> bool {
+        self.senders.contains_key(&id)
+    }
+
     pub fn send(&mut self, id: StreamId, bytes: axum::body::Bytes) -> Result<(), String> {
         match self.senders.get(&id) {
             Some(sender) => match sender.try_send(bytes) {
@@ -174,15 +184,54 @@ pub fn stream_registry() -> Arc<Mutex<StreamRegistry>> {
     STREAM_REGISTRY.clone()
 }
 
-/// Registry of named broadcast channels.
+/// Commands sent to the broadcast forwarder task.
+/// See PLAN_BROADCAST_QUEUE.md for the full architecture.
+enum BroadcastCommand {
+    Subscribe {
+        channel: String,
+        stream_id: StreamId,
+        sender: mpsc::Sender<axum::body::Bytes>,
+    },
+    Unsubscribe {
+        channel: String,
+        stream_id: StreamId,
+    },
+    UnsubscribeAll {
+        stream_id: StreamId,
+    },
+    Send {
+        channel: String,
+        bytes: axum::body::Bytes,
+    },
+}
+
+/// The broadcast registry is just a handle to an unbounded command
+/// queue. All work (subscribe, unsubscribe, fan-out) is done by a
+/// single forwarder task that drains the queue in FIFO order.
 ///
-/// Prolog publishes to a channel by name; Rust forwards the message to every
-/// connected stream that has subscribed to that channel. Senders are stored in
-/// the existing `StreamRegistry`, so channel cleanup is driven by stream
-/// lifecycle (via `StreamGuard::drop`).
-#[derive(Default)]
+/// `send()` is O(1) — pushes to the queue and returns. The forwarder
+/// does the O(N) fan-out asynchronously, so commit latency is constant
+/// regardless of subscriber count.
+///
+/// FIFO ordering preserves the transactional invariant: if Subscribe{S}
+/// is pushed before Send{C}, S receives C via broadcast; if after, S
+/// doesn't, and Phase 2 must send C as delta. The Prolog mutex ensures
+/// `broadcast_sent(BranchPath, C)` is asserted atomically with pushing Send{C}.
 pub struct BroadcastRegistry {
-    channels: HashMap<String, std::collections::HashSet<StreamId>>,
+    tx: mpsc::UnboundedSender<BroadcastCommand>,
+    /// Pending receiver, held until the tokio runtime is available
+    /// to spawn the forwarder task. Once spawned, this is None.
+    pending_rx: Option<mpsc::UnboundedReceiver<BroadcastCommand>>,
+}
+
+impl Default for BroadcastRegistry {
+    fn default() -> Self {
+        let (tx, rx) = mpsc::unbounded_channel::<BroadcastCommand>();
+        Self {
+            tx,
+            pending_rx: Some(rx),
+        }
+    }
 }
 
 impl BroadcastRegistry {
@@ -190,53 +239,198 @@ impl BroadcastRegistry {
         Self::default()
     }
 
-    pub fn subscribe(&mut self, channel: String, stream_id: StreamId) {
-        self.channels.entry(channel).or_default().insert(stream_id);
+    /// Ensure the forwarder task is running. Called on every public
+    /// method. If the tokio handle isn't available yet, the receiver
+    /// stays pending and commands queue up in the unbounded channel.
+    /// Once the handle is available, the forwarder is spawned and
+    /// drains the queued commands.
+    fn ensure_forwarder(&mut self) {
+        if self.pending_rx.is_some() {
+            if let Some(handle) = tokio_handle() {
+                let rx = self.pending_rx.take().unwrap();
+                handle.spawn(run_forwarder(rx));
+            }
+        }
+    }
+
+    pub fn subscribe(
+        &mut self,
+        channel: String,
+        stream_id: StreamId,
+        sender: mpsc::Sender<axum::body::Bytes>,
+    ) {
+        self.ensure_forwarder();
+        let _ = self.tx.send(BroadcastCommand::Subscribe {
+            channel,
+            stream_id,
+            sender,
+        });
     }
 
     pub fn unsubscribe(&mut self, channel: &str, stream_id: StreamId) {
-        if let Some(set) = self.channels.get_mut(channel) {
-            set.remove(&stream_id);
-        }
+        self.ensure_forwarder();
+        let _ = self.tx.send(BroadcastCommand::Unsubscribe {
+            channel: channel.to_string(),
+            stream_id,
+        });
     }
 
     pub fn unsubscribe_all(&mut self, stream_id: StreamId) {
-        for set in self.channels.values_mut() {
-            set.remove(&stream_id);
-        }
+        self.ensure_forwarder();
+        let _ = self.tx.send(BroadcastCommand::UnsubscribeAll { stream_id });
     }
 
-    pub fn broadcast(
-        &mut self,
-        channel: &str,
-        bytes: axum::body::Bytes,
-        stream_registry: &mut StreamRegistry,
-    ) -> Result<(), String> {
-        let stream_ids: Vec<StreamId> = self
-            .channels
-            .get(channel)
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
-        if stream_ids.is_empty() {
-            return Ok(());
-        }
+    pub fn send(&mut self, channel: &str, bytes: axum::body::Bytes) -> Result<(), String> {
+        self.ensure_forwarder();
+        self.tx
+            .send(BroadcastCommand::Send {
+                channel: channel.to_string(),
+                bytes,
+            })
+            .map_err(|_| "broadcast forwarder task terminated".to_string())
+    }
+}
 
-        let mut failed: Vec<StreamId> = Vec::new();
-        for stream_id in stream_ids {
-            if stream_registry.send(stream_id, bytes.clone()).is_err() {
-                failed.push(stream_id);
+/// A subscriber entry in the forwarder's channel map.
+///
+/// Each subscriber has:
+/// - A bounded per-subscriber channel (the decoupling buffer) that the
+///   forwarder writes to with `try_send` (non-blocking, CPU-only)
+/// - A per-subscriber task that drains this channel and writes to the
+///   stream's mpsc::Sender with `send().await` (async, I/O-bound)
+///
+/// This decouples CPU work (forwarder fanout) from I/O work (writing to
+/// TCP sockets). A slow client only blocks its own per-subscriber task,
+/// not the forwarder or other subscribers.
+struct Subscriber {
+    /// Bounded buffer between forwarder and per-subscriber task.
+    /// The forwarder does try_send (non-blocking). If full, the
+    /// subscriber is too slow and gets disconnected.
+    tx: mpsc::Sender<axum::body::Bytes>,
+    /// Handle to the per-subscriber task. Aborting it drops the
+    /// per-subscriber receiver, cleaning up cleanly.
+    task: tokio::task::JoinHandle<()>,
+}
+
+/// Per-subscriber buffer capacity for live broadcasts. Each subscriber
+/// gets its own independent channel of this size — buffers are not shared
+/// across subscribers.
+///
+/// This is the **live backlog** limit: if a subscriber falls behind by
+/// this many commit events (because its per-subscriber task isn't being
+/// scheduled fast enough to drain the buffer), the forwarder's `try_send`
+/// returns `Full` and the subscriber is disconnected.
+///
+/// 64 means a client that falls 64 commits behind on live events is
+/// disconnected. This is intentional — a client that far behind is either
+/// gone or too slow to be useful. The client can reconnect with
+/// `since=<last_received_commit>` to catch up on the missed events,
+/// same progressive-reconnect pattern as `create_response_stream`.
+///
+/// The per-subscriber task drains this buffer into the stream channel
+/// (see `create_response_stream`, which has a separate, larger buffer
+/// for catch-up bursts).
+///
+/// Memory: each slot is a `Bytes` (reference-counted pointer, ~50 bytes).
+/// 64 slots × 10000 subscribers = ~32MB — negligible.
+const SUBSCRIBER_BUFFER: usize = 64;
+
+/// The forwarder task — drains the command queue and does the fan-out.
+/// Runs in the tokio runtime. Maintains the subscriber list per channel.
+///
+/// The forwarder only does CPU work: `try_send` to each subscriber's
+/// per-subscriber buffer. It never blocks on I/O. Per-subscriber tasks
+/// handle the async I/O of writing to each stream independently.
+///
+/// This means:
+/// - Commit latency is O(1) for the FFI call + O(N) try_send for the
+///   forwarder, but the try_send is non-blocking and very fast (just
+///   pushes to a bounded channel, no I/O)
+/// - A slow client only affects its own per-subscriber task
+/// - No subscriber can block the forwarder or other subscribers
+/// - Backpressure is per-subscriber: if a client can't keep up, its
+///   buffer fills and it gets disconnected (zero loss for fast clients)
+async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
+    let mut channels: HashMap<String, HashMap<StreamId, Subscriber>> = HashMap::new();
+
+    while let Some(cmd) = rx.recv().await {
+        match cmd {
+            BroadcastCommand::Subscribe {
+                channel,
+                stream_id,
+                sender,
+            } => {
+                // Create a bounded per-subscriber buffer and spawn a
+                // per-subscriber task that drains it into the stream.
+                let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+                let task = tokio::spawn(subscriber_task(sub_rx, sender));
+                channels
+                    .entry(channel)
+                    .or_default()
+                    .insert(stream_id, Subscriber { tx: sub_tx, task });
+            }
+            BroadcastCommand::Unsubscribe { channel, stream_id } => {
+                if let Some(subs) = channels.get_mut(&channel) {
+                    if let Some(sub) = subs.remove(&stream_id) {
+                        sub.task.abort();
+                    }
+                }
+            }
+            BroadcastCommand::UnsubscribeAll { stream_id } => {
+                for subs in channels.values_mut() {
+                    if let Some(sub) = subs.remove(&stream_id) {
+                        sub.task.abort();
+                    }
+                }
+            }
+            BroadcastCommand::Send { channel, bytes } => {
+                if let Some(subs) = channels.get_mut(&channel) {
+                    if subs.is_empty() {
+                        continue;
+                    }
+                    // Fan out with try_send — non-blocking, CPU-only.
+                    // A full buffer means the subscriber is too slow;
+                    // disconnect it rather than blocking the forwarder.
+                    let failed: Vec<StreamId> = subs
+                        .iter()
+                        .filter_map(|(id, sub)| {
+                            match sub.tx.try_send(bytes.clone()) {
+                                Ok(()) => None,
+                                Err(mpsc::error::TrySendError::Full(_)) => Some(*id),
+                                Err(mpsc::error::TrySendError::Closed(_)) => Some(*id),
+                            }
+                        })
+                        .collect();
+                    for id in failed {
+                        if let Some(sub) = subs.remove(&id) {
+                            sub.task.abort();
+                        }
+                    }
+                }
             }
         }
+    }
+}
 
-        if let Some(set) = self.channels.get_mut(channel) {
-            for stream_id in failed {
-                set.remove(&stream_id);
-            }
+/// Per-subscriber task — drains the per-subscriber buffer and writes to
+/// the stream's mpsc::Sender. This is the async I/O boundary: `send().await`
+/// backpressures on the stream's mpsc channel, which backpressures on the
+/// TCP socket. A slow client only blocks this task, not the forwarder.
+///
+/// The task exits (and cleans up) when either side closes:
+/// - The per-subscriber buffer sender is dropped (forwarder removed the
+///   subscriber, or the forwarder task ended) → `recv().await` returns None
+/// - The stream's mpsc receiver is dropped (client disconnected) →
+///   `send().await` returns Err
+async fn subscriber_task(
+    mut rx: mpsc::Receiver<axum::body::Bytes>,
+    stream_tx: mpsc::Sender<axum::body::Bytes>,
+) {
+    while let Some(bytes) = rx.recv().await {
+        if stream_tx.send(bytes).await.is_err() {
+            // Stream closed — client disconnected. Exit.
+            break;
         }
-
-        Ok(())
     }
 }
 
@@ -247,6 +441,21 @@ lazy_static::lazy_static! {
 /// Return a handle to the global broadcast registry.
 pub fn broadcast_registry() -> Arc<Mutex<BroadcastRegistry>> {
     BROADCAST_REGISTRY.clone()
+}
+
+/// Global handle to the tokio runtime, set when the server starts.
+/// This allows FFI functions (called from Prolog threads) to spawn
+/// async tasks on the tokio runtime.
+static TOKIO_HANDLE: OnceLock<tokio::runtime::Handle> = OnceLock::new();
+
+/// Store the tokio runtime handle so FFI functions can spawn tasks.
+pub fn set_tokio_handle(handle: tokio::runtime::Handle) {
+    let _ = TOKIO_HANDLE.set(handle);
+}
+
+/// Get the tokio runtime handle, if set.
+pub fn tokio_handle() -> Option<&'static tokio::runtime::Handle> {
+    TOKIO_HANDLE.get()
 }
 
 /// Registry of active input stream receivers.
@@ -576,6 +785,27 @@ fn dispatch_stream_to_prolog(
 }
 
 /// Register a new response stream and return its id and the receiver.
+///
+/// The buffer is larger than `SUBSCRIBER_BUFFER` (64) because this
+/// channel serves **both** catch-up and live events. Catch-up commits
+/// (historical, requested via `since=<commit>`) are sent synchronously
+/// via `appserver_stream_send` → `try_send` on this channel. A client
+/// requesting `since=<old_commit>` may receive dozens of catch-up
+/// commits in a burst. This buffer must absorb that burst without
+/// `try_send` returning `Full` (which would fail the catch-up).
+///
+/// 128 handles catch-up of up to 128 commits. If a client's catch-up
+/// set exceeds 128 (e.g. `since=<very_old_commit>`), the buffer fills,
+/// `try_send` returns `Full`, the stream closes, and the client must
+/// reconnect with `since=<last_received_commit>` to resume. Each
+/// reconnect advances through the history by up to 128 commits, so a
+/// 500-commit gap takes ~4 reconnects. This is by design — it keeps
+/// memory bounded at scale while still allowing clients to catch up
+/// from any point in history. Clients must track the last commit ID
+/// they received (from the `commit.identifier` field in each NDJSON
+/// event) and use it as the `since` parameter on reconnect.
+///
+/// Memory: 128 slots × 40 bytes = 5KB per client, 50MB at 10000 clients.
 fn create_response_stream() -> (u64, mpsc::Receiver<axum::body::Bytes>) {
     let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
     let stream_id = stream_registry().lock().unwrap().add(tx);
@@ -1318,28 +1548,55 @@ mod tests {
 
     #[tokio::test]
     async fn broadcast_registry_multiplexes_to_multiple_streams() {
-        let mut stream_registry = StreamRegistry::new();
+        // Set the tokio handle so BroadcastRegistry can spawn the forwarder
+        set_tokio_handle(tokio::runtime::Handle::current());
+
         let mut broadcast_registry = BroadcastRegistry::new();
 
         let (tx1, mut rx1) = mpsc::channel::<axum::body::Bytes>(10);
-        let id1 = stream_registry.add(tx1);
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
-        let id2 = stream_registry.add(tx2);
 
-        broadcast_registry.subscribe("actions".to_string(), id1);
-        broadcast_registry.subscribe("actions".to_string(), id2);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2);
 
         let event = axum::body::Bytes::from(r#"{"action":"test"}"#);
-        assert!(
-            broadcast_registry
-                .broadcast("actions", event.clone(), &mut stream_registry)
-                .is_ok()
-        );
+        assert!(broadcast_registry.send("actions", event.clone()).is_ok());
+
+        // Give the forwarder + per-subscriber tasks time to process
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         let received1 = rx1.recv().await.unwrap();
         let received2 = rx2.recv().await.unwrap();
         assert_eq!(received1, event);
         assert_eq!(received2, event);
+    }
+
+    #[tokio::test]
+    async fn broadcast_registry_slow_subscriber_does_not_block_others() {
+        set_tokio_handle(tokio::runtime::Handle::current());
+
+        let mut broadcast_registry = BroadcastRegistry::new();
+
+        // Subscriber 1: small channel that we won't drain (simulates slow client)
+        let (tx1, _rx1) = mpsc::channel::<axum::body::Bytes>(1);
+        // Subscriber 2: normal channel that we will drain
+        let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
+
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2);
+
+        // Send event 1 — both subscribers should get it (subscriber 1's
+        // per-subscriber buffer has room for 64 events)
+        let event1 = axum::body::Bytes::from(r#"{"action":"1"}"#);
+        broadcast_registry.send("actions", event1.clone()).unwrap();
+
+        // Give tasks time to process
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Subscriber 2 should receive event 1 even though subscriber 1
+        // is not draining its channel
+        let received2 = rx2.recv().await.unwrap();
+        assert_eq!(received2, event1);
     }
 
     #[tokio::test]

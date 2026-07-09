@@ -406,23 +406,38 @@ log_worker_memory(Phase, HandlerModule, HandlerName) :-
 %%
 %%  For stream handlers (HandlerName == stream_handler), the ResponseStreamId
 %%  is made available so that ndjson streaming can use it.
-handle_stream_work(Request, _HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
+handle_stream_work(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
     drain_input_stream(InputStreamId, MemoryFile, BodyStream, BodyLen),
     setup_call_cleanup(
         true,
         (   build_swi_request_from_dict(Request, BodyStream, BodyLen, SWIRequest),
             (   HandlerName == stream_handler
             ->  handle_stream_request(Request, SWIRequest, ResponseStreamId, Response)
-            ;   handle_plugin_request(SWIRequest, Response)
+            ;   handle_plugin_stream_request(HandlerModule, HandlerName, Request, SWIRequest, ResponseStreamId, Response)
             ),
-            send_response(ResponseStreamId, Response),
-            (   get_dict(body, Response, stream),
-                get_dict('_ndjson_body', Response, Body)
+            %% Extract post_response goal before serializing — it's a
+            %% Prolog goal, not JSON serializable.
+            (   get_dict(post_response, Response, PostResponseGoal)
+            ->  select_dict(_{post_response:PostResponseGoal}, Response, ResponseClean),
+                HasPostResponse = true
+            ;   ResponseClean = Response,
+                HasPostResponse = false
+            ),
+            send_response(ResponseStreamId, ResponseClean),
+            (   get_dict(body, ResponseClean, stream),
+                get_dict('_ndjson_body', ResponseClean, Body)
             ->  thread_create(
                     tdb_http_handler:stream_ndjson_body(Body, ResponseStreamId),
                     _,
                     [detached(true)]
                 )
+            ;   true
+            ),
+            %% Call the post_response goal after sending headers. The goal
+            %% sends initial data via appserver_stream_send and registers
+            %% for live updates. It runs on the worker thread.
+            (   HasPostResponse == true
+            ->  call(PostResponseGoal)
             ;   true
             )
         ),
@@ -589,6 +604,44 @@ handle_plugin_request(SWIRequest, Response) :-
         ),
         Error,
         (   json_log_error_formatted("Plugin handler failed: ~q", [Error]),
+            Response = _{
+                status: 500,
+                body: _{
+                    '@type': 'api:ErrorResponse',
+                    'api:status': 'api:failure',
+                    'api:error': _{'@type': 'api:InternalServerError'},
+                    'api:message': 'Internal server error'
+                },
+                headers: _{'Content-Type': 'application/json'}
+            }
+        )
+    ).
+
+%% handle_plugin_stream_request(+HandlerModule, +HandlerName, +RequestDict,
+%%                               +SWIRequest, +ResponseStreamId, -Response) is det.
+%%
+%%  Call a plugin stream handler directly by module:handler. The handler
+%%  signature is Handler(+RequestDict, +StreamId, -Response). The request
+%%  dict is the original JSON request from Rust (with params, query, etc.).
+handle_plugin_stream_request(HandlerModule, HandlerName, Request, _SWIRequest, ResponseStreamId, Response) :-
+    Goal =.. [HandlerName, Request, ResponseStreamId, Response],
+    catch(
+        (   call(HandlerModule:Goal)
+        ->  true
+        ;   json_log_error_formatted("Plugin stream handler ~w:~w failed", [HandlerModule, HandlerName]),
+            Response = _{
+                status: 500,
+                body: _{
+                    '@type': 'api:ErrorResponse',
+                    'api:status': 'api:failure',
+                    'api:error': _{'@type': 'api:InternalServerError'},
+                    'api:message': 'Internal server error'
+                },
+                headers: _{'Content-Type': 'application/json'}
+            }
+        ),
+        Error,
+        (   json_log_error_formatted("Plugin stream handler ~w:~w error: ~q", [HandlerModule, HandlerName, Error]),
             Response = _{
                 status: 500,
                 body: _{

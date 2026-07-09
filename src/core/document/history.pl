@@ -6,7 +6,8 @@
               document_history_entries/5,
               enrich_entry/7,
               changed_document_id/2,
-              commits_changed_id/5
+              commits_changed_id/5,
+              commit_info_dict/3
           ]).
 
 :- use_module(library(yall)).

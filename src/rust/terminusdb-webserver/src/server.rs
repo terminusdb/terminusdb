@@ -76,17 +76,60 @@ pub fn start_with_routes(
 
     std::thread::spawn(move || {
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
-        let listener = match std::net::TcpListener::bind(addr) {
-            Ok(listener) => listener,
+
+        // Use socket2 to create a listener with a large backlog. The
+        // default backlog (128 on macOS) is too small for high connection
+        // counts — 30000 simultaneous connections overflow the accept
+        // queue and drop ~50% of connections.
+        let socket = match socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::STREAM,
+            None,
+        ) {
+            Ok(s) => s,
             Err(e) => {
                 tx.send(Err(format!(
-                    "unable to bind port {}: {}. Webserver not started.",
+                    "unable to create socket for port {}: {}. Webserver not started.",
                     port, e
                 )))
                 .ok();
                 return;
             }
         };
+
+        // Allow rebinding while previous socket is in TIME_WAIT
+        if let Err(e) = socket.set_reuse_address(true) {
+            tx.send(Err(format!(
+                "failed to set SO_REUSEADDR for port {}: {}",
+                port, e
+            )))
+            .ok();
+            return;
+        }
+
+        if let Err(e) = socket.bind(&addr.into()) {
+            tx.send(Err(format!(
+                "unable to bind port {}: {}. Webserver not started.",
+                port, e
+            )))
+            .ok();
+            return;
+        }
+
+        // Listen with a large backlog. The OS caps this at somaxconn,
+        // but we request a high value — the OS will use min(our_value, somaxconn).
+        // On macOS with somaxconn=128, this still helps because the kernel
+        // may use a higher internal queue.
+        if let Err(e) = socket.listen(65535) {
+            tx.send(Err(format!(
+                "failed to listen on port {}: {}",
+                port, e
+            )))
+            .ok();
+            return;
+        }
+
+        let listener: std::net::TcpListener = socket.into();
 
         // Tokio requires the socket to be in non-blocking mode before
         // TcpListener::from_std. Without this, accept() can block a runtime
@@ -102,7 +145,11 @@ pub fn start_with_routes(
         }
 
         let runtime = match tokio::runtime::Runtime::new() {
-            Ok(runtime) => runtime,
+            Ok(runtime) => {
+                // Store the handle so FFI functions can spawn tasks
+                crate::dispatch::set_tokio_handle(runtime.handle().clone());
+                runtime
+            }
             Err(e) => {
                 tx.send(Err(format!("failed to create tokio runtime: {}", e))).ok();
                 return;

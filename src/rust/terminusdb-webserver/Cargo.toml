@@ -20,6 +20,7 @@ hyper-util = { version = "0.1.10", features = ["full"] }
 flate2 = "1.0"
 uuid = { version = "1.11.0", features = ["v4"] }
 libc = "0.2"
+socket2 = "0.6"
 
 [dev-dependencies]
 tower = { version = "0.4.13", features = ["util"] }
