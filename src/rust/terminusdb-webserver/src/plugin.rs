@@ -114,20 +114,81 @@ predicates! {
         Ok(())
     }
 
+    /// Check if a stream with the given id is still active.
+    ///
+    /// Signature: `appserver_stream_exists(+StreamId)`. Succeeds if the
+    /// stream is in the registry, fails otherwise. Used by Prolog to
+    /// detect stale `commit_stream/3` entries when `timeout=false` (no
+    /// timeout thread to clean them up).
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_exists(_context, stream_id_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        if crate::dispatch::stream_registry()
+            .lock()
+            .unwrap()
+            .contains(stream_id)
+        {
+            Ok(())
+        } else {
+            Err(PrologError::Failure)
+        }
+    }
+
     /// Subscribe an existing stream to a named broadcast channel.
     ///
     /// Signature: `appserver_broadcast_subscribe(+Channel, +StreamId)`.
     /// The channel name is an atom or string. After subscribing, any data sent
     /// to the channel with `appserver_broadcast_send/2` is forwarded to
-    /// this stream by Rust.
+    /// this stream by a background tokio task.
     #[module("$appserver")]
     pub semidet fn appserver_broadcast_subscribe(_context, channel_term, stream_id_term) {
+        let channel = term_to_string(channel_term)?;
+        let stream_id: u64 = stream_id_term.get_ex()?;
+
+        // Clone the stream's mpsc::Sender so the forwarder task can
+        // write to it without holding the stream_registry mutex.
+        let stream_sender = {
+            let registry = crate::dispatch::stream_registry();
+            let registry = registry.lock().unwrap();
+            match registry.get_sender(stream_id) {
+                Some(sender) => sender,
+                None => return Err(PrologError::Failure),
+            }
+        };
+
+        crate::dispatch::broadcast_registry()
+            .lock()
+            .unwrap()
+            .subscribe(channel, stream_id, stream_sender);
+        Ok(())
+    }
+
+    /// Unsubscribe a stream from a specific broadcast channel.
+    ///
+    /// Signature: `appserver_broadcast_unsubscribe(+Channel, +StreamId)`.
+    /// Aborts the forwarder task, which drops the broadcast::Receiver.
+    #[module("$appserver")]
+    pub semidet fn appserver_broadcast_unsubscribe(_context, channel_term, stream_id_term) {
         let channel = term_to_string(channel_term)?;
         let stream_id: u64 = stream_id_term.get_ex()?;
         crate::dispatch::broadcast_registry()
             .lock()
             .unwrap()
-            .subscribe(channel, stream_id);
+            .unsubscribe(&channel, stream_id);
+        Ok(())
+    }
+
+    /// Unsubscribe a stream from all broadcast channels.
+    ///
+    /// Signature: `appserver_broadcast_unsubscribe_all(+StreamId)`.
+    /// Aborts all forwarder tasks for this stream.
+    #[module("$appserver")]
+    pub semidet fn appserver_broadcast_unsubscribe_all(_context, stream_id_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        crate::dispatch::broadcast_registry()
+            .lock()
+            .unwrap()
+            .unsubscribe_all(stream_id);
         Ok(())
     }
 
@@ -135,8 +196,9 @@ predicates! {
     ///
     /// Signature: `appserver_broadcast_send(+Channel, +Data)`. Data is
     /// serialized to JSON and forwarded with a trailing newline to every
-    /// stream in the channel. Rust performs the multiplexing, so Prolog only
-    /// needs to send once.
+    /// stream subscribed to the channel. This is a single `broadcast::send()`
+    /// call — no per-stream loop, no stream_registry lock. Forwarder tasks
+    /// in the tokio runtime handle delivery to each stream asynchronously.
     #[module("$appserver")]
     pub semidet fn appserver_broadcast_send(context, channel_term, data_term) {
         let channel = term_to_string(channel_term)?;
@@ -145,12 +207,32 @@ predicates! {
             .map_err(|_| PrologError::Failure)?;
         let mut bytes = data.to_string().into_bytes();
         bytes.push(b'\n');
-        let broadcast_arc = crate::dispatch::broadcast_registry();
-        let stream_arc = crate::dispatch::stream_registry();
-        let mut broadcast = broadcast_arc.lock().unwrap();
-        let mut stream_registry = stream_arc.lock().unwrap();
-        broadcast
-            .broadcast(&channel, axum::body::Bytes::from(bytes), &mut stream_registry)
+        crate::dispatch::broadcast_registry()
+            .lock()
+            .unwrap()
+            .send(&channel, axum::body::Bytes::from(bytes))
+            .map_err(|_| PrologError::Failure)
+    }
+
+    /// Broadcast pre-serialized JSON to every stream subscribed to a channel.
+    ///
+    /// Signature: `appserver_broadcast_send_raw(+Channel, +JsonString)`.
+    /// The string is forwarded verbatim with a trailing newline. Use this
+    /// when the Prolog side has already serialized the data with
+    /// `json_write_dict/3` to avoid term-to-JSON conversion issues (e.g.
+    /// Prolog `[]` being mapped to JSON `null` by `deserialize_from_term`).
+    ///
+    /// This is a single `broadcast::send()` call — no stream_registry lock.
+    #[module("$appserver")]
+    pub semidet fn appserver_broadcast_send_raw(_context, channel_term, json_term) {
+        let channel = term_to_string(channel_term)?;
+        let json_string: String = json_term.get_ex()?;
+        let mut bytes = json_string.into_bytes();
+        bytes.push(b'\n');
+        crate::dispatch::broadcast_registry()
+            .lock()
+            .unwrap()
+            .send(&channel, axum::body::Bytes::from(bytes))
             .map_err(|_| PrologError::Failure)
     }
 
@@ -299,7 +381,10 @@ pub fn register() {
     register_appserver_stream_send_raw();
     register_appserver_stream_close();
     register_appserver_broadcast_subscribe();
+    register_appserver_broadcast_unsubscribe();
+    register_appserver_broadcast_unsubscribe_all();
     register_appserver_broadcast_send();
+    register_appserver_broadcast_send_raw();
     register_appserver_stream_recv();
     register_appserver_open_fd_stream();
     register_appserver_close_fd();

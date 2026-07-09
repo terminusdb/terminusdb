@@ -2473,6 +2473,7 @@ dependencies = [
  "nix",
  "percent-encoding",
  "serde_json",
+ "socket2 0.6.4",
  "swipl",
  "tempfile",
  "tokio",
