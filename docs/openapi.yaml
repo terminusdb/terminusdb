@@ -104,6 +104,22 @@ paths:
                       "authority":
                         type: string
                         example: "terminusdb://system/data/User/admin"
+                      "edition":
+                        type: string
+                        enum: ["community", "enterprise"]
+                        example: "community"
+                        description: |
+                          The TerminusDB edition currently running.
+                          `community` for the open source build, `enterprise`
+                          when the enterprise extension is loaded.
+                      "http_engine":
+                        type: string
+                        enum: ["metal", "swipl"]
+                        example: "metal"
+                        description: |
+                          The HTTP engine serving requests. `metal` for the
+                          Rust webserver (the default), `swipl` for the
+                          traditional SWI-Prolog HTTP server.
                       "storage":
                         type: object
                         properties:
@@ -112,12 +128,18 @@ paths:
                             example: "1"
                       "terminusdb":
                         type: object
+                        description: |
+                          Server version information. Only included for
+                          authenticated (logged-in) users.
                         properties:
                           "version":
                             type: string
                             example: "12.0.2"
                       "terminusdb_store":
                         type: object
+                        description: |
+                          Store version information. Only included for
+                          authenticated (logged-in) users.
                         properties:
                           "version":
                             type: string
@@ -2329,10 +2351,6 @@ paths:
                 "keep":
                   type: object
                   example: { "@id" : true, "_id" : true }
-                "unfold":
-                  type: boolean
-                  default: true
-                  description: Expand subdocuments inline when retrieving documents from the specified commits. Set to false to compare documents without unfolding.
       responses:
         200:
           description: "Successful Diff"
