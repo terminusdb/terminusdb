@@ -274,6 +274,8 @@ build_swi_header(Key-Value, Term) :-
     atom_string(ValueAtom, Value),
     (   KeyLower == authorization
     ->  Term = authorization(ValueAtom)
+    ;   KeyLower == 'authorization-remote'
+    ->  Term = authorization_remote(ValueAtom)
     ;   KeyLower == 'content-type'
     ->  Term = content_type(ValueAtom)
     ;   KeyLower == origin
@@ -405,6 +407,15 @@ test(build_swi_headers_accept) :-
     Dict = _{accept: "text/turtle"},
     build_swi_headers(Dict, Headers),
     memberchk(accept([media(text/turtle, [], 1.0, [])]), Headers).
+
+test(build_swi_headers_authorization_remote) :-
+    %% The Authorization-Remote header is used by clone/fetch/push/pull
+    %% handlers via request_remote_authorization/2, which looks for
+    %% authorization_remote(Token) in the request list. The header must
+    %% be mapped to that term — not the generic header(Key,Value) fallback.
+    Dict = _{'Authorization-Remote': "Basic dXNlcjpwYXNz"},
+    build_swi_headers(Dict, Headers),
+    memberchk(authorization_remote('Basic dXNlcjpwYXNz'), Headers).
 
 test(strip_hop_headers) :-
     strip_hop_headers(['Content-Type'-"application/json", 'Transfer-Encoding'-chunked], Clean),
