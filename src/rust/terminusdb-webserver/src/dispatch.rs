@@ -323,9 +323,13 @@ struct Subscriber {
 ///
 /// 64 means a client that falls 64 commits behind on live events is
 /// disconnected. This is intentional — a client that far behind is either
-/// gone or too slow to be useful. The per-subscriber task drains this
-/// buffer into the stream channel (see `create_response_stream`, which
-/// has a separate, larger buffer for catch-up bursts).
+/// gone or too slow to be useful. The client can reconnect with
+/// `since=<last_received_commit>` to catch up on the missed events,
+/// same progressive-reconnect pattern as `create_response_stream`.
+///
+/// The per-subscriber task drains this buffer into the stream channel
+/// (see `create_response_stream`, which has a separate, larger buffer
+/// for catch-up bursts).
 ///
 /// Memory: each slot is a `Bytes` (reference-counted pointer, ~50 bytes).
 /// 64 slots × 10000 subscribers = ~32MB — negligible.
@@ -790,9 +794,18 @@ fn dispatch_stream_to_prolog(
 /// commits in a burst. This buffer must absorb that burst without
 /// `try_send` returning `Full` (which would fail the catch-up).
 ///
-/// 128 handles catch-up of up to 128 commits — sufficient for typical
-/// usage. Memory: 128 slots × 40 bytes = 5KB per client, 50MB at
-/// 10000 clients.
+/// 128 handles catch-up of up to 128 commits. If a client's catch-up
+/// set exceeds 128 (e.g. `since=<very_old_commit>`), the buffer fills,
+/// `try_send` returns `Full`, the stream closes, and the client must
+/// reconnect with `since=<last_received_commit>` to resume. Each
+/// reconnect advances through the history by up to 128 commits, so a
+/// 500-commit gap takes ~4 reconnects. This is by design — it keeps
+/// memory bounded at scale while still allowing clients to catch up
+/// from any point in history. Clients must track the last commit ID
+/// they received (from the `commit.identifier` field in each NDJSON
+/// event) and use it as the `since` parameter on reconnect.
+///
+/// Memory: 128 slots × 40 bytes = 5KB per client, 50MB at 10000 clients.
 fn create_response_stream() -> (u64, mpsc::Receiver<axum::body::Bytes>) {
     let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
     let stream_id = stream_registry().lock().unwrap().add(tx);
