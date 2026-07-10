@@ -13,6 +13,7 @@
     io_statistics_forward/6,
     io_resolve_forward/6,
     io_compare_forward/4,
+    io_compare_forward/5,
     io_delete_domain/2,
     ancestor_window/4,
     maybe_nudge_push/6,
@@ -164,23 +165,71 @@ api_index_jobs(System_DB, Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
     embedding_type_queries(Commit_Descriptor, TypeQueries),
-    maplist([Type-Query-_Template, Type-Query]>>true,
-            TypeQueries,
-            Queries),
-    convlist([Type-Query-Template, Type-Template]>>ground(Template),
-             TypeQueries,
-             Templates),
     open_descriptor(Commit_Descriptor, Transaction),
-    all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-    '$embedding':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
-    call(Prelude,Stream),
+    call(Prelude, Stream),
+    % Path 1: schema-defined embedding queries
+    (   TypeQueries \= []
+    ->  maplist([Type-Query-_Template, Type-Query]>>true,
+                TypeQueries,
+                Queries),
+        convlist([Type-Query-Template, Type-Template]>>ground(Template),
+                 TypeQueries,
+                 Templates),
+        all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
+        '$embedding':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
+        forall(
+            (   member(Type-_Query-_Template, TypeQueries),
+                api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
+                              Type, Operation)),
+            (   get_dict(op, Operation, Op),
+                ignore(get_dict(id, Operation, Id)),
+                '$embedding':write_op_for(Stream, System_DB, Transaction, Embedding_Context, Type, Id, Op),
+                flush_output(Stream)
+            )
+        )
+    ;   true
+    ),
+    % Path 2: JSONDocument fallback via plugin embedding_for_type
     forall(
-        (   member(Type-_Query-_Template, TypeQueries),
-            api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
-                          Type, Operation)),
+        (   resolve_relative_descriptor(Descriptor,
+                                        ["commit", Commit_Id],
+                                        Path2_Commit_Descriptor),
+            ask(Path2_Commit_Descriptor,
+                t(Id, rdf:type, 'http://terminusdb.com/schema/sys#JSONDocument'),
+                [compress_prefixes(true)]),
+            Operation = json{op:'Inserted', id:Id}
+        ),
         (   get_dict(op, Operation, Op),
-            ignore(get_dict(id, Operation, Id)),
-            '$embedding':write_op_for(Stream, System_DB, Transaction, Embedding_Context, Type, Id, Op)
+            get_dict(id, Operation, Id),
+            (   member(Op, ['Inserted', 'Changed'])
+            ->  get_document(Transaction, Id, Document),
+                (   plugins:embedding_for_type(_, _, Document, EmbeddingString),
+                    EmbeddingString \= ''
+                ->  atom_string(EmbeddingString, EmbStr),
+                    with_output_to(string(JsonLine),
+                                   json_write(current_output,
+                                              json{op:Op, id:Id, string:EmbStr},
+                                              [width(0)])),
+                    format(Stream, '~s~n', [JsonLine]),
+                    flush_output(Stream)
+                ;   plugins:embedding_for_type(_, Document, EmbeddingString),
+                    EmbeddingString \= ''
+                ->  atom_string(EmbeddingString, EmbStr2),
+                    with_output_to(string(JsonLine2),
+                                   json_write(current_output,
+                                              json{op:Op, id:Id, string:EmbStr2},
+                                              [width(0)])),
+                    format(Stream, '~s~n', [JsonLine2]),
+                    flush_output(Stream)
+                ;   true
+                )
+            ;   with_output_to(string(JsonLine3),
+                               json_write(current_output,
+                                          json{op:Op, id:Id},
+                                          [width(0)])),
+                format(Stream, '~s~n', [JsonLine3]),
+                flush_output(Stream)
+            )
         )
     ).
 
@@ -222,7 +271,7 @@ io_stream_push(Endpoint, Domain, Branch, Target_Commit,
     build_push_url(Endpoint, Domain, Branch, Target_Commit,
                    Parent_Commit_Or_Empty, URL),
     Producer = [Chunked_Stream]>>(
-        api_index_jobs(
+        tdb_search:api_index_jobs(
             System_DB,
             Auth,
             Chunked_Stream,
@@ -635,10 +684,22 @@ build_compare_url(Endpoint, Method, URL) :-
     plugin_api:encode_query_value(Method, Enc_Method),
     format(atom(URL), "~w/compare?method=~w", [Endpoint, Enc_Method]).
 
+build_compare_url(Endpoint, Method, Role, URL) :-
+    nonvar(Role),
+    !,
+    plugin_api:encode_query_value(Method, Enc_Method),
+    plugin_api:encode_query_value(Role, Enc_Role),
+    format(atom(URL), "~w/compare?method=~w&role=~w", [Endpoint, Enc_Method, Enc_Role]).
+build_compare_url(Endpoint, Method, _Role, URL) :-
+    build_compare_url(Endpoint, Method, URL).
+
 io_compare_forward(Endpoint, Method, Body_Dict, Response_Body) :-
+    io_compare_forward(Endpoint, Method, _No_Role, Body_Dict, Response_Body).
+
+io_compare_forward(Endpoint, Method, Role, Body_Dict, Response_Body) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_compare_url(Endpoint, Method, URL),
+    build_compare_url(Endpoint, Method, Role, URL),
     setup_call_cleanup(
         http_open(URL, In,
                   [ method(post),
@@ -801,28 +862,28 @@ search_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(search_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            descriptor_graphspec(Descriptor, Domain),
-            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            search_extra_params(Search, Body, Extra_Params),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_graphspec(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            tdb_search:search_extra_params(Search, Body, Extra_Params),
             catch(
-                (   io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   tdb_search:io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
-                    maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                    tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
                                      System_DB, Auth, Path, Branch_Name),
-                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   catch(
-                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
                         Nudge_Error,
                         format(user_error,
                                "[WARN] Search not-indexed nudge failed for ~w: ~q~n",
@@ -845,28 +906,28 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(similar_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            descriptor_graphspec(Descriptor, Domain),
-            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            similar_extra_params(Search, Body, Extra_Params),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_graphspec(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            tdb_search:similar_extra_params(Search, Body, Extra_Params),
             catch(
-                (   io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   tdb_search:io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                        Extra_Params, Response_Body, Data_Version_Header),
-                    maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                    tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
                                      System_DB, Auth, Path, Branch_Name),
-                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   catch(
-                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
                         Nudge_Error,
                         format(user_error,
                                "[WARN] Similar not-indexed nudge failed for ~w: ~q~n",
@@ -887,25 +948,25 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            descriptor_graphspec(Descriptor, Domain),
-            duplicates_extra_params(Search, Body, Extra_Params),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_graphspec(Descriptor, Domain),
+            tdb_search:duplicates_extra_params(Search, Body, Extra_Params),
             catch(
-                (   io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
+                (   tdb_search:io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
                                           Extra_Params, Response_Body, Data_Version_Header),
-                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   catch(
-                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
                         Nudge_Error,
                         format(user_error,
                                "[WARN] Duplicates not-indexed nudge failed for ~w: ~q~n",
@@ -923,20 +984,20 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            descriptor_graphspec(Descriptor, Domain),
-            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            resolve_forward_body(Body, Forward_Body),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_graphspec(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            tdb_search:resolve_forward_body(Body, Forward_Body),
             catch(
-                (   io_resolve_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   tdb_search:io_resolve_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                        Forward_Body, Response_Body),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
@@ -944,7 +1005,7 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   catch(
-                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
                         Nudge_Error,
                         format(user_error,
                                "[WARN] Resolve not-indexed nudge failed for ~w: ~q~n",
@@ -979,25 +1040,25 @@ statistics_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(statistics_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            descriptor_graphspec(Descriptor, Domain),
-            ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_graphspec(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
             catch(
-                (   io_statistics_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   tdb_search:io_statistics_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                           Response_Body, Data_Version_Header),
-                    reply_search_response(Request, Response_Body, Data_Version_Header)
+                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   catch(
-                        io_push_delta(System_DB, Auth, Path, Branch_Name),
+                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
                         Nudge_Error,
                         format(user_error,
                                "[WARN] Statistics not-indexed nudge failed for ~w: ~q~n",
@@ -1028,6 +1089,16 @@ compare_handler(post, Request, _System_DB, Auth) :-
                     Method \== ''
                 ),
                 error(missing_parameter(method), _)),
+            (   memberchk(role=Role, Search)
+            ->  true
+            ;   Role = _No_Role
+            ),
+            (   var(Role)
+            ->  true
+            ;   member(Role, [query, document, clustering, classification])
+            ->  true
+            ;   throw(error(malformed_parameter(role), _))
+            ),
             do_or_die(
                 (   get_dict(source, Body, Source),
                     string(Source),
@@ -1041,8 +1112,8 @@ compare_handler(post, Request, _System_DB, Auth) :-
                 ),
                 error(missing_parameter(target), _)),
             Forward_Body = _{source: Source, target: Target},
-            io_compare_forward(Endpoint, Method, Forward_Body, Response_Body),
-            reply_compare_response(Request, Response_Body)
+            tdb_search:io_compare_forward(Endpoint, Method, Role, Forward_Body, Response_Body),
+            tdb_search:reply_compare_response(Request, Response_Body)
         )
     ).
 
@@ -1153,8 +1224,28 @@ reply_search_response(Request, Response_Body, Data_Version_Header) :-
     write(Response_Body).
 
 % ==========================================================================
+% Index handler — explicit reindex trigger
+% ==========================================================================
+
+index_handler(post, Path, Request, System_DB, Auth) :-
+    plugin_api:api_report_errors(
+        index,
+        Request,
+        (   tdb_search:io_index_branch(System_DB, Auth, Path),
+            plugin_api:write_cors_headers(Request),
+            format("Content-Type: application/json~n~n"),
+            write(json{'@type':'api:IndexResponse','api:status':'api:success'})
+        )
+    ).
+
+% ==========================================================================
 % Route registration
 % ==========================================================================
+
+:- plugin_api:register_route(api(index/Path),
+    plugin_api:cors_handler(Method, tdb_search:index_handler(Path)),
+    [method(Method), prefix, time_limit(infinite),
+     methods([options,post])]).
 
 :- plugin_api:register_route(api(search/Path),
     plugin_api:cors_handler(Method, tdb_search:search_handler(Path)),
