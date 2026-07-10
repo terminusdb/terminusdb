@@ -43,9 +43,6 @@
               set_memory_mode/0,
               cache_eviction_probability/1,
               indexer_backend/1,
-              tdb_search_endpoint/1,
-              tdb_search_admin_user/1,
-              tdb_search_admin_secret/1,
               check_indexer_backend_config/0,
               clear_indexer_backend_config/0,
               worker_elaboration_preference/1
@@ -425,46 +422,19 @@ indexer_backend(Backend) :-
     do_or_die(valid_indexer_backend(Backend),
               error(bad_env_var_value(Env_Var, Value), _)).
 
-/**
- * tdb_search_endpoint(-Endpoint) is semidet.
- *
- * Host for the push/search backend. Only meaningful when
- * indexer_backend(http_tdb_search). Semidet: fails if unset.
- */
-:- table tdb_search_endpoint/1.
-tdb_search_endpoint(Endpoint) :-
-    getenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint).
-
-/**
- * tdb_search_admin_user(-User) is det.
- *
- * HTTP Basic user presented to the tdb-search backend. Default `admin`.
- */
-:- table tdb_search_admin_user/1.
-tdb_search_admin_user(User) :-
-    getenv_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, User).
-
-/**
- * tdb_search_admin_secret(-Secret) is det.
- *
- * HTTP Basic secret presented to the tdb-search backend. Default `root`
- * (dev convenience; must be changed for any exposed deployment).
- */
-:- table tdb_search_admin_secret/1.
-tdb_search_admin_secret(Secret) :-
-    getenv_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, Secret).
-
 /* For testing: clear the tabled selector predicates after mutating env vars.
- * SYMMETRIC WITH clean_indexer_env/0 in api_init.pl — that predicate unsets
- * the env vars that these tabled predicates read. If you add a tabled predicate
- * here, add the corresponding unsetenv in clean_indexer_env/0 too.
+ * The tdb_search_* predicates are now owned by the tdb_search plugin and
+ * use plugin_api_config's tabled env helpers. We clear those tables too.
  */
 clear_indexer_backend_config :-
     abolish_table_subgoals(indexer_backend(_)),
-    abolish_table_subgoals(tdb_search_endpoint(_)),
-    abolish_table_subgoals(tdb_search_admin_user(_)),
-    abolish_table_subgoals(tdb_search_admin_secret(_)),
-    abolish_table_subgoals(semantic_indexer_endpoint(_)).
+    abolish_table_subgoals(semantic_indexer_endpoint(_)),
+    (   current_predicate(plugin_api_config:plugin_env/2)
+    ->  abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT', _)),
+        abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, _)),
+        abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, _))
+    ;   true
+    ).
 
 /**
  * check_indexer_backend_config is det.
@@ -489,7 +459,8 @@ check_indexer_backend_config :-
     ->  Legacy_Endpoint_Set = true
     ;   Legacy_Endpoint_Set = false
     ),
-    (   tdb_search_endpoint(_)
+    (   current_predicate(tdb_search:tdb_search_endpoint/1),
+        tdb_search:tdb_search_endpoint(_)
     ->  Search_Endpoint_Set = true
     ;   Search_Endpoint_Set = false
     ),

@@ -1,6 +1,7 @@
 :- module(plugins, [
               pre_commit_hook/2,
               post_commit_hook/2,
+              post_delete_db_hook/2,
               enrich_commit_info/3,
               fast_document_history/6,
               fast_document_history_entries/5,
@@ -31,6 +32,7 @@
 
 :- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
+:- multifile post_delete_db_hook/2.
 :- multifile enrich_commit_info/3.
 :- multifile fast_document_history/6.
 :- multifile fast_document_history_entries/5.

@@ -16,8 +16,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(document/meta_commit_queue)).
 :- use_module(core(account)).
-:- use_module(core(api/api_search), [io_delete_domain/2]).
-:- use_module(config(terminus_config)).
+:- use_module(core(plugins)).
 
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -79,17 +78,10 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
 
     (   Force = true
     ->  force_delete_db(Organization, DB_Name)
-        % force_delete_db/2 already calls maybe_delete_search_domain/2 —
-        % do NOT call it again here (avoids double DELETE /domain round-trip).
     ;   do_or_die(delete_database_label(Organization, DB_Name),
                   error(database_files_do_not_exist(Organization, DB_Name), _)),
         delete_db_from_system(Organization, DB_Name),
-        % T5: FAIL-LOUD, BEST-EFFORT engine index cleanup.
-        % After the TerminusDB-side deletion is complete, notify the search engine
-        % to drop its index for this domain. Best-effort: if the engine call fails,
-        % surface a loud error log (orphaned index is VISIBLE, not silent) but do
-        % NOT block the TerminusDB-side deletion that already succeeded.
-        maybe_delete_search_domain(Organization, DB_Name)
+        ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true))
     ).
 
 /**
@@ -113,34 +105,4 @@ delete_database_label(Organization, DB_Name) :-
 force_delete_db(Organization, DB_Name) :-
     ignore(delete_database_label(Organization, DB_Name)),
     ignore(delete_db_from_system(Organization, DB_Name)),
-    % T5: Best-effort engine index cleanup (same as normal delete_db).
-    maybe_delete_search_domain(Organization, DB_Name).
-
-/**
- * maybe_delete_search_domain(+Organization, +DB_Name) is det.
- *
- * If the indexer backend is http_tdb_search, calls DELETE /domain on the
- * engine to drop the search index for this data product. FAIL-LOUD,
- * BEST-EFFORT: logs a loud error if the engine call fails, but NEVER
- * blocks the TerminusDB-side deletion.
- *
- * Idempotent: safe to call even if no index exists (engine returns 204).
- * Silent no-op when backend is not http_tdb_search (no engine to notify).
- */
-maybe_delete_search_domain(Organization, DB_Name) :-
-    (   indexer_backend(http_tdb_search),
-        tdb_search_endpoint(Endpoint)
-    ->  format(atom(Domain), "~w/~w", [Organization, DB_Name]),
-        % WHY: Best-effort — the TerminusDB deletion already succeeded.
-        % INVARIANT: io_delete_domain is idempotent (204 for missing domains).
-        % CONSEQUENCE: If the engine call fails, an orphaned index remains
-        %              until manual cleanup. The error is VISIBLE in server logs.
-        catch(
-            io_delete_domain(Endpoint, Domain),
-            Delete_Error,
-            format(user_error,
-                   "[ERROR] Failed to delete search domain '~w' from engine: ~q~n",
-                   [Domain, Delete_Error])
-        )
-    ;   true  % Backend is not http_tdb_search — no engine to notify.
-    ).
+    ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true)).

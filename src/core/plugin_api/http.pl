@@ -2,13 +2,16 @@
     register_route/3,
     cors_handler/3,
     cors_handler/4,
-    authenticate/3
+    authenticate/3,
+    write_cors_headers/1,
+    api_report_errors/3
 ]).
 
 :- use_module(server(routes)).
 :- use_module(server(routes/tdb_http_handler)).
 
-:- reexport(server(routes), [cors_handler/3, cors_handler/4, authenticate/3]).
+:- reexport(server(routes), [cors_handler/3, cors_handler/4, authenticate/3,
+                             write_cors_headers/1, api_report_errors/3]).
 
 %% register_route(+Path, +Handler, +Options) is det.
 %
