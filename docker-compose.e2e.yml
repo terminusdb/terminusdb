@@ -1,0 +1,141 @@
+# E2E test stack: TerminusDB + tdb-search + vectorlink + Ollama
+#
+# Brings up the full plugin ecosystem for end-to-end testing:
+#   - terminusdb: built from source with tdb_search + vectorlink plugins
+#   - tdb-search: search engine (built from sibling ../tdb-search repo)
+#   - vectorlink: legacy semantic indexer (pre-built image)
+#   - embeddings: Ollama serving nomic-embed-v2 for vector embeddings
+#
+# Usage:
+#   docker compose -f docker-compose.e2e.yml up -d
+#   docker compose -f docker-compose.e2e.yml down -v
+#
+# The e2e test suite (tests/e2e/plugin-e2e.js) runs against the TerminusDB
+# port (6370) and exercises the full plugin API surface.
+
+services:
+  terminusdb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SKIP_TESTS: "true"
+        SWIPL_VERSION: "10.0.1"
+    image: terminusdb/terminusdb-server:e2e
+    container_name: terminusdb-e2e
+    hostname: terminusdb-e2e
+    environment:
+      - TERMINUSDB_SERVER_PORT=6363
+      - TERMINUSDB_ADMIN_PASS=root
+      - TERMINUSDB_SERVER_NAME=0.0.0.0
+      # Plugin paths inside the container
+      - TERMINUSDB_ADDON_PATH=/app/terminusdb
+      - TERMINUSDB_PLUGINS_PATH=/app/terminusdb/plugins
+      # tdb-search plugin config
+      - TERMINUSDB_INDEXER_BACKEND=http_tdb_search
+      - TERMINUSDB_TDB_SEARCH_ENDPOINT=http://tdb-search:8080
+      - TERMINUSDB_SEARCH_ADMIN_SECRET=root
+      # vectorlink plugin config
+      - TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT=http://vectorlink:8080
+    ports:
+      - "127.0.0.1:6370:6363"
+    volumes:
+      - terminusdb-e2e-storage:/app/terminusdb/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6363 && echo -e \"GET /api/ok HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && timeout 2 grep -q api:success <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    restart: unless-stopped
+
+  embeddings:
+    image: ollama/ollama:latest
+    pull_policy: missing
+    container_name: e2e-ollama
+    hostname: e2e-ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=60m
+    volumes:
+      - e2e-ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  embeddings-init:
+    image: ollama/ollama:latest
+    pull_policy: missing
+    container_name: e2e-ollama-init
+    depends_on:
+      embeddings:
+        condition: service_healthy
+    volumes:
+      - e2e-ollama-models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://embeddings:11434
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        ollama pull hf.co/nomic-ai/nomic-embed-text-v2-moe-GGUF:Q8_0 || true
+        ollama cp hf.co/nomic-ai/nomic-embed-text-v2-moe-GGUF:Q8_0 nomic-embed-v2 2>/dev/null || true
+        echo "Model ready."
+    restart: "no"
+
+  tdb-search:
+    build:
+      context: ../tdb-search
+      dockerfile: Dockerfile
+    image: tdb-search:e2e
+    container_name: tdb-search-e2e
+    hostname: tdb-search-e2e
+    environment:
+      - TDB_SEARCH_ADMIN_USER=admin
+      - TDB_SEARCH_ADMIN_SECRET=root
+      - TDB_SEARCH_EMBED_PROVIDER=openai_compatible
+      - TDB_SEARCH_EMBED_URL=http://embeddings:11434
+      - TDB_SEARCH_MODEL=nomic-embed-v2
+      - TDB_SEARCH_DIM=768
+      - TDB_SEARCH_DATA_DIR=/data
+      - TDB_SEARCH_TOKENIZER_PATH=/opt/tdb-search/tokenizer.json.bz2
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - e2e-tdb-search-data:/data
+    depends_on:
+      terminusdb:
+        condition: service_healthy
+      embeddings:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && echo -e \"GET /health/live HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && timeout 2 grep -q 200 <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  vectorlink:
+    image: terminusdb/vectorlink:v0.0.8
+    pull_policy: missing
+    container_name: vectorlink-e2e
+    hostname: vectorlink-e2e
+    environment:
+      - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb:6363/api/index
+      - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
+    volumes:
+      - e2e-vectorlink-storage:/app/storage
+    command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage"]
+    depends_on:
+      terminusdb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  terminusdb-e2e-storage:
+  e2e-ollama-models:
+  e2e-tdb-search-data:
+  e2e-vectorlink-storage:
