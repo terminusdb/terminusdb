@@ -3001,6 +3001,20 @@ generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(tdb_search_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "tdb-search endpoint is not configured (called from ~w)", [Context]),
+    JSON = _{'@type' : 'api:EndpointNotConfigured',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:TdbSearchEndpointNotConfigured',
+                             'api:context' : Context}}.
+generic_exception_jsonld(semantic_indexer_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "semantic indexer endpoint is not configured (called from ~w)", [Context]),
+    JSON = _{'@type' : 'api:EndpointNotConfigured',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:SemanticIndexerEndpointNotConfigured',
+                             'api:context' : Context}}.
 generic_exception_jsonld(Error, _Context, JSON) :-
     !,
     generic_exception_jsonld(Error, JSON).

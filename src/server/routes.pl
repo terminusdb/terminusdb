@@ -3280,50 +3280,6 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
         )
     ).
 
-%%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- tdb_http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
-                [method(Method),
-                 prefix,
-                 time_limit(infinite),
-                 methods([options,get,post,put])]).
-
-index_handler(get,Path,Request,System_DB,Auth) :-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []),
-
-    api_report_errors(
-        index,
-        Request,
-        (
-            % Legacy pull-serving route. Only reachable under the http_vectorlink
-            % backend; the selector (Spec 16 §2.3 / RISK-17) makes the legacy and
-            % push paths mutually exclusive. Refuse loud otherwise.
-            do_or_die(config:indexer_backend(http_vectorlink),
-                      error(indexer_backend_not_vectorlink(index_handler), _)),
-            param_value_search_required(Search, commit_id, text, Commit_Id),
-            param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
-            (   Previous_Commit_Id = none
-            ->  Maybe_Previous_Commit_Id = Previous_Commit_Id
-            ;   Maybe_Previous_Commit_Id = some(Previous_Commit_Id)
-            ),
-            api_index_jobs(
-                System_DB,
-                Auth,
-                current_output,
-                [Stream]>>(
-                    write(Stream,'Status: 200'),nl(Stream),
-                    write(Stream,'Content-Type: application/json'),nl(Stream),
-                    format("Transfer-Encoding: chunked~n"),
-                    nl(Stream)),
-                Path,
-                Commit_Id,
-                Maybe_Previous_Commit_Id,
-                [])
-        )
-    ).
-
-
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
 :- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
