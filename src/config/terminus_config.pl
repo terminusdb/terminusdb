@@ -424,9 +424,9 @@ indexer_backend(Backend) :-
  */
 clear_indexer_backend_config :-
     abolish_table_subgoals(indexer_backend(_)),
-    abolish_table_subgoals(semantic_indexer_endpoint(_)),
     (   current_predicate(plugin_api_config:plugin_env/2)
     ->  abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT', _)),
+        abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', _)),
         abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, _)),
         abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, _))
     ;   true
@@ -451,7 +451,8 @@ clear_indexer_backend_config :-
  */
 check_indexer_backend_config :-
     indexer_backend(Backend),
-    (   semantic_indexer_endpoint(_)
+    (   current_predicate(vectorlink:semantic_indexer_endpoint/1),
+        vectorlink:semantic_indexer_endpoint(_)
     ->  Legacy_Endpoint_Set = true
     ;   Legacy_Endpoint_Set = false
     ),

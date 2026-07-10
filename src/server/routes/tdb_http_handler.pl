@@ -1,7 +1,8 @@
 :- module(tdb_http_handler, [
                   tdb_http_handler/3,
                   rust_handler/2,
-                  stream_handler/3
+                  stream_handler/3,
+                  tdb_is_json_content_type/1
               ]).
 
 :- use_module(library(http/http_dispatch)).
@@ -290,7 +291,8 @@ stream_handler_safe(Request, StreamId, Response) :-
             parse_http_response(Captured, Response0),
             Response0 = _{status: Status, body: Body, headers: Headers},
             (   string(Body),
-                ndjson_body(Body)
+                ndjson_body(Body),
+                tdb_is_json_content_type(Headers)
             ->  Response = _{status: Status, body: stream, headers: Headers},
                 thread_create(
                     stream_ndjson_body(Body, StreamId),
@@ -310,6 +312,14 @@ ndjson_body(Body) :-
     subtract(Lines, [""], NonEmpty),
     length(NonEmpty, Len),
     Len > 1.
+
+tdb_is_json_content_type(Headers) :-
+    get_dict('Content-Type', Headers, CT),
+    (   atom(CT)
+    ->  sub_atom(CT, _, _, _, 'application/json')
+    ;   string(CT)
+    ->  sub_string(CT, _, _, _, 'application/json')
+    ).
 
 stream_ndjson_body(Body, StreamId) :-
     catch(

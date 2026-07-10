@@ -77,6 +77,7 @@
               ]).
 :- use_module(core(util/json_preserve), [close_list_tails/1]).
 :- use_module(core(account)).
+:- use_module(core(plugins)).
 :- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
@@ -1471,28 +1472,62 @@ document_stream_headers(embedding, Request, DataVersion) :-
 document_stream_start(embedding, Config, StreamState) :-
     System_DB = Config.system_db,
     Transaction = Config.transaction,
+    (   Config.request = []
+    ->  GraphSpec = ''
+    ;   memberchk(path(Path), Config.request)
+    ->  atom_string(GraphSpec, Path)
+    ;   GraphSpec = ''
+    ),
     embedding_type_queries_from_transaction(Transaction, TypeQueries),
-    maplist([Type-Query-_Template, Type-Query]>>true, TypeQueries, Queries),
-    convlist([Type-Query-Template, Type-Template]>>ground(Template),
-             TypeQueries, Templates),
-    all_class_frames(Transaction, Frames,
-                     [compress_ids(true), expand_abstract(true), simple(true)]),
-    '$embedding':embedding_context(System_DB, Transaction, Templates, Queries,
-                                   Frames, EmbeddingContext),
-    StreamState = state(System_DB, Transaction, EmbeddingContext).
+    (   TypeQueries = []
+    ->  EmbeddingContext = none,
+        TypeQueryMap = []
+    ;   maplist([Type-Query-_Template, Type-Query]>>true, TypeQueries, Queries),
+        convlist([Type-Query-Template, Type-Template]>>ground(Template),
+                 TypeQueries, Templates),
+        all_class_frames(Transaction, Frames,
+                         [compress_ids(true), expand_abstract(true), simple(true)]),
+        '$embedding':embedding_context(System_DB, Transaction, Templates, Queries,
+                                       Frames, EmbeddingContext),
+        findall(Type-Query-Template,
+                member(Type-Query-Template, TypeQueries),
+                TypeQueryMap)
+    ),
+    StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap).
 
 document_stream_write(embedding, _Config, StreamState, Document) :-
-    StreamState = state(System_DB, Transaction, EmbeddingContext),
-    get_dict('@type', Document, Type),
+    StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap),
     database_prefixes(Transaction, Prefixes),
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+    (   get_dict('@type', Document, Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   get_dict('@id', Document, Id),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        ask(Transaction, t(Id_Ex, rdf:type, Type_Ex), [compress_prefixes(false)])
+    ->  true
+    ;   Type_Ex = 'http://terminusdb.com/schema/sys#JSONDocument'
+    ),
     get_dict('@id', Document, Id),
     prefix_expand(Id, Prefixes, Id_Ex),
-    '$embedding':embedding_string_for(System_DB, Transaction, EmbeddingContext,
-                                       Type_Ex, Id_Ex, EmbeddingString),
+    (   EmbeddingContext \= none,
+        member(Type_Ex-_Query-_Template, TypeQueryMap)
+    ->  '$embedding':embedding_string_for(System_DB, Transaction, EmbeddingContext,
+                                           Type_Ex, Id_Ex, EmbeddingString)
+    ;   plugins:embedding_for_type(GraphSpec, Type_Ex, Document, EmbeddingString)
+    ->  true
+    ;   plugins:embedding_for_type(Type_Ex, Document, EmbeddingString)
+    ->  true
+    ;   EmbeddingString = ''
+    ),
     format("~w~n", [EmbeddingString]).
 
 document_stream_end(embedding, _Config).
+
+%% embedding_has_query_for_type(+TypeQueryMap, +Type_Ex) is semidet.
+%%
+%%  True if the type has an embedding query defined in the schema metadata.
+embedding_has_query_for_type(TypeQueryMap, Type_Ex) :-
+    member(Type_Ex-_Query-_Template, TypeQueryMap),
+    !.
 
 % Embedding selector with full pre-flight
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
@@ -1507,18 +1542,19 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
                 Transaction),
     embedding_type_queries_from_transaction(Transaction, TypeQueries),
-    die_if(TypeQueries = [],
-           error(no_embedding_queries_defined, _)),
     embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
                              DocTypes),
     list_to_set(DocTypes, UniqueTypes),
-    forall(
-        member(DocType, UniqueTypes),
-        (   member(SchemaType-_Query-_Template, TypeQueries),
-            class_subsumed(Transaction, DocType, SchemaType)
-        ->  true
-        ;   throw(error(no_embedding_query_for_type(DocType), _))
-        )),
+    (   TypeQueries = []
+    ->  true
+    ;   forall(
+            member(DocType, UniqueTypes),
+            (   member(SchemaType-_Query-_Template, TypeQueries),
+                class_subsumed(Transaction, DocType, SchemaType)
+            ->  true
+            ;   throw(error(no_embedding_query_for_type(DocType), _))
+            ))
+    ),
     put_dict(system_db, Config, System_DB, ConfigWithSystem),
     format_read_documents(embedding, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
@@ -3004,6 +3040,114 @@ test(embedding_api_end_to_end, [
     ),
     % Verify the output contains the rendered template
     once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Plato.")).
+
+test(embedding_plugin_fallback_for_jsondocument, [
+         setup((setup_temp_store(State),
+                create_db_with_test_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert a JSONDocument instance (no embedding query defined, raw_json bypasses schema check)
+    open_string('
+{ "title": "My Document",
+  "body": "This is the content",
+  "tags": ["alpha", "beta"],
+  "meta": { "author": "Alice", "year": 2024 }
+}
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       raw_json(true),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    % Call the API selector with format=embedding and capture output
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    % The output should not be empty — the json2markdown plugin should have produced markdown
+    EmbeddingOutput \= "",
+    % Verify key content appears in the markdown output
+    once(sub_string(EmbeddingOutput, _, _, _, "My Document")),
+    once(sub_string(EmbeddingOutput, _, _, _, "This is the content")),
+    once(sub_string(EmbeddingOutput, _, _, _, "alpha")),
+    once(sub_string(EmbeddingOutput, _, _, _, "beta")),
+    once(sub_string(EmbeddingOutput, _, _, _, "Alice")).
+
+test(embedding_schema_query_takes_precedence_over_plugin, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert schema WITH embedding metadata for Animal
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}
+', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    open_string('
+{ "@type": "Animal", "name": "Rex" }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    % Schema query+template should take precedence — plugin should NOT be called
+    once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Rex.")).
 
 :- end_tests(document_embedding).
 

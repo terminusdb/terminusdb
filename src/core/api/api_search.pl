@@ -5,6 +5,7 @@
               io_statistics_forward/6,
               io_resolve_forward/6,
               io_compare_forward/4,
+              io_compare_forward/5,
               io_delete_domain/2,
               build_search_url/5,
               build_similar_url/5,
@@ -12,6 +13,7 @@
               build_statistics_url/5,
               build_resolve_url/4,
               build_compare_url/3,
+              build_compare_url/4,
               build_delete_domain_url/3,
               ancestor_window/4,
               maybe_nudge_push/6
@@ -284,6 +286,22 @@ build_compare_url(Endpoint, Method, URL) :-
     format(atom(URL), "~w/compare?method=~w", [Endpoint, Enc_Method]).
 
 /**
+ * build_compare_url(+Endpoint, +Method, +Role, -URL) is det.
+ *
+ * Constructs the engine's POST /compare URL with method and optional role
+ * query parameters. Role is a nomic task prefix selector (query, document,
+ * clustering, classification).
+ */
+build_compare_url(Endpoint, Method, Role, URL) :-
+    nonvar(Role),
+    !,
+    encode_query_value(Method, Enc_Method),
+    encode_query_value(Role, Enc_Role),
+    format(atom(URL), "~w/compare?method=~w&role=~w", [Endpoint, Enc_Method, Enc_Role]).
+build_compare_url(Endpoint, Method, _Role, URL) :-
+    build_compare_url(Endpoint, Method, URL).
+
+/**
  * io_compare_forward(+Endpoint, +Method, +Body_Dict, -Response_Body) is det.
  *
  * Forwards a compare request to the engine's POST /compare endpoint.
@@ -296,9 +314,12 @@ build_compare_url(Endpoint, Method, URL) :-
  * Fails loud on non-2xx responses (the engine validates method and body).
  */
 io_compare_forward(Endpoint, Method, Body_Dict, Response_Body) :-
+    io_compare_forward(Endpoint, Method, _No_Role, Body_Dict, Response_Body).
+
+io_compare_forward(Endpoint, Method, Role, Body_Dict, Response_Body) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_compare_url(Endpoint, Method, URL),
+    build_compare_url(Endpoint, Method, Role, URL),
     setup_call_cleanup(
         http_open(URL, In,
                   [ method(post),

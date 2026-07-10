@@ -9,7 +9,9 @@
               post_server_startup_hook/1,
               enrich_history/5,
               enrich_history/6,
-              load_plugins/0
+              load_plugins/0,
+              embedding_for_type/4,
+              embedding_for_type/3
           ]).
 :- use_module(library(lists)).
 :- use_module(library(filesex)).
@@ -40,12 +42,27 @@
 :- multifile enrich_history/6.
 :- multifile pre_server_startup_hook/1.
 :- multifile post_server_startup_hook/1.
+:- multifile embedding_for_type/4.
+:- multifile embedding_for_type/3.
 
 load_plugins :-
     plugin_path(Path),
     exists_directory(Path),
     !,
     directory_files(Path, Files),
+    findall(Full_Path,
+            (   member(File, Files),
+                file_name_extension(_, '.pl', File),
+                directory_file_path(Path, File, Full_Path)
+            ),
+            Plugin_Files),
+    (   Plugin_Files = []
+    ->  true
+    ;   forall(member(Full_Path, Plugin_Files),
+               load_plugin_file(Full_Path)),
+        load_foreign_plugins(Path, Files)
+    ).
+load_plugins.
 
 %% load_plugin_file(+Full_Path) is det.
 %
@@ -323,3 +340,24 @@ update_validation_instance_layer(OldValidation, NewValidation) :-
     New_Layer = New_Instance_Obj.read,
     nb_set_dict(read, Old_Instance_Obj, New_Layer),
     nb_set_dict(changed, Old_Instance_Obj, true).
+
+%% embedding_for_type(+GraphSpec, +Type_IRI, +Document, -Markdown) is semidet.
+%
+%  Multifile hook for plugins to provide a default embedding string
+%  for documents of a given type when no embedding query+template
+%  is defined in the schema metadata.
+%
+%  GraphSpec is the data product path (e.g. "admin/testdb").
+%  Type_IRI is the fully expanded type IRI.
+%  Document is the JSON dict of the document.
+%  Markdown is the output string to embed.
+%
+%  The /4 arity tries the graphspec-specific clause first.
+%  The /3 arity is the fallback that ignores the graphspec.
+embedding_for_type(_, _, _, _) :- fail.
+
+%% embedding_for_type(+Type_IRI, +Document, -Markdown) is semidet.
+%
+%  Fallback hook without graphspec. Tried after all /4 clauses fail.
+embedding_for_type(_, _, _) :- fail.
+

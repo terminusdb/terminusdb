@@ -26,6 +26,7 @@ The /4 hook (with graphspec) is tried first, then the /3 hook (without).
 :- use_module(core(plugin_api)).
 :- use_module(core(plugins)).
 :- use_module(library(lists)).
+:- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(dicts)).
 

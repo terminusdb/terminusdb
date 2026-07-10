@@ -718,7 +718,8 @@ handle_stream_request(_Request, SWIRequest, _ResponseStreamId, Response) :-
             parse_http_response(Captured, Response0),
             Response0 = _{status: Status, body: Body, headers: Headers},
             (   string(Body),
-                tdb_http_handler:ndjson_body(Body)
+                tdb_http_handler:ndjson_body(Body),
+                tdb_http_handler:tdb_is_json_content_type(Headers)
             ->  Response = _{status: Status, body: stream, headers: Headers, '_ndjson_body': Body}
             ;   Response = Response0
             )

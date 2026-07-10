@@ -279,6 +279,19 @@ api_global_error_jsonld(error(document_not_found(Id, Document), _), Type, JSON) 
                               'api:document': Document },
              'api:message' : Msg
             }.
+% Search-family handler received a non-branch descriptor path.
+% Returns a structured 400 response.
+api_global_error_jsonld(error(search_requires_branch_descriptor(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search operations require a branch descriptor path, got: ~w",
+           [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SearchRequiresBranchDescriptor',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
 % Search-family handler received 404 from engine (not indexed yet).
 % Returns a structured 404 response instead of an unhandled 500.
 api_global_error_jsonld(error(search_not_indexed(Path, Engine_Body), _), Type, JSON) :-
@@ -294,14 +307,19 @@ api_global_error_jsonld(error(search_not_indexed(Path, Engine_Body), _), Type, J
              'api:message' : Msg
             }.
 % Generic handler for engine forward failures (non-404 status codes).
-% Maps non-404 engine errors to a structured 500 response instead of a raw exception.
+% Maps 4xx engine errors to api:failure (400) and 5xx to api:server_error (500).
 api_global_error_jsonld(error(tdb_search_forward_failed(Status, Body, URL), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg),
            "Search engine returned unexpected status ~w for ~w",
            [Status, URL]),
+    (   Status >= 400,
+        Status < 500
+    ->  Api_Status = "api:failure"
+    ;   Api_Status = "api:server_error"
+    ),
     JSON = _{'@type' : Type_Displayed,
-             'api:status' : "api:server_error",
+             'api:status' : Api_Status,
              'api:error' : _{ '@type' : 'api:SearchEngineError',
                               'api:status_code' : Status,
                               'api:engine_body' : Body },
