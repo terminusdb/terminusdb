@@ -1,3 +1,34 @@
+# TerminusDB Server v12.1-rc1 Release Notes
+
+This is a major release that also builds the core foundation for a reactive future by moving to a scalable webserver foundation in Rust and a streaming commit pipeline.
+
+## Major changes
+* Subscriptions made possible by replacing streaming swipl http server with rust based streaming http server
+* Significantly improve performance and scalability with parallel write document elaboration and processing
+* Standards-compliant fully qualified intervals support
+
+## Bugfixes
+* Fix rebase race condition on throttled cpu 
+
+# TerminusDB Server v12.0.6 Release Notes
+
+## New functionality
+
+* `@shared` class-level annotation for cascade-deleted shared documents, in [#2437](https://github.com/terminusdb/terminusdb/pull/2437)
+* Add api to render handlebars embeddings, in [#2447](https://github.com/terminusdb/terminusdb/pull/2447)
+
+## Bugfixes
+
+* Fix `@ref` capture resolution with TaggedUnion variants, in [#2432](https://github.com/terminusdb/terminusdb/pull/2432)
+* Fix silent document loss for non-ASCII characters in document API, in [#2450](https://github.com/terminusdb/terminusdb/pull/2450)
+* fix: handle dicts/lists/numbers in SwapValue patches, in [#2438](https://github.com/terminusdb/terminusdb/pull/2438)
+
+## Maintenance
+
+* Bump dependencies: lodash flatted picomatch picomatch tar brace-expansion pytest form-data follow-redirects qs rand tar axios js-yaml to new versions
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.5...v12.0.6-dev
+
 # TerminusDB Server v12.0.5 Release Notes
 
 ## Enhancements

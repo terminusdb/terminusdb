@@ -17,7 +17,7 @@
                json_read_list_stream_head/3,
                json_read_tail_stream/2,
                terminus_schema_path/1]).
-:- use_module(library(http/json), [json_write_dict/3]).
+:- use_module(library(json), [json_write_dict/3]).
 :- use_module(core(query), [literally/2]).
 
 is_var(v(_)).

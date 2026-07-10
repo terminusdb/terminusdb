@@ -26,6 +26,7 @@
 :- use_module(library(lists)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
+:- use_module(library(error), [must_be/2]).
 :- use_module(library(assoc)).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
@@ -123,6 +124,11 @@ coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
 
 document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
                      Map_In, Map_Out) :-
+    document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
+                         Map_In, Map_Out, options{}).
+
+document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction,
+                     Map_In, Map_Out, Options) :-
     resolve_relative_descriptor(Branch_Descriptor,
                                 ["commit", Commit_Id],
                                 Commit_Descriptor),
@@ -131,25 +137,28 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
         open_descriptor(Commit_Descriptor, commit_info{}, Transaction, Map_In, Map_Out),
         error(unresolvable_collection(Commit_Descriptor),_)),
 
-    Options = options{
+    option(unfold(Unfold), Options, true),
+    must_be(boolean, Unfold),
+
+    Get_Document_Options = options{
                   compress_ids : true,
-                  unfold: true,
+                  unfold: Unfold,
                   keep_json_type: true
               },
-    get_document(Transaction, Doc_Id, Document, Options).
+    get_document(Transaction, Doc_Id, Document, Get_Document_Options).
 
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
     coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
 
-    (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
-    ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
+    (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
+    ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
         ->  simple_diff(Before,After,Diff,Options)
         ;   Diff = json{ '@op' : 'Delete',
                          '@delete' : Before }
         )
-    ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+    ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
         ->  Diff = json{ '@op' : 'Insert',
                          '@insert' : After }
         ;   fail)
@@ -159,7 +168,7 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
 
-    document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _),
+    document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _, Options),
 
     normalize_document(Transaction, After_Document, Normal_Document),
     simple_diff(Before,Normal_Document,Diff,Options).
@@ -175,13 +184,13 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
         offset(
             Start,
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
-                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map)
-                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _)
+                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
+                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
                     ->  simple_diff(Before,After,Diff,Options)
                     ;   Diff = json{ '@op' : 'Delete',
                                      '@delete' : Before }
                     )
-                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _)
+                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
                     ->  Diff = json{ '@op' : 'Insert',
                                      '@insert' : After }
                     ;   fail)
@@ -240,7 +249,7 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
 :- use_module(core(document)).
 :- use_module(core(triple)).
 :- use_module(core(api/api_document)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(delete_missing,
      [setup((setup_temp_store(State),
@@ -261,7 +270,7 @@ test(delete_missing,
                 message(Message),
                 full_replace(false),
                 json(false)],
-    api_insert_documents(SystemDB, Auth, Path, Stream, no_data_version, Data_Version1, Ids, Options0),
+    api_insert_documents(SystemDB, Auth, Path, Stream, no_data_version, Data_Version1, _Transaction_Meta_Data1, Ids, Options0),
 
     atom_json_dict(Id_Atom, Ids, []),
     open_string(Id_Atom, Stream2),
@@ -269,7 +278,7 @@ test(delete_missing,
     Options1 = [graph_type(Graph_Type),
                 author(Author),
                 message(Message)],
-    api_delete_documents(SystemDB, Auth, Path, Stream2, Data_Version1, Data_Version2, _Ids, Options1),
+    api_delete_documents(SystemDB, Auth, Path, Stream2, Data_Version1, Data_Version2, _Transaction_Meta_Data2, _Ids, Options1),
 
     Commit_Info = commit_info{ author : Author, message: Message },
     Options2 = [match_final_state(true)],
@@ -305,9 +314,9 @@ test(insert_twice,
                full_replace(false),
                json(false)],
     open_string('{"@type" : "City", "name" : "Warsaw"}', Stream1),
-    api_insert_documents(SystemDB, Auth, Path, Stream1, no_data_version, Data_Version1, _Ids1, Options),
+    api_insert_documents(SystemDB, Auth, Path, Stream1, no_data_version, Data_Version1, _Transaction_Meta_Data1, _Ids1, Options),
     open_string('{"@type" : "City", "name" : "Dublin"}', Stream2),
-    api_insert_documents(SystemDB, Auth, Path, Stream2, Data_Version1, Data_Version2, _Ids2, Options),
+    api_insert_documents(SystemDB, Auth, Path, Stream2, Data_Version1, Data_Version2, _Transaction_Meta_Data2, _Ids2, Options),
 
     Commit_Info = commit_info{ author : Author, message: Message },
     Options1 = [match_final_state(true)],

@@ -11,7 +11,7 @@
 :- use_module(library(option)).
 :- use_module(library(date), [parse_time/3]).
 :- use_module(library(lists), [append/2]).
-:- use_module(library(http/json), [json_write_dict/3]).
+:- use_module(library(json), [json_write_dict/3]).
 
 iso8601_to_rational_epoch(ISO8601, Epoch) :-
     parse_time(ISO8601, iso_8601, FloatEpoch),

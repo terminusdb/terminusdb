@@ -4,6 +4,7 @@
               server/1,
               server_name/1,
               server_port/1,
+              server_enabled/0,
               worker_amount/1,
               max_transaction_retries/1,
               db_path/1,
@@ -47,6 +48,7 @@
               tdb_search_admin_secret/1,
               check_indexer_backend_config/0,
               clear_indexer_backend_config/0
+              worker_elaboration_preference/1
 ]).
 
 :- use_module(library(pcre)).
@@ -59,7 +61,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('12.0.6-dev').
+terminusdb_version('12.0.6').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -80,7 +82,20 @@ server_name(Value) :-
     ;   random_string(Value)).
 
 server_port(Value) :-
-    getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
+    (   getenv_number('TERMINUSDB_SWIPL_PORT', Value)
+    ->  true
+    ;   getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value)
+    ).
+
+server_enabled :-
+    (   getenv('TERMINUSDB_SWIPL_PORT', Value)
+    ->  Value \= 'false',
+        Value \= '0'
+    ;   getenv('TERMINUSDB_SERVER_PORT', Value)
+    ->  Value \= 'false',
+        Value \= '0'
+    ;   true
+    ).
 
 worker_amount(Value) :-
     current_prolog_flag(cpu_count,Integer),
@@ -506,6 +521,14 @@ check_indexer_backend_config_(http_tdb_search, Legacy_Set, Search_Set) :-
 doc_work_limit(Limit) :-
     % This env var is actually read from rust so this default is ignored
     getenv_default('TERMINUSDB_DOC_WORK_LIMIT', Limit, 500_000).
+
+:- table worker_elaboration_preference/1.
+worker_elaboration_preference(Preference) :-
+    getenv_default_number('TERMINUSDB_WORKER_ELABORATION_PREFERENCE', 0.5, Preference),
+    Preference >= 0.0,
+    Preference =< 1.0,
+    !.
+worker_elaboration_preference(0.5).
 
 /**
  * is_memory_mode is semidet.

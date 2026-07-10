@@ -107,7 +107,7 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(apply_macros)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
 :- use_module(library(random)).
@@ -819,11 +819,12 @@ whole_arg(_, _) :-
  *
  * Tests to see if a URI has a protocol.
  *
- * This performs a very simple check and does not support the full URI
- * specification. We can always improve on this if needed.
+ * Matches RFC 3986 \u00a73.1 scheme syntax:
+ *   ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+ * followed by "://". Keeps the existing Unicode-friendly property escapes.
  */
 uri_has_protocol(K) :-
-    re_match('^\\p{L}\\p{Xan}*://.+', K).
+    re_match('^\\p{L}[\\p{Xan}+\\-.]*://.+', K).
 
 /*
  * uri_has_prefix(K) is semidet.
@@ -957,18 +958,27 @@ member_last_([A,_|_],A,false).
 member_last_([_|Rest],A,Last) :-
     member_last_(Rest,A,Last).
 
-datetime_to_internal_datetime(Date,date_time(Y,M,D,HH,MM,SS)) :-
-    date_time_stamp(Date,TS),
-    stamp_date_time(TS,date(Y, M, D, HH, MM, SS, 0, 'UTC', -), 'UTC').
+datetime_to_internal_datetime(date(Y,M,D,HH,MM,SS,Offset,Zone,DST),date_time(NY,NM,ND,NHH,NMM,NSS)) :-
+    % The XSD parser stores offsets in XSD convention (positive = east).
+    % SWI-Prolog's date_time_stamp expects seconds west (negative = east).
+    Swipl_Offset is -Offset,
+    date_time_stamp(date(Y,M,D,HH,MM,SS,Swipl_Offset,Zone,DST),TS),
+    stamp_date_time(TS,date(NY, NM, ND, NHH, NMM, NSS, 0, 'UTC', -), 'UTC').
 
-time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
-    HHOff is Offset div 3600,
-    Offset1 is Offset - HHOff * 3600,
-    MMOff is Offset1 div 60,
+time_to_internal_time(time(HH,MM,SS,_NS,Offset),time(HN,MN,SN)) :-
+    % XSD offset is positive = east.  To get UTC we must subtract east offsets.
+    % Accepts the 5-arg time term produced by the time/5 DCG in xsd_parser.pl.
+    % Nanoseconds are dropped (internal time representation has no NS field).
+    Swipl_Offset is -Offset,
+    HHOff is Swipl_Offset // 3600,
+    Offset1 is Swipl_Offset - HHOff * 3600,
+    MMOff is Offset1 // 60,
     SSOff is Offset1 - MMOff * 60,
-    HN is HH + HHOff mod 24,
-    MN is MM + MMOff mod 60,
-    SN is SS + SSOff mod 60.
+    HN0 is HH + HHOff,
+    HN is (HN0 mod 24 + 24) mod 24,
+    MN0 is MM + MMOff,
+    MN is (MN0 mod 60 + 60) mod 60,
+    SN is SS + SSOff.
 
 % Read a JSON Term from Stream. Fail if no JSON terms are found in Stream.
 json_read_term(Stream, Term) :-
@@ -976,7 +986,7 @@ json_read_term(Stream, Term) :-
     (   Term = eof
     ->  !,
         fail
-    ;   true
+    ;   !
     ).
 
 % Read a JSON Term from Stream. Repeat with backtracking until eof. Fail if no
@@ -1321,3 +1331,102 @@ local_memoize(State, Template, Goal) :-
                                do_local_memoize(State, Template)),
                            finalize_memoization(State))
     ;   get_local_memoized(State, Template)).
+
+:- begin_tests(utils_uri_prefix).
+
+test(uri_has_prefix_hyphenated, []) :-
+    uri_has_prefix('dfrnt-bom:Item', Match),
+    get_dict(prefix, Match, "dfrnt-bom"),
+    get_dict(suffix, Match, "Item").
+
+test(uri_has_prefix_hyphenated_empty_suffix, []) :-
+    uri_has_prefix('dfrnt-bom:', Match),
+    get_dict(prefix, Match, "dfrnt-bom"),
+    get_dict(suffix, Match, "").
+
+test(uri_has_prefix_hyphenated_with_digit, []) :-
+    uri_has_prefix('a1:b', Match),
+    get_dict(prefix, Match, "a1"),
+    get_dict(suffix, Match, "b").
+
+test(uri_has_prefix_no_colon_fails, [fail]) :-
+    uri_has_prefix('dfrnt-bom-name', _).
+
+test(uri_has_prefix_leading_hyphen_fails, [fail]) :-
+    uri_has_prefix('-bom:Item', _).
+
+test(uri_has_prefix_unsafe_hyphenated, []) :-
+    uri_has_prefix_unsafe('dfrnt-bom:Item', Match),
+    get_dict(prefix, Match, "dfrnt-bom"),
+    get_dict(suffix, Match, "Item").
+
+test(uri_has_protocol_standard, []) :-
+    uri_has_protocol('http://example.com/'),
+    uri_has_protocol('https://example.com/path').
+
+test(uri_has_protocol_hyphenated_bom_scheme, []) :-
+    uri_has_protocol('dfrnt-bom:///schema#BomClass').
+
+test(uri_has_protocol_plus_scheme, []) :-
+    uri_has_protocol('coap+tcp:///path').
+
+test(uri_has_protocol_dot_scheme, []) :-
+    uri_has_protocol('my.scheme:///path').
+
+test(uri_has_protocol_rejects_prefixed_name, [fail]) :-
+    uri_has_protocol('dfrnt-bom:Item').
+
+test(uri_has_protocol_rejects_bare_string, [fail]) :-
+    uri_has_protocol('notaprotocol').
+
+:- end_tests(utils_uri_prefix).
+
+:- begin_tests(time_offset_conversion).
+
+% time_to_internal_time/2 converts a local time with XSD timezone offset to UTC.
+% Accepts the 5-arg time(H,M,S,NS,Offset) term produced by the time/5 DCG.
+% XSD convention: positive offset = seconds east of Greenwich (e.g. +02:00 = 7200).
+% To get UTC we subtract east offsets: 09:00+02:00 -> 07:00 UTC.
+
+test(time_east_offset_to_utc, []) :-
+    time_to_internal_time(time(9,0,0,0,7200), time(7,0,0)).
+
+test(time_west_offset_to_utc, []) :-
+    time_to_internal_time(time(9,0,0,0,-18000), time(14,0,0)).
+
+test(time_zero_offset_to_utc, []) :-
+    time_to_internal_time(time(12,30,45,0,0), time(12,30,45)).
+
+test(time_east_offset_wraps_past_midnight, []) :-
+    % 23:00+03:00 -> 20:00 UTC (same day, no wrap needed)
+    time_to_internal_time(time(23,0,0,0,10800), time(20,0,0)).
+
+test(time_west_offset_wraps_past_midnight, []) :-
+    % 01:00-03:00 -> 04:00 UTC (same day, no wrap needed)
+    time_to_internal_time(time(1,0,0,0,-10800), time(4,0,0)).
+
+test(time_with_minute_offset_east, []) :-
+    % 10:30:45+01:30 -> 09:00:45 UTC
+    time_to_internal_time(time(10,30,45,0,5400), time(9,0,45)).
+
+% datetime_to_internal_datetime/2 converts a date/9 term with XSD offset to UTC.
+% The date/9 term uses XSD convention: positive offset = seconds east.
+
+test(datetime_east_offset_to_utc, []) :-
+    datetime_to_internal_datetime(date(2025,1,31,9,0,0,7200,-,-),
+                                  date_time(2025,1,31,7,0,0.0)).
+
+test(datetime_west_offset_to_utc, []) :-
+    datetime_to_internal_datetime(date(2025,3,31,9,0,0,-18000,-,-),
+                                  date_time(2025,3,31,14,0,0.0)).
+
+test(datetime_zero_offset_to_utc, []) :-
+    datetime_to_internal_datetime(date(2025,1,1,12,0,0,0,-,-),
+                                  date_time(2025,1,1,12,0,0.0)).
+
+test(datetime_crosses_date_boundary, []) :-
+    % 2025-01-01T01:00:00-03:00 -> 2025-01-01T04:00:00 UTC (same day)
+    datetime_to_internal_datetime(date(2025,1,1,1,0,0,-10800,-,-),
+                                  date_time(2025,1,1,4,0,0.0)).
+
+:- end_tests(time_offset_conversion).

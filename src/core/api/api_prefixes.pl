@@ -516,6 +516,11 @@ test(valid_prefix_name_basic,
     valid_prefix_name("my_prefix"),
     valid_prefix_name('foo-bar').
 
+test(valid_prefix_name_hyphenated_bom_namespace,
+     []) :-
+    valid_prefix_name('dfrnt-bom'),
+    valid_prefix_name("dfrnt-bom").
+
 test(valid_prefix_name_with_dot,
      []) :-
     valid_prefix_name('v1.0'),

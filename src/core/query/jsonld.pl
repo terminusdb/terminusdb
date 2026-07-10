@@ -26,6 +26,7 @@
 :- use_module(core(util)).
 :- use_module(core(util/syntax)).
 :- use_module(core(triple)).
+:- use_module(core(document/schema), [schema_read_layer/2]).
 :- use_module(core(triple/literals), [object_storage/2]).
 :- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
 :- use_module(core(document)).
@@ -37,7 +38,7 @@
 :- use_module(library(plunit)).
 :- use_module(library(pcre), [re_match/2]).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 % sgml for xsd dates.
 %:- use_module(library(sgml), [xsd_time_string/3]).
@@ -225,26 +226,20 @@ prefix_expand('',_,_) :-
     throw(error(empty_key, _)).
 prefix_expand("",_,_) :-
     throw(error(empty_key, _)).
-prefix_expand(K,Context,Key) :-
-    %   Is already qualified
-    (   uri_has_protocol(K)
-    ->  K = Key
-    %   Is prefixed (but does not check for protocol)
-    ;   uri_has_prefix_unsafe(K, Groups)
-    ->  atom_string(Prefix, Groups.prefix),
-        (   get_dict(Prefix,Context,Expanded)
-        ->  atom_concat(Expanded,(Groups.suffix),Key)
-        ;   throw(error(key_has_unknown_prefix(K), _)))
-    ;   is_at(K)
-    ->  K = Key
-    ;   (   get_dict('@base', Context, Base)
-        ->  true
-        ;   Base = ''),
-        (   get_dict('@vocab', Context, Vocab)
-        ->  true
-        ;   Vocab = ''),
-        atomic_list_concat([Base,Vocab,K],Key)
-    ).
+
+prefix_expand(K, Context, Key) :-
+    is_dict(Context),
+    !,
+    '$doc':rust_expand_prefix(Context, K, Key).
+prefix_expand(K, Layer, Key) :-
+    blob(Layer, layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
+prefix_expand(K, Schema, Key) :-
+    is_list(Schema),
+    schema_read_layer(Schema, Layer),
+    !,
+    '$doc':rust_expand_prefix_layer(Layer, K, Key).
 
 /*
  * expand_context(+Context,-Context_Expanded) is det.
@@ -320,6 +315,19 @@ test(expand_prefix_with_colon, []) :-
     prefix_expand("@base:foo:bar", Prefixes, 'terminusdb:///data/foo:bar'),
     prefix_expand("@schema:foo:bar", Prefixes, 'terminusdb:///schema#foo:bar'),
     prefix_expand("a:foo:bar", Prefixes, 'http://example.org/a/foo:bar').
+
+test(expand_hyphenated_prefix, []) :-
+    Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
+    prefix_expand("dfrnt-bom:Item", Prefixes, 'https://example.com/dfrnt-bom/Item'),
+    prefix_expand("dfrnt-bom:instance/123", Prefixes, 'https://example.com/dfrnt-bom/instance/123').
+
+test(expand_hyphenated_prefix_with_colon_in_local, []) :-
+    Prefixes = _{'dfrnt-bom': "https://example.com/dfrnt-bom/"},
+    prefix_expand("dfrnt-bom:Foo:Bar", Prefixes, 'https://example.com/dfrnt-bom/Foo:Bar').
+
+test(expand_hyphenated_scheme_unchanged, []) :-
+    Prefixes = _{},
+    prefix_expand('dfrnt-bom:///schema#BomClass', Prefixes, 'dfrnt-bom:///schema#BomClass').
 
 :- end_tests(jsonld_expand).
 
@@ -437,6 +445,23 @@ test(compress_base, [])
     compress(Document, Context, Compressed),
 
     json{'@type':'scm:Fact','scm:your_face':json{'@id':'is_ugly'}} :< Compressed.
+
+test(compress_hyphenated_prefix, [])
+:-
+    Context = json{ 'dfrnt-bom' : "https://example.com/dfrnt-bom/"},
+    Document = json{ '@type' : "https://example.com/dfrnt-bom/Item",
+                     '@id' : "https://example.com/dfrnt-bom/instance/123"},
+    compress(Document, Context, Compressed),
+
+    json{'@type':'dfrnt-bom:Item','@id':'dfrnt-bom:instance/123'} :< Compressed.
+
+test(compress_hyphenated_prefix_property, [])
+:-
+    Context = json{ 'dfrnt-bom' : "https://example.com/dfrnt-bom/"},
+    Document = json{ 'https://example.com/dfrnt-bom/weight' : 42},
+    compress(Document, Context, Compressed),
+
+    json{'dfrnt-bom:weight':42} :< Compressed.
 
 :- end_tests(jsonld_compress).
 

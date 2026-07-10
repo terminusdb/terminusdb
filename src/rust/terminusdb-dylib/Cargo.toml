@@ -15,6 +15,7 @@ jemalloc-bg-threads = ["tikv-jemallocator/background_threads"]
 [dependencies]
 terminusdb-community = {path="../terminusdb-community"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+terminusdb-webserver = {path="../terminusdb-webserver"}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "0.6", features = ["disable_initial_exec_tls"] }

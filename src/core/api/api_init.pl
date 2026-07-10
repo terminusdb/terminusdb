@@ -31,8 +31,8 @@
 
 :- use_module(library(semweb/turtle)).
 :- use_module(library(terminus_store)).
-:- use_module(library(http/json)).
 :- use_module(library(http/http_authenticate), [http_authorization_data/2]).
+:- use_module(library(json)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).

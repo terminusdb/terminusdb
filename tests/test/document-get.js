@@ -429,4 +429,27 @@ describe('document-get', function () {
       expectInstances(r.body, [socratesExpected, gödelExpected])
     })
   })
+
+  describe('Content-Type header on GET with empty body', function () {
+    // Regression test for Rust webserver: GET /api/document with
+    // Content-Type: application/json and an empty body returned 400
+    // "Submitted object was not valid JSON" because the Prolog handler
+    // attempted to JSON-parse the empty body. The fix is in
+    // http_read_json_semidet: fail semidet when content_length is 0
+    // rather than attempting to parse an empty stream.
+    it('returns 200 with Content-Type: application/json and empty body', async function () {
+      const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+        .set('Content-Type', 'application/json')
+        .query({ graph_type: 'instance', as_list: true })
+      expect(r.status).to.equal(200)
+      expect(r.body).to.have.length(instancesExpected.length)
+    })
+
+    it('returns 200 without Content-Type header', async function () {
+      const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+        .query({ graph_type: 'instance', as_list: true })
+      expect(r.status).to.equal(200)
+      expect(r.body).to.have.length(instancesExpected.length)
+    })
+  })
 })

@@ -15,7 +15,7 @@
 :- use_module(core(api/api_init), [update_system_graphs/0]).
 :- use_module(core(triple)).
 :- use_module(server(main), [terminus_server/2]).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2, organization_database_name_uri/4]).
 :- use_module(core(document), [get_document/3]).
@@ -48,26 +48,28 @@ cli_toplevel :-
     update_system_graphs,
     load_plugins,
     % Better error handling here...
-    catch_with_backtrace(
-        (   set_prolog_flag(verbose, true),
-            run(Argv),
-            set_prolog_flag(verbose, false),
-            halt(0)
-        ),
-        Exception,
-        (   Exception = unwind(halt(Code))
-        ->  halt(Code)
-        ;   Exception = error(io_error(write,user_output),_)
-        ->  halt(0)
-        ;   Exception = error(rust_io_error('WriteZero',_),_)
-        ->  halt(0)
-        ;   Exception = error(Error,context(prolog_stack(Stack),_)),
-            print_prolog_backtrace(user_error, Stack)
-        ->  format(user_error, "~NError: ~q~n~n", [Error]),
-            halt(1)
-        ;   format(user_error, "~NError: ~q~n~n", [Exception]),
-            halt(1)
-        )).
+    (   catch_with_backtrace(
+            (   set_prolog_flag(verbose, true),
+                run(Argv),
+                set_prolog_flag(verbose, false)
+            ),
+            Exception,
+            (   Exception = unwind(halt(Code))
+            ->  halt(Code)
+            ;   Exception = error(io_error(write,user_output),_)
+            ->  halt(0)
+            ;   Exception = error(rust_io_error('WriteZero',_),_)
+            ->  halt(0)
+            ;   Exception = error(Error,context(prolog_stack(Stack),_)),
+                print_prolog_backtrace(user_error, Stack)
+            ->  format(user_error, "~NError: ~q~n~n", [Error]),
+                halt(1)
+            ;   format(user_error, "~NError: ~q~n~n", [Exception]),
+                halt(1)
+            ))
+    ->  halt(0)
+    ;   halt(1)
+    ).
 
 % commands
 opt_spec(help,'terminusdb help',
@@ -464,6 +466,12 @@ or two commits (path required).',
            shortflags([c]),
            default(false),
            help('Maintain explit copies of diffs in lists')],
+          [opt(unfold),
+           type(boolean),
+           longflags([unfold]),
+           shortflags([u]),
+           default(true),
+           help('Expand subdocuments inline when comparing documents from commits')],
           [opt(docid),
            type(atom),
            longflags([docid]),
@@ -1663,7 +1671,7 @@ run_command(query,[Path,Query],Opts) :-
                          data_version: no_data_version,
                          library: Library,
                          all_witnesses: false },
-            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, Response, Options),
+            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, _, Response, Options),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Response, [])
             ;   get_dict(prefixes, Context, Context_Prefixes),
@@ -1892,6 +1900,7 @@ run_command(diff, Args, Opts) :-
     option(before_commit(Before_Commit), Opts),
     option(after_commit(After_Commit), Opts),
     option(copy_value(Copy_Value), Opts),
+    option(unfold(Unfold), Opts, true),
 
     api_report_errors(
         diff,
@@ -1904,7 +1913,7 @@ run_command(diff, Args, Opts) :-
         ;   \+ var(DocId), \+ var(Before_Commit), \+ var(After_Commit),
             [Path] = Args
         ->  atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            Options = [keep(Keep),copy_value(Copy_Value)],
+            Options = [keep(Keep),copy_value(Copy_Value),unfold(Unfold)],
             api_diff_id(System_DB, Auth, Path, Before_Commit,
                         After_Commit, DocId, Patch, Options)
         ;   \+ var(After_Commit), \+ var(Before_Commit),
@@ -1915,6 +1924,7 @@ run_command(diff, Args, Opts) :-
             negative_to_infinity(Count_With_Neg,Count),
             Options = [keep(Keep),
                        copy_value(Copy_Value),
+                       unfold(Unfold),
                        start(Start),
                        count(Count)],
             api_diff_all_documents(System_DB, Auth, Path,
@@ -1924,7 +1934,7 @@ run_command(diff, Args, Opts) :-
             [Path] = Args
         ->  atom_json_dict(After_Atom, After, [default_tag(json)]),
             atom_json_dict(Keep_Atom, Keep, [default_tag(json)]),
-            Options = [keep(Keep),copy_value(Copy_Value)],
+            Options = [keep(Keep),copy_value(Copy_Value),unfold(Unfold)],
             api_diff_id_document(System_DB, Auth, Path,
                                  Before_Commit, After,
                                  DocId, Patch, Options)
@@ -2222,19 +2232,19 @@ run_command(doc,delete, [Path], Opts) :-
     api_report_errors(
         delete_documents,
         (   Nuke = true
-        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, Opts),
+        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, _, Opts),
             format("Documents nuked~n", [])
         ;   (   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
+            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, _, Opts),
                 Ids = [Id]
             ;   ground(Type)
-            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, Opts),
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, _, Opts),
                 format(atom(Msg), 'All documents of type ~q', [Type]),
                 Ids = [Msg] % silly
             ;   (   var(Data)
                 ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts))
                 ;   open_string(Data, Stream),
-                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts)
                 )
             ),
             format(current_output, "Documents deleted:~n", []),
@@ -2251,7 +2261,7 @@ run_command(doc,replace, [Path], Opts) :-
         (   (   var(Data)
             ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts))
             ;   open_string(Data, Stream),
-                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts)
             ),
             format(current_output, "Documents replaced:~n", []),
             format_doc_id_list(Ids)
@@ -2687,7 +2697,7 @@ doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_replace_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
+    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts).
 
 doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     % Copy stdin to a memory file.
@@ -2696,7 +2706,7 @@ doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_delete_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
+    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts).
 
 doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
     % Copy stdin to a memory file.
@@ -2707,7 +2717,7 @@ doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
 doc_insert_stream(System_DB, Auth, Path, Ids, Options, Stream) :-
     api_insert_documents(
         System_DB, Auth, Path, Stream,
-        no_data_version, _New_Data_Version, Ids, Options).
+        no_data_version, _New_Data_Version, _, Ids, Options).
 
 create_authorization(Opts,Authorization) :-
     option(token(Token), Opts),
@@ -2887,6 +2897,7 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  ~s~n~n', [Help]).
 
 format_doc_id_list(Ids) :-
+    is_list(Ids),
     length(Ids, Id_Count),
     (   Id_Count > 0
     ->  Column_Width is floor(log10(Id_Count)) + 2,

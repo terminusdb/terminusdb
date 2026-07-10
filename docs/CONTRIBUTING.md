@@ -253,6 +253,19 @@ swipl -g "run_tests(graphql_numeric_serialization)" -t halt src/interactive.pl
 swipl -g "run_tests(woql:group_by_single_element_list_template)" -t halt src/interactive.pl
 ```
 
+> **Important:** Always terminate `swipl` properly. Use `-t halt` or include
+> `halt(0)` in your `-g` goal. If the goal fails or throws an exception before
+> reaching `halt(0)`, the process will hang. Do **not** pipe `swipl` output
+> through `tail` or `head`—it hides errors and can mask hanging processes.
+>
+> ```bash
+> # Good: explicit halt
+> swipl -g "run_tests(json), halt(0)" -t halt src/interactive.pl
+>
+> # Bad: no halt, will hang on failure or if the goal is not fully deterministic
+> swipl -g "run_tests(json)" -f src/interactive.pl | tail -n 20
+> ```
+
 ### Test Server Management
 
 Before running JavaScript tests, ensure the test server is running:
@@ -339,7 +352,14 @@ TerminusDB provides built-in logging functions in Rust that integrate with the s
 
 **Built-in Logging Functions:**
 
-The logging module (`src/rust/terminusdb-community/src/log.rs`) provides five severity levels:
+TerminusDB has two Rust logging modules:
+
+- `src/rust/terminusdb-community/src/log.rs` — used from predicates that have a `Context` parameter. It provides the `log_debug!`, `log_info!`, `log_notice!`, `log_warning!`, and `log_error!` macros.
+- `src/rust/terminusdb-webserver/src/log.rs` — used from Rust code that does not have a Prolog context (e.g., background threads in the webserver). It provides the `log_debug`, `log_info`, `log_warning`, and `log_error` functions.
+
+Both modules route messages through Prolog's `json_log:json_log/2` predicate, so they appear in the server log with timestamps, severity, and metadata.
+
+**Logging from a predicate context:**
 
 ```rust
 use crate::log::{log_debug, log_info, log_notice, log_warning, log_error};
@@ -364,6 +384,18 @@ predicates! {
         output_term.unify("result")
     }
 }
+```
+
+**Logging from Rust code without a context (e.g., webserver background threads):**
+
+```rust
+use crate::log;
+
+// In a background thread where no Prolog context is available
+log::log_error(format!("[terminusdb-webserver] server error on port {}: {}", port, e));
+log::log_warning(format!("[terminusdb-webserver] suspicious request: {}", request));
+log::log_info(format!("[terminusdb-webserver] listening on port {}", port));
+log::log_debug(format!("[terminusdb-webserver] resolved path: {:?}", path));
 ```
 
 **How It Works:**
@@ -425,32 +457,15 @@ predicates! {
 }
 ```
 
-**Alternative: File-Based Logging (When Built-in Logging Isn't Available):**
-
-For Rust code that doesn't have access to a Prolog context (e.g., standalone functions), use temporary file logging:
-
-```rust
-use std::io::Write;
-
-if let Ok(mut f) = std::fs::OpenOptions::new()
-    .create(true)
-    .append(true)
-    .open("/tmp/debug_output.log")
-{
-    let _ = writeln!(f, "Debug message: {:?}", some_value);
-}
-
-// View output
-// tail -f /tmp/debug_output.log
-```
-
 **Best Practices:**
 
 - **Always use built-in logging** when you have a `context` parameter
+- **Use the webserver logging module** (`crate::log` in `terminusdb-webserver`) for background threads and code without a context
+- **Never use `eprintln!` or `println!` for production diagnostics** in Rust code; they bypass the structured logging pipeline
 - **Use appropriate severity levels** - avoid `log_error!` for non-errors
 - **Include context in messages** - function name, key identifiers
 - **Remove debug logging** before committing (or use INFO+ level for permanent logs)
-- **File-based logging** should only be used when context isn't available
+- **File-based logging** should only be used when the built-in modules are unavailable
 
 ### Debugging GraphQL Queries
 

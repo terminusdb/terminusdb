@@ -1,10 +1,17 @@
-:- module(routes,[]).
+:- module(routes, [
+              document_handler/5,
+              db_handler/5,
+              db_handler/6,
+              authenticate/3,
+              write_cors_headers/1,
+              customise_exception/1
+          ]).
 
 /** <module> HTTP API
  *
  * The Terminus DB API interface.
  *
- * A RESTful endpoint inventory for weilding the full capabilities of the
+ * A RESTful endpoint inventory for wielding the full capabilities of the
  * terminusDB.
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -20,6 +27,8 @@
 :- use_module(core(api)).
 :- use_module(core(account)).
 :- use_module(core(document)).
+:- use_module(core(util/json_preserve), []).
+:- use_module(core(document/parallel_elaboration), [maybe_help_with_elaboration/0]).
 :- use_module(core(api/api_init)).
 :- use_module(core(api/api_search),
              [io_search_forward/7, io_similar_forward/7,
@@ -42,12 +51,15 @@
 :- use_module(library(yall)).
 :- use_module(library(zlib)).
 :- use_module(library(uuid)).
+:- use_module(library(memfile)).
 
 % unit tests
 :- use_module(library(plunit)).
 
 % http libraries
 :- use_module(library(http/http_dispatch)).
+:- use_module(server(routes/tdb_http_handler)).
+:- use_module(server(routes/request_worker_pool)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
 :- use_module(library(http/http_path)).
@@ -57,8 +69,8 @@
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_header)).
 :- use_module(library(http/http_cors)).
-:- use_module(library(http/json)).
-:- use_module(library(http/json_convert)).
+:- use_module(library(json)).
+:- use_module(library(json_convert)).
 :- use_module(library(http/http_stream)).
 :- use_module(library(url)).
 :- use_module(library(uri)).
@@ -104,7 +116,17 @@ http:location(root, '/', []).
 http:location(api, '/api', []).
 
 %%%%%%%%%%%%% Fallback Path %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler('/api', reply_404_not_found, [prefix]).
+% Wrapper that exposes the 404 handler through the Rust backend as well.
+% It must skip authentication so that unauthenticated missing-path requests
+% get the JSON 404 response instead of an auth challenge.
+:- tdb_http_handler('/api', cors_handler(Method, reply_404_not_found_handler),
+                [method(Method),
+                 methods([options,get,post,put,delete,patch]),
+                 prefix,
+                 skip_authentication(true)]).
+
+reply_404_not_found_handler(_Method, Request, _System_Database, _Auth) :-
+    reply_404_not_found(Request).
 
 reply_404_not_found(Request) :-
     member(path(Path), Request),
@@ -115,7 +137,7 @@ reply_404_not_found(Request) :-
                [status(404)]).
 
 %%%%%%%%%%%%%%%%%%%% Connection Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(.), cors_handler(Method, connect_handler),
+:- tdb_http_handler(api(.), cors_handler(Method, connect_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -133,7 +155,7 @@ connect_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
+:- tdb_http_handler(api(log/Path), cors_handler(Method, log_handler(Path)),
                 [method(Method),
                  methods([options,get])]).
 
@@ -153,7 +175,7 @@ log_handler(get, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(info), cors_handler(Method, info_handler),
+:- tdb_http_handler(api(info), cors_handler(Method, info_handler),
                 [method(Method),
                  methods([options,get])]).
 
@@ -168,7 +190,7 @@ info_handler(get, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Ping Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(ok), cors_handler(Method, ok_handler, [skip_authentication(true)]),
+:- tdb_http_handler(api(ok), cors_handler(Method, ok_handler, [skip_authentication(true)]),
                 [method(Method),
                  methods([options,get])]).
 
@@ -177,12 +199,12 @@ ok_handler(_Method, _Request, _System_DB, _Auth) :-
     format('Status: 200 OK~n~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),
-                [method(Method),
-                 methods([options,get])]).
-:- http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
-                [method(Method),
-                 methods([options,get,head,post,put,delete])]).
+:- tdb_http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),
+                    [method(Method),
+                     methods([options,get])]).
+:- tdb_http_handler(api(db/Org/DB), cors_handler(Method, db_handler(Org, DB), [add_payload(false)]),
+                    [method(Method),
+                     methods([options,get,head,post,put,delete])]).
 
 db_handler(get, Organization, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -381,7 +403,7 @@ test(db_force_delete_unfinalized_system_and_label, [
 :- end_tests(db_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Triples Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
+:- tdb_http_handler(api(triples/Path), cors_handler(Method, triples_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -413,7 +435,7 @@ triples_handler(get,Path,Request, System_DB, Auth) :-
                 var(SubType)
             ->  cors_reply_json(Request, String)
             ;   memberchk(media(text/turtle,_,_,_), Accepted)
-            ->  format('Content-type: text/turtle~n', []),
+            ->  format('Content-type: text/turtle; charset=UTF-8~n', []),
                 format('Status: 200 OK~n~n', []),
                 format(String, [])
             ;   cors_reply_json(Request, String)))).
@@ -444,11 +466,12 @@ triples_handler(put,Path,Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Document Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
-                [method(Method),
-                 prefix,
-                 time_limit(infinite),
-                 methods([head,options,post,delete,get,put])]).
+:- tdb_http_handler(api(document/Path), cors_handler(Method, document_handler(Path), [add_payload(false)]),
+                    [method(Method),
+                     prefix,
+                     time_limit(infinite),
+                     tdb_stream,
+                     methods([head,options,post,delete,get,put])]).
 
 
 document_handler(head, Path, Request, System_DB, Auth) :-
@@ -568,10 +591,12 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           overwrite: Overwrite,
                           input_format: InputFormat
                       },
-            api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
+            api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
 
+            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
+            write_transaction_retry_count_header(Transaction_Retry_Count),
             reply_json(Ids, [width(0)]),
             nl
         )).
@@ -604,18 +629,20 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
                       },
 
             (   Nuke = true
-            ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
             ;   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
             ;   ground(Type)
-            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Options)
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
             ;   http_read_json_semidet(stream(Stream), Request)
-            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, _Ids, Options)
+            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, _Ids, Options)
             ;   throw(error(missing_targets, _))
             ),
 
+            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
+            write_transaction_retry_count_header(Transaction_Retry_Count),
             format("Status: 204~n~n")
         )).
 
@@ -650,16 +677,18 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 merge_repeats: Merge_Repeats,
                 input_format: InputFormat
             },
-            api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
+            api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
 
+            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
             write_cors_headers(Request),
             write_data_version_header(New_Data_Version),
+            write_transaction_retry_count_header(Transaction_Retry_Count),
             reply_json(Ids, [width(0)]),
             nl
         )).
 
 %%%%%%%%%%%%%%%%%%%% History %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
+:- tdb_http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
@@ -719,7 +748,7 @@ history_handler(get, Path, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Frame Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
+:- tdb_http_handler(api(schema/Path), cors_handler(Method, frame_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,get,post])]).
@@ -763,11 +792,11 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% WOQL Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 %
-:- http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),
+:- tdb_http_handler(api(woql), cors_handler(Method, woql_handler, [add_payload(false)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path), [add_payload(false)]),
+:- tdb_http_handler(api(woql/Path), cors_handler(Method, woql_handler(Path), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -828,16 +857,18 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
                 format('Content-Type: application/json~n'),
                 format("Transfer-Encoding: chunked~n~n"),
                 woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
-            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Response, Options),
+            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Transaction_Meta_Data, Response, Options),
+                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                 write_cors_headers(Request),
                 write_data_version_header(New_Data_Version),
+                write_transaction_retry_count_header(Transaction_Retry_Count),
                 reply_json_dict(Response, [width(0)])
             )
         )).
 
 
 %%%%%%%%%%%%%%%%%%%% Clone Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
+:- tdb_http_handler(api(clone/Organization/DB), cors_handler(Method, clone_handler(Organization, DB)),
                 [method(Method),
                  methods([options,post])]).
 
@@ -985,7 +1016,7 @@ test(clone_remote, [
 :- end_tests(clone_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Fetch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
+:- tdb_http_handler(api(fetch/Path), cors_handler(Method, fetch_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1264,7 +1295,7 @@ test(fetch_second_time_with_change, [
 
 
 %%%%%%%%%%%%%%%%%%%% Rebase Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
+:- tdb_http_handler(api(rebase/Path), cors_handler(Method, rebase_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1371,10 +1402,12 @@ test(rebase_divergent_history, [
 :- end_tests(rebase_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pack Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
+:- tdb_http_handler(api(pack/Path), cors_handler(Method, pack_handler(Path)),
                 [method(Method),
+                 prefix,
                  time_limit(infinite),
                  chunked,
+                 tdb_binary,
                  methods([options,post])]).
 
 pack_handler(post,Path,Request, System_DB, Auth) :-
@@ -1488,10 +1521,12 @@ test(pack_nothing, [
 :- end_tests(pack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Unpack Handlers %%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
+:- tdb_http_handler(api(unpack/Path), cors_handler(Method, unpack_handler(Path)),
                 [method(Method),
+                 prefix,
                  chunked,
                  time_limit(infinite),
+                 tdb_binary,
                  methods([options,post])]).
 
 unpack_handler(post, Path, Request, System_DB, Auth) :-
@@ -1523,9 +1558,10 @@ unpack_handler(post, Path, Request, System_DB, Auth) :-
 %:- end_tests(unpack_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% TUS Handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(files), tus_auth_wrapper(tus_dispatch),
+:- tdb_http_handler(api(files), tus_auth_wrapper(tus_dispatch),
                 [ methods([options,head,post,patch,delete]),
-                  prefix
+                  prefix,
+                  tdb_binary
                 ]).
 
 :- meta_predicate tus_auth_wrapper(2,?).
@@ -1553,7 +1589,7 @@ tus_auth_wrapper(Goal,Request) :-
     !.
 
 %%%%%%%%%%%%%%%%%%%% Push Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
+:- tdb_http_handler(api(push/Path), cors_handler(Method, push_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -1886,7 +1922,7 @@ test(push_nonempty_to_earlier_nonempty_advances_remote_head,
 :- end_tests(push_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Pull Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
+:- tdb_http_handler(api(pull/Path), cors_handler(Method, pull_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2222,7 +2258,7 @@ test(pull_from_something_to_something_equal_other_branch,
 :- end_tests(pull_endpoint).
 
 %%%%%%%%%%%%%%%%%%%% Branch Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
+:- tdb_http_handler(api(branch/Path), cors_handler(Method, branch_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2256,7 +2292,7 @@ branch_handler(delete, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
+:- tdb_http_handler(api(prefixes/Path), cors_handler(Method, prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
@@ -2275,7 +2311,7 @@ prefix_handler(get, Path, Request, System_DB, Auth) :-
 
 %%%%%%%%%%%%%%%%%%%% Individual Prefix Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 
-:- http_handler(api(prefix/Path), cors_handler(Method, individual_prefix_handler(Path)),
+:- tdb_http_handler(api(prefix/Path), cors_handler(Method, individual_prefix_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,get,post,put,delete])]).
@@ -2375,11 +2411,11 @@ resolve_prefix_path(Path, DB_Path, Prefix_Name) :-
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
-:- http_handler(api(user), cors_handler(Method, user_handler),
+:- tdb_http_handler(api(user), cors_handler(Method, user_handler),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(api(user/Name), cors_handler(Method, user_handler(Name)),
+:- tdb_http_handler(api(user/Name), cors_handler(Method, user_handler(Name)),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
@@ -2437,7 +2473,7 @@ user_handler(delete, Request, System_DB, Auth) :-
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
-:- http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
+:- tdb_http_handler(api(user_organizations), cors_handler(Method, user_organizations_handler),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
@@ -2456,11 +2492,11 @@ user_organizations_handler(get, Request, System_DB, Auth) :-
 %
 % THIS IS A DEPRECATED HANDLER - YOU SHOULD NOT RELY ON THIS!
 %
-:- http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
+:- tdb_http_handler(api(organization), cors_handler(Method, organization_handler, [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,post,delete])]).
-:- http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
+:- tdb_http_handler(api(organization/Name), cors_handler(Method, organization_handler(Name), [add_payload(false)]),
                 [method(Method),
                  prefix,
                  methods([options,delete])]).
@@ -2505,7 +2541,7 @@ organization_handler(delete, Name, Request, System_DB, Auth) :-
                               'api:status' : "api:success"}))).
 
 %%%%%%%%%%%%%%%%%%%% Squash handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
+:- tdb_http_handler(api(squash/Path), cors_handler(Method, squash_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2538,7 +2574,7 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Reset handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
+:- tdb_http_handler(api(reset/Path), cors_handler(Method, reset_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2565,7 +2601,7 @@ reset_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Optimize handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
+:- tdb_http_handler(api(optimize/Path), cors_handler(Method, optimize_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2580,7 +2616,7 @@ optimize_handler(post, Path, Request, System_DB, Auth) :-
     api_report_errors(
         optimize,
         Request,
-        (   api_optimize(System_DB, Auth, Path),
+        (   api_optimize_queued(System_DB, Auth, Path),
             cors_reply_json(Request, _{'@type' : 'api:OptimizeResponse',
                                        'api:status' : "api:success"}))).
 
@@ -2615,7 +2651,7 @@ test(optimize_system, [
 
 
 %%%%%%%%%%%%%%%%%%%% Remote handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
+:- tdb_http_handler(api(remote/Path), cors_handler(Method, remote_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2692,11 +2728,11 @@ remote_handler(get, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Patch handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(patch), cors_handler(Method, patch_handler),
+:- tdb_http_handler(api(patch), cors_handler(Method, patch_handler, [add_payload(json_preserve)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path)),
+:- tdb_http_handler(api(patch/Path), cors_handler(Method, patch_handler(Path), [add_payload(json_preserve)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2762,11 +2798,11 @@ patch_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Diff handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(diff), cors_handler(Method, diff_handler(none{})),
+:- tdb_http_handler(api(diff), cors_handler(Method, diff_handler(none{}), [add_payload(json_preserve)]),
                 [method(Method),
                  time_limit(infinite),
                  methods([options,post])]).
-:- http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path)),
+:- tdb_http_handler(api(diff/Path), cors_handler(Method, diff_handler(Path), [add_payload(json_preserve)]),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2807,9 +2843,11 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     % We could probably just feed the document in,
     % the default is dubious.
     (   get_dict(keep,Document,_)
-    ->  Options = Document
-    ;   put_dict(_{ keep : _{ '@id' : true, '_id' : true }},
-                 Document, Options)
+    ->  put_dict(Document, _{ unfold : true }, Options)
+    ;   put_dict(Document,
+                 _{ keep : _{ '@id' : true, '_id' : true },
+                    unfold : true },
+                 Options)
     ),
 
     api_report_errors(
@@ -2834,7 +2872,7 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Apply handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
+:- tdb_http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -2894,10 +2932,10 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
 
 
 %%%%%%%%%%%%%%%%%%%% Roles handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(roles), cors_handler(Method, roles_handler),
+:- tdb_http_handler(api(roles), cors_handler(Method, roles_handler),
                 [method(Method),
                  methods([options,post,put,get])]).
-:- http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
+:- tdb_http_handler(api(roles/Name), cors_handler(Method, roles_handler(Name)),
                 [method(Method),
                  methods([options,delete,get])]).
 
@@ -2979,23 +3017,23 @@ roles_handler(get, Name, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Organizations handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(organizations), cors_handler(Method, organizations_handler),
+:- tdb_http_handler(api(organizations), cors_handler(Method, organizations_handler),
                 [method(Method),
                  methods([options,get])]).
-:- http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
+:- tdb_http_handler(api(organizations/Name), cors_handler(Method, organizations_handler(Name)),
                 [method(Method),
                  methods([options,post,delete,get])]).
-:- http_handler(api(organizations/Org/users/Rest),
+:- tdb_http_handler(api(organizations/Org/users/Rest),
                 cors_handler(Method, organizations_users_handler(Org,Rest)),
                 [method(Method),
                  prefix,
                  methods([options,get])]).
 /*
-:- http_handler(api(organizations/Org/users/User),
+:- tdb_http_handler(api(organizations/Org/users/User),
                 cors_handler(Method, organizations_users_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
-:- http_handler(api(organizations/Org/users/User/databases),
+:- tdb_http_handler(api(organizations/Org/users/User/databases),
                 cors_handler(Method, organizations_users_databases_handler(Org,User)),
                 [method(Method),
                  methods([options,get])]).
@@ -3073,10 +3111,10 @@ organizations_users_handler(get, Org, Path, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Users handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(users), cors_handler(Method, users_handler),
+:- tdb_http_handler(api(users), cors_handler(Method, users_handler),
                 [method(Method),
                  methods([options,post,put,get])]).
-:- http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
+:- tdb_http_handler(api(users/Name), cors_handler(Method, users_handler(Name)),
                 [method(Method),
                  methods([options,delete,get])]).
 
@@ -3160,7 +3198,7 @@ users_handler(delete, Name, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Capabilities handler %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
+:- tdb_http_handler(api(capabilities), cors_handler(Method, capabilities_handler),
                 [method(Method),
                  methods([options,post])]).
 
@@ -3205,7 +3243,7 @@ capabilities_handler(post, Request, System_DB, Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%% Schema Migration %%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
+:- tdb_http_handler(api(migration/Path), cors_handler(Method, migration_handler(Path)),
                 [method(Method),
                  prefix,
                  methods([options,post])]).
@@ -3247,7 +3285,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
+:- tdb_http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
                 [method(Method),
                  prefix,
                  time_limit(infinite),
@@ -3880,8 +3918,11 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     memberchk(content_length(Content_Length), Request),
 
     catch((      authenticate(System_DB, Request, Auth),
-                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length),
+                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data),
+                 transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                  write_cors_headers(Request),
+                 write_data_version_header(New_Data_Version),
+                 write_transaction_retry_count_header(Transaction_Retry_Count),
                  write('Status: 200'),nl,
                  write('Content-Type: application/json'),nl,
                  nl,
@@ -3993,7 +4034,11 @@ cors_handler(Method, Goal, Options, R) :-
         (
             (   memberchk(Method, [post, put, delete]),
                 \+ memberchk(add_payload(false), Options)
-            ->  add_payload_to_request(R,Request)
+            ->  (   memberchk(add_payload(json_preserve), Options)
+                ->  do_or_die(http_read_json_preserve_semidet(json_dict(Document), R),
+                              error(bad_api_document(R, [payload]), _)),
+                    Request = [payload(Document)|R]
+                ;   add_payload_to_request(R, Request))
             ;   Request = R),
 
             open_descriptor(system_descriptor{}, System_Database),
@@ -4015,6 +4060,7 @@ cors_handler(Method, Goal, Options, R) :-
                                   },
                                  [width(0), status(401)]))))),
     abolish_private_tables,
+    ignore(maybe_help_with_elaboration),
     !.
 cors_handler(_Method, Goal, _Options, R) :-
     write_cors_headers(R),
@@ -4100,7 +4146,7 @@ customise_exception(error(E)) :-
     json_http_code(JSON,Status),
     reply_json(JSON,[status(Status), width(0)]).
 customise_exception(error(E,Context)) :-
-    generic_exception_jsonld(E,JSON),
+    generic_exception_jsonld(E, Context, JSON),
     (   get_dict('@type', JSON, 'api:UnhandledErrorResponse')
     ->  log_unhandled_error_backtrace(E, Context)
     ;   true
@@ -4544,6 +4590,58 @@ test(accept_nonzero_content_length) :-
 
 :- end_tests(content_length_validation).
 
+:- begin_tests(http_read_json_semidet).
+
+test(fails_on_empty_body_with_json_content_type) :-
+    %% A GET request with Content-Type: application/json and an empty
+    %% body (content_length(0)) should fail semidet, not throw.
+    %% This is the Rust webserver regression: the Rust dispatch always
+    %% adds content_length(0) for empty bodies, so the semidet check
+    %% must not attempt to JSON-parse an empty stream.
+    new_memory_file(MF),
+    open_memory_file(MF, read, EmptyStream, [type(binary), encoding(octet)]),
+    Request = [
+        method(get),
+        path('/api/document/admin/test'),
+        content_type('application/json'),
+        content_length(0),
+        input(EmptyStream)
+    ],
+    \+ http_read_json_semidet(json_dict(_JSON), Request),
+    close(EmptyStream),
+    free_memory_file(MF).
+
+test(fails_on_missing_content_length) :-
+    %% Without content_length, semidet should fail (no body to read).
+    new_memory_file(MF),
+    open_memory_file(MF, read, EmptyStream, [type(binary), encoding(octet)]),
+    Request = [
+        method(get),
+        path('/api/document/admin/test'),
+        content_type('application/json'),
+        input(EmptyStream)
+    ],
+    \+ http_read_json_semidet(json_dict(_JSON), Request),
+    close(EmptyStream),
+    free_memory_file(MF).
+
+test(fails_on_non_json_content_type) :-
+    %% Non-JSON content type should fail semidet.
+    new_memory_file(MF),
+    open_memory_file(MF, read, EmptyStream, [type(binary), encoding(octet)]),
+    Request = [
+        method(post),
+        path('/api/document/admin/test'),
+        content_type('text/plain'),
+        content_length(10),
+        input(EmptyStream)
+    ],
+    \+ http_read_json_semidet(json_dict(_JSON), Request),
+    close(EmptyStream),
+    free_memory_file(MF).
+
+:- end_tests(http_read_json_semidet).
+
 content_encoded(Request, Encoding) :-
     memberchk(content_encoding(Encoding), Request),
     do_or_die(
@@ -4677,8 +4775,8 @@ http_read_json_stream_for_documents_body(Stream, Request) :-
         zopen(Input_Stream, Uncompressed_Stream, [close_parent(false), format(Encoding), multi_part(false)]),
         read_string(Uncompressed_Stream, _, BufferedString),
         close(Uncompressed_Stream)
-    ;   % Uncompressed request - read directly
-        http_read_data(Request, BufferedString, [to(string)])
+    ;   % Uncompressed request - read raw bytes, no charset decoding.
+        http_read_data(Request, BufferedString, [to(string), input_encoding(octet)])
     ),
     open_string(BufferedString, Stream).
 
@@ -4734,13 +4832,19 @@ http_read_json_required(Output, Request) :-
  */
 http_read_json_semidet(Output, Request) :-
     json_content_type(Request),
-    memberchk(content_length(_Len), Request),
+    memberchk(content_length(Len), Request),
+    Len > 0,
     http_read_utf8(Output, Request).
+
+http_read_json_preserve_semidet(json_dict(JSON), Request) :-
+    http_read_json_stream_for_documents(Stream, Request),
+    json_preserve:json_read_dict_stream(Stream, JSON, []).
 
 % WOQL-specific JSON reader that preserves numeric string precision
 http_read_woql_json_semidet(Output, Request) :-
     json_content_type(Request),
-    memberchk(content_length(_Len), Request),
+    memberchk(content_length(Len), Request),
+    Len > 0,
     http_read_woql_utf8(Output, Request).
 
 /*

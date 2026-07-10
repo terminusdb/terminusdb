@@ -11,12 +11,12 @@ describe('In-Memory Mode', function () {
     it.skip('skipped: requires local terminusdb binary (set SKIP_MEMORY_MODE_TESTS=true)', function () {})
     return
   }
-  this.timeout(30000)
+  this.timeout(15000)
 
   const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
-  async function waitForServer (maxRetries = 40) {
+  async function waitForServer (maxRetries = 10) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const res = await new Promise((resolve, reject) => {
@@ -38,6 +38,25 @@ describe('In-Memory Mode', function () {
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
     throw new Error('Server did not start in time')
+  }
+
+  async function waitForApi (auth, maxRetries = 20) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const res = await httpRequest({
+          hostname: '127.0.0.1',
+          port: PORT,
+          path: '/api/',
+          method: 'GET',
+          headers: { Authorization: `Basic ${auth}` },
+        })
+        if (res.status === 200) return res
+      } catch (e) {
+        // Endpoint not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+    throw new Error('/api/ did not return 200 in time')
   }
 
   async function waitForJsonEndpoint (path, auth, maxRetries = 10) {
@@ -113,13 +132,7 @@ describe('In-Memory Mode', function () {
 
       // Verify we can authenticate with the custom password
       const auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')
-      const response = await httpRequest({
-        hostname: '127.0.0.1',
-        port: PORT,
-        path: '/api/',
-        method: 'GET',
-        headers: { Authorization: `Basic ${auth}` },
-      })
+      const response = await waitForApi(auth)
 
       expect(response.status).to.equal(200)
     })
@@ -134,13 +147,7 @@ describe('In-Memory Mode', function () {
 
       // Verify we can authenticate with the default password 'root'
       const auth = Buffer.from('admin:root').toString('base64')
-      const response = await httpRequest({
-        hostname: '127.0.0.1',
-        port: PORT,
-        path: '/api/',
-        method: 'GET',
-        headers: { Authorization: `Basic ${auth}` },
-      })
+      const response = await waitForApi(auth)
 
       expect(response.status).to.equal(200)
     })

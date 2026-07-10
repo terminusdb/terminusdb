@@ -5,7 +5,10 @@
               retry_transaction/2,
               with_transaction/3,
               with_transaction/4,
-              graph_inserts_deletes/3
+              graph_inserts_deletes/3,
+              transaction_object_database_key/2,
+              reset_transaction_object_graph_descriptors/1,
+              reset_transaction_objects_graph_descriptors/1
           ]).
 
 /** <module> Implementation of database graph management
@@ -23,6 +26,7 @@
 :- use_module(core(triple), [xrdf_added/4, xrdf_deleted/4]).
 :- use_module(core(plugins)).
 :- use_module(core(document/migration)).
+:- use_module(core(document/meta_commit_queue)).
 
 :- use_module(config(terminus_config), [max_transaction_retries/1]).
 
@@ -130,17 +134,22 @@ slot_time(0.1).
 compute_backoff(Count, Time) :-
     slot_size(Slot),
     slot_coefficient(C),
-    Slots is floor(C * (Slot ** Count)) + 1,
+    % Exponential backoff with jitter. Cap the slot count so that even
+    % 10 retries complete within roughly 10 seconds (slot_time=0.1s,
+    % so max_slots=10 gives a 1s upper bound per retry).
+    MaxSlots is 10,
+    Slots0 is floor(C * (Slot ** Count)) + 1,
+    Slots is min(Slots0, MaxSlots),
     random(0,Slots,This_Slot),
     slot_time(Slot_Time),
     Time is This_Slot * Slot_Time.
 
 reset_read_write_obj(Read_Write_Obj, Map, New_Map) :-
+    Descriptor = (Read_Write_Obj.descriptor),
     nb_set_dict(read, Read_Write_Obj, _),
     nb_set_dict(write, Read_Write_Obj, _),
     nb_set_dict(backlinks, Read_Write_Obj, []),
     nb_set_dict(triple_update, Read_Write_Obj, false),
-    Descriptor = (Read_Write_Obj.descriptor),
     (   get_dict(commit_type, Descriptor, _)
     ->  nb_set_dict(commit_type, Descriptor, _)
     ;   true),
@@ -167,6 +176,9 @@ reset_transaction_object_graph_descriptors(Transaction_Object, Map, New_Map) :-
  */
 reset_transaction_objects_graph_descriptors(Transaction_Objects) :-
     mapm(reset_transaction_object_graph_descriptors, Transaction_Objects, [], _).
+
+reset_transaction_object_graph_descriptors(Transaction_Object) :-
+    reset_transaction_object_graph_descriptors(Transaction_Object, [], _).
 
 /**
  * reset_query_context(Query_Context) is semidet.
@@ -247,16 +259,22 @@ with_transaction_(Query_Context,
                   Meta_Data,
                   Options) :-
     retry_transaction(Query_Context, Transaction_Retry_Count),
-    (   catch(call(Body),
-              fail_transaction,
-              Fail_Transaction=true)
-    ->  Fail_Transaction = false,
-        query_context_transaction_objects(Query_Context, Transactions),
-        run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0,Options),
-        !, % No going back now!
-        Meta_Data = (Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}))
-    ;   !,
-        fail).
+    (   catch(call(Body), fail_transaction,
+              (   nb_setval(transaction_retry_signal, true),
+                  fail
+              ))
+    ->  (   nb_current(transaction_retry_signal, true)
+        ->  fail                     % retry on fail_transaction
+        ;   query_context_transaction_objects(Query_Context, Transactions),
+            run_transactions(Transactions,(Query_Context.all_witnesses),Meta_Data0,Options),
+            !, % No going back now!
+            Meta_Data = (Meta_Data0.put(_{transaction_retry_count : Transaction_Retry_Count}))
+        )
+    ;   (   nb_current(transaction_retry_signal, true)
+        ->  fail                     % retry on fail_transaction
+        ;   !, fail                  % normal body failure: fail immediately
+        )
+    ).
 with_transaction_(_,
                   _,
                   _,
@@ -264,7 +282,7 @@ with_transaction_(_,
     throw(error(transaction_retry_exceeded, _)).
 
 :- use_module(core(util/test_utils)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 /*
  * run_transactions(Transaction, All_Witnesses, Meta_Data) is det.
  *
@@ -281,6 +299,18 @@ Options include
 * allow_destructive_migration: whether we should allow strengthening migrations
 
  */
+transaction_object_database_key(Transaction_Object, Key) :-
+    get_dict(descriptor, Transaction_Object, Descriptor),
+    (   database_descriptor{organization_name: _,
+                          database_name: _} = Descriptor
+    ->  meta_commit_queue:database_descriptor_key(Descriptor, Key)
+    ;   system_descriptor{} = Descriptor
+    ->  meta_commit_queue:system_meta_lock_key(Key)
+    ;   get_dict(parent, Transaction_Object, Parent)
+    ->  transaction_object_database_key(Parent, Key)
+    ;   fail
+    ).
+
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     (   option(inside_migration(true), Options)
@@ -301,7 +331,20 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     ->  true
     ;   throw(error(schema_check_failure(Hook_Witnesses),_))),
 
-    commit_validation_objects(Validations0, Committed),
+    findall(Key,
+            (   member(Transaction, Transactions),
+                transaction_object_database_key(Transaction, Key)
+            ),
+            Keys),
+    sort(Keys, Sorted_Keys),
+
+    % Serialize the actual _meta commits and graph head updates. The lock is
+    % released before post_commit_hook so that plugins (such as the auto-
+    % optimizer) do not deadlock trying to acquire the same lock.
+    with_meta_commit_locks(
+        Sorted_Keys,
+        commit_validation_objects(Validations0, Committed)
+    ),
     % Use the original validations before any potential schema migration
     collect_validations_metadata(Validations, Validation_Meta_Data),
     collect_commit_metadata(Committed, Commit_Meta_Data),

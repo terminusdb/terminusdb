@@ -167,6 +167,91 @@ pub fn changed_document_ids(
         }
     }
 
+    // Phase 4 — @shared reference propagation.
+    //
+    // When a @shared document is Added or Changed, any document that
+    // references it should also be reported as Changed, because the
+    // content visible through that reference has changed. This is the
+    // reference-graph analogue of the containment walk-up in Phase 3,
+    // but for @shared documents (which have their own IRIs and are
+    // referenced, not contained).
+    //
+    // The propagation is transitive: if A references @shared B, and B
+    // references @shared C, then a change to C should mark both B and
+    // A as Changed. Cycle safety is handled via a dedicated visited set.
+    //
+    // Deleted @shared documents are NOT propagated here: the cascade-
+    // delete pre-commit hook already removes them from the instance
+    // graph, and the referrer's link-removal triple ensures the
+    // referrer already appears in `changes` with its own entry.
+    let shared_schema_ids = schema_context.get_shared_ids_from_schema();
+    if !shared_schema_ids.is_empty() {
+        let shared_instance_ids: HashSet<u64> = schema_context
+            .schema_to_instance_types(instance, shared_schema_ids.iter().copied())
+            .collect();
+
+        if !shared_instance_ids.is_empty() {
+            // Collect all Added/Changed documents whose type is @shared.
+            // These are the seeds for the reference walk-up.
+            let mut shared_work: Vec<u64> = Vec::new();
+            for (&id, change_type) in &result {
+                if matches!(change_type, ChangeType::Added(_) | ChangeType::Changed) {
+                    if let Some(type_triple) = instance.single_triple_sp(id, rdf_type_id) {
+                        if shared_instance_ids.contains(&type_triple.object) {
+                            shared_work.push(id);
+                        }
+                    }
+                }
+            }
+
+            // Walk up the reference graph from each changed @shared document.
+            // A separate visited set prevents infinite loops on cycles.
+            let mut ref_visited: HashSet<u64> = HashSet::new();
+            while let Some(shared_id) = shared_work.pop() {
+                if !ref_visited.insert(shared_id) {
+                    continue;
+                }
+
+                // Find all documents that reference this @shared document
+                // (i.e., triples where shared_id is the object).
+                for ref_triple in instance.triples_o(shared_id) {
+                    let referrer = ref_triple.subject;
+
+                    // Skip self-references
+                    if referrer == shared_id {
+                        continue;
+                    }
+
+                    // Only mark document-type referrers (skip Cons cells,
+                    // subdocuments, etc. — those are handled by Phase 3).
+                    if let Some(ref_type_triple) =
+                        instance.single_triple_sp(referrer, rdf_type_id)
+                    {
+                        if is_document_type(
+                            ref_type_triple.object,
+                            json_document_id,
+                            &document_type_ids,
+                        ) {
+                            // Mark referrer as Changed if it doesn't already
+                            // have an entry. or_insert preserves existing
+                            // Added/Deleted/Changed entries — we never
+                            // downgrade a stronger change type.
+                            result.entry(referrer).or_insert(ChangeType::Changed);
+
+                            // If the referrer is itself @shared, continue
+                            // propagating transitively.
+                            if shared_instance_ids.contains(&ref_type_triple.object)
+                                && !ref_visited.contains(&referrer)
+                            {
+                                shared_work.push(referrer);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut result: Vec<(u64, ChangeType)> = result.into_iter().collect();
     result.shrink_to_fit();
     Ok(result)

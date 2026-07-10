@@ -178,5 +178,51 @@ describe('patch', function () {
       // Should succeed without conflict
       expect(res.body).to.deep.equal([enumId])
     })
+
+    it('applies patch to decimal property without false conflict', async function () {
+      // Schema with decimal type
+      const decimalSchema = [
+        {
+          '@id': 'DecimalTest',
+          '@type': 'Class',
+          '@key': { '@type': 'Random' },
+          weight: 'xsd:decimal',
+        },
+      ]
+      await document.insert(agent, { schema: decimalSchema })
+
+      // Insert instance with a decimal value
+      const instance = [
+        {
+          '@type': 'DecimalTest',
+          weight: 1.1,
+        },
+      ]
+      const response = await document.insert(agent, { instance })
+      const decimalId = response.body[0]
+
+      // Apply patch to change decimal value using JSON numbers, reproducing the
+      // reported issue where a float-rounded @before did not match the stored rational.
+      const path = api.path.patchDb(agent)
+      const patch = {
+        '@id': decimalId,
+        weight: {
+          '@op': 'SwapValue',
+          '@before': 1.1,
+          '@after': 1.2,
+        },
+      }
+      const author = 'test'
+      const message = 'change decimal weight'
+      const res = await agent.post(path).send({ patch, author, message })
+
+      // Should succeed without conflict
+      if (res.status !== 200) {
+        console.log('DECIMAL PATCH FAILED - status:', res.status)
+        console.log('DECIMAL PATCH FAILED - body:', res.text)
+      }
+      expect(res.status).to.equal(200)
+      expect(res.body).to.deep.equal([decimalId])
+    })
   })
 })
