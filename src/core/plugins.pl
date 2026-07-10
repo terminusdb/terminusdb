@@ -46,6 +46,72 @@ load_plugins :-
     exists_directory(Path),
     !,
     directory_files(Path, Files),
+
+%% load_plugin_file(+Full_Path) is det.
+%
+%  Loads a single plugin file with proper error handling.
+%  If the plugin fails to load, prints a helpful error message and
+%  continues instead of killing the server.
+load_plugin_file(Full_Path) :-
+    setup_call_cleanup(
+        (   current_prolog_flag(verbose, OldVerbose),
+            set_prolog_flag(verbose, silent)
+        ),
+        catch(load_files(Full_Path, [if(not_loaded), must_be_module(false)]),
+              Error,
+              print_plugin_error(Full_Path, Error)),
+        set_prolog_flag(verbose, OldVerbose)
+    ),
+    !.
+load_plugin_file(Full_Path) :-
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load (directive failed without exception).~n",
+           [Full_Path]),
+    format(user_error,
+           "       Check the file for syntax errors or failed directives.~n~n", []).
+
+%% print_plugin_error(+Path, +Error) is det.
+%
+%  Print a user-friendly error message for a failed plugin load.
+print_plugin_error(Full_Path, unwind(halt(Code))) :-
+    !,
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load with exit code ~w.~n",
+           [Full_Path, Code]),
+    format(user_error,
+           "       This usually means a syntax error, missing module import,~n", []),
+    format(user_error,
+           "       a failed directive, or singleton variables in a clause head~n", []),
+    format(user_error,
+           "       (prefix unused head variables with _ to fix).~n", []),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+print_plugin_error(Full_Path, error(existence_error(source_sink, Module), _)) :-
+    !,
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load: module ~w not found.~n",
+           [Full_Path, Module]),
+    format(user_error,
+           "       The plugin imports a module that does not exist in this build.~n", []),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+print_plugin_error(Full_Path, error(permission_error(load, http_handler, Path_Spec), _)) :-
+    !,
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load: duplicate HTTP route ~w.~n",
+           [Full_Path, Path_Spec]),
+    format(user_error,
+           "       Another plugin or the core server already registers this route.~n", []),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+print_plugin_error(Full_Path, Error) :-
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load:~n", [Full_Path]),
+    format(user_error,
+           "       ~q~n", [Error]),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+
     forall((member(File, Files),
             file_name_extension(_, '.pl', File)),
 

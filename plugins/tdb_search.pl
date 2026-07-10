@@ -801,7 +801,7 @@ search_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(search_handler), _)),
             do_or_die(
@@ -845,7 +845,7 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(similar_handler), _)),
             do_or_die(
@@ -887,7 +887,7 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
@@ -923,7 +923,7 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
@@ -979,7 +979,7 @@ statistics_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            capabilities:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(statistics_handler), _)),
             do_or_die(

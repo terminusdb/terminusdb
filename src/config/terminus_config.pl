@@ -377,10 +377,6 @@ expose_stack_traces :-
     !.
 % Predicate fails (returns false) if env var not set or set to any other value
 
-:- table semantic_indexer_endpoint/1.
-semantic_indexer_endpoint(Endpoint) :-
-    getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).
-
 /*
  * Semantic-indexer backend selector.
  *
