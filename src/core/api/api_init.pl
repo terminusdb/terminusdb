@@ -16,7 +16,7 @@
              [setup_temp_store/1, teardown_temp_store/1,
               create_db_without_schema/2, create_db_with_empty_schema/2,
               create_db_with_test_schema/2]).
-:- use_module(core(api/api_document), [api_insert_documents/8]).
+:- use_module(core(api/api_document), [api_insert_documents/9]).
 :- use_module(core(api/db_branch), [branch_create/5]).
 :- use_module(core(document)).
 :- use_module(core(query), [expand/2, default_prefixes/1, create_context/3,
@@ -1197,7 +1197,7 @@ test("validation_is_index_enabled succeeds for schema with embedding metadata",
 ]
 ', Stream),
     Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
-    api_insert_documents(System, Auth, "admin/hookdb", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/hookdb", Stream, no_data_version, _, _, _, Options),
     % Resolve descriptor and get validation object by opening a transaction.
     resolve_absolute_string_descriptor("admin/hookdb", Descriptor),
     open_descriptor(Descriptor, Transaction),
@@ -1236,9 +1236,10 @@ test("post_commit_hook is no-op when backend is none",
               setenv('TERMINUSDB_INDEXER_BACKEND', none))),
        cleanup(clean_indexer_env)
      ]) :-
-    % The hook clause should FAIL (no-op) when backend is not http_tdb_search.
-    % forall(post_commit_hook([], _), true) should vacuously succeed.
-    \+ plugins:post_commit_hook([], meta_data{}).
+    % The auto-push hook's gate (indexer_backend) must fail when backend is none,
+    % preventing the hook from firing. Other plugins' post_commit_hook clauses
+    % (webserver_commits, webserver_events) always succeed for empty validations.
+    \+ config:indexer_backend(http_tdb_search).
 
 % ---- Hook fires for http_tdb_search backend with indexed schema ----
 test("post_commit_hook spawns worker for indexed branch",
@@ -1279,12 +1280,12 @@ test("post_commit_hook spawns worker for indexed branch",
 ]
 ', Stream),
     Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
-    api_insert_documents(System, Auth, "admin/hookdb3", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/hookdb3", Stream, no_data_version, _, _, _, Options),
     % Commit a document (triggers post_commit_hook via with_transaction).
     % Use api_insert_documents to insert a valid document (schema requires name field).
     open_string('{"@type": "Animal", "name": "dog"}', Doc_Stream),
     Doc_Options = [author("test"), message("add dog")],
-    api_insert_documents(System, Auth, "admin/hookdb3", Doc_Stream, no_data_version, _, _, Doc_Options),
+    api_insert_documents(System, Auth, "admin/hookdb3", Doc_Stream, no_data_version, _, _, _, Doc_Options),
     % The hook fires and spawns a worker thread. In the test environment the worker
     % fails on open_descriptor(system_descriptor{}) because setup_temp_store uses
     % thread-local storage (invisible to detached threads). The [ERROR] log message
@@ -1303,8 +1304,8 @@ test("post_commit_hook returns quickly even if engine is slow",
               create_db_with_test_schema("admin", "hookdb4"),
               clean_indexer_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
-              % Point to unreachable endpoint (will timeout in worker, not in commit).
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://192.0.2.1:9999'),
+              % Point to immediately-refusing endpoint (connection refused, no 20s timeout).
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:1'),
               setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
              )),
        cleanup((clean_indexer_env,
@@ -1334,13 +1335,13 @@ test("post_commit_hook returns quickly even if engine is slow",
 ]
 ', Stream),
     Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
-    api_insert_documents(System, Auth, "admin/hookdb4", Stream, no_data_version, _, _, Options),
+    api_insert_documents(System, Auth, "admin/hookdb4", Stream, no_data_version, _, _, _, Options),
     % Time the commit — it must return quickly even though the engine is unreachable.
     % Use api_insert_documents to insert a valid document (schema requires name field).
     get_time(T0),
     open_string('{"@type": "Animal", "name": "cat"}', Doc_Stream),
     Doc_Options = [author("test"), message("add cat")],
-    api_insert_documents(System, Auth, "admin/hookdb4", Doc_Stream, no_data_version, _, _, Doc_Options),
+    api_insert_documents(System, Auth, "admin/hookdb4", Doc_Stream, no_data_version, _, _, _, Doc_Options),
     get_time(T1),
     Elapsed is T1 - T0,
     % Commit MUST complete in under 5 seconds (real indexing takes much longer).

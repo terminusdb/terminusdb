@@ -1,0 +1,22 @@
+:- module(plugin_api_http, [
+    register_route/3,
+    cors_handler/3,
+    cors_handler/4,
+    authenticate/3
+]).
+
+:- use_module(server(routes)).
+:- use_module(server(routes/tdb_http_handler)).
+
+:- reexport(server(routes), [cors_handler/3, cors_handler/4, authenticate/3]).
+
+%% register_route(+Path, +Handler, +Options) is det.
+%
+%  Drop-in wrapper around tdb_http_handler/3 that registers a route
+%  with both the SWI-Prolog HTTP dispatcher and the Rust webserver.
+%  Plugins call this instead of reaching into server(routes) directly.
+%
+%  Handler is the same closure that http_handler/3 accepts, typically
+%  cors_handler(Method, Goal, ExtraOptions).
+register_route(Path, Handler, Options) :-
+    tdb_http_handler:tdb_http_handler(Path, Handler, Options).

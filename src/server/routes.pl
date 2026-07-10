@@ -3,6 +3,8 @@
               db_handler/5,
               db_handler/6,
               authenticate/3,
+              cors_handler/3,
+              cors_handler/4,
               write_cors_headers/1,
               customise_exception/1
           ]).

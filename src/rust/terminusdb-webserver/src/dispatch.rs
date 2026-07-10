@@ -191,6 +191,7 @@ enum BroadcastCommand {
         channel: String,
         stream_id: StreamId,
         sender: mpsc::Sender<axum::body::Bytes>,
+        idle_timeout: Option<std::time::Duration>,
     },
     Unsubscribe {
         channel: String,
@@ -258,12 +259,14 @@ impl BroadcastRegistry {
         channel: String,
         stream_id: StreamId,
         sender: mpsc::Sender<axum::body::Bytes>,
+        idle_timeout: Option<std::time::Duration>,
     ) {
         self.ensure_forwarder();
         let _ = self.tx.send(BroadcastCommand::Subscribe {
             channel,
             stream_id,
             sender,
+            idle_timeout,
         });
     }
 
@@ -359,11 +362,12 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                 channel,
                 stream_id,
                 sender,
+                idle_timeout,
             } => {
                 // Create a bounded per-subscriber buffer and spawn a
                 // per-subscriber task that drains it into the stream.
                 let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
-                let task = tokio::spawn(subscriber_task(sub_rx, sender));
+                let task = tokio::spawn(subscriber_task(sub_rx, sender, idle_timeout));
                 channels
                     .entry(channel)
                     .or_default()
@@ -391,16 +395,30 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                     // Fan out with try_send — non-blocking, CPU-only.
                     // A full buffer means the subscriber is too slow;
                     // disconnect it rather than blocking the forwarder.
+                    let mut full_count = 0u32;
+                    let mut closed_count = 0u32;
                     let failed: Vec<StreamId> = subs
                         .iter()
                         .filter_map(|(id, sub)| {
                             match sub.tx.try_send(bytes.clone()) {
                                 Ok(()) => None,
-                                Err(mpsc::error::TrySendError::Full(_)) => Some(*id),
-                                Err(mpsc::error::TrySendError::Closed(_)) => Some(*id),
+                                Err(mpsc::error::TrySendError::Full(_)) => {
+                                    full_count += 1;
+                                    Some(*id)
+                                }
+                                Err(mpsc::error::TrySendError::Closed(_)) => {
+                                    closed_count += 1;
+                                    Some(*id)
+                                }
                             }
                         })
                         .collect();
+                    if full_count > 0 || closed_count > 0 {
+                        crate::log::log_info(format!(
+                            "broadcast send: disconnected {} subscribers (buffer_full={} closed={}) from channel '{}', remaining={}",
+                            failed.len(), full_count, closed_count, channel, subs.len() - failed.len()
+                        ));
+                    }
                     for id in failed {
                         if let Some(sub) = subs.remove(&id) {
                             sub.task.abort();
@@ -417,19 +435,58 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
 /// backpressures on the stream's mpsc channel, which backpressures on the
 /// TCP socket. A slow client only blocks this task, not the forwarder.
 ///
+/// If `idle_timeout` is set, the task exits after that duration of
+/// inactivity (no messages received). Each received message resets the
+/// timer. This replaces per-stream Prolog OS threads with a lightweight
+/// tokio task — no OS thread per client.
+///
 /// The task exits (and cleans up) when either side closes:
 /// - The per-subscriber buffer sender is dropped (forwarder removed the
 ///   subscriber, or the forwarder task ended) → `recv().await` returns None
 /// - The stream's mpsc receiver is dropped (client disconnected) →
 ///   `send().await` returns Err
+/// - The idle timeout fires with no messages → exit, which drops
+///   stream_tx, causing the ReceiverStream to see EOF
 async fn subscriber_task(
     mut rx: mpsc::Receiver<axum::body::Bytes>,
     stream_tx: mpsc::Sender<axum::body::Bytes>,
+    idle_timeout: Option<std::time::Duration>,
 ) {
-    while let Some(bytes) = rx.recv().await {
-        if stream_tx.send(bytes).await.is_err() {
-            // Stream closed — client disconnected. Exit.
-            break;
+    match idle_timeout {
+        Some(timeout) => {
+            loop {
+                let sleep = tokio::time::sleep(timeout);
+                tokio::pin!(sleep);
+
+                tokio::select! {
+                    result = rx.recv() => {
+                        match result {
+                            None => break,
+                            Some(bytes) => {
+                                if stream_tx.send(bytes).await.is_err() {
+                                    break;
+                                }
+                                // Loop restarts the sleep timer.
+                            }
+                        }
+                    }
+                    _ = &mut sleep => {
+                        // Idle timeout — no messages for the timeout
+                        // duration. Exit to close the stream.
+                        crate::log::log_info(format!(
+                            "subscriber_task: idle timeout fired, closing stream"
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+        None => {
+            while let Some(bytes) = rx.recv().await {
+                if stream_tx.send(bytes).await.is_err() {
+                    break;
+                }
+            }
         }
     }
 }
@@ -1556,8 +1613,8 @@ mod tests {
         let (tx1, mut rx1) = mpsc::channel::<axum::body::Bytes>(10);
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("actions".to_string(), 1, tx1);
-        broadcast_registry.subscribe("actions".to_string(), 2, tx2);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None);
 
         let event = axum::body::Bytes::from(r#"{"action":"test"}"#);
         assert!(broadcast_registry.send("actions", event.clone()).is_ok());
@@ -1582,8 +1639,8 @@ mod tests {
         // Subscriber 2: normal channel that we will drain
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("actions".to_string(), 1, tx1);
-        broadcast_registry.subscribe("actions".to_string(), 2, tx2);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None);
 
         // Send event 1 — both subscribers should get it (subscriber 1's
         // per-subscriber buffer has room for 64 events)

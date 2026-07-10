@@ -452,7 +452,7 @@ handle_stream_work(Request, HandlerModule, HandlerName, InputStreamId, ResponseS
 %%  Process a single plugin request through OS pipes. The input pipe is drained
 %%  into a memory file, the SWI request is built, and the handler runs with a
 %%  CGI stream writing directly to the output pipe.
-handle_pipe_work(Request, _HandlerModule, _HandlerName, InputReadFd, OutputWriteFd, Binary) :-
+handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary) :-
     (   Binary == true -> WriteEnc = octet ; WriteEnc = utf8 ),
     setup_call_cleanup(
         (   (   InputReadFd >= 0
@@ -463,22 +463,32 @@ handle_pipe_work(Request, _HandlerModule, _HandlerName, InputReadFd, OutputWrite
             '$appserver':appserver_open_fd_stream(OutputWriteFd, write, WriteEnc, OutStream)
         ),
         (   build_swi_request_from_dict(Request, BodyStream, BodyLen, SWIRequest),
-            catch(
-                (   cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(SWIRequest)]),
-                    setup_call_cleanup(
-                        (   Binary == true
-                        ->  set_stream(CGI, encoding(octet))
-                        ;   set_stream(CGI, encoding(utf8))
-                        ),
-                        with_output_to(CGI,
-                            tdb_http_handler:http_dispatch_with_expansion(SWIRequest)),
-                        close(CGI)
+            (   HandlerModule == tdb_http_handler,
+                HandlerName == rust_handler
+            ->  catch(
+                    (   cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(SWIRequest)]),
+                        setup_call_cleanup(
+                            (   Binary == true
+                            ->  set_stream(CGI, encoding(octet))
+                            ;   set_stream(CGI, encoding(utf8))
+                            ),
+                            with_output_to(CGI,
+                                tdb_http_handler:http_dispatch_with_expansion(SWIRequest)),
+                            close(CGI)
+                        )
+                    ->  true
+                    ;   write_cgi_error(OutStream, 500, "Handler goal failed")
+                    ),
+                    Error,
+                    handle_handler_error(Error, OutStream, CGI)
+                )
+            ;   catch(
+                    call_raw_plugin_handler(HandlerModule, HandlerName, SWIRequest, OutStream),
+                    Error,
+                    (   json_log_error_formatted("Raw plugin handler error: ~q", [Error]),
+                        write_cgi_error(OutStream, 500, Error)
                     )
-                ->  true
-                ;   write_cgi_error(OutStream, 500, "Handler goal failed")
-                ),
-                Error,
-                handle_handler_error(Error, OutStream, CGI)
+                )
             )
         ),
         (   catch(close(OutStream), _, true),
@@ -492,6 +502,46 @@ handle_pipe_work(Request, _HandlerModule, _HandlerName, InputReadFd, OutputWrite
             (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
         )
     ).
+
+%% call_raw_plugin_handler(+Module, +Handler, +Request, +OutStream) is det.
+%%
+%%  Call a raw plugin handler (arity 2: +Request, -Response) and write
+%%  the response dict as CGI headers + body to the output stream.
+%%  The response dict has keys: status (integer), body (string), headers (dict).
+call_raw_plugin_handler(Module, Handler, Request, OutStream) :-
+    Goal =.. [Handler, Request, Response],
+    call(Module:Goal),
+    (   is_dict(Response)
+    ->  write_plugin_response(OutStream, Response)
+    ;   json_log_error_formatted("Raw plugin handler ~w:~w/2 did not return a dict: ~q", [Module, Handler, Response]),
+        write_cgi_error(OutStream, 500, "Plugin handler did not return a dict")
+    ).
+
+%% write_plugin_response(+Stream, +Response) is det.
+%%
+%%  Write a plugin response dict as CGI headers + body.
+%%  Response has keys: status (integer, default 200), body (string, default ""),
+%%  headers (dict, optional).
+write_plugin_response(Stream, Response) :-
+    (   get_dict(status, Response, Status)
+    ->  true
+    ;   Status = 200
+    ),
+    (   get_dict(body, Response, Body)
+    ->  true
+    ;   Body = ""
+    ),
+    (   get_dict(headers, Response, Headers)
+    ->  true
+    ;   Headers = _{}
+    ),
+    format(Stream, 'Status: ~w\n', [Status]),
+    (   get_dict('Content-Type', Headers, ContentType)
+    ->  format(Stream, 'Content-Type: ~w\n', [ContentType])
+    ;   true
+    ),
+    format(Stream, '\n', []),
+    format(Stream, '~s', [Body]).
 
 %% drain_input_stream(+InputStreamId, -MemoryFile, -BodyStream, -BodyLen) is det.
 %%
@@ -846,6 +896,10 @@ send_error_response(ResponseStreamId, Error) :-
     ;   '$appserver':appserver_stream_close(ResponseStreamId)
     ).
 
+%% Test helper for call_raw_plugin_handler unit test.
+test_raw_handler(_Request, Response) :-
+    Response = _{status: 200, body: "test response body", headers: _{'Content-Type': 'text/plain'}}.
+
 :- begin_tests(request_worker_pool, [concurrent(false)]).
 
 %% Suppress SWI-Prolog's "Thread running ... died on exception" warnings
@@ -868,6 +922,31 @@ test(write_cgi_error_body_format) :-
                    write_cgi_error_body(current_output, "Oops")),
     assertion(sub_string(Result, _, _, _, '############# ERROR #################')),
     assertion(sub_string(Result, _, _, _, '"api:message":"Oops"')).
+
+test(write_plugin_response_default_status) :-
+    with_output_to(string(Result),
+                   write_plugin_response(current_output, _{body: "hello", headers: _{'Content-Type': 'text/plain'}})),
+    assertion(sub_string(Result, _, _, _, 'Status: 200')),
+    assertion(sub_string(Result, _, _, _, 'Content-Type: text/plain')),
+    assertion(sub_string(Result, _, _, _, 'hello')).
+
+test(write_plugin_response_custom_status) :-
+    with_output_to(string(Result),
+                   write_plugin_response(current_output, _{status: 404, body: "not found", headers: _{'Content-Type': 'application/json'}})),
+    assertion(sub_string(Result, _, _, _, 'Status: 404')),
+    assertion(sub_string(Result, _, _, _, 'not found')).
+
+test(write_plugin_response_no_headers) :-
+    with_output_to(string(Result),
+                   write_plugin_response(current_output, _{status: 201, body: "created"})),
+    assertion(sub_string(Result, _, _, _, 'Status: 201')),
+    assertion(sub_string(Result, _, _, _, 'created')).
+
+test(call_raw_plugin_handler_calls_handler) :-
+    with_output_to(string(Result),
+                   call_raw_plugin_handler(request_worker_pool, test_raw_handler, _{}, current_output)),
+    assertion(sub_string(Result, _, _, _, 'Status: 200')),
+    assertion(sub_string(Result, _, _, _, 'test response body')).
 
 test(empty_body_stream_zero_length) :-
     empty_body_stream(MemoryFile, BodyStream, 0),

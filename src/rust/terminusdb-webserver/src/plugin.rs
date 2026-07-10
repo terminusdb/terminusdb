@@ -134,16 +134,26 @@ predicates! {
         }
     }
 
-    /// Subscribe an existing stream to a named broadcast channel.
+    /// Subscribe an existing stream to a named broadcast channel with idle timeout.
     ///
-    /// Signature: `appserver_broadcast_subscribe(+Channel, +StreamId)`.
+    /// Signature: `appserver_broadcast_subscribe(+Channel, +StreamId, +IdleTimeout)`.
     /// The channel name is an atom or string. After subscribing, any data sent
     /// to the channel with `appserver_broadcast_send/2` is forwarded to
     /// this stream by a background tokio task.
+    ///
+    /// IdleTimeout is the idle timeout in seconds: if no messages arrive
+    /// for this duration, the stream is closed. 0 or negative means no
+    /// timeout (stream stays open until client disconnects).
     #[module("$appserver")]
-    pub semidet fn appserver_broadcast_subscribe(_context, channel_term, stream_id_term) {
+    pub semidet fn appserver_broadcast_subscribe(_context, channel_term, stream_id_term, timeout_term) {
         let channel = term_to_string(channel_term)?;
         let stream_id: u64 = stream_id_term.get_ex()?;
+        let timeout_secs: i64 = timeout_term.get_ex()?;
+        let idle_timeout = if timeout_secs > 0 {
+            Some(std::time::Duration::from_secs(timeout_secs as u64))
+        } else {
+            None
+        };
 
         // Clone the stream's mpsc::Sender so the forwarder task can
         // write to it without holding the stream_registry mutex.
@@ -159,7 +169,7 @@ predicates! {
         crate::dispatch::broadcast_registry()
             .lock()
             .unwrap()
-            .subscribe(channel, stream_id, stream_sender);
+            .subscribe(channel, stream_id, stream_sender, idle_timeout);
         Ok(())
     }
 
@@ -380,6 +390,7 @@ pub fn register() {
     register_appserver_stream_send();
     register_appserver_stream_send_raw();
     register_appserver_stream_close();
+    register_appserver_stream_exists();
     register_appserver_broadcast_subscribe();
     register_appserver_broadcast_unsubscribe();
     register_appserver_broadcast_unsubscribe_all();

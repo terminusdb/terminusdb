@@ -19,6 +19,8 @@
 :- set_test_options([run(manual), load(always), concurrent(true)]).
 
 :- use_module(server(routes)).
+:- use_module(core(plugin_api)).
+:- use_module(core(plugin_raw_api)).
 :- use_module(server(main)).
 :- use_module(cli(main)).
 :- use_module(core(query)).
