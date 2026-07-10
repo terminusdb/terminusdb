@@ -2322,6 +2322,15 @@ api_document_error_jsonld(Type, error(can_not_insert_existing_object_with_id(Id,
                               'api:document' : Document},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(can_not_insert_existing_object_with_id(Id), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a new document with id ~q, but an object with that id already exists", [Id]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentIdAlreadyExists',
+                              'api:document_id' : Id},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(unknown_language_tag(Tag,Document), _), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Unknown language tag used ~q", [Tag]),
@@ -3019,5 +3028,34 @@ test(bad_schema_document, []) :-
                            'api:document':_{'@type':'Garbage'}},
              'api:message':"The submitted schema document could not be elaborated due to an unknown syntax error.",
              'api:status':"api:failure"}.
+
+test(document_id_already_exists_with_document, []) :-
+    api_error_jsonld(insert_documents,
+                     error(can_not_insert_existing_object_with_id(
+                               'terminusdb:///data/Doc/test1',
+                               _{'@type':'Doc','@id':'Doc/test1','name':'test'}), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentIdAlreadyExists'),
+    get_dict('api:document_id', Error, 'terminusdb:///data/Doc/test1'),
+    get_dict('api:document', Error, _{'@type':'Doc','@id':'Doc/test1','name':'test'}),
+    get_dict('api:status', JSON, "api:failure").
+
+test(document_id_already_exists_without_document, []) :-
+    % The queued commit path throws can_not_insert_existing_object_with_id/1
+    % (without the Document argument) because it does not go through
+    % call_catch_document_mutation which embeds the document. This must
+    % still produce a proper 400 error response, not a 500.
+    api_error_jsonld(insert_documents,
+                     error(can_not_insert_existing_object_with_id(
+                               'terminusdb:///data/Doc/test1'), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentIdAlreadyExists'),
+    get_dict('api:document_id', Error, 'terminusdb:///data/Doc/test1'),
+    \+ get_dict('api:document', Error, _),
+    get_dict('api:status', JSON, "api:failure").
 
 :- end_tests(error_reporting).
