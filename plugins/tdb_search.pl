@@ -354,7 +354,7 @@ normalise_commit_value(Atom, String) :-
 normalise_commit_value(String, String) :-
     string(String).
 
-io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
+io_push_delta_(_Endpoint, _Domain, _Branch_Name, Head_Commit_Id,
                _Head_Commit_Uri, Engine_Commit,
                _Repository_Descriptor, _System_DB, _Auth, _Path) :-
     Engine_Commit \== null,
@@ -464,7 +464,7 @@ io_push_delta(System_DB, Auth, Path, Branch_Name) :-
 io_index_branch(System_DB, Auth, Path) :-
     validate_index_path(Path),
     do_or_die(
-        tdb_search_endpoint(Endpoint),
+        tdb_search_endpoint(_Endpoint),
         error(tdb_search_endpoint_not_configured(io_index_branch), _)),
     resolve_absolute_string_descriptor(Path, Descriptor),
     do_or_die(
@@ -802,7 +802,7 @@ search_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search_endpoint(Endpoint),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(search_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
@@ -846,7 +846,7 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search_endpoint(Endpoint),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(similar_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
@@ -888,7 +888,7 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         Request,
         (
             resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search_endpoint(Endpoint),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
@@ -924,7 +924,7 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search_endpoint(Endpoint),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
@@ -980,7 +980,7 @@ statistics_handler(get, Path, Request, System_DB, Auth) :-
         Request,
         (
             resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search_endpoint(Endpoint),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(statistics_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
@@ -1021,7 +1021,7 @@ compare_handler(post, Request, _System_DB, Auth) :-
         search,
         Request,
         (
-            do_or_die(tdb_search_endpoint(Endpoint),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(compare_handler), _)),
             do_or_die(
                 (   memberchk(method=Method, Search),
@@ -1200,6 +1200,11 @@ start_push_stub(Port) :-
     retractall(stub_check_response(_, _)),
     retractall(stub_push_response_override(_)),
     assertz(stub_push_call_count(0)),
+    http_handler('/last-indexed', push_stub_last_indexed, []),
+    http_handler('/push', push_stub_push, [methods([post])]),
+    http_handler('/check', push_stub_check, []),
+    http_handler('/domain', push_stub_domain_delete, [methods([delete])]),
+    http_handler('/resolve', push_stub_resolve, [methods([post])]),
     http_server(http_dispatch, [port(Port), workers(1)]).
 
 stop_push_stub(Port) :-
@@ -1209,12 +1214,6 @@ stop_push_stub(Port) :-
     retractall(stub_push_call_count(_)),
     retractall(stub_check_response(_, _)),
     retractall(stub_push_response_override(_)).
-
-:- http_handler('/last-indexed', push_stub_last_indexed, []).
-:- http_handler('/push', push_stub_push, [methods([post])]).
-:- http_handler('/check', push_stub_check, []).
-:- http_handler('/domain', push_stub_domain_delete, [methods([delete])]).
-:- http_handler('/resolve', push_stub_resolve, [methods([post])]).
 
 push_stub_last_indexed(Request) :-
     (   memberchk(search(Search), Request)
@@ -1499,7 +1498,8 @@ test("path_to_domain fails on empty path",
 
 test("descriptor_graphspec produces full graphspec for main branch",
      [ setup(setup_temp_store(State)),
-       cleanup(teardown_temp_store(State))
+       cleanup(teardown_temp_store(State)),
+       true(GraphSpec == 'admin/testdb/local/branch/main')
      ]) :-
     create_db_without_schema("admin", "testdb"),
     resolve_absolute_string_descriptor("admin/testdb", Descriptor),
