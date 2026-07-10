@@ -47,7 +47,7 @@
               tdb_search_admin_user/1,
               tdb_search_admin_secret/1,
               check_indexer_backend_config/0,
-              clear_indexer_backend_config/0
+              clear_indexer_backend_config/0,
               worker_elaboration_preference/1
 ]).
 
