@@ -1,0 +1,81 @@
+const { expect } = require('chai')
+const { Agent, db } = require('../lib')
+
+describe('plugin-endpoints', function () {
+  let agent
+
+  before(async function () {
+    agent = new Agent().auth()
+    await db.create(agent)
+  })
+
+  after(async function () {
+    await db.delete(agent)
+  })
+
+  describe('tdb-search plugin routes', function () {
+    it('GET /api/search/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .query({ query: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('POST /api/search/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .send({ query: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('POST /api/similar/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post(`/api/similar/${agent.orgName}/${agent.dbName}`)
+        .send({ id: 'test', query: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('GET /api/duplicates/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/duplicates/${agent.orgName}/${agent.dbName}`)
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('POST /api/resolve/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post(`/api/resolve/${agent.orgName}/${agent.dbName}`)
+        .send({ source: 'test', target: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('GET /api/statistics/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/statistics/${agent.orgName}/${agent.dbName}`)
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('POST /api/compare returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post('/api/compare')
+        .send({ method: 'cosine', source: 'test', target: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+  })
+
+  describe('vectorlink plugin routes', function () {
+    it('GET /api/index/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/index/${agent.orgName}/${agent.dbName}`)
+        .query({ commit_id: 'placeholder' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:SemanticIndexerEndpointNotConfigured')
+    })
+  })
+})
