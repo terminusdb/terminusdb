@@ -2,7 +2,9 @@ use std::os::raw::c_char;
 use swipl::fli::{
     IOENC_ENC_OCTET, IOENC_ENC_UTF8, PL_unify_stream, Sclose, Sfdopen, Ssetenc,
 };
+use swipl::fli::{PL_unify_list, PL_unify_nil};
 use swipl::prelude::*;
+use swipl::term::Nil;
 
 use crate::dispatch::{collect_routes, collect_static_paths, collect_streams};
 use crate::server;
@@ -91,6 +93,33 @@ predicates! {
     pub semidet fn appserver_stream_send_raw(_context, stream_id_term, data_term) {
         let stream_id: u64 = stream_id_term.get_ex()?;
         let bytes: Vec<u8> = data_term.get_ex()?;
+        crate::dispatch::stream_registry()
+            .lock()
+            .unwrap()
+            .send(stream_id, axum::body::Bytes::from(bytes))
+            .map_err(|_| PrologError::Failure)
+    }
+
+    /// Send a batch of Prolog dicts as NDJSON in a single FFI call.
+    ///
+    /// Signature: `appserver_stream_send_batch(+StreamId, +ListOfDicts)` where
+    /// StreamId is the identifier given to the stream handler and ListOfDicts
+    /// is a Prolog list of dicts. Each dict is deserialized to a serde_json::Value
+    /// and serialized to a JSON line with a trailing newline. The entire batch
+    /// is sent as a single chunk via one `send` call, amortizing FFI overhead
+    /// and mpsc lock contention.
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_send_batch(context, stream_id_term, list_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        let mut bytes = Vec::with_capacity(4096);
+        for term in context.term_list_iter(&list_term) {
+            let value: serde_json::Value = context
+                .deserialize_from_term(&term)
+                .map_err(|_| PrologError::Failure)?;
+            serde_json::to_writer(&mut bytes, &value)
+                .map_err(|_| PrologError::Failure)?;
+            bytes.push(b'\n');
+        }
         crate::dispatch::stream_registry()
             .lock()
             .unwrap()
@@ -268,9 +297,6 @@ predicates! {
             Some(bytes) => {
                 // Put the receiver back so the worker can read the next chunk.
                 registry.replace(stream_id, receiver);
-                // Use unify instead of put — PL_unify_* works with term refs
-                // from the Prolog call frame, while PL_put_* requires a
-                // foreign frame which the semidet trampoline doesn't open.
                 let f = context.open_frame();
                 let tmp = f.new_term_ref();
                 tmp.put(&bytes[..]).map_err(|_| PrologError::Failure)?;
@@ -280,7 +306,7 @@ predicates! {
             }
             None => {
                 // Stream is closed and fully consumed. Leave the receiver out
-                // of the registry.
+                // of the registry so subsequent calls fail fast.
                 let f = context.open_frame();
                 let tmp = f.new_term_ref();
                 tmp.put(&Atom::new("end_of_stream")).map_err(|_| PrologError::Failure)?;
@@ -383,12 +409,79 @@ predicates! {
         }
         Ok(())
     }
+
+    /// Receive the next chunk from an input stream, split into complete lines.
+    ///
+    /// Signature: `appserver_stream_recv_lines(+StreamId, -Lines, -Remaining)`.
+    /// Lines is a Prolog list of strings (one per complete line, without the
+    /// trailing newline). Remaining is the partial line at the end of the chunk
+    /// (no trailing newline), or "" if the chunk ended on a newline. If the
+    /// stream is closed, Lines = [] and Remaining = end_of_stream.
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_recv_lines(context, stream_id_term, lines_term, remaining_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        let registry_arc = crate::dispatch::input_stream_registry();
+        let mut registry = registry_arc.lock().unwrap();
+        let mut receiver = registry
+            .take(stream_id)
+            .ok_or(PrologError::Failure)?;
+        drop(registry);
+        let result = receiver.blocking_recv();
+        let mut registry = registry_arc.lock().unwrap();
+        match result {
+            Some(bytes) => {
+                registry.replace(stream_id, receiver);
+
+                let text = String::from_utf8_lossy(&bytes);
+                let mut lines: Vec<&str> = Vec::new();
+                let mut remaining = "";
+                let mut last_end = 0;
+                for (i, b) in text.bytes().enumerate() {
+                    if b == b'\n' {
+                        lines.push(&text[last_end..i]);
+                        last_end = i + 1;
+                    }
+                }
+                if last_end < text.len() {
+                    remaining = &text[last_end..];
+                }
+
+                // Build Prolog list directly into lines_term using context.
+                // Use unify (not put) for head values — put overwrites the term ref
+                // instead of binding the list cell's head variable.
+                let mut tails: Vec<Term<'_>> = Vec::with_capacity(lines.len());
+                let mut cur = lines_term;
+                for line in &lines {
+                    let (head, tail) = context.unify_list_functor(cur)?;
+                    let str_tmp = context.new_term_ref();
+                    str_tmp.put(*line).map_err(|_| PrologError::Failure)?;
+                    head.unify(&str_tmp).map_err(|_| PrologError::Failure)?;
+                    tails.push(tail);
+                    cur = tails.last().unwrap();
+                }
+                cur.unify(&Nil).map_err(|_| PrologError::Failure)?;
+
+                // Unify remaining_term.
+                let rem_tmp = context.new_term_ref();
+                rem_tmp.put(remaining).map_err(|_| PrologError::Failure)?;
+                remaining_term.unify(&rem_tmp).map_err(|_| PrologError::Failure)
+            }
+            None => {
+                lines_term.unify(&Nil).map_err(|_| PrologError::Failure)?;
+                let rem_tmp = context.new_term_ref();
+                rem_tmp.put(&Atom::new("end_of_stream")).map_err(|_| PrologError::Failure)?;
+                remaining_term.unify(&rem_tmp).map_err(|_| PrologError::Failure)
+            }
+        }
+        .map_err(|_| PrologError::Failure)
+    }
 }
 
 pub fn register() {
     register_appserver_start();
     register_appserver_stream_send();
     register_appserver_stream_send_raw();
+    register_appserver_stream_send_batch();
     register_appserver_stream_close();
     register_appserver_stream_exists();
     register_appserver_broadcast_subscribe();
@@ -397,6 +490,7 @@ pub fn register() {
     register_appserver_broadcast_send();
     register_appserver_broadcast_send_raw();
     register_appserver_stream_recv();
+    register_appserver_stream_recv_lines();
     register_appserver_open_fd_stream();
     register_appserver_close_fd();
 }

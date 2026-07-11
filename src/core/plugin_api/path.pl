@@ -7,6 +7,7 @@
 :- use_module(core(util)).
 :- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2]).
 :- use_module(library(lists)).
+:- use_module(library(apply)).
 
 %% descriptor_to_path(+Descriptor, -Path) is det.
 %

@@ -406,44 +406,85 @@ log_worker_memory(Phase, HandlerModule, HandlerName) :-
 %%
 %%  For stream handlers (HandlerName == stream_handler), the ResponseStreamId
 %%  is made available so that ndjson streaming can use it.
+%%
+%%  Two paths:
+%%    - Buffered: parsed_body present (Content-Length set). Drain input stream,
+%%      build SWI request, call handler with body or parsed_body.
+%%    - Raw streaming: no parsed_body (chunked transfer). Pass input_stream_id
+%%      to handler via Request dict. Handler drains chunks itself via
+%%      appserver_stream_recv/2, enabling true incremental streaming.
 handle_stream_work(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
+    (   \+ get_dict(parsed_body, Request, _),
+        HandlerName \== stream_handler
+    ->  handle_stream_work_raw(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)
+    ;   handle_stream_work_buffered(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)
+    ).
+
+%% Raw streaming path: skip drain, pass input_stream_id to handler.
+%% Handler reads chunks via appserver_stream_recv/2 and can interleave
+%% reads with response sends for true streaming.
+handle_stream_work_raw(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
+    put_dict(input_stream_id, Request, InputStreamId, RequestWithStream),
+    handle_plugin_stream_request(HandlerModule, HandlerName, RequestWithStream, _NoSWIRequest, ResponseStreamId, Response),
+    finish_stream_response(Response, ResponseStreamId).
+
+%% Buffered path: drain input stream into memory file, build SWI request,
+%% inject body string into Request dict for plugin handlers.
+handle_stream_work_buffered(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
     drain_input_stream(InputStreamId, MemoryFile, BodyStream, BodyLen),
     setup_call_cleanup(
         true,
         (   build_swi_request_from_dict(Request, BodyStream, BodyLen, SWIRequest),
             (   HandlerName == stream_handler
             ->  handle_stream_request(Request, SWIRequest, ResponseStreamId, Response)
-            ;   handle_plugin_stream_request(HandlerModule, HandlerName, Request, SWIRequest, ResponseStreamId, Response)
+            ;   (   BodyLen > 0
+                ->  read_string(BodyStream, _, BodyString),
+                    b_set_dict(body, Request, BodyString)
+                ;   true
+                ),
+                handle_plugin_stream_request(HandlerModule, HandlerName, Request, SWIRequest, ResponseStreamId, Response)
             ),
-            %% Extract post_response goal before serializing — it's a
-            %% Prolog goal, not JSON serializable.
-            (   get_dict(post_response, Response, PostResponseGoal)
-            ->  select_dict(_{post_response:PostResponseGoal}, Response, ResponseClean),
-                HasPostResponse = true
-            ;   ResponseClean = Response,
-                HasPostResponse = false
-            ),
-            send_response(ResponseStreamId, ResponseClean),
-            (   get_dict(body, ResponseClean, stream),
-                get_dict('_ndjson_body', ResponseClean, Body)
-            ->  thread_create(
-                    tdb_http_handler:stream_ndjson_body(Body, ResponseStreamId),
-                    _,
-                    [detached(true)]
-                )
-            ;   true
-            ),
-            %% Call the post_response goal after sending headers. The goal
-            %% sends initial data via appserver_stream_send and registers
-            %% for live updates. It runs on the worker thread.
-            (   HasPostResponse == true
-            ->  call(PostResponseGoal)
-            ;   true
-            )
+            finish_stream_response(Response, ResponseStreamId)
         ),
         (   catch(close(BodyStream), _, true),
             catch(free_memory_file(MemoryFile), _, true)
         )
+    ).
+
+%% finish_stream_response(+Response, +ResponseStreamId) is det.
+%%
+%%  Extract non-serializable fields (post_response, _sync_queue) from the
+%%  response dict, send the response metadata to Rust, signal the sync
+%%  queue, and call the post_response goal if present.
+finish_stream_response(Response, ResponseStreamId) :-
+    (   get_dict(post_response, Response, PostResponseGoal)
+    ->  select_dict(_{post_response:PostResponseGoal}, Response, ResponseClean),
+        HasPostResponse = true
+    ;   ResponseClean = Response,
+        HasPostResponse = false
+    ),
+    (   get_dict('_sync_queue', ResponseClean, SyncQueue)
+    ->  select_dict(_{'_sync_queue':SyncQueue}, ResponseClean, ResponseClean1)
+    ;   ResponseClean1 = ResponseClean,
+        SyncQueue = none
+    ),
+    send_response(ResponseStreamId, ResponseClean1),
+    (   SyncQueue \= none
+    ->  thread_send_message(SyncQueue, go)
+    ;   true
+    ),
+    (   get_dict(body, ResponseClean1, stream),
+        get_dict('_ndjson_body', ResponseClean1, Body)
+    ->  thread_create(
+            tdb_http_handler:stream_ndjson_body(Body, ResponseStreamId),
+            _,
+            [detached(true)]
+        )
+    ;   true
+    ),
+    (   HasPostResponse == true
+    ->  call(PostResponseGoal)
+    ;   true
     ).
 
 %% handle_pipe_work(+Request, +HandlerModule, +HandlerName,

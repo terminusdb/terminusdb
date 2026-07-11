@@ -160,14 +160,11 @@ impl StreamRegistry {
 
     pub fn send(&mut self, id: StreamId, bytes: axum::body::Bytes) -> Result<(), String> {
         match self.senders.get(&id) {
-            Some(sender) => match sender.try_send(bytes) {
+            Some(sender) => match sender.blocking_send(bytes) {
                 Ok(()) => Ok(()),
-                Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err(_) => {
                     self.senders.remove(&id);
                     Err("stream closed".to_string())
-                }
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    Err("stream buffer full".to_string())
                 }
             },
             None => Err("stream not found".to_string()),
@@ -862,16 +859,16 @@ fn dispatch_stream_to_prolog(
 /// they received (from the `commit.identifier` field in each NDJSON
 /// event) and use it as the `since` parameter on reconnect.
 ///
-/// Memory: 128 slots × 40 bytes = 5KB per client, 50MB at 10000 clients.
+/// Memory: 256 slots × 40 bytes = 10KB per client, 100MB at 10000 clients.
 fn create_response_stream() -> (u64, mpsc::Receiver<axum::body::Bytes>) {
-    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
+    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(256);
     let stream_id = stream_registry().lock().unwrap().add(tx);
     (stream_id, rx)
 }
 
 /// Register a new input stream and return its id and the sender.
 fn create_input_stream() -> (u64, mpsc::Sender<axum::body::Bytes>) {
-    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
+    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(256);
     let stream_id = input_stream_registry().lock().unwrap().add(rx);
     (stream_id, tx)
 }
@@ -2099,18 +2096,16 @@ async fn dispatch_stream_request(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let (parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-        Ok(bytes) => bytes,
-        Err(_) => return plugin_error_response("failed to read request body"),
-    };
     let content_encoding = parts
         .headers
         .get(header::CONTENT_ENCODING)
         .and_then(|v| v.to_str().ok());
-    let body_bytes = match decompress_request_body(content_encoding, &body_bytes) {
-        Ok(bytes) => bytes,
-        Err(msg) => return plugin_error_response(&msg),
-    };
+    let content_type = parts
+        .headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let has_content_length = parts.headers.contains_key(header::CONTENT_LENGTH);
 
     let method = parts.method.to_string();
     let path = normalize_dispatch_path(parts.uri.path());
@@ -2119,9 +2114,6 @@ async fn dispatch_stream_request(
         .headers
         .iter()
         .filter_map(|(k, v)| {
-            // Strip Content-Encoding: the body has already been decompressed
-            // by the Rust server. If we leave it in, the Prolog handler will
-            // try to decompress the already-decompressed data.
             if k == header::CONTENT_ENCODING {
                 return None;
             }
@@ -2135,14 +2127,58 @@ async fn dispatch_stream_request(
         .map(|(k, v)| (k, json!(v)))
         .collect();
 
-    let request_json = json!({
-        "method": method,
-        "path": path,
-        "query": query,
-        "headers": headers,
-        "body": "",
-        "params": params,
-    });
+    // When Content-Length is present and no compression, use the fast
+    // buffered path: read full body, pre-parse NDJSON into native dicts,
+    // and include parsed_body in the request. This eliminates
+    // json_read_dict overhead on the Prolog side.
+    //
+    // When chunked (no Content-Length) or compressed, stream body chunks
+    // through the input channel as they arrive. Prolog drains them via
+    // appserver_stream_recv/2. No parsed_body — Prolog parses NDJSON
+    // from the drained body. This enables true streaming with lower
+    // latency at the cost of Prolog-side JSON parsing.
+    let can_pre_parse = has_content_length
+        && content_encoding.is_none()
+        && content_type.contains("application/x-ndjson");
+
+    let mut body_opt = Some(body);
+
+    let (buffered_body, parsed_body) = if can_pre_parse {
+        let body = body_opt.take().unwrap();
+        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(bytes) => bytes,
+            Err(_) => return plugin_error_response("failed to read request body"),
+        };
+        let parsed_body: Vec<serde_json::Value> = body_bytes
+            .split(|&b| b == b'\n')
+            .filter(|line| !line.is_empty())
+            .filter_map(|line| serde_json::from_slice(line).ok())
+            .collect();
+        (Some(body_bytes), parsed_body)
+    } else {
+        (None, Vec::new())
+    };
+
+    let request_json = if parsed_body.is_empty() {
+        json!({
+            "method": method,
+            "path": path,
+            "query": query,
+            "headers": headers,
+            "body": "",
+            "params": params,
+        })
+    } else {
+        json!({
+            "method": method,
+            "path": path,
+            "query": query,
+            "headers": headers,
+            "body": "",
+            "params": params,
+            "parsed_body": parsed_body,
+        })
+    };
     crate::log::log_info(format!("{} {} (stream)", method, path));
 
     let (input_stream_id, input_tx) = create_input_stream();
@@ -2180,11 +2216,34 @@ async fn dispatch_stream_request(
             return plugin_error_response("dispatch queue closed");
         }
 
-        if input_tx.send(axum::body::Bytes::from(body_bytes)).await.is_err() {
-            stream_registry().lock().unwrap().remove(response_stream_id);
-            return plugin_error_response("failed to send request body");
+        if let Some(bytes) = buffered_body {
+            // Buffered path: send entire body as one chunk, then close.
+            if input_tx.send(bytes).await.is_err() {
+                stream_registry().lock().unwrap().remove(response_stream_id);
+                return plugin_error_response("failed to send request body");
+            }
+            drop(input_tx);
+        } else {
+            // Streaming path: forward body chunks to Prolog as they arrive.
+            let body = body_opt.take().unwrap();
+            tokio::spawn(async move {
+                let mut body = body;
+                use http_body_util::BodyExt;
+                while let Some(chunk_result) = body.frame().await {
+                    match chunk_result {
+                        Ok(frame) => {
+                            if let Ok(bytes) = frame.into_data() {
+                                if input_tx.send(bytes).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                drop(input_tx);
+            });
         }
-        drop(input_tx);
 
         tokio::task::spawn_blocking(move || {
             let first = response_rx
