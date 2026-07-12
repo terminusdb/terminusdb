@@ -4,6 +4,7 @@
 //! SWI-Prolog process and is loaded through the existing `librust.dylib`.
 
 pub mod dispatch;
+pub mod indexer;
 pub mod log;
 pub mod plugin;
 pub mod routes;
@@ -14,4 +15,5 @@ pub mod server;
 /// Called from `terminusdb_community::install()` during dylib load.
 pub fn install() {
     plugin::register();
+    indexer::register();
 }

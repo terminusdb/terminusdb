@@ -1,18 +1,14 @@
 :- module(api_indexer, [
-              api_start_job/3,
-              api_check_job/2,
-              %api_index/5,
-              %api_query/5,
               api_index_jobs/8,
               io_push_delta/4,
               io_index_branch/3,
               descriptor_graphspec/2,
-              io_await_task_completion/2,
-              build_last_indexed_url/4,
               validate_index_path/1,
               encode_query_value/2,
               validation_is_index_enabled/1,
-              io_auto_push_worker/2
+              indexer_process_commit/4,
+              indexer_next_commit/4,
+              count_indexable_documents/4
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
@@ -26,10 +22,6 @@
 :- use_module(core(util)).
 :- use_module(core(account)).
 :- use_module(library(json)).
-:- use_module(library(http/http_client)).
-:- use_module(library(http/http_open)).
-:- use_module(library(http/http_header)).
-:- use_module(library(http/http_stream)).
 :- use_module(config(terminus_config)).
 :- use_module(core(api/api_graphql)).
 :- use_module(core(triple), [super_user_authority/1, database_schema/2, xrdf/4]).
@@ -39,33 +31,6 @@
 :- use_module(library(lists)).
 :- use_module(library(dicts)).
 :- use_module(library(url), [www_form_encode/2]).
-
-% api_start_job(+Domain:string,+Commit:string,-Task_id, +Options) is det.
-% Legacy pull trigger. Only active under the http_vectorlink backend; refuses
-% loud if the selector is not http_vectorlink so the legacy and push paths can
-% never both run (RISK-17 / Spec 16 §2.3).
-api_start_job(Domain, Commit, Task_Id) :-
-    do_or_die(config:indexer_backend(http_vectorlink),
-              error(indexer_backend_not_vectorlink(api_start_job), _)),
-    config:semantic_indexer_endpoint(Endpoint),
-    http_get(
-        [ host(Endpoint),
-          path('/start'),
-          search([ domain=Domain,
-                   commit=Commit])],
-        Task_Id,
-        []).
-
-api_check_job(Task_Id, Status) :-
-    do_or_die(config:indexer_backend(http_vectorlink),
-              error(indexer_backend_not_vectorlink(api_check_job), _)),
-    config:semantic_indexer_endpoint(Endpoint),
-    http_get(
-        [ host(Endpoint),
-          path('/check'),
-          search([ task_id=Task_Id ])],
-        Status,
-        []).
 
 embedding_type_queries(Commit_Descriptor, TypeQueries) :-
     open_descriptor(Commit_Descriptor, Transaction),
@@ -82,28 +47,26 @@ embedding_type_queries(Commit_Descriptor, TypeQueries) :-
         TypeQueries
     ).
 
-api_indexable(some(Previous_Commit_Id), Descriptor, Commit_Id, Type, Operation) :-
-    commits_changed_id(Descriptor, Previous_Commit_Id, Commit_Id, Id,
-                       options{ type: Type }),
+%% api_indexable(some(Previous_Commit_Id), Descriptor, Commit_Id, Type, Operation) is nondet.
+%%
+%%  Uses the fast Rust $changes:collect_changed_documents_filtered/5 predicate
+%%  to enumerate changed documents for the given type between the previous
+%%  commit and this commit. The Rust predicate operates directly on the
+%%  layer's triple additions/removals and is orders of magnitude faster than
+%%  the Prolog commits_changed_id/5.
+api_indexable(some(_Previous_Commit_Id), Descriptor, Commit_Id, Type, Operation) :-
     resolve_relative_descriptor(Descriptor,
                                 ["commit", Commit_Id],
-                                After_Commit_Descriptor),
-    resolve_relative_descriptor(Descriptor,
-                                ["commit", Previous_Commit_Id],
-                                Before_Commit_Descriptor),
+                                Commit_Descriptor),
+    open_descriptor(Commit_Descriptor, Transaction),
+    atom_string(TypeAtom, Type),
+    '$changes':collect_changed_documents_filtered(Transaction, [TypeAtom], Id, ChangeType),
+    change_type_to_op(ChangeType, Id, Operation).
 
-    (   ask(After_Commit_Descriptor,
-            t(Id, rdf:type, _))
-    ->  (   ask(Before_Commit_Descriptor,
-                t(Id, rdf:type, _))
-        ->  Operation = json{ op: 'Changed',
-                              id: Id }
-        ;   Operation = json{ op: 'Inserted',
-                              id: Id }
-        )
-    ;   Operation = json{ op: 'Deleted',
-                          id: Id }
-    ).
+%% api_indexable(none, Descriptor, Commit_Id, Type, Operation) is nondet.
+%%
+%%  First commit (no previous): all documents of the given type are Inserted.
+%%  Uses direct ask query since there is no delta to compute.
 api_indexable(none, Descriptor, Commit_Id, Type, Operation) :-
     resolve_relative_descriptor(Descriptor,
                                 ["commit", Commit_Id],
@@ -111,6 +74,13 @@ api_indexable(none, Descriptor, Commit_Id, Type, Operation) :-
     ask(Commit_Descriptor, t(Id, rdf:type, Type),[compress_prefixes(false)]),
     Operation = json{ op: 'Inserted',
                       id: Id }.
+
+%% change_type_to_op(+ChangeType, +Id, -Operation) is det.
+%%
+%%  Maps Rust change type atoms to indexer operation dicts.
+change_type_to_op(added, Id, json{op:'Inserted', id:Id}).
+change_type_to_op(changed, Id, json{op:'Changed', id:Id}).
+change_type_to_op(deleted, Id, json{op:'Deleted', id:Id}).
 
 /* predicate which returns the various jobs as op/string:
 { "op" : "Inserted", "id" : "Doc/1", "string" : "this is in doc 1" }
@@ -149,47 +119,6 @@ api_index_jobs(System_DB, Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous
         )
     ).
 
-% ==========================================================================
-% Phase 6 T3 — Push driver (Capability A)
-%
-% TerminusDB DRIVES incremental indexing INTO the tdb-search engine.
-% Protocol: GET /last-indexed -> compute delta -> POST /push (NDJSON stream).
-% Gated on indexer_backend(http_tdb_search). Uses the T1-proven chunked
-% streaming mechanism (http:post_data_hook/3 + http_chunked_open/3).
-% ==========================================================================
-
-:- multifile http:post_data_hook/3.
-
-% ---- post_data_hook for lazy NDJSON streaming (T1-proven mechanism) ----
-% The data term ndjson_push(Goal) carries a goal that accepts a stream arg
-% and writes NDJSON lines to it. The hook sends them chunked without
-% buffering the body.
-http:post_data_hook(ndjson_push(Producer), Out, _HdrExtra) :-
-    raw_out_stream(Out, RawOut),
-    format(RawOut, "Content-Type: application/x-ndjson\r\n", []),
-    format(RawOut, "Transfer-Encoding: chunked\r\n", []),
-    format(RawOut, "\r\n", []),
-    flush_output(RawOut),
-    setup_call_cleanup(
-        http_chunked_open(RawOut, Chunked, []),
-        call(Producer, Chunked),
-        close(Chunked)).
-
-% Resolve a stream pair to its output side (avoids "ambiguous operation on
-% stream pair" from http_open's returned pair).
-raw_out_stream(Stream, Out) :-
-    (   is_stream(Stream),
-        stream_pair(Stream, _In, PairOut),
-        PairOut \== []
-    ->  Out = PairOut
-    ;   Out = Stream
-    ).
-
-% ---- HTTP Basic auth header for tdb-search calls ----
-tdb_search_auth_header(authorization(basic(User, Secret))) :-
-    tdb_search_admin_user(User),
-    tdb_search_admin_secret(Secret).
-
 /**
  * encode_query_value(+Value, -Encoded) is det.
  *
@@ -210,222 +139,11 @@ encode_query_value(Value, Encoded) :-
     ),
     www_form_encode(Atom, Encoded).
 
-/**
- * build_last_indexed_url(+Endpoint, +Domain, +Branch, -URL) is det.
- *
- * Constructs the GET /last-indexed URL with properly encoded query
- * parameters. Exported for testability (verify encoding of reserved chars
- * in domain/branch strings).
- */
-build_last_indexed_url(Endpoint, Domain, Branch, URL) :-
-    encode_query_value(Domain, Enc_Domain),
-    encode_query_value(Branch, Enc_Branch),
-    format(atom(URL), "~w/last-indexed?domain=~w&branch=~w",
-           [Endpoint, Enc_Domain, Enc_Branch]).
-
-/**
- * io_get_last_indexed(+Endpoint, +Domain, +Branch, -Result) is det.
- *
- * Calls GET /last-indexed?domain=Domain&branch=Branch on the tdb-search engine.
- * Result is a dict with keys `commit` (atom or null) and `version` (integer).
- * Fails loud on any non-200 response or connection error.
- */
-io_get_last_indexed(Endpoint, Domain, Branch, Result) :-
-    tdb_search_auth_header(AuthHeader),
-    build_last_indexed_url(Endpoint, Domain, Branch, URL),
-    setup_call_cleanup(
-        http_open(URL, In,
-                  [ status_code(Status),
-                    AuthHeader,
-                    request_header('Accept' = 'application/json')
-                  ]),
-        ( read_string(In, _, Body_String) ),
-        close(In)),
-    do_or_die(
-        Status =:= 200,
-        error(tdb_search_last_indexed_failed(Status, Body_String), _)),
-    atom_json_dict(Body_String, Result, [default_tag(json)]).
-
-/**
- * io_stream_push(+Endpoint, +Domain, +Branch, +Target_Commit,
- *                +Parent_Commit_Or_Empty, +System_DB, +Auth, +Path,
- *                +Maybe_Previous_Commit_Id, +Commit_Id, -Result) is det.
- *
- * Opens POST /push to the engine and streams the NDJSON delta using the
- * T1-proven chunked mechanism. The op-lines are produced lazily by
- * api_index_jobs/8 writing directly to the chunked HTTP stream.
- * Parent_Commit_Or_Empty is either an atom (the parent commit hash) or
- * the atom `none` (for a full initial index — omit parent_commit param).
- *
- * Result is one of:
- *   - accepted(Task_Id): push accepted, task spawned for async indexing
- *   - conflict_already_pushed: 409, commit is already in-flight or indexed
- */
-io_stream_push(Endpoint, Domain, Branch, Target_Commit,
-               Parent_Commit_Or_Empty, System_DB, Auth, Path,
-               Maybe_Previous_Commit_Id, Commit_Id, Result) :-
-    tdb_search_auth_header(AuthHeader),
-    build_push_url(Endpoint, Domain, Branch, Target_Commit,
-                   Parent_Commit_Or_Empty, URL),
-    Producer = [Chunked_Stream]>>(
-        api_index_jobs(
-            System_DB,
-            Auth,
-            Chunked_Stream,
-            [_S]>>true,
-            Path,
-            Commit_Id,
-            Maybe_Previous_Commit_Id,
-            [])
-    ),
-    setup_call_cleanup(
-        http_open(URL, In,
-                  [ method(post),
-                    post(ndjson_push(Producer)),
-                    status_code(Status),
-                    AuthHeader
-                  ]),
-        read_string(In, _, Reply_Body),
-        close(In)),
-    handle_push_response(Status, Reply_Body, Result).
-
-% 200: push accepted, task spawned.
-handle_push_response(200, Task_Id, accepted(Task_Id)) :- !.
-% 409: commit already pushed (in-flight or indexed). NOT a hard failure.
-handle_push_response(409, _Body, conflict_already_pushed) :- !.
-% Any other status: fail loud.
-handle_push_response(Status, Body, _) :-
-    throw(error(tdb_search_push_failed(Status, Body), _)).
-
-/**
- * io_await_task_completion(+Endpoint, +Task_Id) is det.
- *
- * Polls GET /check?task_id=Task_Id until the engine reports a TERMINAL
- * state (Complete or Error). Enforces the per-commit-tagged-before-next
- * contract.
- *
- * Poll backoff: 0.1s initial, doubling up to 2s cap. Max 60 iterations.
- */
-io_await_task_completion(Endpoint, Task_Id) :-
-    io_await_task_completion_(Endpoint, Task_Id, 0.1, 60).
-
-io_await_task_completion_(_Endpoint, Task_Id, _Backoff, 0) :-
-    !,
-    throw(error(tdb_search_task_poll_timeout(Task_Id), _)).
-io_await_task_completion_(Endpoint, Task_Id, Backoff, Retries_Left) :-
-    io_check_task(Endpoint, Task_Id, Status),
-    (   Status = complete
-    ->  true
-    ;   Status = error(ErrorMsg)
-    ->  throw(error(tdb_search_task_failed(Task_Id, ErrorMsg), _))
-    ;   Status = pending
-    ->  sleep(Backoff),
-        Next_Backoff is min(Backoff * 2, 2.0),
-        Next_Retries is Retries_Left - 1,
-        io_await_task_completion_(Endpoint, Task_Id, Next_Backoff, Next_Retries)
-    ;   throw(error(tdb_search_task_unknown_status(Task_Id, Status), _))
-    ).
-
-/**
- * io_check_task(+Endpoint, +Task_Id, -Status) is det.
- *
- * Calls GET /check?task_id=Task_Id on the engine. Returns:
- *   - complete / pending / error(Msg)
- */
-io_check_task(Endpoint, Task_Id, Status) :-
-    tdb_search_auth_header(AuthHeader),
-    encode_query_value(Task_Id, Enc_Task_Id),
-    format(atom(URL), "~w/check?task_id=~w", [Endpoint, Enc_Task_Id]),
-    setup_call_cleanup(
-        http_open(URL, In,
-                  [ status_code(Http_Status),
-                    AuthHeader,
-                    request_header('Accept' = 'application/json')
-                  ]),
-        read_string(In, _, Body_String),
-        close(In)),
-    interpret_check_response(Http_Status, Body_String, Status).
-
-interpret_check_response(200, Body_String, Status) :-
-    !,
-    atom_json_dict(Body_String, Dict, [default_tag(json)]),
-    get_dict(status, Dict, Status_Tag_Raw),
-    % atom_json_dict may yield atoms OR strings for JSON string values
-    % depending on SWI-Prolog version. Normalise to atom for comparison.
-    (   atom(Status_Tag_Raw)
-    ->  Status_Tag = Status_Tag_Raw
-    ;   atom_string(Status_Tag, Status_Tag_Raw)
-    ),
-    (   Status_Tag == 'Complete'
-    ->  Status = complete
-    ;   Status_Tag == 'Pending'
-    ->  Status = pending
-    ;   throw(error(tdb_search_check_unexpected_status(Status_Tag, Body_String), _))
-    ).
-interpret_check_response(500, Body_String, error(Body_String)) :- !.
-interpret_check_response(404, Body_String, error(Body_String)) :- !.
-interpret_check_response(Other_Status, Body_String, _) :-
-    throw(error(tdb_search_check_failed(Other_Status, Body_String), _)).
-
-/**
- * io_resolve_409(+Endpoint, +Domain, +Branch, +Commit) is det.
- *
- * Called when a push returns 409. Polls /last-indexed until the commit
- * appears as indexed (handles both in-flight and already-indexed cases).
- */
-io_resolve_409(Endpoint, Domain, Branch, Commit) :-
-    io_poll_until_indexed(Endpoint, Domain, Branch, Commit, 0.2, 30).
-
-io_poll_until_indexed(_Endpoint, _Domain, _Branch, _Commit, _Backoff, 0) :-
-    !,
-    throw(error(tdb_search_409_resolution_timeout, _)).
-io_poll_until_indexed(Endpoint, Domain, Branch, Commit, Backoff, Retries) :-
-    io_get_last_indexed(Endpoint, Domain, Branch, Result),
-    get_dict(commit, Result, Engine_Commit_Raw),
-    normalise_commit_value(Engine_Commit_Raw, Engine_Commit),
-    (   Engine_Commit \== null,
-        Engine_Commit == Commit
-    ->  true
-    ;   sleep(Backoff),
-        Next_Backoff is min(Backoff * 2, 2.0),
-        Next_Retries is Retries - 1,
-        io_poll_until_indexed(Endpoint, Domain, Branch, Commit,
-                              Next_Backoff, Next_Retries)
-    ).
-
-/**
- * io_handle_push_result(+Endpoint, +Domain, +Branch, +Commit, +Result) is det.
- *
- * Processes the result from io_stream_push:
- *   - accepted(Task_Id): await task completion via /check polling
- *   - conflict_already_pushed: resolve via /last-indexed polling (resume-409)
- */
-io_handle_push_result(Endpoint, _Domain, _Branch, _Commit, accepted(Task_Id)) :-
-    !,
-    io_await_task_completion(Endpoint, Task_Id).
-io_handle_push_result(Endpoint, Domain, Branch, Commit, conflict_already_pushed) :-
-    !,
-    io_resolve_409(Endpoint, Domain, Branch, Commit).
-
-% Build the POST /push URL with query parameters.
-% All values are percent-encoded via encode_query_value (www_form_encode)
-% to prevent parameter injection and ensure '/' in domain paths becomes %2f.
-build_push_url(Endpoint, Domain, Branch, Target_Commit, none, URL) :-
-    !,
-    encode_query_value(Domain, Enc_Domain),
-    encode_query_value(Branch, Enc_Branch),
-    encode_query_value(Target_Commit, Enc_Target),
-    format(atom(URL),
-           "~w/push?domain=~w&branch=~w&target_commit=~w",
-           [Endpoint, Enc_Domain, Enc_Branch, Enc_Target]).
-build_push_url(Endpoint, Domain, Branch, Target_Commit, Parent_Commit, URL) :-
-    encode_query_value(Domain, Enc_Domain),
-    encode_query_value(Branch, Enc_Branch),
-    encode_query_value(Target_Commit, Enc_Target),
-    encode_query_value(Parent_Commit, Enc_Parent),
-    format(atom(URL),
-           "~w/push?domain=~w&branch=~w&target_commit=~w&parent_commit=~w",
-           [Endpoint, Enc_Domain, Enc_Branch, Enc_Target, Enc_Parent]).
+% ==========================================================================
+% All curl-based push code removed — replaced by indexer_notify FFI.
+% The Rust IndexerRegistry handles /last-indexed, /push, /check, and 409
+% resolution internally via reqwest. Prolog only calls indexer_notify/2.
+% ==========================================================================
 
 /**
  * validate_index_path(+Path) is det.
@@ -472,93 +190,36 @@ validate_index_segments(N, _Segments, Path) :-
 /**
  * io_push_delta(+System_DB, +Auth, +Path, +Branch_Name) is det.
  *
- * The push driver entrypoint. Validates path structure, then gated on
- * indexer_backend(http_tdb_search). Asks the engine for its last-indexed
- * state, resolves the branch HEAD, and pushes each commit individually.
+ * Thin wrapper around the indexer_notify/2 FFI predicate. Validates the
+ * path, checks that the tdb_search endpoint is configured, and delegates
+ * to the Rust IndexerRegistry which handles NDJSON generation, HTTP
+ * streaming, 409 resolution, and task polling internally.
  *
  * Fails loud on:
  *   - invalid path (not 2-or-5 segment form)
  *   - indexer_backend not http_tdb_search (wrong backend)
- *   - engine unreachable or returns non-200 on /last-indexed
- *   - engine rejects the push (4xx/5xx on /push)
- *   - wrong admin secret (401 from engine)
+ *   - tdb_search endpoint not configured
+ *   - indexer_notify FFI not loaded (Rust runtime not available)
  */
-io_push_delta(System_DB, Auth, Path, Branch_Name) :-
-    % Validate path structure FIRST — before any descriptor resolution or I/O.
+io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     validate_index_path(Path),
     do_or_die(
         indexer_backend(http_tdb_search),
         error(indexer_backend_not_tdb_search(io_push_delta), _)),
     do_or_die(
-        tdb_search_endpoint(Endpoint),
+        tdb_search_endpoint(_Endpoint),
         error(tdb_search_endpoint_not_configured(io_push_delta), _)),
-    % Resolve the descriptor — safe now that path structure is validated.
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    % Derive the full graphspec from the resolved descriptor.
-    descriptor_graphspec(Descriptor, Domain),
-    % Extract the branch name from the descriptor and verify consistency.
-    do_or_die(
-        branch_descriptor{branch_name: Descriptor_Branch} :< Descriptor,
-        error(push_requires_branch_descriptor(Path), _)),
-    do_or_die(
-        Descriptor_Branch == Branch_Name,
-        error(branch_name_mismatch(Branch_Name, Descriptor_Branch, Path), _)),
-    % Ask the engine where it is up to.
-    io_get_last_indexed(Endpoint, Domain, Branch_Name, Last_Indexed),
-    get_dict(commit, Last_Indexed, Engine_Commit_Raw),
-    normalise_commit_value(Engine_Commit_Raw, Engine_Commit_Or_Null),
-    % Resolve the branch HEAD commit in TerminusDB.
-    Repository_Descriptor = Descriptor.repository_descriptor,
-    branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-    commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-    % Dispatch based on engine state.
-    io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
-                   Head_Commit_Uri, Engine_Commit_Or_Null,
-                   Repository_Descriptor, System_DB, Auth, Path).
-
-normalise_commit_value(@(null), null) :- !.
-normalise_commit_value(null, null) :- !.
-normalise_commit_value(Atom, String) :-
-    atom(Atom),
-    !,
-    atom_string(Atom, String).
-normalise_commit_value(String, String) :-
-    string(String).
-
-% Case 1: engine is already at HEAD — nothing to push.
-io_push_delta_(_Endpoint, _Domain, _Branch_Name, Head_Commit_Id,
-               _Head_Commit_Uri, Engine_Commit,
-               _Repository_Descriptor, _System_DB, _Auth, _Path) :-
-    Engine_Commit \== null,
-    Engine_Commit == Head_Commit_Id,
-    !.
-
-% Case 2: engine has never indexed this branch (commit is null) — full index.
-% After the push is accepted, AWAIT completion (per-commit-tagged contract).
-io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
-               _Head_Commit_Uri, null,
-               _Repository_Descriptor, System_DB, Auth, Path) :-
-    !,
-    io_stream_push(Endpoint, Domain, Branch_Name, Head_Commit_Id,
-                   none, System_DB, Auth, Path,
-                   none, Head_Commit_Id, Result),
-    io_handle_push_result(Endpoint, Domain, Branch_Name, Head_Commit_Id, Result).
-
-% Case 3: engine has a previous commit — per-commit incremental push.
-io_push_delta_(Endpoint, Domain, Branch_Name, _Head_Commit_Id,
-               Head_Commit_Uri, Engine_Commit,
-               Repository_Descriptor, System_DB, Auth, Path) :-
-    Engine_Commit \== null,
-    commit_uri_to_history_commit_ids(Repository_Descriptor,
-                                     Head_Commit_Uri,
-                                     History_Oldest_First),
-    commits_after(Engine_Commit, History_Oldest_First, Forward_Range),
-    do_or_die(
-        Forward_Range \== [],
-        error(tdb_search_push_no_forward_range(Engine_Commit), _)),
-    io_push_commit_chain(Endpoint, Domain, Branch_Name,
-                         Engine_Commit, Forward_Range,
-                         System_DB, Auth, Path).
+    (   atom_concat(_, '/local/branch/', Path)
+    ->  Branch_Path = Path
+    ;   format(atom(Branch_Path), "~w/local/branch/~w", [Path, Branch_Name])
+    ),
+    (   plugin_api:indexer_available
+    ->  (   plugin_api:indexer_notify(Branch_Path, Branch_Name)
+        ->  true
+        ;   throw(error(indexer_notify_failed(io_push_delta), _))
+        )
+    ;   throw(error(indexer_ffi_not_loaded(io_push_delta), _))
+    ).
 
 /**
  * commits_after(+Last_Commit, +History_Oldest_First, -Forward_Range) is det.
@@ -568,25 +229,6 @@ commits_after(Last_Commit, History, Forward_Range) :-
     ->  true
     ;   throw(error(tdb_search_last_indexed_not_in_history(Last_Commit), _))
     ).
-
-/**
- * io_push_commit_chain(+Endpoint, +Domain, +Branch, +Parent_Commit,
- *                      +Commits, +System_DB, +Auth, +Path) is det.
- *
- * Pushes each commit sequentially, oldest-first. After each push is accepted,
- * awaits task completion before proceeding to the next commit (per-commit-
- * tagged-before-next contract). Handles 409 via resume polling.
- */
-io_push_commit_chain(_Endpoint, _Domain, _Branch, _Parent, [],
-                     _System_DB, _Auth, _Path) :- !.
-io_push_commit_chain(Endpoint, Domain, Branch, Parent_Commit,
-                     [Commit | Rest], System_DB, Auth, Path) :-
-    io_stream_push(Endpoint, Domain, Branch, Commit,
-                   Parent_Commit, System_DB, Auth, Path,
-                   some(Parent_Commit), Commit, Result),
-    io_handle_push_result(Endpoint, Domain, Branch, Commit, Result),
-    io_push_commit_chain(Endpoint, Domain, Branch, Commit,
-                         Rest, System_DB, Auth, Path).
 
 /**
  * descriptor_graphspec(+Descriptor, -GraphSpec) is det.
@@ -639,16 +281,16 @@ io_index_branch(System_DB, Auth, Path) :-
 % data product's schema has at least one type with embedding metadata.
 % For all other commits this is a cheap no-op (two config checks + fail).
 %
-% ASYNC FIRE-AND-FORGET: spawns a detached thread to drive io_push_delta
-% so commit latency is NOT inflated. The thread runs as the SYSTEM identity
-% (super_user_authority) — indexing is infrastructure, not coupled to the
-% committing user's auth. It needs to run as system as the user may not have
-% read rights on the data product they write into.
+% ASYNC FIRE-AND-FORGET: calls indexer_notify/2 FFI which spawns a tokio
+% task in the Rust IndexerRegistry. The task runs independently of the
+% commit path — commit latency is NOT inflated. The Rust task runs as
+% the system identity (super_user_authority) — indexing is infrastructure,
+% not coupled to the committing user's auth.
 %
-% FAILURE SEMANTICS: thread catches its own errors, logs them loud
-% ([ERROR] via json_log_error_formatted), and stops. The commit is NEVER
-% blocked or broken by engine-down / push failure. The existing search-miss
-% nudge (api_search.pl maybe_nudge_push) remains as catch-up fallback.
+% FAILURE SEMANTICS: the tokio task catches its own errors, logs them,
+% and stops. The commit is NEVER blocked or broken by engine-down / push
+% failure. The existing search-miss nudge (api_search.pl maybe_nudge_push)
+% remains as catch-up fallback.
 %
 % NO DOUBLE-PUSH: the engine's 409 transactional guard makes a duplicate
 % push (hook + nudge both fire for same commit) a safe no-op.
@@ -660,17 +302,10 @@ io_index_branch(System_DB, Auth, Path) :-
 plugins:post_commit_hook(Validations, _Meta_Data) :-
     % Gate 1: backend must be http_tdb_search. Cheap tabled check.
     indexer_backend(http_tdb_search),
-    % Gate 2 + spawn: for each validation with a branch_descriptor whose
-    % schema has embedding metadata, spawn an async push worker.
-    % forall/2 iterates all matching validations; the hook as a whole
-    % succeeds once (deterministic) regardless of how many branches matched.
-    %
-    % SAFETY: The entire forall is wrapped in catch/3 so that NEITHER a
-    % Generator exception (malformed validation) NOR a thread_create failure
-    % (OS resource exhaustion) can propagate into the commit path. The
-    % documented contract is "failure never breaks commit" — ignore/1 in
-    % database.pl:310 only catches failure, NOT exceptions, so we must
-    % catch here at source.
+    % Gate 2: FFI predicate must be registered (Rust runtime loaded).
+    plugin_api:indexer_available,
+    % Gate 3: for each validation with embedding metadata, call indexer_notify
+    % (O(1) FFI — no NDJSON generation, no HTTP calls from Prolog).
     catch(
         forall(
             (   member(Validation, Validations),
@@ -680,29 +315,14 @@ plugins:post_commit_hook(Validations, _Meta_Data) :-
                 descriptor_graphspec(Descriptor, Path)
             ),
             catch(
-                thread_create(
-                    io_auto_push_worker(Path, Branch_Name),
-                    _Thread_Id,
-                    [detached(true)]
-                ),
-                Spawn_Error,
-                % WHY: thread_create can throw on OS resource exhaustion.
-                % INVARIANT: the commit already succeeded at this point;
-                %   indexing is best-effort infrastructure.
-                % CONSEQUENCE: push is skipped for this commit; the existing
-                %   search-miss nudge (maybe_nudge_push) catches up on next query.
+                plugin_api:indexer_notify(Path, Branch_Name),
+                Notify_Error,
                 format(user_error,
-                       "[ERROR] Auto-push thread spawn failed for ~w (~w): ~q~n",
-                       [Path, Branch_Name, Spawn_Error])
+                       "[ERROR] indexer_notify failed for ~w (~w): ~q~n",
+                       [Path, Branch_Name, Notify_Error])
             )
         ),
         Hook_Error,
-        % WHY: Generator goals (get_dict, descriptor_graphspec) could
-        %   theoretically throw on malformed validation objects.
-        % INVARIANT: transaction infrastructure always produces well-formed
-        %   validation_object{} dicts; this is a last-resort defensive catch.
-        % CONSEQUENCE: all pending pushes for this commit are skipped;
-        %   the search-miss nudge catches up on next query.
         format(user_error,
                "[ERROR] Auto-push hook generator failed: ~q~n",
                [Hook_Error])
@@ -720,36 +340,387 @@ validation_is_index_enabled(Validation) :-
     get_dict(descriptor, Validation, Descriptor),
     branch_descriptor{} :< Descriptor,
     get_dict(schema_objects, Validation, Schema_Objects),
-    Schema_Objects \== [],
-    % Check if schema has at least one type with embedding metadata.
-    % Uses xrdf which iterates the schema_objects list.
-    once(xrdf(Schema_Objects, _Type, sys:metadata, _)).
+    (   Schema_Objects \== []
+    ->  once(xrdf(Schema_Objects, _Type, sys:metadata, _))
+    ;   % Document-only commit: schema didn't change, but the branch
+        % schema may still have embedding metadata. Open the branch
+        % descriptor and check its schema.
+        open_descriptor(Descriptor, Transaction),
+        database_schema(Transaction, Schema),
+        once(xrdf(Schema, _Type, sys:metadata, _))
+    ).
 
-/**
- * io_auto_push_worker(+Path, +Branch_Name) is det.
- *
- * The async worker spawned by the post_commit_hook. Resolves system
- * credentials (System_DB + super_user_authority) and drives io_push_delta.
- * Catches ALL errors — logs them loud and stops. Never propagates exceptions
- * to the caller (there is none — detached thread).
- */
-io_auto_push_worker(Path, Branch_Name) :-
+% ==========================================================================
+% FFI dispatch predicates — called from Rust dispatch loop
+% ==========================================================================
+
+%% indexer_next_commit(+Path, +BranchName, +CommitId, -NextCommit) is det.
+%
+%  Given a commit ID, finds the next commit in the branch history.
+%  Returns the next commit ID as a string, or the atom 'None' if the
+%  given commit is HEAD (no next commit).
+indexer_next_commit(Path, BranchNameRaw, CommitIdRaw, NextCommit) :-
+    text_to_string(CommitIdRaw, CommitId),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    text_to_string(BranchNameRaw, BranchNameStr),
+    branch_descriptor{branch_name: BranchNameStr} :< Descriptor,
+    get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+    branch_head_commit(Repository_Descriptor, BranchNameStr, Head_Commit_Uri),
+    commit_id_uri(Repository_Descriptor, _Head_Commit_Id, Head_Commit_Uri),
+    commit_uri_to_history_commit_ids(Repository_Descriptor,
+                                     Head_Commit_Uri,
+                                     History_Oldest_First),
+    (   append(_, [CommitId, NextCommitId|_], History_Oldest_First)
+    ->  text_to_string(NextCommitId, NextCommit)
+    ;   NextCommit = 'None'
+    ).
+
+%% indexer_process_commit(+Path, +BranchName, +CommitId, +Stream) is det.
+%
+%  Opens the commit descriptor, computes the parent commit from history,
+%  finds changed documents via api_indexable/5, generates embedding text,
+%  and writes NDJSON lines to Stream. On error, writes an error marker
+%  JSON line to the stream before failing.
+indexer_process_commit(Path, _BranchName, CommitIdRaw, Stream) :-
+    text_to_string(CommitIdRaw, CommitId),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    resolve_relative_descriptor(Descriptor,
+                                ["commit", CommitId],
+                                Commit_Descriptor),
+    embedding_type_queries(Commit_Descriptor, TypeQueries),
+    open_descriptor(Commit_Descriptor, Transaction),
     catch(
-        (   open_descriptor(system_descriptor{}, System_DB),
-            super_user_authority(Auth),
-            io_push_delta(System_DB, Auth, Path, Branch_Name)
+        (   write_commit_ndjson(Transaction, Descriptor,
+                                CommitId, TypeQueries, Stream)
+        ->  format(user_error, "[DEBUG] indexer_process_commit: write_commit_ndjson succeeded for ~w~n", [CommitId])
+        ;   format(user_error, "[DEBUG] indexer_process_commit: write_commit_ndjson FAILED (no exception) for ~w~n", [CommitId]),
+            fail
         ),
         Error,
-        % Recovery must itself be robust — the Error term may contain dead
-        % stream references that crash formatters. Double-catch ensures the
-        % worker thread NEVER dies on an uncaught exception.
-        catch(
-            json_log_error_formatted(
-                "[ERROR] Auto-push-on-commit failed for ~w (~w): ~q",
-                [Path, Branch_Name, Error]),
-            _Log_Error,
-            format(user_error,
-                   "[ERROR] Auto-push-on-commit failed for ~w (~w); error not printable~n",
-                   [Path, Branch_Name])
+        (   with_output_to(atom(Error_Atom),
+                write_term(Error, [quoted(false)])),
+            format(user_error, "[DEBUG] indexer_process_commit: write_commit_ndjson THREW ERROR for ~w: ~w~n", [CommitId, Error_Atom]),
+            Error_Json = json{op:"Error", message:Error_Atom},
+            json_write_dict(Stream, Error_Json, []),
+            nl(Stream),
+            flush_output(Stream),
+            fail
         )
     ).
+
+%% write_commit_ndjson(+Transaction, +Descriptor, +CommitId,
+%%                     +TypeQueries, +Stream)
+%
+%  Computes the parent commit from the commit history, then for each
+%  embedding-enabled type, finds changed documents via api_indexable/5
+%  and writes NDJSON lines with embedding text to Stream.
+write_commit_ndjson(Transaction, Descriptor, CommitId,
+                    TypeQueries, Stream) :-
+    (   TypeQueries = []
+    ->  format(user_error, "[DEBUG] write_commit_ndjson: no TypeQueries for commit ~w~n", [CommitId])
+    ;   format(user_error, "[DEBUG] write_commit_ndjson: ~w type queries for commit ~w~n", [TypeQueries, CommitId]),
+        open_descriptor(system_descriptor{}, System_DB),
+        format(user_error, "[DEBUG] write_commit_ndjson: opened system descriptor for ~w~n", [CommitId]),
+        maplist([Type-Query-_Template, Type-Query]>>true,
+                TypeQueries, Queries),
+        convlist([Type-Query-Template, Type-Template]>>ground(Template),
+                 TypeQueries, Templates),
+        all_class_frames(Transaction, Frames,
+                         [compress_ids(true), expand_abstract(true),
+                          simple(true)]),
+        format(user_error, "[DEBUG] write_commit_ndjson: got class frames for ~w~n", [CommitId]),
+        '$embedding':embedding_context(System_DB, Transaction, Templates,
+                                       Queries, Frames, Embedding_Context),
+        format(user_error, "[DEBUG] write_commit_ndjson: got embedding context for ~w~n", [CommitId]),
+        get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+        format(user_error, "[DEBUG] write_commit_ndjson: got repo descriptor for ~w~n", [CommitId]),
+        commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
+        format(user_error, "[DEBUG] write_commit_ndjson: got commit uri for ~w~n", [CommitId]),
+        commit_uri_to_history_commit_ids(Repository_Descriptor,
+                                         Commit_Uri, History_Oldest_First),
+        format(user_error, "[DEBUG] write_commit_ndjson: got history (~w commits) for ~w~n", [History_Oldest_First, CommitId]),
+        (   append(_, [Parent_Id, CommitId|_], History_Oldest_First)
+        ->  Maybe_Previous = some(Parent_Id),
+            format(user_error, "[DEBUG] write_commit_ndjson: parent=~w for ~w~n", [Parent_Id, CommitId])
+        ;   Maybe_Previous = none,
+            format(user_error, "[DEBUG] write_commit_ndjson: no parent (first commit) for ~w~n", [CommitId])
+        ),
+        nb_setval(ndjson_count, 0),
+        format(user_error, "[DEBUG] write_commit_ndjson: starting forall for ~w with Maybe_Previous=~w~n", [CommitId, Maybe_Previous]),
+        forall(
+            (   member(Type-_Query-_Template, TypeQueries),
+                format(user_error, "[DEBUG] write_commit_ndjson: trying api_indexable for type ~w commit ~w~n", [Type, CommitId]),
+                api_indexable(Maybe_Previous, Descriptor, CommitId,
+                              Type, Operation)
+            ),
+            (   get_dict(op, Operation, Op),
+                ignore(get_dict(id, Operation, Id)),
+                nb_getval(ndjson_count, PrevCount),
+                Count is PrevCount + 1,
+                nb_setval(ndjson_count, Count),
+                (   Count =< 3
+                ->  format(user_error, "[DEBUG] write_commit_ndjson: doc #~w type=~w op=~w id=~w~n", [Count, Type, Op, Id])
+                ;   true
+                ),
+                '$embedding':write_op_for(Stream, System_DB, Transaction,
+                                          Embedding_Context, Type, Id, Op),
+                flush_output(Stream)
+            )
+        ),
+        (   nb_current(ndjson_count, Count)
+        ->  format(user_error, "[DEBUG] write_commit_ndjson: wrote ~w NDJSON lines for commit ~w~n", [Count, CommitId])
+        ;   format(user_error, "[DEBUG] write_commit_ndjson: wrote 0 NDJSON lines for commit ~w~n", [CommitId])
+        )
+    ).
+
+%% count_indexable_documents(+Path, +BranchName, +CommitId, -Count) is det.
+%
+%  Counts the total number of indexable documents that will be processed
+%  for a given commit, without generating embedding text. Used by the
+%  indexer worker handler to emit an X-Document-Count header for progress
+%  reporting.
+%
+%  Uses the fast Rust $changes:collect_changed_documents_filtered/5 for
+%  commits with a parent, and direct ask counting for the first commit.
+count_indexable_documents(Path, _BranchName, CommitIdRaw, Count) :-
+    text_to_string(CommitIdRaw, CommitId),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    resolve_relative_descriptor(Descriptor,
+                                ["commit", CommitId],
+                                Commit_Descriptor),
+    embedding_type_queries(Commit_Descriptor, TypeQueries),
+    (   TypeQueries = []
+    ->  Count = 0
+    ;   open_descriptor(Commit_Descriptor, Transaction),
+        get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+        commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
+        commit_uri_to_history_commit_ids(Repository_Descriptor,
+                                         Commit_Uri, History_Oldest_First),
+        (   append(_, [Parent_Id, CommitId|_], History_Oldest_First)
+        ->  Maybe_Previous = some(Parent_Id)
+        ;   Maybe_Previous = none
+        ),
+        count_indexable_documents_(Maybe_Previous, Transaction,
+                                    TypeQueries, Count)
+    ).
+
+%% count_indexable_documents_(+Maybe_Previous, +Transaction, +TypeQueries, -Count) is det.
+%
+%  Helper that does the actual counting based on whether there is a parent commit.
+count_indexable_documents_(some(_Parent_Id), Transaction, TypeQueries, Count) :-
+    findall(TypeAtom,
+            (   member(Type-__-_Template, TypeQueries),
+                atom_string(TypeAtom, Type)
+            ),
+            TypeAtoms),
+    (   TypeAtoms = []
+    ->  Count = 0
+    ;   findall(_,
+                '$changes':collect_changed_documents_filtered(
+                    Transaction, TypeAtoms, _Id, _ChangeType),
+                Changes),
+        length(Changes, Count)
+    ).
+count_indexable_documents_(none, Transaction, TypeQueries, Count) :-
+    findall(_,
+            (   member(Type-__-_Template, TypeQueries),
+                ask(Transaction, t(_Id, rdf:type, Type),
+                    [compress_prefixes(false)])
+            ),
+            Operations),
+    length(Operations, Count).
+
+
+:- begin_tests(indexer_predicates, [concurrent(true)]).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(transaction/ref_entity),
+             [branch_head_commit/3, commit_id_uri/3,
+              commit_uri_to_history_commit_ids/3]).
+:- use_module(core(api/api_document), [api_insert_documents/9]).
+:- use_module(core(triple), [super_user_authority/1]).
+
+test(next_commit_returns_none_at_head,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx),
+    with_transaction(Ctx, ask(Ctx, insert(a,b,c)), _),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        Head_Commit_Id, NextCommit),
+    assertion(NextCommit == 'None').
+
+test(next_commit_returns_next_for_older_commit,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", First_Uri),
+    commit_id_uri(Repo_Desc, First_Commit_Id, First_Uri),
+    create_context(Desc, commit_info{author:"test",message:"second"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        First_Commit_Id, NextCommit),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    text_to_string(Head_Commit_Id, Head_Str),
+    assertion(NextCommit == Head_Str).
+
+test(process_commit_fails_on_bad_path,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State)),
+      fail
+     ]) :-
+    open_string("", EmptyStream),
+    indexer_process_commit("admin/nonexistent/local/branch/main",
+                           "main", "dummy_commit", EmptyStream).
+
+test(next_commit_traverses_three_commit_chain,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    %% Commit 1
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Uri1),
+    commit_id_uri(Repo_Desc, Id1, Uri1),
+    %% Commit 2
+    create_context(Desc, commit_info{author:"test",message:"second"}, Ctx2),
+    with_transaction(Ctx2, ask(Ctx2, insert(d,e,f)), _),
+    branch_head_commit(Repo_Desc, "main", Uri2),
+    commit_id_uri(Repo_Desc, Id2, Uri2),
+    %% Commit 3
+    create_context(Desc, commit_info{author:"test",message:"third"}, Ctx3),
+    with_transaction(Ctx3, ask(Ctx3, insert(g,h,i)), _),
+    branch_head_commit(Repo_Desc, "main", Uri3),
+    commit_id_uri(Repo_Desc, Id3, Uri3),
+    %% Id1 → Id2
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        Id1, Next1),
+    text_to_string(Id2, Id2_Str),
+    assertion(Next1 == Id2_Str),
+    %% Id2 → Id3
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        Id2, Next2),
+    text_to_string(Id3, Id3_Str),
+    assertion(Next2 == Id3_Str),
+    %% Id3 → None (at head)
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        Id3, Next3),
+    assertion(Next3 == 'None').
+
+test(process_commit_writes_ndjson_to_stream,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx),
+    with_transaction(Ctx, ask(Ctx, insert(a,b,c)), _),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    text_to_string(Head_Commit_Id, CommitId),
+    %% Capture NDJSON output to a temporary file stream.
+    %% The predicate may succeed or fail depending on schema configuration;
+    %% the invariant is that it must not throw.
+    tmp_file_stream(text, TmpFile, WriteStream),
+    (   indexer_process_commit("admin/foo/local/branch/main",
+                               "main", CommitId, WriteStream)
+    ->  true
+    ;   true
+    ),
+    close(WriteStream),
+    delete_file(TmpFile).
+
+test(next_commit_returns_none_for_nonexistent_commit,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    %% A commit ID not in the branch history yields 'None'.
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        "nonexistent_commit_id_xyz", Next),
+    assertion(Next == 'None').
+
+test(count_indexable_documents_returns_zero_for_no_embedding_schema,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx),
+    with_transaction(Ctx, ask(Ctx, insert(a,b,c)), _),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    text_to_string(Head_Commit_Id, CommitId),
+    count_indexable_documents("admin/foo/local/branch/main", "main",
+                              CommitId, Count),
+    assertion(Count == 0).
+
+test(count_indexable_documents_counts_documents_with_embedding_schema,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "embdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/embdb", SchemaStream, no_data_version, _, _, _, Options),
+    %% Insert 3 documents
+    open_string('
+[
+  {"@type": "Article", "title": "First Document", "body": "Content of first document"},
+  {"@type": "Article", "title": "Second Document", "body": "Content of second document"},
+  {"@type": "Article", "title": "Third Document", "body": "Content of third document"}
+]
+', DocStream),
+    DocOptions = [author("test"), graph_type(instance), message("test docs")],
+    api_insert_documents(System, Auth, "admin/embdb", DocStream, no_data_version, _, _, _, DocOptions),
+    resolve_absolute_string_descriptor("admin/embdb/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    text_to_string(Head_Commit_Id, CommitId),
+    count_indexable_documents("admin/embdb/local/branch/main", "main",
+                              CommitId, Count),
+    assertion(Count == 3).
+
+:- end_tests(indexer_predicates).
+

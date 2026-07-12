@@ -1896,6 +1896,7 @@ error_type_(migration, 'api:MigrationErrorResponse').
 error_type_(concat, 'api:ConcatErrorResponse').
 error_type_(index, 'api:IndexErrorResponse').
 error_type_(search, 'api:SearchErrorResponse').
+error_type_(suggest, 'api:SearchErrorResponse').
 error_type_(server, 'api:ServerErrorResponse').
 
 % Info endpoint errors

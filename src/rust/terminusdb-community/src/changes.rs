@@ -4,6 +4,7 @@ use std::{
 };
 
 use swipl::{atom, predicates, prelude::Atom, result::PrologError};
+use swipl::prelude::PrologText;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::{
@@ -290,6 +291,67 @@ predicates! {
         }
     }
 
+    /// Nondet predicate that enumerates changed document IDs filtered by
+    /// a specific type IRI. This avoids the overhead of enumerating all
+    /// changes and filtering post-hoc in Prolog.
+    ///
+    /// Signature: changed_document_id_filtered(+Transaction, -Id, -ChangeType, +TypeIRI)
+    /// TypeIRI is the full IRI string of the type to filter by (e.g.
+    /// "terminusdb:///schema#MyClass"). If the type IRI is not in the
+    /// instance layer's dictionary, the predicate fails (no documents of
+    /// that type exist).
+    #[module("$changes")]
+    nondet fn changed_document_id_filtered<State>(context, transaction_term, id_term, change_type_term, type_iri_term) {
+        setup => {
+            let schema_layer = transaction_schema_layer(context, transaction_term)?;
+            let instance_layer = transaction_instance_layer(context, transaction_term)?;
+            match (schema_layer, instance_layer) {
+                (Some(schema_layer), Some(instance_layer)) => {
+                    let type_iri: String = type_iri_term.get_ex()?;
+                    let type_id = match instance_layer.subject_id(&type_iri) {
+                        Some(id) => id,
+                        None => return Err(PrologError::Failure),
+                    };
+                    let all_changes = context.try_or_die(changed_document_ids(&schema_layer, &instance_layer))?;
+                    let rdf_type_id = match instance_layer.predicate_id(RDF_TYPE) {
+                        Some(id) => id,
+                        None => return Err(PrologError::Failure),
+                    };
+                    // Filter: keep only entries whose rdf:type matches type_id.
+                    let filtered: Vec<(u64, ChangeType)> = all_changes
+                        .into_iter()
+                        .filter(|(id, change_type)| {
+                            let entry_type_id = match change_type {
+                                ChangeType::Added(t) | ChangeType::Deleted(t) => *t,
+                                ChangeType::Changed => {
+                                    match instance_layer.single_triple_sp(*id, rdf_type_id) {
+                                        Some(triple) => triple.object,
+                                        None => return false,
+                                    }
+                                }
+                            };
+                            entry_type_id == type_id
+                        })
+                        .collect();
+                    Ok(Some(State { changes: filtered, layer: instance_layer }))
+                },
+                _ => Err(PrologError::Failure)
+            }
+        },
+        call(state) => {
+            let State{changes, layer} = state;
+            if let Some((id, change_type)) = changes.pop() {
+                let iri = layer.id_subject(id).expect("id was not in dictionary");
+                id_term.unify(iri)?;
+                change_type_term.unify(change_type.as_atom())?;
+
+                Ok(!changes.is_empty())
+            } else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
     /// Semidet predicate that computes all document changes in a single call
     /// and returns three lists: Added, Changed, Deleted.
     /// This avoids the 3x overhead and cross-process non-determinism of
@@ -324,9 +386,95 @@ predicates! {
             _ => Err(PrologError::Failure)
         }
     }
+
+    /// Nondet predicate that enumerates changed document IDs filtered by
+    /// a list of type IRIs, streaming solutions one at a time.
+    ///
+    /// Signature: collect_changed_documents_filtered(+Transaction, +TypeIRIs, -Id, -ChangeType)
+    /// TypeIRIs is a Prolog list of type IRI strings to filter by (e.g.
+    /// ["terminusdb:///schema#Article", "terminusdb:///schema#Tutorial"]).
+    /// Only documents whose rdf:type matches one of the provided type IRIs
+    /// are yielded. Type IRIs not in the instance layer's dictionary are
+    /// silently skipped (no documents of that type exist in this layer).
+    ///
+    /// Each solution is a (Id, ChangeType) pair where ChangeType is the
+    /// atom `added`, `changed`, or `deleted`.
+    #[module("$changes")]
+    nondet fn collect_changed_documents_filtered<State>(context, transaction_term, type_iris_term, id_term, change_type_term) {
+        setup => {
+            let schema_layer = transaction_schema_layer(context, transaction_term)?;
+            let instance_layer = transaction_instance_layer(context, transaction_term)?;
+            match (schema_layer, instance_layer) {
+                (Some(schema_layer), Some(instance_layer)) => {
+                    let changes = context.try_or_die(changed_document_ids(&schema_layer, &instance_layer))?;
+
+                    // Collect type IRI strings from the Prolog list term.
+                    // PrologText handles both atoms and strings (IRIs are
+                    // typically atoms in TerminusDB).
+                    let type_iris: Vec<String> = context
+                        .term_list_iter(type_iris_term)
+                        .map(|t| t.get_ex::<PrologText>().map(|t| t.into_inner()))
+                        .collect::<Result<_, _>>()?;
+
+                    // Convert type IRIs to numeric IDs. Skip any that are not
+                    // in the instance layer dictionary.
+                    let mut filter_type_ids: HashSet<u64> = HashSet::new();
+                    for iri in &type_iris {
+                        if let Some(id) = instance_layer.subject_id(iri) {
+                            filter_type_ids.insert(id);
+                        }
+                    }
+
+                    // If no filter type IDs resolved, return empty (fail immediately).
+                    if filter_type_ids.is_empty() {
+                        return Err(PrologError::Failure);
+                    }
+
+                    let rdf_type_id = match instance_layer.predicate_id(RDF_TYPE) {
+                        Some(id) => id,
+                        None => return Err(PrologError::Failure),
+                    };
+
+                    // Filter changes by type.
+                    let filtered: Vec<(u64, ChangeType)> = changes
+                        .into_iter()
+                        .filter(|(id, change_type)| {
+                            let entry_type_id = match change_type {
+                                ChangeType::Added(t) | ChangeType::Deleted(t) => *t,
+                                ChangeType::Changed => {
+                                    match instance_layer.single_triple_sp(*id, rdf_type_id) {
+                                        Some(triple) => triple.object,
+                                        None => return false,
+                                    }
+                                }
+                            };
+                            filter_type_ids.contains(&entry_type_id)
+                        })
+                        .collect();
+
+                    Ok(Some(State { changes: filtered, layer: instance_layer }))
+                },
+                _ => Err(PrologError::Failure)
+            }
+        },
+        call(state) => {
+            let State{changes, layer} = state;
+            if let Some((id, change_type)) = changes.pop() {
+                let iri = layer.id_subject(id).expect("id was not in dictionary");
+                id_term.unify(iri)?;
+                change_type_term.unify(change_type.as_atom())?;
+
+                Ok(!changes.is_empty())
+            } else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
 }
 
 pub fn register() {
     register_changed_document_id();
+    register_changed_document_id_filtered();
     register_collect_changed_documents();
+    register_collect_changed_documents_filtered();
 }

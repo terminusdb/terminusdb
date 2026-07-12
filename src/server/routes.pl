@@ -56,6 +56,7 @@
 :- use_module(library(http/http_dispatch)).
 :- use_module(server(routes/tdb_http_handler)).
 :- use_module(server(routes/request_worker_pool)).
+:- use_module(server(routes/indexer_worker)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
 :- use_module(library(http/http_path)).

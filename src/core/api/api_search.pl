@@ -55,11 +55,12 @@ backend is none or http_vectorlink.
 :- use_module(library(http/http_open)).
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_header)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(lists)).
 :- use_module(library(option)).
 :- use_module(library(apply)).
 :- use_module(library(url), [www_form_encode/2]).
+:- use_module(core(plugins)).
 
 % ==========================================================================
 % Backend gate — all search forwarding requires http_tdb_search.
@@ -82,8 +83,8 @@ assert_search_backend :-
 % ==========================================================================
 
 search_auth_header(authorization(basic(User, Secret))) :-
-    tdb_search_admin_user(User),
-    tdb_search_admin_secret(Secret).
+    plugins:tdb_search_admin_user(User),
+    plugins:tdb_search_admin_secret(Secret).
 
 % ==========================================================================
 % Ancestor window computation.
@@ -442,25 +443,20 @@ repeated_param_fragment(Key, Value, Fragment) :-
  * valid, just not at HEAD).
  */
 maybe_nudge_push(none, _Commit, _System_DB, _Auth, _Path, _Branch) :- !.
-maybe_nudge_push(Data_Version_Header, Commit, System_DB, Auth, Path, Branch) :-
+maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :-
     format(atom(Expected_DV), "commit:~w", [Commit]),
     (   Data_Version_Header == Expected_DV
     ->  true  % Served the exact commit requested — no nudge needed.
-    ;   % Stale: served a different (ancestor) commit. Nudge a push.
-        % Fire-and-forget: catch and log any error from the push attempt.
-        % WHY: The search result is valid (nearest ancestor), but stale. The
-        %      nudge ensures convergence on the next search.
-        % INVARIANT: io_push_delta is idempotent (409 on already-in-flight);
-        %            failure here does not corrupt any state.
-        % CONSEQUENCE: If the nudge fails, subsequent searches will continue
-        %              serving the stale ancestor until a future nudge or
-        %              explicit index trigger succeeds.
-        catch(
-            io_push_delta(System_DB, Auth, Path, Branch),
-            Nudge_Error,
-            format(user_error,
-                   "[WARN] Search stale-version nudge failed for ~w: ~q~n",
-                   [Path, Nudge_Error])
+    ;   % Stale: served a different (ancestor) commit. Nudge via indexer_notify
+        % (O(1) FFI call — no HTTP, no NDJSON generation from Prolog).
+        (   plugin_api:indexer_available
+        ->  catch(
+                (plugin_api:indexer_notify(Path, Branch) ; true),
+                Nudge_Error,
+                format(user_error,
+                       "[WARN] Search stale-version nudge failed for ~w: ~q~n",
+                       [Path, Nudge_Error]))
+        ;   true
         )
     ).
 

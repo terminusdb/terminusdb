@@ -560,7 +560,7 @@ pub fn input_stream_registry() -> Arc<Mutex<InputStreamRegistry>> {
 }
 
 /// Request to be dispatched to the single SWI-Prolog engine.
-struct DispatchRequest {
+pub struct DispatchRequest {
     request_json: serde_json::Value,
     handler_module: String,
     handler_name: String,
@@ -577,17 +577,17 @@ impl DispatchRequest {
 }
 
 /// Request to be dispatched through OS pipes (plugin routes).
-struct PipeDispatchRequest {
-    request_json: serde_json::Value,
-    handler_module: String,
-    handler_name: String,
-    input_read_fd: Option<i32>,
-    output_write_fd: i32,
-    binary: bool,
+pub struct PipeDispatchRequest {
+    pub(crate) request_json: serde_json::Value,
+    pub(crate) handler_module: String,
+    pub(crate) handler_name: String,
+    pub(crate) input_read_fd: Option<i32>,
+    pub(crate) output_write_fd: i32,
+    pub(crate) binary: bool,
 }
 
 /// Message sent to the single-engine dispatcher queue.
-enum DispatchMessage {
+pub enum DispatchMessage {
     Pipe(PipeDispatchRequest),
     Stream(DispatchRequest),
 }
@@ -600,7 +600,7 @@ static IN_FLIGHT_REQUESTS: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new
 
 /// Return the dispatcher queue sender, panicking if the dispatcher is not
 /// initialized.
-fn dispatch_queue() -> mpsc::Sender<DispatchMessage> {
+pub fn dispatch_queue() -> mpsc::Sender<DispatchMessage> {
     DISPATCH_QUEUE
         .get()
         .expect("request dispatcher not initialized")
@@ -837,6 +837,17 @@ fn dispatch_stream_to_prolog(
         &response_stream_id_term,
     ])
 }
+
+/// Write a string to a file descriptor.
+#[allow(dead_code)]
+fn write_to_fd(fd: i32, data: &str) -> std::io::Result<()> {
+    use std::os::fd::BorrowedFd;
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    nix::unistd::write(borrowed, data.as_bytes())
+        .map(|_| ())
+        .map_err(std::io::Error::from)
+}
+
 
 /// Register a new response stream and return its id and the receiver.
 ///
@@ -1558,15 +1569,15 @@ mod tests {
         assert!(stream.next().await.is_none());
     }
 
-    #[tokio::test]
-    async fn stream_registry_sends_and_removes_on_close() {
+    #[test]
+    fn stream_registry_sends_and_removes_on_close() {
         let mut registry = StreamRegistry::new();
         let (tx, mut rx) = mpsc::channel::<axum::body::Bytes>(10);
         let id = registry.add(tx);
 
         let event = axum::body::Bytes::from(r#"{"event":"test"}"#);
         assert!(registry.send(id, event.clone()).is_ok());
-        let received = rx.recv().await.unwrap();
+        let received = rx.blocking_recv().unwrap();
         assert_eq!(received, event);
 
         drop(rx);
@@ -1899,7 +1910,7 @@ async fn dispatch_request_via_pipe(
 
 /// Read CGI headers from the pipe receiver, returning the parsed status, header
 /// map, and any bytes that were read past the header separator.
-async fn read_cgi_headers(
+pub(crate) async fn read_cgi_headers(
     receiver: &mut Receiver,
 ) -> Result<(u16, HeaderMap, Vec<u8>), String> {
     let mut buf = Vec::new();
@@ -1926,7 +1937,7 @@ async fn read_cgi_headers(
 /// Content-Length is preserved so that hyper can use it for keep-alive when
 /// the handler sets it (e.g. reply_json). When Content-Length is absent
 /// (streaming responses like NDJSON), hyper uses chunked transfer encoding.
-fn parse_cgi_headers(buf: &[u8]) -> Option<(u16, HeaderMap, usize)> {
+pub(crate) fn parse_cgi_headers(buf: &[u8]) -> Option<(u16, HeaderMap, usize)> {
     let separator_pos = find_header_separator(buf)?;
     let header_bytes = &buf[..separator_pos];
     let body_start = if buf[separator_pos..].starts_with(b"\r\n\r\n") {
@@ -2149,23 +2160,42 @@ async fn dispatch_stream_request(
             Ok(bytes) => bytes,
             Err(_) => return plugin_error_response("failed to read request body"),
         };
-        let parsed_body: Vec<serde_json::Value> = body_bytes
-            .split(|&b| b == b'\n')
-            .filter(|line| !line.is_empty())
-            .filter_map(|line| serde_json::from_slice(line).ok())
-            .collect();
-        (Some(body_bytes), parsed_body)
+        // For large bodies, skip pre-parsing to avoid dispatch thread
+        // serialize_to_term bottleneck. Worker threads parse via
+        // json_read_all_from_stream in parallel. Don't include the body
+        // string in request_json either — the worker reads it from the
+        // input stream.
+        if body_bytes.len() < 100_000 {
+            let parsed_body: Vec<serde_json::Value> = body_bytes
+                .split(|&b| b == b'\n')
+                .filter(|line| !line.is_empty())
+                .filter_map(|line| serde_json::from_slice(line).ok())
+                .collect();
+            (Some(body_bytes), parsed_body)
+        } else {
+            // Large body: send via input stream only, don't serialize in JSON.
+            (Some(body_bytes), Vec::new())
+        }
     } else {
         (None, Vec::new())
     };
 
     let request_json = if parsed_body.is_empty() {
+        // For large NDJSON bodies (>= 100KB), don't serialize the body
+        // string into request_json — the worker reads it from the input
+        // stream. For small bodies that failed to parse as NDJSON lines,
+        // include the body string as fallback.
+        let body_str = buffered_body
+            .as_ref()
+            .filter(|b| b.len() < 100_000)
+            .map(|b| String::from_utf8_lossy(b).to_string())
+            .unwrap_or_default();
         json!({
             "method": method,
             "path": path,
             "query": query,
             "headers": headers,
-            "body": "",
+            "body": body_str,
             "params": params,
         })
     } else {

@@ -523,6 +523,17 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                     Error,
                     handle_handler_error(Error, OutStream, CGI)
                 )
+            ;   HandlerModule == indexer_worker
+            ->  catch(
+                    (   indexer_worker:indexer_process_commit_handler(Request, OutStream)
+                    ->  true
+                    ;   write_cgi_error(OutStream, 500, "Indexer worker handler failed")
+                    ),
+                    Error,
+                    (   json_log_error_formatted("Indexer worker handler error: ~q", [Error]),
+                        write_cgi_error(OutStream, 500, Error)
+                    )
+                )
             ;   catch(
                     call_raw_plugin_handler(HandlerModule, HandlerName, SWIRequest, OutStream),
                     Error,
@@ -1615,5 +1626,27 @@ test(watchdog_grace_period_env_positive,
     %% A positive integer overrides the default.
     watchdog_grace_period(P),
     assertion(P == 120).
+
+test(handle_pipe_work_indexer_worker_receives_dict_not_swi_request,
+     []) :-
+    %% Regression: the indexer_worker branch must pass the Request dict
+    %% (which has .path and .query as dict keys) to the handler, not the
+    %% SWIRequest list (which is a list of key-value pairs like
+    %% [method(post), path('/api'), ...]).  Passing the list caused
+    %% type_error(dict, [method(post), ...]) because the handler calls
+    %% get_dict/3 which requires a dict.
+    Request = _{method: "POST", path: "admin/db/local/branch/main",
+                 query: "branch=main&commit=abc123",
+                 headers: _{}},
+    %% The handler expects get_dict(path, Request, _) to succeed.
+    assertion(get_dict(path, Request, _)),
+    assertion(get_dict(query, Request, _)),
+    %% A SWI request list causes a type error from get_dict/3 (not
+    %% uniform failure), so we verify via catch/3.
+    SWIRequest = [method(post), path('admin/db/local/branch/main'),
+                  search([branch=main, commit=abc123])],
+    catch(get_dict(path, SWIRequest, _),
+          error(type_error(dict, _), _),
+          true).
 
 :- end_tests(request_worker_pool).
