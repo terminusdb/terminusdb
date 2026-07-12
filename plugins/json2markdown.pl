@@ -90,6 +90,8 @@ matches_document(Document) :-
     ->  true
     ;   json_document_id_prefix_full(FullPrefix),
         sub_string(IdStr, 0, _, _, FullPrefix)
+    ->  true
+    ;   sub_string(IdStr, _, _, _, Prefix)
     ).
 
 id_to_string(Id, IdStr) :-
@@ -336,40 +338,41 @@ indent(Level) :-
 test(simple_string_value) :-
     Doc = json{title: "Hello"},
     json_to_markdown(Doc, MD),
-    sub_string(MD, _, _, _, "Hello").
+    once(sub_string(MD, _, _, _, "Hello")).
 
 test(simple_number_value) :-
     Doc = json{count: 42},
     json_to_markdown(Doc, MD),
-    sub_string(MD, _, _, _, "42").
+    once(sub_string(MD, _, _, _, "42")).
 
 test(list_of_strings) :-
     Doc = json{tags: ["alpha", "beta"]},
     json_to_markdown(Doc, MD),
-    sub_string(MD, _, _, _, "alpha"),
-    sub_string(MD, _, _, _, "beta").
+    once(sub_string(MD, _, _, _, "alpha")),
+    once(sub_string(MD, _, _, _, "beta")).
 
 test(nested_dict) :-
     Doc = json{meta: json{author: "Alice", year: 2024}},
     json_to_markdown(Doc, MD),
-    sub_string(MD, _, _, _, "Alice"),
-    sub_string(MD, _, _, _, "2024").
+    once(sub_string(MD, _, _, _, "Alice")),
+    once(sub_string(MD, _, _, _, "2024")).
 
 test(heading_level_increases) :-
     Doc = json{outer: json{inner: "deep"}},
     json_to_markdown(Doc, MD),
-    sub_string(MD, _, _, _, "deep").
+    once(sub_string(MD, _, _, _, "deep")).
 
 test(multiple_keys) :-
     Doc = json{a: "first", b: "second"},
     json_to_markdown(Doc, MD),
-    sub_string(MD, _, _, _, "first"),
-    sub_string(MD, _, _, _, "second").
+    once(sub_string(MD, _, _, _, "first")),
+    once(sub_string(MD, _, _, _, "second")).
 
 test(empty_dict) :-
     Doc = json{},
-    json_to_markdown(Doc, MD),
-    string_length(MD, 0).
+    once(( json_to_markdown(Doc, MD),
+           normalize_space(atom(Norm), MD),
+           Norm == '' )).
 
 test(boolean_value) :-
     Doc = json{active: @(true)},
