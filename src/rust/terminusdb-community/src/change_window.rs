@@ -192,7 +192,22 @@ impl ChangeWindow {
         }
 
         let parent_id = parent_commit_id.unwrap();
-        let commit = branch.get_commit_mut(&parent_id)?;
+        // If the parent commit is not yet in the window (e.g. after a server
+        // restart when the in-memory window is empty), register it as a
+        // baseline with no parent and no recorded changes.
+        if branch.get_commit(&parent_id).is_none() {
+            branch.push_back(CommitChanges {
+                commit_id: parent_id.clone(),
+                parent_commit_id: None,
+                schema_layer_id: None,
+                instance_layer_id: None,
+                added_iris: HashSet::new(),
+                removed_iris: HashSet::new(),
+                active_count: 0,
+            });
+        }
+        let commit = branch.get_commit_mut(&parent_id)
+            .expect("parent commit just inserted or already present");
         commit.active_count += 1;
 
         let guard_id = self.next_guard_id.fetch_add(1, Ordering::SeqCst);
