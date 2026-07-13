@@ -156,12 +156,10 @@ start_server_backend(rust, Port, _Workers) :-
 
 %% run_post_server_startup_hooks(+Backend, +Port) is det.
 %%
-%  Run the SWI-Prolog post-startup hooks only when the SWI-Prolog backend is
-%  active. The Rust backend performs its own startup in start_server_backend.
-run_post_server_startup_hooks(swipl, Port) :-
+%  Run post-startup hooks for both backends. These hooks wire up
+%  plugin configuration (e.g. indexer_set_config for tdb-search).
+run_post_server_startup_hooks(_Backend, Port) :-
     foreach(post_server_startup_hook(Port), true).
-run_post_server_startup_hooks(rust, _Port) :-
-    true.
 
 %% wait_for_backend(+Backend, +Port) is det.
 %%
