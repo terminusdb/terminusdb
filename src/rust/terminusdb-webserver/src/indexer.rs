@@ -573,13 +573,14 @@ impl IndexerRegistry {
     /// with a FATAL log message and a full stack trace.
     ///
     /// The deadline is configurable via TERMINUSDB_INDEXER_WATCHDOG_DEADLINE
-    /// (default: 10 seconds). A single document should take < 5 seconds
-    /// (100x margin), so 10 seconds means something is seriously wrong.
+    /// (default: 60 seconds). CPU-only embedding backends (e.g. Ollama)
+    /// can take >10s for the first document, so the default allows for
+    /// slow first-document processing.
     fn check_dead_mans_switch(&self) {
         let deadline_secs = std::env::var("TERMINUSDB_INDEXER_WATCHDOG_DEADLINE")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(10);
+            .unwrap_or(60);
 
         let deadline = Duration::from_secs(deadline_secs);
 
