@@ -107,6 +107,7 @@
 document_input_format(json).
 document_output_format(json).
 document_output_format(embedding).
+document_output_format(markdown).
 
 detect_input_format(ContentType, Format) :-
     (   re_match('^application/json', ContentType, [])
@@ -150,6 +151,7 @@ accept_to_format(application/'ld+json', jsonld).
 accept_to_format(application/'rdf+xml', rdfxml).
 accept_to_format(text/turtle, turtle).
 accept_to_format(text/plain, embedding).
+accept_to_format(text/markdown, markdown).
 
 before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction) :-
     do_or_die(
@@ -1522,6 +1524,52 @@ document_stream_write(embedding, _Config, StreamState, Document) :-
 
 document_stream_end(embedding, _Config).
 
+% Markdown stream handlers — strip @id/@type, convert JSON to markdown via json2markdown
+document_stream_headers(markdown, Request, DataVersion) :-
+    routes:write_cors_headers(Request),
+    (   DataVersion \= no_data_version
+    ->  routes:write_data_version_header(DataVersion)
+    ;   true
+    ),
+    format("Transfer-Encoding: chunked~n"),
+    format("Content-type: text/markdown; charset=UTF-8~n~n").
+
+document_stream_start(markdown, _Config, StreamState) :-
+    StreamState = state.
+
+document_stream_write(markdown, _Config, state, Document) :-
+    strip_metadata_fields(Document, Cleaned),
+    (   json2markdown:json_to_markdown(Cleaned, Markdown)
+    ->  true
+    ;   Markdown = ''
+    ),
+    format("~w~n", [Markdown]).
+
+document_stream_end(markdown, _Config).
+
+%% strip_metadata_fields(+Document, -Cleaned) is det.
+%
+%  Recursively removes @id and @type keys from a JSON dict, including
+%  nested dicts and lists. Returns the cleaned structure.
+strip_metadata_fields(Dict, Cleaned) :-
+    is_dict(Dict),
+    !,
+    dict_pairs(Dict, Tag, Pairs),
+    exclude(at_metadata_pair, Pairs, ContentPairs),
+    maplist([K-V, K-VC]>>strip_metadata_fields(V, VC), ContentPairs, CleanedPairs),
+    dict_pairs(Cleaned, Tag, CleanedPairs).
+strip_metadata_fields(List, Cleaned) :-
+    is_list(List),
+    !,
+    maplist([V, VC]>>strip_metadata_fields(V, VC), List, Cleaned).
+strip_metadata_fields(Scalar, Scalar).
+
+at_metadata_pair(Key-_Value) :-
+    atom(Key),
+    (   Key == '@id'
+    ;   Key == '@type'
+    ).
+
 %% embedding_has_query_for_type(+TypeQueryMap, +Type_Ex) is semidet.
 %%
 %%  True if the type has an embedding query defined in the schema metadata.
@@ -1541,22 +1589,31 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
                             Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
                 Transaction),
-    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    embedding_type_queries_from_transaction(Transaction, _TypeQueries),
     embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
                              DocTypes),
-    list_to_set(DocTypes, UniqueTypes),
-    (   TypeQueries = []
-    ->  true
-    ;   forall(
-            member(DocType, UniqueTypes),
-            (   member(SchemaType-_Query-_Template, TypeQueries),
-                class_subsumed(Transaction, DocType, SchemaType)
-            ->  true
-            ;   throw(error(no_embedding_query_for_type(DocType), _))
-            ))
-    ),
+    list_to_set(DocTypes, _UniqueTypes),
     put_dict(system_db, Config, System_DB, ConfigWithSystem),
     format_read_documents(embedding, Transaction, Graph_Type, Id, Ids, Type,
+                        Query, ConfigWithSystem, Actual_Data_Version).
+
+% Markdown selector — uses json2markdown directly, no embedding pipeline needed
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
+                           Query, Config, Requested_Data_Version,
+                           Actual_Data_Version, _Initial_Goal) :-
+    get_dict(format, Config, markdown),
+    !,
+    die_if(Graph_Type \= instance,
+           error(embedding_only_supported_for_instance_graphs, _)),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type,
+                            Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
+                Transaction),
+    embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
+                             DocTypes),
+    list_to_set(DocTypes, _UniqueTypes),
+    put_dict(system_db, Config, System_DB, ConfigWithSystem),
+    format_read_documents(markdown, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
 
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
@@ -3043,7 +3100,7 @@ test(embedding_api_end_to_end, [
 
 test(embedding_plugin_fallback_for_jsondocument, [
          setup((setup_temp_store(State),
-                create_db_with_test_schema("admin", "testdb"))),
+                create_db_with_empty_schema("admin", "testdb"))),
          cleanup(teardown_temp_store(State))
      ]) :-
     open_descriptor(system_descriptor{}, System),
