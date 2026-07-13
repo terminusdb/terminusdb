@@ -16,14 +16,76 @@ use std::{
 };
 use swipl::prelude::*;
 
-/// Post-processes GraphQL JSON to convert high-precision number markers to JSON numbers.
-/// Replaces "__TERMINUS_NUM__<digits>" markers with raw JSON numbers to achieve 20-digit precision.
-fn post_process_graphql_numbers(json_str: String) -> String {
+/// Post-processes GraphQL JSON or Handlebars text to convert high-precision
+/// number markers to raw numbers.
+/// Replaces "__TERMINUS_NUM__<digits>" markers with raw numbers to achieve
+/// 20-digit precision. Handles both quoted markers (in JSON output, e.g.
+/// `"__TERMINUS_NUM__100"`) and unquoted markers (in Handlebars template
+/// output, e.g. `__TERMINUS_NUM__100`).
+pub fn post_process_graphql_numbers(json_str: String) -> String {
     lazy_static! {
-        static ref NUM_MARKER_RE: Regex = Regex::new(r#""__TERMINUS_NUM__([0-9.eE+-]+)""#).unwrap();
+        static ref QUOTED_NUM_MARKER_RE: Regex =
+            Regex::new(r#""__TERMINUS_NUM__([0-9.eE+-]+)""#).unwrap();
+        static ref UNQUOTED_NUM_MARKER_RE: Regex =
+            Regex::new(r"__TERMINUS_NUM__([0-9.eE+-]+)").unwrap();
     }
-    // Replace quoted marker strings with unquoted numbers
-    NUM_MARKER_RE.replace_all(&json_str, "$1").to_string()
+    // First replace quoted marker strings with unquoted numbers (JSON path)
+    let intermediate = QUOTED_NUM_MARKER_RE.replace_all(&json_str, "$1").to_string();
+    // Then replace any remaining unquoted markers (Handlebars text path)
+    UNQUOTED_NUM_MARKER_RE.replace_all(&intermediate, "$1").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quoted_marker_in_json() {
+        let input = r#"{"category_code":"__TERMINUS_NUM__100","level":"__TERMINUS_NUM__3"}"#.to_string();
+        let expected = r#"{"category_code":100,"level":3}"#;
+        assert_eq!(post_process_graphql_numbers(input), expected);
+    }
+
+    #[test]
+    fn test_unquoted_marker_in_handlebars_output() {
+        let input = "Category code: __TERMINUS_NUM__100. Taxonomy level: __TERMINUS_NUM__3.".to_string();
+        let expected = "Category code: 100. Taxonomy level: 3.";
+        assert_eq!(post_process_graphql_numbers(input), expected);
+    }
+
+    #[test]
+    fn test_mixed_quoted_and_unquoted_markers() {
+        let input = r#"{"code":"__TERMINUS_NUM__42"} text: __TERMINUS_NUM__10"#.to_string();
+        let expected = r#"{"code":42} text: 10"#;
+        assert_eq!(post_process_graphql_numbers(input), expected);
+    }
+
+    #[test]
+    fn test_decimal_marker() {
+        let input = "Price: __TERMINUS_NUM__19.99.".to_string();
+        let expected = "Price: 19.99.";
+        assert_eq!(post_process_graphql_numbers(input), expected);
+    }
+
+    #[test]
+    fn test_negative_marker() {
+        let input = "Value: __TERMINUS_NUM__-42.".to_string();
+        let expected = "Value: -42.";
+        assert_eq!(post_process_graphql_numbers(input), expected);
+    }
+
+    #[test]
+    fn test_no_markers_unchanged() {
+        let input = "No markers here, just text.".to_string();
+        assert_eq!(post_process_graphql_numbers(input), "No markers here, just text.");
+    }
+
+    #[test]
+    fn test_handlebars_output_with_multiple_fields() {
+        let input = "# Busbar Connectors.\n\nCategory code: __TERMINUS_NUM__100.\nTaxonomy level: __TERMINUS_NUM__3.\n\n  Sub-categories:\n  Industrial Busbar Connectors\n    (code __TERMINUS_NUM__386),\n  Commercial Busbar Connectors\n    (code __TERMINUS_NUM__387)\n  .".to_string();
+        let expected = "# Busbar Connectors.\n\nCategory code: 100.\nTaxonomy level: 3.\n\n  Sub-categories:\n  Industrial Busbar Connectors\n    (code 386),\n  Commercial Busbar Connectors\n    (code 387)\n  .";
+        assert_eq!(post_process_graphql_numbers(input), expected);
+    }
 }
 
 mod filter;
@@ -221,26 +283,7 @@ predicates! {
                                             is_error_term.unify(errored)?;
                                             match serde_json::to_string(&response){
                                                 Ok(r) => {
-                                                    use std::io::Write;
-                                                    use chrono::Utc;
-                                                    
-                                                    // Debug: Log to single file with timestamp per entry
-                                                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/graphql_debug.log") {
-                                                        let timestamp = Utc::now().to_rfc3339();
-                                                        let _ = writeln!(f, "\n=== {} BEFORE POST-PROCESS ===", timestamp);
-                                                        let _ = writeln!(f, "{}", &r[..1000.min(r.len())]);
-                                                        let _ = writeln!(f, "Contains marker: {}", r.contains("__TERMINUS_NUM__"));
-                                                    }
-                                                    
-                                                    // Post-process to convert high-precision markers to JSON numbers
-                                                    let processed = post_process_graphql_numbers(r.clone());
-                                                    
-                                                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/graphql_debug.log") {
-                                                        let _ = writeln!(f, "=== AFTER POST-PROCESS ===");
-                                                        let _ = writeln!(f, "{}", &processed[..1000.min(processed.len())]);
-                                                        let _ = writeln!(f, "Changed: {}", processed != r);
-                                                    }
-                                                    
+                                                    let processed = post_process_graphql_numbers(r);
                                                     response_term.unify(processed)
                                                 },
                                                 Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
