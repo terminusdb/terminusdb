@@ -488,14 +488,14 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
 build_resolve_url(Endpoint, Domain, Commit, URL) :-
     encode_query_value(Domain, Enc_Domain),
     encode_query_value(Commit, Enc_Commit),
-    format(atom(URL), "~w/resolve?domain=~w&commit=~w",
+    format(atom(URL), "~w/candidates?domain=~w&commit=~w",
            [Endpoint, Enc_Domain, Enc_Commit]).
 
 /**
  * io_resolve_forward(+Endpoint, +Domain, +Commit, +Ancestors,
  *                    +Body_Dict, -Response_Body) is det.
  *
- * Forwards a resolve request to the engine's POST /resolve endpoint.
+ * Forwards a resolve request to the engine's POST /candidates endpoint.
  * Body_Dict is the full JSON body dict from the caller (with server-derived
  * domain, commit, and ancestors injected). Returns the engine's JSON response.
  *
@@ -505,8 +505,8 @@ io_resolve_forward(Endpoint, Domain, Commit, Ancestors,
                    Body_Dict, Response_Body) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    % /resolve uses POST with JSON body — domain, commit, ancestors in body.
-    format(atom(Resolve_URL), "~w/resolve", [Endpoint]),
+    % /candidates uses POST with JSON body — domain, commit, ancestors in body.
+    format(atom(Resolve_URL), "~w/candidates", [Endpoint]),
     % Inject server-derived fields into the body (overwriting any caller attempt
     % to supply them — graphspec-from-URL invariant).
     put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
