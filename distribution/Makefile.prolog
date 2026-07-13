@@ -70,7 +70,7 @@ endif
 default: $(TARGET)
 
 .PHONY: dev
-dev: $(RUST_TARGET) dev-build
+dev: $(RUST_TARGET) plugins-rust dev-build
 
 .PHONY: i
 i: $(RUST_TARGET)
@@ -93,7 +93,7 @@ download-lint: $(SWIPL_LINT_PATH)
 
 .PHONY: lint
 lint: $(SWIPL_LINT_PATH)
-	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -s $(SWIPL_LINT_PATH) -g lint_files -t halt
+	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -g "use_module(library(plunit))" -s $(SWIPL_LINT_PATH) -g lint_files -t halt
 
 .PHONY: clean
 clean:
@@ -127,6 +127,10 @@ $(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -
 	  -f src/bootstrap.pl
 
 $(RUST_TARGET):
+	@$(MAKE) -f distribution/Makefile.rust $@
+
+.PHONY: plugins-rust
+plugins-rust:
 	@$(MAKE) -f distribution/Makefile.rust $@
 
 $(SWIPL_LINT_PATH):

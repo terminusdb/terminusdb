@@ -109,6 +109,11 @@ lint-openapi:
 rust:
 	@$(MAKE) -f distribution/Makefile.rust
 
+# Build Rust plugin crates and copy shared objects to plugins/.
+.PHONY: plugins-rust
+plugins-rust:
+	@$(MAKE) -f distribution/Makefile.rust $@
+
 # Run unit tests in swipl; all, or just one suite.
 # make test OR make test SUITE='[json,terminus_store,tables]'
 .PHONY: test
@@ -195,6 +200,18 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 # Create a man page from using `ronn`.
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
+
+# Run end-to-end plugin tests (TerminusDB + tdb-search + vectorlink + Ollama).
+# Brings up the full stack via docker-compose.e2e.yml, runs the e2e mocha suite,
+# then tears down. Use --no-down to keep the stack running for debugging.
+#
+# Usage:
+#   make test-e2e              # full: build, up, test, down
+#   make test-e2e ARGS=--no-down  # keep stack running after tests
+#   make test-e2e ARGS=--no-up    # run against an already-running stack
+.PHONY: test-e2e
+test-e2e:
+	./tests/run-e2e.sh $(ARGS)
 
 .PHONY: pr
 pr: lint lint-mocha lint-openapi clippy clean dev restart test test-int

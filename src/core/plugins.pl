@@ -10,11 +10,14 @@
               enrich_history/5,
               enrich_history/6,
               load_plugins/0,
+              load_foreign_plugins/2,
+              shared_object_extension/1,
               embedding_for_type/4,
               embedding_for_type/3
           ]).
 :- use_module(library(lists)).
 :- use_module(library(filesex)).
+:- use_module(library(shlib)).
 :- use_module(library(assoc)).
 :- use_module(library(terminus_store)).
 :- use_module(config(terminus_config)).
@@ -139,12 +142,20 @@ print_plugin_error(Full_Path, Error) :-
     format(user_error,
            "       The server will continue without this plugin.~n~n", []).
 
+load_foreign_plugins(Path, Files) :-
     forall((member(File, Files),
-            file_name_extension(_, '.pl', File)),
-
+            shared_object_extension(File)),
            (   directory_file_path(Path, File, Full_Path),
-               load_files(Full_Path, [if(not_loaded), must_be_module(false)]))).
-load_plugins.
+               catch(load_foreign_library(Full_Path),
+                     Error,
+                     format(user_error,
+                            "[ERROR] Failed to load foreign plugin ~w: ~q~n",
+                            [Full_Path, Error])))).
+
+shared_object_extension(File) :-
+    (   file_name_extension(_, dylib, File)
+    ;   file_name_extension(_, so, File)),
+    !.
 
 %%% ====================================================================
 %%% @shared cascade delete hook
@@ -371,3 +382,32 @@ embedding_for_type(_, _, _, _) :- fail.
 %  Fallback hook without graphspec. Tried after all /4 clauses fail.
 embedding_for_type(_, _, _) :- fail.
 
+:- begin_tests(foreign_plugin_loader, [concurrent(false)]).
+
+test(shared_object_extension_dylib) :-
+    shared_object_extension('libhello_plugin.dylib').
+
+test(shared_object_extension_so) :-
+    shared_object_extension('libhello_plugin.so').
+
+test(shared_object_extension_rejects_pl, [fail]) :-
+    shared_object_extension('webserver_hello.pl').
+
+test(shared_object_extension_rejects_txt, [fail]) :-
+    shared_object_extension('readme.txt').
+
+test(load_foreign_plugins_empty_dir) :-
+    tmp_file(temp, TmpDir),
+    make_directory(TmpDir),
+    call_cleanup(
+        load_foreign_plugins(TmpDir, []),
+        delete_directory(TmpDir)).
+
+test(load_foreign_plugins_no_so_files) :-
+    tmp_file(temp, TmpDir),
+    make_directory(TmpDir),
+    call_cleanup(
+        load_foreign_plugins(TmpDir, ['webserver_hello.pl', 'readme.txt']),
+        delete_directory(TmpDir)).
+
+:- end_tests(foreign_plugin_loader).
