@@ -454,10 +454,14 @@ check_indexer_backend_config :-
     (   current_predicate(vectorlink:semantic_indexer_endpoint/1),
         vectorlink:semantic_indexer_endpoint(_)
     ->  Legacy_Endpoint_Set = true
+    ;   getenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', _)
+    ->  Legacy_Endpoint_Set = true
     ;   Legacy_Endpoint_Set = false
     ),
     (   current_predicate(tdb_search:tdb_search_endpoint/1),
         tdb_search:tdb_search_endpoint(_)
+    ->  Search_Endpoint_Set = true
+    ;   getenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', _)
     ->  Search_Endpoint_Set = true
     ;   Search_Endpoint_Set = false
     ),

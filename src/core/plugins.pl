@@ -49,6 +49,16 @@ load_plugins :-
     plugin_path(Path),
     exists_directory(Path),
     !,
+    % Update the plugins file search path at runtime so that plugins
+    % can import each other via use_module(plugins(other_plugin), [...]).
+    % The load_paths.pl directive runs at compile time when
+    % TERMINUSDB_PLUGINS_PATH is not yet set, so it points to src/plugins/
+    % which may not exist. This corrects it to the actual plugin directory.
+    (   user:file_search_path(plugins, Path)
+    ->  true
+    ;   retractall(user:file_search_path(plugins, _)),
+        asserta(user:file_search_path(plugins, Path))
+    ),
     directory_files(Path, Files),
     findall(Full_Path,
             (   member(File, Files),

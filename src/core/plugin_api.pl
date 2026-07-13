@@ -18,7 +18,12 @@
     plugin_consume_env/2,
     plugin_consume_env_default/3,
     abolish_plugin_env/1,
-    abolish_plugin_env_default/2
+    abolish_plugin_env_default/2,
+    indexer_notify/2,
+    indexer_set_config/2,
+    indexer_progress/3,
+    indexer_abort_domain/1,
+    indexer_available/0
 ]).
 
 :- use_module(core(plugin_api/http)).
@@ -27,6 +32,7 @@
 :- use_module(core(plugin_api/delta)).
 :- use_module(core(plugin_api/stream)).
 :- use_module(core(plugin_api/config)).
+:- use_module(core(plugin_api/indexer)).
 
 :- reexport(core(plugin_api/http)).
 :- reexport(core(plugin_api/path)).
@@ -34,3 +40,4 @@
 :- reexport(core(plugin_api/delta)).
 :- reexport(core(plugin_api/stream)).
 :- reexport(core(plugin_api/config)).
+:- reexport(core(plugin_api/indexer)).
