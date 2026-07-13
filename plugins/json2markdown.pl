@@ -1,5 +1,6 @@
 :- module(json2markdown, [
-    clean_json2markdown_env/0
+    clean_json2markdown_env/0,
+    json_to_markdown/2
 ]).
 
 /** <module> json2markdown plugin — default embedding for JSONDocument
