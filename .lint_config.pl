@@ -48,6 +48,9 @@ ignore_predicate("par_print_all_documents_json_by_type/9").
 ignore_predicate("print_documents_json_by_id/9").
 ignore_predicate("par_print_documents_json_by_id/9").
 
+% SWI-Prolog 10 setup_call_cleanup/4 — valid but linter doesn't resolve it
+ignore_predicate("setup_call_cleanup/4").
+
 
 ignore_file("./src/library").
 ignore_file("./x").
