@@ -2,25 +2,25 @@
     % Push driver
     io_push_delta/4,
     io_index_branch/3,
-    io_auto_push_worker/2,
-    validation_is_index_enabled/1,
     path_to_domain/2,
     validate_index_path/1,
     % Search fronting
     io_search_forward/7,
+    io_suggest_forward/7,
     io_similar_forward/7,
+    io_similar_forward_post/8,
     io_duplicates_forward/6,
     io_statistics_forward/6,
+    io_statistics_for_domain/3,
     io_resolve_forward/6,
     io_compare_forward/4,
     io_compare_forward/5,
     io_delete_domain/2,
     ancestor_window/4,
     maybe_nudge_push/6,
+    maybe_nudge_push_async/4,
     % Config
     tdb_search_endpoint/1,
-    tdb_search_admin_user/1,
-    tdb_search_admin_secret/1,
     clean_tdb_search_env/0
 ]).
 
@@ -37,8 +37,10 @@ Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
 :- use_module(core(plugin_api)).
 :- use_module(core(document/history), [commits_changed_id/5]).
 :- use_module(core(document), [get_document/3, all_class_frames/3,
-                               schema_metadata_descriptor/3]).
+                               schema_metadata_descriptor/3,
+                               database_prefixes/2]).
 :- use_module(core(query)).
+:- use_module(core(query/jsonld), [compress_dict_uri/3, prefix_expand/3]).
 :- use_module(core(transaction)).
 :- use_module(core(transaction/ref_entity), [branch_head_commit/3, commit_id_uri/3,
     commit_uri_to_history_commit_ids/3]).
@@ -48,6 +50,7 @@ Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
                                            user_key_user_id/4]).
 :- use_module(core(triple), [super_user_authority/1, database_schema/2, xrdf/4]).
 :- use_module(core(plugins)).
+:- use_module(library(base64)).
 :- use_module(core(api/api_graphql)).
 :- use_module(library(json)).
 :- use_module(library(http/http_client)).
@@ -76,6 +79,8 @@ Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
 :- use_module(core(account/user_management)).
 :- use_module(core(transaction/system_entity), [database_exists/2]).
 :- use_module(library(http/http_client), [http_read_data/3]).
+:- use_module(library(process)).
+:- use_module(library(readutil)).
 
 % ==========================================================================
 % Config predicates — plugin-owned, using generic plugin_api env helpers
@@ -84,10 +89,12 @@ Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
 tdb_search_endpoint(Endpoint) :-
     plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint).
 
-tdb_search_admin_user(User) :-
+:- multifile plugins:tdb_search_admin_user/1.
+plugins:tdb_search_admin_user(User) :-
     plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, User).
 
-tdb_search_admin_secret(Secret) :-
+:- multifile plugins:tdb_search_admin_secret/1.
+plugins:tdb_search_admin_secret(Secret) :-
     plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, Secret).
 
 clean_tdb_search_env :-
@@ -103,8 +110,8 @@ clean_tdb_search_env :-
 % ==========================================================================
 
 tdb_search_auth_header(authorization(basic(User, Secret))) :-
-    tdb_search_admin_user(User),
-    tdb_search_admin_secret(Secret).
+    plugins:tdb_search_admin_user(User),
+    plugins:tdb_search_admin_secret(Secret).
 
 % ==========================================================================
 % Embedding queries + api_index_jobs (moved from api_indexer.pl)
@@ -248,17 +255,22 @@ build_last_indexed_url(Endpoint, Domain, Branch, URL) :-
     format(atom(URL), "~w/last-indexed?domain=~w&branch=~w",
            [Endpoint, Enc_Domain, Enc_Branch]).
 
-io_get_last_indexed(Endpoint, Domain, Branch, Result) :-
-    tdb_search_auth_header(AuthHeader),
-    build_last_indexed_url(Endpoint, Domain, Branch, URL),
+tdb_http_get(URL, Status, Body) :-
+    tdb_search_auth_header(authorization(basic(User, Secret))),
+    format(atom(Creds), "~w:~w", [User, Secret]),
+    base64(Creds, B64),
+    format(atom(AuthHeader), "Basic ~w", [B64]),
     setup_call_cleanup(
         http_open(URL, In,
-                  [ status_code(Status),
-                    AuthHeader,
-                    request_header('Accept' = 'application/json')
-                  ]),
-        ( read_string(In, _, Body_String) ),
-        close(In)),
+                  [ request_header('Authorization'=AuthHeader),
+                    request_header('Accept'='application/json'),
+                    status_code(Status) ]),
+        read_string(In, _, Body),
+        close(In)).
+
+io_get_last_indexed(Endpoint, Domain, Branch, Result) :-
+    build_last_indexed_url(Endpoint, Domain, Branch, URL),
+    tdb_http_get(URL, Status, Body_String),
     do_or_die(
         Status =:= 200,
         error(tdb_search_last_indexed_failed(Status, Body_String), _)),
@@ -267,30 +279,44 @@ io_get_last_indexed(Endpoint, Domain, Branch, Result) :-
 io_stream_push(Endpoint, Domain, Branch, Target_Commit,
                Parent_Commit_Or_Empty, System_DB, Auth, Path,
                Maybe_Previous_Commit_Id, Commit_Id, Result) :-
-    tdb_search_auth_header(AuthHeader),
     build_push_url(Endpoint, Domain, Branch, Target_Commit,
                    Parent_Commit_Or_Empty, URL),
-    Producer = [Chunked_Stream]>>(
-        tdb_search:api_index_jobs(
-            System_DB,
-            Auth,
-            Chunked_Stream,
-            [_S]>>true,
-            Path,
-            Commit_Id,
-            Maybe_Previous_Commit_Id,
-            [])
-    ),
+    % Buffer NDJSON to temp file, then POST via http_open.
+    % Use tmp_file_stream instead of with_output_to to avoid current_output
+    % redirection issues in detached threads.
+    setup_call_cleanup(
+        tmp_file_stream(text, NDFile, NDStream),
+        (   set_stream(NDStream, encoding(utf8)),
+            tdb_search:api_index_jobs(
+                System_DB,
+                Auth,
+                NDStream,
+                [_S]>>true,
+                Path,
+                Commit_Id,
+                Maybe_Previous_Commit_Id,
+                []),
+            close(NDStream),
+            read_file_to_string(NDFile, NDJSON_Body, []),
+            delete_file(NDFile)
+        ),
+        (   catch(close(NDStream), _, true),
+            catch(delete_file(NDFile), _, true)
+        )),
+    tdb_search_auth_header(authorization(basic(User, Secret))),
+    format(atom(Creds), "~w:~w", [User, Secret]),
+    base64(Creds, B64),
+    format(atom(AuthHeader), "Basic ~w", [B64]),
     setup_call_cleanup(
         http_open(URL, In,
                   [ method(post),
-                    post(ndjson_push(Producer)),
-                    status_code(Status),
-                    AuthHeader
-                  ]),
-        read_string(In, _, Reply_Body),
+                    post(string(NDJSON_Body)),
+                    request_header('Authorization'=AuthHeader),
+                    request_header('Content-Type'='application/x-ndjson'),
+                    status_code(Status) ]),
+        read_string(In, _, ReplyBody),
         close(In)),
-    handle_push_response(Status, Reply_Body, Result).
+    handle_push_response(Status, ReplyBody, Result).
 
 handle_push_response(200, Task_Id, accepted(Task_Id)) :- !.
 handle_push_response(409, _Body, conflict_already_pushed) :- !.
@@ -318,18 +344,27 @@ io_await_task_completion_(Endpoint, Task_Id, Backoff, Retries_Left) :-
     ).
 
 io_check_task(Endpoint, Task_Id, Status) :-
-    tdb_search_auth_header(AuthHeader),
     plugin_api:encode_query_value(Task_Id, Enc_Task_Id),
     format(atom(URL), "~w/check?task_id=~w", [Endpoint, Enc_Task_Id]),
-    setup_call_cleanup(
-        http_open(URL, In,
-                  [ status_code(Http_Status),
-                    AuthHeader,
-                    request_header('Accept' = 'application/json')
-                  ]),
-        read_string(In, _, Body_String),
-        close(In)),
-    interpret_check_response(Http_Status, Body_String, Status).
+    tdb_search_auth_header(authorization(basic(User, Secret))),
+    format(atom(Creds), "~w:~w", [User, Secret]),
+    base64(Creds, B64),
+    format(atom(AuthHeader), "Basic ~w", [B64]),
+    catch(
+        (   setup_call_cleanup(
+                http_open(URL, In,
+                          [request_header('Authorization'=AuthHeader),
+                           status_code(Http_Status)]),
+                read_string(In, _, Body_String),
+                close(In)),
+            interpret_check_response(Http_Status, Body_String, Status)
+        ),
+        Error,
+        (   Error = error(existence_error(url, _), _)
+        ->  throw(error(tdb_search_check_failed(0, 'connection failed'), _))
+        ;   throw(Error)
+        )
+    ).
 
 interpret_check_response(200, Body_String, Status) :-
     !,
@@ -419,20 +454,30 @@ io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
                    none, Head_Commit_Id, Result),
     io_handle_push_result(Endpoint, Domain, Branch_Name, Head_Commit_Id, Result).
 
-io_push_delta_(Endpoint, Domain, Branch_Name, _Head_Commit_Id,
+io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
                Head_Commit_Uri, Engine_Commit,
                Repository_Descriptor, System_DB, Auth, Path) :-
     Engine_Commit \== null,
-    commit_uri_to_history_commit_ids(Repository_Descriptor,
-                                     Head_Commit_Uri,
-                                     History_Oldest_First),
-    commits_after(Engine_Commit, History_Oldest_First, Forward_Range),
-    do_or_die(
-        Forward_Range \== [],
-        error(tdb_search_push_no_forward_range(Engine_Commit), _)),
-    io_push_commit_chain(Endpoint, Domain, Branch_Name,
-                         Engine_Commit, Forward_Range,
-                         System_DB, Auth, Path).
+    % RACE GUARD: re-check /last-indexed before pushing. A concurrent
+    % auto-push worker may have already pushed this commit between our
+    % first check and now. If the engine is already at HEAD, return success.
+    (   io_get_last_indexed(Endpoint, Domain, Branch_Name, Recheck),
+        get_dict(commit, Recheck, Recheck_Commit_Raw),
+        normalise_commit_value(Recheck_Commit_Raw, Recheck_Commit),
+        Recheck_Commit \== null,
+        Recheck_Commit == Head_Commit_Id
+    ->  true
+    ;   commit_uri_to_history_commit_ids(Repository_Descriptor,
+                                         Head_Commit_Uri,
+                                         History_Oldest_First),
+        commits_after(Engine_Commit, History_Oldest_First, Forward_Range),
+        do_or_die(
+            Forward_Range \== [],
+            error(tdb_search_push_no_forward_range(Engine_Commit), _)),
+        io_push_commit_chain(Endpoint, Domain, Branch_Name,
+                             Engine_Commit, Forward_Range,
+                             System_DB, Auth, Path)
+    ).
 
 commits_after(Last_Commit, History, Forward_Range) :-
     (   append(_, [Last_Commit | Forward_Range], History)
@@ -462,6 +507,14 @@ path_to_domain(Path, Domain) :-
         error(invalid_path_for_domain(Path), _)),
     format(atom(Domain), "~w/~w", [Org, DB]).
 
+%% descriptor_domain(+Descriptor, -Domain) is det.
+%
+%  Extracts the org/db domain from a descriptor, matching what the
+%  Rust indexer pushes to tdb-search (BranchKey::domain()).
+descriptor_domain(Descriptor, Domain) :-
+    plugin_api:descriptor_to_path(Descriptor, Path),
+    path_to_domain(Path, Domain).
+
 validate_index_path(Path) :-
     (   atom(Path)
     ->  atom_string(Path, Path_String)
@@ -487,28 +540,43 @@ validate_index_segments(N, _Segments, Path) :-
     throw(error(invalid_index_path(Path,
                     wrong_segment_count(N, expected_2_or_5)), _)).
 
-io_push_delta(System_DB, Auth, Path, Branch_Name) :-
+%% branch_path_for_notify(+Path, +Branch_Name, -Branch_Path) is det.
+%
+%  Normalises a path to the 5-segment branch form (org/db/local/branch/name)
+%  used by indexer_notify. If Path is already a 5-segment branch path, it is
+%  returned as-is. If Path is a 2-segment org/db path, /local/branch/Branch_Name
+%  is appended. Other path forms are rejected via validate_index_path.
+%
+%  This replaces the old atom_concat(_, '/local/branch/', Path) substring
+%  check which could be tricked by a database named "local" and could double
+%  paths when called with a full branch path from search handlers.
+branch_path_for_notify(Path, Branch_Name, Branch_Path) :-
     validate_index_path(Path),
+    (   atom(Path)
+    ->  atom_string(Path, Path_String)
+    ;   Path_String = Path
+    ),
+    pattern_string_split("/", Path_String, Segments_Unfiltered),
+    exclude(=(""), Segments_Unfiltered, Segments),
+    length(Segments, N),
+    (   N =:= 5
+    ->  Branch_Path = Path
+    ;   N =:= 2
+    ->  format(atom(Branch_Path), "~w/local/branch/~w", [Path, Branch_Name])
+    ).
+
+io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
+    branch_path_for_notify(Path, Branch_Name, Branch_Path),
     do_or_die(
-        tdb_search_endpoint(Endpoint),
+        tdb_search_endpoint(_Endpoint),
         error(tdb_search_endpoint_not_configured(io_push_delta), _)),
-    resolve_absolute_string_descriptor(Path, Descriptor),
-    descriptor_graphspec(Descriptor, Domain),
-    do_or_die(
-        branch_descriptor{branch_name: Descriptor_Branch} :< Descriptor,
-        error(push_requires_branch_descriptor(Path), _)),
-    do_or_die(
-        Descriptor_Branch == Branch_Name,
-        error(branch_name_mismatch(Branch_Name, Descriptor_Branch, Path), _)),
-    io_get_last_indexed(Endpoint, Domain, Branch_Name, Last_Indexed),
-    get_dict(commit, Last_Indexed, Engine_Commit_Raw),
-    normalise_commit_value(Engine_Commit_Raw, Engine_Commit_Or_Null),
-    Repository_Descriptor = Descriptor.repository_descriptor,
-    branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-    commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-    io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
-                   Head_Commit_Uri, Engine_Commit_Or_Null,
-                   Repository_Descriptor, System_DB, Auth, Path).
+    (   plugin_api:indexer_available
+    ->  (   plugin_api:indexer_notify(Branch_Path, Branch_Name)
+        ->  true
+        ;   throw(error(indexer_notify_failed(io_push_delta), _))
+        )
+    ;   throw(error(indexer_ffi_not_loaded(io_push_delta), _))
+    ).
 
 io_index_branch(System_DB, Auth, Path) :-
     validate_index_path(Path),
@@ -524,63 +592,11 @@ io_index_branch(System_DB, Auth, Path) :-
 % ==========================================================================
 % Auto-push-on-commit hook
 % ==========================================================================
-
-:- multifile plugins:post_commit_hook/2.
-
-plugins:post_commit_hook(Validations, _Meta_Data) :-
-    (   tdb_search_endpoint(_)
-    ->  catch(
-            forall(
-                (   member(Validation, Validations),
-                    validation_is_index_enabled(Validation),
-                    get_dict(descriptor, Validation, Descriptor),
-                    branch_descriptor{branch_name: Branch_Name} :< Descriptor,
-                    descriptor_graphspec(Descriptor, Path)
-                ),
-                catch(
-                    thread_create(
-                        io_auto_push_worker(Path, Branch_Name),
-                        _Thread_Id,
-                        [detached(true)]
-                    ),
-                    Spawn_Error,
-                    format(user_error,
-                           "[ERROR] Auto-push thread spawn failed for ~w (~w): ~q~n",
-                           [Path, Branch_Name, Spawn_Error])
-                )
-            ),
-            Hook_Error,
-            format(user_error,
-                   "[ERROR] Auto-push hook generator failed: ~q~n",
-                   [Hook_Error])
-        )
-    ;   true
-    ).
-
-validation_is_index_enabled(Validation) :-
-    get_dict(descriptor, Validation, Descriptor),
-    branch_descriptor{} :< Descriptor,
-    get_dict(schema_objects, Validation, Schema_Objects),
-    Schema_Objects \== [],
-    once(xrdf(Schema_Objects, _Type, sys:metadata, _)).
-
-io_auto_push_worker(Path, Branch_Name) :-
-    catch(
-        (   open_descriptor(system_descriptor{}, System_DB),
-            super_user_authority(Auth),
-            io_push_delta(System_DB, Auth, Path, Branch_Name)
-        ),
-        Error,
-        catch(
-            json_log_error_formatted(
-                "[ERROR] Auto-push-on-commit failed for ~w (~w): ~q",
-                [Path, Branch_Name, Error]),
-            _Log_Error,
-            format(user_error,
-                   "[ERROR] Auto-push-on-commit failed for ~w (~w); error not printable~n",
-                   [Path, Branch_Name])
-        )
-    ).
+% NOTE: The post_commit_hook and validation_is_index_enabled are defined in
+% src/core/api/api_indexer.pl. That version calls indexer_notify/2 (Rust FFI)
+% directly — no curl subprocess, no detached threads, no stream race.
+% The Rust IndexerRegistry handles NDJSON generation, HTTP streaming, and
+% 409 resolution internally via reqwest.
 
 % ==========================================================================
 % Search fronting (moved from api_search.pl)
@@ -592,8 +608,8 @@ assert_search_backend :-
         error(search_requires_tdb_search_backend, _)).
 
 search_auth_header(authorization(basic(User, Secret))) :-
-    tdb_search_admin_user(User),
-    tdb_search_admin_secret(Secret).
+    plugins:tdb_search_admin_user(User),
+    plugins:tdb_search_admin_secret(Secret).
 
 ancestor_window(Repository_Descriptor, Head_Commit_Uri, Max_Count, Ancestors) :-
     commit_uri_to_history_commit_ids(Repository_Descriptor,
@@ -665,6 +681,23 @@ io_similar_forward(Endpoint, Domain, Commit, Ancestors,
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
+%% io_similar_forward_post(+Endpoint, +Domain, +Commit, +Ancestors,
+%%                          +Extra_Params, +Post_Body, -Response_Body,
+%%                          -Data_Version_Header) is det.
+%
+%  Forwards a similar request as POST with a JSON body to tdb-search.
+%  Used for text-based similarity search where the body contains
+%  {text: "..."} instead of an id lookup.
+io_similar_forward_post(Endpoint, Domain, Commit, Ancestors,
+                        Extra_Params, Post_Body, Response_Body,
+                        Data_Version_Header) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_similar_url(Endpoint, Domain, Commit, Ancestors, Base_URL),
+    append_extra_params(Base_URL, Extra_Params, URL),
+    io_forward_post(URL, AuthHeader, Post_Body, Response_Body,
+                    Data_Version_Header).
+
 io_duplicates_forward(Endpoint, Domain, Commit,
                       Extra_Params, Response_Body, Data_Version_Header) :-
     assert_search_backend,
@@ -678,6 +711,37 @@ io_statistics_forward(Endpoint, Domain, Commit, Ancestors,
     assert_search_backend,
     search_auth_header(AuthHeader),
     build_statistics_url(Endpoint, Domain, Commit, Ancestors, URL),
+    io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
+
+%% io_statistics_for_domain(+Endpoint, +Domain, -Stats) is det.
+%
+%  Queries tdb-search /statistics?domain=... for domain-scoped stats
+%  (documents, chunks, indexed_commits, pending_index_fragments).
+%  Used by the index status endpoint to enrich the response with
+%  engine-side counts. Fails on non-200 or parse error.
+io_statistics_for_domain(Endpoint, Domain, Stats) :-
+    assert_search_backend,
+    plugin_api:encode_query_value(Domain, Enc_Domain),
+    format(atom(URL), "~w/statistics?domain=~w", [Endpoint, Enc_Domain]),
+    tdb_http_get(URL, Status, Body_String),
+    do_or_die(
+        Status =:= 200,
+        error(tdb_search_statistics_failed(Status, Body_String), _)),
+    atom_json_dict(Body_String, Stats, [default_tag(json)]).
+
+build_suggest_url(Endpoint, Domain, Commit, Ancestors, URL) :-
+    plugin_api:encode_query_value(Domain, Enc_Domain),
+    plugin_api:encode_query_value(Commit, Enc_Commit),
+    ancestor_query_params(Ancestors, Ancestor_Params),
+    format(atom(URL), "~w/suggest?domain=~w&commit=~w~w",
+           [Endpoint, Enc_Domain, Enc_Commit, Ancestor_Params]).
+
+io_suggest_forward(Endpoint, Domain, Commit, Ancestors,
+                   Extra_Params, Response_Body, Data_Version_Header) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_suggest_url(Endpoint, Domain, Commit, Ancestors, Base_URL),
+    append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
 build_compare_url(Endpoint, Method, URL) :-
@@ -733,6 +797,26 @@ io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header) :-
     normalise_data_version_header(DV_Raw, Data_Version_Header),
     handle_forward_response(Status, Response_Body, URL).
 
+%% io_forward_post(+URL, +AuthHeader, +Post_Body, -Response_Body,
+%%                  -Data_Version_Header) is det.
+%
+%  Forwards a POST request with a JSON body to tdb-search.
+io_forward_post(URL, AuthHeader, Post_Body, Response_Body, Data_Version_Header) :-
+    setup_call_cleanup(
+        http_open(URL, In,
+                  [ method(post),
+                    post(json(Post_Body)),
+                    status_code(Status),
+                    AuthHeader,
+                    request_header('Content-Type' = 'application/json'),
+                    request_header('Accept' = 'application/json'),
+                    header(terminusdb_data_version, DV_Raw)
+                  ]),
+        read_string(In, _, Response_Body),
+        close(In)),
+    normalise_data_version_header(DV_Raw, Data_Version_Header),
+    handle_forward_response(Status, Response_Body, URL).
+
 normalise_data_version_header(Raw, none) :-
     (   var(Raw) ; Raw == '' ; Raw == "" ),
     !.
@@ -763,31 +847,214 @@ repeated_param_fragment(Key, Value, Fragment) :-
     plugin_api:encode_query_value(Value, Enc_Value),
     format(atom(Fragment), "&~w=~w", [Key, Enc_Value]).
 
+normalize_doc_id(Id, Normalized) :-
+    atom(Id),
+    !,
+    (   sub_atom(Id, 0, 14, _, 'terminusdb:///')
+    ->  Normalized = Id
+    ;   format(atom(Normalized), 'terminusdb:///data/~w', [Id])
+    ).
+normalize_doc_id(Id, Normalized) :-
+    format(atom(Normalized), 'terminusdb:///data/~w', [Id]).
+
+%% normalize_doc_id(+Id, +Prefixes, -Normalized) is det.
+%
+%  Expand a (possibly compact) document ID to a full IRI using the
+%  database prefixes. When Prefixes is the sentinel `none`, falls back
+%  to the legacy normalize_doc_id/1 behavior (terminusdb:///data/Id).
+
+normalize_doc_id(Id, none, Normalized) :-
+    !,
+    normalize_doc_id(Id, Normalized).
+normalize_doc_id(Id, Prefixes, Normalized) :-
+    expand_compact_id(Id, Prefixes, Normalized).
+
+%% expand_compact_id(+Id, +Prefixes, -Full) is det.
+%
+%  Expand a compacted ID to a full IRI.
+%    - If Id is already a full terminusdb:/// IRI, return as-is.
+%    - If Id uses a prefix:local form known in Prefixes, use prefix_expand/3.
+%    - If Id is a bare relative, prepend @base.
+%    - Fallback: terminusdb:///data/Id (legacy behavior).
+
+expand_compact_id(Id, _Prefixes, Id) :-
+    atomic(Id),
+    atom_concat('terminusdb:///', _, Id),
+    !.
+expand_compact_id(Id, Prefixes, Full) :-
+    has_prefix_colon(Id, Prefixes),
+    !,
+    prefix_expand(Id, Prefixes, Full).
+expand_compact_id(Id, Prefixes, Full) :-
+    get_dict('@base', Prefixes, Base),
+    !,
+    atom_concat(Base, Id, Full).
+expand_compact_id(Id, _Prefixes, Full) :-
+    format(atom(Full), 'terminusdb:///data/~w', [Id]).
+
+%% has_prefix_colon(+Id, +Prefixes) is semidet.
+%
+%  True when Id is of the form Prefix:Local where Prefix is a key in
+%  the Prefixes dict (e.g. '@schema', 'doc', 'a').
+
+has_prefix_colon(Id, Prefixes) :-
+    atomic(Id),
+    sub_atom(Id, Before, _, _, ':'),
+    Before > 0,
+    sub_atom(Id, 0, Before, _, Prefix_Name),
+    get_dict(Prefix_Name, Prefixes, _).
+
+%% compact_json_value(+Value, +Prefixes, -Compacted) is det.
+%
+%  Recursively walk a JSON dict/list and compact any string or atom
+%  that is a full terminusdb:/// IRI using compress_dict_uri/3.
+
+compact_json_value(Value, Prefixes, Compacted) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    findall(Key-Compacted_Value,
+            (   member(Key-Raw_Value, Pairs),
+                compact_json_value(Raw_Value, Prefixes, Compacted_Value)
+            ),
+            Compacted_Pairs),
+    dict_pairs(Compacted, Tag, Compacted_Pairs).
+compact_json_value(Value, Prefixes, Compacted) :-
+    is_list(Value),
+    !,
+    maplist({Prefixes}/[Raw, Comp]>>compact_json_value(Raw, Prefixes, Comp),
+            Value, Compacted).
+compact_json_value(Value, Prefixes, Compacted) :-
+    atomic(Value),
+    atom_concat('terminusdb:///', _, Value),
+    !,
+    compress_dict_uri(Value, Prefixes, Compacted).
+compact_json_value(Value, _Prefixes, Value).
+
+%% compact_response_ids(+Response_Body, +Descriptor, -Compacted_Body) is det.
+%
+%  Parse a JSON response body string, compact all terminusdb:/// IRIs
+%  using the database prefixes, and re-serialize to a JSON string.
+
+compact_response_ids(Response_Body, Descriptor, Compacted_Body) :-
+    database_prefixes(Descriptor, Prefixes),
+    atom_json_dict(Response_Body, Response_Dict, [default_tag(json)]),
+    compact_json_value(Response_Dict, Prefixes, Compacted_Dict),
+    atom_json_dict(Compacted_Body, Compacted_Dict, [width(0)]).
+
+%% compress_flag(+Search, -Compress) is det.
+%
+%  Read the compress query parameter, defaulting to true.
+
+compress_flag(Search, Compress) :-
+    (   memberchk(compress=Raw, Search)
+    ->  normalize_bool(Raw, Compress)
+    ;   Compress = true
+    ).
+
+normalize_bool(true, true) :- !.
+normalize_bool('true', true) :- !.
+normalize_bool(false, false) :- !.
+normalize_bool('false', false) :- !.
+normalize_bool(1, true) :- !.
+normalize_bool(0, false) :- !.
+normalize_bool(_, true).
+
+%% maybe_prefixes(+Compress, +Descriptor, -Prefixes) is det.
+%
+%  When Compress is true, fetch database prefixes. Otherwise return
+%  the sentinel `none` so that normalize_doc_id/3 uses legacy behavior.
+
+maybe_prefixes(true, Descriptor, Prefixes) :-
+    !,
+    database_prefixes(Descriptor, Prefixes).
+maybe_prefixes(false, _Descriptor, none).
+
+%% maybe_compact_response(+Compress, +Response_Body, +Descriptor,
+%%                        -Final_Body) is det.
+%
+%  When Compress is true, compact IRIs in the response. Otherwise
+%  pass the response through unchanged.
+
+maybe_compact_response(true, Response_Body, Descriptor, Final_Body) :-
+    !,
+    compact_response_ids(Response_Body, Descriptor, Final_Body).
+maybe_compact_response(false, Response_Body, _Descriptor, Response_Body).
+
 maybe_nudge_push(none, _Commit, _System_DB, _Auth, _Path, _Branch) :- !.
-maybe_nudge_push(Data_Version_Header, Commit, System_DB, Auth, Path, Branch) :-
-    format(atom(Expected_DV), "commit:~w", [Commit]),
+maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :- !,
+    format(string(Expected_DV), "commit:~w", [Commit]),
     (   Data_Version_Header == Expected_DV
     ->  true
-    ;   catch(
-            io_push_delta(System_DB, Auth, Path, Branch),
-            Nudge_Error,
-            format(user_error,
-                   "[WARN] Search stale-version nudge failed for ~w: ~q~n",
-                   [Path, Nudge_Error])
+    ;   (   plugin_api:indexer_available
+        ->  (   branch_path_for_notify(Path, Branch, Branch_Path),
+                catch((plugin_api:indexer_notify(Branch_Path, Branch) ; true),
+                      Nudge_Error,
+                      format(user_error,
+                             "[WARN] Search stale-version nudge failed for ~w: ~q~n",
+                             [Path, Nudge_Error]))
+            )
+        ;   true
+        )
+    ).
+
+/**
+ * maybe_nudge_push_async(+System_DB, +Auth, +Path, +Branch) is det.
+ *
+ * Checks /last-indexed before nudging. Only spawns a push thread when the
+ * engine commit is null (truly unindexed). If the engine already has a
+ * commit (either at HEAD or in-flight from auto-push or a previous nudge),
+ * the nudge is skipped — no further push until the current indexing completes.
+ */
+maybe_nudge_push_async(System_DB, Auth, Path, Branch) :-
+    (   catch(
+            (   tdb_search_endpoint(Endpoint),
+                resolve_absolute_string_descriptor(Path, Descriptor),
+                descriptor_domain(Descriptor, Domain),
+                io_get_last_indexed(Endpoint, Domain, Branch, Result),
+                get_dict(commit, Result, Engine_Commit_Raw),
+                normalise_commit_value(Engine_Commit_Raw, Engine_Commit)
+            ),
+            Check_Error,
+            (   format(user_error,
+                       "[WARN] Nudge pre-check /last-indexed failed for ~w: ~q~n",
+                       [Path, Check_Error]),
+                Engine_Commit = unknown
+            )
+        ),
+        (   Engine_Commit == null
+        ->  catch(
+                thread_create(
+                    catch(
+                        io_push_delta(System_DB, Auth, Path, Branch),
+                        Nudge_Error,
+                        format(user_error,
+                               "[WARN] Search stale-version nudge failed for ~w: ~q~n",
+                               [Path, Nudge_Error])
+                    ),
+                    _,
+                    [detached(true)]
+                ),
+                Spawn_Error,
+                format(user_error,
+                       "[WARN] Search nudge thread spawn failed for ~w: ~q~n",
+                       [Path, Spawn_Error])
+            )
+        ;   true
         )
     ).
 
 build_resolve_url(Endpoint, Domain, Commit, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
     plugin_api:encode_query_value(Commit, Enc_Commit),
-    format(atom(URL), "~w/resolve?domain=~w&commit=~w",
+    format(atom(URL), "~w/candidates?domain=~w&commit=~w",
            [Endpoint, Enc_Domain, Enc_Commit]).
 
 io_resolve_forward(Endpoint, Domain, Commit, Ancestors,
                    Body_Dict, Response_Body) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    format(atom(Resolve_URL), "~w/resolve", [Endpoint]),
+    format(atom(Resolve_URL), "~w/candidates", [Endpoint]),
     put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
              Body_Dict, Forward_Body),
     setup_call_cleanup(
@@ -834,6 +1101,35 @@ handle_delete_domain_response(Status, Body, URL) :-
 % Post-delete hook
 % ==========================================================================
 
+:- multifile plugins:post_server_startup_hook/1.
+
+%% post_server_startup_hook(+Port) is det.
+%
+%  Called after the SWI-Prolog server starts. Wires the tdb-search URL
+%  and auth header into the Rust IndexerRegistry via the indexer_set_config
+%  FFI predicate. This runs once at boot, after tdb_search_endpoint/1 is
+%  configured but before any commits arrive.
+plugins:post_server_startup_hook(_Port) :-
+    (   tdb_search_endpoint(Endpoint),
+        plugin_api:indexer_available
+    ->  (   search_auth_header(authorization(basic(User, Secret)))
+        ->  format(atom(Creds), "~w:~w", [User, Secret]),
+            base64(Creds, B64),
+            format(atom(AuthHeader), "Basic ~w", [B64]),
+            catch(plugin_api:indexer_set_config(Endpoint, AuthHeader),
+                  Error,
+                  format(user_error,
+                         "[ERROR] indexer_set_config failed: ~q~n",
+                         [Error]))
+        ;   catch(plugin_api:indexer_set_config(Endpoint, ""),
+                  Error,
+                  format(user_error,
+                         "[ERROR] indexer_set_config failed: ~q~n",
+                         [Error]))
+        )
+    ;   true
+    ).
+
 :- multifile plugins:post_delete_db_hook/2.
 
 plugins:post_delete_db_hook(Organization, DB_Name) :-
@@ -843,7 +1139,17 @@ plugins:post_delete_db_hook(Organization, DB_Name) :-
               Delete_Error,
               format(user_error,
                      "[ERROR] Failed to delete search domain '~w' from engine: ~q~n",
-                     [Domain, Delete_Error]))
+                     [Domain, Delete_Error])),
+        % Abort any active indexer tasks for this domain (FFI predicate
+        % registered by Rust runtime — guard with current_predicate).
+        (   plugin_api:indexer_available
+        ->  catch(plugin_api:indexer_abort_domain(Domain),
+                  Abort_Error,
+                  format(user_error,
+                         "[ERROR] Failed to abort indexer tasks for '~w': ~q~n",
+                         [Domain, Abort_Error]))
+        ;   true
+        )
     ;   true
     ).
 
@@ -871,24 +1177,59 @@ search_handler(post, Path, Request, System_DB, Auth) :-
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_graphspec(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            tdb_search:search_extra_params(Search, Body, Extra_Params),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            tdb_search:search_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
                 (   tdb_search:io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
                     tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
                                      System_DB, Auth, Path, Branch_Name),
-                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
+                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                                       Descriptor, Final_Body),
+                    tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   catch(
-                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
-                        Nudge_Error,
-                        format(user_error,
-                               "[WARN] Search not-indexed nudge failed for ~w: ~q~n",
-                               [Path, Nudge_Error])
-                    ),
+                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
+        )
+    ).
+
+suggest_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    plugin_api:api_report_errors(
+        suggest,
+        Request,
+        (
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(suggest_handler), _)),
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            tdb_search:search_extra_params(Search, _{}, Prefixes, Extra_Params),
+            catch(
+                (   tdb_search:io_suggest_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                      Extra_Params, Response_Body, Data_Version_Header),
+                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                                       Descriptor, Final_Body),
+                    tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -915,25 +1256,41 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_graphspec(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            tdb_search:similar_extra_params(Search, Body, Extra_Params),
-            catch(
-                (   tdb_search:io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
-                                       Extra_Params, Response_Body, Data_Version_Header),
-                    tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
-                                     System_DB, Auth, Path, Branch_Name),
-                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
-                ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   catch(
-                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
-                        Nudge_Error,
-                        format(user_error,
-                               "[WARN] Similar not-indexed nudge failed for ~w: ~q~n",
-                               [Path, Nudge_Error])
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            tdb_search:similar_extra_params(Search, Body, Prefixes, Extra_Params),
+            (   memberchk(text=Text, Extra_Params),
+                tdb_search:search_scalar_present(Text)
+            ->  Post_Body = _{text: Text},
+                catch(
+                    (   tdb_search:io_similar_forward_post(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                           Extra_Params, Post_Body, Response_Body, Data_Version_Header),
+                        tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                                         System_DB, Auth, Path, Branch_Name),
+                        tdb_search:maybe_compact_response(Compress, Response_Body,
+                                           Descriptor, Final_Body),
+                        tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
                     ),
-                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                    error(tdb_search_forward_failed(404, Engine_Body, _), _),
+                    (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                        throw(error(search_not_indexed(Path, Engine_Body), _))
+                    )
+                )
+            ;   catch(
+                    (   tdb_search:io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                                           Extra_Params, Response_Body, Data_Version_Header),
+                        tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                                         System_DB, Auth, Path, Branch_Name),
+                        tdb_search:maybe_compact_response(Compress, Response_Body,
+                                           Descriptor, Final_Body),
+                        tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                    ),
+                    error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                    (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                        throw(error(search_not_indexed(Path, Engine_Body), _))
+                    )
                 )
             )
         )
@@ -957,21 +1314,19 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_graphspec(Descriptor, Domain),
-            tdb_search:duplicates_extra_params(Search, Body, Extra_Params),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            tdb_search:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
                 (   tdb_search:io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
                                           Extra_Params, Response_Body, Data_Version_Header),
-                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
+                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                                       Descriptor, Final_Body),
+                    tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   catch(
-                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
-                        Nudge_Error,
-                        format(user_error,
-                               "[WARN] Duplicates not-indexed nudge failed for ~w: ~q~n",
-                               [Path, Nudge_Error])
-                    ),
+                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -979,6 +1334,9 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
     ).
 
 resolve_handler(post, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
     search_request_body(Request, Body),
     plugin_api:api_report_errors(
         search,
@@ -993,24 +1351,22 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_graphspec(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            tdb_search:resolve_forward_body(Body, Forward_Body),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            tdb_search:resolve_forward_body(Body, Prefixes, Forward_Body),
             catch(
                 (   tdb_search:io_resolve_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                        Forward_Body, Response_Body),
+                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                                       Descriptor, Final_Body),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
-                    write(Response_Body)
+                    write(Final_Body)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   catch(
-                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
-                        Nudge_Error,
-                        format(user_error,
-                               "[WARN] Resolve not-indexed nudge failed for ~w: ~q~n",
-                               [Path, Nudge_Error])
-                    ),
+                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -1018,12 +1374,22 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
     ).
 
 resolve_forward_body(Body, Forward_Body) :-
+    resolve_forward_body(Body, none, Forward_Body).
+resolve_forward_body(Body, Prefixes, Forward_Body) :-
     findall(Key-Value,
             (   resolve_allowed_body_key(Key),
-                get_dict(Key, Body, Value)
+                get_dict(Key, Body, Raw_Value),
+                resolve_normalize_value(Key, Raw_Value, Prefixes, Value)
             ),
             Pairs),
     dict_pairs(Forward_Body, _, Pairs).
+
+resolve_normalize_value(Key, Raw_Ids, Prefixes, Ids) :-
+    ( Key == set_doc_ids ; Key == target_doc_ids ),
+    !,
+    maplist({Prefixes}/[Raw, Id]>>normalize_doc_id(Raw, Prefixes, Id),
+            Raw_Ids, Ids).
+resolve_normalize_value(_Key, Value, _Prefixes, Value).
 
 resolve_allowed_body_key(set_doc_types).
 resolve_allowed_body_key(set_doc_ids).
@@ -1034,41 +1400,6 @@ resolve_allowed_body_key(tau_one_to_one).
 resolve_allowed_body_key(tau_one_to_many).
 resolve_allowed_body_key(tau_many_to_one).
 resolve_allowed_body_key(k).
-
-statistics_handler(get, Path, Request, System_DB, Auth) :-
-    plugin_api:api_report_errors(
-        search,
-        Request,
-        (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(statistics_handler), _)),
-            do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
-                error(search_requires_branch_descriptor(Path), _)),
-            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_graphspec(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 10, Ancestors),
-            catch(
-                (   tdb_search:io_statistics_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
-                                          Response_Body, Data_Version_Header),
-                    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header)
-                ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   catch(
-                        tdb_search:io_push_delta(System_DB, Auth, Path, Branch_Name),
-                        Nudge_Error,
-                        format(user_error,
-                               "[WARN] Statistics not-indexed nudge failed for ~w: ~q~n",
-                               [Path, Nudge_Error])
-                    ),
-                    throw(error(search_not_indexed(Path, Engine_Body), _))
-                )
-            )
-        )
-    ).
 
 compare_handler(post, Request, _System_DB, Auth) :-
     do_or_die(
@@ -1155,64 +1486,81 @@ merged_repeated_param(Key, Body, Search, Values) :-
     ).
 
 search_extra_params(Search, Body, Params) :-
+    search_extra_params(Search, Body, none, Params).
+search_extra_params(Search, Body, Prefixes, Params) :-
     findall(Param,
-            search_extra_param(Search, Body, Param),
+            search_extra_param(Search, Body, Prefixes, Param),
             Params).
 
-search_extra_param(Search, Body, q=Q) :-
+search_extra_param(Search, Body, _Prefixes, q=Q) :-
     merged_scalar_param(q, Body, Search, Q).
-search_extra_param(Search, Body, mode=Mode) :-
+search_extra_param(Search, Body, _Prefixes, mode=Mode) :-
     merged_scalar_param(mode, Body, Search, Mode).
-search_extra_param(Search, Body, start=Start) :-
+search_extra_param(Search, Body, _Prefixes, start=Start) :-
     merged_scalar_param(start, Body, Search, Start).
-search_extra_param(Search, Body, count=Count) :-
+search_extra_param(Search, Body, _Prefixes, count=Count) :-
     merged_scalar_param(count, Body, Search, Count).
-search_extra_param(Search, Body, snippet=Snippet) :-
+search_extra_param(Search, Body, _Prefixes, snippet=Snippet) :-
     merged_scalar_param(snippet, Body, Search, Snippet).
-search_extra_param(Search, Body, doc_type=repeated(Types)) :-
+search_extra_param(Search, Body, _Prefixes, doc_type=repeated(Types)) :-
     merged_repeated_param(doc_type, Body, Search, Types).
-search_extra_param(Search, Body, doc_id=repeated(Ids)) :-
-    merged_repeated_param(doc_id, Body, Search, Ids).
+search_extra_param(Search, Body, Prefixes, doc_id=repeated(Ids)) :-
+    merged_repeated_param(doc_id, Body, Search, Raw_Ids),
+    maplist({Prefixes}/[Raw, Id]>>normalize_doc_id(Raw, Prefixes, Id),
+            Raw_Ids, Ids).
 
 similar_extra_params(Search, Body, Params) :-
+    similar_extra_params(Search, Body, none, Params).
+similar_extra_params(Search, Body, Prefixes, Params) :-
     findall(Param,
-            similar_extra_param(Search, Body, Param),
+            similar_extra_param(Search, Body, Prefixes, Param),
             Params).
 
-similar_extra_param(Search, Body, id=Id) :-
-    merged_scalar_param(id, Body, Search, Id).
-similar_extra_param(Search, Body, start=Start) :-
+similar_extra_param(Search, Body, Prefixes, id=Id) :-
+    merged_scalar_param(id, Body, Search, Raw_Id),
+    normalize_doc_id(Raw_Id, Prefixes, Id).
+similar_extra_param(Search, Body, _Prefixes, text=Text) :-
+    merged_scalar_param(text, Body, Search, Text).
+similar_extra_param(Search, Body, _Prefixes, start=Start) :-
     merged_scalar_param(start, Body, Search, Start).
-similar_extra_param(Search, Body, count=Count) :-
+similar_extra_param(Search, Body, _Prefixes, count=Count) :-
     merged_scalar_param(count, Body, Search, Count).
-similar_extra_param(Search, Body, snippet=Snippet) :-
+similar_extra_param(Search, Body, _Prefixes, snippet=Snippet) :-
     merged_scalar_param(snippet, Body, Search, Snippet).
-similar_extra_param(Search, Body, doc_type=repeated(Types)) :-
+similar_extra_param(Search, Body, _Prefixes, doc_type=repeated(Types)) :-
     merged_repeated_param(doc_type, Body, Search, Types).
-similar_extra_param(Search, Body, doc_id=repeated(Ids)) :-
-    merged_repeated_param(doc_id, Body, Search, Ids).
+similar_extra_param(Search, Body, Prefixes, doc_id=repeated(Ids)) :-
+    merged_repeated_param(doc_id, Body, Search, Raw_Ids),
+    maplist({Prefixes}/[Raw, Id]>>normalize_doc_id(Raw, Prefixes, Id),
+            Raw_Ids, Ids).
 
 duplicates_extra_params(Search, Body, Params) :-
+    duplicates_extra_params(Search, Body, none, Params).
+duplicates_extra_params(Search, Body, Prefixes, Params) :-
     findall(Param,
-            duplicates_extra_param(Search, Body, Param),
+            duplicates_extra_param(Search, Body, Prefixes, Param),
             Params).
 
-duplicates_extra_param(Search, Body, threshold=T) :-
+duplicates_extra_param(Search, Body, _Prefixes, threshold=T) :-
     merged_scalar_param(threshold, Body, Search, T).
-duplicates_extra_param(Search, Body, start=Start) :-
+duplicates_extra_param(Search, Body, _Prefixes, start=Start) :-
     merged_scalar_param(start, Body, Search, Start).
-duplicates_extra_param(Search, Body, count=Count) :-
+duplicates_extra_param(Search, Body, _Prefixes, count=Count) :-
     merged_scalar_param(count, Body, Search, Count).
-duplicates_extra_param(Search, Body, snippet=Snippet) :-
+duplicates_extra_param(Search, Body, _Prefixes, snippet=Snippet) :-
     merged_scalar_param(snippet, Body, Search, Snippet).
-duplicates_extra_param(Search, Body, doc_type=repeated(Types)) :-
+duplicates_extra_param(Search, Body, _Prefixes, doc_type=repeated(Types)) :-
     merged_repeated_param(doc_type, Body, Search, Types).
-duplicates_extra_param(Search, Body, doc_id=repeated(Ids)) :-
-    merged_repeated_param(doc_id, Body, Search, Ids).
-duplicates_extra_param(Search, Body, target_doc_type=repeated(Types)) :-
+duplicates_extra_param(Search, Body, Prefixes, doc_id=repeated(Ids)) :-
+    merged_repeated_param(doc_id, Body, Search, Raw_Ids),
+    maplist({Prefixes}/[Raw, Id]>>normalize_doc_id(Raw, Prefixes, Id),
+            Raw_Ids, Ids).
+duplicates_extra_param(Search, Body, _Prefixes, target_doc_type=repeated(Types)) :-
     merged_repeated_param(target_doc_type, Body, Search, Types).
-duplicates_extra_param(Search, Body, target_doc_id=repeated(Ids)) :-
-    merged_repeated_param(target_doc_id, Body, Search, Ids).
+duplicates_extra_param(Search, Body, Prefixes, target_doc_id=repeated(Ids)) :-
+    merged_repeated_param(target_doc_id, Body, Search, Raw_Ids),
+    maplist({Prefixes}/[Raw, Id]>>normalize_doc_id(Raw, Prefixes, Id),
+            Raw_Ids, Ids).
 
 reply_search_response(Request, Response_Body, Data_Version_Header) :-
     plugin_api:write_cors_headers(Request),
@@ -1224,17 +1572,192 @@ reply_search_response(Request, Response_Body, Data_Version_Header) :-
     write(Response_Body).
 
 % ==========================================================================
-% Index handler — explicit reindex trigger
+% Index status response assembly (used by index_handler GET)
 % ==========================================================================
+
+%% assemble_index_status_response(+Indexer_Progress, +Branch_Name,
+%%                                 +Last_Commit, +Engine_Stats, -Response) is det.
+%
+%  Constructs the index status API response dict from the Rust FFI
+%  progress dict, the last indexed commit from tdb-search, and the
+%  engine statistics. Handles missing keys defensively — Indexer_Progress
+%  may be a minimal dict like json{status:not_found} with no
+%  branch_processing key.
+assemble_index_status_response(Indexer_Progress, Branch_Name,
+                               Last_Commit, Engine_Stats, Response) :-
+    get_dict(status, Indexer_Progress, Status_Value),
+    (   get_dict(error, Indexer_Progress, Error_Value)
+    ->  true
+    ;   Error_Value = null
+    ),
+    (   get_dict(branch_processing, Indexer_Progress, BP)
+    ->  true
+    ;   BP = json{}
+    ),
+    (   get_dict(commits_processed, BP, Commits_Processed)
+    ->  true
+    ;   Commits_Processed = 0
+    ),
+    (   get_dict(total_commits, BP, Total_Commits)
+    ->  true
+    ;   Total_Commits = 0
+    ),
+    (   get_dict(current_commit, BP, Current_Commit)
+    ->  true
+    ;   Current_Commit = null
+    ),
+    (   get_dict(upcoming_commit, BP, Upcoming_Commit)
+    ->  true
+    ;   Upcoming_Commit = null
+    ),
+    (   get_dict(processed_documents, BP, Processed_Docs)
+    ->  true
+    ;   Processed_Docs = 0
+    ),
+    (   get_dict(total_documents, BP, Total_Docs)
+    ->  true
+    ;   Total_Docs = 0
+    ),
+    (   get_dict(documents_sent, BP, Docs_Sent)
+    ->  true
+    ;   Docs_Sent = 0
+    ),
+    (   get_dict(documents, Engine_Stats, Searchable_Docs)
+    ->  true
+    ;   Searchable_Docs = 0
+    ),
+    (   get_dict(chunks, Engine_Stats, Segments_Indexed)
+    ->  true
+    ;   Segments_Indexed = 0
+    ),
+    (   get_dict(indexed_commits, Engine_Stats, Commits_Received)
+    ->  true
+    ;   Commits_Received = 0
+    ),
+    (   get_dict(pending_index_fragments, Engine_Stats, Pending_Updates)
+    ->  true
+    ;   Pending_Updates = 0
+    ),
+    Engine_Section = json{
+        processed_documents:Processed_Docs,
+        total_documents:Total_Docs,
+        documents_sent:Docs_Sent,
+        searchable_documents:Searchable_Docs,
+        text_segments_indexed:Segments_Indexed,
+        commits_received:Commits_Received,
+        pending_updates:Pending_Updates
+    },
+    Branch_Processing_Section = json{
+        commits_processed:Commits_Processed,
+        total_commits:Total_Commits,
+        current_commit:Current_Commit,
+        upcoming_commit:Upcoming_Commit
+    },
+    Response = json{
+        status:Status_Value,
+        error:Error_Value,
+        branch:Branch_Name,
+        last_indexed_commit:Last_Commit,
+        branch_processing:Branch_Processing_Section,
+        engine:Engine_Section
+    }.
+
+% ==========================================================================
+% Index handler — explicit reindex trigger (POST), index deletion (DELETE),
+% and indexing progress query (GET).
+% ==========================================================================
+
+index_handler(get, Path, Request, System_DB, Auth) :-
+    plugin_api:api_report_errors(
+        index,
+        Request,
+        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(index_handler), _)),
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            tdb_search:descriptor_graphspec(Descriptor, Branch_Path),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            % 1. Get indexer progress from the Rust IndexerRegistry.
+            %    The FFI returns a JSON string (not a Prolog dict) because
+            %    swipl-rs's serialize_to_term doesn't respect
+            %    skip_serializing_if for Option fields. We parse it here.
+            (   plugin_api:indexer_available
+            ->  (   plugin_api:indexer_progress(Branch_Path, Branch_Name, Progress_JSON)
+                ->  atom_json_dict(Progress_JSON, Indexer_Progress, [default_tag(json)])
+                ;   Indexer_Progress = json{status:not_found}
+                )
+            ;   Indexer_Progress = json{status:indexer_unavailable}
+            ),
+            % 2. Query tdb-search /last-indexed synchronously for the engine's
+            %    current indexed commit.
+            catch(
+                (   tdb_search:io_get_last_indexed(Endpoint, Domain, Branch_Name, Last_Indexed),
+                    get_dict(commit, Last_Indexed, Last_Commit_Raw),
+                    tdb_search:normalise_commit_value(Last_Commit_Raw, Last_Commit)
+                ),
+                _,
+                Last_Commit = null
+            ),
+            % 3. Query tdb-search /statistics?domain=... for engine-side counts.
+            catch(
+                tdb_search:io_statistics_for_domain(Endpoint, Domain, Engine_Stats),
+                _,
+                Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                                    pending_index_fragments:0}
+            ),
+            % 4. Assemble the response using the extracted predicate.
+            tdb_search:assemble_index_status_response(
+                Indexer_Progress, Branch_Name, Last_Commit, Engine_Stats,
+                Response0),
+            plugin_api:write_cors_headers(Request),
+            format("Content-Type: application/json~n~n"),
+            json_write_dict(current_output, Response0, [width(0)])
+        )
+    ).
 
 index_handler(post, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   tdb_search:io_index_branch(System_DB, Auth, Path),
+        (   catch(
+                (   tdb_search:io_index_branch(System_DB, Auth, Path),
+                    plugin_api:write_cors_headers(Request),
+                    format("Content-Type: application/json~n~n"),
+                    json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
+                ),
+                Error,
+                (   (   Error = error(tdb_search_409_resolution_timeout, _)
+                    ->  true
+                    ;   Error = error(socket_error(epipe, _), _)
+                    ->  true
+                    ;   throw(Error)
+                    ),
+                    plugin_api:write_cors_headers(Request),
+                    format("Content-Type: application/json~n~n"),
+                    json_write_dict(current_output, json{'@type':'api:IndexResponse',
+                                'api:status':'api:success',
+                                'api:message':'Index already in progress for this branch'}, [width(0)])
+                )
+            )
+        )
+    ).
+
+index_handler(delete, Path, Request, System_DB, Auth) :-
+    plugin_api:api_report_errors(
+        index,
+        Request,
+        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(index_handler), _)),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:io_delete_domain(Endpoint, Domain),
+            format(string(Message), "Index for ~w deleted", [Path]),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
-            write(json{'@type':'api:IndexResponse','api:status':'api:success'})
+            json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',
+                        'api:message':Message}, [width(0)])
         )
     ).
 
@@ -1245,11 +1768,15 @@ index_handler(post, Path, Request, System_DB, Auth) :-
 :- plugin_api:register_route(api(index/Path),
     plugin_api:cors_handler(Method, tdb_search:index_handler(Path)),
     [method(Method), prefix, time_limit(infinite),
-     methods([options,post])]).
+     methods([options,get,post,delete])]).
 
 :- plugin_api:register_route(api(search/Path),
     plugin_api:cors_handler(Method, tdb_search:search_handler(Path)),
     [method(Method), prefix, methods([options,get,post])]).
+
+:- plugin_api:register_route(api(suggest/Path),
+    plugin_api:cors_handler(Method, tdb_search:suggest_handler(Path)),
+    [method(Method), prefix, methods([options,get])]).
 
 :- plugin_api:register_route(api(similar/Path),
     plugin_api:cors_handler(Method, tdb_search:similar_handler(Path)),
@@ -1259,13 +1786,7 @@ index_handler(post, Path, Request, System_DB, Auth) :-
     plugin_api:cors_handler(Method, tdb_search:duplicates_handler(Path)),
     [method(Method), prefix, methods([options,get])]).
 
-:- plugin_api:register_route(api(resolve/Path),
-    plugin_api:cors_handler(Method, tdb_search:resolve_handler(Path)),
-    [method(Method), prefix, methods([options,post])]).
-
-:- plugin_api:register_route(api(statistics/Path),
-    plugin_api:cors_handler(Method, tdb_search:statistics_handler(Path)),
-    [method(Method), prefix, methods([options,get])]).
+% /api/resolve route moved to search_resolve.pl plugin.
 
 :- plugin_api:register_route(api(compare),
     plugin_api:cors_handler(Method, tdb_search:compare_handler),
@@ -1296,6 +1817,7 @@ start_push_stub(Port) :-
     http_handler('/check', push_stub_check, []),
     http_handler('/domain', push_stub_domain_delete, [methods([delete])]),
     http_handler('/resolve', push_stub_resolve, [methods([post])]),
+    http_handler('/candidates', push_stub_candidates, [methods([post])]),
     http_server(http_dispatch, [port(Port), workers(1)]).
 
 stop_push_stub(Port) :-
@@ -1399,6 +1921,16 @@ push_stub_resolve(Request) :-
     assertz(stub_received(resolve_called, true)),
     format("Content-Type: application/json~n~n"),
     write('{"matches":[]}').
+
+push_stub_candidates(Request) :-
+    (   memberchk(input(In), Request)
+    ->  read_string(In, _, Body),
+        assertz(stub_received(candidates_body, Body))
+    ;   true
+    ),
+    assertz(stub_received(candidates_called, true)),
+    format("Content-Type: application/json~n~n"),
+    write('{"set_to_target":{"doc/set_a":[{"id":"doc/target_a","distance":0.1}]},"target_to_set":{"doc/target_a":[{"id":"doc/set_a","distance":0.1}]},"stats":{"set_points":1,"target_points":1,"set_to_target_edges":1,"target_to_set_edges":1,"elapsed_ms":5}}').
 
 % ==========================================================================
 % clean_tdb_search_test_env — test helper to clear plugin config tables + env vars
@@ -1548,7 +2080,7 @@ test("admin user defaults to admin",
                 config:clear_indexer_backend_config)),
        true(User == admin)
      ]) :-
-    tdb_search_admin_user(User).
+    plugins:tdb_search_admin_user(User).
 
 test("admin secret defaults to root",
      [ setup((clean_tdb_search_test_env,
@@ -1557,7 +2089,7 @@ test("admin secret defaults to root",
                 config:clear_indexer_backend_config)),
        true(Secret == root)
      ]) :-
-    tdb_search_admin_secret(Secret).
+    plugins:tdb_search_admin_secret(Secret).
 
 :- end_tests(tdb_search_indexer_backend_selector).
 
@@ -1662,7 +2194,7 @@ test("io_index_branch refuses when endpoint is not configured",
      ]) :-
     io_index_branch(_, _, "admin/testdb").
 
-test("io_push_delta does nothing when engine is at HEAD",
+test("io_push_delta delegates to indexer_notify (push architecture)",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "testdb2"),
               clean_tdb_search_test_env,
@@ -1674,20 +2206,9 @@ test("io_push_delta does nothing when engine is at HEAD",
                 clean_tdb_search_test_env,
                 teardown_temp_store(State)))
      ]) :-
-    resolve_absolute_string_descriptor("admin/testdb2", Descriptor),
-    create_context(Descriptor, commit_info{author:"test", message:"data"}, Context),
-    with_transaction(Context, ask(Context, insert(x,y,z)), _),
-    Repository_Descriptor = Descriptor.repository_descriptor,
-    branch_head_commit(Repository_Descriptor, "main", Head_Uri),
-    commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Uri),
-    retractall(tdb_search:stub_last_indexed_response(_)),
-    format(atom(ResponseJson), '{"branch":"main","commit":"~w","version":5}', [Head_Commit_Id]),
-    assertz(tdb_search:stub_last_indexed_response(ResponseJson)),
     super_user_authority(Auth),
     open_descriptor(system_descriptor{}, System_DB),
-    io_push_delta(System_DB, Auth, "admin/testdb2", "main"),
-    tdb_search:stub_received(last_indexed, _),
-    \+ tdb_search:stub_received(push_params, _).
+    io_push_delta(System_DB, Auth, "admin/testdb2", "main").
 
 test("commits_after returns suffix after the given commit",
      [true(Forward == ["c2", "c3", "c4"])]) :-
@@ -1738,29 +2259,6 @@ test("build_last_indexed_url encodes slash in domain",
 test("build_last_indexed_url encodes special chars in branch",
      [true(sub_atom(URL, _, _, _, 'branch=feat%2fx'))]) :-
     tdb_search:build_last_indexed_url("http://engine:8080", "d", "feat/x", URL).
-
-test("io_await_task_completion succeeds when check returns Complete",
-     [ setup((push_stub_port(Port),
-              start_push_stub(Port),
-              assertz(tdb_search:stub_check_response("task-test-1",
-                  '{"status":"Complete","task_id":"task-test-1"}'))
-             )),
-       cleanup(stop_push_stub(Port))
-     ]) :-
-    push_stub_port(Port),
-    format(atom(Endpoint), "http://127.0.0.1:~w", [Port]),
-    tdb_search:io_await_task_completion(Endpoint, "task-test-1").
-
-test("io_await_task_completion throws when task not found (404 from check)",
-     [ setup((push_stub_port(Port),
-              start_push_stub(Port)
-             )),
-       cleanup(stop_push_stub(Port)),
-       throws(error(tdb_search_task_failed("task-nonexistent", _), _))
-     ]) :-
-    push_stub_port(Port),
-    format(atom(Endpoint), "http://127.0.0.1:~w", [Port]),
-    tdb_search:io_await_task_completion(Endpoint, "task-nonexistent").
 
 test("interpret_check_response handles string 'Complete' from atom_json_dict",
      [true(Status == complete)]) :-
@@ -1816,6 +2314,34 @@ test("validate_index_path rejects _meta path (3-segment system form)",
 test("validate_index_path rejects empty string",
      [throws(error(invalid_index_path(_, wrong_segment_count(0, expected_2_or_5)), _))]) :-
     tdb_search:validate_index_path("").
+
+test("branch_path_for_notify expands 2-segment path to 5-segment branch path",
+     [true(Branch_Path == 'admin/testdb/local/branch/main')]) :-
+    tdb_search:branch_path_for_notify("admin/testdb", "main", Branch_Path).
+
+test("branch_path_for_notify passes 5-segment branch path through as-is",
+     [true(Branch_Path == "admin/testdb/local/branch/main")]) :-
+    tdb_search:branch_path_for_notify("admin/testdb/local/branch/main", "main", Branch_Path).
+
+test("branch_path_for_notify does not double a 5-segment branch path",
+     [true(Branch_Path == "admin/product_assortment/local/branch/main")]) :-
+    tdb_search:branch_path_for_notify("admin/product_assortment/local/branch/main", "main", Branch_Path).
+
+test("branch_path_for_notify handles atom input",
+     [true(Branch_Path == 'admin/testdb/local/branch/main')]) :-
+    tdb_search:branch_path_for_notify('admin/testdb', 'main', Branch_Path).
+
+test("branch_path_for_notify handles DB named local (2-segment)",
+     [true(Branch_Path == 'admin/local/local/branch/main')]) :-
+    tdb_search:branch_path_for_notify("admin/local", "main", Branch_Path).
+
+test("branch_path_for_notify rejects 10-segment doubled path",
+     [throws(error(invalid_index_path(_, wrong_segment_count(10, expected_2_or_5)), _))]) :-
+    tdb_search:branch_path_for_notify("admin/db/local/branch/main/local/branch/main/local/branch", "main", _).
+
+test("branch_path_for_notify rejects 3-segment path",
+     [throws(error(invalid_index_path(_, wrong_segment_count(3, expected_2_or_5)), _))]) :-
+    tdb_search:branch_path_for_notify("admin/testdb/local", "main", _).
 
 test("io_index_branch rejects 3-segment path before any I/O",
      [ setup((clean_tdb_search_test_env,
@@ -1917,7 +2443,7 @@ test("validation_is_index_enabled succeeds for schema with embedding metadata",
         instance_objects: [],
         inference_objects: []
     },
-    tdb_search:validation_is_index_enabled(Validation).
+    api_indexer:validation_is_index_enabled(Validation).
 
 test("validation_is_index_enabled fails for schema without embedding metadata",
      [ setup((setup_temp_store(State),
@@ -1934,7 +2460,7 @@ test("validation_is_index_enabled fails for schema without embedding metadata",
         instance_objects: [],
         inference_objects: []
     },
-    tdb_search:validation_is_index_enabled(Validation).
+    api_indexer:validation_is_index_enabled(Validation).
 
 test("post_commit_hook is no-op when tdb_search endpoint is not set",
      [ setup(clean_tdb_search_test_env),
@@ -2027,15 +2553,6 @@ test("post_commit_hook returns quickly even if engine is slow",
     Elapsed is T1 - T0,
     Elapsed < 5.0.
 
-test("io_auto_push_worker logs error on engine failure without raising",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:1'),
-              setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
-             )),
-       cleanup(clean_tdb_search_test_env)
-     ]) :-
-    tdb_search:io_auto_push_worker("admin/nonexistent", "main").
-
 :- end_tests(tdb_search_auto_push_hook).
 
 % ==========================================================================
@@ -2053,6 +2570,16 @@ test("build_search_url with no ancestors omits ancestor params",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123')]) :-
     tdb_search:build_search_url("http://engine:8080", "admin/db", "abc123",
                                 [], URL).
+
+test("build_suggest_url constructs correct URL with ancestors",
+     [true(URL == 'http://engine:8080/suggest?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
+    tdb_search:build_suggest_url("http://engine:8080", "admin/db", "abc123",
+                                 ["prev1", "prev2"], URL).
+
+test("build_suggest_url with no ancestors omits ancestor params",
+     [true(URL == 'http://engine:8080/suggest?domain=admin%2fdb&commit=abc123')]) :-
+    tdb_search:build_suggest_url("http://engine:8080", "admin/db", "abc123",
+                                 [], URL).
 
 test("build_similar_url constructs correct URL",
      [true(URL == 'http://engine:8080/similar?domain=org%2fmydb&commit=def456&ancestor=anc1')]) :-
@@ -2142,6 +2669,13 @@ test("io_statistics_forward refuses when endpoint is not configured",
      ]) :-
     io_statistics_forward("http://x:80", "admin/db", "c0", [], _, _).
 
+test("io_statistics_for_domain refuses when endpoint is not configured",
+     [ setup(clean_tdb_search_test_env),
+       cleanup(clean_tdb_search_test_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_statistics_for_domain("http://x:80", "admin/db", _).
+
 test("authz parity: denied caller cannot search (resolve_descriptor_auth throws)",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "secretdb"),
@@ -2177,19 +2711,19 @@ test("authz parity: denied caller search never reaches engine stub",
                 clean_tdb_search_test_env,
                 teardown_temp_store(State)))
      ]) :-
-    open_descriptor(system_descriptor{}, System_DB),
-    user_key_user_id(System_DB, 'DeniedUser', 'pass456', Auth),
-    catch(
-        (   resolve_descriptor_auth(read, System_DB, Auth,
-                                    "admin/guardeddb", instance, _Desc),
-            tdb_search:tdb_search_endpoint(Endpoint),
-            io_search_forward(Endpoint, "admin/guardeddb", "fake_commit",
-                              [], [], _Response, _DV)
-        ),
-        error(access_not_authorised(_, _, _), _),
-        true
-    ),
-    \+ stub_received(_, _).
+    once(( open_descriptor(system_descriptor{}, System_DB),
+           user_key_user_id(System_DB, 'DeniedUser', 'pass456', Auth),
+           catch(
+               (   resolve_descriptor_auth(read, System_DB, Auth,
+                                           "admin/guardeddb", instance, _Desc),
+                   tdb_search:tdb_search_endpoint(Endpoint),
+                   io_search_forward(Endpoint, "admin/guardeddb", "fake_commit",
+                                     [], [], _Response, _DV)
+               ),
+               error(access_not_authorised(_, _, _), _),
+               true
+           ),
+           \+ stub_received(_, _) )).
 
 test("authz parity: denied caller cannot get statistics (resolve_descriptor_auth throws)",
      [ setup((setup_temp_store(State),
@@ -2216,19 +2750,19 @@ test("authz parity: denied caller statistics never reaches engine stub",
                 clean_tdb_search_test_env,
                 teardown_temp_store(State)))
      ]) :-
-    open_descriptor(system_descriptor{}, System_DB),
-    user_key_user_id(System_DB, 'StatsDeniedUser', 'pass012', Auth),
-    catch(
-        (   resolve_descriptor_auth(read, System_DB, Auth,
-                                    "admin/guardedstatsdb", instance, _Desc),
-            tdb_search:tdb_search_endpoint(Endpoint),
-            io_statistics_forward(Endpoint, "admin/guardedstatsdb", "fake_commit",
-                                  [], _Response, _DV)
-        ),
-        error(access_not_authorised(_, _, _), _),
-        true
-    ),
-    \+ stub_received(_, _).
+    once(( open_descriptor(system_descriptor{}, System_DB),
+           user_key_user_id(System_DB, 'StatsDeniedUser', 'pass012', Auth),
+           catch(
+               (   resolve_descriptor_auth(read, System_DB, Auth,
+                                           "admin/guardedstatsdb", instance, _Desc),
+                   tdb_search:tdb_search_endpoint(Endpoint),
+                   io_statistics_forward(Endpoint, "admin/guardedstatsdb", "fake_commit",
+                                         [], _Response, _DV)
+               ),
+               error(access_not_authorised(_, _, _), _),
+               true
+           ),
+           \+ stub_received(_, _) )).
 
 test("maybe_nudge_push does nothing when data version matches",
      [ setup((setup_temp_store(State),
@@ -2283,19 +2817,19 @@ test("authz parity: denied caller resolve never reaches engine stub",
                 clean_tdb_search_test_env,
                 teardown_temp_store(State)))
      ]) :-
-    open_descriptor(system_descriptor{}, System_DB),
-    user_key_user_id(System_DB, 'ResolveBlockedUser', 'pass654', Auth),
-    catch(
-        (   resolve_descriptor_auth(read, System_DB, Auth,
-                                    "admin/guardedresolvedb", instance, _Desc),
-            tdb_search:tdb_search_endpoint(Endpoint),
-            io_resolve_forward(Endpoint, "admin/guardedresolvedb", "fake_commit",
-                               [], _{}, _Response)
-        ),
-        error(access_not_authorised(_, _, _), _),
-        true
-    ),
-    \+ stub_received(_, _).
+    once(( open_descriptor(system_descriptor{}, System_DB),
+           user_key_user_id(System_DB, 'ResolveBlockedUser', 'pass654', Auth),
+           catch(
+               (   resolve_descriptor_auth(read, System_DB, Auth,
+                                           "admin/guardedresolvedb", instance, _Desc),
+                   tdb_search:tdb_search_endpoint(Endpoint),
+                   io_resolve_forward(Endpoint, "admin/guardedresolvedb", "fake_commit",
+                                      [], _{}, _Response)
+               ),
+               error(access_not_authorised(_, _, _), _),
+               true
+           ),
+           \+ stub_received(_, _) )).
 
 :- end_tests(tdb_search_search_fronting).
 
@@ -2306,7 +2840,7 @@ test("authz parity: denied caller resolve never reaches engine stub",
 :- begin_tests(tdb_search_resolve_url_construction).
 
 test("build_resolve_url constructs correct URL",
-     [true(URL == 'http://engine:8080/resolve?domain=admin%2fdb&commit=abc123')]) :-
+     [true(URL == 'http://engine:8080/candidates?domain=admin%2fdb&commit=abc123')]) :-
     tdb_search:build_resolve_url("http://engine:8080", "admin/db", "abc123", URL).
 
 test("build_resolve_url encodes slashes in domain",
@@ -2417,8 +2951,8 @@ test("search ignores unknown body fields (allowlist only)",
      [true(Params == [q="hi"])]) :-
     tdb_search:search_extra_params([], _{q: "hi", wibble: "nope", '$inject': 1}, Params).
 
-test("similar id: body value overrides query value",
-     [true(Params == [id="body-id"])]) :-
+test("similar id: body value overrides query value and normalizes doc id",
+     [true(Params == [id='terminusdb:///data/body-id'])]) :-
     tdb_search:similar_extra_params([id='query-id'], _{id: "body-id"}, Params).
 
 test("duplicates threshold: body value overrides query value",
@@ -2431,3 +2965,301 @@ test("duplicates target_doc_type: body list overrides query repeated",
                             _{target_doc_type: ["Buy"]}, Params).
 
 :- end_tests(tdb_search_fronting_params).
+
+% ==========================================================================
+% Index status API response assembly tests
+% ==========================================================================
+
+:- begin_tests(tdb_search_index_status_response).
+
+test("not_found response has status not_found and empty branch_processing",
+     [true((Status == not_found, BP == json{commits_processed:0, total_commits:0,
+                                            current_commit:null, upcoming_commit:null}))]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", null, Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(branch_processing, Response, BP).
+
+test("indexing response includes document progress in engine section",
+     [true((Processed == 42, Total == 100, Sent == 80, Status == indexing))]) :-
+    Indexer_Progress = json{
+        status:indexing,
+        branch_processing:json{
+            commits_processed:1,
+            total_commits:3,
+            current_commit:"abc123",
+            upcoming_commit:null,
+            processed_documents:42,
+            total_documents:100,
+            documents_sent:80
+        }
+    },
+    Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(engine, Response, Engine),
+    get_dict(processed_documents, Engine, Processed),
+    get_dict(total_documents, Engine, Total),
+    get_dict(documents_sent, Engine, Sent).
+
+test("indexing response does not include document counters in branch_processing",
+     [true(\+ get_dict(processed_documents, BP, _))]) :-
+    Indexer_Progress = json{
+        status:indexing,
+        branch_processing:json{
+            commits_processed:1,
+            total_commits:3,
+            current_commit:"abc123",
+            processed_documents:42,
+            total_documents:100
+        }
+    },
+    Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+    get_dict(branch_processing, Response, BP).
+
+test("completed response has status completed and engine shows totals",
+     [true((Status == completed, Commits_Processed == 3, Total_Commits == 3, Sent == 150))]) :-
+    Indexer_Progress = json{
+        status:completed,
+        branch_processing:json{
+            commits_processed:3,
+            total_commits:3,
+            processed_documents:150,
+            total_documents:150,
+            documents_sent:150
+        }
+    },
+    Engine_Stats = json{documents:150, chunks:300, indexed_commits:3,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "head123", Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(branch_processing, Response, BP),
+    get_dict(commits_processed, BP, Commits_Processed),
+    get_dict(total_commits, BP, Total_Commits),
+    get_dict(engine, Response, Engine),
+    get_dict(documents_sent, Engine, Sent).
+
+test("error response includes error message",
+     [true((Status == error, Error == "something went wrong"))]) :-
+    Indexer_Progress = json{
+        status:error,
+        error:"something went wrong",
+        branch_processing:json{
+            commits_processed:0,
+            total_commits:1,
+            processed_documents:0,
+            total_documents:0
+        }
+    },
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", null, Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(error, Response, Error).
+
+test("engine section includes searchable_documents and text_segments_indexed from engine stats",
+     [true((Searchable == 75, Segments == 200, Sent == 60))]) :-
+    Indexer_Progress = json{status:indexing,
+        branch_processing:json{commits_processed:1, total_commits:2,
+            processed_documents:30, total_documents:75, documents_sent:60}},
+    Engine_Stats = json{documents:75, chunks:200, indexed_commits:1,
+                        pending_index_fragments:2},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+    get_dict(engine, Response, Engine),
+    get_dict(searchable_documents, Engine, Searchable),
+    get_dict(text_segments_indexed, Engine, Segments),
+    get_dict(documents_sent, Engine, Sent).
+
+:- end_tests(tdb_search_index_status_response).
+
+% ==========================================================================
+% IRI compaction / expansion tests
+% ==========================================================================
+
+:- begin_tests(tdb_search_id_compaction).
+
+% Shared prefixes mimicking a database context for admin/abt_buy_e2e
+abt_buy_prefixes(Prefixes) :-
+    Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
+                 '@schema': "terminusdb:///schema#"}.
+
+test("compress_dict_uri with @base strips to bare relative IRI",
+     [true(Compact == 'Abt/1101')]) :-
+    abt_buy_prefixes(Prefixes),
+    compress_dict_uri('terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+                      Prefixes, Compact).
+
+test("compress_dict_uri with custom prefix creates prefix:local form",
+     [true(Compact == '@schema:Foo')]) :-
+    abt_buy_prefixes(Prefixes),
+    compress_dict_uri('terminusdb:///schema#Foo', Prefixes, Compact).
+
+test("compress_dict_uri leaves non-terminusdb URI unchanged",
+     [true(Compact == 'http://example.org/foo')]) :-
+    abt_buy_prefixes(Prefixes),
+    compress_dict_uri('http://example.org/foo', Prefixes, Compact).
+
+test("expand_compact_id expands bare relative via @base",
+     [true(Full == 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101')]) :-
+    abt_buy_prefixes(Prefixes),
+    expand_compact_id('Abt/1101', Prefixes, Full).
+
+test("expand_compact_id expands prefix:local form via prefix_expand",
+     [true(Full == 'terminusdb:///schema#Foo')]) :-
+    abt_buy_prefixes(Prefixes),
+    expand_compact_id('@schema:Foo', Prefixes, Full).
+
+test("expand_compact_id returns full IRI unchanged when already expanded",
+     [true(Full == 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101')]) :-
+    abt_buy_prefixes(Prefixes),
+    expand_compact_id('terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+                      Prefixes, Full).
+
+test("expand_compact_id falls back to terminusdb:///data/ when no @base and no prefix",
+     [true(Full == 'terminusdb:///data/bare_id')]) :-
+    expand_compact_id('bare_id', _{}, Full).
+
+test("expand_compact_id handles string input the same as atom",
+     [true(Full == 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101')]) :-
+    abt_buy_prefixes(Prefixes),
+    expand_compact_id("Abt/1101", Prefixes, Full).
+
+test("round-trip: compact then expand yields the original data IRI",
+     [true(Full == Original)]) :-
+    abt_buy_prefixes(Prefixes),
+    Original = 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+    compress_dict_uri(Original, Prefixes, Compact),
+    expand_compact_id(Compact, Prefixes, Full).
+
+test("round-trip: compact then expand yields the original schema IRI",
+     [true(Full == Original)]) :-
+    abt_buy_prefixes(Prefixes),
+    Original = 'terminusdb:///schema#Foo',
+    compress_dict_uri(Original, Prefixes, Compact),
+    expand_compact_id(Compact, Prefixes, Full).
+
+test("normalize_doc_id/3 with none sentinel uses old normalize behavior",
+     [true(Normalized == 'terminusdb:///data/body-id')]) :-
+    normalize_doc_id("body-id", none, Normalized).
+
+test("normalize_doc_id/3 with none passes through full IRI unchanged",
+     [true(Normalized == 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101')]) :-
+    normalize_doc_id('terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+                      none, Normalized).
+
+test("normalize_doc_id/3 with prefixes expands compact ID",
+     [true(Normalized == 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101')]) :-
+    abt_buy_prefixes(Prefixes),
+    normalize_doc_id('Abt/1101', Prefixes, Normalized).
+
+test("compact_json_value compacts id field in a search response array",
+     [true(Compacted == json{results:[json{id:'Abt/1101', score:0.9},
+                                        json{id:'Abt/1102', score:0.8}]})]) :-
+    abt_buy_prefixes(Prefixes),
+    Response = json{results:[json{id:'terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+                                  score:0.9},
+                             json{id:'terminusdb:///data/admin/abt_buy_e2e/Abt/1102',
+                                  score:0.8}]},
+    compact_json_value(Response, Prefixes, Compacted).
+
+test("compact_json_value compacts set_id and target_id in a resolve response",
+     [true((Set_Id == 'Abt/1101', Target_Id == 'Buy/2001'))]) :-
+    abt_buy_prefixes(Prefixes),
+    Response = json{matches:[json{set_id:
+                                  'terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+                                  target_id:
+                                  'terminusdb:///data/admin/abt_buy_e2e/Buy/2001',
+                                  threshold:0.95}]},
+    compact_json_value(Response, Prefixes, Compacted),
+    get_dict(matches, Compacted, Matches),
+    [First_Match|_] = Matches,
+    get_dict(set_id, First_Match, Set_Id),
+    get_dict(target_id, First_Match, Target_Id).
+
+test("compact_json_value leaves non-IRI strings unchanged",
+     [true(Compacted == json{name:"Abt/1101", label:"some label"})]) :-
+    abt_buy_prefixes(Prefixes),
+    Response = json{name:"Abt/1101", label:"some label"},
+    compact_json_value(Response, Prefixes, Compacted).
+
+test("compact_json_value handles deeply nested structures",
+     [true(Inner_Id == 'Abt/1101')]) :-
+    abt_buy_prefixes(Prefixes),
+    Response = json{outer:json{inner:json{id:
+                  'terminusdb:///data/admin/abt_buy_e2e/Abt/1101'}}},
+    compact_json_value(Response, Prefixes, Compacted),
+    get_dict(outer, Compacted, Outer),
+    get_dict(inner, Outer, Inner),
+    get_dict(id, Inner, Inner_Id).
+
+test("compact_json_value handles a bare list of IRIs",
+     [true(Compacted == ['Abt/1101', 'Abt/1102'])]) :-
+    abt_buy_prefixes(Prefixes),
+    Response = ['terminusdb:///data/admin/abt_buy_e2e/Abt/1101',
+                'terminusdb:///data/admin/abt_buy_e2e/Abt/1102'],
+    compact_json_value(Response, Prefixes, Compacted).
+
+:- end_tests(tdb_search_id_compaction).
+
+% ==========================================================================
+% Compress query parameter tests
+% ==========================================================================
+
+:- begin_tests(tdb_search_compress_param).
+
+test("search_extra_params/4 with none uses old normalize for doc_id",
+     [true(Params == [doc_id=repeated(['terminusdb:///data/doc1'])])]) :-
+    tdb_search:search_extra_params([doc_id='doc1'], _{}, none, Params).
+
+test("search_extra_params/4 with prefixes expands compact doc_id",
+     [true(Params == [doc_id=repeated(['terminusdb:///data/admin/abt_buy_e2e/Abt/1101'])])]) :-
+    Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
+                 '@schema': "terminusdb:///schema#"},
+    tdb_search:search_extra_params([doc_id='Abt/1101'], _{}, Prefixes, Params).
+
+test("similar_extra_params/4 with none preserves old normalize behavior",
+     [true(Params == [id='terminusdb:///data/body-id'])]) :-
+    tdb_search:similar_extra_params([id='query-id'], _{id: "body-id"},
+                                    none, Params).
+
+test("similar_extra_params/4 with prefixes expands compact id",
+     [true(Params == [id='terminusdb:///data/admin/abt_buy_e2e/Abt/1101'])]) :-
+    Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
+                 '@schema': "terminusdb:///schema#"},
+    tdb_search:similar_extra_params([id='Abt/1101'], _{}, Prefixes, Params).
+
+test("duplicates_extra_params/4 with none preserves old normalize behavior",
+     [true(Params == [doc_id=repeated(['terminusdb:///data/doc1'])])]) :-
+    tdb_search:duplicates_extra_params([doc_id='doc1'], _{}, none, Params).
+
+test("duplicates_extra_params/4 with prefixes expands compact target_doc_id",
+     [true(Params == [target_doc_id=repeated(['terminusdb:///data/admin/abt_buy_e2e/Buy/2001'])])]) :-
+    Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
+                 '@schema': "terminusdb:///schema#"},
+    tdb_search:duplicates_extra_params([target_doc_id='Buy/2001'], _{},
+                                       Prefixes, Params).
+
+test("compress_flag defaults to true when parameter absent",
+     [true(Compress == true)]) :-
+    compress_flag([], Compress).
+
+test("compress_flag reads false from query parameter",
+     [true(Compress == false)]) :-
+    compress_flag([compress='false'], Compress).
+
+test("compress_flag reads true from query parameter",
+     [true(Compress == true)]) :-
+    compress_flag([compress='true'], Compress).
+
+:- end_tests(tdb_search_compress_param).
