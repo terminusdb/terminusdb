@@ -47,6 +47,8 @@
 :- multifile post_server_startup_hook/1.
 :- multifile embedding_for_type/4.
 :- multifile embedding_for_type/3.
+:- multifile tdb_search_admin_user/1.
+:- multifile tdb_search_admin_secret/1.
 
 load_plugins :-
     plugin_path(Path),
@@ -381,6 +383,18 @@ embedding_for_type(_, _, _, _) :- fail.
 %
 %  Fallback hook without graphspec. Tried after all /4 clauses fail.
 embedding_for_type(_, _, _) :- fail.
+
+%% tdb_search_admin_user(-User) is semidet.
+%
+%  Multifile hook provided by the tdb_search plugin.
+%  Returns the admin user for HTTP Basic auth to the search backend.
+tdb_search_admin_user(_) :- fail.
+
+%% tdb_search_admin_secret(-Secret) is semidet.
+%
+%  Multifile hook provided by the tdb_search plugin.
+%  Returns the admin secret for HTTP Basic auth to the search backend.
+tdb_search_admin_secret(_) :- fail.
 
 :- begin_tests(foreign_plugin_loader, [concurrent(false)]).
 

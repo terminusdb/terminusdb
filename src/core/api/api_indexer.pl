@@ -8,7 +8,10 @@
               validation_is_index_enabled/1,
               indexer_process_commit/4,
               indexer_next_commit/4,
-              count_indexable_documents/4
+              count_indexable_documents/4,
+              schema_store_clustering/2,
+              schema_store_clustering_for_descriptor/2,
+              schema_store_clustering_for_path/2
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
@@ -25,6 +28,7 @@
 :- use_module(config(terminus_config)).
 :- use_module(core(api/api_graphql)).
 :- use_module(core(triple), [super_user_authority/1, database_schema/2, xrdf/4]).
+:- use_module(core(document/json), [database_schema_context_object/2]).
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(yall)).
@@ -142,7 +146,7 @@ encode_query_value(Value, Encoded) :-
 % ==========================================================================
 % All curl-based push code removed — replaced by indexer_notify FFI.
 % The Rust IndexerRegistry handles /last-indexed, /push, /check, and 409
-% resolution internally via reqwest. Prolog only calls indexer_notify/2.
+% resolution internally via reqwest. Prolog only calls indexer_notify/3.
 % ==========================================================================
 
 /**
@@ -190,7 +194,7 @@ validate_index_segments(N, _Segments, Path) :-
 /**
  * io_push_delta(+System_DB, +Auth, +Path, +Branch_Name) is det.
  *
- * Thin wrapper around the indexer_notify/2 FFI predicate. Validates the
+ * Thin wrapper around the indexer_notify/3 FFI predicate. Validates the
  * path, checks that the tdb_search endpoint is configured, and delegates
  * to the Rust IndexerRegistry which handles NDJSON generation, HTTP
  * streaming, 409 resolution, and task polling internally.
@@ -214,7 +218,8 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     ;   format(atom(Branch_Path), "~w/local/branch/~w", [Path, Branch_Name])
     ),
     (   plugin_api:indexer_available
-    ->  (   plugin_api:indexer_notify(Branch_Path, Branch_Name)
+    ->  (   schema_store_clustering_for_path(Path, Store_Clustering),
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering)
         ->  true
         ;   throw(error(indexer_notify_failed(io_push_delta), _))
         )
@@ -281,7 +286,7 @@ io_index_branch(System_DB, Auth, Path) :-
 % data product's schema has at least one type with embedding metadata.
 % For all other commits this is a cheap no-op (two config checks + fail).
 %
-% ASYNC FIRE-AND-FORGET: calls indexer_notify/2 FFI which spawns a tokio
+% ASYNC FIRE-AND-FORGET: calls indexer_notify/3 FFI which spawns a tokio
 % task in the Rust IndexerRegistry. The task runs independently of the
 % commit path — commit latency is NOT inflated. The Rust task runs as
 % the system identity (super_user_authority) — indexing is infrastructure,
@@ -312,10 +317,11 @@ plugins:post_commit_hook(Validations, _Meta_Data) :-
                 validation_is_index_enabled(Validation),
                 get_dict(descriptor, Validation, Descriptor),
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
-                descriptor_graphspec(Descriptor, Path)
+                descriptor_graphspec(Descriptor, Path),
+                schema_store_clustering_for_descriptor(Descriptor, Store_Clustering)
             ),
             catch(
-                plugin_api:indexer_notify(Path, Branch_Name),
+                plugin_api:indexer_notify(Path, Branch_Name, Store_Clustering),
                 Notify_Error,
                 format(user_error,
                        "[ERROR] indexer_notify failed for ~w (~w): ~q~n",
@@ -348,6 +354,65 @@ validation_is_index_enabled(Validation) :-
         open_descriptor(Descriptor, Transaction),
         database_schema(Transaction, Schema),
         once(xrdf(Schema, _Type, sys:metadata, _))
+    ).
+
+/**
+ * schema_store_clustering(+Schema, -StoreClustering) is det.
+ *
+ *  Reads the store_clustering flag from the schema @context document's
+ *  @metadata.terminusdb.options array. Returns false if the option is
+ *  not present, if @metadata or terminusdb is missing, or if the schema
+ *  has no context object.
+ */
+schema_store_clustering(Schema, Store_Clustering) :-
+    (   catch(
+            (   database_schema_context_object(Schema, Context),
+                get_dict('@metadata', Context, Metadata),
+                get_dict('terminusdb', Metadata, TerminusDB),
+                get_dict('options', TerminusDB, Options),
+                memberchk("store_clustering", Options)
+            ),
+            _,
+            fail
+        )
+    ->  Store_Clustering = true
+    ;   Store_Clustering = false
+    ).
+
+/**
+ * schema_store_clustering_for_descriptor(+Descriptor, -StoreClustering) is det.
+ *
+ *  Opens the descriptor, reads the schema, and checks for store_clustering.
+ *  Falls back to false on any error (e.g. schemaless database).
+ */
+schema_store_clustering_for_descriptor(Descriptor, Store_Clustering) :-
+    (   catch(
+            (   open_descriptor(Descriptor, Transaction),
+                database_schema(Transaction, Schema),
+                schema_store_clustering(Schema, Store_Clustering)
+            ),
+            _,
+            fail
+        )
+    ->  true
+    ;   Store_Clustering = false
+    ).
+
+/**
+ * schema_store_clustering_for_path(+Path, -StoreClustering) is det.
+ *
+ *  Resolves the path to a descriptor and checks for store_clustering.
+ */
+schema_store_clustering_for_path(Path, Store_Clustering) :-
+    (   catch(
+            (   resolve_absolute_string_descriptor(Path, Descriptor),
+                schema_store_clustering_for_descriptor(Descriptor, Store_Clustering)
+            ),
+            _,
+            fail
+        )
+    ->  true
+    ;   Store_Clustering = false
     ).
 
 % ==========================================================================
@@ -721,6 +786,91 @@ test(count_indexable_documents_counts_documents_with_embedding_schema,
     count_indexable_documents("admin/embdb/local/branch/main", "main",
                               CommitId, Count),
     assertion(Count == 3).
+
+test(schema_store_clustering_returns_true_when_option_present,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "clusterdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#",
+    "@metadata": {
+      "terminusdb": {
+        "options": ["store_clustering"]
+      }
+    }
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/clusterdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/clusterdb/local/branch/main", Desc),
+    open_descriptor(Desc, Transaction),
+    database_schema(Transaction, Schema),
+    schema_store_clustering(Schema, Result),
+    assertion(Result == true).
+
+test(schema_store_clustering_returns_false_when_option_absent,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "noclusterdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/noclusterdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/noclusterdb/local/branch/main", Desc),
+    open_descriptor(Desc, Transaction),
+    database_schema(Transaction, Schema),
+    schema_store_clustering(Schema, Result),
+    assertion(Result == false).
+
+test(schema_store_clustering_for_path_returns_false_for_schemaless_db,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "schemadb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    schema_store_clustering_for_path("admin/schemadb/local/branch/main", Result),
+    assertion(Result == false).
 
 :- end_tests(indexer_predicates).
 

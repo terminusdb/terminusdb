@@ -53,9 +53,9 @@ describe('plugin-endpoints', function () {
       expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
     })
 
-    it('GET /api/statistics/{path} returns 400 when endpoint is not configured', async function () {
+    it('GET /api/index/{path} returns 400 when endpoint is not configured', async function () {
       const r = await agent
-        .get(`/api/statistics/${agent.orgName}/${agent.dbName}`)
+        .get(`/api/index/${agent.orgName}/${agent.dbName}`)
       expect(r.status).to.equal(400)
       expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
     })
@@ -69,13 +69,37 @@ describe('plugin-endpoints', function () {
     })
   })
 
-  describe('vectorlink plugin routes', function () {
+  describe('index endpoint response format', function () {
     it('GET /api/index/{path} returns 400 when endpoint is not configured', async function () {
       const r = await agent
         .get(`/api/index/${agent.orgName}/${agent.dbName}`)
         .query({ commit_id: 'placeholder' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:SemanticIndexerEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+    })
+
+    it('POST /api/index/{path} returns valid JSON (not Prolog json{} term)', async function () {
+      const r = await agent
+        .post(`/api/index/${agent.orgName}/${agent.dbName}/local/branch/main`)
+      // Regression: handler used write(json{...}) which produced invalid JSON
+      // like "json{@type:api:IndexResponse,api:status:api:success}" instead of
+      // proper JSON. The response must be parseable JSON in all cases
+      // (success, error, or endpoint-not-configured).
+      expect(r.text).to.not.match(/^json\{/)
+      expect(r.body).to.be.an('object')
+      expect(r.body).to.have.property('@type')
+      expect(r.body).to.have.property('api:status')
+    })
+
+    it('DELETE /api/index/{path} returns valid JSON (not Prolog json{} term)', async function () {
+      const r = await agent
+        .delete(`/api/index/${agent.orgName}/${agent.dbName}/local/branch/main`)
+      // Regression: handler used write(json{...}) which produced invalid JSON.
+      // The response must be parseable JSON in all cases.
+      expect(r.text).to.not.match(/^json\{/)
+      expect(r.body).to.be.an('object')
+      expect(r.body).to.have.property('@type')
+      expect(r.body).to.have.property('api:status')
     })
   })
 })

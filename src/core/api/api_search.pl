@@ -43,7 +43,8 @@ backend is none or http_vectorlink.
     encode_query_value/2,
     io_push_delta/4,
     descriptor_graphspec/2,
-    validate_index_path/1
+    validate_index_path/1,
+    schema_store_clustering_for_path/2
 ]).
 :- use_module(core(transaction)).
 :- use_module(core(transaction/ref_entity), [
@@ -451,7 +452,9 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
         % (O(1) FFI call — no HTTP, no NDJSON generation from Prolog).
         (   plugin_api:indexer_available
         ->  catch(
-                (plugin_api:indexer_notify(Path, Branch) ; true),
+                (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
+                    (plugin_api:indexer_notify(Path, Branch, Store_Clustering) ; true)
+                ),
                 Nudge_Error,
                 format(user_error,
                        "[WARN] Search stale-version nudge failed for ~w: ~q~n",

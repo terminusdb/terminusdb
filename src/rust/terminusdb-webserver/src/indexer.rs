@@ -213,6 +213,9 @@ struct BranchTask {
     next_commit: StdMutex<Option<String>>,
     /// Cancellation token — when set, the task should exit.
     cancel: tokio_util::sync::CancellationToken,
+    /// Whether to request clustering embeddings from tdb-search on push.
+    /// Read from the schema @context @metadata.terminusdb.options at notify time.
+    store_clustering: std::sync::atomic::AtomicBool,
 }
 
 /// The global indexer registry.
@@ -255,13 +258,14 @@ impl IndexerRegistry {
 
     /// Notify that a commit happened on a branch. If a task already exists,
     /// increment its notify_count. If not, create a new task and enqueue it.
-    fn notify(&self, path: String, branch: String) -> Result<(), String> {
+    fn notify(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
         let key = BranchKey { path, branch };
         let mut tasks = self.tasks.lock().unwrap();
 
         if let Some(task) = tasks.get(&key) {
-            // Task exists — increment notify_count.
+            // Task exists — increment notify_count and update store_clustering.
             task.notify_count.fetch_add(1, Ordering::SeqCst);
+            task.store_clustering.store(store_clustering, Ordering::SeqCst);
             // If the task is already Completed, re-enqueue it for
             // scheduling so the new commits get processed.
             let is_completed = matches!(
@@ -286,6 +290,7 @@ impl IndexerRegistry {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(None),
             cancel: cancel.clone(),
+            store_clustering: std::sync::atomic::AtomicBool::new(store_clustering),
         });
         tasks.insert(key.clone(), task);
         drop(tasks);
@@ -342,7 +347,7 @@ impl IndexerRegistry {
         *self.current_branch.lock().unwrap() = Some(key.clone());
 
         // Get the task data.
-        let (progress, cancel, next_commit) = {
+        let (progress, cancel, next_commit, store_clustering) = {
             let tasks = self.tasks.lock().unwrap();
             match tasks.get(&key) {
                 Some(task) => {
@@ -351,7 +356,8 @@ impl IndexerRegistry {
                     // report a stale scheduling value while the task runs.
                     // on_task_complete will set it from X-Next-Commit header.
                     *task.next_commit.lock().unwrap() = None;
-                    (task.progress.clone(), task.cancel.clone(), nc)
+                    let sc = task.store_clustering.load(Ordering::SeqCst);
+                    (task.progress.clone(), task.cancel.clone(), nc, sc)
                 },
                 None => {
                     // Task was removed (e.g. by abort_domain) — skip.
@@ -412,6 +418,7 @@ impl IndexerRegistry {
                             progress.clone(),
                             cancel,
                             next_commit,
+                            store_clustering,
                         )
                     )
                     .catch_unwind()
@@ -677,6 +684,7 @@ async fn run_commit_task(
     progress: Arc<BranchProgress>,
     cancel: tokio_util::sync::CancellationToken,
     next_commit: Option<String>,
+    store_clustering: bool,
 ) -> TaskResult {
     if cancel.is_cancelled() {
         return TaskResult::Error("task cancelled".to_string());
@@ -858,6 +866,7 @@ async fn run_commit_task(
         pipe_receiver,
         &cancel,
         &progress,
+        store_clustering,
     ).await;
 
     // Clear the current commit marker — the task is done.
@@ -936,27 +945,36 @@ async fn post_push_stream(
     mut receiver: PipeReceiver,
     cancel: &tokio_util::sync::CancellationToken,
     progress: &Arc<BranchProgress>,
+    store_clustering: bool,
 ) -> Result<(), String> {
     use futures::StreamExt;
     use http_body_util::StreamBody;
     use http_body::Frame;
 
+    let clustering_param = if store_clustering {
+        "&store_clustering=true"
+    } else {
+        ""
+    };
+
     let url = if parent_commit == "none" || parent_commit.is_empty() {
         format!(
-            "{}/push?domain={}&branch={}&target_commit={}&stream=true",
+            "{}/push?domain={}&branch={}&target_commit={}&stream=true{}",
             tdb_search_url.trim_end_matches('/'),
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
+            clustering_param,
         )
     } else {
         format!(
-            "{}/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true",
+            "{}/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true{}",
             tdb_search_url.trim_end_matches('/'),
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
             urlencoding::encode(parent_commit),
+            clustering_param,
         )
     };
 
@@ -1216,12 +1234,13 @@ predicates! {
     /// Notify the indexer that a commit happened on a branch.
     /// If a task already exists, increments notify_count and returns immediately.
     /// If no task exists, creates one and enqueues it for scheduling.
-    /// Signature: indexer_notify(+Path, +BranchName)
     #[module("$appserver")]
-    pub semidet fn indexer_notify(_context, path_term, branch_term) {
+    /// Signature: indexer_notify(+Path, +BranchName, +StoreClustering)
+    pub semidet fn indexer_notify(_context, path_term, branch_term, store_clustering_term) {
         let path: PrologText = path_term.get_ex()?;
         let branch: PrologText = branch_term.get_ex()?;
-        indexer_registry().notify(path.into_inner(), branch.into_inner()).map_err(|e| {
+        let store_clustering: bool = store_clustering_term.get_ex()?;
+        indexer_registry().notify(path.into_inner(), branch.into_inner(), store_clustering).map_err(|e| {
             crate::log::log_error(format!("[indexer] notify failed: {}", e));
             PrologError::Failure
         })
