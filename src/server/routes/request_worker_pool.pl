@@ -1,7 +1,9 @@
 :- module(request_worker_pool, [
                   init_request_worker_pool/1,
                   dispatch_request/5,
-                  dispatch_request/6
+                  dispatch_request/6,
+                  worker_pool_stats/1,
+                  worker_busy_stats/1
               ]).
 
 :- use_module(library(http/http_dispatch)).
@@ -18,7 +20,8 @@
 :- use_module(library(unix)).
 :- use_module(library(uri)).
 :- use_module(core(appserver_hooks)).
-:- use_module(core(util)).
+:- use_module(core(util), [saved_request/5]).
+:- use_module(core(util/json_log)).
 :- use_module(server(routes/srv_http)).
 :- use_module(server(routes/tdb_http_handler)).
 
@@ -52,6 +55,30 @@
 :- dynamic worker_busy/2.
 :- dynamic watchdog_running/0.
 :- dynamic watchdog_queue/1.
+
+%% worker_pool_stats(-Stats) is det.
+%%
+%%  Returns a dict with pool size, idle count, and busy count.
+%%  Intended for Prometheus metrics collection.
+worker_pool_stats(Stats) :-
+    findall(Alias, worker(_, _, Alias), AllAliases),
+    length(AllAliases, Total),
+    findall(Alias, worker_busy(Alias, _), BusyAliases),
+    length(BusyAliases, Busy),
+    Idle is Total - Busy,
+    Stats = _{total: Total, idle: Idle, busy: Busy}.
+
+%% worker_busy_stats(-BusyList) is det.
+%%
+%%  Returns a list of dicts with alias and dispatch_time_seconds
+%%  for each currently busy worker.
+worker_busy_stats(BusyList) :-
+    findall(_{alias: Alias, dispatch_time_seconds: Seconds},
+            (   worker_busy(Alias, DispatchTime),
+                get_time(Now),
+                Seconds is Now - DispatchTime
+            ),
+            BusyList).
 
 %% watchdog_grace_period(-Grace) is det.
 %%
@@ -305,6 +332,7 @@ worker_loop(Queue) :-
         ),
         catch(
             (   cleanup_worker_state,
+                track_atom_growth,
                 log_worker_memory(after, HandlerModule, HandlerName)
             ),
             CleanupError,
@@ -329,6 +357,7 @@ worker_loop(Queue) :-
         ),
         catch(
             (   cleanup_worker_state,
+                track_atom_growth,
                 log_worker_memory(after, HandlerModule, HandlerName)
             ),
             CleanupError,
@@ -357,6 +386,12 @@ worker_loop(Queue) :-
 %%  garbage_collect_atoms when the atom count exceeds a threshold,
 %%  rather than on every request.
 cleanup_worker_state :-
+    %% Abolish tables BEFORE garbage_collect so atoms held by table
+    %% entries can actually be collected. Tables keyed on Layer
+    %% references accumulate across requests because each
+    %% open_descriptor creates a new Layer object, and the old table
+    %% entries are never invalidated.
+    abolish_all_tables,
     get_time(T0),
     garbage_collect,
     get_time(T1),
@@ -376,6 +411,28 @@ cleanup_worker_state :-
             "SLOW_GC: garbage_collect took ~3f seconds, trim_stacks took ~3f seconds, atom_gc took ~3f seconds, atoms=~w",
             [GCTime, TrimTime, GCAtomTime, AtomCount])
     ;   true
+    ).
+
+%% track_atom_growth(+BeforeCount, +AfterCount, +HandlerModule, +HandlerName)
+%%
+%%  Log when a single request creates more than 1000 new atoms that survive
+%%  garbage_collect. This helps identify atom leakage sources.
+:- dynamic atom_count_before/2.  % atom_count_before(ThreadId, Count)
+track_atom_growth :-
+    thread_self(ThreadId),
+    (   atom_count_before(ThreadId, Before)
+    ->  statistics(atoms, After),
+        Growth is After - Before,
+        (   Growth > 100
+        ->  json_log_error_formatted(
+                "ATOM_GROWTH: ~w new atoms survived GC (before=~w, after=~w)",
+                [Growth, Before, After])
+        ;   true
+        ),
+        retractall(atom_count_before(ThreadId, _)),
+        assertz(atom_count_before(ThreadId, After))
+    ;   statistics(atoms, Current),
+        assertz(atom_count_before(ThreadId, Current))
     ).
 
 %% log_worker_memory(+Phase, +HandlerModule, +HandlerName) is det.
@@ -404,9 +461,6 @@ log_worker_memory(Phase, HandlerModule, HandlerName) :-
 %%  dispatches via http_dispatch_with_expansion. The response is captured
 %%  and sent to the output stream.
 %%
-%%  For stream handlers (HandlerName == stream_handler), the ResponseStreamId
-%%  is made available so that ndjson streaming can use it.
-%%
 %%  Two paths:
 %%    - Buffered: parsed_body present (Content-Length set). Drain input stream,
 %%      build SWI request, call handler with body or parsed_body.
@@ -414,8 +468,7 @@ log_worker_memory(Phase, HandlerModule, HandlerName) :-
 %%      to handler via Request dict. Handler drains chunks itself via
 %%      appserver_stream_recv/2, enabling true incremental streaming.
 handle_stream_work(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
-    (   \+ get_dict(parsed_body, Request, _),
-        HandlerName \== stream_handler
+    (   \+ get_dict(parsed_body, Request, _)
     ->  handle_stream_work_raw(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)
     ;   handle_stream_work_buffered(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)
     ).
@@ -510,7 +563,13 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                     ),
                     Error,
                     handle_handler_error(Error, OutStream, CGI)
-                )
+                ),
+                % Clean up saved_request/5 facts that were asserted by
+                % http:request_expansion/2 during handler execution.
+                % In the SWI-Prolog HTTP server, this is done via
+                % http(request_finished(...)) broadcast events, but the
+                % Rust backend does not emit those events.
+                retractall_saved_request_for_request(SWIRequest)
             ;   HandlerModule == indexer_worker
             ->  catch(
                     (   indexer_worker:indexer_process_commit_handler(Request, OutStream)
@@ -542,6 +601,17 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
             (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
         )
     ).
+
+%% retractall_saved_request_for_request(+SWIRequest) is det.
+%%
+%%  Clean up saved_request/5 facts asserted by http:request_expansion/2
+%%  during handler execution. The Rust backend does not emit
+%%  http(request_finished(...)) broadcast events, so without this
+%%  cleanup, saved_request/5 facts accumulate indefinitely.
+%%  Each worker processes one request at a time, so retracting all
+%%  is safe.
+retractall_saved_request_for_request(_SWIRequest) :-
+    retractall(saved_request(_, _, _, _, _)).
 
 %% call_raw_plugin_handler(+Module, +Handler, +Request, +OutStream) is det.
 %%

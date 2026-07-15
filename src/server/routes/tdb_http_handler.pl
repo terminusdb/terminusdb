@@ -17,7 +17,6 @@
 
 :- multifile appserver_hooks:appserver_route/3.
 :- multifile appserver_hooks:appserver_route/4.
-:- multifile appserver_hooks:appserver_stream/3.
 
 :- meta_predicate tdb_http_handler(+, :, +).
 

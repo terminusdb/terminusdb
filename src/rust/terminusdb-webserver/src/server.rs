@@ -4,11 +4,32 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use axum::middleware::Next;
+use axum::extract::Request;
 use serde_json::json;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::routes::root_redirect;
+
+/// Global counter for active HTTP connections.
+static ACTIVE_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Get the current number of active connections.
+pub fn active_connections() -> u64 {
+    ACTIVE_CONNECTIONS.load(Ordering::SeqCst)
+}
+
+/// Middleware that tracks active connections by incrementing on entry
+/// and decrementing when the response completes.
+async fn connection_counter_middleware(req: Request, next: Next) -> impl IntoResponse {
+    ACTIVE_CONNECTIONS.fetch_add(1, Ordering::SeqCst);
+    let resp = next.run(req).await;
+    ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::SeqCst);
+    resp
+}
 
 /// Build the Axum application router.
 ///
@@ -164,7 +185,8 @@ pub fn start_with_routes(
                 .merge(plugin_router)
                 .merge(static_router)
                 .merge(stream_router)
-                .fallback(fallback_not_found);
+                .fallback(fallback_not_found)
+                .layer(axum::middleware::from_fn(connection_counter_middleware));
             let tokio_listener = match tokio::net::TcpListener::from_std(listener) {
                 Ok(listener) => listener,
                 Err(e) => {

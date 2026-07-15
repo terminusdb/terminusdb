@@ -474,6 +474,16 @@ predicates! {
         }
         .map_err(|_| PrologError::Failure)
     }
+
+    /// Get the current number of active HTTP connections in the Rust webserver.
+    ///
+    /// Signature: `appserver_active_connections(-Count)` where Count is a
+    /// non-negative integer.
+    #[module("$appserver")]
+    pub semidet fn appserver_active_connections(_context, count_term) {
+        let count = crate::server::active_connections();
+        count_term.unify(count).map_err(|_| PrologError::Failure)
+    }
 }
 
 pub fn register() {
@@ -492,4 +502,5 @@ pub fn register() {
     register_appserver_stream_recv_lines();
     register_appserver_open_fd_stream();
     register_appserver_close_fd();
+    register_appserver_active_connections();
 }
