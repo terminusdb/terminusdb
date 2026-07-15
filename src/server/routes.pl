@@ -166,9 +166,22 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         (   param_value_search_optional(Search, start, integer, 0, Start),
             param_value_search_optional(Search, count, integer, -1, Count),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
+            param_value_search_optional(Search, stream, boolean, false, Stream),
             Options = opts{ start: Start, count: Count, verbose: Verbose},
-            api_log(System_DB, Auth, Path, Log, Options),
-            cors_reply_json(Request, Log))).
+            (   Stream = true
+            ->  write_cors_headers(Request),
+                format('Status: 200~n'),
+                format('Content-Type: application/x-ndjson~n'),
+                format('Cache-Control: no-cache~n'),
+                format('X-Accel-Buffering: no~n'),
+                format('Connection: close~n'),
+                format("Transfer-Encoding: chunked~n~n"),
+                flush_output,
+                api_log:api_log_streaming(System_DB, Auth, Path, Options)
+            ;   api_log(System_DB, Auth, Path, Log, Options),
+                cors_reply_json(Request, Log)
+            )
+        )).
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -4413,6 +4426,16 @@ save_request(Request) :-
 http:request_expansion(Request, Request) :-
     save_request(Request).
 
+http_request_logger(request_finished(Local_Id, Code, Status, Cpu, Bytes)) :-
+    % Always retract saved_request/5 to prevent unbounded accumulation.
+    % The retraction must happen regardless of log level.
+    (   retract(saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs))
+    ->  (   info_log_enabled
+        ->  http_request_log_finished(Local_Id, Code, Status, Cpu, Bytes,
+                                       Start, Path, Submitted_Operation_Id, Initial_Http_Pairs)
+        ;   true)
+    ;   true),  % nothing to retract — request may have been logged differently
+    !.
 http_request_logger(_) :-
     % Skip work if info log is not enabled
     \+ info_log_enabled,
@@ -4438,11 +4461,9 @@ http_request_logger(request_start(Local_Id, Request)) :-
                   Request_Id,
                    Dict).
 
-http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
+http_request_log_finished(Local_Id, Code, _Status, _Cpu, Bytes,
+                           Start, Path, Submitted_Operation_Id, Initial_Http_Pairs) :-
     term_string(Bytes, Bytes_String),
-
-    saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs),
-    retract(saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs)),
     get_time(Now),
     Latency is Now - Start,
     format(string(Latency_String), "~9fs", [Latency]),
