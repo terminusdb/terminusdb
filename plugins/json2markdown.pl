@@ -30,6 +30,7 @@ The /4 hook (with graphspec) is tried first, then the /3 hook (without).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(dicts)).
+:- use_module(core(triple/casting), [decimal_precision/1, rational_to_decimal_string/3]).
 
 % ==========================================================================
 % Config
@@ -230,7 +231,8 @@ render_list([Item | Rest], Level) :-
     ->  format("- ~n", []),
         NextLevel is Level + 1,
         render_list(Item, NextLevel)
-    ;   format("- ~w~n", [Item])
+    ;   scalar_to_string(Item, ItemStr),
+        format("- ~w~n", [ItemStr])
     ),
     render_list(Rest, Level).
 
@@ -252,7 +254,9 @@ render_pairs_indented([Key-Value | Rest], Level) :-
         NextLevel is Level + 1,
         render_list_indented(Value, NextLevel)
     ;   indent(Level),
-        format("**~w**: ~w~n", [PrettyKey, Value])
+        format("**~w**: ", [PrettyKey]),
+        render_scalar(Value),
+        nl
     ),
     render_pairs_indented(Rest, Level).
 
@@ -267,15 +271,30 @@ render_list_indented([Item | Rest], Level) :-
     ->  format("- ~n", []),
         NextLevel is Level + 1,
         render_list_indented(Item, NextLevel)
-    ;   format("- ~w~n", [Item])
+    ;   scalar_to_string(Item, ItemStr),
+        format("- ~w~n", [ItemStr])
     ),
     render_list_indented(Rest, Level).
 
 render_scalar(Value) :-
-    (   atom(Value) -> format("~w", [Value])
+    (   rational(Value), \+ integer(Value)
+    ->  decimal_precision(Precision),
+        rational_to_decimal_string(Value, DecimalStr, Precision),
+        format("~w", [DecimalStr])
+    ;   atom(Value) -> format("~w", [Value])
     ;   string(Value) -> format("~w", [Value])
     ;   number(Value) -> format("~w", [Value])
     ;   true -> format("~w", [Value])
+    ).
+
+scalar_to_string(Value, Str) :-
+    (   rational(Value), \+ integer(Value)
+    ->  decimal_precision(Precision),
+        rational_to_decimal_string(Value, Str, Precision)
+    ;   atom(Value) -> atom_string(Value, Str)
+    ;   string(Value) -> Str = Value
+    ;   number(Value) -> number_string(Value, Str)
+    ;   term_string(Value, Str)
     ).
 
 heading(Level, Key) :-
@@ -407,5 +426,25 @@ test(pretty_key_leaves_uppercase) :-
 test(pretty_key_multiple_underscores) :-
     pretty_key('user_id_number', PK),
     sub_string(PK, _, _, _, "User Id Number").
+
+test(rational_scalar_value) :-
+    Doc = json{depth: 313r10},
+    json_to_markdown(Doc, MD),
+    \+ sub_string(MD, _, _, _, "313r10"),
+    sub_string(MD, _, _, _, "31.3").
+
+test(rational_in_list) :-
+    Doc = json{values: [181r5, 471r5]},
+    json_to_markdown(Doc, MD),
+    \+ sub_string(MD, _, _, _, "181r5"),
+    \+ sub_string(MD, _, _, _, "471r5"),
+    sub_string(MD, _, _, _, "36.2"),
+    sub_string(MD, _, _, _, "94.2").
+
+test(rational_in_nested_dict) :-
+    Doc = json{size: json{width: 313r10, height: 471r5}},
+    json_to_markdown(Doc, MD),
+    \+ sub_string(MD, _, _, _, "r10"),
+    \+ sub_string(MD, _, _, _, "r5").
 
 :- end_tests(json2markdown_unit).
