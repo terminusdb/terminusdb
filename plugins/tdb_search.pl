@@ -12,7 +12,7 @@
     io_duplicates_forward/6,
     io_statistics_forward/6,
     io_statistics_for_domain/3,
-    io_resolve_forward/6,
+    io_resolve_forward/7,
     io_compare_forward/4,
     io_compare_forward/5,
     io_embeddings_forward/8,
@@ -44,7 +44,7 @@ Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
 :- use_module(core(query/jsonld), [compress_dict_uri/3, prefix_expand/3]).
 :- use_module(core(transaction)).
 :- use_module(core(transaction/ref_entity), [branch_head_commit/3, commit_id_uri/3,
-    commit_uri_to_history_commit_ids/3]).
+    commit_uri_to_history_commit_ids/3, commit_id_to_metadata/5]).
 :- use_module(core(util)).
 :- use_module(core(account)).
 :- use_module(core(account/capabilities), [resolve_descriptor_auth/6,
@@ -265,7 +265,8 @@ tdb_http_get(URL, Status, Body) :-
         http_open(URL, In,
                   [ request_header('Authorization'=AuthHeader),
                     request_header('Accept'='application/json'),
-                    status_code(Status) ]),
+                    status_code(Status),
+                    timeout(30) ]),
         read_string(In, _, Body),
         close(In)).
 
@@ -561,7 +562,18 @@ branch_path_for_notify(Path, Branch_Name, Branch_Path) :-
     exclude(=(""), Segments_Unfiltered, Segments),
     length(Segments, N),
     (   N =:= 5
-    ->  Branch_Path = Path
+    ->  nth1(4, Segments, Seg4),
+        text_to_string(Seg4, Seg4_Str),
+        (   Seg4_Str == "branch"
+        ->  Branch_Path = Path
+        ;   Seg4_Str == "commit"
+        ->  nth1(1, Segments, Org),
+            nth1(2, Segments, DB),
+            nth1(3, Segments, Repo),
+            format(atom(Branch_Path), "~w/~w/~w/branch/~w", [Org, DB, Repo, Branch_Name])
+        ;   throw(error(invalid_index_path(Path,
+                            bad_segment_4(Seg4, expected_branch_or_commit)), _))
+        )
     ;   N =:= 2
     ->  format(atom(Branch_Path), "~w/local/branch/~w", [Path, Branch_Name])
     ).
@@ -587,9 +599,24 @@ io_index_branch(System_DB, Auth, Path) :-
         error(tdb_search_endpoint_not_configured(io_index_branch), _)),
     resolve_absolute_string_descriptor(Path, Descriptor),
     do_or_die(
-        branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+        (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+        ->  true
+        ;   commit_descriptor{repository_descriptor: Repo_Desc, commit_id: Commit_Id} :< Descriptor
+        ->  branch_for_commit(Repo_Desc, Commit_Id, Branch_Name)
+        ),
         error(push_requires_branch_descriptor(Path), _)),
     io_push_delta(System_DB, Auth, Path, Branch_Name).
+
+%% branch_for_commit(+Repo_Desc, +Commit_Id, -Branch_Name) is semidet.
+%
+%  Find the branch whose head commit matches Commit_Id.
+%  Tries each branch in the repository and returns the first match.
+%  Fails if no branch has this commit as its head.
+branch_for_commit(Repo_Desc, Commit_Id, Branch_Name) :-
+    commit_id_uri(Repo_Desc, Commit_Id, Commit_Uri),
+    has_branch(Repo_Desc, Branch_Name),
+    branch_head_commit(Repo_Desc, Branch_Name, Commit_Uri),
+    !.
 
 % ==========================================================================
 % Auto-push-on-commit hook
@@ -631,32 +658,44 @@ length_bounded_prefix(List, Max, Prefix) :-
         append(Prefix, _, List)
     ).
 
-build_search_url(Endpoint, Domain, Commit, Ancestors, URL) :-
-    plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
-    ancestor_query_params(Ancestors, Ancestor_Params),
-    format(atom(URL), "~w/search?domain=~w&commit=~w~w",
-           [Endpoint, Enc_Domain, Enc_Commit, Ancestor_Params]).
+%% search_ref_param(+Search_Ref, -ParamString) is det.
+%
+%  Builds the query parameter string for either a commit or branch reference.
+%  commit(Commit_Id) → "&commit=<id>"
+%  branch(Branch_Name) → "&branch=<name>"
+search_ref_param(commit(Commit), ParamString) :-
+    plugin_api:encode_query_value(Commit, Enc),
+    format(atom(ParamString), "&commit=~w", [Enc]).
+search_ref_param(branch(Branch), ParamString) :-
+    plugin_api:encode_query_value(Branch, Enc),
+    format(atom(ParamString), "&branch=~w", [Enc]).
 
-build_similar_url(Endpoint, Domain, Commit, Ancestors, URL) :-
+build_search_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
+    search_ref_param(Search_Ref, Ref_Params),
     ancestor_query_params(Ancestors, Ancestor_Params),
-    format(atom(URL), "~w/similar?domain=~w&commit=~w~w",
-           [Endpoint, Enc_Domain, Enc_Commit, Ancestor_Params]).
+    format(atom(URL), "~w/search?domain=~w~w~w",
+           [Endpoint, Enc_Domain, Ref_Params, Ancestor_Params]).
 
-build_duplicates_url(Endpoint, Domain, Commit, URL) :-
+build_similar_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
-    format(atom(URL), "~w/duplicates?domain=~w&commit=~w",
-           [Endpoint, Enc_Domain, Enc_Commit]).
-
-build_statistics_url(Endpoint, Domain, Commit, Ancestors, URL) :-
-    plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
+    search_ref_param(Search_Ref, Ref_Params),
     ancestor_query_params(Ancestors, Ancestor_Params),
-    format(atom(URL), "~w/statistics?domain=~w&commit=~w~w",
-           [Endpoint, Enc_Domain, Enc_Commit, Ancestor_Params]).
+    format(atom(URL), "~w/similar?domain=~w~w~w",
+           [Endpoint, Enc_Domain, Ref_Params, Ancestor_Params]).
+
+build_duplicates_url(Endpoint, Domain, Search_Ref, URL) :-
+    plugin_api:encode_query_value(Domain, Enc_Domain),
+    search_ref_param(Search_Ref, Ref_Params),
+    format(atom(URL), "~w/duplicates?domain=~w~w",
+           [Endpoint, Enc_Domain, Ref_Params]).
+
+build_statistics_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
+    plugin_api:encode_query_value(Domain, Enc_Domain),
+    search_ref_param(Search_Ref, Ref_Params),
+    ancestor_query_params(Ancestors, Ancestor_Params),
+    format(atom(URL), "~w/statistics?domain=~w~w~w",
+           [Endpoint, Enc_Domain, Ref_Params, Ancestor_Params]).
 
 ancestor_query_params([], "") :- !.
 ancestor_query_params(Ancestors, ParamString) :-
@@ -667,52 +706,52 @@ ancestor_param_fragment(Ancestor, Fragment) :-
     plugin_api:encode_query_value(Ancestor, Enc),
     format(atom(Fragment), "&ancestor=~w", [Enc]).
 
-io_search_forward(Endpoint, Domain, Commit, Ancestors,
+io_search_forward(Endpoint, Domain, Search_Ref, Ancestors,
                   Extra_Params, Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_search_url(Endpoint, Domain, Commit, Ancestors, Base_URL),
+    build_search_url(Endpoint, Domain, Search_Ref, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
-io_similar_forward(Endpoint, Domain, Commit, Ancestors,
+io_similar_forward(Endpoint, Domain, Search_Ref, Ancestors,
                    Extra_Params, Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_similar_url(Endpoint, Domain, Commit, Ancestors, Base_URL),
+    build_similar_url(Endpoint, Domain, Search_Ref, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
-%% io_similar_forward_post(+Endpoint, +Domain, +Commit, +Ancestors,
+%% io_similar_forward_post(+Endpoint, +Domain, +Search_Ref, +Ancestors,
 %%                          +Extra_Params, +Post_Body, -Response_Body,
 %%                          -Data_Version_Header) is det.
 %
 %  Forwards a similar request as POST with a JSON body to tdb-search.
 %  Used for text-based similarity search where the body contains
 %  {text: "..."} instead of an id lookup.
-io_similar_forward_post(Endpoint, Domain, Commit, Ancestors,
+io_similar_forward_post(Endpoint, Domain, Search_Ref, Ancestors,
                         Extra_Params, Post_Body, Response_Body,
                         Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_similar_url(Endpoint, Domain, Commit, Ancestors, Base_URL),
+    build_similar_url(Endpoint, Domain, Search_Ref, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_post(URL, AuthHeader, Post_Body, Response_Body,
                     Data_Version_Header).
 
-io_duplicates_forward(Endpoint, Domain, Commit,
+io_duplicates_forward(Endpoint, Domain, Search_Ref,
                       Extra_Params, Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_duplicates_url(Endpoint, Domain, Commit, Base_URL),
+    build_duplicates_url(Endpoint, Domain, Search_Ref, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
-io_statistics_forward(Endpoint, Domain, Commit, Ancestors,
+io_statistics_forward(Endpoint, Domain, Search_Ref, Ancestors,
                       Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_statistics_url(Endpoint, Domain, Commit, Ancestors, URL),
+    build_statistics_url(Endpoint, Domain, Search_Ref, Ancestors, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
 %% io_statistics_for_domain(+Endpoint, +Domain, -Stats) is det.
@@ -731,18 +770,18 @@ io_statistics_for_domain(Endpoint, Domain, Stats) :-
         error(tdb_search_statistics_failed(Status, Body_String), _)),
     atom_json_dict(Body_String, Stats, [default_tag(json)]).
 
-build_suggest_url(Endpoint, Domain, Commit, Ancestors, URL) :-
+build_suggest_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
+    search_ref_param(Search_Ref, Ref_Params),
     ancestor_query_params(Ancestors, Ancestor_Params),
-    format(atom(URL), "~w/suggest?domain=~w&commit=~w~w",
-           [Endpoint, Enc_Domain, Enc_Commit, Ancestor_Params]).
+    format(atom(URL), "~w/suggest?domain=~w~w~w",
+           [Endpoint, Enc_Domain, Ref_Params, Ancestor_Params]).
 
-io_suggest_forward(Endpoint, Domain, Commit, Ancestors,
+io_suggest_forward(Endpoint, Domain, Search_Ref, Ancestors,
                    Extra_Params, Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_suggest_url(Endpoint, Domain, Commit, Ancestors, Base_URL),
+    build_suggest_url(Endpoint, Domain, Search_Ref, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
@@ -1002,6 +1041,14 @@ maybe_compact_response(true, Response_Body, Descriptor, Final_Body) :-
     compact_response_ids(Response_Body, Descriptor, Final_Body).
 maybe_compact_response(false, Response_Body, _Descriptor, Response_Body).
 
+%% nudge_commit(+Search_Ref, -Nudge_Commit) is det.
+%
+%  Extracts the commit ID for nudge purposes. For commit descriptors,
+%  returns the commit ID. For branch descriptors, returns none (skip
+%  sync nudge — branch searches rely on async nudge only).
+nudge_commit(commit(Commit_Id), Commit_Id) :- !.
+nudge_commit(branch(_), none).
+
 maybe_nudge_push(none, _Commit, _System_DB, _Auth, _Path, _Branch) :- !.
 maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :- !,
     format(string(Expected_DV), "commit:~w", [Commit]),
@@ -1066,19 +1113,24 @@ maybe_nudge_push_async(System_DB, Auth, Path, Branch) :-
         )
     ).
 
-build_resolve_url(Endpoint, Domain, Commit, URL) :-
+build_resolve_url(Endpoint, Domain, Search_Ref, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
-    format(atom(URL), "~w/candidates?domain=~w&commit=~w",
-           [Endpoint, Enc_Domain, Enc_Commit]).
+    search_ref_param(Search_Ref, Ref_Params),
+    format(atom(URL), "~w/candidates?domain=~w~w",
+           [Endpoint, Enc_Domain, Ref_Params]).
 
-io_resolve_forward(Endpoint, Domain, Commit, Ancestors,
-                   Body_Dict, Response_Body) :-
+io_resolve_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                   Body_Dict, Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
     format(atom(Resolve_URL), "~w/candidates", [Endpoint]),
-    put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
-             Body_Dict, Forward_Body),
+    (   Search_Ref = commit(Commit)
+    ->  put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
+                 Body_Dict, Forward_Body)
+    ;   Search_Ref = branch(Branch),
+        put_dict(_{domain: Domain, branch: Branch, ancestors: Ancestors},
+                 Body_Dict, Forward_Body)
+    ),
     setup_call_cleanup(
         http_open(Resolve_URL, In,
                   [ method(post),
@@ -1086,10 +1138,12 @@ io_resolve_forward(Endpoint, Domain, Commit, Ancestors,
                     status_code(Status),
                     AuthHeader,
                     request_header('Content-Type' = 'application/json'),
-                    request_header('Accept' = 'application/json')
+                    request_header('Accept' = 'application/json'),
+                    header(terminusdb_data_version, DV_Raw)
                   ]),
         read_string(In, _, Response_Body),
         close(In)),
+    normalise_data_version_header(DV_Raw, Data_Version_Header),
     handle_forward_response(Status, Response_Body, Resolve_URL).
 
 build_delete_domain_url(Endpoint, Domain, URL) :-
@@ -1176,6 +1230,59 @@ plugins:post_delete_db_hook(Organization, DB_Name) :-
     ).
 
 % ==========================================================================
+% Commit resolution: use the descriptor's commit or branch name.
+%
+% If the URL path is /commit/<id> (commit_descriptor), search that commit.
+% Otherwise (branch_descriptor), pass the branch name to tdb-search which
+% resolves it to the latest indexed commit internally.
+% ==========================================================================
+
+%% resolve_search_commit(+Descriptor, -Search_Ref, -Commit_Uri, -Ancestors) is det.
+%
+%  Returns a search reference: either commit(Commit_Id) for commit
+%  descriptors, or branch(Branch_Name) for branch descriptors.
+%  Commit_Uri and Ancestors are only meaningful for commit descriptors;
+%  for branch descriptors they are '' and [] respectively.
+resolve_search_commit(Descriptor, Search_Ref, Commit_Uri, Ancestors) :-
+    (   commit_descriptor{commit_id: Commit_Id} :< Descriptor
+    ->  get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+        tdb_search:commit_id_uri(Repository_Descriptor, Commit_Id, Commit_Uri),
+        tdb_search:ancestor_window(Repository_Descriptor, Commit_Uri, 100, Ancestors),
+        Search_Ref = commit(Commit_Id)
+    ;   branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+        Commit_Uri = '',
+        Ancestors = [],
+        Search_Ref = branch(Branch_Name)
+    ).
+
+%% commit_timestamp(+Repository_Descriptor, +Commit_Id, -Timestamp) is det.
+%
+%  Looks up the commit timestamp from the repository. Returns none on failure.
+commit_timestamp(Repository_Descriptor, Commit_Id, Timestamp) :-
+    catch(
+        (   commit_id_to_metadata(Repository_Descriptor, Commit_Id,
+                                             _Author, _Message, Timestamp)
+        ),
+        _,
+        Timestamp = none
+    ).
+
+%% reply_search_with_metadata(+Request, +Response_Body, +Data_Version_Header,
+%%                             +Repository_Descriptor) is det.
+%
+%  Extracts the served commit from the data version header, looks up its
+%  timestamp, and calls reply_search_response with both.
+reply_search_with_metadata(Request, Response_Body, Data_Version_Header,
+                           Repository_Descriptor) :-
+    tdb_search:extract_commit_from_data_version(Data_Version_Header, Served_Commit),
+    (   Served_Commit \== none
+    ->  tdb_search:commit_timestamp(Repository_Descriptor, Served_Commit, Timestamp)
+    ;   Timestamp = none
+    ),
+    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header,
+                                     Served_Commit, Timestamp).
+
+% ==========================================================================
 % HTTP handlers (moved from routes.pl)
 % ==========================================================================
 
@@ -1194,24 +1301,28 @@ search_handler(post, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(search_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            tdb_search:nudge_commit(Search_Ref, Nudge_Commit),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:search_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_search_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   tdb_search:io_search_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
-                    tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                    tdb_search:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
                                      System_DB, Auth, Path, Branch_Name),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                                       Data_Version_Header, Repository_Descriptor)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
@@ -1233,22 +1344,25 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(suggest_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:search_extra_params(Search, _{}, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_suggest_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   tdb_search:io_suggest_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                                       Data_Version_Header, Repository_Descriptor)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
@@ -1273,13 +1387,16 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(similar_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            tdb_search:nudge_commit(Search_Ref, Nudge_Commit),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:similar_extra_params(Search, Body, Prefixes, Extra_Params),
@@ -1287,13 +1404,14 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
                 tdb_search:search_scalar_present(Text)
             ->  Post_Body = _{text: Text},
                 catch(
-                    (   tdb_search:io_similar_forward_post(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                    (   tdb_search:io_similar_forward_post(Endpoint, Domain, Search_Ref, Ancestors,
                                            Extra_Params, Post_Body, Response_Body, Data_Version_Header),
-                        tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                        tdb_search:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
                                          System_DB, Auth, Path, Branch_Name),
                         tdb_search:maybe_compact_response(Compress, Response_Body,
                                            Descriptor, Final_Body),
-                        tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                        tdb_search:reply_search_with_metadata(Request, Final_Body,
+                                           Data_Version_Header, Repository_Descriptor)
                     ),
                     error(tdb_search_forward_failed(404, Engine_Body, _), _),
                     (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
@@ -1301,13 +1419,14 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
                     )
                 )
             ;   catch(
-                    (   tdb_search:io_similar_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                    (   tdb_search:io_similar_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                            Extra_Params, Response_Body, Data_Version_Header),
-                        tdb_search:maybe_nudge_push(Data_Version_Header, Head_Commit_Id,
+                        tdb_search:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
                                          System_DB, Auth, Path, Branch_Name),
                         tdb_search:maybe_compact_response(Compress, Response_Body,
                                            Descriptor, Final_Body),
-                        tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                        tdb_search:reply_search_with_metadata(Request, Final_Body,
+                                           Data_Version_Header, Repository_Descriptor)
                     ),
                     error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                     (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
@@ -1331,21 +1450,25 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, _Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_duplicates_forward(Endpoint, Domain, Head_Commit_Id,
+                (   tdb_search:io_duplicates_forward(Endpoint, Domain, Search_Ref,
                                           Extra_Params, Response_Body, Data_Version_Header),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_response(Request, Final_Body, Data_Version_Header)
+                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                                       Data_Version_Header, Repository_Descriptor)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
@@ -1368,22 +1491,43 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:resolve_forward_body(Body, Prefixes, Forward_Body),
             catch(
-                (   tdb_search:io_resolve_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
-                                       Forward_Body, Response_Body),
+                (   tdb_search:io_resolve_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                                       Forward_Body, Response_Body, Data_Version_Header),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
+                    tdb_search:extract_commit_from_data_version(Data_Version_Header, Served_Commit),
+                    (   Served_Commit \== none
+                    ->  tdb_search:commit_timestamp(Repository_Descriptor, Served_Commit, Timestamp)
+                    ;   Search_Ref = commit(CId)
+                    ->  tdb_search:commit_timestamp(Repository_Descriptor, CId, Timestamp)
+                    ;   Timestamp = none
+                    ),
                     plugin_api:write_cors_headers(Request),
+                    (   Data_Version_Header \== none
+                    ->  format("TerminusDB-Data-Version: ~w~n", [Data_Version_Header])
+                    ;   true
+                    ),
+                    (   Served_Commit \== none
+                    ->  format("TerminusDB-Served-Commit: ~w~n", [Served_Commit])
+                    ;   true
+                    ),
+                    (   Timestamp \== none
+                    ->  format("TerminusDB-Served-Timestamp: ~w~n", [Timestamp])
+                    ;   true
+                    ),
                     format("Content-Type: application/json~n~n"),
                     write(Final_Body)
                 ),
@@ -1585,27 +1729,57 @@ duplicates_extra_param(Search, Body, Prefixes, target_doc_id=repeated(Ids)) :-
             Raw_Ids, Ids).
 
 reply_search_response(Request, Response_Body, Data_Version_Header) :-
+    reply_search_response(Request, Response_Body, Data_Version_Header, none, none).
+
+%% reply_search_response(+Request, +Response_Body, +Data_Version_Header,
+%%                        +Served_Commit, +Served_Timestamp) is det.
+%
+%  Writes CORS headers, the TerminusDB-Data-Version header (from tdb-search),
+%  and optional TerminusDB-Served-Commit / TerminusDB-Served-Timestamp headers
+%  when the served commit is known. The served commit may differ from the
+%  requested commit when the indexer is catching up (fallback to last-indexed).
+reply_search_response(Request, Response_Body, Data_Version_Header, Served_Commit, Served_Timestamp) :-
     plugin_api:write_cors_headers(Request),
     (   Data_Version_Header \== none
     ->  format("TerminusDB-Data-Version: ~w~n", [Data_Version_Header])
     ;   true
     ),
+    (   Served_Commit \== none
+    ->  format("TerminusDB-Served-Commit: ~w~n", [Served_Commit])
+    ;   true
+    ),
+    (   Served_Timestamp \== none
+    ->  format("TerminusDB-Served-Timestamp: ~w~n", [Served_Timestamp])
+    ;   true
+    ),
     format("Content-Type: application/json~n~n"),
     write(Response_Body).
 
-%% reply_embeddings_stream_response(+Request, +Response_Body) is det.
+%% extract_commit_from_data_version(+Data_Version_Header, -Commit) is det.
 %
-%  Writes the NDJSON streaming response with CORS headers.
-%  The tdb_stream infrastructure detects the NDJSON body + x-ndjson content type
-%  and streams it to the client line-by-line.
-reply_embeddings_stream_response(Request, Response_Body, Served_Commit, Store_Clustering, Total_Count) :-
+%  Extracts the commit ID from a "commit:<id>" data version header.
+%  Returns none if the header is missing or doesn't match the format.
+extract_commit_from_data_version(none, none) :- !.
+extract_commit_from_data_version("", none) :- !.
+extract_commit_from_data_version(Header, Commit) :-
+    atom_string(Header, HeaderStr),
+    string_concat("commit:", Commit, HeaderStr),
+    !.
+extract_commit_from_data_version(_, none).
+
+%% reply_embeddings_stream_headers(+Request, +Served_Commit,
+%%                               +Store_Clustering, +Total_Count) is det.
+%
+%  Writes CORS and NDJSON streaming headers to current_output.
+%  Used by both io_embeddings_forward_stream and io_embeddings_forward_post_stream
+%  before streaming the NDJSON body line-by-line.
+reply_embeddings_stream_headers(Request, Served_Commit, Store_Clustering, Total_Count) :-
     plugin_api:write_cors_headers(Request),
     format("Access-Control-Expose-Headers: X-Served-Commit, X-Store-Clustering, X-Total-Count~n"),
     format("Content-Type: application/x-ndjson~n"),
     format("X-Served-Commit: ~w~n", [Served_Commit]),
     format("X-Store-Clustering: ~w~n", [Store_Clustering]),
-    format("X-Total-Count: ~w~n~n", [Total_Count]),
-    write(Response_Body).
+    format("X-Total-Count: ~w~n~n", [Total_Count]).
 
 % ==========================================================================
 % Index status response assembly (used by index_handler GET)
@@ -1740,7 +1914,11 @@ index_handler(get, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(index_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             tdb_search:descriptor_graphspec(Descriptor, Branch_Path),
             tdb_search:descriptor_domain(Descriptor, Domain),
@@ -1839,9 +2017,9 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
 %  Constructs the tdb-search /embeddings URL with query parameters.
 %  Doc_Ids and Doc_Types are sent as comma-separated single params
 %  (doc_ids=A,B&doc_types=X,Y) matching tdb-search's EmbeddingsParams struct.
-build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, URL) :-
+build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
-    plugin_api:encode_query_value(Commit, Enc_Commit),
+    search_ref_param(Search_Ref, Ref_Params),
     (   Doc_Ids = []
     ->  Doc_Id_Params = ''
     ;   maplist([Id, Enc]>>(plugin_api:encode_query_value(Id, Enc)), Doc_Ids, Enc_Ids),
@@ -1855,18 +2033,18 @@ build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, UR
         format(atom(Doc_Type_Params), "&doc_types=~w", [Doc_Types_Joined])
     ),
     ancestor_query_params(Ancestors, Ancestor_Params),
-    format(atom(URL), "~w/embeddings?domain=~w&commit=~w~w~w~w",
-           [Endpoint, Enc_Domain, Enc_Commit, Doc_Id_Params, Doc_Type_Params, Ancestor_Params]).
+    format(atom(URL), "~w/embeddings?domain=~w~w~w~w~w",
+           [Endpoint, Enc_Domain, Ref_Params, Doc_Id_Params, Doc_Type_Params, Ancestor_Params]).
 
-%% io_embeddings_forward(+Endpoint, +Domain, +Commit, +Doc_Ids, +Doc_Types, +Ancestors,
+%% io_embeddings_forward(+Endpoint, +Domain, +Search_Ref, +Doc_Ids, +Doc_Types, +Ancestors,
 %%                       +Extra_Params, -Response_Body) is det.
 %
 %  Forwards a GET /embeddings request to the tdb-search engine.
-io_embeddings_forward(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
+io_embeddings_forward(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                      Extra_Params, Response_Body) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, Base_URL),
+    build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     setup_call_cleanup(
         http_open(URL, In,
@@ -1879,7 +2057,7 @@ io_embeddings_forward(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
         close(In)),
     handle_forward_response(Status, Response_Body, URL).
 
-%% io_embeddings_forward_stream(+Endpoint, +Domain, +Commit, +Doc_Ids, +Doc_Types,
+%% io_embeddings_forward_stream(+Endpoint, +Domain, +Search_Ref, +Doc_Ids, +Doc_Types,
 %%                              +Ancestors, +Extra_Params, +Request, +Prefixes,
 %%                              -Served_Commit, -Store_Clustering, -Total_Count) is det.
 %
@@ -1888,12 +2066,12 @@ io_embeddings_forward(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
 %  line-by-line from tdb-search to current_output (the CGI pipe stream).
 %  If Prefixes is not 'none', compacts doc_id fields in each NDJSON line.
 %  This achieves true end-to-end streaming without buffering the full response.
-io_embeddings_forward_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
+io_embeddings_forward_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                             Extra_Params, Request, Prefixes,
                             Served_Commit, Store_Clustering, Total_Count) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, Base_URL),
+    build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     setup_call_cleanup(
         http_open(URL, In,
@@ -1908,31 +2086,32 @@ io_embeddings_forward_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ances
             (   var(Served_Commit_Raw) -> Served_Commit = "" ; Served_Commit = Served_Commit_Raw ),
             (   var(Store_Clustering_Raw) -> Store_Clustering = "false" ; Store_Clustering = Store_Clustering_Raw ),
             (   var(Total_Count_Raw) -> Total_Count = "0" ; Total_Count = Total_Count_Raw ),
-            plugin_api:write_cors_headers(Request),
-            format("Access-Control-Expose-Headers: X-Served-Commit, X-Store-Clustering, X-Total-Count~n"),
-            format("Content-Type: application/x-ndjson~n"),
-            format("X-Served-Commit: ~w~n", [Served_Commit]),
-            format("X-Store-Clustering: ~w~n", [Store_Clustering]),
-            format("X-Total-Count: ~w~n~n", [Total_Count]),
+            reply_embeddings_stream_headers(Request, Served_Commit, Store_Clustering, Total_Count),
             stream_ndjson_from(In, Prefixes)
         ),
         close(In)).
 
-%% io_embeddings_forward_post_stream(+Endpoint, +Domain, +Commit, +Doc_Ids,
+%% io_embeddings_forward_post_stream(+Endpoint, +Domain, +Search_Ref, +Doc_Ids,
 %%   +Doc_Types, +Ancestors, +Request, +Prefixes,
 %%   -Served_Commit, -Store_Clustering, -Total_Count) is det.
 %
 %  POSTs a JSON body to tdb-search /embeddings with stream=true,
 %  then streams the NDJSON response back with per-line doc_id compaction.
-io_embeddings_forward_post_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
+io_embeddings_forward_post_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                   Request, Prefixes,
                                   Served_Commit, Store_Clustering, Total_Count) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
     format(atom(URL), "~w/embeddings", [Endpoint]),
-    JSON_Body = _{domain: Domain, commit: Commit,
-                   doc_ids: Doc_Ids, doc_types: Doc_Types,
-                   ancestors: Ancestors, stream: true},
+    (   Search_Ref = commit(Commit)
+    ->  JSON_Body = _{domain: Domain, commit: Commit,
+                       doc_ids: Doc_Ids, doc_types: Doc_Types,
+                       ancestors: Ancestors, stream: true}
+    ;   Search_Ref = branch(Branch),
+        JSON_Body = _{domain: Domain, branch: Branch,
+                       doc_ids: Doc_Ids, doc_types: Doc_Types,
+                       ancestors: Ancestors, stream: true}
+    ),
     setup_call_cleanup(
         http_open(URL, In,
                   [ method(post),
@@ -1949,12 +2128,7 @@ io_embeddings_forward_post_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, 
             (   var(Served_Commit_Raw) -> Served_Commit = "" ; Served_Commit = Served_Commit_Raw ),
             (   var(Store_Clustering_Raw) -> Store_Clustering = "false" ; Store_Clustering = Store_Clustering_Raw ),
             (   var(Total_Count_Raw) -> Total_Count = "0" ; Total_Count = Total_Count_Raw ),
-            plugin_api:write_cors_headers(Request),
-            format("Access-Control-Expose-Headers: X-Served-Commit, X-Store-Clustering, X-Total-Count~n"),
-            format("Content-Type: application/x-ndjson~n"),
-            format("X-Served-Commit: ~w~n", [Served_Commit]),
-            format("X-Store-Clustering: ~w~n", [Store_Clustering]),
-            format("X-Total-Count: ~w~n~n", [Total_Count]),
+            reply_embeddings_stream_headers(Request, Served_Commit, Store_Clustering, Total_Count),
             stream_ndjson_from(In, Prefixes)
         ),
         close(In)).
@@ -1971,33 +2145,28 @@ io_embeddings_forward_post_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, 
 %%  Handles escaped quotes (\"") in the IRI by skipping them when
 %%  searching for the closing quote.
 compact_ndjson_line(Line, Prefixes, Compacted) :-
-    catch(
-        (   (   string(Line)
-            ->  Line_Str = Line
-            ;   atom_string(Line, Line_Str)
-            ),
-            (   sub_string(Line_Str, Before, _, _, '"doc_id":"')
-            ->  Prefix_Len = 10,
-                Start is Before + Prefix_Len,
-                string_length(Line_Str, Total_Len),
-                After_Len is Total_Len - Start,
-                sub_string(Line_Str, Start, After_Len, _, Rest),
-                (   find_closing_quote(Rest, 0, QPos)
-                ->  sub_string(Rest, 0, QPos, _, Full_IRI),
-                    compress_dict_uri(Full_IRI, Prefixes, Compacted_Id),
-                    sub_string(Line_Str, 0, Start, _, Head),
-                    After_IRI_Pos is QPos + 1,
-                    sub_string(Rest, After_IRI_Pos, _, 0, Tail),
-                    string_concat(Head, Compacted_Id, T1),
-                    string_concat(T1, '"', T2),
-                    string_concat(T2, Tail, Compacted)
-                ;   Compacted = Line_Str
-                )
-            ;   Compacted = Line_Str
-            )
-        ),
-        _,
-        Compacted = Line
+    (   string(Line)
+    ->  Line_Str = Line
+    ;   atom_string(Line, Line_Str)
+    ),
+    (   sub_string(Line_Str, Before, _, _, '"doc_id":"')
+    ->  Prefix_Len = 10,
+        Start is Before + Prefix_Len,
+        string_length(Line_Str, Total_Len),
+        After_Len is Total_Len - Start,
+        sub_string(Line_Str, Start, After_Len, _, Rest),
+        (   find_closing_quote(Rest, 0, QPos)
+        ->  sub_string(Rest, 0, QPos, _, Full_IRI),
+            compress_dict_uri(Full_IRI, Prefixes, Compacted_Id),
+            sub_string(Line_Str, 0, Start, _, Head),
+            After_IRI_Pos is QPos + 1,
+            sub_string(Rest, After_IRI_Pos, _, 0, Tail),
+            string_concat(Head, Compacted_Id, T1),
+            string_concat(T1, '"', T2),
+            string_concat(T2, Tail, Compacted)
+        ;   Compacted = Line_Str
+        )
+    ;   Compacted = Line_Str
     ).
 
 %% find_closing_quote(+String, +StartPos, -QuotePos) is semidet.
@@ -2054,12 +2223,21 @@ stream_ndjson_from(In, Prefixes) :-
     (   Line == end_of_file
     ->  true
     ;   (   Prefixes == none
-        ->  format("~s~n", [Line])
-        ;   compact_ndjson_line(Line, Prefixes, Compacted),
-            format("~s~n", [Compacted])
-        ),
-        flush_output,
-        stream_ndjson_from(In, Prefixes)
+        ->  format("~s~n", [Line]),
+            flush_output,
+            stream_ndjson_from(In, Prefixes)
+        ;   catch(compact_ndjson_line(Line, Prefixes, Compacted),
+                Error,
+                (   format(user_error, "[ERROR] compact_ndjson_line failed: ~q~n", [Error]),
+                    format("{\"error\":\"compaction_failed\"}~n"),
+                    flush_output,
+                    !,
+                    fail
+                )),
+            format("~s~n", [Compacted]),
+            flush_output,
+            stream_ndjson_from(In, Prefixes)
+        )
     ).
 
 %% embeddings_handler(+Method, +Path, +Request, +System_DB, +Auth)
@@ -2086,28 +2264,31 @@ embeddings_handler(get, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:embeddings_extra_params(Search, Prefixes, Doc_Ids, Doc_Types, Extra_Params),
             catch(
                 (   Streaming == true
                 ->  tdb_search:io_embeddings_forward_stream(Endpoint, Domain,
-                                      Head_Commit_Id, Doc_Ids, Doc_Types, Ancestors,
+                                      Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                       Extra_Params, Request, Prefixes,
                                       _Served_Commit, _Store_Clustering, _Total_Count)
                 ;   tdb_search:io_embeddings_forward(Endpoint, Domain,
-                                      Head_Commit_Id, Doc_Ids, Doc_Types, Ancestors,
+                                      Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                       Extra_Params, Response_Body),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_response(Request, Final_Body, none)
+                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                                       none, Repository_Descriptor)
                 ),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
                 (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
@@ -2129,13 +2310,15 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
             do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
                       error(tdb_search_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
-                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
+                ->  true
+                ;   commit_descriptor{} :< Descriptor,
+                    Branch_Name = none
+                ),
                 error(search_requires_branch_descriptor(Path), _)),
-            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            get_dict(repository_descriptor, Descriptor, _Repository_Descriptor),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             %% Read JSON body from request (plugin API populates payload for JSON POST)
@@ -2156,7 +2339,7 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
             ),
             catch(
                 tdb_search:io_embeddings_forward_post_stream(Endpoint, Domain,
-                                      Head_Commit_Id, Doc_Ids, Doc_Types, Ancestors,
+                                      Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                       Request, Prefixes,
                                       _Served_Commit, _Store_Clustering, _Total_Count),
                 error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
@@ -3011,47 +3194,56 @@ test("post_commit_hook returns quickly even if engine is slow",
 
 test("build_search_url constructs correct URL with ancestors",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
-    tdb_search:build_search_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_search_url("http://engine:8080", "admin/db", commit("abc123"),
                                 ["prev1", "prev2"], URL).
 
 test("build_search_url with no ancestors omits ancestor params",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_search_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_search_url("http://engine:8080", "admin/db", commit("abc123"),
                                 [], URL).
 
 test("build_suggest_url constructs correct URL with ancestors",
      [true(URL == 'http://engine:8080/suggest?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
-    tdb_search:build_suggest_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_suggest_url("http://engine:8080", "admin/db", commit("abc123"),
                                  ["prev1", "prev2"], URL).
 
 test("build_suggest_url with no ancestors omits ancestor params",
      [true(URL == 'http://engine:8080/suggest?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_suggest_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_suggest_url("http://engine:8080", "admin/db", commit("abc123"),
                                  [], URL).
 
 test("build_similar_url constructs correct URL",
      [true(URL == 'http://engine:8080/similar?domain=org%2fmydb&commit=def456&ancestor=anc1')]) :-
-    tdb_search:build_similar_url("http://engine:8080", "org/mydb", "def456",
+    tdb_search:build_similar_url("http://engine:8080", "org/mydb", commit("def456"),
                                  ["anc1"], URL).
 
 test("build_duplicates_url constructs correct URL without ancestors",
      [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&commit=c99')]) :-
-    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", "c99", URL).
+    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", commit("c99"), URL).
 
 test("build_statistics_url constructs scoped URL with domain and commit",
      [true(URL == 'http://engine:8080/statistics?domain=admin%2fmydb&commit=abc123')]) :-
-    tdb_search:build_statistics_url("http://engine:8080", "admin/mydb", "abc123",
+    tdb_search:build_statistics_url("http://engine:8080", "admin/mydb", commit("abc123"),
                                     [], URL).
 
 test("build_statistics_url includes ancestor params",
      [true(sub_atom(URL, _, _, _, '&ancestor=anc1'))]) :-
-    tdb_search:build_statistics_url("http://engine:8080", "admin/db", "c1",
+    tdb_search:build_statistics_url("http://engine:8080", "admin/db", commit("c1"),
                                     ["anc1"], URL).
 
 test("build_search_url encodes slashes in domain",
      [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
     tdb_search:build_search_url("http://e:80", "org/db/local/branch/main",
-                                "c1", [], URL).
+                                commit("c1"), [], URL).
+
+test("build_search_url with branch ref constructs branch param",
+     [true(URL == 'http://engine:8080/search?domain=admin%2fdb&branch=main')]) :-
+    tdb_search:build_search_url("http://engine:8080", "admin/db", branch("main"),
+                                [], URL).
+
+test("build_duplicates_url with branch ref constructs branch param",
+     [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&branch=main')]) :-
+    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", branch("main"), URL).
 
 test("ancestor_window returns ancestors nearest first excluding HEAD",
      [ setup(setup_temp_store(State)),
@@ -3094,28 +3286,28 @@ test("io_search_forward refuses when endpoint is not configured",
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_search_forward("http://x:80", "d", "c", [], [], _, _).
+    io_search_forward("http://x:80", "d", commit("c"), [], [], _, _).
 
 test("io_similar_forward refuses when endpoint is not configured",
      [ setup(clean_tdb_search_test_env),
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_similar_forward("http://x:80", "d", "c", [], [], _, _).
+    io_similar_forward("http://x:80", "d", commit("c"), [], [], _, _).
 
 test("io_duplicates_forward refuses when endpoint is not configured",
      [ setup(clean_tdb_search_test_env),
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_duplicates_forward("http://x:80", "d", "c", [], _, _).
+    io_duplicates_forward("http://x:80", "d", commit("c"), [], _, _).
 
 test("io_statistics_forward refuses when endpoint is not configured",
      [ setup(clean_tdb_search_test_env),
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_statistics_forward("http://x:80", "admin/db", "c0", [], _, _).
+    io_statistics_forward("http://x:80", "admin/db", commit("c0"), [], _, _).
 
 test("io_statistics_for_domain refuses when endpoint is not configured",
      [ setup(clean_tdb_search_test_env),
@@ -3165,7 +3357,7 @@ test("authz parity: denied caller search never reaches engine stub",
                (   resolve_descriptor_auth(read, System_DB, Auth,
                                            "admin/guardeddb", instance, _Desc),
                    tdb_search:tdb_search_endpoint(Endpoint),
-                   io_search_forward(Endpoint, "admin/guardeddb", "fake_commit",
+                   io_search_forward(Endpoint, "admin/guardeddb", commit("fake_commit"),
                                      [], [], _Response, _DV)
                ),
                error(access_not_authorised(_, _, _), _),
@@ -3204,7 +3396,7 @@ test("authz parity: denied caller statistics never reaches engine stub",
                (   resolve_descriptor_auth(read, System_DB, Auth,
                                            "admin/guardedstatsdb", instance, _Desc),
                    tdb_search:tdb_search_endpoint(Endpoint),
-                   io_statistics_forward(Endpoint, "admin/guardedstatsdb", "fake_commit",
+                   io_statistics_forward(Endpoint, "admin/guardedstatsdb", commit("fake_commit"),
                                          [], _Response, _DV)
                ),
                error(access_not_authorised(_, _, _), _),
@@ -3271,8 +3463,8 @@ test("authz parity: denied caller resolve never reaches engine stub",
                (   resolve_descriptor_auth(read, System_DB, Auth,
                                            "admin/guardedresolvedb", instance, _Desc),
                    tdb_search:tdb_search_endpoint(Endpoint),
-                   io_resolve_forward(Endpoint, "admin/guardedresolvedb", "fake_commit",
-                                      [], _{}, _Response)
+                   io_resolve_forward(Endpoint, "admin/guardedresolvedb", commit("fake_commit"),
+                                      [], _{}, _Response, _DV)
                ),
                error(access_not_authorised(_, _, _), _),
                true
@@ -3289,18 +3481,18 @@ test("authz parity: denied caller resolve never reaches engine stub",
 
 test("build_resolve_url constructs correct URL",
      [true(URL == 'http://engine:8080/candidates?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_resolve_url("http://engine:8080", "admin/db", "abc123", URL).
+    tdb_search:build_resolve_url("http://engine:8080", "admin/db", commit("abc123"), URL).
 
 test("build_resolve_url encodes slashes in domain",
      [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
-    tdb_search:build_resolve_url("http://e:80", "org/db/local/branch/main", "c1", URL).
+    tdb_search:build_resolve_url("http://e:80", "org/db/local/branch/main", commit("c1"), URL).
 
 test("io_resolve_forward refuses when endpoint is not configured",
      [ setup(clean_tdb_search_test_env),
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_resolve_forward("http://x:80", "d", "c", [], _{}, _).
+    io_resolve_forward("http://x:80", "d", commit("c"), [], _{}, _, _).
 
 :- end_tests(tdb_search_resolve_url_construction).
 
@@ -3542,10 +3734,6 @@ abt_buy_prefixes(Prefixes) :-
 
 :- begin_tests(tdb_search_id_compaction).
 
-abt_buy_prefixes(Prefixes) :-
-    Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
-                 '@schema': "terminusdb:///schema#"}.
-
 test("compress_dict_uri with @base strips to bare relative IRI",
      [true(Compact == 'Abt/1101')]) :-
     abt_buy_prefixes(Prefixes),
@@ -3741,16 +3929,16 @@ test("compress_flag reads true from query parameter",
 
 test("build_embeddings_url constructs correct URL with no doc_ids",
      [true(URL == 'http://engine:8080/embeddings?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123", [], [], [], URL).
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"), [], [], [], URL).
 
 test("build_embeddings_url constructs correct URL with doc_ids as comma-separated",
      [true(sub_atom(URL, _, _, _, 'doc_ids=doc%2f1,doc%2f2'))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     ["doc/1", "doc/2"], [], [], URL).
 
 test("build_embeddings_url includes ancestor params",
      [true(sub_atom(URL, _, _, _, '&ancestor=anc1'))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     [], [], ["anc1"], URL).
 
 test("io_embeddings_forward refuses when endpoint is not configured",
@@ -3758,7 +3946,7 @@ test("io_embeddings_forward refuses when endpoint is not configured",
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_embeddings_forward("http://x:80", "admin/db", "abc123", [], [], [], [], _).
+    io_embeddings_forward("http://x:80", "admin/db", commit("abc123"), [], [], [], [], _).
 
 test("embeddings_extra_params extracts and normalizes doc_ids from query",
      [true(Doc_Ids == ['terminusdb:///data/doc1'])]) :-
@@ -3785,13 +3973,13 @@ test("embeddings_extra_params with no params returns empty for both",
 
 test("build_embeddings_url constructs correct URL with doc_types as comma-separated",
      [true(sub_atom(URL, _, _, _, 'doc_types=Product,Customer'))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     [], ["Product", "Customer"], [], URL).
 
 test("build_embeddings_url constructs correct URL with both doc_ids and doc_types",
      [true((sub_atom(URL, _, _, _, 'doc_ids=doc%2f1'),
             sub_atom(URL, _, _, _, 'doc_types=Product')))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     ["doc/1"], ["Product"], [], URL).
 
 test("stream_ndjson_from reads lines and writes to current_output",

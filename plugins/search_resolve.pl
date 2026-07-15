@@ -251,18 +251,23 @@ resolve_run(Endpoint, Domain, Commit, Ancestors, Forward_Body, Response_Body) :-
     ->  true
     ;   K = 5),
 
-    % Build candidates request body (no include — we only need distances).
-    put_dict(_{threshold_set: Threshold, threshold_target: Threshold},
-             Forward_Body, Cand_Body0),
-    % Remove keys not relevant for /candidates (some may be absent).
-    safe_del_dict(threshold, Cand_Body0, Cand_Body1),
-    safe_del_dict(tau_one_to_one, Cand_Body1, Cand_Body2),
-    safe_del_dict(tau_one_to_many, Cand_Body2, Cand_Body3),
-    safe_del_dict(tau_many_to_one, Cand_Body3, Cand_Body4),
+    % Build candidates request body explicitly — /candidates only needs
+    % doc ids/types, k, and threshold_set/threshold_target.
+    findall(Key-Value,
+            (   candidates_allowed_body_key(Key),
+                (   get_dict(Key, Forward_Body, Value)
+                ->  true
+                ;   Key == threshold_set -> Value = Threshold
+                ;   Key == threshold_target -> Value = Threshold
+                ;   fail
+                )
+            ),
+            Cand_Pairs),
+    dict_pairs(Cand_Body, _, Cand_Pairs),
 
     % Call tdb-search /candidates.
     io_candidates_forward(Endpoint, Domain, Commit, Ancestors,
-                          Cand_Body4, Cand_Response_String),
+                          Cand_Body, Cand_Response_String),
 
     % Parse JSON response.
     atom_json_dict(Cand_Response_String, Cand_Result, []),
@@ -417,14 +422,6 @@ extract_ids(Matched, Key, Ids) :-
 % Helper to map between atom and JSON key names.
 atom_json_key(set_id, set_id).
 atom_json_key(target_id, target_id).
-
-% safe_del_dict(+Key, +DictIn, -DictOut) is det.
-%  Removes Key from DictIn if present, otherwise returns DictIn unchanged.
-safe_del_dict(Key, DictIn, DictOut) :-
-    (   del_dict(Key, DictIn, _, DictOut)
-    ->  true
-    ;   DictOut = DictIn
-    ).
 
 % ==========================================================================
 % Unit tests
