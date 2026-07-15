@@ -139,3 +139,11 @@ $(SWIPL_LINT_PATH):
 	# which no longer terminates the process in SWI-Prolog 10.
 	sed -i.bak -e "s#catch(\['\./\.lint_config\.pl'\], _, true)#catch(consult('./.lint_config.pl'), _, true)#" $@
 	sed -i.bak -e "s/:- initialization(lint_files)./:- export(lint_files\/0)./" $@
+	# Add ignore_module/1 support for suppressing $-prefixed runtime module warnings.
+	sed -i.bak -e '/:- dynamic ignore_file\/1\./a\
+:- dynamic ignore_module/1.' $@
+	sed -i.bak -e '/atom_string(ModuleAtom, Module),/a\
+    (   catch(ignore_module(ModuleAtom), _, false)\
+    ->  fail\
+    ;   true\
+    ),' $@
