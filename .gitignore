@@ -1,7 +1,7 @@
 # TerminusDB gitignore defaults
 tus
 .DS_Store
-tests/.terminusdb-test-storage
+tests/.terminusdb-test-storage*
 tests/benchmark/benchmark_results
 tests/benchmark_results
 node_modules
