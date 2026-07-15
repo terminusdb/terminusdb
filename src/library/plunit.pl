@@ -925,6 +925,12 @@ report_sto_results([Type+Result|T], Options) :-
 %           * setup_failed(Unit, Name, Line)
 
 run_test_6(Unit, Name, Line, Options, _Body,
+           blocked(Unit, Name, Line, condition)) :-
+    option(condition(Condition), Options),
+    unit_module(Unit, Module),
+    \+ catch(call_ex(Module, Condition), _, fail),
+    !.
+run_test_6(Unit, Name, Line, Options, _Body,
            blocked(Unit, Name, Line, Reason)) :-
     option(blocked(Reason), Options),
     !.
