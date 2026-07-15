@@ -25,6 +25,20 @@ dev:
 restart:
 	tests/terminusdb-test-server.sh restart
 
+# Build the release binary and restart the standalone test server (port 6363).
+.PHONY: build-restart
+build-restart:
+	@$(MAKE) -f distribution/Makefile.prolog
+	tests/terminusdb-test-server.sh restart
+
+# Build the release binary and restart both TerminusDB (port 7373) and
+# tdb-search (port 7372) for paired indexing/search development.
+# Requires the tdb-search repo as a sibling of the terminusdb repo.
+.PHONY: build-restart-search
+build-restart-search:
+	@$(MAKE) -f distribution/Makefile.prolog
+	../tdb-search/tests/tdb-search-server.sh restart
+
 .PHONY: server-clean
 server-clean:
 	tests/terminusdb-test-server.sh start --clean
