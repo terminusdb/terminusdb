@@ -181,7 +181,10 @@ stream_commit_data(System_DB, Descriptor, BranchPath, Since, Timeout, StreamId) 
             with_mutex(Mutex,
                 (   send_delta_commits(System_DB, Descriptor,
                                        BranchPath, C_head, StreamId),
-                    '$appserver':appserver_broadcast_subscribe(BranchPath, StreamId),
+                    (   Timeout == false -> TimeoutSecs = 0
+                    ;   Timeout = TimeoutSecs
+                    ),
+                    '$appserver':appserver_broadcast_subscribe(BranchPath, StreamId, TimeoutSecs),
                     assertz(commit_stream(StreamId, BranchPath, TimeoutThread))
                 )
             )
