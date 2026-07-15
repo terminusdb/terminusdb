@@ -54,11 +54,11 @@ then applies the matching algorithm to produce the 3-partition output
 
 :- plugin_api:register_route(api(plugin/'search-resolve'/Path),
     plugin_api:cors_handler(Method, search_resolve:resolve_handler(Path)),
-    [method(Method), prefix, methods([options,post])]).
+    [method(Method), prefix, time_limit(infinite), methods([options,post])]).
 
 :- plugin_api:register_route(api(plugin/'search-candidates'/Path),
     plugin_api:cors_handler(Method, search_resolve:candidates_handler(Path)),
-    [method(Method), prefix, methods([options,post])]).
+    [method(Method), prefix, time_limit(infinite), methods([options,post])]).
 
 % ==========================================================================
 % /api/plugin/search-candidates — proxy to tdb-search /candidates
@@ -80,15 +80,15 @@ candidates_handler(post, Path, Request, System_DB, Auth) :-
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            search_resolve:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            search_resolve:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
             tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            candidates_forward_body(Body, Prefixes, Forward_Body),
+            search_resolve:candidates_forward_body(Body, Prefixes, Forward_Body),
             catch(
-                (   io_candidates_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   search_resolve:io_candidates_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                           Forward_Body, Response_Body),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                                        Descriptor, Final_Body),
@@ -140,8 +140,7 @@ candidates_forward_body(Body, Prefixes, Forward_Body) :-
 candidates_normalize_value(Key, Raw_Ids, Prefixes, Ids) :-
     ( Key == set_doc_ids ; Key == target_doc_ids ),
     !,
-    maplist({Prefixes}/[Raw, Id]>>tdb_search:normalize_doc_id(Raw, Prefixes, Id),
-            Raw_Ids, Ids).
+    maplist(normalize_with_prefixes(Prefixes), Raw_Ids, Ids).
 candidates_normalize_value(_Key, Value, _Prefixes, Value).
 
 candidates_allowed_body_key(set_doc_types).
@@ -173,15 +172,15 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
-            commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            search_resolve:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            search_resolve:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
             tdb_search:descriptor_domain(Descriptor, Domain),
             tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            resolve_forward_body(Body, Prefixes, Forward_Body),
+            search_resolve:resolve_forward_body(Body, Prefixes, Forward_Body),
             catch(
-                (   resolve_run(Endpoint, Domain, Head_Commit_Id, Ancestors,
+                (   search_resolve:resolve_run(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                 Forward_Body, Response_Body),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                                        Descriptor, Final_Body),
@@ -209,9 +208,11 @@ resolve_forward_body(Body, Prefixes, Forward_Body) :-
 resolve_normalize_value(Key, Raw_Ids, Prefixes, Ids) :-
     ( Key == set_doc_ids ; Key == target_doc_ids ),
     !,
-    maplist({Prefixes}/[Raw, Id]>>tdb_search:normalize_doc_id(Raw, Prefixes, Id),
-            Raw_Ids, Ids).
+    maplist(normalize_with_prefixes(Prefixes), Raw_Ids, Ids).
 resolve_normalize_value(_Key, Value, _Prefixes, Value).
+
+normalize_with_prefixes(Prefixes, Raw, Id) :-
+    tdb_search:normalize_doc_id(Raw, Prefixes, Id).
 
 resolve_allowed_body_key(set_doc_types).
 resolve_allowed_body_key(set_doc_ids).
@@ -234,8 +235,12 @@ resolve_allowed_body_key(k).
 %  algorithm, and produces the 3-partition JSON output.
 resolve_run(Endpoint, Domain, Commit, Ancestors, Forward_Body, Response_Body) :-
     % Extract matching parameters from Forward_Body.
-    get_dict(threshold, Forward_Body, Threshold),
-    get_dict(tau_one_to_one, Forward_Body, TauOneToOne),
+    (   get_dict(threshold, Forward_Body, Threshold)
+    ->  true
+    ;   Threshold = 0.5),
+    (   get_dict(tau_one_to_one, Forward_Body, TauOneToOne)
+    ->  true
+    ;   TauOneToOne = Threshold),
     (   get_dict(tau_one_to_many, Forward_Body, TauOneToMany)
     ->  true
     ;   TauOneToMany = none),
@@ -260,7 +265,7 @@ resolve_run(Endpoint, Domain, Commit, Ancestors, Forward_Body, Response_Body) :-
                           Cand_Body4, Cand_Response_String),
 
     % Parse JSON response.
-    atom_json_dict(Cand_Response_String, Cand_Result),
+    atom_json_dict(Cand_Response_String, Cand_Result, []),
 
     % Extract directional maps.
     get_dict(set_to_target, Cand_Result, SetToTarget),
@@ -347,7 +352,8 @@ resolve_match(SetToTarget, TargetToSet, Options, Matched) :-
     ->  findall(_{set_id: S, target_id: T, distance: D, stage: set_extra},
                 (   get_dict(S, SetToTarget, S_Neighbours),
                     member(N, S_Neighbours),
-                    get_dict(id, N, T),
+                    get_dict(id, N, Raw_T),
+                    as_atom(Raw_T, T),
                     get_dict(distance, N, D),
                     D =< Tau1M,
                     \+ memberchk(T, Core_Target_Ids),
@@ -361,7 +367,8 @@ resolve_match(SetToTarget, TargetToSet, Options, Matched) :-
     ->  findall(_{set_id: S, target_id: T, distance: D, stage: target_extra},
                 (   get_dict(T, TargetToSet, T_Neighbours),
                     member(N, T_Neighbours),
-                    get_dict(id, N, S),
+                    get_dict(id, N, Raw_S),
+                    as_atom(Raw_S, S),
                     get_dict(distance, N, D),
                     D =< TauM1,
                     \+ memberchk(S, Core_Set_Ids),
@@ -385,9 +392,18 @@ has_match(Matched, S, T) :-
 %  Returns the first (nearest) neighbour from a sorted candidate list.
 %  Fails if the list is empty.
 best_neighbour([H | _], Id, D) :-
-    get_dict(id, H, Id),
+    get_dict(id, H, Raw_Id),
+    as_atom(Raw_Id, Id),
     get_dict(distance, H, D),
     !.
+
+%% as_atom(+Value, -Atom) is det.
+%  Convert a string or atom to an atom (dict keys are atoms in SWI-Prolog).
+as_atom(Value, Atom) :-
+    (   atom(Value) -> Atom = Value
+    ;   string(Value) -> atom_string(Atom, Value)
+    ;   Atom = Value
+    ).
 
 %% extract_ids(+Matched, +Key, -Ids) is det.
 %
@@ -529,9 +545,9 @@ test("io_candidates_forward calls engine /candidates and returns response",
     io_candidates_forward(Endpoint, "admin/canddb", "c0", [],
                           _{threshold_set: 0.5, threshold_target: 0.5, k: 5},
                           Response_Body),
-    atom_json_dict(Response_Body, Response),
+    atom_json_dict(Response_Body, Response, []),
     get_dict(set_to_target, Response, SetMap),
-    get_dict("doc/set_a", SetMap, Neighbours),
+    get_dict('doc/set_a', SetMap, Neighbours),
     member(_{id: "doc/target_a", distance: 0.1}, Neighbours),
     tdb_search:stub_received(candidates_called, true).
 

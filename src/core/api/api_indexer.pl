@@ -457,14 +457,12 @@ indexer_process_commit(Path, _BranchName, CommitIdRaw, Stream) :-
     catch(
         (   write_commit_ndjson(Transaction, Descriptor,
                                 CommitId, TypeQueries, Stream)
-        ->  format(user_error, "[DEBUG] indexer_process_commit: write_commit_ndjson succeeded for ~w~n", [CommitId])
-        ;   format(user_error, "[DEBUG] indexer_process_commit: write_commit_ndjson FAILED (no exception) for ~w~n", [CommitId]),
-            fail
+        ->  true
+        ;   fail
         ),
         Error,
         (   with_output_to(atom(Error_Atom),
                 write_term(Error, [quoted(false)])),
-            format(user_error, "[DEBUG] indexer_process_commit: write_commit_ndjson THREW ERROR for ~w: ~w~n", [CommitId, Error_Atom]),
             Error_Json = json{op:"Error", message:Error_Atom},
             json_write_dict(Stream, Error_Json, []),
             nl(Stream),
@@ -482,10 +480,8 @@ indexer_process_commit(Path, _BranchName, CommitIdRaw, Stream) :-
 write_commit_ndjson(Transaction, Descriptor, CommitId,
                     TypeQueries, Stream) :-
     (   TypeQueries = []
-    ->  format(user_error, "[DEBUG] write_commit_ndjson: no TypeQueries for commit ~w~n", [CommitId])
-    ;   format(user_error, "[DEBUG] write_commit_ndjson: ~w type queries for commit ~w~n", [TypeQueries, CommitId]),
-        open_descriptor(system_descriptor{}, System_DB),
-        format(user_error, "[DEBUG] write_commit_ndjson: opened system descriptor for ~w~n", [CommitId]),
+    ->  true
+    ;   open_descriptor(system_descriptor{}, System_DB),
         maplist([Type-Query-_Template, Type-Query]>>true,
                 TypeQueries, Queries),
         convlist([Type-Query-Template, Type-Template]>>ground(Template),
@@ -493,28 +489,19 @@ write_commit_ndjson(Transaction, Descriptor, CommitId,
         all_class_frames(Transaction, Frames,
                          [compress_ids(true), expand_abstract(true),
                           simple(true)]),
-        format(user_error, "[DEBUG] write_commit_ndjson: got class frames for ~w~n", [CommitId]),
         '$embedding':embedding_context(System_DB, Transaction, Templates,
                                        Queries, Frames, Embedding_Context),
-        format(user_error, "[DEBUG] write_commit_ndjson: got embedding context for ~w~n", [CommitId]),
         get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-        format(user_error, "[DEBUG] write_commit_ndjson: got repo descriptor for ~w~n", [CommitId]),
         commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
-        format(user_error, "[DEBUG] write_commit_ndjson: got commit uri for ~w~n", [CommitId]),
         commit_uri_to_history_commit_ids(Repository_Descriptor,
                                          Commit_Uri, History_Oldest_First),
-        format(user_error, "[DEBUG] write_commit_ndjson: got history (~w commits) for ~w~n", [History_Oldest_First, CommitId]),
         (   append(_, [Parent_Id, CommitId|_], History_Oldest_First)
-        ->  Maybe_Previous = some(Parent_Id),
-            format(user_error, "[DEBUG] write_commit_ndjson: parent=~w for ~w~n", [Parent_Id, CommitId])
-        ;   Maybe_Previous = none,
-            format(user_error, "[DEBUG] write_commit_ndjson: no parent (first commit) for ~w~n", [CommitId])
+        ->  Maybe_Previous = some(Parent_Id)
+        ;   Maybe_Previous = none
         ),
         nb_setval(ndjson_count, 0),
-        format(user_error, "[DEBUG] write_commit_ndjson: starting forall for ~w with Maybe_Previous=~w~n", [CommitId, Maybe_Previous]),
         forall(
             (   member(Type-_Query-_Template, TypeQueries),
-                format(user_error, "[DEBUG] write_commit_ndjson: trying api_indexable for type ~w commit ~w~n", [Type, CommitId]),
                 api_indexable(Maybe_Previous, Descriptor, CommitId,
                               Type, Operation)
             ),
@@ -523,18 +510,10 @@ write_commit_ndjson(Transaction, Descriptor, CommitId,
                 nb_getval(ndjson_count, PrevCount),
                 Count is PrevCount + 1,
                 nb_setval(ndjson_count, Count),
-                (   Count =< 3
-                ->  format(user_error, "[DEBUG] write_commit_ndjson: doc #~w type=~w op=~w id=~w~n", [Count, Type, Op, Id])
-                ;   true
-                ),
                 '$embedding':write_op_for(Stream, System_DB, Transaction,
                                           Embedding_Context, Type, Id, Op),
                 flush_output(Stream)
             )
-        ),
-        (   nb_current(ndjson_count, Count)
-        ->  format(user_error, "[DEBUG] write_commit_ndjson: wrote ~w NDJSON lines for commit ~w~n", [Count, CommitId])
-        ;   format(user_error, "[DEBUG] write_commit_ndjson: wrote 0 NDJSON lines for commit ~w~n", [CommitId])
         )
     ).
 
@@ -580,20 +559,18 @@ count_indexable_documents_(some(_Parent_Id), Transaction, TypeQueries, Count) :-
             TypeAtoms),
     (   TypeAtoms = []
     ->  Count = 0
-    ;   findall(_,
-                '$changes':collect_changed_documents_filtered(
-                    Transaction, TypeAtoms, _Id, _ChangeType),
-                Changes),
-        length(Changes, Count)
+    ;   aggregate_all(count,
+                      '$changes':collect_changed_documents_filtered(
+                          Transaction, TypeAtoms, _Id, _ChangeType),
+                      Count)
     ).
 count_indexable_documents_(none, Transaction, TypeQueries, Count) :-
-    findall(_,
-            (   member(Type-__-_Template, TypeQueries),
-                ask(Transaction, t(_Id, rdf:type, Type),
-                    [compress_prefixes(false)])
-            ),
-            Operations),
-    length(Operations, Count).
+    aggregate_all(count,
+                  (   member(Type-__-_Template, TypeQueries),
+                      ask(Transaction, t(_Id, rdf:type, Type),
+                          [compress_prefixes(false)])
+                  ),
+                  Count).
 
 
 :- begin_tests(indexer_predicates, [concurrent(true)]).

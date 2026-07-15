@@ -294,7 +294,7 @@ api_global_error_jsonld(error(search_requires_branch_descriptor(Path), _), Type,
             }.
 % Search-family handler received 404 from engine (not indexed yet).
 % Returns a structured 404 response instead of an unhandled 500.
-api_global_error_jsonld(error(search_not_indexed(Path, Engine_Body), _), Type, JSON) :-
+api_global_error_jsonld(error(search_not_indexed(Path, _Engine_Body), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg),
            "No indexed data for ~w — the data product has not been indexed yet or indexing is in progress. A background index has been triggered; retry shortly.",
@@ -302,17 +302,16 @@ api_global_error_jsonld(error(search_not_indexed(Path, Engine_Body), _), Type, J
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:not_found",
              'api:error' : _{ '@type' : 'api:SearchNotIndexed',
-                              'api:path' : Path,
-                              'api:engine_detail' : Engine_Body },
+                              'api:path' : Path },
              'api:message' : Msg
             }.
 % Generic handler for engine forward failures (non-404 status codes).
 % Maps 4xx engine errors to api:failure (400) and 5xx to api:server_error (500).
-api_global_error_jsonld(error(tdb_search_forward_failed(Status, Body, URL), _), Type, JSON) :-
+api_global_error_jsonld(error(tdb_search_forward_failed(Status, _Body, _URL), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg),
-           "Search engine returned unexpected status ~w for ~w",
-           [Status, URL]),
+           "Search engine returned unexpected status ~w",
+           [Status]),
     (   Status >= 400,
         Status < 500
     ->  Api_Status = "api:failure"
@@ -321,8 +320,7 @@ api_global_error_jsonld(error(tdb_search_forward_failed(Status, Body, URL), _), 
     JSON = _{'@type' : Type_Displayed,
              'api:status' : Api_Status,
              'api:error' : _{ '@type' : 'api:SearchEngineError',
-                              'api:status_code' : Status,
-                              'api:engine_body' : Body },
+                              'api:status_code' : Status },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted_Id, Generated_Id), _), Type, JSON) :-

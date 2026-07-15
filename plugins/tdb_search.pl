@@ -15,6 +15,7 @@
     io_resolve_forward/6,
     io_compare_forward/4,
     io_compare_forward/5,
+    io_embeddings_forward/8,
     io_delete_domain/2,
     ancestor_window/4,
     maybe_nudge_push/6,
@@ -571,7 +572,8 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
         tdb_search_endpoint(_Endpoint),
         error(tdb_search_endpoint_not_configured(io_push_delta), _)),
     (   plugin_api:indexer_available
-    ->  (   plugin_api:indexer_notify(Branch_Path, Branch_Name)
+    ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering)
         ->  true
         ;   throw(error(indexer_notify_failed(io_push_delta), _))
         )
@@ -593,7 +595,7 @@ io_index_branch(System_DB, Auth, Path) :-
 % Auto-push-on-commit hook
 % ==========================================================================
 % NOTE: The post_commit_hook and validation_is_index_enabled are defined in
-% src/core/api/api_indexer.pl. That version calls indexer_notify/2 (Rust FFI)
+% src/core/api/api_indexer.pl. That version calls indexer_notify/3 (Rust FFI)
 % directly — no curl subprocess, no detached threads, no stream race.
 % The Rust IndexerRegistry handles NDJSON generation, HTTP streaming, and
 % 409 resolution internally via reqwest.
@@ -892,6 +894,12 @@ expand_compact_id(Id, Prefixes, Full) :-
 expand_compact_id(Id, _Prefixes, Full) :-
     format(atom(Full), 'terminusdb:///data/~w', [Id]).
 
+%% expand_doc_id(+Prefixes, +Raw, -Full) is det.
+%
+%  Helper for maplist: expands a compact doc ID to full IRI.
+expand_doc_id(Prefixes, Raw, Full) :-
+    expand_compact_id(Raw, Prefixes, Full).
+
 %% has_prefix_colon(+Id, +Prefixes) is semidet.
 %
 %  True when Id is of the form Prefix:Local where Prefix is a key in
@@ -913,9 +921,10 @@ compact_json_value(Value, Prefixes, Compacted) :-
     is_dict(Value),
     !,
     dict_pairs(Value, Tag, Pairs),
-    findall(Key-Compacted_Value,
+    findall(Compacted_Key-Compacted_Value,
             (   member(Key-Raw_Value, Pairs),
-                compact_json_value(Raw_Value, Prefixes, Compacted_Value)
+                compact_json_value(Raw_Value, Prefixes, Compacted_Value),
+                compact_key(Key, Prefixes, Compacted_Key)
             ),
             Compacted_Pairs),
     dict_pairs(Compacted, Tag, Compacted_Pairs).
@@ -930,6 +939,18 @@ compact_json_value(Value, Prefixes, Compacted) :-
     !,
     compress_dict_uri(Value, Prefixes, Compacted).
 compact_json_value(Value, _Prefixes, Value).
+
+%% compact_key(+Key, +Prefixes, -CompactedKey) is det.
+%
+%  Compact a dict key if it is a full terminusdb:/// IRI.
+%  Keys can be atoms or strings — both are handled.
+
+compact_key(Key, Prefixes, Compacted) :-
+    atomic(Key),
+    atom_concat('terminusdb:///', _, Key),
+    !,
+    compress_dict_uri(Key, Prefixes, Compacted).
+compact_key(Key, _Prefixes, Key).
 
 %% compact_response_ids(+Response_Body, +Descriptor, -Compacted_Body) is det.
 %
@@ -988,7 +1009,8 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
     ->  true
     ;   (   plugin_api:indexer_available
         ->  (   branch_path_for_notify(Path, Branch, Branch_Path),
-                catch((plugin_api:indexer_notify(Branch_Path, Branch) ; true),
+                api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
+                catch((plugin_api:indexer_notify(Branch_Path, Branch, Store_Clustering) ; true),
                       Nudge_Error,
                       format(user_error,
                              "[WARN] Search stale-version nudge failed for ~w: ~q~n",
@@ -1571,6 +1593,20 @@ reply_search_response(Request, Response_Body, Data_Version_Header) :-
     format("Content-Type: application/json~n~n"),
     write(Response_Body).
 
+%% reply_embeddings_stream_response(+Request, +Response_Body) is det.
+%
+%  Writes the NDJSON streaming response with CORS headers.
+%  The tdb_stream infrastructure detects the NDJSON body + x-ndjson content type
+%  and streams it to the client line-by-line.
+reply_embeddings_stream_response(Request, Response_Body, Served_Commit, Store_Clustering, Total_Count) :-
+    plugin_api:write_cors_headers(Request),
+    format("Access-Control-Expose-Headers: X-Served-Commit, X-Store-Clustering, X-Total-Count~n"),
+    format("Content-Type: application/x-ndjson~n"),
+    format("X-Served-Commit: ~w~n", [Served_Commit]),
+    format("X-Store-Clustering: ~w~n", [Store_Clustering]),
+    format("X-Total-Count: ~w~n~n", [Total_Count]),
+    write(Response_Body).
+
 % ==========================================================================
 % Index status response assembly (used by index_handler GET)
 % ==========================================================================
@@ -1585,7 +1621,26 @@ reply_search_response(Request, Response_Body, Data_Version_Header) :-
 %  branch_processing key.
 assemble_index_status_response(Indexer_Progress, Branch_Name,
                                Last_Commit, Engine_Stats, Response) :-
-    get_dict(status, Indexer_Progress, Status_Value),
+    get_dict(status, Indexer_Progress, Status_Raw),
+    % atom_json_dict/3 parses JSON string values as Prolog strings,
+    % not atoms. Normalise to atom for reliable == comparison.
+    (   atom(Status_Raw)
+    ->  Status_Atom = Status_Raw
+    ;   atom_string(Status_Atom, Status_Raw)
+    ),
+    % If the indexer registry has no task (not_found) or is not loaded
+    % (indexer_unavailable) but the engine reports a valid last-indexed
+    % commit, the index exists — the task simply completed and was removed
+    % from the registry, or the Rust indexer FFI isn't compiled in. Override
+    % the status to "completed" so the UI doesn't show "not_found" or
+    % "indexer_unavailable" for a healthy, indexed branch.
+    (   ( Status_Atom == not_found
+      ; Status_Atom == indexer_unavailable
+      ),
+        Last_Commit \= null
+    ->  Status_Value = completed
+    ;   Status_Value = Status_Raw
+    ),
     (   get_dict(error, Indexer_Progress, Error_Value)
     ->  true
     ;   Error_Value = null
@@ -1638,6 +1693,15 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
     ->  true
     ;   Pending_Updates = 0
     ),
+    (   get_dict(store_clustering, Engine_Stats, Store_Clustering_Raw)
+    ->  (   Store_Clustering_Raw == true
+        ->  Store_Clustering = true
+        ;   Store_Clustering_Raw == false
+        ->  Store_Clustering = false
+        ;   Store_Clustering = null
+        )
+    ;   Store_Clustering = null
+    ),
     Engine_Section = json{
         processed_documents:Processed_Docs,
         total_documents:Total_Docs,
@@ -1645,7 +1709,8 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         searchable_documents:Searchable_Docs,
         text_segments_indexed:Segments_Indexed,
         commits_received:Commits_Received,
-        pending_updates:Pending_Updates
+        pending_updates:Pending_Updates,
+        store_clustering:Store_Clustering
     },
     Branch_Processing_Section = json{
         commits_processed:Commits_Processed,
@@ -1700,12 +1765,16 @@ index_handler(get, Path, Request, System_DB, Auth) :-
                 _,
                 Last_Commit = null
             ),
+            % 2b. (not_found → completed override is handled in
+            %     assemble_index_status_response, where it's unit-tested.)
+            
             % 3. Query tdb-search /statistics?domain=... for engine-side counts.
             catch(
                 tdb_search:io_statistics_for_domain(Endpoint, Domain, Engine_Stats),
                 _,
                 Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
-                                    pending_index_fragments:0}
+                                    pending_index_fragments:0,
+                                    store_clustering:null}
             ),
             % 4. Assemble the response using the extracted predicate.
             tdb_search:assemble_index_status_response(
@@ -1762,6 +1831,365 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
     ).
 
 % ==========================================================================
+% Embeddings retrieval proxy
+% ==========================================================================
+
+%% build_embeddings_url(+Endpoint, +Domain, +Commit, +Doc_Ids, +Doc_Types, +Ancestors, -URL) is det.
+%
+%  Constructs the tdb-search /embeddings URL with query parameters.
+%  Doc_Ids and Doc_Types are sent as comma-separated single params
+%  (doc_ids=A,B&doc_types=X,Y) matching tdb-search's EmbeddingsParams struct.
+build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, URL) :-
+    plugin_api:encode_query_value(Domain, Enc_Domain),
+    plugin_api:encode_query_value(Commit, Enc_Commit),
+    (   Doc_Ids = []
+    ->  Doc_Id_Params = ''
+    ;   maplist([Id, Enc]>>(plugin_api:encode_query_value(Id, Enc)), Doc_Ids, Enc_Ids),
+        atomic_list_concat(Enc_Ids, ',', Doc_Ids_Joined),
+        format(atom(Doc_Id_Params), "&doc_ids=~w", [Doc_Ids_Joined])
+    ),
+    (   Doc_Types = []
+    ->  Doc_Type_Params = ''
+    ;   maplist([Type, Enc]>>(plugin_api:encode_query_value(Type, Enc)), Doc_Types, Enc_Types),
+        atomic_list_concat(Enc_Types, ',', Doc_Types_Joined),
+        format(atom(Doc_Type_Params), "&doc_types=~w", [Doc_Types_Joined])
+    ),
+    ancestor_query_params(Ancestors, Ancestor_Params),
+    format(atom(URL), "~w/embeddings?domain=~w&commit=~w~w~w~w",
+           [Endpoint, Enc_Domain, Enc_Commit, Doc_Id_Params, Doc_Type_Params, Ancestor_Params]).
+
+%% io_embeddings_forward(+Endpoint, +Domain, +Commit, +Doc_Ids, +Doc_Types, +Ancestors,
+%%                       +Extra_Params, -Response_Body) is det.
+%
+%  Forwards a GET /embeddings request to the tdb-search engine.
+io_embeddings_forward(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
+                     Extra_Params, Response_Body) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, Base_URL),
+    append_extra_params(Base_URL, Extra_Params, URL),
+    setup_call_cleanup(
+        http_open(URL, In,
+                  [ status_code(Status),
+                    AuthHeader,
+                    request_header('Accept' = 'application/json'),
+                    header(terminusdb_data_version, _DV_Raw)
+                  ]),
+        read_string(In, _, Response_Body),
+        close(In)),
+    handle_forward_response(Status, Response_Body, URL).
+
+%% io_embeddings_forward_stream(+Endpoint, +Domain, +Commit, +Doc_Ids, +Doc_Types,
+%%                              +Ancestors, +Extra_Params, +Request, +Prefixes,
+%%                              -Served_Commit, -Store_Clustering, -Total_Count) is det.
+%
+%  Forwards a GET /embeddings request to tdb-search with Accept: application/x-ndjson.
+%  Writes CGI headers to current_output, then streams the NDJSON response body
+%  line-by-line from tdb-search to current_output (the CGI pipe stream).
+%  If Prefixes is not 'none', compacts doc_id fields in each NDJSON line.
+%  This achieves true end-to-end streaming without buffering the full response.
+io_embeddings_forward_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
+                            Extra_Params, Request, Prefixes,
+                            Served_Commit, Store_Clustering, Total_Count) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    build_embeddings_url(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors, Base_URL),
+    append_extra_params(Base_URL, Extra_Params, URL),
+    setup_call_cleanup(
+        http_open(URL, In,
+                  [ status_code(Status),
+                    AuthHeader,
+                    request_header('Accept' = 'application/x-ndjson'),
+                    header(x_served_commit, Served_Commit_Raw),
+                    header(x_store_clustering, Store_Clustering_Raw),
+                    header(x_total_count, Total_Count_Raw)
+                  ]),
+        (   handle_forward_response(Status, "", URL),
+            (   var(Served_Commit_Raw) -> Served_Commit = "" ; Served_Commit = Served_Commit_Raw ),
+            (   var(Store_Clustering_Raw) -> Store_Clustering = "false" ; Store_Clustering = Store_Clustering_Raw ),
+            (   var(Total_Count_Raw) -> Total_Count = "0" ; Total_Count = Total_Count_Raw ),
+            plugin_api:write_cors_headers(Request),
+            format("Access-Control-Expose-Headers: X-Served-Commit, X-Store-Clustering, X-Total-Count~n"),
+            format("Content-Type: application/x-ndjson~n"),
+            format("X-Served-Commit: ~w~n", [Served_Commit]),
+            format("X-Store-Clustering: ~w~n", [Store_Clustering]),
+            format("X-Total-Count: ~w~n~n", [Total_Count]),
+            stream_ndjson_from(In, Prefixes)
+        ),
+        close(In)).
+
+%% io_embeddings_forward_post_stream(+Endpoint, +Domain, +Commit, +Doc_Ids,
+%%   +Doc_Types, +Ancestors, +Request, +Prefixes,
+%%   -Served_Commit, -Store_Clustering, -Total_Count) is det.
+%
+%  POSTs a JSON body to tdb-search /embeddings with stream=true,
+%  then streams the NDJSON response back with per-line doc_id compaction.
+io_embeddings_forward_post_stream(Endpoint, Domain, Commit, Doc_Ids, Doc_Types, Ancestors,
+                                  Request, Prefixes,
+                                  Served_Commit, Store_Clustering, Total_Count) :-
+    assert_search_backend,
+    search_auth_header(AuthHeader),
+    format(atom(URL), "~w/embeddings", [Endpoint]),
+    JSON_Body = _{domain: Domain, commit: Commit,
+                   doc_ids: Doc_Ids, doc_types: Doc_Types,
+                   ancestors: Ancestors, stream: true},
+    setup_call_cleanup(
+        http_open(URL, In,
+                  [ method(post),
+                    status_code(Status),
+                    AuthHeader,
+                    request_header('Content-Type' = 'application/json'),
+                    request_header('Accept' = 'application/x-ndjson'),
+                    post(json(JSON_Body)),
+                    header(x_served_commit, Served_Commit_Raw),
+                    header(x_store_clustering, Store_Clustering_Raw),
+                    header(x_total_count, Total_Count_Raw)
+                  ]),
+        (   handle_forward_response(Status, "", URL),
+            (   var(Served_Commit_Raw) -> Served_Commit = "" ; Served_Commit = Served_Commit_Raw ),
+            (   var(Store_Clustering_Raw) -> Store_Clustering = "false" ; Store_Clustering = Store_Clustering_Raw ),
+            (   var(Total_Count_Raw) -> Total_Count = "0" ; Total_Count = Total_Count_Raw ),
+            plugin_api:write_cors_headers(Request),
+            format("Access-Control-Expose-Headers: X-Served-Commit, X-Store-Clustering, X-Total-Count~n"),
+            format("Content-Type: application/x-ndjson~n"),
+            format("X-Served-Commit: ~w~n", [Served_Commit]),
+            format("X-Store-Clustering: ~w~n", [Store_Clustering]),
+            format("X-Total-Count: ~w~n~n", [Total_Count]),
+            stream_ndjson_from(In, Prefixes)
+        ),
+        close(In)).
+
+%% compact_ndjson_line(+Line, +Prefixes, -CompactedLine) is det.
+%%
+%%  Compacts the doc_id field in a single NDJSON line using Prefixes.
+%%  Uses a targeted string replacement on the doc_id field only,
+%%  avoiding full JSON parse/serialize which is too slow for large
+%%  embedding arrays (768 floats per line, 2000+ lines).
+%%  The doc_id is always the first key in the NDJSON output from
+%%  tdb-search, so we can safely target "doc_id":"<iri>" at the
+%%  start of the line without risking corruption of embedding data.
+%%  Handles escaped quotes (\"") in the IRI by skipping them when
+%%  searching for the closing quote.
+compact_ndjson_line(Line, Prefixes, Compacted) :-
+    catch(
+        (   (   string(Line)
+            ->  Line_Str = Line
+            ;   atom_string(Line, Line_Str)
+            ),
+            (   sub_string(Line_Str, Before, _, _, '"doc_id":"')
+            ->  Prefix_Len = 10,
+                Start is Before + Prefix_Len,
+                string_length(Line_Str, Total_Len),
+                After_Len is Total_Len - Start,
+                sub_string(Line_Str, Start, After_Len, _, Rest),
+                (   find_closing_quote(Rest, 0, QPos)
+                ->  sub_string(Rest, 0, QPos, _, Full_IRI),
+                    compress_dict_uri(Full_IRI, Prefixes, Compacted_Id),
+                    sub_string(Line_Str, 0, Start, _, Head),
+                    After_IRI_Pos is QPos + 1,
+                    sub_string(Rest, After_IRI_Pos, _, 0, Tail),
+                    string_concat(Head, Compacted_Id, T1),
+                    string_concat(T1, '"', T2),
+                    string_concat(T2, Tail, Compacted)
+                ;   Compacted = Line_Str
+                )
+            ;   Compacted = Line_Str
+            )
+        ),
+        _,
+        Compacted = Line
+    ).
+
+%% find_closing_quote(+String, +StartPos, -QuotePos) is semidet.
+%%
+%%  Finds the position of the first unescaped " in String starting
+%%  from StartPos. Skips \" (escaped quote) sequences. An escaped
+%%  quote is a " preceded by an odd number of backslashes.
+find_closing_quote(String, Pos, QuotePos) :-
+    string_length(String, Len),
+    Pos < Len,
+    sub_string(String, Pos, 1, _, Char),
+    (   Char == "\""
+    ->  (   Pos > 0
+        ->  Before_Pos is Pos - 1,
+            count_trailing_backslashes(String, Before_Pos, 0, Count),
+            (   Count mod 2 =:= 0
+            ->  QuotePos = Pos
+            ;   Next_Pos is Pos + 1,
+                find_closing_quote(String, Next_Pos, QuotePos)
+            )
+        ;   QuotePos = Pos
+        )
+    ;   Next_Pos is Pos + 1,
+        find_closing_quote(String, Next_Pos, QuotePos)
+    ).
+
+%% count_trailing_backslashes(+String, +Pos, +Acc, -Count) is det.
+%%
+%%  Counts consecutive backslashes ending at Pos, accumulating in Acc.
+count_trailing_backslashes(String, Pos, Acc, Count) :-
+    (   Pos >= 0,
+        sub_string(String, Pos, 1, _, BS),
+        BS == "\\"
+    ->  Next_Pos is Pos - 1,
+        Next_Acc is Acc + 1,
+        count_trailing_backslashes(String, Next_Pos, Next_Acc, Count)
+    ;   Count = Acc
+    ).
+
+%% stream_ndjson_from(+In) is det.
+%%
+%%  Reads NDJSON lines from input stream In and writes each line
+%%  to current_output, flushing after each line for incremental streaming.
+stream_ndjson_from(In) :-
+    stream_ndjson_from(In, none).
+
+%% stream_ndjson_from(+In, +Prefixes) is det.
+%%
+%%  Reads NDJSON lines from input stream In and writes each line
+%%  to current_output, flushing after each line for incremental streaming.
+%%  If Prefixes is not 'none', compacts the doc_id field in each line.
+stream_ndjson_from(In, Prefixes) :-
+    read_line_to_string(In, Line),
+    (   Line == end_of_file
+    ->  true
+    ;   (   Prefixes == none
+        ->  format("~s~n", [Line])
+        ;   compact_ndjson_line(Line, Prefixes, Compacted),
+            format("~s~n", [Compacted])
+        ),
+        flush_output,
+        stream_ndjson_from(In, Prefixes)
+    ).
+
+%% embeddings_handler(+Method, +Path, +Request, +System_DB, +Auth)
+%
+%  HTTP handler for GET/POST /api/plugin/search-embeddings/<path>.
+%  GET: proxies to tdb-search GET /embeddings with query params.
+%  POST: reads JSON body with doc_ids/doc_types, expands compact IDs,
+%        forwards to tdb-search POST /embeddings with stream=true,
+%        streams NDJSON back with per-line doc_id compaction.
+embeddings_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    (   memberchk(accept(Accept), Request),
+        member(media(application/'x-ndjson', _, _, _), Accept)
+    ->  Streaming = true
+    ;   Streaming = false
+    ),
+    plugin_api:api_report_errors(
+        search,
+        Request,
+        (
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(embeddings_handler), _)),
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            tdb_search:embeddings_extra_params(Search, Prefixes, Doc_Ids, Doc_Types, Extra_Params),
+            catch(
+                (   Streaming == true
+                ->  tdb_search:io_embeddings_forward_stream(Endpoint, Domain,
+                                      Head_Commit_Id, Doc_Ids, Doc_Types, Ancestors,
+                                      Extra_Params, Request, Prefixes,
+                                      _Served_Commit, _Store_Clustering, _Total_Count)
+                ;   tdb_search:io_embeddings_forward(Endpoint, Domain,
+                                      Head_Commit_Id, Doc_Ids, Doc_Types, Ancestors,
+                                      Extra_Params, Response_Body),
+                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                                       Descriptor, Final_Body),
+                    tdb_search:reply_search_response(Request, Final_Body, none)
+                ),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
+        )
+    ).
+
+embeddings_handler(post, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    plugin_api:api_report_errors(
+        search,
+        Request,
+        (
+            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
+                      error(tdb_search_endpoint_not_configured(embeddings_handler), _)),
+            do_or_die(
+                branch_descriptor{branch_name: Branch_Name} :< Descriptor,
+                error(search_requires_branch_descriptor(Path), _)),
+            get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+            tdb_search:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
+            tdb_search:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
+            tdb_search:descriptor_domain(Descriptor, Domain),
+            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            tdb_search:compress_flag(Search, Compress),
+            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            %% Read JSON body from request (plugin API populates payload for JSON POST)
+            (   memberchk(payload(Body), Request),
+                is_dict(Body)
+            ->  true
+            ;   Body = _{}
+            ),
+            %% Extract and expand doc_ids from body
+            (   get_dict(doc_ids, Body, Raw_Doc_Ids)
+            ->  maplist(tdb_search:expand_doc_id(Prefixes), Raw_Doc_Ids, Doc_Ids)
+            ;   Doc_Ids = []
+            ),
+            %% Extract doc_types from body
+            (   get_dict(doc_types, Body, Raw_Doc_Types)
+            ->  Doc_Types = Raw_Doc_Types
+            ;   Doc_Types = []
+            ),
+            catch(
+                tdb_search:io_embeddings_forward_post_stream(Endpoint, Domain,
+                                      Head_Commit_Id, Doc_Ids, Doc_Types, Ancestors,
+                                      Request, Prefixes,
+                                      _Served_Commit, _Store_Clustering, _Total_Count),
+                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                    throw(error(search_not_indexed(Path, Engine_Body), _))
+                )
+            )
+        )
+    ).
+
+%% embeddings_extra_params(+Search, +Prefixes, -Doc_Ids, -Doc_Types, -Extra_Params) is det.
+%
+%  Extracts doc_id and doc_type (repeated) from query params and normalizes them.
+%  Reuses search_extra_params/4 with an empty body (GET-only endpoint)
+%  then splits the result into Doc_Ids, Doc_Types, and Extra_Params (count etc.).
+embeddings_extra_params(Search, Prefixes, Doc_Ids, Doc_Types, Extra) :-
+    search_extra_params(Search, _{}, Prefixes, Params),
+    (   select(doc_id=repeated(Doc_Ids), Params, Rest1)
+    ->  true
+    ;   Doc_Ids = [],
+        Rest1 = Params
+    ),
+    (   select(doc_type=repeated(Doc_Types), Rest1, Rest2)
+    ->  true
+    ;   Doc_Types = [],
+        Rest2 = Rest1
+    ),
+    findall(Param, embeddings_extra_param(Rest2, Param), Extra).
+
+embeddings_extra_param(Params, count=Count) :-
+    memberchk(count=Count, Params).
+
+% ==========================================================================
 % Route registration
 % ==========================================================================
 
@@ -1772,25 +2200,29 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
 
 :- plugin_api:register_route(api(search/Path),
     plugin_api:cors_handler(Method, tdb_search:search_handler(Path)),
-    [method(Method), prefix, methods([options,get,post])]).
+    [method(Method), prefix, time_limit(infinite), methods([options,get,post])]).
 
 :- plugin_api:register_route(api(suggest/Path),
     plugin_api:cors_handler(Method, tdb_search:suggest_handler(Path)),
-    [method(Method), prefix, methods([options,get])]).
+    [method(Method), prefix, time_limit(infinite), methods([options,get])]).
 
 :- plugin_api:register_route(api(similar/Path),
     plugin_api:cors_handler(Method, tdb_search:similar_handler(Path)),
-    [method(Method), prefix, methods([options,get,post])]).
+    [method(Method), prefix, time_limit(infinite), methods([options,get,post])]).
 
 :- plugin_api:register_route(api(duplicates/Path),
     plugin_api:cors_handler(Method, tdb_search:duplicates_handler(Path)),
-    [method(Method), prefix, methods([options,get])]).
+    [method(Method), prefix, time_limit(infinite), methods([options,get])]).
 
 % /api/resolve route moved to search_resolve.pl plugin.
 
 :- plugin_api:register_route(api(compare),
     plugin_api:cors_handler(Method, tdb_search:compare_handler),
-    [method(Method), methods([options,post])]).
+    [method(Method), time_limit(infinite), methods([options,post])]).
+
+:- plugin_api:register_route(api(plugin/'search-embeddings'/Path),
+    plugin_api:cors_handler(Method, tdb_search:embeddings_handler(Path)),
+    [method(Method), prefix, time_limit(infinite), tdb_stream, methods([options,get,post])]).
 
 % ==========================================================================
 % Stub HTTP server for unit tests
@@ -1818,6 +2250,7 @@ start_push_stub(Port) :-
     http_handler('/domain', push_stub_domain_delete, [methods([delete])]),
     http_handler('/resolve', push_stub_resolve, [methods([post])]),
     http_handler('/candidates', push_stub_candidates, [methods([post])]),
+    http_handler('/embeddings', push_stub_embeddings, [methods([get])]),
     http_server(http_dispatch, [port(Port), workers(1)]).
 
 stop_push_stub(Port) :-
@@ -1861,9 +2294,8 @@ push_stub_push(Request) :-
     ->  assertz(stub_received(push_auth, basic(User, Secret)))
     ;   true
     ),
-    (   memberchk(input(In), Request)
-    ->  read_string(In, _, Body),
-        assertz(stub_received(push_body(N1), Body))
+    (   http_read_data(Request, Body, [to(string)])
+    ->  assertz(stub_received(push_body(N1), Body))
     ;   true
     ),
     (   memberchk(transfer_encoding(chunked), Request)
@@ -1913,9 +2345,8 @@ push_stub_domain_delete(Request) :-
     format("Content-Type: text/plain~n~n").
 
 push_stub_resolve(Request) :-
-    (   memberchk(input(In), Request)
-    ->  read_string(In, _, Body),
-        assertz(stub_received(resolve_body, Body))
+    (   http_read_data(Request, Body, [to(string)])
+    ->  assertz(stub_received(resolve_body, Body))
     ;   true
     ),
     assertz(stub_received(resolve_called, true)),
@@ -1923,14 +2354,31 @@ push_stub_resolve(Request) :-
     write('{"matches":[]}').
 
 push_stub_candidates(Request) :-
-    (   memberchk(input(In), Request)
-    ->  read_string(In, _, Body),
-        assertz(stub_received(candidates_body, Body))
+    (   http_read_data(Request, Body, [to(string)])
+    ->  assertz(stub_received(candidates_body, Body))
     ;   true
     ),
     assertz(stub_received(candidates_called, true)),
     format("Content-Type: application/json~n~n"),
     write('{"set_to_target":{"doc/set_a":[{"id":"doc/target_a","distance":0.1}]},"target_to_set":{"doc/target_a":[{"id":"doc/set_a","distance":0.1}]},"stats":{"set_points":1,"target_points":1,"set_to_target_edges":1,"target_to_set_edges":1,"elapsed_ms":5}}').
+
+push_stub_embeddings(Request) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []
+    ),
+    assertz(stub_received(embeddings_called, Search)),
+    (   memberchk(accept(Accept), Request),
+        member(media(application/'x-ndjson', _, _, _), Accept)
+    ->  format("Content-Type: application/x-ndjson~n"),
+        format("X-Served-Commit: stub-commit~n"),
+        format("X-Store-Clustering: false~n"),
+        format("X-Total-Count: 0~n~n"),
+        write('{"@id":"doc1","@type":"Article","title":"Test Article 1"}'), nl,
+        write('{"@id":"doc2","@type":"Article","title":"Test Article 2"}'), nl
+    ;   format("Content-Type: application/json~n~n"),
+        write('{"doc_embeddings":{},"clustering_embeddings":{},"store_clustering":false,"served_commit":"stub-commit"}')
+    ).
 
 % ==========================================================================
 % clean_tdb_search_test_env — test helper to clear plugin config tables + env vars
@@ -3087,9 +3535,13 @@ test("engine section includes searchable_documents and text_segments_indexed fro
 % IRI compaction / expansion tests
 % ==========================================================================
 
+% Shared prefixes mimicking a database context for admin/abt_buy_e2e
+abt_buy_prefixes(Prefixes) :-
+    Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
+                 '@schema': "terminusdb:///schema#"}.
+
 :- begin_tests(tdb_search_id_compaction).
 
-% Shared prefixes mimicking a database context for admin/abt_buy_e2e
 abt_buy_prefixes(Prefixes) :-
     Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
                  '@schema': "terminusdb:///schema#"}.
@@ -3210,6 +3662,23 @@ test("compact_json_value handles a bare list of IRIs",
                 'terminusdb:///data/admin/abt_buy_e2e/Abt/1102'],
     compact_json_value(Response, Prefixes, Compacted).
 
+test("compact_json_value compacts dict keys that are full IRIs (doc_embeddings)",
+     [true((Key_Abt == 'Abt/1101', Key_Buy == 'Buy/2001'))]) :-
+    abt_buy_prefixes(Prefixes),
+    Response = json{doc_embeddings:json{
+                  'terminusdb:///data/admin/abt_buy_e2e/Abt/1101':[0.1,0.2],
+                  'terminusdb:///data/admin/abt_buy_e2e/Buy/2001':[0.3,0.4]}},
+    compact_json_value(Response, Prefixes, Compacted),
+    get_dict(doc_embeddings, Compacted, Emb),
+    dict_pairs(Emb, _, Pairs),
+    member(Key_Abt-[0.1,0.2], Pairs),
+    member(Key_Buy-[0.3,0.4], Pairs).
+
+test("compact_key leaves non-IRI keys unchanged",
+     [true(Key == name)]) :-
+    abt_buy_prefixes(Prefixes),
+    compact_key(name, Prefixes, Key).
+
 :- end_tests(tdb_search_id_compaction).
 
 % ==========================================================================
@@ -3263,3 +3732,267 @@ test("compress_flag reads true from query parameter",
     compress_flag([compress='true'], Compress).
 
 :- end_tests(tdb_search_compress_param).
+
+% ==========================================================================
+% Embeddings proxy tests
+% ==========================================================================
+
+:- begin_tests(tdb_search_embeddings_proxy).
+
+test("build_embeddings_url constructs correct URL with no doc_ids",
+     [true(URL == 'http://engine:8080/embeddings?domain=admin%2fdb&commit=abc123')]) :-
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123", [], [], [], URL).
+
+test("build_embeddings_url constructs correct URL with doc_ids as comma-separated",
+     [true(sub_atom(URL, _, _, _, 'doc_ids=doc%2f1,doc%2f2'))]) :-
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+                                    ["doc/1", "doc/2"], [], [], URL).
+
+test("build_embeddings_url includes ancestor params",
+     [true(sub_atom(URL, _, _, _, '&ancestor=anc1'))]) :-
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+                                    [], [], ["anc1"], URL).
+
+test("io_embeddings_forward refuses when endpoint is not configured",
+     [ setup(clean_tdb_search_test_env),
+       cleanup(clean_tdb_search_test_env),
+       throws(error(search_requires_tdb_search_backend, _))
+     ]) :-
+    io_embeddings_forward("http://x:80", "admin/db", "abc123", [], [], [], [], _).
+
+test("embeddings_extra_params extracts and normalizes doc_ids from query",
+     [true(Doc_Ids == ['terminusdb:///data/doc1'])]) :-
+    tdb_search:embeddings_extra_params([doc_id='doc1'], none, Doc_Ids, _, _).
+
+test("embeddings_extra_params with no doc_ids returns empty list",
+     [true(Doc_Ids == [])]) :-
+    tdb_search:embeddings_extra_params([], none, Doc_Ids, _, _).
+
+test("embeddings_extra_params extracts doc_types from query",
+     [true(Doc_Types == ['Product', 'Customer'])]) :-
+    tdb_search:embeddings_extra_params([doc_type='Product', doc_type='Customer'],
+                            none, _, Doc_Types, _).
+
+test("embeddings_extra_params extracts both doc_ids and doc_types",
+     [true((Doc_Ids == ['terminusdb:///data/doc1'],
+            Doc_Types == ['Product']))]) :-
+    tdb_search:embeddings_extra_params([doc_id='doc1', doc_type='Product'],
+                            none, Doc_Ids, Doc_Types, _).
+
+test("embeddings_extra_params with no params returns empty for both",
+     [true((Doc_Ids == [], Doc_Types == []))]) :-
+    tdb_search:embeddings_extra_params([], none, Doc_Ids, Doc_Types, _).
+
+test("build_embeddings_url constructs correct URL with doc_types as comma-separated",
+     [true(sub_atom(URL, _, _, _, 'doc_types=Product,Customer'))]) :-
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+                                    [], ["Product", "Customer"], [], URL).
+
+test("build_embeddings_url constructs correct URL with both doc_ids and doc_types",
+     [true((sub_atom(URL, _, _, _, 'doc_ids=doc%2f1'),
+            sub_atom(URL, _, _, _, 'doc_types=Product')))]) :-
+    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", "abc123",
+                                    ["doc/1"], ["Product"], [], URL).
+
+test("stream_ndjson_from reads lines and writes to current_output",
+     [true(Output == "line1\nline2\nline3\n")]) :-
+    open_string("line1\nline2\nline3\n", In),
+    with_output_to(string(Output), stream_ndjson_from(In)),
+    close(In).
+
+test("stream_ndjson_from handles empty input",
+     [true(Output == "")]) :-
+    open_string("", In),
+    with_output_to(string(Output), stream_ndjson_from(In)),
+    close(In).
+
+test("compact_ndjson_line compacts doc_id field in an NDJSON line",
+     [true(Doc_Id == "Abt/1101")]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.1,0.2]}',
+    compact_ndjson_line(Line, Prefixes, Compacted),
+    atom_json_dict(Compacted, Dict, []),
+    get_dict(doc_id, Dict, Doc_Id).
+
+test("compact_ndjson_line leaves non-IRI doc_id unchanged",
+     [true(Doc_Id == "Abt/1101")]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = '{"doc_id":"Abt/1101","embedding":[0.1,0.2]}',
+    compact_ndjson_line(Line, Prefixes, Compacted),
+    atom_json_dict(Compacted, Dict, []),
+    get_dict(doc_id, Dict, Doc_Id).
+
+test("compact_ndjson_line preserves embedding array",
+     [true(Embedding == [0.1,0.2,0.3])]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.1,0.2,0.3]}',
+    compact_ndjson_line(Line, Prefixes, Compacted),
+    atom_json_dict(Compacted, Dict, []),
+    get_dict(embedding, Dict, Embedding).
+
+test("compact_ndjson_line preserves clustering_embedding field",
+     [true(Clustering == [1.0,2.0])]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.1,0.2],"clustering_embedding":[1.0,2.0]}',
+    compact_ndjson_line(Line, Prefixes, Compacted),
+    atom_json_dict(Compacted, Dict, []),
+    get_dict(clustering_embedding, Dict, Clustering).
+
+test("stream_ndjson_from with prefixes compacts doc_id in each line",
+     [true((sub_atom(Output, _, _, _, '"doc_id":"Abt/1101"'),
+            \+ sub_atom(Output, _, _, _, 'terminusdb:///data')))]) :-
+    abt_buy_prefixes(Prefixes),
+    NDJSON = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.1]}\n{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1102","embedding":[0.2]}\n',
+    open_string(NDJSON, In),
+    with_output_to(string(Output), stream_ndjson_from(In, Prefixes)),
+    close(In).
+
+test("stream_ndjson_from without prefixes passes lines through unchanged",
+     [true(sub_atom(Output, _, _, _, 'terminusdb:///data'))]) :-
+    NDJSON = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.1]}\n',
+    open_string(NDJSON, In),
+    with_output_to(string(Output), stream_ndjson_from(In)),
+    close(In).
+
+test("compact_ndjson_line does not corrupt embedding text containing the IRI",
+     [true(atom_string(Text, 'terminusdb:///data/admin/abt_buy_e2e/Abt/1101'))]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.1],"text":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101"}',
+    compact_ndjson_line(Line, Prefixes, Compacted),
+    atom_json_dict(Compacted, Dict, []),
+    get_dict(text, Dict, Text).
+
+test("compact_ndjson_line produces single-line JSON output",
+     [true((\+ sub_atom(Compacted, _, _, _, '\n')))]) :-
+    abt_buy_prefixes(Prefixes),
+    numlist(1, 100, Nums),
+    maplist([N, S] >> (format(atom(S), "~w", [N])), Nums, NumStrs),
+    atomic_list_concat(NumStrs, ",", EmbStr),
+    format(string(Line), '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[~w]}', [EmbStr]),
+    compact_ndjson_line(Line, Prefixes, Compacted).
+
+test("compact_ndjson_line serializes rational numbers correctly",
+     [true(sub_atom(Compacted, _, _, _, '0.33333333333333333333'))]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = '{"doc_id":"terminusdb:///data/admin/abt_buy_e2e/Abt/1101","embedding":[0.33333333333333333333]}',
+    compact_ndjson_line(Line, Prefixes, Compacted).
+
+test("compact_ndjson_line handles escaped quote in doc_id IRI",
+     [true(sub_string(Compacted, _, _, _, "Abt/110\\\"1"))]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = "{\"doc_id\":\"terminusdb:///data/admin/abt_buy_e2e/Abt/110\\\"1\",\"embedding\":[0.1]}",
+    compact_ndjson_line(Line, Prefixes, Compacted).
+
+test("compact_ndjson_line handles escaped backslash before closing quote",
+     [true(sub_string(Compacted, _, _, _, "Abt/1101"))]) :-
+    abt_buy_prefixes(Prefixes),
+    Line = "{\"doc_id\":\"terminusdb:///data/admin/abt_buy_e2e/Abt/1101\\\\\",\"embedding\":[0.1]}",
+    compact_ndjson_line(Line, Prefixes, Compacted),
+    atom_json_dict(Compacted, Dict, []),
+    get_dict(doc_id, Dict, Doc_Id),
+    atom_string(Doc_Id, Doc_Id_Str),
+    sub_string(Doc_Id_Str, _, _, _, "Abt/1101").
+
+test("find_closing_quote finds first unescaped quote",
+     [true(QPos == 5)]) :-
+    find_closing_quote("hello\"world", 0, QPos).
+
+test("find_closing_quote skips escaped quote",
+     [true(QPos == 12)]) :-
+    find_closing_quote("hello\\\"world\"", 0, QPos).
+
+test("find_closing_quote handles escaped backslash before quote",
+     [true(QPos == 7)]) :-
+    find_closing_quote("hello\\\\\"world", 0, QPos).
+
+test("find_closing_quote handles quote at position 0",
+     [true(QPos == 0)]) :-
+    find_closing_quote("\"rest", 0, QPos).
+
+test("find_closing_quote fails on string with no quote",
+     [fail]) :-
+    find_closing_quote("no quote here", 0, _).
+
+:- end_tests(tdb_search_embeddings_proxy).
+
+% ==========================================================================
+% store_clustering in index status response tests
+% ==========================================================================
+
+:- begin_tests(tdb_search_store_clustering_status).
+
+test("index status response includes store_clustering true from engine stats",
+     [true(Store_Clustering == true)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
+                        pending_index_fragments:0, store_clustering:true},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+    get_dict(engine, Response, Engine),
+    get_dict(store_clustering, Engine, Store_Clustering).
+
+test("index status response includes store_clustering false from engine stats",
+     [true(Store_Clustering == false)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
+                        pending_index_fragments:0, store_clustering:false},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+    get_dict(engine, Response, Engine),
+    get_dict(store_clustering, Engine, Store_Clustering).
+
+test("index status response defaults store_clustering to null when absent",
+     [true(Store_Clustering == null)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+    get_dict(engine, Response, Engine),
+    get_dict(store_clustering, Engine, Store_Clustering).
+
+:- end_tests(tdb_search_store_clustering_status).
+
+% ==========================================================================
+% not_found → completed override tests
+% ==========================================================================
+
+:- begin_tests(tdb_search_not_found_override).
+
+test("not_found with valid last_indexed commit should be overridden to completed",
+     [true(Status == completed)]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("not_found with null last_indexed commit stays not_found",
+     [true(Status == not_found)]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", null, Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("indexer_unavailable with valid last_indexed commit becomes completed",
+     [true(Status == completed)]) :-
+    Indexer_Progress = json{status:indexer_unavailable},
+    Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("indexer_unavailable with null last_indexed commit stays indexer_unavailable",
+     [true(Status == indexer_unavailable)]) :-
+    Indexer_Progress = json{status:indexer_unavailable},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    tdb_search:assemble_index_status_response(
+        Indexer_Progress, "main", null, Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+:- end_tests(tdb_search_not_found_override).

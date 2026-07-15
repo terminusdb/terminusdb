@@ -435,15 +435,12 @@ handle_stream_work_buffered(Request, HandlerModule, HandlerName, InputStreamId, 
     setup_call_cleanup(
         true,
         (   build_swi_request_from_dict(Request, BodyStream, BodyLen, SWIRequest),
-            (   HandlerName == stream_handler
-            ->  handle_stream_request(Request, SWIRequest, ResponseStreamId, Response)
-            ;   (   BodyLen > 0
-                ->  read_string(BodyStream, _, BodyString),
-                    b_set_dict(body, Request, BodyString)
-                ;   true
-                ),
-                handle_plugin_stream_request(HandlerModule, HandlerName, Request, SWIRequest, ResponseStreamId, Response)
+            (   BodyLen > 0
+            ->  read_string(BodyStream, _, BodyString),
+                b_set_dict(body, Request, BodyString)
+            ;   true
             ),
+            handle_plugin_stream_request(HandlerModule, HandlerName, Request, SWIRequest, ResponseStreamId, Response),
             finish_stream_response(Response, ResponseStreamId)
         ),
         (   catch(close(BodyStream), _, true),
@@ -471,15 +468,6 @@ finish_stream_response(Response, ResponseStreamId) :-
     send_response(ResponseStreamId, ResponseClean1),
     (   SyncQueue \= none
     ->  thread_send_message(SyncQueue, go)
-    ;   true
-    ),
-    (   get_dict(body, ResponseClean1, stream),
-        get_dict('_ndjson_body', ResponseClean1, Body)
-    ->  thread_create(
-            tdb_http_handler:stream_ndjson_body(Body, ResponseStreamId),
-            _,
-            [detached(true)]
-        )
     ;   true
     ),
     (   HasPostResponse == true
@@ -757,76 +745,24 @@ handle_plugin_stream_request(HandlerModule, HandlerName, Request, _SWIRequest, R
         )
     ).
 
-%% handle_stream_request(+RequestDict, +SWIRequest, +ResponseStreamId, -Response) is det.
-%%
-%%  Dispatch the SWI request through the HTTP pipeline, capture the output,
-%%  and if the body is NDJSON, return body: stream and spawn a detached
-%%  thread to push lines to the Rust stream.
-handle_stream_request(_Request, SWIRequest, _ResponseStreamId, Response) :-
-    catch(
-        (   capture_http_output(SWIRequest,
-                               tdb_http_handler:http_dispatch_with_expansion(SWIRequest),
-                               Captured),
-            parse_http_response(Captured, Response0),
-            Response0 = _{status: Status, body: Body, headers: Headers},
-            (   string(Body),
-                tdb_http_handler:ndjson_body(Body),
-                tdb_http_handler:tdb_is_json_content_type(Headers)
-            ->  Response = _{status: Status, body: stream, headers: Headers, '_ndjson_body': Body}
-            ;   Response = Response0
-            )
-        ->  true
-        ;   json_log_error_formatted("Stream handler goal failed", []),
-            Response = _{
-                status: 500,
-                body: _{
-                    '@type': 'api:ErrorResponse',
-                    'api:status': 'api:failure',
-                    'api:error': _{'@type': 'api:InternalServerError'},
-                    'api:message': 'Internal server error'
-                },
-                headers: _{'Content-Type': 'application/json'}
-            }
-        ),
-        Error,
-        (   json_log_error_formatted("Stream handler failed: ~q", [Error]),
-            Response = _{
-                status: 500,
-                body: _{
-                    '@type': 'api:ErrorResponse',
-                    'api:status': 'api:failure',
-                    'api:error': _{'@type': 'api:InternalServerError'},
-                    'api:message': 'Internal server error'
-                },
-                headers: _{'Content-Type': 'application/json'}
-            }
-        )
-    ).
-
 %% send_response(+ResponseStreamId, +Response) is det.
 %%
 %%  Serialize the response dict as JSON and send it to the output stream.
-%%  When the body is 'stream', the stream is left open for the spawned
-%%  NDJSON thread to write to and close.
 %%
 %%  For binary content types (e.g. application/octets), the body is sent
 %%  as a separate raw byte message after the JSON metadata, using
 %%  appserver_stream_send_raw/2 which preserves 8-bit clean data.
 send_response(ResponseStreamId, Response) :-
-    (   get_dict('_ndjson_body', Response, _)
-    ->  select_dict(_{'_ndjson_body':_}, Response, ResponseClean)
-    ;   ResponseClean = Response
-    ),
-    (   is_binary_response(ResponseClean)
-    ->  get_dict(body, ResponseClean, Body),
-        select_dict(_{body:Body}, ResponseClean, ResponseMeta),
+    (   is_binary_response(Response)
+    ->  get_dict(body, Response, Body),
+        select_dict(_{body:Body}, Response, ResponseMeta),
         with_output_to(string(JsonString), json_write_dict(current_output, ResponseMeta, [as(string)])),
         '$appserver':appserver_stream_send(ResponseStreamId, JsonString),
         '$appserver':appserver_stream_send_raw(ResponseStreamId, Body),
         '$appserver':appserver_stream_close(ResponseStreamId)
-    ;   with_output_to(string(JsonString), json_write_dict(current_output, ResponseClean, [as(string)])),
+    ;   with_output_to(string(JsonString), json_write_dict(current_output, Response, [as(string)])),
         '$appserver':appserver_stream_send(ResponseStreamId, JsonString),
-        (   get_dict(body, ResponseClean, stream)
+        (   get_dict(body, Response, stream)
         ->  true
         ;   '$appserver':appserver_stream_close(ResponseStreamId)
         )

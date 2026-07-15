@@ -1589,7 +1589,18 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
                             Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
                 Transaction),
-    embedding_type_queries_from_transaction(Transaction, _TypeQueries),
+    embedding_type_queries_from_transaction(Transaction, TypeQueries),
+    (   TypeQueries = []
+    ->  (   ground(Id),
+            api_get_document(Graph_Type, Transaction, Id, Config, Document),
+            (   plugins:embedding_for_type(_, _, Document, _)
+            ;   plugins:embedding_for_type(_, Document, _)
+            )
+        ->  true
+        ;   throw(error(no_embedding_queries_defined, _))
+        )
+    ;   true
+    ),
     embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
                              DocTypes),
     list_to_set(DocTypes, _UniqueTypes),
@@ -3145,6 +3156,59 @@ test(embedding_plugin_fallback_for_jsondocument, [
     once(sub_string(EmbeddingOutput, _, _, _, "alpha")),
     once(sub_string(EmbeddingOutput, _, _, _, "beta")),
     once(sub_string(EmbeddingOutput, _, _, _, "Alice")).
+
+test(embedding_rejects_schema_document_without_embedding_instructions, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+
+    % Insert a schema WITHOUT embedding metadata
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string"
+}
+', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    open_string('
+{ "@type": "Animal", "name": "Rex" }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id], InstanceOptions),
+
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    catch(
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        ),
+        error(no_embedding_queries_defined, _),
+        true
+    ).
 
 test(embedding_schema_query_takes_precedence_over_plugin, [
          setup((setup_temp_store(State),

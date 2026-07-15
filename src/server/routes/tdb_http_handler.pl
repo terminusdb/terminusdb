@@ -1,8 +1,6 @@
 :- module(tdb_http_handler, [
                   tdb_http_handler/3,
-                  rust_handler/2,
-                  stream_handler/3,
-                  tdb_is_json_content_type/1
+                  rust_handler/2
               ]).
 
 :- use_module(library(http/http_dispatch)).
@@ -49,11 +47,12 @@ register_rust_routes(Path, Options) :-
     ),
     member(methods(Methods), Options),
     member(Method, Methods),
-    (   option(tdb_stream, Options),
-        Method == get
-    ->  assertz(appserver_hooks:appserver_stream(Method, RustPath, tdb_http_handler:stream_handler))
-    ;   assertz(appserver_hooks:appserver_route(Method, RustPath, tdb_http_handler:rust_handler, Binary))
-    ),
+    %% tdb_stream routes now use the Pipe path (appserver_route), which
+    %% streams CGI output directly to an OS pipe. Rust reads headers from
+    %% the pipe and streams the body via CgiPipeStream (chunked transfer
+    %% encoding for NDJSON, buffered for JSON with Content-Length).
+    %% The tdb_stream option is retained as a documentation marker.
+    assertz(appserver_hooks:appserver_route(Method, RustPath, tdb_http_handler:rust_handler, Binary)),
     % Axum's `*name` wildcard does not match an empty tail, so for prefix
     % handlers also register the exact route for the empty tail case.
     (   option(prefix, Options),
@@ -256,95 +255,6 @@ http_dispatch_with_expansion(Request) :-
     %% pipe path reuses worker threads.
     nb_delete(http_dispatch_tree),
     http_dispatch:http_dispatch(Expanded).
-
-%% stream_handler(+RequestDict, +StreamId, -ResponseDict) is det.
-%%
-%%  Streaming entry point for Rust-registered routes marked with the `tdb_stream`
-%%  option. It runs the SWI-Prolog handler, captures the response, and if the
-%%  body is an NDJSON payload it returns `body: stream` and pushes the lines to
-%%  the Rust stream in a detached thread.
-stream_handler(Request, StreamId, Response) :-
-    catch(
-        stream_handler_safe(Request, StreamId, Response),
-        E,
-        (   json_log_error_formatted("Rust stream handler failed: ~q", [E]),
-            Response = _{
-                status: 500,
-                body: _{
-                    '@type': 'api:ErrorResponse',
-                    'api:status': 'api:failure',
-                    'api:error': _{'@type': 'api:InternalServerError'},
-                    'api:message': 'Internal server error'
-                },
-                headers: _{'Content-Type': 'application/json'}
-            }
-        )
-    ).
-
-stream_handler_safe(Request, StreamId, Response) :-
-    build_swi_request(Request, SWIRequest, BodyStream, MemoryFile),
-    setup_call_cleanup(
-        true,
-        (   capture_http_output(SWIRequest,
-                               tdb_http_handler:http_dispatch_with_expansion(SWIRequest),
-                               Captured),
-            parse_http_response(Captured, Response0),
-            Response0 = _{status: Status, body: Body, headers: Headers},
-            (   string(Body),
-                ndjson_body(Body),
-                tdb_is_json_content_type(Headers)
-            ->  Response = _{status: Status, body: stream, headers: Headers},
-                thread_create(
-                    stream_ndjson_body(Body, StreamId),
-                    _,
-                    [detached(true)]
-                )
-            ;   Response = Response0
-            )
-        ),
-        (   catch(close(BodyStream), _, true),
-            catch(free_memory_file(MemoryFile), _, true)
-        )
-    ).
-
-ndjson_body(Body) :-
-    split_string(Body, "\n", "", Lines),
-    subtract(Lines, [""], NonEmpty),
-    length(NonEmpty, Len),
-    Len > 1.
-
-tdb_is_json_content_type(Headers) :-
-    get_dict('Content-Type', Headers, CT),
-    (   atom(CT)
-    ->  sub_atom(CT, _, _, _, 'application/json')
-    ;   string(CT)
-    ->  sub_string(CT, _, _, _, 'application/json')
-    ).
-
-stream_ndjson_body(Body, StreamId) :-
-    catch(
-        (   open_string(Body, Stream),
-            stream_ndjson_lines(Stream, StreamId),
-            close(Stream)
-        ),
-        Error,
-        (   json_log_error_formatted("Stream send failed: ~q", [Error]),
-            catch('$appserver':appserver_stream_close(StreamId), _, true)
-        )
-    ).
-
-stream_ndjson_lines(Stream, StreamId) :-
-    read_line_to_string(Stream, Line),
-    (   Line == end_of_file
-    ->  catch('$appserver':appserver_stream_close(StreamId), _, true)
-    ;   (   Line \= ""
-        ->  (   '$appserver':appserver_stream_send(StreamId, Line)
-            ->  stream_ndjson_lines(Stream, StreamId)
-            ;   catch('$appserver':appserver_stream_close(StreamId), _, true)
-            )
-        ;   stream_ndjson_lines(Stream, StreamId)
-        )
-    ).
 
 :- begin_tests(tdb_http_handler, [concurrent(false)]).
 
