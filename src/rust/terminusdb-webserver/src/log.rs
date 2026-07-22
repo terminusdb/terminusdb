@@ -1,5 +1,5 @@
 use std::sync::mpsc::{self, Sender, Receiver};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use swipl::prelude::*;
 
@@ -21,10 +21,21 @@ pub struct LogEntry {
 /// which has a proper Prolog engine that can call json_log:json_log/2.
 static LOG_CHANNEL: OnceLock<Sender<LogEntry>> = OnceLock::new();
 
+/// Buffer for log messages emitted before the dispatcher has initialized the
+/// logging channel. The contents are drained into the channel on init.
+static PRE_BUFFER: OnceLock<Mutex<Vec<LogEntry>>> = OnceLock::new();
+
 /// Initialize the logging channel. The receiver end is returned to the
 /// dispatcher thread, which processes log messages alongside dispatch requests.
 pub fn init_log_channel() -> Receiver<LogEntry> {
     let (tx, rx) = mpsc::channel::<LogEntry>();
+    // Drain any messages logged before initialization into the new channel
+    // so they are handled by json_log once the dispatcher is running.
+    if let Ok(mut pre) = PRE_BUFFER.get_or_init(|| Mutex::new(Vec::new())).lock() {
+        for entry in pre.drain(..) {
+            let _ = tx.send(entry);
+        }
+    }
     LOG_CHANNEL.set(tx).ok();
     rx
 }
@@ -45,13 +56,19 @@ fn log(severity: &str, msg: &str) {
     };
     if let Some(tx) = LOG_CHANNEL.get() {
         // Send to the dispatcher thread's engine for proper Prolog logging.
-        // If the channel is closed, fall back to stderr.
-        if tx.send(entry).is_err() {
-            eprintln!("[{}] {} (log channel closed)", severity, msg);
+        let _ = tx.send(entry);
+    } else if Engine::some_engine_active() {
+        // No dispatcher yet, but a Prolog engine is active on this thread.
+        // Log directly through json_log instead of writing to stderr.
+        unsafe {
+            let context = unmanaged_engine_context();
+            let _ = log_to_context(&context, &entry);
         }
     } else {
-        // Channel not initialized yet — fall back to stderr.
-        eprintln!("[{}] {} (log channel not initialized)", severity, msg);
+        // No dispatcher and no Prolog engine; buffer until init_log_channel is called.
+        if let Ok(mut pre) = PRE_BUFFER.get_or_init(|| Mutex::new(Vec::new())).lock() {
+            pre.push(entry);
+        }
     }
 }
 

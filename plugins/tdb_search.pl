@@ -2648,6 +2648,25 @@ clean_tdb_search_test_env :-
     unsetenv('TERMINUSDB_SEARCH_ADMIN_SECRET').
 
 % ==========================================================================
+% silence_user_error(:Goal) is det.
+%
+%  Run Goal with the Prolog user_error stream temporarily rebound to a
+%  null stream, then restore the original user_error. Use only in unit
+%  tests where the json_log output is not the object under test.
+silence_user_error(Goal) :-
+    stream_property(OldErr, alias(user_error)),
+    setup_call_cleanup(
+        (   open_null_stream(Null),
+            set_stream(Null, alias(user_error))
+        ),
+        once(Goal),
+        (   flush_output(Null),
+            close(Null),
+            set_stream(OldErr, alias(user_error))
+        )
+    ).
+
+% ==========================================================================
 % Indexer backend selector tests (moved from api_init.pl)
 %
 % These tests verify config-layer behaviour: indexer_backend/1,
@@ -2852,12 +2871,12 @@ test("descriptor_graphspec graphspec branch agrees with descriptor branch_name",
     sub_atom(GS_String, _, _, _, Expected_Suffix).
 
 test("build_push_url with parent_commit includes parent_commit param",
-     [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1&parent_commit=prev1')]) :-
+     [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1&parent_commit=prev1&stream=true')]) :-
     tdb_search:build_push_url("http://engine:8080", "admin/db", "main",
                                "head1", "prev1", URL).
 
 test("build_push_url with none parent omits parent_commit param",
-     [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1')]) :-
+     [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1&stream=true')]) :-
     tdb_search:build_push_url("http://engine:8080", "admin/db", "main",
                                "head1", none, URL).
 
@@ -2895,17 +2914,28 @@ test("io_push_delta delegates to indexer_notify (push architecture)",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "testdb2"),
               clean_tdb_search_test_env,
+              resolve_absolute_string_descriptor("admin/testdb2", Desc),
+              get_dict(repository_descriptor, Desc, Repo_Desc),
+              branch_head_commit(Repo_Desc, "main", Head_Uri),
+              commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+              text_to_string(Head_Commit_Id, Head_Str),
+              format(atom(Last_Indexed_Json),
+                     '{"branch":"main","commit":"~w","version":0}',
+                     [Head_Str]),
               start_push_stub(Port),
+              assertz(stub_last_indexed_response(Last_Indexed_Json)),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL),
+              plugin_api:indexer_set_config(Endpoint_URL, "")
              )),
        cleanup((stop_push_stub(Port),
                 clean_tdb_search_test_env,
+                catch(plugin_api:indexer_set_config("", ""), _, true),
                 teardown_temp_store(State)))
      ]) :-
     super_user_authority(Auth),
     open_descriptor(system_descriptor{}, System_DB),
-    io_push_delta(System_DB, Auth, "admin/testdb2", "main").
+    silence_user_error(io_push_delta(System_DB, Auth, "admin/testdb2", "main")).
 
 test("commits_after returns suffix after the given commit",
      [true(Forward == ["c2", "c3", "c4"])]) :-
@@ -2940,7 +2970,7 @@ test("normalise_commit_value passes through strings",
     tdb_search:normalise_commit_value("def456", Result).
 
 test("build_push_url encodes slash in domain path",
-     [true(URL == 'http://engine:8080/push?domain=org%2fdb%2flocal%2fbranch%2fmain&branch=main&target_commit=c1')]) :-
+     [true(URL == 'http://engine:8080/push?domain=org%2fdb%2flocal%2fbranch%2fmain&branch=main&target_commit=c1&stream=true')]) :-
     tdb_search:build_push_url("http://engine:8080", "org/db/local/branch/main",
                                "main", "c1", none, URL).
 
@@ -3925,8 +3955,8 @@ test("compact_json_value compacts dict keys that are full IRIs (doc_embeddings)"
     compact_json_value(Response, Prefixes, Compacted),
     get_dict(doc_embeddings, Compacted, Emb),
     dict_pairs(Emb, _, Pairs),
-    member(Key_Abt-[0.1,0.2], Pairs),
-    member(Key_Buy-[0.3,0.4], Pairs).
+    once(member(Key_Abt-[0.1,0.2], Pairs)),
+    once(member(Key_Buy-[0.3,0.4], Pairs)).
 
 test("compact_key leaves non-IRI keys unchanged",
      [true(Key == name)]) :-
@@ -4145,7 +4175,7 @@ test("compact_ndjson_line handles escaped backslash before closing quote",
     atom_json_dict(Compacted, Dict, []),
     get_dict(doc_id, Dict, Doc_Id),
     atom_string(Doc_Id, Doc_Id_Str),
-    sub_string(Doc_Id_Str, _, _, _, "Abt/1101").
+    once(sub_string(Doc_Id_Str, _, _, _, "Abt/1101")).
 
 test("find_closing_quote finds first unescaped quote",
      [true(QPos == 5)]) :-

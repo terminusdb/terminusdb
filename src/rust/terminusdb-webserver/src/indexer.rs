@@ -275,9 +275,10 @@ impl IndexerRegistry {
 
     fn get_config(&self) -> Result<(String, String), String> {
         let url = self.tdb_search_url.lock().unwrap().clone()
+            .filter(|u| !u.is_empty())
             .ok_or("tdb_search_url not set")?;
         let auth = self.auth_header.lock().unwrap().clone()
-            .ok_or("auth_header not set")?;
+            .unwrap_or_default();
         Ok((url, auth))
     }
 
