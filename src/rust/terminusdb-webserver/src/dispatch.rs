@@ -715,7 +715,16 @@ pub fn init_dispatcher() {
 fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> PrologResult<()> {
     let f = context.open_frame();
     let workers_term = f.new_term_ref();
-    workers_term.put(&16u64).map_err(|_| PrologError::Failure)?;
+    let pool_size: u64 = std::env::var("TERMINUSDB_WORKER_POOL_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .or_else(|| {
+            std::env::var("TERMINUSDB_SERVER_WORKERS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or(16);
+    workers_term.put(&pool_size).map_err(|_| PrologError::Failure)?;
 
     let init_callable = CallablePredicate::new(Predicate::new(
         Functor::new(Atom::new("init_request_worker_pool"), 1),
