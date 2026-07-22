@@ -431,15 +431,15 @@ test(rational_scalar_value) :-
     Doc = json{depth: 313r10},
     json_to_markdown(Doc, MD),
     \+ sub_string(MD, _, _, _, "313r10"),
-    sub_string(MD, _, _, _, "31.3").
+    once(sub_string(MD, _, _, _, "31.3")).
 
 test(rational_in_list) :-
     Doc = json{values: [181r5, 471r5]},
     json_to_markdown(Doc, MD),
     \+ sub_string(MD, _, _, _, "181r5"),
     \+ sub_string(MD, _, _, _, "471r5"),
-    sub_string(MD, _, _, _, "36.2"),
-    sub_string(MD, _, _, _, "94.2").
+    once(sub_string(MD, _, _, _, "36.2")),
+    once(sub_string(MD, _, _, _, "94.2")).
 
 test(rational_in_nested_dict) :-
     Doc = json{size: json{width: 313r10, height: 471r5}},
