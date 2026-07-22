@@ -272,7 +272,7 @@ io_index_branch(System_DB, Auth, Path) :-
     do_or_die(
         indexer_backend(http_tdb_search),
         error(indexer_backend_not_tdb_search(io_index_branch), _)),
-    resolve_absolute_string_descriptor(Path, Descriptor),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
     do_or_die(
         branch_descriptor{branch_name: Branch_Name} :< Descriptor,
         error(push_requires_branch_descriptor(Path), _)),

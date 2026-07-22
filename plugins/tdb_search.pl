@@ -9,7 +9,7 @@
     io_suggest_forward/7,
     io_similar_forward/7,
     io_similar_forward_post/8,
-    io_duplicates_forward/6,
+    io_duplicates_forward/7,
     io_statistics_forward/6,
     io_statistics_for_domain/3,
     io_resolve_forward/7,
@@ -316,14 +316,60 @@ io_stream_push(Endpoint, Domain, Branch, Target_Commit,
                     request_header('Authorization'=AuthHeader),
                     request_header('Content-Type'='application/x-ndjson'),
                     status_code(Status) ]),
-        read_string(In, _, ReplyBody),
-        close(In)),
-    handle_push_response(Status, ReplyBody, Result).
+        read_stream_to_final_status(In, Status, Result),
+        close(In)).
 
 handle_push_response(200, Task_Id, accepted(Task_Id)) :- !.
 handle_push_response(409, _Body, conflict_already_pushed) :- !.
 handle_push_response(Status, Body, _) :-
     throw(error(tdb_search_push_failed(Status, Body), _)).
+
+%% Read NDJSON progress lines from a streaming push response.
+%% The stream sends {"status":"progress",...} lines and ends with
+%% either {"status":"complete",...} or {"status":"error",...}.
+%% On 409 (conflict), the body is a plain error string (no stream).
+read_stream_to_final_status(In, 409, conflict_already_pushed) :-
+    !,
+    read_string(In, _, _Body),
+    close(In).
+read_stream_to_final_status(In, Status, Result) :-
+    Status >= 200, Status < 300,
+    !,
+    read_ndjson_lines(In, Lines),
+    (   member(Line, Lines),
+        atom_json_dict(Line, Dict, [default_tag(json)]),
+        get_dict(status, Dict, complete)
+    ->  get_dict(task_id, Dict, TaskId),
+        Result = accepted(TaskId)
+    ;   member(Line, Lines),
+        atom_json_dict(Line, Dict, [default_tag(json)]),
+        get_dict(status, Dict, error)
+    ->  (   get_dict(error, Dict, ErrMsg)
+        ->  true
+        ;   ErrMsg = "unknown error"
+        ),
+        throw(error(tdb_search_push_failed(200, ErrMsg), _))
+    ;   throw(error(tdb_search_push_stream_unexpected(Lines), _))
+    ).
+read_stream_to_final_status(In, Status, _) :-
+    read_string(In, _, Body),
+    close(In),
+    throw(error(tdb_search_push_failed(Status, Body), _)).
+
+%% Read all lines from a stream into a list of atom strings.
+read_ndjson_lines(In, Lines) :-
+    read_ndjson_lines_(In, [], Lines).
+
+read_ndjson_lines_(In, Acc, Lines) :-
+    (   at_end_of_stream(In)
+    ->  reverse(Acc, Lines)
+    ;   read_line_to_string(In, LineStr),
+        (   LineStr = end_of_file
+        ->  reverse(Acc, Lines)
+        ;   atom_string(LineAtom, LineStr),
+            read_ndjson_lines_(In, [LineAtom|Acc], Lines)
+        )
+    ).
 
 io_await_task_completion(Endpoint, Task_Id) :-
     io_await_task_completion_(Endpoint, Task_Id, 0.1, 60).
@@ -407,9 +453,10 @@ io_poll_until_indexed(Endpoint, Domain, Branch, Commit, Backoff, Retries) :-
                               Next_Backoff, Next_Retries)
     ).
 
-io_handle_push_result(Endpoint, _Domain, _Branch, _Commit, accepted(Task_Id)) :-
-    !,
-    io_await_task_completion(Endpoint, Task_Id).
+io_handle_push_result(_Endpoint, _Domain, _Branch, _Commit, accepted(_Task_Id)) :-
+    !.
+%% Pipeline already completed by the time we get accepted(Task_Id)
+%% in streaming mode. No polling needed.
 io_handle_push_result(Endpoint, Domain, Branch, Commit, conflict_already_pushed) :-
     !,
     io_resolve_409(Endpoint, Domain, Branch, Commit).
@@ -420,7 +467,7 @@ build_push_url(Endpoint, Domain, Branch, Target_Commit, none, URL) :-
     plugin_api:encode_query_value(Branch, Enc_Branch),
     plugin_api:encode_query_value(Target_Commit, Enc_Target),
     format(atom(URL),
-           "~w/push?domain=~w&branch=~w&target_commit=~w",
+           "~w/push?domain=~w&branch=~w&target_commit=~w&stream=true",
            [Endpoint, Enc_Domain, Enc_Branch, Enc_Target]).
 build_push_url(Endpoint, Domain, Branch, Target_Commit, Parent_Commit, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
@@ -428,7 +475,7 @@ build_push_url(Endpoint, Domain, Branch, Target_Commit, Parent_Commit, URL) :-
     plugin_api:encode_query_value(Target_Commit, Enc_Target),
     plugin_api:encode_query_value(Parent_Commit, Enc_Parent),
     format(atom(URL),
-           "~w/push?domain=~w&branch=~w&target_commit=~w&parent_commit=~w",
+           "~w/push?domain=~w&branch=~w&target_commit=~w&parent_commit=~w&stream=true",
            [Endpoint, Enc_Domain, Enc_Branch, Enc_Target, Enc_Parent]).
 
 normalise_commit_value(@(null), null) :- !.
@@ -597,7 +644,7 @@ io_index_branch(System_DB, Auth, Path) :-
     do_or_die(
         tdb_search_endpoint(_Endpoint),
         error(tdb_search_endpoint_not_configured(io_index_branch), _)),
-    resolve_absolute_string_descriptor(Path, Descriptor),
+    plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
     do_or_die(
         (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
         ->  true
@@ -605,17 +652,32 @@ io_index_branch(System_DB, Auth, Path) :-
         ->  branch_for_commit(Repo_Desc, Commit_Id, Branch_Name)
         ),
         error(push_requires_branch_descriptor(Path), _)),
-    io_push_delta(System_DB, Auth, Path, Branch_Name).
+    tdb_search:branch_path_for_notify(Path, Branch_Name, Branch_Path),
+    (   plugin_api:indexer_available
+    ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
+            plugin_api:indexer_reindex(Branch_Path, Branch_Name, Store_Clustering)
+        ->  true
+        ;   throw(error(indexer_reindex_failed(io_index_branch), _))
+        )
+    ;   throw(error(indexer_ffi_not_loaded(io_index_branch), _))
+    ).
 
 %% branch_for_commit(+Repo_Desc, +Commit_Id, -Branch_Name) is semidet.
 %
-%  Find the branch whose head commit matches Commit_Id.
-%  Tries each branch in the repository and returns the first match.
-%  Fails if no branch has this commit as its head.
+%  Find a branch that contains Commit_Id in its history.
+%  Tries each branch in the repository and returns the first whose
+%  commit history includes Commit_Id. This handles both the case where
+%  the commit is the current branch head and where it is an older commit
+%  (e.g. when indexing from the commit explorer view).
 branch_for_commit(Repo_Desc, Commit_Id, Branch_Name) :-
     commit_id_uri(Repo_Desc, Commit_Id, Commit_Uri),
     has_branch(Repo_Desc, Branch_Name),
-    branch_head_commit(Repo_Desc, Branch_Name, Commit_Uri),
+    branch_head_commit(Repo_Desc, Branch_Name, Head_Uri),
+    (   Head_Uri == Commit_Uri
+    ->  true
+    ;   commit_uri_to_history_commit_ids(Repo_Desc, Head_Uri, History_Ids),
+        member(Commit_Id, History_Ids)
+    ),
     !.
 
 % ==========================================================================
@@ -684,11 +746,12 @@ build_similar_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
     format(atom(URL), "~w/similar?domain=~w~w~w",
            [Endpoint, Enc_Domain, Ref_Params, Ancestor_Params]).
 
-build_duplicates_url(Endpoint, Domain, Search_Ref, URL) :-
+build_duplicates_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
     search_ref_param(Search_Ref, Ref_Params),
-    format(atom(URL), "~w/duplicates?domain=~w~w",
-           [Endpoint, Enc_Domain, Ref_Params]).
+    ancestor_query_params(Ancestors, Ancestor_Params),
+    format(atom(URL), "~w/duplicates?domain=~w~w~w",
+           [Endpoint, Enc_Domain, Ref_Params, Ancestor_Params]).
 
 build_statistics_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
@@ -739,11 +802,11 @@ io_similar_forward_post(Endpoint, Domain, Search_Ref, Ancestors,
     io_forward_post(URL, AuthHeader, Post_Body, Response_Body,
                     Data_Version_Header).
 
-io_duplicates_forward(Endpoint, Domain, Search_Ref,
+io_duplicates_forward(Endpoint, Domain, Search_Ref, Ancestors,
                       Extra_Params, Response_Body, Data_Version_Header) :-
     assert_search_backend,
     search_auth_header(AuthHeader),
-    build_duplicates_url(Endpoint, Domain, Search_Ref, Base_URL),
+    build_duplicates_url(Endpoint, Domain, Search_Ref, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header).
 
@@ -1458,12 +1521,12 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, _Ancestors),
+            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
             tdb_search:compress_flag(Search, Compress),
             tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
             tdb_search:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_duplicates_forward(Endpoint, Domain, Search_Ref,
+                (   tdb_search:io_duplicates_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                           Extra_Params, Response_Body, Data_Version_Header),
                     tdb_search:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
@@ -1863,7 +1926,9 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
     ->  true
     ;   Commits_Received = 0
     ),
-    (   get_dict(pending_index_fragments, Engine_Stats, Pending_Updates)
+    (   get_dict(pending_index_documents, Engine_Stats, Pending_Updates)
+    ->  true
+    ;   get_dict(pending_index_fragments, Engine_Stats, Pending_Updates)
     ->  true
     ;   Pending_Updates = 0
     ),
@@ -1968,7 +2033,8 @@ index_handler(post, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   catch(
+        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, _Descriptor),
+            catch(
                 (   tdb_search:io_index_branch(System_DB, Auth, Path),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
@@ -3219,7 +3285,7 @@ test("build_similar_url constructs correct URL",
 
 test("build_duplicates_url constructs correct URL without ancestors",
      [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&commit=c99')]) :-
-    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", commit("c99"), URL).
+    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", commit("c99"), [], URL).
 
 test("build_statistics_url constructs scoped URL with domain and commit",
      [true(URL == 'http://engine:8080/statistics?domain=admin%2fmydb&commit=abc123')]) :-
@@ -3243,7 +3309,7 @@ test("build_search_url with branch ref constructs branch param",
 
 test("build_duplicates_url with branch ref constructs branch param",
      [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&branch=main')]) :-
-    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", branch("main"), URL).
+    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", branch("main"), [], URL).
 
 test("ancestor_window returns ancestors nearest first excluding HEAD",
      [ setup(setup_temp_store(State)),
@@ -3300,7 +3366,7 @@ test("io_duplicates_forward refuses when endpoint is not configured",
        cleanup(clean_tdb_search_test_env),
        throws(error(search_requires_tdb_search_backend, _))
      ]) :-
-    io_duplicates_forward("http://x:80", "d", commit("c"), [], _, _).
+    io_duplicates_forward("http://x:80", "d", commit("c"), [], [], _, _).
 
 test("io_statistics_forward refuses when endpoint is not configured",
      [ setup(clean_tdb_search_test_env),

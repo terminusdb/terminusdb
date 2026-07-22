@@ -20,6 +20,7 @@
     abolish_plugin_env/1,
     abolish_plugin_env_default/2,
     indexer_notify/3,
+    indexer_reindex/3,
     indexer_set_config/2,
     indexer_progress/3,
     indexer_abort_domain/1,

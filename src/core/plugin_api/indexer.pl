@@ -1,5 +1,6 @@
 :- module(plugin_api_indexer, [
     indexer_notify/3,
+    indexer_reindex/3,
     indexer_set_config/2,
     indexer_progress/3,
     indexer_abort_domain/1,
@@ -28,7 +29,8 @@ loaded (e.g. in unit tests or when the swipl backend is used).
 %  Succeeds iff the Rust indexer FFI predicates are registered.
 %  Use this to gate code that requires the indexer without calling it.
 indexer_available :-
-    current_predicate('$appserver':indexer_notify/3).
+    current_predicate('$appserver':indexer_notify/3),
+    current_predicate('$appserver':indexer_reindex/3).
 
 %% indexer_notify(+Path, +BranchName, +StoreClustering) is det.
 %
@@ -40,6 +42,18 @@ indexer_notify(Path, BranchName, StoreClustering) :-
     (   current_predicate('$appserver':indexer_notify/3)
     ->  '$appserver':indexer_notify(Path, BranchName, StoreClustering)
     ;   throw(error(indexer_ffi_not_loaded(indexer_notify), _))
+    ).
+
+%% indexer_reindex(+Path, +BranchName, +StoreClustering) is det.
+%
+%  Re-index a branch from scratch. Aborts any running indexing task for
+%  this branch, wipes the branch's index on tdb-search (DELETE /branch-index),
+%  then starts a fresh indexing pass from the oldest commit.
+%  Throws `indexer_ffi_not_loaded` if the Rust runtime is not available.
+indexer_reindex(Path, BranchName, StoreClustering) :-
+    (   current_predicate('$appserver':indexer_reindex/3)
+    ->  '$appserver':indexer_reindex(Path, BranchName, StoreClustering)
+    ;   throw(error(indexer_ffi_not_loaded(indexer_reindex), _))
     ).
 
 %% indexer_set_config(+TdbSearchUrl, +AuthHeader) is det.

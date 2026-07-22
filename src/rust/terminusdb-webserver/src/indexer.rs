@@ -58,6 +58,8 @@ enum TaskResult {
     AtHead,
     /// An error occurred.
     Error(String),
+    /// tdb-search returned 503 (compaction in progress). Retry the same commit.
+    Retry,
 }
 
 /// Progress tracking for a branch task.
@@ -78,6 +80,8 @@ pub struct BranchProgress {
     documents_sent: AtomicU64,
     /// Timestamp of the last document processed (for dead man's switch).
     last_progress_at: StdMutex<Option<Instant>>,
+    /// When the current 503-retry cycle started (for max retry duration).
+    retry_started_at: StdMutex<Option<Instant>>,
 }
 
 impl BranchProgress {
@@ -91,6 +95,7 @@ impl BranchProgress {
             total_documents: AtomicU64::new(0),
             documents_sent: AtomicU64::new(0),
             last_progress_at: StdMutex::new(None),
+            retry_started_at: StdMutex::new(None),
         })
     }
 
@@ -143,6 +148,21 @@ impl BranchProgress {
     fn clear_current_commit(&self) {
         *self.current_commit.lock().unwrap() = None;
         *self.last_progress_at.lock().unwrap() = None;
+    }
+
+    /// Mark the start of a 503-retry cycle for max-duration tracking.
+    fn start_retry_timer(&self) {
+        *self.retry_started_at.lock().unwrap() = Some(Instant::now());
+    }
+
+    /// Clear the retry timer (called when the push succeeds).
+    fn clear_retry_timer(&self) {
+        *self.retry_started_at.lock().unwrap() = None;
+    }
+
+    /// Returns how long the current retry cycle has been going, or None.
+    fn retry_duration(&self) -> Option<Duration> {
+        self.retry_started_at.lock().unwrap().map(|t| t.elapsed())
     }
 
     /// Update the progress timestamp to now. Called when a document is processed.
@@ -216,6 +236,11 @@ struct BranchTask {
     /// Whether to request clustering embeddings from tdb-search on push.
     /// Read from the schema @context @metadata.terminusdb.options at notify time.
     store_clustering: std::sync::atomic::AtomicBool,
+    /// When true, the next on_task_complete(NextCommit) should ignore
+    /// the X-Next-Commit header and set next_commit = None instead,
+    /// forcing a fresh /last-indexed query. Set by notify() when a
+    /// re-index is requested while indexing is ongoing.
+    reset_chain: std::sync::atomic::AtomicBool,
 }
 
 /// The global indexer registry.
@@ -277,6 +302,11 @@ impl IndexerRegistry {
                 *task.next_commit.lock().unwrap() = None;
                 drop(tasks);
                 self.enqueue_for_scheduling(&key);
+            } else {
+                // Task is still Indexing — set reset_chain so the next
+                // on_task_complete(NextCommit) will ignore the stale
+                // X-Next-Commit header and query /last-indexed fresh.
+                task.reset_chain.store(true, Ordering::SeqCst);
             }
             return Ok(());
         }
@@ -291,12 +321,125 @@ impl IndexerRegistry {
             next_commit: StdMutex::new(None),
             cancel: cancel.clone(),
             store_clustering: std::sync::atomic::AtomicBool::new(store_clustering),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         tasks.insert(key.clone(), task);
         drop(tasks);
 
         // Enqueue for scheduling.
         self.enqueue_for_scheduling(&key);
+
+        Ok(())
+    }
+
+    /// Re-index a branch from scratch. Aborts any running task for this
+    /// branch, calls DELETE /domain on tdb-search to wipe all document data
+    /// and tags (so /last-indexed returns null), then creates a fresh task
+    /// that will start from the oldest commit.
+    fn reindex(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
+        let key = BranchKey { path: path.clone(), branch: branch.clone() };
+
+        // 1. Cancel and remove any existing task for this branch.
+        {
+            let mut tasks = self.tasks.lock().unwrap();
+            if let Some(task) = tasks.remove(&key) {
+                task.cancel.cancel();
+            }
+        }
+        {
+            let mut queue = self.pending_queue.lock().unwrap();
+            queue.retain(|k| k != &key);
+        }
+        // Clear current_branch if it matches.
+        {
+            let mut current = self.current_branch.lock().unwrap();
+            if current.as_ref() == Some(&key) {
+                *current = None;
+            }
+        }
+
+        // 2. Call DELETE /branch-index on tdb-search (async), then create
+        //    a fresh task and enqueue it after the delete completes.
+        let (tdb_search_url, auth_header) = self.get_config()?;
+        let http_client = self.http_client.clone();
+        let domain = key.domain().to_string();
+        let branch_clone = branch.clone();
+        let path_clone = path.clone();
+
+        match crate::dispatch::tokio_handle() {
+            Some(h) => {
+                let registry = match INDEXER_REGISTRY.get() {
+                    Some(r) => r.clone(),
+                    None => return Err("registry not initialized".to_string()),
+                };
+                h.spawn(async move {
+                    // Delete the entire domain on tdb-search. This removes all
+                    // document data, tags, and in-memory state — not just the
+                    // branch tags. Using /domain (not /branch-index) ensures
+                    // old documents are wiped, so re-indexed pushes insert
+                    // fresh data instead of silently upserting existing docs.
+                    let delete_url = format!(
+                        "{}/domain?domain={}",
+                        tdb_search_url.trim_end_matches('/'),
+                        urlencoding::encode(&domain),
+                    );
+                    crate::log::log_info(format!(
+                        "[indexer] reindex: DELETE {} for {} {}",
+                        delete_url, path_clone, branch_clone
+                    ));
+                    let resp = http_client
+                        .delete(&delete_url)
+                        .header("Authorization", &auth_header)
+                        .send()
+                        .await;
+                    match resp {
+                        Ok(r) if r.status().is_success() => {
+                            crate::log::log_info(format!(
+                                "[indexer] reindex: domain deleted for {} {}",
+                                path_clone, branch_clone
+                            ));
+                        }
+                        Ok(r) => {
+                            crate::log::log_error(format!(
+                                "[indexer] reindex: DELETE domain returned {}: {}",
+                                r.status(),
+                                path_clone
+                            ));
+                        }
+                        Err(e) => {
+                            crate::log::log_error(format!(
+                                "[indexer] reindex: DELETE domain failed: {} ({})",
+                                e, path_clone
+                            ));
+                        }
+                    }
+
+                    // 3. Create a fresh task and enqueue it.
+                    //    next_commit = None → run_commit_task will query
+                    //    /last-indexed, which now returns null → starts from
+                    //    the oldest commit.
+                    let key = BranchKey {
+                        path: path_clone.clone(),
+                        branch: branch_clone.clone(),
+                    };
+                    let progress = BranchProgress::new();
+                    progress.set_total(1);
+                    progress.set_status_indexing();
+                    let task = Arc::new(BranchTask {
+                        progress: progress,
+                        notify_count: AtomicU64::new(1),
+                        next_commit: StdMutex::new(None),
+                        cancel: tokio_util::sync::CancellationToken::new(),
+                        store_clustering: std::sync::atomic::AtomicBool::new(store_clustering),
+                        reset_chain: std::sync::atomic::AtomicBool::new(false),
+                    });
+                    registry.tasks.lock().unwrap().insert(key.clone(), task);
+                    registry.enqueue_for_scheduling(&key);
+                    registry.try_spawn_next();
+                });
+            }
+            None => return Err("tokio runtime not available".to_string()),
+        }
 
         Ok(())
     }
@@ -464,13 +607,24 @@ impl IndexerRegistry {
                 ));
                 let tasks = self.tasks.lock().unwrap();
                 if let Some(task) = tasks.get(key) {
-                    *task.next_commit.lock().unwrap() = Some(next);
-                    task.progress.increment_completed();
-                    let completed = task.progress.completed.load(Ordering::SeqCst);
-                    task.progress.total.store(completed + 1, Ordering::SeqCst);
-                    drop(tasks);
-                    self.enqueue_for_scheduling(key);
-                    self.try_spawn_next();
+                    task.progress.clear_retry_timer();
+                    // If reset_chain was requested (re-index while indexing),
+                    // ignore the X-Next-Commit header and force a fresh
+                    // /last-indexed query by setting next_commit = None.
+                    let should_reset = task.reset_chain.swap(false, Ordering::SeqCst);
+                    if should_reset {
+                        *task.next_commit.lock().unwrap() = None;
+                        task.progress.increment_completed();
+                        drop(tasks);
+                        self.enqueue_for_scheduling(key);
+                        self.try_spawn_next();
+                    } else {
+                        *task.next_commit.lock().unwrap() = Some(next);
+                        task.progress.increment_completed();
+                        drop(tasks);
+                        self.enqueue_for_scheduling(key);
+                        self.try_spawn_next();
+                    }
                 } else {
                     drop(tasks);
                     self.try_spawn_next();
@@ -483,6 +637,7 @@ impl IndexerRegistry {
                 ));
                 let tasks = self.tasks.lock().unwrap();
                 if let Some(task) = tasks.get(key) {
+                    task.progress.clear_retry_timer();
                     task.progress.increment_completed();
                     let completed = task.progress.completed.load(Ordering::SeqCst);
                     task.progress.total.store(completed, Ordering::SeqCst);
@@ -526,6 +681,67 @@ impl IndexerRegistry {
                 drop(tasks);
                 self.remove_task(key);
                 self.try_spawn_next();
+            }
+            TaskResult::Retry => {
+                // Maximum total retry duration before giving up (5 minutes).
+                const MAX_RETRY_DURATION: Duration = Duration::from_secs(300);
+
+                let tasks = self.tasks.lock().unwrap();
+                if let Some(task) = tasks.get(key) {
+                    // Check if we've exceeded the max retry duration.
+                    if let Some(elapsed) = task.progress.retry_duration() {
+                        if elapsed >= MAX_RETRY_DURATION {
+                            drop(tasks);
+                            let msg = format!(
+                                "indexing task for {} {} failed: tdb-search returned 503 \
+                                 (compaction in progress) for {}s — exceeded max retry duration of {}s",
+                                key.path, key.branch,
+                                elapsed.as_secs(), MAX_RETRY_DURATION.as_secs()
+                            );
+                            crate::log::log_error(format!("[indexer] {}", msg));
+                            let tasks = self.tasks.lock().unwrap();
+                            if let Some(task) = tasks.get(key) {
+                                task.progress.set_error(msg);
+                                task.progress.clear_retry_timer();
+                            }
+                            drop(tasks);
+                            self.remove_task(key);
+                            self.try_spawn_next();
+                            return;
+                        }
+                    } else {
+                        // First 503 in this cycle — start the retry timer.
+                        task.progress.start_retry_timer();
+                    }
+
+                    let elapsed = task.progress.retry_duration()
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    crate::log::log_info(format!(
+                        "[indexer] task for {} {} will retry (503 from tdb-search, \
+                         retry cycle {}s / {}s max)",
+                        key.path, key.branch, elapsed, MAX_RETRY_DURATION.as_secs()
+                    ));
+
+                    // Refresh the dead man's switch timer so it doesn't fire
+                    // during the retry wait. We are intentionally waiting for
+                    // compaction — this is not a stuck task.
+                    task.progress.touch_progress();
+                    // Keep current_commit set so the status API reports activity,
+                    // but the refreshed timer prevents the dead man's switch.
+                    *task.next_commit.lock().unwrap() = None;
+                }
+                drop(tasks);
+                // Re-enqueue after a short delay to give compaction time to finish.
+                let registry = Arc::clone(indexer_registry());
+                let key_clone = key.clone();
+                if let Some(handle) = crate::dispatch::tokio_handle() {
+                    handle.spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        registry.enqueue_for_scheduling(&key_clone);
+                        registry.try_spawn_next();
+                    });
+                }
             }
         }
     }
@@ -578,6 +794,14 @@ impl IndexerRegistry {
     /// If any task has a current_commit set (actively processing) but no
     /// document progress for longer than the deadline, crash the server
     /// with a FATAL log message and a full stack trace.
+    ///
+    /// ARCHITECTURAL INVARIANT: This fail-loud behaviour must NEVER be changed
+    /// to cancel-and-continue, log-and-swallow, or any non-aborting strategy
+    /// without explicit approval from a human architect. If this switch fires,
+    /// there is a serious correctness issue in the TerminusDB product — a
+    /// thread is stuck in a state that violates the indexing contract. Aborting
+    /// is the only safe response: it surfaces the bug immediately with a stack
+    /// trace rather than silently corrupting the index or leaking resources.
     ///
     /// The deadline is configurable via TERMINUSDB_INDEXER_WATCHDOG_DEADLINE
     /// (default: 60 seconds). CPU-only embedding backends (e.g. Ollama)
@@ -813,7 +1037,6 @@ async fn run_commit_task(
 
     // Track which commit is being processed for the status endpoint.
     progress.set_current_commit(actual_commit_id.clone());
-    progress.reset_document_counters();
 
     // Read X-Commit-Count (total commits in branch history) and update
     // the progress total so the status API reports meaningful progress.
@@ -829,13 +1052,15 @@ async fn run_commit_task(
     }
 
     // Read X-Document-Count (total documents to process in this commit).
-    if let Some(doc_count_str) = headers
+    // Reset document counters AFTER reading the new total so the status API
+    // never sees a 0/0 gap between commits.
+    let new_doc_count = headers
         .get("x-document-count")
         .and_then(|v| v.to_str().ok())
-    {
-        if let Ok(doc_count) = doc_count_str.trim().parse::<u64>() {
-            progress.set_total_documents(doc_count);
-        }
+        .and_then(|s| s.trim().parse::<u64>().ok());
+    progress.reset_document_counters();
+    if let Some(doc_count) = new_doc_count {
+        progress.set_total_documents(doc_count);
     }
 
     let next_commit_header = headers
@@ -875,9 +1100,8 @@ async fn run_commit_task(
     match push_result {
         Ok(_) => next_commit_result,
         Err(e) => {
-            // Check for error markers in the stream.
-            if e.contains("422") || e.contains("abort") {
-                TaskResult::Error(e)
+            if e == "RETRY_503" {
+                TaskResult::Retry
             } else {
                 TaskResult::Error(e)
             }
@@ -1079,7 +1303,7 @@ async fn post_push_stream(
     }
 
     if !status.is_success() && status.as_u16() != 409 {
-        // Non-streaming error response (e.g. 409, 422, 400) — read as text.
+        // Non-streaming error response (e.g. 409, 422, 400, 503) — read as text.
         let resp_body = resp.text().await.unwrap_or_default();
         crate::log::log_info(format!(
             "[indexer] POST /push response status: {}, body: {}",
@@ -1090,6 +1314,12 @@ async fn post_push_stream(
         }
         if status.as_u16() == 422 {
             return Err(format!("POST /push returned 422 (abort): {}", resp_body));
+        }
+        if status.as_u16() == 503 {
+            crate::log::log_info(format!(
+                "[indexer] POST /push returned 503 (compaction in progress), will retry"
+            ));
+            return Err("RETRY_503".to_string());
         }
         return Err(format!("POST /push returned {}: {}", status, resp_body));
     }
@@ -1319,6 +1549,20 @@ predicates! {
         indexer_registry().abort_domain(&domain.into_inner());
         Ok(())
     }
+
+    /// Re-index a branch from scratch. Aborts any running task, wipes the
+    /// branch's index on tdb-search, then starts fresh from the oldest commit.
+    /// Signature: indexer_reindex(+Path, +BranchName, +StoreClustering)
+    #[module("$appserver")]
+    pub semidet fn indexer_reindex(_context, path_term, branch_term, store_clustering_term) {
+        let path: PrologText = path_term.get_ex()?;
+        let branch: PrologText = branch_term.get_ex()?;
+        let store_clustering: bool = store_clustering_term.get_ex()?;
+        indexer_registry().reindex(path.into_inner(), branch.into_inner(), store_clustering).map_err(|e| {
+            crate::log::log_error(format!("[indexer] reindex failed: {}", e));
+            PrologError::Failure
+        })
+    }
 }
 
 /// Register all indexer FFI predicates.
@@ -1327,6 +1571,7 @@ pub fn register() {
     register_indexer_notify();
     register_indexer_progress();
     register_indexer_abort_domain();
+    register_indexer_reindex();
 }
 
 #[cfg(test)]
@@ -1353,7 +1598,7 @@ mod tests {
         let progress = BranchProgress::new();
         assert_eq!(progress.completed.load(Ordering::Relaxed), 0);
         assert_eq!(progress.total.load(Ordering::Relaxed), 0);
-        let (_, _, status, _, _, _) = progress.snapshot();
+        let (_, _, status, _, _, _, _) = progress.snapshot();
         assert!(matches!(status, IndexStatus::Indexing));
     }
 
@@ -1366,7 +1611,7 @@ mod tests {
         progress.increment_completed();
         progress.increment_completed();
         progress.increment_completed();
-        let (completed, total, status, _, _, _) = progress.snapshot();
+        let (completed, total, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 5);
         assert_eq!(total, 10);
         assert!(matches!(status, IndexStatus::Indexing));
@@ -1376,7 +1621,7 @@ mod tests {
     fn test_branch_progress_error() {
         let progress = BranchProgress::new();
         progress.set_error("test error".to_string());
-        let (_, _, status, _, _, _) = progress.snapshot();
+        let (_, _, status, _, _, _, _) = progress.snapshot();
         assert!(matches!(status, IndexStatus::Error(ref msg) if msg == "test error"));
     }
 
@@ -1384,22 +1629,22 @@ mod tests {
     fn test_branch_progress_completed() {
         let progress = BranchProgress::new();
         progress.set_completed();
-        let (_, _, status, _, _, _) = progress.snapshot();
+        let (_, _, status, _, _, _, _) = progress.snapshot();
         assert!(matches!(status, IndexStatus::Completed));
     }
 
     #[test]
     fn test_branch_progress_current_commit() {
         let progress = BranchProgress::new();
-        let (_, _, _, current, _, _) = progress.snapshot();
+        let (_, _, _, current, _, _, _) = progress.snapshot();
         assert!(current.is_none(), "current_commit should start as None");
 
         progress.set_current_commit("abc123".to_string());
-        let (_, _, _, current, _, _) = progress.snapshot();
+        let (_, _, _, current, _, _, _) = progress.snapshot();
         assert_eq!(current.as_deref(), Some("abc123"));
 
         progress.clear_current_commit();
-        let (_, _, _, current, _, _) = progress.snapshot();
+        let (_, _, _, current, _, _, _) = progress.snapshot();
         assert!(current.is_none(), "current_commit should be None after clear");
     }
 
@@ -1408,18 +1653,18 @@ mod tests {
         let progress = BranchProgress::new();
         // Initial notify sets total = 1
         progress.set_total(1);
-        let (_, total, _, _, _, _) = progress.snapshot();
+        let (_, total, _, _, _, _, _) = progress.snapshot();
         assert_eq!(total, 1);
 
         // X-Commit-Count header provides the real total
         progress.set_total(5);
-        let (_, total, _, _, _, _) = progress.snapshot();
+        let (_, total, _, _, _, _, _) = progress.snapshot();
         assert_eq!(total, 5, "set_total should override the initial guess");
 
         // Simulate processing commits
         progress.increment_completed();
         progress.increment_completed();
-        let (completed, total, _, _, _, _) = progress.snapshot();
+        let (completed, total, _, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2);
         assert_eq!(total, 5, "total should remain 5 after incrementing completed");
     }
@@ -1431,12 +1676,12 @@ mod tests {
         progress.increment_completed();
         progress.increment_completed();
         progress.set_completed();
-        let (completed, _, status, _, _, _) = progress.snapshot();
+        let (completed, _, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2);
         assert!(matches!(status, IndexStatus::Completed));
 
         progress.reset_to_indexing();
-        let (completed, total, status, _, _, _) = progress.snapshot();
+        let (completed, total, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 0);
         assert_eq!(total, 5);
         assert!(matches!(status, IndexStatus::Indexing));
@@ -1538,12 +1783,12 @@ mod tests {
         progress.set_total(3);
         progress.increment_completed();
         progress.increment_completed();
-        let (completed, total, _, _, _, _) = progress.snapshot();
+        let (completed, total, _, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2);
         assert_eq!(total, 3);
 
         progress.set_status_indexing();
-        let (completed, total, status, _, _, _) = progress.snapshot();
+        let (completed, total, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2, "set_status_indexing must not reset completed");
         assert_eq!(total, 3, "set_status_indexing must not reset total");
         assert!(matches!(status, IndexStatus::Indexing));
@@ -1569,6 +1814,8 @@ mod tests {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(None),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         registry.tasks.lock().unwrap().insert(key.clone(), task);
 
@@ -1579,7 +1826,7 @@ mod tests {
         // Simulate try_spawn_next calling set_status_indexing (not reset_to_indexing).
         progress.set_status_indexing();
 
-        let (completed, total, status, _, _, _) = progress.snapshot();
+        let (completed, total, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 1, "completed must not be reset when re-scheduling");
         assert_eq!(total, 2);
         assert!(matches!(status, IndexStatus::Indexing));
@@ -1588,15 +1835,15 @@ mod tests {
     #[test]
     fn test_total_updated_on_next_commit() {
         let progress = BranchProgress::new();
-        progress.set_total(1);
+        // Simulate X-Commit-Count header set the real total.
+        progress.set_total(5);
 
         // Simulate first commit completes with NextCommit.
+        // total should NOT be overwritten — it stays at 5.
         progress.increment_completed();
-        let completed = progress.completed.load(Ordering::SeqCst);
-        progress.total.store(completed + 1, Ordering::SeqCst);
 
         assert_eq!(progress.completed.load(Ordering::Relaxed), 1);
-        assert_eq!(progress.total.load(Ordering::Relaxed), 2);
+        assert_eq!(progress.total.load(Ordering::Relaxed), 5);
 
         // Simulate second commit completes with AtHead.
         progress.increment_completed();
@@ -1604,7 +1851,7 @@ mod tests {
         progress.total.store(completed, Ordering::SeqCst);
         progress.set_completed();
 
-        let (completed, total, status, _, _, _) = progress.snapshot();
+        let (completed, total, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2);
         assert_eq!(total, 2);
         assert!(matches!(status, IndexStatus::Completed));
@@ -1628,6 +1875,8 @@ mod tests {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(None),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
 
@@ -1635,15 +1884,13 @@ mod tests {
         // (replicating what on_task_complete does for NextCommit, without try_spawn_next)
         *task.next_commit.lock().unwrap() = Some("commit2".to_string());
         progress.increment_completed();
-        let completed = progress.completed.load(Ordering::SeqCst);
-        progress.total.store(completed + 1, Ordering::SeqCst);
         progress.set_status_indexing();
 
         // Verify state after first commit.
         assert_eq!(*task.next_commit.lock().unwrap(), Some("commit2".to_string()));
         assert_eq!(progress.completed.load(Ordering::Relaxed), 1);
-        assert_eq!(progress.total.load(Ordering::Relaxed), 2);
-        let (_, _, status, _, _, _) = progress.snapshot();
+        assert_eq!(progress.total.load(Ordering::Relaxed), 1);
+        let (_, _, status, _, _, _, _) = progress.snapshot();
         assert!(matches!(status, IndexStatus::Indexing));
 
         // Simulate commit 2 completes with AtHead:
@@ -1653,7 +1900,7 @@ mod tests {
         progress.total.store(completed, Ordering::SeqCst);
         progress.set_completed();
 
-        let (completed, total, status, _, _, _) = progress.snapshot();
+        let (completed, total, status, _, _, _, _) = progress.snapshot();
         assert_eq!(completed, 2, "both commits should be counted as completed");
         assert_eq!(total, 2);
         assert!(matches!(status, IndexStatus::Completed));
@@ -1673,6 +1920,8 @@ mod tests {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(None),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
 
@@ -1686,9 +1935,9 @@ mod tests {
 
         // on_task_complete clears current_branch, then try_spawn_next runs
         // and clears next_commit after reading it. We verify the side effects
-        // that persist: completed was incremented and total was updated.
+        // that persist: completed was incremented. total is NOT overwritten
+        // — it stays at the value set from X-Commit-Count header.
         assert_eq!(progress.completed.load(Ordering::Relaxed), 1);
-        assert_eq!(progress.total.load(Ordering::Relaxed), 2);
     }
 
     #[test]
@@ -1714,6 +1963,8 @@ mod tests {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(None),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
 
@@ -1745,6 +1996,8 @@ mod tests {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(None),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         registry.tasks.lock().unwrap().insert(key.clone(), task);
 
@@ -1757,7 +2010,7 @@ mod tests {
         registry.on_task_complete(&key, TaskResult::Error("test error".to_string()));
 
         assert!(registry.tasks.lock().unwrap().get(&key).is_none());
-        let (_, _, status, _, _, _) = progress.snapshot();
+        let (_, _, status, _, _, _, _) = progress.snapshot();
         assert!(matches!(status, IndexStatus::Error(ref m) if m == "test error"));
     }
 
@@ -1771,6 +2024,8 @@ mod tests {
             notify_count: AtomicU64::new(2), // 2 notifies: one processed, one pending
             next_commit: StdMutex::new(None),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
 
         // Simulate AtHead with pending notify:
@@ -1784,7 +2039,7 @@ mod tests {
         assert_eq!(*task.next_commit.lock().unwrap(), None);
 
         // Status should NOT be set to Completed (it stays Indexing).
-        let (_, _, status, _, _, _) = progress.snapshot();
+        let (_, _, status, _, _, _, _) = progress.snapshot();
         assert!(matches!(status, IndexStatus::Indexing),
             "status should remain Indexing when re-enqueueing");
     }
@@ -1809,6 +2064,8 @@ mod tests {
             notify_count: AtomicU64::new(1),
             next_commit: StdMutex::new(Some("commitB".to_string())),
             cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
         });
         registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
 
@@ -1835,8 +2092,55 @@ mod tests {
         // progress() should report None for upcoming_commit while task runs.
         let prog = registry.progress(&key.path, &key.branch);
         assert!(prog.is_some());
-        let (_, _, _, _, upcoming, _, _) = prog.unwrap();
+        let (_, _, _, _, upcoming, _, _, _) = prog.unwrap();
         assert_eq!(upcoming, None,
             "progress() must not report stale next_commit while task is running");
+    }
+
+    #[test]
+    fn test_reset_chain_on_notify_while_indexing() {
+        // When notify() is called on a task that is still Indexing,
+        // reset_chain is set. The next on_task_complete(NextCommit)
+        // should ignore the X-Next-Commit header and set next_commit=None,
+        // forcing a fresh /last-indexed query.
+        let registry = IndexerRegistry::new();
+        registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
+
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+
+        let progress = BranchProgress::new();
+        progress.set_total(5);
+        let task = Arc::new(BranchTask {
+            progress: progress.clone(),
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(Some("commit2".to_string())),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+
+        // Simulate re-index while indexing: notify() sets reset_chain.
+        task.reset_chain.store(true, Ordering::SeqCst);
+
+        // Block try_spawn_next from actually spawning.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+
+        // on_task_complete with NextCommit should ignore "commit3" and
+        // set next_commit = None because reset_chain is true.
+        registry.on_task_complete(&key, TaskResult::NextCommit("commit3".to_string()));
+
+        assert_eq!(progress.completed.load(Ordering::Relaxed), 1,
+            "completed should be incremented after NextCommit with reset_chain");
+
+        // reset_chain should be cleared after being consumed.
+        assert!(!task.reset_chain.load(Ordering::SeqCst),
+            "reset_chain should be cleared after on_task_complete consumes it");
     }
 }

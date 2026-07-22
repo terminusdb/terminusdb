@@ -45,9 +45,9 @@ describe('plugin-endpoints', function () {
       expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
     })
 
-    it('POST /api/resolve/{path} returns 400 when endpoint is not configured', async function () {
+    it('POST /api/plugin/search-resolve/{path} returns 400 when endpoint is not configured', async function () {
       const r = await agent
-        .post(`/api/resolve/${agent.orgName}/${agent.dbName}`)
+        .post(`/api/plugin/search-resolve/${agent.orgName}/${agent.dbName}`)
         .send({ source: 'test', target: 'test' })
       expect(r.status).to.equal(400)
       expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
