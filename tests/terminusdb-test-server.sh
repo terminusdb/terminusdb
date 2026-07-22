@@ -9,9 +9,19 @@ export TERMINUSDB_LOG_LEVEL=${TERMINUSDB_LOG_LEVEL:-DEBUG}
 export TERMINUSDB_LOG_FORMAT=${TERMINUSDB_LOG_FORMAT:-text}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PID_FILE="$SCRIPT_DIR/.terminusdb-test.pid"
-STORAGE_DIR="$SCRIPT_DIR/.terminusdb-test-storage"
-LOG_FILE="$SCRIPT_DIR/.terminusdb-test.log"
+
+# Use port-specific PID/storage/log files when a non-default port is set,
+# so multiple TerminusDB instances (e.g. 6363 and 7373) don't conflict.
+_TDB_PORT="${TERMINUSDB_SERVER_PORT:-6363}"
+if [ "$_TDB_PORT" = "6363" ]; then
+    PID_FILE="$SCRIPT_DIR/.terminusdb-test.pid"
+    STORAGE_DIR="$SCRIPT_DIR/.terminusdb-test-storage"
+    LOG_FILE="$SCRIPT_DIR/.terminusdb-test.log"
+else
+    PID_FILE="$SCRIPT_DIR/.terminusdb-test-${_TDB_PORT}.pid"
+    STORAGE_DIR="$SCRIPT_DIR/.terminusdb-test-storage-${_TDB_PORT}"
+    LOG_FILE="$SCRIPT_DIR/.terminusdb-test-${_TDB_PORT}.log"
+fi
 
 # Default admin password (terminusdb default)
 ADMIN_PASS="${TERMINUSDB_ADMIN_PASS:-root}"
@@ -104,6 +114,22 @@ function start_server() {
     # (swipl or rust). TERMINUSDB_SERVER_PORT sets the listen port (default 6363).
     export TERMINUSDB_SERVER_PORT=${TERMINUSDB_SERVER_PORT:-6363}
     export TERMINUSDB_SERVER_BACKEND=${TERMINUSDB_SERVER_BACKEND:-rust}
+
+    # tdb-search plugin: disabled by default. Set TERMINUSDB_INDEXER_BACKEND=http_tdb_search
+    # and TERMINUSDB_TDB_SEARCH_ENDPOINT=http://127.0.0.1:7372 to enable.
+    export TERMINUSDB_INDEXER_BACKEND=${TERMINUSDB_INDEXER_BACKEND:-none}
+    # When the indexer backend is http_tdb_search, export the endpoint so
+    # the tdb_search plugin can find it via plugin_env/2. Without this,
+    # suggest/search/similar handlers fail with TdbSearchEndpointNotConfigured.
+    if [ "$TERMINUSDB_INDEXER_BACKEND" = "http_tdb_search" ]; then
+        export TERMINUSDB_TDB_SEARCH_ENDPOINT=${TERMINUSDB_TDB_SEARCH_ENDPOINT:-http://127.0.0.1:7372}
+    fi
+    export TERMINUSDB_SEARCH_ADMIN_USER=${TERMINUSDB_SEARCH_ADMIN_USER:-admin}
+    export TERMINUSDB_SEARCH_ADMIN_SECRET=${TERMINUSDB_SEARCH_ADMIN_SECRET:-root}
+
+    # Worker pool size: 30 for test workloads with concurrent streaming
+    # and indexing. Override with TERMINUSDB_WORKER_POOL_SIZE if needed.
+    export TERMINUSDB_WORKER_POOL_SIZE=${TERMINUSDB_WORKER_POOL_SIZE:-30}
 
     # Start the server in a new session so it survives the script exiting.
     python3 -c "
