@@ -12,7 +12,10 @@
               embedding_type_queries/2,
               schema_store_clustering/2,
               schema_store_clustering_for_descriptor/2,
-              schema_store_clustering_for_path/2
+              schema_store_clustering_for_path/2,
+              schema_store_indices/2,
+              schema_store_indices_for_descriptor/2,
+              schema_store_indices_for_path/2
           ]).
 
 :- use_module(core(document/history),[commits_changed_id/5]).
@@ -219,8 +222,14 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     ;   format(atom(Branch_Path), "~w/local/branch/~w", [Path, Branch_Name])
     ),
     (   plugin_api:indexer_available
-    ->  (   schema_store_clustering_for_path(Path, Store_Clustering),
-            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)
+    ->  (   schema_store_indices_for_path(Path, Store_Indices),
+            (   Store_Indices == true
+            ->  schema_store_clustering_for_path(Path, Store_Clustering),
+                Has_Embeddings = true
+            ;   Store_Clustering = false,
+                Has_Embeddings = false
+            ),
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, Has_Embeddings)
         ->  true
         ;   throw(error(indexer_notify_failed(io_push_delta), _))
         )
@@ -284,14 +293,20 @@ io_index_branch(System_DB, Auth, Path) :-
 %
 % Fires after every commit (multifile post_commit_hook/2 from plugins.pl).
 % GATE: only acts when indexer_backend = http_tdb_search AND the committed
-% data product's schema has at least one type with embedding metadata.
-% For all other commits this is a cheap no-op (two config checks + fail).
+% data product's schema has store_indices enabled in @metadata.terminusdb.options.
+%
+% OPTIMISED COMMIT PATH:
+%   - Schema-change commits: check store_indices from Schema_Objects (fast
+%     in-memory option lookup, no descriptor open). If true, also read
+%     store_clustering and call indexer_notify with has_embeddings=true.
+%   - Document-only commits: skip all schema checks. Call indexer_notify
+%     with has_embeddings=false. The Rust-side no_embedding_cache skips
+%     instantly for domains without store_indices. If a task already exists
+%     (from a prior schema commit), notify_count is incremented (O(1)).
 %
 % ASYNC FIRE-AND-FORGET: calls indexer_notify/4 FFI which spawns a tokio
 % task in the Rust IndexerRegistry. The task runs independently of the
-% commit path — commit latency is NOT inflated. The Rust task runs as
-% the system identity (super_user_authority) — indexing is infrastructure,
-% not coupled to the committing user's auth.
+% commit path — commit latency is NOT inflated.
 %
 % FAILURE SEMANTICS: the tokio task catches its own errors, logs them,
 % and stops. The commit is NEVER blocked or broken by engine-down / push
@@ -310,19 +325,35 @@ plugins:post_commit_hook(Validations, _Meta_Data) :-
     indexer_backend(http_tdb_search),
     % Gate 2: FFI predicate must be registered (Rust runtime loaded).
     plugin_api:indexer_available,
-    % Gate 3: for each validation with embedding metadata, call indexer_notify
-    % (O(1) FFI — no NDJSON generation, no HTTP calls from Prolog).
+    % Gate 3: for each branch validation, call indexer_notify.
+    % Schema-change commits check store_indices (fast option lookup).
+    % Document-only commits skip all schema checks — the Rust-side
+    % no_embedding_cache handles the skip for domains without store_indices.
     catch(
         forall(
             (   member(Validation, Validations),
-                validation_is_index_enabled(Validation),
                 get_dict(descriptor, Validation, Descriptor),
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 descriptor_graphspec(Descriptor, Path),
-                schema_store_clustering_for_descriptor(Descriptor, Store_Clustering)
-            ),
+                get_dict(schema_objects, Validation, Schema_Objects),
+                (   Schema_Objects \== []
+                ->  % Schema-change commit: check store_indices flag (fast
+                    % in-memory option lookup, no descriptor open).
+                    schema_store_indices(Schema_Objects, Store_Indices),
+                    (   Store_Indices == true
+                    ->  schema_store_clustering(Schema_Objects, Store_Clustering),
+                        Has_Embeddings = true
+                    ;   Store_Clustering = false,
+                        Has_Embeddings = false
+                    )
+                ;   % Document-only commit: skip expensive schema checks.
+                    % Let the Rust-side no_embedding_cache decide.
+                    Store_Clustering = false,
+                    Has_Embeddings = false
+                    )
+                ),
             catch(
-                plugin_api:indexer_notify(Path, Branch_Name, Store_Clustering, true),
+                plugin_api:indexer_notify(Path, Branch_Name, Store_Clustering, Has_Embeddings),
                 Notify_Error,
                 format(user_error,
                        "[ERROR] indexer_notify failed for ~w (~w): ~q~n",
@@ -355,6 +386,68 @@ validation_is_index_enabled(Validation) :-
         open_descriptor(Descriptor, Transaction),
         database_schema(Transaction, Schema),
         once(xrdf(Schema, _Type, sys:metadata, _))
+    ).
+
+/**
+ * schema_store_indices(+Schema, -StoreIndices) is det.
+ *
+ *  Reads the store_indices flag from the schema @context document's
+ *  @metadata.terminusdb.options array. Returns false if the option is
+ *  not present, if @metadata or terminusdb is missing, or if the schema
+ *  has no context object.
+ *
+ *  This is the primary gate for whether indexing should happen for a
+ *  data product. It is a fast option lookup (no xrdf scan).
+ */
+schema_store_indices(Schema, Store_Indices) :-
+    (   catch(
+            (   database_schema_context_object(Schema, Context),
+                get_dict('@metadata', Context, Metadata),
+                get_dict('terminusdb', Metadata, TerminusDB),
+                get_dict('options', TerminusDB, Options),
+                memberchk("store_indices", Options)
+            ),
+            _,
+            fail
+        )
+    ->  Store_Indices = true
+    ;   Store_Indices = false
+    ).
+
+/**
+ * schema_store_indices_for_descriptor(+Descriptor, -StoreIndices) is det.
+ *
+ *  Opens the descriptor, reads the schema, and checks for store_indices.
+ *  Falls back to false on any error (e.g. schemaless database).
+ */
+schema_store_indices_for_descriptor(Descriptor, Store_Indices) :-
+    (   catch(
+            (   open_descriptor(Descriptor, Transaction),
+                database_schema(Transaction, Schema),
+                schema_store_indices(Schema, Store_Indices)
+            ),
+            _,
+            fail
+        )
+    ->  true
+    ;   Store_Indices = false
+    ).
+
+/**
+ * schema_store_indices_for_path(+Path, -StoreIndices) is det.
+ *
+ *  Resolves the path to a descriptor and checks for store_indices.
+ */
+schema_store_indices_for_path(Path, Store_Indices) :-
+    (   catch(
+            (   resolve_absolute_string_descriptor(Path, Descriptor),
+                schema_store_indices_for_descriptor(Descriptor, Store_Indices)
+            ),
+            _,
+            fail
+        )
+    ->  true
+    ;   Store_Indices = false
     ).
 
 /**
@@ -849,6 +942,130 @@ test(schema_store_clustering_for_path_returns_false_for_schemaless_db,
      ]) :-
     schema_store_clustering_for_path("admin/schemadb/local/branch/main", Result),
     assertion(Result == false).
+
+test(schema_store_indices_returns_true_when_option_present,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "indicesdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#",
+    "@metadata": {
+      "terminusdb": {
+        "options": ["store_indices"]
+      }
+    }
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/indicesdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/indicesdb/local/branch/main", Desc),
+    open_descriptor(Desc, Transaction),
+    database_schema(Transaction, Schema),
+    schema_store_indices(Schema, Result),
+    assertion(Result == true).
+
+test(schema_store_indices_returns_false_when_option_absent,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "noindicesdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/noindicesdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/noindicesdb/local/branch/main", Desc),
+    open_descriptor(Desc, Transaction),
+    database_schema(Transaction, Schema),
+    schema_store_indices(Schema, Result),
+    assertion(Result == false).
+
+test(schema_store_indices_for_path_returns_false_for_schemaless_db,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "schemadb2"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    schema_store_indices_for_path("admin/schemadb2/local/branch/main", Result),
+    assertion(Result == false).
+
+test(schema_store_indices_for_descriptor_returns_true_with_both_options,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "bothoptsdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#",
+    "@metadata": {
+      "terminusdb": {
+        "options": ["store_indices", "store_clustering"]
+      }
+    }
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/bothoptsdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/bothoptsdb/local/branch/main", Desc),
+    schema_store_indices_for_descriptor(Desc, Result),
+    assertion(Result == true).
 
 :- end_tests(indexer_predicates).
 

@@ -339,12 +339,16 @@ impl IndexerRegistry {
         let mut tasks = self.tasks.lock().unwrap();
 
         if let Some(task) = tasks.get(&key) {
-            // Task exists — increment notify_count and update store_clustering.
+            // Task exists — increment notify_count.
             task.notify_count.fetch_add(1, Ordering::SeqCst);
-            task.store_clustering.store(store_clustering, Ordering::SeqCst);
-            // If has_embeddings=true, clear the no_embedding flag on the
-            // existing task (schema was updated to add embeddings).
+            // Only update store_clustering when has_embeddings=true (schema
+            // commit confirmed store_indices). For document-only commits
+            // (has_embeddings=false), keep the existing value — the CGI
+            // header X-Store-Clustering from the worker will update it.
             if has_embeddings {
+                task.store_clustering.store(store_clustering, Ordering::SeqCst);
+                // Clear the no_embedding flag on the existing task (schema
+                // was updated to add store_indices).
                 task.progress.set_no_embedding(false);
             }
             // If the task is already Completed, re-enqueue it for
@@ -1122,21 +1126,38 @@ async fn run_commit_task(
         progress.set_total_documents(doc_count);
     }
 
-    // Read X-Has-Embedding-Types to cache whether this domain has embedding
-    // metadata in its schema. When false, future notify() calls with
-    // has_embeddings=false will skip immediately without dispatching to Prolog.
-    let has_embedding_types = headers
-        .get("x-has-embedding-types")
+    // Read X-Store-Indices to cache whether this domain has indexing enabled
+    // via @metadata.terminusdb.options store_indices. When false, future
+    // notify() calls with has_embeddings=false will skip immediately without
+    // dispatching to Prolog.
+    let store_indices = headers
+        .get("x-store-indices")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.trim().eq_ignore_ascii_case("true"))
         .unwrap_or(false);
-    if has_embedding_types {
+    if store_indices {
         progress.set_no_embedding(false);
     } else {
         progress.set_no_embedding(true);
         // Add to the registry's no_embedding_cache so future nudges skip.
         if let Some(registry) = INDEXER_REGISTRY.get() {
             registry.no_embedding_cache.lock().unwrap().insert(key.path.clone());
+        }
+    }
+
+    // Read X-Store-Clustering to update the task's store_clustering flag
+    // from the schema. This ensures the correct value is used even after
+    // a server restart where the first commit is document-only.
+    if let Some(sc_str) = headers
+        .get("x-store-clustering")
+        .and_then(|v| v.to_str().ok())
+    {
+        let sc = sc_str.trim().eq_ignore_ascii_case("true");
+        if let Some(registry) = INDEXER_REGISTRY.get() {
+            let tasks = registry.tasks.lock().unwrap();
+            if let Some(task) = tasks.get(&key) {
+                task.store_clustering.store(sc, Ordering::SeqCst);
+            }
         }
     }
 

@@ -454,9 +454,7 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
         % this nudge instantly for domains without embedding metadata.
         (   plugin_api:indexer_available
         ->  catch(
-                (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-                    (plugin_api:indexer_notify(Path, Branch, Store_Clustering, false) ; true)
-                ),
+                (plugin_api:indexer_notify(Path, Branch, false, false) ; true),
                 Nudge_Error,
                 format(user_error,
                        "[WARN] Search stale-version nudge failed for ~w: ~q~n",

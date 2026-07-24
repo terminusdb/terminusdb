@@ -5,7 +5,9 @@
 :- use_module(core(api/api_indexer),
              [indexer_process_commit/4, indexer_next_commit/4,
               count_indexable_documents/4,
-              embedding_type_queries/2]).
+              embedding_type_queries/2,
+              schema_store_indices_for_descriptor/2,
+              schema_store_clustering_for_descriptor/2]).
 :- use_module(core(util)).
 :- use_module(core(query), [resolve_absolute_string_descriptor/2,
                             resolve_relative_descriptor/3]).
@@ -58,13 +60,15 @@ indexer_process_commit_handler(Request, OutStream) :-
     NextCommitRaw == 'None',
     !,
     commit_count_for_branch(Path, BranchName, CommitCount),
-    has_embedding_types_for_branch(Path, BranchName, HasEmbedding),
+    store_indices_for_branch(Path, BranchName, StoreIndices),
+    store_clustering_for_branch(Path, BranchName, StoreClustering),
     format(OutStream, 'Status: 200\n', []),
     format(OutStream, 'X-Commit-Id: ~w\n', [CommitId]),
     format(OutStream, 'X-Next-Commit: None\n', []),
     format(OutStream, 'X-Commit-Count: ~w\n', [CommitCount]),
     format(OutStream, 'X-Document-Count: 0\n', []),
-    format(OutStream, 'X-Has-Embedding-Types: ~w\n', [HasEmbedding]),
+    format(OutStream, 'X-Store-Indices: ~w\n', [StoreIndices]),
+    format(OutStream, 'X-Store-Clustering: ~w\n', [StoreClustering]),
     format(OutStream, '\n', []),
     flush_output(OutStream).
 
@@ -90,7 +94,8 @@ indexer_process_commit_handler(Request, OutStream) :-
     ->  true
     ;   CommitCount = 0
     ),
-    has_embedding_types_for_branch(Path, BranchName, HasEmbedding),
+    store_indices_for_branch(Path, BranchName, StoreIndices),
+    store_clustering_for_branch(Path, BranchName, StoreClustering),
     % Compute document count using fast Rust change detection.
     % This is near-instant so we can include it in the same header block.
     (   catch(count_indexable_documents(Path, BranchName, CommitToProcess, DocCount),
@@ -116,7 +121,8 @@ indexer_process_commit_handler(Request, OutStream) :-
     format(OutStream, 'X-Commit-Count: ~w\n', [CommitCount]),
     format(OutStream, 'X-Document-Count: ~w\n', [DocCount]),
     format(OutStream, 'X-Parent-Commit: ~w\n', [ParentCommit]),
-    format(OutStream, 'X-Has-Embedding-Types: ~w\n', [HasEmbedding]),
+    format(OutStream, 'X-Store-Indices: ~w\n', [StoreIndices]),
+    format(OutStream, 'X-Store-Clustering: ~w\n', [StoreClustering]),
     format(OutStream, '\n', []),
     flush_output(OutStream),
     format(user_error, "[DEBUG] indexer_worker: calling indexer_process_commit for ~w commit=~w doc_count=~w~n", [Path, CommitToProcess, DocCount]),
@@ -200,36 +206,40 @@ parent_commit_for_branch(Path, BranchName, CommitId, ParentCommit) :-
     ;   ParentCommit = "none"
     ).
 
-%% has_embedding_types_for_branch(+Path, +BranchName, -HasEmbedding) is det.
+%% store_indices_for_branch(+Path, +BranchName, -StoreIndices) is det.
 %
-%  Checks whether the branch's schema has at least one type with embedding
-%  metadata. Returns the atom 'true' or 'false' for use in CGI headers.
-%  This is a lightweight check (single xrdf scan) used to inform the Rust
-%  indexer whether to cache a "no embedding" state for this domain.
-has_embedding_types_for_branch(Path, BranchName, HasEmbedding) :-
-    (   catch(embedding_type_queries_for_branch(Path, BranchName),
+%  Checks whether the branch's schema has store_indices enabled in
+%  @metadata.terminusdb.options. Returns the atom 'true' or 'false' for
+%  use in CGI headers. This is a fast option lookup (no xrdf scan).
+store_indices_for_branch(Path, BranchName, StoreIndices) :-
+    (   catch(store_indices_for_branch_(Path, BranchName),
               _, fail)
-    ->  HasEmbedding = true
-    ;   HasEmbedding = false
+    ->  StoreIndices = true
+    ;   StoreIndices = false
     ).
 
-%% embedding_type_queries_for_branch(+Path, +BranchName) is semidet.
-%
-%  True if the branch schema has at least one type with embedding metadata.
-%  Opens the branch descriptor and checks for sys:metadata embedding config.
-embedding_type_queries_for_branch(Path, BranchName) :-
+store_indices_for_branch_(Path, BranchName) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     branch_descriptor{branch_name: BranchName} :< Descriptor,
-    get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-    branch_head_commit(Repository_Descriptor, BranchName, Head_Commit_Uri),
-    commit_uri_to_history_commit_ids(Repository_Descriptor,
-                                     Head_Commit_Uri,
-                                     [LatestCommitId|_]),
-    resolve_relative_descriptor(Descriptor,
-                                ["commit", LatestCommitId],
-                                Commit_Descriptor),
-    embedding_type_queries(Commit_Descriptor, TypeQueries),
-    TypeQueries \== [].
+    api_indexer:schema_store_indices_for_descriptor(Descriptor, StoreIndices),
+    StoreIndices == true.
+
+%% store_clustering_for_branch(+Path, +BranchName, -StoreClustering) is det.
+%
+%  Checks whether the branch's schema has store_clustering enabled in
+%  @metadata.terminusdb.options. Returns the atom 'true' or 'false'.
+store_clustering_for_branch(Path, BranchName, StoreClustering) :-
+    (   catch(store_clustering_for_branch_(Path, BranchName),
+              _, fail)
+    ->  StoreClustering = true
+    ;   StoreClustering = false
+    ).
+
+store_clustering_for_branch_(Path, BranchName) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    branch_descriptor{branch_name: BranchName} :< Descriptor,
+    api_indexer:schema_store_clustering_for_descriptor(Descriptor, StoreClustering),
+    StoreClustering == true.
 
 
 :- begin_tests(indexer_worker_tests).
@@ -279,13 +289,13 @@ test("commit_count_for_branch returns 1 for a freshly created database",
      ]) :-
     commit_count_for_branch("admin/countdb/local/branch/main", "main", Count).
 
-test("has_embedding_types_for_branch returns false for a database without embedding metadata",
+test("store_indices_for_branch returns false for a database without store_indices option",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "embeddb")
              )),
        cleanup(teardown_temp_store(State)),
-       true(HasEmbedding == false)
+       true(StoreIndices == false)
      ]) :-
-    has_embedding_types_for_branch("admin/embeddb/local/branch/main", "main", HasEmbedding).
+    store_indices_for_branch("admin/embeddb/local/branch/main", "main", StoreIndices).
 
 :- end_tests(indexer_worker_tests).
