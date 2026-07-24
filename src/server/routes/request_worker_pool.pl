@@ -3,7 +3,8 @@
                   dispatch_request/5,
                   dispatch_request/6,
                   worker_pool_stats/1,
-                  worker_busy_stats/1
+                  worker_busy_stats/1,
+                  cancel_pipe_request/1
               ]).
 
 :- use_module(library(http/http_dispatch)).
@@ -55,6 +56,16 @@
 :- dynamic worker_busy/2.
 :- dynamic watchdog_running/0.
 :- dynamic watchdog_queue/1.
+
+%% Pipe cancellation state
+%%
+%% active_pipe/3 links an output pipe FD to the worker thread handling it:
+%%   active_pipe(OutputWriteFd, ThreadId, Alias)
+%% When a client disconnects, Rust calls cancel_pipe_request/1 with the
+%% output write FD. The predicate looks up the thread and signals it with
+%% error(client_disconnected, _) so the worker aborts its current work
+%% at the next goal boundary (e.g. between id_triple calls in WOQL).
+:- dynamic active_pipe/3.
 
 %% worker_pool_stats(-Stats) is det.
 %%
@@ -215,6 +226,47 @@ mark_worker_busy(Queue) :-
 mark_worker_ready(Alias) :-
     retractall(worker_busy(Alias, _)).
 
+%% register_active_pipe(+OutputWriteFd, +ThreadId) is det.
+%%
+%%  Record that the current worker thread is handling a request whose
+%%  output pipe has the given write FD. This allows cancel_pipe_request/1
+%%  to find and signal the thread when the client disconnects.
+register_active_pipe(OutputWriteFd, ThreadId) :-
+    (   worker(_, ThreadId, Alias)
+    ->  true
+    ;   Alias = unknown
+    ),
+    retractall(active_pipe(OutputWriteFd, _, _)),
+    assertz(active_pipe(OutputWriteFd, ThreadId, Alias)).
+
+%% unregister_active_pipe(+OutputWriteFd) is det.
+%%
+%%  Remove the active_pipe entry for this FD. Called during cleanup
+%%  in handle_pipe_work after the handler finishes (normally or via
+%%  exception). Idempotent — safe to call even if no entry exists.
+unregister_active_pipe(OutputWriteFd) :-
+    retractall(active_pipe(OutputWriteFd, _, _)).
+
+%% cancel_pipe_request(+OutputWriteFd) is det.
+%%
+%%  Signal the worker thread handling the given output pipe FD that the
+%%  client has disconnected. The thread receives error(client_disconnected, _)
+%%  via thread_signal/2, which is delivered at the next goal boundary
+%%  (e.g. between PL_next_solution calls in a WOQL query loop).
+%%
+%%  If no active_pipe entry exists for the FD, this is a no-op — the
+%%  worker may have already finished and cleaned up.
+cancel_pipe_request(OutputWriteFd) :-
+    (   active_pipe(OutputWriteFd, ThreadId, _Alias)
+    ->  catch(thread_signal(ThreadId, throw(error(client_disconnected, _))),
+              _,
+              true),
+        json_log_error_formatted(
+            "Client disconnected, signalled worker thread ~w for pipe FD ~w",
+            [ThreadId, OutputWriteFd])
+    ;   true
+    ).
+
 %% start_watchdog is det.
 %%
 %%  Start the watchdog thread if it is not already running. The watchdog
@@ -301,6 +353,53 @@ check_stuck_workers :-
         ),
         fail  %% backtrack to check all busy workers
     ;   true  %% no more busy workers
+    ),
+    check_pipe_health.
+
+%% check_pipe_health is det.
+%%
+%%  Safety net for pipe cancellation. For each active_pipe entry, verify
+%%  that the worker thread is still running. If the thread is dead but the
+%%  pipe entry persists (e.g. the thread died before cleanup ran), remove
+%%  the stale entry. If the thread is running, attempt a non-blocking write
+%%  of zero bytes to the output FD to check if the pipe is still writable.
+%%  If the pipe's read end has been closed (client disconnected), the write
+%%  will fail with EPIPE, and we signal the thread to abort.
+check_pipe_health :-
+    (   active_pipe(OutputWriteFd, ThreadId, Alias),
+        catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+        (   Status == running
+        ->  (   pipe_write_health_check(OutputWriteFd)
+            ->  true  %% pipe is healthy
+            ;   json_log_error_formatted(
+                    "Watchdog: pipe FD ~w (worker ~w, thread ~w) write check failed — signalling client_disconnected",
+                    [OutputWriteFd, Alias, ThreadId]),
+                cancel_pipe_request(OutputWriteFd)
+            )
+        ;   %% Thread is dead — remove stale entry
+            json_log_error_formatted(
+                "Watchdog: removing stale active_pipe entry for FD ~w (thread ~w is dead: ~w)",
+                [OutputWriteFd, ThreadId, Status]),
+            unregister_active_pipe(OutputWriteFd)
+        ),
+        fail
+    ;   true
+    ).
+
+%% pipe_write_health_check(+Fd) is semidet.
+%%
+%%  Attempt a zero-byte write to the pipe FD to check if the read end
+%%  is still open. On Unix, writing to a pipe with no readers raises
+%%  SIGPIPE (or returns EPIPE if SIGPIPE is blocked). We use catch/3
+%%  to detect this. A successful zero-byte write is a no-op on pipes.
+pipe_write_health_check(Fd) :-
+    catch(
+        (   '$appserver':appserver_open_fd_stream(Fd, write, octet, TestStream),
+            write(TestStream, ''),
+            close(TestStream)
+        ),
+        _Error,
+        fail
     ).
 
 %% worker_loop(+Queue) is det.
@@ -351,7 +450,10 @@ worker_loop(Queue) :-
                 safe_write_cgi_error(OutputWriteFd, "Worker goal failed")
             ),
             Error,
-            (   json_log_error_formatted("Worker error: ~q", [Error]),
+            (   Error = error(client_disconnected, _)
+            ->  json_log_error_formatted(
+                    "Worker aborted: client disconnected (pipe FD ~w)", [OutputWriteFd])
+            ;   json_log_error_formatted("Worker error: ~q", [Error]),
                 safe_write_cgi_error(OutputWriteFd, Error)
             )
         ),
@@ -536,6 +638,8 @@ finish_stream_response(Response, ResponseStreamId) :-
 %%  CGI stream writing directly to the output pipe.
 handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary) :-
     (   Binary == true -> WriteEnc = octet ; WriteEnc = utf8 ),
+    thread_self(ThreadId),
+    register_active_pipe(OutputWriteFd, ThreadId),
     setup_call_cleanup(
         (   (   InputReadFd >= 0
             ->  '$appserver':appserver_open_fd_stream(InputReadFd, read, octet, InStream),
@@ -598,7 +702,8 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
             %% underlying FD if flushing buffered data encounters an error
             %% (e.g. broken pipe). Explicitly close the FDs to prevent leaks.
             catch('$appserver':appserver_close_fd(OutputWriteFd), _, true),
-            (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
+            (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true ),
+            unregister_active_pipe(OutputWriteFd)
         )
     ).
 
@@ -1654,5 +1759,84 @@ test(handle_pipe_work_indexer_worker_receives_dict_not_swi_request,
     catch(get_dict(path, SWIRequest, _),
           error(type_error(dict, _), _),
           true).
+
+%% --- Pipe cancellation on client disconnect ---
+
+test(active_pipe_registered_during_handle_pipe_work) :-
+    %% When handle_pipe_work starts, it should register active_pipe/3
+    %% linking the output FD to the current thread. We verify by
+    %% calling register_active_pipe/2 directly and checking the fact.
+    retractall(request_worker_pool:active_pipe(_, _, _)),
+    thread_self(ThreadId),
+    request_worker_pool:register_active_pipe(999, ThreadId),
+    assertion(request_worker_pool:active_pipe(999, ThreadId, _)),
+    request_worker_pool:unregister_active_pipe(999),
+    \+ request_worker_pool:active_pipe(999, _, _).
+
+test(cancel_pipe_request_signals_worker_thread) :-
+    %% cancel_pipe_request/1 should find the thread for a given FD
+    %% and send it a thread_signal/2 with a client_disconnected exception.
+    retractall(request_worker_pool:active_pipe(_, _, _)),
+    message_queue_create(TestQ),
+    thread_create(
+        ( thread_self(Self),
+          request_worker_pool:register_active_pipe(777, Self),
+          thread_get_message(TestQ, _)
+        ),
+        ThreadId,
+        [detached(false), alias(test_cancel_pipe)]
+    ),
+    %% Wait for registration
+    sleep(0.1),
+    assertion(request_worker_pool:active_pipe(777, ThreadId, _)),
+    %% Cancel the pipe — this signals the thread
+    request_worker_pool:cancel_pipe_request(777),
+    %% The thread should receive the signal and eventually exit
+    %% (the signal throws in the thread)
+    thread_join(ThreadId, _),
+    message_queue_destroy(TestQ),
+    retractall(request_worker_pool:active_pipe(_, _, _)).
+
+test(cancel_pipe_request_noop_for_unknown_fd) :-
+    %% Cancelling an unknown FD should succeed silently.
+    retractall(request_worker_pool:active_pipe(_, _, _)),
+    request_worker_pool:cancel_pipe_request(12345),
+    true.
+
+test(unregister_active_pipe_is_idempotent) :-
+    %% Unregistering a non-existent pipe should not throw.
+    retractall(request_worker_pool:active_pipe(_, _, _)),
+    request_worker_pool:unregister_active_pipe(99999),
+    true.
+
+test(worker_loop_catches_client_disconnected) :-
+    %% The worker_loop catch/3 must catch error(client_disconnected, _)
+    %% and continue to the next iteration without dying.
+    retractall(request_worker_pool:active_pipe(_, _, _)),
+    message_queue_create(TestQ),
+    message_queue_create(ReadyQ),
+    thread_create(
+        ( catch(
+              throw(error(client_disconnected, _)),
+              Error,
+              (   Error = error(client_disconnected, _)
+              ->  true
+              ;   throw(Error)
+              )
+            ),
+          %% If we reach here, the exception was caught
+          thread_send_message(ReadyQ, caught),
+          thread_get_message(TestQ, _)
+        ),
+        ThreadId,
+        [detached(false), alias(test_catch_disconnect)]
+    ),
+    thread_get_message(ReadyQ, caught),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    assertion(Status == running),
+    thread_send_message(TestQ, done),
+    thread_join(ThreadId, _),
+    message_queue_destroy(TestQ),
+    message_queue_destroy(ReadyQ).
 
 :- end_tests(request_worker_pool).

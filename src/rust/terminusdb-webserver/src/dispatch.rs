@@ -590,6 +590,9 @@ pub struct PipeDispatchRequest {
 pub enum DispatchMessage {
     Pipe(PipeDispatchRequest),
     Stream(DispatchRequest),
+    /// Cancel an in-flight pipe request by signalling the Prolog worker.
+    /// The argument is the output write FD passed to the worker.
+    CancelPipe(i32),
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -681,6 +684,14 @@ pub fn init_dispatcher() {
                             req.output_write_fd,
                             "Internal server error",
                         );
+                    }
+                }
+                DispatchMessage::CancelPipe(output_write_fd) => {
+                    if let Err(e) = cancel_pipe_to_prolog(&context, output_write_fd) {
+                        crate::log::log_error(format!(
+                            "[terminusdb-webserver] cancel_pipe_request failed for FD {}: {}",
+                            output_write_fd, e
+                        ));
                     }
                 }
                 DispatchMessage::Stream(req) => {
@@ -802,6 +813,28 @@ fn dispatch_pipe_to_prolog(
         &output_fd_term,
         &binary_term,
     ])
+}
+
+/// Call the Prolog predicate `cancel_pipe_request/1` to signal the worker
+/// thread handling the given output pipe FD that the client has disconnected.
+/// The worker receives `error(client_disconnected, _)` via `thread_signal/2`,
+/// which is delivered at the next goal boundary (e.g. between `id_triple`
+/// calls in a WOQL query loop).
+fn cancel_pipe_to_prolog(
+    context: &Context<impl QueryableContextType>,
+    output_write_fd: i32,
+) -> PrologResult<()> {
+    let fd_term = context.new_term_ref();
+    fd_term
+        .put(&(output_write_fd as i64))
+        .map_err(|_| PrologError::Failure)?;
+
+    let callable = CallablePredicate::new(Predicate::new(
+        Functor::new(Atom::new("cancel_pipe_request"), 1),
+        Module::new(Atom::new("request_worker_pool")),
+    ))
+    .map_err(|_| PrologError::Failure)?;
+    context.call_once(callable, [&fd_term])
 }
 
 fn dispatch_stream_to_prolog(
@@ -1527,7 +1560,7 @@ mod tests {
         write.write_all(cgi_output).unwrap();
         drop(write);
 
-        let stream = CgiPipeStream::new(read, Vec::new());
+        let stream = CgiPipeStream::new(read, Vec::new(), None);
         let collected: Vec<u8> = stream
             .map(|chunk| chunk.unwrap().to_vec())
             .concat()
@@ -1548,7 +1581,7 @@ mod tests {
         write.write_all(cgi_output).unwrap();
         drop(write);
 
-        let stream = CgiPipeStream::new(read, Vec::new());
+        let stream = CgiPipeStream::new(read, Vec::new(), None);
         let collected: Vec<u8> = stream
             .map(|chunk| chunk.unwrap().to_vec())
             .concat()
@@ -1565,7 +1598,7 @@ mod tests {
         );
 
         let leftover = b"left".to_vec();
-        let mut stream = CgiPipeStream::new(read, leftover);
+        let mut stream = CgiPipeStream::new(read, leftover, None);
 
         let first = stream.next().await.unwrap().unwrap();
         assert_eq!(first, "left");
@@ -1858,6 +1891,13 @@ async fn dispatch_request_via_pipe(
         return plugin_error_response("Plugin handler failed").into_response();
     }
 
+    // Create a cancel guard that covers the entire request lifecycle from
+    // dispatch to response completion. If the HTTP response future is dropped
+    // at any point (client disconnect during header reading or body
+    // streaming), this guard sends a CancelPipe message to the dispatch
+    // queue, which signals the Prolog worker to abort via thread_signal/2.
+    let mut cancel_guard = PipeCancelGuard::new(output_write_fd, dispatch_queue());
+
     if let Some(input_file) = input_write {
         tokio::task::spawn_blocking(move || {
             let mut file = input_file;
@@ -1871,6 +1911,7 @@ async fn dispatch_request_via_pipe(
         Ok(result) => result,
         Err(e) => {
             crate::log::log_error(format!("failed to read CGI headers from pipe: {}", e));
+            // The guard will fire on drop, sending a cancel to the worker.
             return plugin_error_response("Plugin handler failed").into_response();
         }
     };
@@ -1904,6 +1945,9 @@ async fn dispatch_request_via_pipe(
                     }
                 }
                 body.truncate(read);
+                // The Prolog worker has finished writing the full response.
+                // Disarm the cancel guard so we don't send a spurious cancel.
+                cancel_guard.disarm();
                 return builder
                     .body(Body::from(axum::body::Bytes::from(body)))
                     .unwrap()
@@ -1913,7 +1957,9 @@ async fn dispatch_request_via_pipe(
     }
 
     // No Content-Length — stream with chunked transfer encoding.
-    let body_stream = CgiPipeStream::new(output_receiver, leftover);
+    // Transfer the cancel guard into the stream so that if the client
+    // disconnects during streaming, the Prolog worker is signalled to abort.
+    let body_stream = CgiPipeStream::new(output_receiver, leftover, Some(cancel_guard));
     builder.body(Body::from_stream(body_stream)).unwrap().into_response()
 }
 
@@ -1987,20 +2033,65 @@ fn find_header_separator(buf: &[u8]) -> Option<usize> {
     (0..buf.len().saturating_sub(3)).find(|&i| &buf[i..i + 4] == b"\r\n\r\n")
 }
 
+/// Guard that sends a `CancelPipe` message to the dispatch queue when dropped.
+/// This is held by `CgiPipeStream` so that when the HTTP response future is
+/// dropped (client disconnect), the Prolog worker handling this pipe FD is
+/// signalled to abort its work via `thread_signal/2`.
+struct PipeCancelGuard {
+    output_write_fd: i32,
+    queue: mpsc::Sender<DispatchMessage>,
+    cancelled: bool,
+}
+
+impl PipeCancelGuard {
+    fn new(output_write_fd: i32, queue: mpsc::Sender<DispatchMessage>) -> Self {
+        Self {
+            output_write_fd,
+            queue,
+            cancelled: false,
+        }
+    }
+
+    /// Mark the guard as consumed so Drop does not send a cancel message.
+    /// Called when the stream completes normally (EOF or error).
+    fn disarm(&mut self) {
+        self.cancelled = true;
+    }
+}
+
+impl Drop for PipeCancelGuard {
+    fn drop(&mut self) {
+        if !self.cancelled {
+            let fd = self.output_write_fd;
+            let queue = self.queue.clone();
+            // Send the cancel message asynchronously. If the queue is full
+            // or closed, there's nothing we can do — the watchdog will
+            // catch it as a safety net.
+            tokio::spawn(async move {
+                let _ = queue.send(DispatchMessage::CancelPipe(fd)).await;
+            });
+        }
+    }
+}
+
 /// Stream that yields bytes from the pipe receiver, prefixed by the bytes that
-/// were read while parsing the CGI headers.
+/// were read while parsing the CGI headers. When dropped before EOF (client
+/// disconnect), the `PipeCancelGuard` sends a cancel message to the dispatch
+/// queue so the Prolog worker is signalled to abort.
 struct CgiPipeStream {
     receiver: Receiver,
     leftover: Vec<u8>,
     leftover_yielded: bool,
+    cancel_guard: Option<PipeCancelGuard>,
 }
 
 impl CgiPipeStream {
-    fn new(receiver: Receiver, leftover: Vec<u8>) -> Self {
+    fn new(receiver: Receiver, leftover: Vec<u8>, cancel_guard: Option<PipeCancelGuard>) -> Self {
         Self {
             receiver,
             leftover,
             leftover_yielded: false,
+            cancel_guard,
         }
     }
 }
@@ -2024,12 +2115,23 @@ impl Stream for CgiPipeStream {
             Poll::Ready(Ok(())) => {
                 let n = read_buf.filled().len();
                 if n == 0 {
+                    // EOF — disarm the cancel guard so we don't send a
+                    // spurious cancel message for a completed request.
+                    if let Some(guard) = &mut this.cancel_guard {
+                        guard.disarm();
+                    }
                     Poll::Ready(None)
                 } else {
                     Poll::Ready(Some(Ok(axum::body::Bytes::copy_from_slice(&buf[..n]))))
                 }
             }
-            Poll::Ready(Err(_)) => Poll::Ready(None),
+            Poll::Ready(Err(_)) => {
+                // Error — disarm and return None.
+                if let Some(guard) = &mut this.cancel_guard {
+                    guard.disarm();
+                }
+                Poll::Ready(None)
+            }
             Poll::Pending => Poll::Pending,
         }
     }
