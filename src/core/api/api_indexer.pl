@@ -9,6 +9,7 @@
               indexer_process_commit/4,
               indexer_next_commit/4,
               count_indexable_documents/4,
+              embedding_type_queries/2,
               schema_store_clustering/2,
               schema_store_clustering_for_descriptor/2,
               schema_store_clustering_for_path/2
@@ -146,7 +147,7 @@ encode_query_value(Value, Encoded) :-
 % ==========================================================================
 % All curl-based push code removed — replaced by indexer_notify FFI.
 % The Rust IndexerRegistry handles /last-indexed, /push, /check, and 409
-% resolution internally via reqwest. Prolog only calls indexer_notify/3.
+% resolution internally via reqwest. Prolog only calls indexer_notify/4.
 % ==========================================================================
 
 /**
@@ -194,7 +195,7 @@ validate_index_segments(N, _Segments, Path) :-
 /**
  * io_push_delta(+System_DB, +Auth, +Path, +Branch_Name) is det.
  *
- * Thin wrapper around the indexer_notify/3 FFI predicate. Validates the
+ * Thin wrapper around the indexer_notify/4 FFI predicate. Validates the
  * path, checks that the tdb_search endpoint is configured, and delegates
  * to the Rust IndexerRegistry which handles NDJSON generation, HTTP
  * streaming, 409 resolution, and task polling internally.
@@ -219,7 +220,7 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     ),
     (   plugin_api:indexer_available
     ->  (   schema_store_clustering_for_path(Path, Store_Clustering),
-            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering)
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)
         ->  true
         ;   throw(error(indexer_notify_failed(io_push_delta), _))
         )
@@ -286,7 +287,7 @@ io_index_branch(System_DB, Auth, Path) :-
 % data product's schema has at least one type with embedding metadata.
 % For all other commits this is a cheap no-op (two config checks + fail).
 %
-% ASYNC FIRE-AND-FORGET: calls indexer_notify/3 FFI which spawns a tokio
+% ASYNC FIRE-AND-FORGET: calls indexer_notify/4 FFI which spawns a tokio
 % task in the Rust IndexerRegistry. The task runs independently of the
 % commit path — commit latency is NOT inflated. The Rust task runs as
 % the system identity (super_user_authority) — indexing is infrastructure,
@@ -321,7 +322,7 @@ plugins:post_commit_hook(Validations, _Meta_Data) :-
                 schema_store_clustering_for_descriptor(Descriptor, Store_Clustering)
             ),
             catch(
-                plugin_api:indexer_notify(Path, Branch_Name, Store_Clustering),
+                plugin_api:indexer_notify(Path, Branch_Name, Store_Clustering, true),
                 Notify_Error,
                 format(user_error,
                        "[ERROR] indexer_notify failed for ~w (~w): ~q~n",

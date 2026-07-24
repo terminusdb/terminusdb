@@ -450,10 +450,12 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
     ->  true  % Served the exact commit requested — no nudge needed.
     ;   % Stale: served a different (ancestor) commit. Nudge via indexer_notify
         % (O(1) FFI call — no HTTP, no NDJSON generation from Prolog).
+        % has_embeddings=false lets the Rust-side no_embedding_cache skip
+        % this nudge instantly for domains without embedding metadata.
         (   plugin_api:indexer_available
         ->  catch(
                 (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-                    (plugin_api:indexer_notify(Path, Branch, Store_Clustering) ; true)
+                    (plugin_api:indexer_notify(Path, Branch, Store_Clustering, false) ; true)
                 ),
                 Nudge_Error,
                 format(user_error,

@@ -1,5 +1,5 @@
 :- module(plugin_api_indexer, [
-    indexer_notify/3,
+    indexer_notify/4,
     indexer_reindex/3,
     indexer_set_config/2,
     indexer_progress/3,
@@ -29,18 +29,22 @@ loaded (e.g. in unit tests or when the swipl backend is used).
 %  Succeeds iff the Rust indexer FFI predicates are registered.
 %  Use this to gate code that requires the indexer without calling it.
 indexer_available :-
-    current_predicate('$appserver':indexer_notify/3),
+    current_predicate('$appserver':indexer_notify/4),
     current_predicate('$appserver':indexer_reindex/3).
 
-%% indexer_notify(+Path, +BranchName, +StoreClustering) is det.
+%% indexer_notify(+Path, +BranchName, +StoreClustering, +HasEmbeddings) is det.
 %
 %  Notify the Rust IndexerRegistry that a commit happened on a branch.
 %  StoreClustering is a boolean indicating whether the schema has
 %  store_clustering enabled in @metadata.terminusdb.options.
+%  HasEmbeddings is a boolean indicating whether the caller has verified
+%  that the schema has embedding metadata. When false, the Rust-side
+%  no_embedding_cache may skip the nudge instantly for domains without
+%  embedding types. When true, the cache is cleared so indexing proceeds.
 %  Throws `indexer_ffi_not_loaded` if the Rust runtime is not available.
-indexer_notify(Path, BranchName, StoreClustering) :-
-    (   current_predicate('$appserver':indexer_notify/3)
-    ->  '$appserver':indexer_notify(Path, BranchName, StoreClustering)
+indexer_notify(Path, BranchName, StoreClustering, HasEmbeddings) :-
+    (   current_predicate('$appserver':indexer_notify/4)
+    ->  '$appserver':indexer_notify(Path, BranchName, StoreClustering, HasEmbeddings)
     ;   throw(error(indexer_ffi_not_loaded(indexer_notify), _))
     ).
 

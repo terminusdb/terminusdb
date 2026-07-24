@@ -8,12 +8,12 @@
 //! - Indexer work routes through `DispatchMessage::Pipe` → worker pool
 //!
 //! FFI predicates registered for Prolog:
-//! - `indexer_notify(+Path, +BranchName)`: notify that a commit happened
+//! - `indexer_notify(+Path, +BranchName, +StoreClustering, +HasEmbeddings)`: notify that a commit happened
 //! - `indexer_set_config(+TdbSearchUrl, +AuthHeader)`: set tdb-search URL/auth
 //! - `indexer_progress(+Path, +BranchName, -Progress)`: query progress
 //! - `indexer_abort_domain(+Domain)`: abort all tasks for a domain
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::fd::IntoRawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
@@ -82,6 +82,11 @@ pub struct BranchProgress {
     last_progress_at: StdMutex<Option<Instant>>,
     /// When the current 503-retry cycle started (for max retry duration).
     retry_started_at: StdMutex<Option<Instant>>,
+    /// Cached flag: true means this domain has no embedding types in its
+    /// schema. Set by run_commit_task after reading X-Has-Embedding-Types
+    /// header from Prolog. When true, future notify() calls with
+    /// has_embeddings=false return immediately without spawning tasks.
+    no_embedding: std::sync::atomic::AtomicBool,
 }
 
 impl BranchProgress {
@@ -96,6 +101,7 @@ impl BranchProgress {
             documents_sent: AtomicU64::new(0),
             last_progress_at: StdMutex::new(None),
             retry_started_at: StdMutex::new(None),
+            no_embedding: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -205,6 +211,18 @@ impl BranchProgress {
         *self.last_progress_at.lock().unwrap() = Some(Instant::now());
     }
 
+    /// Set the no_embedding cache flag. Called by run_commit_task after
+    /// reading X-Has-Embedding-Types from CGI headers.
+    fn set_no_embedding(&self, value: bool) {
+        self.no_embedding.store(value, Ordering::SeqCst);
+    }
+
+    /// Check the no_embedding cache flag. Called by notify() to decide
+    /// whether to skip task creation entirely.
+    fn is_no_embedding(&self) -> bool {
+        self.no_embedding.load(Ordering::SeqCst)
+    }
+
     fn snapshot(&self) -> (u64, u64, IndexStatus, Option<String>, u64, u64, u64) {
         let completed = self.completed.load(Ordering::SeqCst);
         let total = self.total.load(Ordering::SeqCst);
@@ -251,6 +269,13 @@ pub struct IndexerRegistry {
     tdb_search_url: StdMutex<Option<String>>,
     auth_header: StdMutex<Option<String>>,
     http_client: reqwest::Client,
+    /// Cache of domains known to have no embedding types in their schema.
+    /// Keyed by the path portion of BranchKey (e.g. "admin/db/local/branch/main").
+    /// When a domain is in this set, notify() with has_embeddings=false
+    /// returns immediately without creating a task. Cleared when
+    /// notify() is called with has_embeddings=true (e.g. from post_commit_hook
+    /// which has already verified embedding metadata exists).
+    no_embedding_cache: StdMutex<HashSet<String>>,
 }
 
 impl IndexerRegistry {
@@ -265,6 +290,7 @@ impl IndexerRegistry {
                 .timeout(std::time::Duration::from_secs(300))
                 .build()
                 .expect("failed to build reqwest client"),
+            no_embedding_cache: StdMutex::new(HashSet::new()),
         }
     }
 
@@ -284,14 +310,43 @@ impl IndexerRegistry {
 
     /// Notify that a commit happened on a branch. If a task already exists,
     /// increment its notify_count. If not, create a new task and enqueue it.
-    fn notify(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
-        let key = BranchKey { path, branch };
+    ///
+    /// When has_embeddings=false and the domain is in the no_embedding_cache,
+    /// returns Ok(()) immediately without creating a task — making nudges
+    /// for domains without embedding metadata nearly cost-free.
+    /// When has_embeddings=true, clears the no_embedding cache for this domain
+    /// (embeddings were just added to the schema).
+    fn notify(&self, path: String, branch: String, store_clustering: bool, has_embeddings: bool) -> Result<(), String> {
+        let key = BranchKey { path: path.clone(), branch };
+
+        // Fast path: if the caller doesn't know whether embeddings exist
+        // (has_embeddings=false, e.g. from maybe_nudge_push), check the cache.
+        if !has_embeddings {
+            let cache = self.no_embedding_cache.lock().unwrap();
+            if cache.contains(&path) {
+                return Ok(());
+            }
+            drop(cache);
+        } else {
+            // Embeddings confirmed by caller (e.g. post_commit_hook which
+            // checked validation_is_index_enabled). Clear the cache so
+            // future nudges from maybe_nudge_push will proceed.
+            let mut cache = self.no_embedding_cache.lock().unwrap();
+            cache.remove(&path);
+            drop(cache);
+        }
+
         let mut tasks = self.tasks.lock().unwrap();
 
         if let Some(task) = tasks.get(&key) {
             // Task exists — increment notify_count and update store_clustering.
             task.notify_count.fetch_add(1, Ordering::SeqCst);
             task.store_clustering.store(store_clustering, Ordering::SeqCst);
+            // If has_embeddings=true, clear the no_embedding flag on the
+            // existing task (schema was updated to add embeddings).
+            if has_embeddings {
+                task.progress.set_no_embedding(false);
+            }
             // If the task is already Completed, re-enqueue it for
             // scheduling so the new commits get processed.
             let is_completed = matches!(
@@ -339,6 +394,9 @@ impl IndexerRegistry {
     /// that will start from the oldest commit.
     fn reindex(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
         let key = BranchKey { path: path.clone(), branch: branch.clone() };
+
+        // 0. Clear no_embedding cache — reindex implies embeddings exist.
+        self.no_embedding_cache.lock().unwrap().remove(&path);
 
         // 1. Cancel and remove any existing task for this branch.
         {
@@ -1064,6 +1122,24 @@ async fn run_commit_task(
         progress.set_total_documents(doc_count);
     }
 
+    // Read X-Has-Embedding-Types to cache whether this domain has embedding
+    // metadata in its schema. When false, future notify() calls with
+    // has_embeddings=false will skip immediately without dispatching to Prolog.
+    let has_embedding_types = headers
+        .get("x-has-embedding-types")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if has_embedding_types {
+        progress.set_no_embedding(false);
+    } else {
+        progress.set_no_embedding(true);
+        // Add to the registry's no_embedding_cache so future nudges skip.
+        if let Some(registry) = INDEXER_REGISTRY.get() {
+            registry.no_embedding_cache.lock().unwrap().insert(key.path.clone());
+        }
+    }
+
     let next_commit_header = headers
         .get("x-next-commit")
         .and_then(|v| v.to_str().ok())
@@ -1303,7 +1379,7 @@ async fn post_push_stream(
         ));
     }
 
-    if !status.is_success() && status.as_u16() != 409 {
+    if !status.is_success() {
         // Non-streaming error response (e.g. 409, 422, 400, 503) — read as text.
         let resp_body = resp.text().await.unwrap_or_default();
         crate::log::log_info(format!(
@@ -1311,6 +1387,8 @@ async fn post_push_stream(
             status, resp_body
         ));
         if status.as_u16() == 409 {
+            // 409 Conflict: commit already indexed by tdb-search.
+            // This is a safe no-op — treat as success.
             return Ok(());
         }
         if status.as_u16() == 422 {
@@ -1465,13 +1543,18 @@ predicates! {
     /// Notify the indexer that a commit happened on a branch.
     /// If a task already exists, increments notify_count and returns immediately.
     /// If no task exists, creates one and enqueues it for scheduling.
+    ///
+    /// When HasEmbeddings is false and the domain is in the no_embedding_cache,
+    /// returns immediately without creating a task. When HasEmbeddings is true,
+    /// clears the no_embedding cache for this domain.
     #[module("$appserver")]
-    /// Signature: indexer_notify(+Path, +BranchName, +StoreClustering)
-    pub semidet fn indexer_notify(_context, path_term, branch_term, store_clustering_term) {
+    /// Signature: indexer_notify(+Path, +BranchName, +StoreClustering, +HasEmbeddings)
+    pub semidet fn indexer_notify(_context, path_term, branch_term, store_clustering_term, has_embeddings_term) {
         let path: PrologText = path_term.get_ex()?;
         let branch: PrologText = branch_term.get_ex()?;
         let store_clustering: bool = store_clustering_term.get_ex()?;
-        indexer_registry().notify(path.into_inner(), branch.into_inner(), store_clustering).map_err(|e| {
+        let has_embeddings: bool = has_embeddings_term.get_ex()?;
+        indexer_registry().notify(path.into_inner(), branch.into_inner(), store_clustering, has_embeddings).map_err(|e| {
             crate::log::log_error(format!("[indexer] notify failed: {}", e));
             PrologError::Failure
         })
@@ -2143,5 +2226,88 @@ mod tests {
         // reset_chain should be cleared after being consumed.
         assert!(!task.reset_chain.load(Ordering::SeqCst),
             "reset_chain should be cleared after on_task_complete consumes it");
+    }
+
+    #[test]
+    fn test_no_embedding_flag_default_false() {
+        let progress = BranchProgress::new();
+        assert!(!progress.is_no_embedding(),
+            "no_embedding should default to false");
+    }
+
+    #[test]
+    fn test_no_embedding_flag_set_and_clear() {
+        let progress = BranchProgress::new();
+        progress.set_no_embedding(true);
+        assert!(progress.is_no_embedding(),
+            "no_embedding should be true after set_no_embedding(true)");
+        progress.set_no_embedding(false);
+        assert!(!progress.is_no_embedding(),
+            "no_embedding should be false after set_no_embedding(false)");
+    }
+
+    #[test]
+    fn test_no_embedding_cache_skips_notify() {
+        // When a domain is in the no_embedding_cache, notify() with
+        // has_embeddings=false should return Ok(()) immediately without
+        // creating a task.
+        let registry = IndexerRegistry::new();
+        registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
+
+        let path = "admin/db/local/branch/main".to_string();
+        let branch = "main".to_string();
+
+        // Manually add to the no_embedding cache (simulating what
+        // run_commit_task does after reading X-Has-Embedding-Types: false).
+        registry.no_embedding_cache.lock().unwrap().insert(path.clone());
+
+        // notify with has_embeddings=false should skip.
+        let result = registry.notify(path.clone(), branch.clone(), false, false);
+        assert!(result.is_ok(), "notify should succeed (skip)");
+        assert!(registry.tasks.lock().unwrap().is_empty(),
+            "no task should be created when domain is in no_embedding_cache");
+    }
+
+    #[test]
+    fn test_no_embedding_cache_cleared_by_has_embeddings_true() {
+        // When notify() is called with has_embeddings=true, the domain
+        // should be removed from the no_embedding_cache so indexing proceeds.
+        let registry = IndexerRegistry::new();
+        registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
+
+        let path = "admin/db/local/branch/main".to_string();
+        let branch = "main".to_string();
+
+        // Add to cache, then clear with has_embeddings=true.
+        registry.no_embedding_cache.lock().unwrap().insert(path.clone());
+        assert!(registry.no_embedding_cache.lock().unwrap().contains(&path));
+
+        // Block actual task spawning.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+
+        registry.notify(path.clone(), branch.clone(), false, true);
+        assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),
+            "no_embedding_cache should be cleared when has_embeddings=true");
+    }
+
+    #[test]
+    fn test_reindex_clears_no_embedding_cache() {
+        // reindex() should clear the no_embedding_cache for the domain
+        // since reindex implies embeddings exist.
+        let registry = IndexerRegistry::new();
+        registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry.no_embedding_cache.lock().unwrap().insert(path.clone());
+        assert!(registry.no_embedding_cache.lock().unwrap().contains(&path));
+
+        // reindex will fail because there's no real tdb-search, but it
+        // should still clear the cache first.
+        let _ = registry.reindex(path.clone(), "main".to_string(), false);
+        assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),
+            "no_embedding_cache should be cleared by reindex");
     }
 }

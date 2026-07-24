@@ -632,7 +632,7 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
         error(tdb_search_endpoint_not_configured(io_push_delta), _)),
     (   plugin_api:indexer_available
     ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering)
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)
         ->  true
         ;   throw(error(indexer_notify_failed(io_push_delta), _))
         )
@@ -1926,11 +1926,11 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
     ->  true
     ;   Commits_Received = 0
     ),
-    (   get_dict(pending_index_documents, Engine_Stats, Pending_Updates)
+    (   get_dict(pending_index_documents, Engine_Stats, Pending_Indexing)
     ->  true
-    ;   get_dict(pending_index_fragments, Engine_Stats, Pending_Updates)
+    ;   get_dict(pending_index_fragments, Engine_Stats, Pending_Indexing)
     ->  true
-    ;   Pending_Updates = 0
+    ;   Pending_Indexing = 0
     ),
     (   get_dict(store_clustering, Engine_Stats, Store_Clustering_Raw)
     ->  (   Store_Clustering_Raw == true
@@ -1948,7 +1948,7 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         searchable_documents:Searchable_Docs,
         text_segments_indexed:Segments_Indexed,
         commits_received:Commits_Received,
-        pending_updates:Pending_Updates,
+        pending_indexing:Pending_Indexing,
         store_clustering:Store_Clustering
     },
     Branch_Processing_Section = json{

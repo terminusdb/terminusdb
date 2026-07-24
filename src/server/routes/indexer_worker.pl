@@ -4,9 +4,11 @@
 
 :- use_module(core(api/api_indexer),
              [indexer_process_commit/4, indexer_next_commit/4,
-              count_indexable_documents/4]).
+              count_indexable_documents/4,
+              embedding_type_queries/2]).
 :- use_module(core(util)).
-:- use_module(core(query), [resolve_absolute_string_descriptor/2]).
+:- use_module(core(query), [resolve_absolute_string_descriptor/2,
+                            resolve_relative_descriptor/3]).
 :- use_module(core(transaction/ref_entity),
              [branch_head_commit/3,
               commit_uri_to_history_commit_ids/3]).
@@ -31,11 +33,42 @@
 %    X-Commit-Id: <commit_id>
 %    X-Next-Commit: <commit_id> or None
 %    X-Commit-Count: <total commits in branch history>
+%    X-Has-Embedding-Types: true|false
 %
 %  Then writes NDJSON body (changed documents with embedding text)
 %  by calling api_indexer:indexer_process_commit/4.
 %
 %  On error, writes Status: 500 and an error marker JSON line.
+%
+%  Clause 1: mode=next and already at HEAD — write headers and return
+%  immediately (no fallthrough to commit processing).
+%  Clause 2: all other cases — resolve the commit to process, write
+%  headers, and stream NDJSON body.
+
+% Clause 1: mode=next, at HEAD — early exit, no commit to process.
+indexer_process_commit_handler(Request, OutStream) :-
+    get_dict(path, Request, Path),
+    get_dict(query, Request, QueryString),
+    parse_query(QueryString, BranchName, CommitId, Mode),
+    Mode == "next",
+    (   indexer_next_commit(Path, BranchName, CommitId, NextCommitRaw)
+    ->  true
+    ;   NextCommitRaw = 'None'
+    ),
+    NextCommitRaw == 'None',
+    !,
+    commit_count_for_branch(Path, BranchName, CommitCount),
+    has_embedding_types_for_branch(Path, BranchName, HasEmbedding),
+    format(OutStream, 'Status: 200\n', []),
+    format(OutStream, 'X-Commit-Id: ~w\n', [CommitId]),
+    format(OutStream, 'X-Next-Commit: None\n', []),
+    format(OutStream, 'X-Commit-Count: ~w\n', [CommitCount]),
+    format(OutStream, 'X-Document-Count: 0\n', []),
+    format(OutStream, 'X-Has-Embedding-Types: ~w\n', [HasEmbedding]),
+    format(OutStream, '\n', []),
+    flush_output(OutStream).
+
+% Clause 2: normal processing — resolve commit, write headers, stream body.
 indexer_process_commit_handler(Request, OutStream) :-
     get_dict(path, Request, Path),
     get_dict(query, Request, QueryString),
@@ -43,22 +76,10 @@ indexer_process_commit_handler(Request, OutStream) :-
     (   Mode == "next"
     ->  % CommitId is the last indexed commit — find the next one.
         (   indexer_next_commit(Path, BranchName, CommitId, NextCommitRaw)
-        ->  true
-        ;   NextCommitRaw = 'None'
+        ->  NextCommitRaw \== 'None'
+        ;   fail
         ),
-        (   NextCommitRaw == 'None'
-        ->  % Already at HEAD — nothing to process.
-            commit_count_for_branch(Path, BranchName, CommitCount),
-            format(OutStream, 'Status: 200\n', []),
-            format(OutStream, 'X-Commit-Id: ~w\n', [CommitId]),
-            format(OutStream, 'X-Next-Commit: None\n', []),
-            format(OutStream, 'X-Commit-Count: ~w\n', [CommitCount]),
-            format(OutStream, 'X-Document-Count: 0\n', []),
-            format(OutStream, '\n', []),
-            flush_output(OutStream),
-            !
-        ;   CommitToProcess = NextCommitRaw
-        )
+        CommitToProcess = NextCommitRaw
     ;   Mode == "first"
     ->  % Never indexed — find the first commit in the branch.
         first_commit_for_branch(Path, BranchName, CommitToProcess)
@@ -69,6 +90,7 @@ indexer_process_commit_handler(Request, OutStream) :-
     ->  true
     ;   CommitCount = 0
     ),
+    has_embedding_types_for_branch(Path, BranchName, HasEmbedding),
     % Compute document count using fast Rust change detection.
     % This is near-instant so we can include it in the same header block.
     (   catch(count_indexable_documents(Path, BranchName, CommitToProcess, DocCount),
@@ -94,6 +116,7 @@ indexer_process_commit_handler(Request, OutStream) :-
     format(OutStream, 'X-Commit-Count: ~w\n', [CommitCount]),
     format(OutStream, 'X-Document-Count: ~w\n', [DocCount]),
     format(OutStream, 'X-Parent-Commit: ~w\n', [ParentCommit]),
+    format(OutStream, 'X-Has-Embedding-Types: ~w\n', [HasEmbedding]),
     format(OutStream, '\n', []),
     flush_output(OutStream),
     format(user_error, "[DEBUG] indexer_worker: calling indexer_process_commit for ~w commit=~w doc_count=~w~n", [Path, CommitToProcess, DocCount]),
@@ -177,6 +200,37 @@ parent_commit_for_branch(Path, BranchName, CommitId, ParentCommit) :-
     ;   ParentCommit = "none"
     ).
 
+%% has_embedding_types_for_branch(+Path, +BranchName, -HasEmbedding) is det.
+%
+%  Checks whether the branch's schema has at least one type with embedding
+%  metadata. Returns the atom 'true' or 'false' for use in CGI headers.
+%  This is a lightweight check (single xrdf scan) used to inform the Rust
+%  indexer whether to cache a "no embedding" state for this domain.
+has_embedding_types_for_branch(Path, BranchName, HasEmbedding) :-
+    (   catch(embedding_type_queries_for_branch(Path, BranchName),
+              _, fail)
+    ->  HasEmbedding = true
+    ;   HasEmbedding = false
+    ).
+
+%% embedding_type_queries_for_branch(+Path, +BranchName) is semidet.
+%
+%  True if the branch schema has at least one type with embedding metadata.
+%  Opens the branch descriptor and checks for sys:metadata embedding config.
+embedding_type_queries_for_branch(Path, BranchName) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    branch_descriptor{branch_name: BranchName} :< Descriptor,
+    get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+    branch_head_commit(Repository_Descriptor, BranchName, Head_Commit_Uri),
+    commit_uri_to_history_commit_ids(Repository_Descriptor,
+                                     Head_Commit_Uri,
+                                     [LatestCommitId|_]),
+    resolve_relative_descriptor(Descriptor,
+                                ["commit", LatestCommitId],
+                                Commit_Descriptor),
+    embedding_type_queries(Commit_Descriptor, TypeQueries),
+    TypeQueries \== [].
+
 
 :- begin_tests(indexer_worker_tests).
 
@@ -224,5 +278,14 @@ test("commit_count_for_branch returns 1 for a freshly created database",
        true(Count == 1)
      ]) :-
     commit_count_for_branch("admin/countdb/local/branch/main", "main", Count).
+
+test("has_embedding_types_for_branch returns false for a database without embedding metadata",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "embeddb")
+             )),
+       cleanup(teardown_temp_store(State)),
+       true(HasEmbedding == false)
+     ]) :-
+    has_embedding_types_for_branch("admin/embeddb/local/branch/main", "main", HasEmbedding).
 
 :- end_tests(indexer_worker_tests).
