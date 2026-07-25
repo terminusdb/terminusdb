@@ -167,7 +167,8 @@ log_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, count, integer, -1, Count),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
             param_value_search_optional(Search, stream, boolean, false, Stream),
-            Options = opts{ start: Start, count: Count, verbose: Verbose},
+            param_value_search_optional(Search, with_counts, boolean, false, With_Counts),
+            Options = opts{ start: Start, count: Count, verbose: Verbose, with_counts: With_Counts},
             (   Stream = true
             ->  write_cors_headers(Request),
                 format('Status: 200~n'),

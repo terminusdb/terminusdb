@@ -2580,6 +2580,17 @@ paths:
           schema:
             type: integer
             example: 10
+        - name: with_counts
+          description: >-
+            When true, each commit in the response is enriched with
+            added_count, changed_count, and deleted_count fields showing
+            the number of documents that were inserted, modified, or deleted
+            in that commit.
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: "Successful log request"
@@ -2611,6 +2622,18 @@ paths:
                     "timestamp":
                       type: number
                       example: 1660919664.9129035
+                    "added_count":
+                      type: integer
+                      description: Number of documents added in this commit (only present when with_counts=true)
+                      example: 3
+                    "changed_count":
+                      type: integer
+                      description: Number of documents changed in this commit (only present when with_counts=true)
+                      example: 1
+                    "deleted_count":
+                      type: integer
+                      description: Number of documents deleted in this commit (only present when with_counts=true)
+                      example: 0
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
