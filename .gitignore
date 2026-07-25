@@ -32,3 +32,5 @@ tests/.terminusdb-test-storage
 admin?2fdb-*.bundle
 .terminusdb-test.log
 .terminusdb-test.pid
+tests/.terminusdb-test-7373.log
+tests/.terminusdb-test-7373.pid
