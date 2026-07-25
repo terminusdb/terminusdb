@@ -2618,6 +2618,73 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
+  /changes/{path}:
+    get:
+      operationId: getChanges
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Get document changes for a specific commit or branch"
+      description: |
+        Returns the set of document IDs that were added, changed, or deleted
+        in the given commit. The path may be a branch path (returns changes
+        on the branch head) or a commit path (returns changes for that
+        specific commit).
+
+        Computes document-level additions, modifications, and deletions.
+
+        **Example:**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/changes/admin/mydb/local/commit/abc123"
+        ```
+
+        **Example: With count limit**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/changes/admin/mydb/local/branch/main?count=10"
+        ```
+      tags:
+        - Change management
+      parameters:
+        - $ref: '#/components/parameters/commit_path'
+        - name: count
+          description: Maximum number of IDs to return per category (added, changed, deleted). -1 means unlimited.
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: -1
+            example: 100
+      responses:
+        200:
+          description: "Successful changes request"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: array
+                    items:
+                      type: string
+                    description: Document IDs that were inserted in this commit
+                    example: ["terminusdb:///data/Person/jane"]
+                  changed:
+                    type: array
+                    items:
+                      type: string
+                    description: Document IDs that were modified in this commit
+                    example: ["terminusdb:///data/Person/bob"]
+                  deleted:
+                    type: array
+                    items:
+                      type: string
+                    description: Document IDs that were deleted in this commit
+                    example: ["terminusdb:///data/Person/alice"]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database or commit not found
   /history/{path}:
     get:
       operationId: getDocumentHistory

@@ -2881,6 +2881,37 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% Changes handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- tdb_http_handler(api(changes/Path), cors_handler(Method, changes_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,get])]).
+
+/*
+ * changes_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Returns the set of document IDs that were added, changed, or deleted
+ * in the given commit. The path may be a branch path (returns changes
+ * on the branch head) or a commit path (returns changes for that
+ * specific commit).
+ *
+ * Query parameters:
+ *   count - maximum number of IDs to return per category (default: unlimited)
+ */
+changes_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    api_report_errors(
+        changes,
+        Request,
+        (   param_value_search_optional(Search, count, integer, -1, Count),
+            api_changes(System_DB, Auth, Path, Changes, _{count: Count}),
+            cors_reply_json(Request, Changes)
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% Apply handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
                 [method(Method),
