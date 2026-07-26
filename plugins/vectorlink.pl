@@ -36,23 +36,7 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 */
 
 :- use_module(core(plugin_api)).
-:- use_module(core(document/history), [commits_changed_id/5]).
-:- use_module(core(document), [get_document/3, all_class_frames/3,
-                               schema_metadata_descriptor/3,
-                               database_prefixes/2]).
-:- use_module(core(query)).
-:- use_module(core(query/jsonld), [compress_dict_uri/3, prefix_expand/3]).
-:- use_module(core(transaction)).
-:- use_module(core(transaction/ref_entity), [branch_head_commit/3, commit_id_uri/3,
-    commit_uri_to_history_commit_ids/3, commit_id_to_metadata/5]).
-:- use_module(core(util)).
-:- use_module(core(account)).
-:- use_module(core(account/capabilities), [resolve_descriptor_auth/6,
-                                           user_key_user_id/4]).
-:- use_module(core(triple), [super_user_authority/1, database_schema/2, xrdf/4]).
-:- use_module(core(plugins)).
 :- use_module(library(base64)).
-:- use_module(core(api/api_graphql)).
 :- use_module(library(json)).
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
@@ -70,15 +54,6 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 :- use_module(library(dicts)).
 :- use_module(library(url), [www_form_encode/2]).
 :- use_module(library(aggregate)).
-:- use_module(core(util/test_utils),
-             [setup_temp_store/1, teardown_temp_store/1,
-              create_db_without_schema/2, create_db_with_empty_schema/2,
-              create_db_with_test_schema/2]).
-:- use_module(core(api/api_document), [api_insert_documents/9]).
-:- use_module(core(api/db_branch), [branch_create/5]).
-:- use_module(core(api/db_delete), [delete_db/5]).
-:- use_module(core(account/user_management)).
-:- use_module(core(transaction/system_entity), [database_exists/2]).
 :- use_module(library(http/http_client), [http_read_data/3]).
 :- use_module(library(process)).
 :- use_module(library(readutil)).

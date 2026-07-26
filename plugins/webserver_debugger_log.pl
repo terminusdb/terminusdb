@@ -1,6 +1,6 @@
 :- module(webserver_actions, []).
 
-:- use_module(core(appserver_hooks)).
+:- use_module(core(plugin_api)).
 
 :- multifile appserver_hooks:appserver_stream/3.
 

@@ -14,14 +14,6 @@ Activates when TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set. Provides:
 */
 
 :- use_module(core(plugin_api)).
-:- use_module(core(document/history), [commits_changed_id/5]).
-:- use_module(core(document), [get_document/3, all_class_frames/3,
-                               schema_metadata_descriptor/3]).
-:- use_module(core(query)).
-:- use_module(core(transaction)).
-:- use_module(core(util)).
-:- use_module(core(account)).
-:- use_module(core(triple), [super_user_authority/1, database_schema/2, xrdf/4]).
 :- use_module(library(json)).
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).

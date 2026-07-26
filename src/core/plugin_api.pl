@@ -34,6 +34,16 @@
 :- use_module(core(plugin_api/stream)).
 :- use_module(core(plugin_api/config)).
 :- use_module(core(plugin_api/indexer)).
+:- use_module(core(plugin_api/document)).
+:- use_module(core(plugin_api/query)).
+:- use_module(core(plugin_api/transaction)).
+:- use_module(core(plugin_api/account)).
+:- use_module(core(plugin_api/triple)).
+:- use_module(core(plugin_api/plugins)).
+:- use_module(core(plugin_api/appserver)).
+:- use_module(core(plugin_api/util)).
+:- use_module(core(plugin_api/api)).
+:- use_module(core(plugin_api/test_utils)).
 
 :- reexport(core(plugin_api/http)).
 :- reexport(core(plugin_api/path)).
@@ -42,3 +52,13 @@
 :- reexport(core(plugin_api/stream)).
 :- reexport(core(plugin_api/config)).
 :- reexport(core(plugin_api/indexer)).
+:- reexport(core(plugin_api/document)).
+:- reexport(core(plugin_api/query)).
+:- reexport(core(plugin_api/transaction)).
+:- reexport(core(plugin_api/account)).
+:- reexport(core(plugin_api/triple)).
+:- reexport(core(plugin_api/plugins)).
+:- reexport(core(plugin_api/appserver)).
+:- reexport(core(plugin_api/util)).
+:- reexport(core(plugin_api/api)).
+:- reexport(core(plugin_api/test_utils)).

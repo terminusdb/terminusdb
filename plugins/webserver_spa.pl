@@ -1,6 +1,6 @@
 :- module(webserver_spa, []).
 
-:- use_module(core(appserver_hooks)).
+:- use_module(core(plugin_api)).
 
 :- multifile appserver_hooks:appserver_static_path/3.
 

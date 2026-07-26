@@ -1,13 +1,6 @@
 :- module(webserver_commits, []).
 
-:- use_module(core(appserver_hooks)).
-:- use_module(core(plugins)).
-:- use_module(core(util/json_log)).
-:- use_module(core(util)).
-:- use_module(core(transaction)).
-:- use_module(core(query/resolve_query_resource)).
-:- use_module(core(account/capabilities)).
-:- use_module(core(document/history)).
+:- use_module(core(plugin_api)).
 :- use_module(library(lists)).
 :- use_module(library(json)).
 :- use_module(library(option)).
@@ -790,7 +783,7 @@ error_response(_, Response) :-
 %%%%%%%%%%%%%%%%%%%% Unit Tests %%%%%%%%%%%%%%%%%%%%%%%%%
 
 :- use_module(library(plunit)).
-:- use_module(core(util/test_utils)).
+:- use_module(core(plugin_api)).
 
 :- begin_tests(webserver_commits_utils, []).
 

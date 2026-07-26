@@ -25,12 +25,10 @@ The /4 hook (with graphspec) is tried first, then the /3 hook (without).
 */
 
 :- use_module(core(plugin_api)).
-:- use_module(core(plugins)).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(dicts)).
-:- use_module(core(triple/casting), [decimal_precision/1, rational_to_decimal_string/3]).
 
 % ==========================================================================
 % Config

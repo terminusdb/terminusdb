@@ -7,11 +7,12 @@
 %% hello_rust/1 in the '$rustnative' module. This Prolog plugin calls
 %% that predicate and returns the result as JSON.
 
+:- use_module(core(plugin_api)).
 :- use_module(library(http/http_json)).
 
-%% Register route via tdb_http_handler — same mechanism as webserver_hello.pl.
-:- tdb_http_handler:tdb_http_handler('/api/v1/ext/rust-hello',
-                routes:cors_handler(Method, webserver_rust_hello:rust_hello_handler,
+%% Register route via plugin_api.
+:- plugin_api:register_route('/api/v1/ext/rust-hello',
+                plugin_api:cors_handler(Method, webserver_rust_hello:rust_hello_handler,
                                     [skip_authentication(true)]),
                 [method(Method),
                  methods([options,get])]).

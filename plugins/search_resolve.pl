@@ -23,11 +23,6 @@ then applies the matching algorithm to produce the 3-partition output
 */
 
 :- use_module(core(plugin_api)).
-:- use_module(core(util)).
-:- use_module(core(account)).
-:- use_module(core(account/capabilities), [resolve_descriptor_auth/6]).
-:- use_module(core(transaction/ref_entity), [branch_head_commit/3, commit_id_uri/3]).
-:- use_module(core(plugins)).
 :- use_module(library(json)).
 :- use_module(library(http/http_open)).
 :- use_module(library(http/http_header)).
@@ -427,12 +422,7 @@ atom_json_key(target_id, target_id).
 % Unit tests
 % ==========================================================================
 
-:- use_module(core(util/test_utils),
-             [setup_temp_store/1, teardown_temp_store/1,
-              create_db_without_schema/2]).
-:- use_module(core(account/user_management), [add_user/3]).
-:- use_module(core(triple), [super_user_authority/1]).
-:- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(plugin_api)).
 
 :- begin_tests(search_resolve_matching).
 
