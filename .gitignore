@@ -9,7 +9,7 @@ node_modules
 \#*\#
 .\#*
 .deps
-config.pl
+/src/config/terminus_config.pl
 *.index.v1-1
 prefix.db
 tmp/*
