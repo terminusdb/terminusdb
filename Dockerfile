@@ -62,6 +62,7 @@ WORKDIR /app/terminusdb
 COPY distribution/init_docker.sh distribution/
 COPY distribution/Makefile.prolog Makefile
 COPY src src/
+COPY plugins plugins/
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 
 # Build the community executable.
@@ -98,7 +99,6 @@ COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/search_resolve.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/legacy_vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/json2markdown.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/

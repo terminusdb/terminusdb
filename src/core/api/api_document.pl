@@ -78,6 +78,7 @@
 :- use_module(core(util/json_preserve), [close_list_tails/1]).
 :- use_module(core(account)).
 :- use_module(core(plugins)).
+:- use_module(core(json2markdown)).
 :- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
@@ -1539,11 +1540,7 @@ document_stream_start(markdown, _Config, StreamState) :-
 
 document_stream_write(markdown, _Config, state, Document) :-
     strip_metadata_fields(Document, Cleaned),
-    (   current_predicate(json2markdown:json_to_markdown/2),
-        json2markdown:json_to_markdown(Cleaned, Markdown)
-    ->  true
-    ;   Markdown = ''
-    ),
+    json2markdown:json_to_markdown(Cleaned, Markdown),
     format("~w~n", [Markdown]).
 
 document_stream_end(markdown, _Config).
@@ -1770,7 +1767,6 @@ default_schema_insert_options(Options) :-
 
 :- dynamic execute_commit_package/2.
 :- dynamic commit_package_test_handler/1.
-:- dynamic json2markdown:json_to_markdown/2.
 
 run_commit_package(Package) :-
     execute_commit_package(Package, Result),
