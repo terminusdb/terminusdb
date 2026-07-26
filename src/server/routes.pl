@@ -4435,6 +4435,7 @@ extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size, Opera
 
 get_current_id_from_stream(Id) :-
     current_output(CGI),
+    is_cgi_stream(CGI),
     cgi_property(CGI, id(Id)).
 
 save_request(Request) :-

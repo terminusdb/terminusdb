@@ -488,12 +488,6 @@ worker_loop(Queue) :-
 %%  garbage_collect_atoms when the atom count exceeds a threshold,
 %%  rather than on every request.
 cleanup_worker_state :-
-    %% Abolish tables BEFORE garbage_collect so atoms held by table
-    %% entries can actually be collected. Tables keyed on Layer
-    %% references accumulate across requests because each
-    %% open_descriptor creates a new Layer object, and the old table
-    %% entries are never invalidated.
-    abolish_all_tables,
     get_time(T0),
     garbage_collect,
     get_time(T1),
@@ -504,20 +498,28 @@ cleanup_worker_state :-
     ->  garbage_collect_atoms,
         get_time(T3),
         GCAtomTime is T3 - T2
-    ;   GCAtomTime = 0
+    ;   T3 = T2,
+        GCAtomTime = 0
+    ),
+    (   statistics(atoms, AtomCount2),
+        AtomCount2 > 100000
+    ->  abolish_private_tables,
+        get_time(T4),
+        TableGCTime is T4 - T3
+    ;   TableGCTime = 0
     ),
     GCTime is T1 - T0,
     TrimTime is T2 - T1,
     (   GCTime > 0.05
     ->  json_log_error_formatted(
-            "SLOW_GC: garbage_collect took ~3f seconds, trim_stacks took ~3f seconds, atom_gc took ~3f seconds, atoms=~w",
-            [GCTime, TrimTime, GCAtomTime, AtomCount])
+            "SLOW_GC: garbage_collect took ~3f seconds, trim_stacks took ~3f seconds, atom_gc took ~3f seconds, table_gc took ~3f seconds, atoms=~w",
+            [GCTime, TrimTime, GCAtomTime, TableGCTime, AtomCount2])
     ;   true
     ).
 
 %% track_atom_growth(+BeforeCount, +AfterCount, +HandlerModule, +HandlerName)
 %%
-%%  Log when a single request creates more than 1000 new atoms that survive
+%%  Log when a single request creates more than 100 new atoms that survive
 %%  garbage_collect. This helps identify atom leakage sources.
 :- dynamic atom_count_before/2.  % atom_count_before(ThreadId, Count)
 track_atom_growth :-
@@ -526,7 +528,7 @@ track_atom_growth :-
     ->  statistics(atoms, After),
         Growth is After - Before,
         (   Growth > 100
-        ->  json_log_error_formatted(
+        ->  json_log_debug_formatted(
                 "ATOM_GROWTH: ~w new atoms survived GC (before=~w, after=~w)",
                 [Growth, Before, After])
         ;   true
@@ -663,7 +665,7 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                             close(CGI)
                         )
                     ->  true
-                    ;   write_cgi_error(OutStream, 500, "Handler goal failed")
+                    ;   catch(write_cgi_error(OutStream, 500, "Handler goal failed"), _, true)
                     ),
                     Error,
                     handle_handler_error(Error, OutStream, CGI)
@@ -678,18 +680,18 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
             ->  catch(
                     (   indexer_worker:indexer_process_commit_handler(Request, OutStream)
                     ->  true
-                    ;   write_cgi_error(OutStream, 500, "Indexer worker handler failed")
+                    ;   handle_worker_error(OutStream, "Indexer worker handler failed")
                     ),
                     Error,
                     (   json_log_error_formatted("Indexer worker handler error: ~q", [Error]),
-                        write_cgi_error(OutStream, 500, Error)
+                        catch(handle_worker_error(OutStream, Error), _, true)
                     )
                 )
             ;   catch(
                     call_raw_plugin_handler(HandlerModule, HandlerName, SWIRequest, OutStream),
                     Error,
                     (   json_log_error_formatted("Raw plugin handler error: ~q", [Error]),
-                        write_cgi_error(OutStream, 500, Error)
+                        catch(handle_worker_error(OutStream, Error), _, true)
                     )
                 )
             )
@@ -786,24 +788,17 @@ drain_chunks(InputStreamId, WriteStream, AccLen, TotalLen) :-
 %%  Read all bytes from the input pipe stream into a memory file with octet
 %%  encoding, then reopen the memory file for reading. The pipe is closed by
 %%  the caller after this predicate returns.
+%%
+%%  Uses copy_stream_data/2 for bulk C-level buffered I/O instead of
+%%  byte-at-a-time Prolog recursion. For a 2KB request body this reduces
+%%  ~2000 recursive Prolog calls to a single C call.
 drain_pipe_to_memory_file(InStream, MemoryFile, BodyStream, BodyLen) :-
     new_memory_file(MemoryFile),
     open_memory_file(MemoryFile, write, WriteStream, [type(binary), encoding(octet)]),
-    drain_pipe_bytes(InStream, WriteStream, 0, BodyLen),
+    copy_stream_data(InStream, WriteStream),
     close(WriteStream),
+    size_memory_file(MemoryFile, BodyLen),
     open_memory_file(MemoryFile, read, BodyStream, [type(binary), encoding(octet)]).
-
-drain_pipe_bytes(InStream, WriteStream, AccLen, TotalLen) :-
-    (   at_end_of_stream(InStream)
-    ->  TotalLen = AccLen
-    ;   get_byte(InStream, Byte),
-        (   Byte == -1
-        ->  TotalLen = AccLen
-        ;   put_byte(WriteStream, Byte),
-            NewLen is AccLen + 1,
-            drain_pipe_bytes(InStream, WriteStream, NewLen, TotalLen)
-        )
-    ).
 
 %% empty_body_stream(-MemoryFile, -BodyStream, -BodyLen) is det.
 %%
@@ -1016,6 +1011,31 @@ handle_handler_error(Error, OutStream, CGI) :-
 cgi_headers_sent(CGI) :-
     catch(cgi_property(CGI, header_codes(Codes)), _, fail),
     Codes \= [].
+
+%% handle_worker_error(+OutStream, +Error) is det.
+%%
+%%  Handle a handler exception from a worker pipe. Unlike
+%%  handle_handler_error/3 which uses a CGI stream, this works with a
+%%  raw output stream. If data has already been written to the stream
+%%  (headers sent), append an error banner to the body to avoid
+%%  corrupting the response with a second set of CGI headers; otherwise
+%%  write a fresh CGI error response.
+handle_worker_error(OutStream, Error) :-
+    (   stream_has_output(OutStream)
+    ->  catch(format(OutStream, '~n~n############# ERROR #################~n', []), _, true),
+        catch(write_cgi_error_body(OutStream, Error), _, true)
+    ;   catch(write_cgi_error(OutStream, 500, Error), _, true)
+    ).
+
+%% stream_has_output(+Stream) is semidet.
+%%
+%%  True if the stream has had any data written to it. Used to determine
+%%  whether CGI headers have already been sent to a raw output stream.
+stream_has_output(Stream) :-
+    catch((flush_output(Stream),
+           stream_property(Stream, position('$stream_position'(ByteCount, _, _, _)))),
+          _, fail),
+    ByteCount > 0.
 
 %% open_fd_for_error(+Fd, -Stream) is semidet.
 %%
@@ -1334,6 +1354,38 @@ test(drain_pipe_to_memory_file_japanese_utf8) :-
     ),
     drain_pipe_to_memory_file(InStream, MemoryFile, BodyStream, BodyLen),
     assertion(BodyLen == 9),
+    setup_call_cleanup(
+        true,
+        (   read_string(BodyStream, _, BodyText),
+            string_codes(BodyText, Codes),
+            assertion(Codes == Bytes)
+        ),
+        (   close(BodyStream),
+            close(InStream),
+            catch(close(Read), _, true),
+            free_memory_file(MemoryFile)
+        )
+    ).
+
+test(drain_pipe_to_memory_file_large_payload) :-
+    %% 10000 bytes: alternating pattern to verify no data corruption
+    %% at scale. This would be 10000 recursive Prolog calls with the
+    %% old byte-at-a-time implementation.
+    findall(B, ( between(1, 10000, I),
+                 B is (I mod 256) ), Bytes),
+    pipe(Read, Write),
+    set_stream(Write, encoding(octet)),
+    stream_property(Read, file_no(ReadFd)),
+    '$appserver':appserver_open_fd_stream(ReadFd, read, octet, InStream),
+    setup_call_cleanup(
+        open_string(Bytes, Src),
+        (   copy_stream_data(Src, Write),
+            close(Write)
+        ),
+        close(Src)
+    ),
+    drain_pipe_to_memory_file(InStream, MemoryFile, BodyStream, BodyLen),
+    assertion(BodyLen == 10000),
     setup_call_cleanup(
         true,
         (   read_string(BodyStream, _, BodyText),
@@ -1838,5 +1890,60 @@ test(worker_loop_catches_client_disconnected) :-
     thread_join(ThreadId, _),
     message_queue_destroy(TestQ),
     message_queue_destroy(ReadyQ).
+
+test(handle_worker_error_no_output) :-
+    %% When no data has been written to the stream, handle_worker_error
+    %% should produce a full CGI error response with headers.
+    tmp_file_stream(Tmp, Stream, [encoding(utf8)]),
+    handle_worker_error(Stream, "test error"),
+    close(Stream),
+    read_file_to_string(Tmp, Result, []),
+    delete_file(Tmp),
+    assertion(sub_string(Result, _, _, _, 'Status: 500')),
+    assertion(sub_string(Result, _, _, _, 'Content-Type: application/json')),
+    assertion(sub_string(Result, _, _, _, '"api:message":"test error"')).
+
+test(handle_worker_error_with_output) :-
+    %% When data has already been written to the stream, handle_worker_error
+    %% should append an error banner, NOT write new CGI headers.
+    tmp_file_stream(Tmp, Stream, [encoding(utf8)]),
+    format(Stream, 'Status: 200~nContent-Type: text/plain~n~npartial body', []),
+    handle_worker_error(Stream, "late failure"),
+    close(Stream),
+    read_file_to_string(Tmp, Result, []),
+    delete_file(Tmp),
+    %% Original content preserved
+    assertion(sub_string(Result, _, _, _, 'Status: 200')),
+    assertion(sub_string(Result, _, _, _, 'partial body')),
+    %% Error banner appended, NOT a second Status header from write_cgi_error
+    assertion(sub_string(Result, _, _, _, '############# ERROR #################')),
+    assertion(sub_string(Result, _, _, _, '"api:message":"late failure"')),
+    %% Ensure there is no "Status: 500" from write_cgi_error
+    assertion(\+ sub_string(Result, _, _, _, 'Status: 500')).
+
+test(stream_has_output_fresh_stream) :-
+    tmp_file_stream(Tmp, Stream, [encoding(utf8)]),
+    assertion(\+ stream_has_output(Stream)),
+    close(Stream),
+    delete_file(Tmp).
+
+test(stream_has_output_after_write) :-
+    tmp_file_stream(Tmp, Stream, [encoding(utf8)]),
+    format(Stream, 'hello', []),
+    assertion(stream_has_output(Stream)),
+    close(Stream),
+    delete_file(Tmp).
+
+test(handle_handler_error_no_headers_sent) :-
+    %% When CGI headers haven't been sent yet, handle_handler_error
+    %% should write a fresh CGI error response.
+    tmp_file_stream(Tmp, OutStream, [encoding(utf8)]),
+    cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request([])]),
+    handle_handler_error("test error", OutStream, CGI),
+    catch(close(CGI), _, true),
+    close(OutStream),
+    read_file_to_string(Tmp, Result, []),
+    delete_file(Tmp),
+    assertion(sub_string(Result, _, _, _, 'Status: 500')).
 
 :- end_tests(request_worker_pool).
