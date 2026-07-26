@@ -158,8 +158,9 @@ jobs:
           ./terminusdb store init
 
       - name: Start TerminusDB
-        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}                        
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
+          export TERMINUSDB_PLUGINS_PATH="$GITHUB_WORKSPACE/plugins"
           ./terminusdb serve &
           echo $! > terminusdb.pid
           sleep 5  # wait for server to start
