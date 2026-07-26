@@ -21,7 +21,8 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
 predicates! {
     /// Start the Rust webserver on the given port.
     ///
-    /// Signature: `appserver_start(+Port)` where Port is an integer.
+    /// Signature: `appserver_start(+Port, +RootRedirect)` where Port is an
+    /// integer and RootRedirect is a string/atom for the root `/` redirect target.
     ///
     /// Routes are collected from `appserver_hooks:appserver_route/3` and
     /// static file serving paths from `appserver_hooks:appserver_static_path/3`.
@@ -29,7 +30,7 @@ predicates! {
     /// Fails if the port is outside the valid TCP range (1..65535) or if the
     /// server cannot bind to it.
     #[module("$appserver")]
-    pub semidet fn appserver_start(context, port_term) {
+    pub semidet fn appserver_start(context, port_term, redirect_term) {
         let port: u64 = port_term.get_ex()?;
         if port == 0 || port > u16::MAX as u64 {
             crate::log::log_error(format!(
@@ -38,6 +39,8 @@ predicates! {
             ));
             return Err(PrologError::Failure);
         }
+        let redirect_target: String = term_to_string(&redirect_term)?;
+        crate::config::set_root_redirect_target(redirect_target);
         let routes = collect_routes(context)?;
         let static_paths = collect_static_paths(context)?;
         let streams = collect_streams(context)?;

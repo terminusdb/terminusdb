@@ -3,6 +3,7 @@
 //! This crate provides an Axum/Tokio webserver that runs inside the
 //! SWI-Prolog process and is loaded through the existing `librust.dylib`.
 
+pub mod config;
 pub mod dispatch;
 pub mod indexer;
 pub mod log;

@@ -45,7 +45,8 @@
               indexer_backend/1,
               check_indexer_backend_config/0,
               clear_indexer_backend_config/0,
-              worker_elaboration_preference/1
+              worker_elaboration_preference/1,
+              root_redirect_target/1
 ]).
 
 :- use_module(library(pcre)).
@@ -126,6 +127,10 @@ db_path(Path) :-
 dashboard_enabled :-
     getenv_default('TERMINUSDB_ENABLE_DASHBOARD', true, Value),
     Value = true.
+
+:- table root_redirect_target/1 as shared.
+root_redirect_target(Target) :-
+    getenv_default('TERMINUSDB_ROOT_REDIRECT', '/app/admin', Target).
 
 :- table plugin_path/1 as shared.
 plugin_path(Path) :-

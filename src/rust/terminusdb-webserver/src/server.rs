@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
         assert_eq!(
             response.headers().get("location").unwrap().to_str().unwrap(),
-            "/app/data"
+            "/app/admin"
         );
     }
 
