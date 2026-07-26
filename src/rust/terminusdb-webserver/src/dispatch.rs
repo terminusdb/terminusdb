@@ -1420,8 +1420,8 @@ mod tests {
         assert_eq!(params.get("id"), Some(&"123".to_string()));
         assert_eq!(params.get("path"), Some(&"a/b/c".to_string()));
 
-        params = extract_route_params("/static/*path", "/static/app/alpha/index.html");
-        assert_eq!(params.get("path"), Some(&"app/alpha/index.html".to_string()));
+        params = extract_route_params("/static/*path", "/static/app/admin/index.html");
+        assert_eq!(params.get("path"), Some(&"app/admin/index.html".to_string()));
 
         params = extract_route_params("/api/info", "/api/info");
         assert!(params.is_empty());
