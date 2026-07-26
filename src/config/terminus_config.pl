@@ -56,6 +56,9 @@
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 
+:- dynamic vectorlink:semantic_indexer_endpoint/1.
+:- dynamic tdb_search:tdb_search_endpoint/1.
+
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
 terminusdb_version('12.0.6').

@@ -1539,7 +1539,8 @@ document_stream_start(markdown, _Config, StreamState) :-
 
 document_stream_write(markdown, _Config, state, Document) :-
     strip_metadata_fields(Document, Cleaned),
-    (   json2markdown:json_to_markdown(Cleaned, Markdown)
+    (   current_predicate(json2markdown:json_to_markdown/2),
+        json2markdown:json_to_markdown(Cleaned, Markdown)
     ->  true
     ;   Markdown = ''
     ),
@@ -1769,6 +1770,7 @@ default_schema_insert_options(Options) :-
 
 :- dynamic execute_commit_package/2.
 :- dynamic commit_package_test_handler/1.
+:- dynamic json2markdown:json_to_markdown/2.
 
 run_commit_package(Package) :-
     execute_commit_package(Package, Result),
