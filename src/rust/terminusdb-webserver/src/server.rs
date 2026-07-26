@@ -9,7 +9,6 @@ use axum::extract::Request;
 use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::routes::root_redirect;

@@ -186,11 +186,6 @@ impl BranchProgress {
         self.total_documents.store(n, Ordering::SeqCst);
     }
 
-    fn increment_processed_documents(&self) {
-        self.processed_documents.fetch_add(1, Ordering::SeqCst);
-        self.touch_progress();
-    }
-
     /// Set the processed documents counter to an absolute value.
     /// Used to sync with tdb-search's real indexing progress from its
     /// response stream (indexed count), which reflects actual embedding
@@ -215,12 +210,6 @@ impl BranchProgress {
     /// reading X-Has-Embedding-Types from CGI headers.
     fn set_no_embedding(&self, value: bool) {
         self.no_embedding.store(value, Ordering::SeqCst);
-    }
-
-    /// Check the no_embedding cache flag. Called by notify() to decide
-    /// whether to skip task creation entirely.
-    fn is_no_embedding(&self) -> bool {
-        self.no_embedding.load(Ordering::SeqCst)
     }
 
     fn snapshot(&self) -> (u64, u64, IndexStatus, Option<String>, u64, u64, u64) {
@@ -1586,7 +1575,7 @@ predicates! {
     /// current_commit, upcoming_commit, total_commits, commits_processed.
     /// Signature: indexer_progress(+Path, +BranchName, -Progress)
     #[module("$appserver")]
-    pub semidet fn indexer_progress(context, path_term, branch_term, progress_term) {
+    pub semidet fn indexer_progress(_context, path_term, branch_term, progress_term) {
         let path: PrologText = path_term.get_ex()?;
         let branch: PrologText = branch_term.get_ex()?;
 
