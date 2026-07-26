@@ -35,7 +35,7 @@ The authz gate itself lives in the route handler (routes.pl) because it
 needs System_DB and Auth from the HTTP dispatch.
 
 Gated on indexer_backend(http_tdb_search); clear error if called when
-backend is none or http_vectorlink.
+backend is none or http_legacy_vectorlink.
 */
 
 :- use_module(config(terminus_config)).

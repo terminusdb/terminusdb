@@ -90,7 +90,7 @@ http_engine(Engine) :-
 %% indexer_info(-Info) is det.
 %
 %  Reports the indexer backend configuration and availability.
-%  - backend: the configured backend atom (none, http_tdb_search, http_vectorlink)
+%  - backend: the configured backend atom (none, http_tdb_search, http_legacy_vectorlink)
 %  - configured: true when backend is not 'none'
 %  - available: true when the Rust indexer FFI predicates are registered
 %    (i.e. the indexer runtime is loaded and operational)

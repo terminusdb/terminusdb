@@ -1,5 +1,5 @@
 /**
- * E2E plugin tests — TerminusDB + tdb-search + vectorlink + Ollama
+ * E2E plugin tests — TerminusDB + tdb-search + legacy_vectorlink + Ollama
  *
  * Exercises the full plugin API surface through TerminusDB's HTTP endpoints:
  *   - /api/search/{path}     (GET, POST)
@@ -8,7 +8,7 @@
  *   - /api/resolve/{path}    (POST)
  *   - /api/statistics/{path} (GET)
  *   - /api/compare           (POST — method=embedding, optional role param)
- *   - /api/index/{path}      (GET — vectorlink)
+ *   - /api/index/{path}      (GET — legacy_vectorlink)
  *
  * Nomic embedding prefixes tested via /api/compare?role=<role>:
  *   - search_query:       role=query       (asymmetric: source=query, target=document)
@@ -26,7 +26,7 @@
  *      (set_doc_types, target_doc_types, set_doc_ids, target_doc_ids,
  *       threshold, tau_one_to_one, tau_one_to_many, tau_many_to_one, k)
  *   6. Nomic embedding prefixes — /api/compare with role param for all four prefixes
- *   7. Vectorlink index — legacy pull-based indexing endpoint
+ *   7. Legacy_vectorlink index — legacy pull-based indexing endpoint
  *   8. Post-delete cleanup — deleting a DB does not crash the server
  *
  * Environment:
@@ -611,9 +611,9 @@ describe('plugin-e2e', function () {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 7. Vectorlink index endpoint
+  // 7. Legacy_vectorlink index endpoint
   // ─────────────────────────────────────────────────────────────────────────
-  describe('vectorlink index endpoint', function () {
+  describe('legacy_vectorlink index endpoint', function () {
     before(async function () {
       await db.create(agent, { schema: false })
     })

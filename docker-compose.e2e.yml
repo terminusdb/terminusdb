@@ -1,9 +1,9 @@
-# E2E test stack: TerminusDB + tdb-search + vectorlink + Ollama
+# E2E test stack: TerminusDB + tdb-search + legacy_vectorlink + Ollama
 #
 # Brings up the full plugin ecosystem for end-to-end testing:
-#   - terminusdb: built from source with tdb_search + vectorlink plugins
+#   - terminusdb: built from source with tdb_search + legacy_vectorlink plugins
 #   - tdb-search: search engine (built from sibling ../tdb-search repo)
-#   - vectorlink: legacy semantic indexer (pre-built image)
+#   - legacy_vectorlink: legacy semantic indexer (pre-built image, deprecated in 12.1)
 #   - embeddings: Ollama serving nomic-embed-v2 for vector embeddings
 #
 # Usage:
@@ -35,8 +35,8 @@ services:
       - TERMINUSDB_INDEXER_BACKEND=http_tdb_search
       - TERMINUSDB_TDB_SEARCH_ENDPOINT=http://tdb-search:8080
       - TERMINUSDB_SEARCH_ADMIN_SECRET=root
-      # vectorlink plugin config
-      - TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT=http://vectorlink:8080
+      # legacy_vectorlink plugin config
+      - TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT=http://legacy-vectorlink:8080
     ports:
       - "127.0.0.1:6370:6363"
     volumes:
@@ -118,16 +118,16 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  vectorlink:
+  legacy_vectorlink:
     image: terminusdb/vectorlink:v0.0.8
     pull_policy: missing
-    container_name: vectorlink-e2e
-    hostname: vectorlink-e2e
+    container_name: legacy-vectorlink-e2e
+    hostname: legacy-vectorlink-e2e
     environment:
       - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb:6363/api/index
       - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
     volumes:
-      - e2e-vectorlink-storage:/app/storage
+      - e2e-legacy-vectorlink-storage:/app/storage
     command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage"]
     depends_on:
       terminusdb:
@@ -138,4 +138,4 @@ volumes:
   terminusdb-e2e-storage:
   e2e-ollama-models:
   e2e-tdb-search-data:
-  e2e-vectorlink-storage:
+  e2e-legacy-vectorlink-storage:

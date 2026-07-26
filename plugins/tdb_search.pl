@@ -2717,12 +2717,12 @@ test("unknown backend value refuses startup",
      ]) :-
     config:check_indexer_backend_config.
 
-test("http_vectorlink with its endpoint resolves and passes the check",
+test("http_legacy_vectorlink with its endpoint resolves and passes the check",
      [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
-              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'))),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_legacy_vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'))),
        cleanup(clean_tdb_search_test_env),
-       true(Backend == http_vectorlink)
+       true(Backend == http_legacy_vectorlink)
      ]) :-
     config:check_indexer_backend_config,
     config:indexer_backend(Backend).
@@ -2737,11 +2737,11 @@ test("http_tdb_search with its endpoint resolves and passes the check",
     config:check_indexer_backend_config,
     tdb_search_endpoint(Endpoint).
 
-test("http_vectorlink without its endpoint refuses startup",
+test("http_legacy_vectorlink without its endpoint refuses startup",
      [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink))),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_legacy_vectorlink))),
        cleanup(clean_tdb_search_test_env),
-       throws(error(indexer_backend_incomplete(http_vectorlink, _), _))
+       throws(error(indexer_backend_incomplete(http_legacy_vectorlink, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
@@ -2755,7 +2755,7 @@ test("http_tdb_search without its endpoint refuses startup",
 
 test("none with legacy endpoint set is ambiguous and refuses startup",
      [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'))),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'))),
        cleanup(clean_tdb_search_test_env),
        throws(error(indexer_backend_ambiguous(none, _), _))
      ]) :-
@@ -2769,20 +2769,20 @@ test("none with tdb-search endpoint set is ambiguous and refuses startup",
      ]) :-
     config:check_indexer_backend_config.
 
-test("http_vectorlink with both endpoints set is ambiguous and refuses startup",
+test("http_legacy_vectorlink with both endpoints set is ambiguous and refuses startup",
      [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
-              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'),
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_legacy_vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'),
               setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
        cleanup(clean_tdb_search_test_env),
-       throws(error(indexer_backend_ambiguous(http_vectorlink, _), _))
+       throws(error(indexer_backend_ambiguous(http_legacy_vectorlink, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
 test("http_tdb_search with both endpoints set is ambiguous and refuses startup",
      [ setup((clean_tdb_search_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
-              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://vectorlink:8080'),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'),
               setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
        cleanup(clean_tdb_search_test_env),
        throws(error(indexer_backend_ambiguous(http_tdb_search, _), _))

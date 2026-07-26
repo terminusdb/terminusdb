@@ -2,7 +2,7 @@
 # E2E test runner: brings up the full plugin stack, waits for readiness,
 # runs the mocha e2e suite, then tears down.
 #
-# Stack: TerminusDB + tdb-search + vectorlink + Ollama (embeddings)
+# Stack: TerminusDB + tdb-search + legacy_vectorlink + Ollama (embeddings)
 #
 # Usage:
 #   ./tests/run-e2e.sh              # up, test, down

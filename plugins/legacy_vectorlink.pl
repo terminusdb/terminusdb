@@ -1,15 +1,15 @@
-:- module(vectorlink, [
+:- module(legacy_vectorlink, [
     api_start_job/3,
     api_check_job/2,
     semantic_indexer_endpoint/1,
-    clean_vectorlink_env/0
+    clean_legacy_vectorlink_env/0
 ]).
 
-/** <module> vectorlink plugin — legacy pull-based indexing
+/** <module> legacy_vectorlink plugin — legacy pull-based indexing (deprecated in 12.1)
 
 Activates when TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set. Provides:
-- Legacy pull trigger: GET /start on the vectorlink engine
-- Legacy job status: GET /check on the vectorlink engine
+- Legacy pull trigger: GET /start on the legacy vectorlink engine
+- Legacy job status: GET /check on the legacy vectorlink engine
 - HTTP handler for /api/index (streams NDJSON via api_index_jobs/8)
 */
 
@@ -40,7 +40,7 @@ Activates when TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set. Provides:
 semantic_indexer_endpoint(Endpoint) :-
     plugin_env('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', Endpoint).
 
-clean_vectorlink_env :-
+clean_legacy_vectorlink_env :-
     abolish_plugin_env('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT'),
     unsetenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT').
 
@@ -53,7 +53,7 @@ clean_vectorlink_env :-
 %  Legacy pull trigger. Calls GET /start on the vectorlink engine.
 %  Refuses loud if the endpoint is not configured.
 api_start_job(Domain, Commit, Task_Id) :-
-    do_or_die(vectorlink:semantic_indexer_endpoint(Endpoint),
+    do_or_die(legacy_vectorlink:semantic_indexer_endpoint(Endpoint),
               error(semantic_indexer_endpoint_not_configured(api_start_job), _)),
     http_get(
         [ host(Endpoint),
@@ -67,7 +67,7 @@ api_start_job(Domain, Commit, Task_Id) :-
 %
 %  Legacy job status check. Calls GET /check on the vectorlink engine.
 api_check_job(Task_Id, Status) :-
-    do_or_die(vectorlink:semantic_indexer_endpoint(Endpoint),
+    do_or_die(legacy_vectorlink:semantic_indexer_endpoint(Endpoint),
               error(semantic_indexer_endpoint_not_configured(api_check_job), _)),
     http_get(
         [ host(Endpoint),
@@ -167,7 +167,7 @@ index_handler(get, Path, Request, System_DB, Auth) :-
         index,
         Request,
         (
-            do_or_die(vectorlink:semantic_indexer_endpoint(_),
+            do_or_die(legacy_vectorlink:semantic_indexer_endpoint(_),
                       error(semantic_indexer_endpoint_not_configured(index_handler), _)),
             param_value_search_required(Search, commit_id, text, Commit_Id),
             param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
@@ -196,6 +196,6 @@ index_handler(get, Path, Request, System_DB, Auth) :-
 % ==========================================================================
 
 :- plugin_api:register_route(api(index/Path),
-    plugin_api:cors_handler(Method, vectorlink:index_handler(Path)),
+    plugin_api:cors_handler(Method, legacy_vectorlink:index_handler(Path)),
     [method(Method), prefix, time_limit(infinite),
      methods([options,get,post,put])]).
