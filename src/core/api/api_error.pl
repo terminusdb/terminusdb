@@ -3032,6 +3032,15 @@ generic_exception_jsonld(semantic_indexer_endpoint_not_configured(Context), JSON
              'api:message' : Msg,
              'api:error' : _{'@type' : 'api:SemanticIndexerEndpointNotConfigured',
                              'api:context' : Context}}.
+generic_exception_jsonld(permission_error(http_method, Method, Location), JSON) :-
+    format(string(Msg), "HTTP method ~w is not allowed for ~w", [Method, Location]),
+    upcase_atom(Method, Method_Upper),
+    JSON = _{'@type' : 'api:MethodNotAllowedErrorResponse',
+             'api:status' : 'api:method_not_allowed',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:MethodNotAllowed',
+                             'api:method' : Method_Upper,
+                             'api:path' : Location}}.
 generic_exception_jsonld(Error, _Context, JSON) :-
     !,
     generic_exception_jsonld(Error, JSON).

@@ -194,8 +194,10 @@ index_handler(get, Path, Request, System_DB, Auth) :-
 % ==========================================================================
 % Route registration
 % ==========================================================================
-
-:- plugin_api:register_route(api(index/Path),
-    plugin_api:cors_handler(Method, legacy_vectorlink:index_handler(Path)),
-    [method(Method), prefix, time_limit(infinite),
-     methods([options,get,post,put])]).
+%
+% Route registration for api(index/Path) is handled exclusively by
+% vectorlink.pl, which implements index_handler for get, post, and delete.
+% This plugin only implements index_handler(get,...); registering the route
+% here would replace vectorlink.pl's registration (SWI-Prolog's
+% http_handler/3 replaces handlers for the same path), breaking POST and
+% DELETE endpoints.

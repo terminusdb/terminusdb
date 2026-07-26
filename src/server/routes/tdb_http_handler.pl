@@ -5,6 +5,7 @@
 
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_path)).
+:- use_module(library(http/http_json)).
 :- use_module(library(option)).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
@@ -253,7 +254,25 @@ http_dispatch_with_expansion(Request) :-
     %% runs in a fresh thread with its own nb_current copy, but the Rust
     %% pipe path reuses worker threads.
     nb_delete(http_dispatch_tree),
-    http_dispatch:http_dispatch(Expanded).
+    catch(
+        http_dispatch:http_dispatch(Expanded),
+        Error,
+        (   Error = error(permission_error(http_method, Method, Location), _)
+        ->  format(string(Msg), "HTTP method ~w is not allowed for ~w", [Method, Location]),
+            upcase_atom(Method, Method_Upper),
+            format(current_output, 'Status: 405 Method Not Allowed~n', []),
+            format(current_output, 'Content-Type: application/json~n~n', []),
+            json_write_dict(current_output,
+                _{'@type' : 'api:MethodNotAllowedErrorResponse',
+                  'api:status' : 'api:method_not_allowed',
+                  'api:message' : Msg,
+                  'api:error' : _{'@type' : 'api:MethodNotAllowed',
+                                  'api:method' : Method_Upper,
+                                  'api:path' : Location}},
+                [width(0)])
+        ;   throw(Error)
+        )
+    ).
 
 :- begin_tests(tdb_http_handler, [concurrent(false)]).
 
