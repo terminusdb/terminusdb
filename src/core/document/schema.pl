@@ -229,21 +229,10 @@ class_super(Validation_Object,Class,Super) :-
     schema_class_super(Schema,Class,Super).
 
 schema_class_super(Schema,Class,Super) :-
-    (   schema_read_layer(Schema, Layer)
-    ->  schema_class_super_tabled(Layer,Class,Super)
-    ;   schema_subclass_of(Schema, Class, Super)
-    ;   schema_subclass_of(Schema, Class, Intermediate),
-        schema_class_super(Schema,Intermediate,Super)
-    ).
-
-:- table schema_class_super_tabled/3 as private.
-schema_class_super_tabled(Layer,Class,Super) :-
-    Schema = [_{read: Layer}],
     schema_subclass_of(Schema, Class, Super).
-schema_class_super_tabled(Layer,Class,Super) :-
-    Schema = [_{read: Layer}],
+schema_class_super(Schema,Class,Super) :-
     schema_subclass_of(Schema, Class, Intermediate),
-    schema_class_super_tabled(Layer,Intermediate,Super).
+    schema_class_super(Schema,Intermediate,Super).
 
 schema_all_class_supers(Schema,Class,Prefixes,Supers,Options) :-
     findall(
