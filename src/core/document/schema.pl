@@ -713,27 +713,14 @@ property_is_unfold(Validation_Object, Class, Predicate, Unfold) :-
     database_schema(Validation_Object, Schema),
     schema_property_is_unfold(Schema, Class, Predicate, Unfold).
 
-schema_property_is_unfold(Schema, Class, Predicate, Unfold) :-
-    (   schema_read_layer(Schema, Layer)
-    ->  schema_property_is_unfold_tabled(Layer, Class, Predicate, Unfold)
-    ;   schema_property_is_unfold_compute(Schema, Class, Predicate, Unfold)
-    ).
-
-:- table schema_property_is_unfold_tabled/4 as private.
-schema_property_is_unfold_tabled(Layer, Class, Predicate, true) :-
-    Schema = [_{read: Layer}],
-    schema_property_is_unfold_compute(Schema, Class, Predicate, true),
-    !.
-schema_property_is_unfold_tabled(_, _, _, false).
-
-schema_property_is_unfold_compute(Schema, Class, Predicate, true) :-
+schema_property_is_unfold(Schema, Class, Predicate, true) :-
     schema_class_subsumed(Schema, Class, Super),
     xrdf(Schema, Super, Predicate, TypeNode),
     global_prefix_expand(sys:unfold, UnfoldPred),
     global_prefix_expand(rdf:nil, RdfNil),
     xrdf(Schema, TypeNode, UnfoldPred, RdfNil),
     !.
-schema_property_is_unfold_compute(_, _, _, false).
+schema_property_is_unfold(_, _, _, false).
 
 is_list_type(C) :-
     global_prefix_expand(rdf:'List', C).
@@ -1425,17 +1412,7 @@ metadata_descriptor(Validation_Object, Type, Descriptor) :-
     database_schema(Validation_Object, Schema),
     schema_metadata_descriptor(Schema, Type, Descriptor).
 
-schema_metadata_descriptor(Schema, Type, Descriptor) :-
-    (   schema_read_layer(Schema, Layer)
-    ->  schema_metadata_descriptor_tabled(Layer, Type, Descriptor)
-    ;   schema_metadata_descriptor_compute(Schema, Type, Descriptor)
-    ).
-
-:- table schema_metadata_descriptor_tabled/3 as private.
-schema_metadata_descriptor_tabled(Layer, Type, Descriptor) :-
-    schema_metadata_descriptor_compute([_{read: Layer}], Type, Descriptor).
-
-schema_metadata_descriptor_compute(Schema, Type, metadata(Result)) :-
+schema_metadata_descriptor(Schema, Type, metadata(Result)) :-
     xrdf(Schema, Type, sys:metadata, Metadata),
     graph_get_json_object(Schema, Metadata, JSON),
     % Extract string/array from @value wrapper, or return dict directly

@@ -225,7 +225,7 @@ pre_transaction_tabling :-
 
 post_transaction_tabling :-
     abolish_trampoline,
-    abolish_table_subgoals(woql_compile:trampoline/2).
+    abolish_private_tables.
 
 abolish_trampoline :-
     retractall(woql_compile:defined_predicate(_)),
