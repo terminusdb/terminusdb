@@ -212,6 +212,11 @@ impl BranchProgress {
         self.no_embedding.store(value, Ordering::SeqCst);
     }
 
+    /// Get the no_embedding cache flag.
+    fn is_no_embedding(&self) -> bool {
+        self.no_embedding.load(Ordering::SeqCst)
+    }
+
     fn snapshot(&self) -> (u64, u64, IndexStatus, Option<String>, u64, u64, u64) {
         let completed = self.completed.load(Ordering::SeqCst);
         let total = self.total.load(Ordering::SeqCst);
