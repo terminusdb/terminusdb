@@ -1681,6 +1681,8 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
 operation_is_weakening(create_class(_)).
 operation_is_weakening(create_class_property(_,_,_)).
 operation_is_weakening(upcast_class_property(_,_,_)).
+operation_is_weakening(replace_class_metadata(_,_)).
+operation_is_weakening(replace_class_documentation(_,_)).
 
 operations_are_weakening(L) :-
     maplist(operation_is_weakening, L).

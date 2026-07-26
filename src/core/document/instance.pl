@@ -5,7 +5,8 @@
               refute_referential_integrity/2,
               is_instance/3,
               is_instance_class/3,
-              instance_of/3
+              instance_of/3,
+              schema_layer/2
           ]).
 
 /*
