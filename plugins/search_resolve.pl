@@ -8,15 +8,15 @@
 /** <module> search_resolve — entity resolution matching plugin
 
 This plugin implements the entity resolution matching algorithm on the
-TerminusDB server side. It calls the tdb-search /candidates endpoint to
+TerminusDB server side. It calls the vectorlink /candidates endpoint to
 gather raw bidirectional KNN candidate pairs, then runs the 3-threshold
 matching algorithm (core 1:1, set-extra 1:M, target-extra M:1) in Prolog.
 
 Endpoints:
   POST /api/plugin/search-resolve/<path>  — full matching with tau thresholds
-  POST /api/plugin/search-candidates/<path> — raw KNN gather (proxy to tdb-search)
+  POST /api/plugin/search-candidates/<path> — raw KNN gather (proxy to vectorlink)
 
-The /candidates endpoint is a thin proxy that forwards to tdb-search's
+The /candidates endpoint is a thin proxy that forwards to vectorlink's
 /candidates endpoint. The /resolve endpoint calls /candidates internally,
 then applies the matching algorithm to produce the 3-partition output
 (matched, set_only, target_only).
@@ -38,12 +38,12 @@ then applies the matching algorithm to produce the 3-partition output
 :- use_module(library(dicts)).
 :- use_module(library(pairs)).
 
-% Reuse tdb_search helpers for auth and endpoint discovery.
-% Only ancestor_window/4, maybe_nudge_push_async/4, tdb_search_endpoint/1
-% are exported by tdb_search. Other predicates are called with tdb_search:
+% Reuse vectorlink helpers for auth and endpoint discovery.
+% Only ancestor_window/4, maybe_nudge_push_async/4, vectorlink_endpoint/1
+% are exported by vectorlink. Other predicates are called with vectorlink:
 % module prefix (SWI-Prolog allows calling non-exported predicates this way).
-:- use_module(plugins(tdb_search), [
-    tdb_search_endpoint/1,
+:- use_module(plugins(vectorlink), [
+    vectorlink_endpoint/1,
     ancestor_window/4,
     maybe_nudge_push_async/4
 ]).
@@ -61,43 +61,43 @@ then applies the matching algorithm to produce the 3-partition output
     [method(Method), prefix, time_limit(infinite), methods([options,post])]).
 
 % ==========================================================================
-% /api/plugin/search-candidates — proxy to tdb-search /candidates
+% /api/plugin/search-candidates — proxy to vectorlink /candidates
 % ==========================================================================
 
 candidates_handler(post, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
     ->  true
     ;   Search = []),
-    tdb_search:search_request_body(Request, Body),
+    vectorlink:search_request_body(Request, Body),
     plugin_api:api_report_errors(
         search,
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(candidates_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(candidates_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             search_resolve:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             search_resolve:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             search_resolve:candidates_forward_body(Body, Prefixes, Forward_Body),
             catch(
                 (   search_resolve:io_candidates_forward(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                           Forward_Body, Response_Body),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                                        Descriptor, Final_Body),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
                     write(Final_Body)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -107,11 +107,11 @@ candidates_handler(post, Path, Request, System_DB, Auth) :-
 %% io_candidates_forward(+Endpoint, +Domain, +Commit, +Ancestors,
 %%                       +Body_Dict, -Response_Body) is det.
 %
-%  Forward a POST /candidates request to the tdb-search engine.
+%  Forward a POST /candidates request to the vectorlink engine.
 io_candidates_forward(Endpoint, Domain, Commit, Ancestors,
                       Body_Dict, Response_Body) :-
-    tdb_search:assert_search_backend,
-    tdb_search:search_auth_header(AuthHeader),
+    vectorlink:assert_search_backend,
+    vectorlink:search_auth_header(AuthHeader),
     format(atom(Candidates_URL), "~w/candidates", [Endpoint]),
     put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
              Body_Dict, Forward_Body),
@@ -126,7 +126,7 @@ io_candidates_forward(Endpoint, Domain, Commit, Ancestors,
                   ]),
         read_string(In, _, Response_Body),
         close(In)),
-    tdb_search:handle_forward_response(Status, Response_Body, Candidates_URL).
+    vectorlink:handle_forward_response(Status, Response_Body, Candidates_URL).
 
 candidates_forward_body(Body, Prefixes, Forward_Body) :-
     findall(Key-Value,
@@ -160,36 +160,36 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
     ->  true
     ;   Search = []),
-    tdb_search:search_request_body(Request, Body),
+    vectorlink:search_request_body(Request, Body),
     plugin_api:api_report_errors(
         search,
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(resolve_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
                 branch_descriptor{branch_name: Branch_Name} :< Descriptor,
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
             search_resolve:branch_head_commit(Repository_Descriptor, Branch_Name, Head_Commit_Uri),
             search_resolve:commit_id_uri(Repository_Descriptor, Head_Commit_Id, Head_Commit_Uri),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:ancestor_window(Repository_Descriptor, Head_Commit_Uri, 100, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             search_resolve:resolve_forward_body(Body, Prefixes, Forward_Body),
             catch(
                 (   search_resolve:resolve_run(Endpoint, Domain, Head_Commit_Id, Ancestors,
                                 Forward_Body, Response_Body),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                                        Descriptor, Final_Body),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
                     write(Final_Body)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -212,7 +212,7 @@ resolve_normalize_value(Key, Raw_Ids, Prefixes, Ids) :-
 resolve_normalize_value(_Key, Value, _Prefixes, Value).
 
 normalize_with_prefixes(Prefixes, Raw, Id) :-
-    tdb_search:normalize_doc_id(Raw, Prefixes, Id).
+    vectorlink:normalize_doc_id(Raw, Prefixes, Id).
 
 resolve_allowed_body_key(set_doc_types).
 resolve_allowed_body_key(set_doc_ids).
@@ -231,7 +231,7 @@ resolve_allowed_body_key(k).
 %% resolve_run(+Endpoint, +Domain, +Commit, +Ancestors,
 %%            +Forward_Body, -Response_Body) is det.
 %
-%  Calls /candidates on tdb-search, parses the response, runs the matching
+%  Calls /candidates on vectorlink, parses the response, runs the matching
 %  algorithm, and produces the 3-partition JSON output.
 resolve_run(Endpoint, Domain, Commit, Ancestors, Forward_Body, Response_Body) :-
     % Extract matching parameters from Forward_Body.
@@ -265,7 +265,7 @@ resolve_run(Endpoint, Domain, Commit, Ancestors, Forward_Body, Response_Body) :-
             Cand_Pairs),
     dict_pairs(Cand_Body, _, Cand_Pairs),
 
-    % Call tdb-search /candidates.
+    % Call vectorlink /candidates.
     io_candidates_forward(Endpoint, Domain, Commit, Ancestors,
                           Cand_Body, Cand_Response_String),
 
@@ -527,18 +527,18 @@ test("empty maps produce empty matches", []) :-
 test("io_candidates_forward calls engine /candidates and returns response",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "canddb"),
-              tdb_search:clean_tdb_search_test_env,
-              tdb_search:start_push_stub(Port),
+              vectorlink:clean_vectorlink_test_env,
+              vectorlink:start_push_stub(Port),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL),
               setenv('TERMINUSDB_SEARCH_ADMIN_USER', admin),
               setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
              )),
-       cleanup((tdb_search:stop_push_stub(Port),
-                tdb_search:clean_tdb_search_test_env,
+       cleanup((vectorlink:stop_push_stub(Port),
+                vectorlink:clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
-    tdb_search:tdb_search_endpoint(Endpoint),
+    vectorlink:vectorlink_endpoint(Endpoint),
     io_candidates_forward(Endpoint, "admin/canddb", "c0", [],
                           _{threshold_set: 0.5, threshold_target: 0.5, k: 5},
                           Response_Body),
@@ -546,12 +546,12 @@ test("io_candidates_forward calls engine /candidates and returns response",
     get_dict(set_to_target, Response, SetMap),
     get_dict('doc/set_a', SetMap, Neighbours),
     member(_{id: "doc/target_a", distance: 0.1}, Neighbours),
-    tdb_search:stub_received(candidates_called, true).
+    vectorlink:stub_received(candidates_called, true).
 
 test("io_candidates_forward refuses when endpoint is not configured",
-     [ setup(tdb_search:clean_tdb_search_test_env),
-       cleanup(tdb_search:clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(vectorlink:clean_vectorlink_test_env),
+       cleanup(vectorlink:clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_candidates_forward("http://x:80", "d", "c", [], _{}, _).
 

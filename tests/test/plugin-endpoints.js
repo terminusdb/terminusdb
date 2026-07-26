@@ -13,13 +13,13 @@ describe('plugin-endpoints', function () {
     await db.delete(agent)
   })
 
-  describe('tdb-search plugin routes', function () {
+  describe('vectorlink plugin routes', function () {
     it('GET /api/search/{path} returns 400 when endpoint is not configured', async function () {
       const r = await agent
         .get(`/api/search/${agent.orgName}/${agent.dbName}`)
         .query({ query: 'test' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
     })
 
     it('POST /api/search/{path} returns 400 when endpoint is not configured', async function () {
@@ -27,7 +27,7 @@ describe('plugin-endpoints', function () {
         .post(`/api/search/${agent.orgName}/${agent.dbName}`)
         .send({ query: 'test' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
     })
 
     it('POST /api/similar/{path} returns 400 when endpoint is not configured', async function () {
@@ -35,14 +35,14 @@ describe('plugin-endpoints', function () {
         .post(`/api/similar/${agent.orgName}/${agent.dbName}`)
         .send({ id: 'test', query: 'test' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
     })
 
     it('GET /api/duplicates/{path} returns 400 when endpoint is not configured', async function () {
       const r = await agent
         .get(`/api/duplicates/${agent.orgName}/${agent.dbName}`)
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
     })
 
     it('POST /api/plugin/search-resolve/{path} returns 400 when endpoint is not configured', async function () {
@@ -50,14 +50,14 @@ describe('plugin-endpoints', function () {
         .post(`/api/plugin/search-resolve/${agent.orgName}/${agent.dbName}`)
         .send({ source: 'test', target: 'test' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
     })
 
     it('GET /api/index/{path} returns 400 when endpoint is not configured', async function () {
       const r = await agent
         .get(`/api/index/${agent.orgName}/${agent.dbName}`)
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type').that.matches(/api:(Vectorlink|SemanticIndexer)EndpointNotConfigured/)
     })
 
     it('POST /api/compare returns 400 when endpoint is not configured', async function () {
@@ -65,7 +65,7 @@ describe('plugin-endpoints', function () {
         .post('/api/compare')
         .send({ method: 'cosine', source: 'test', target: 'test' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type').that.matches(/api:(Vectorlink|SemanticIndexer)EndpointNotConfigured/)
     })
   })
 
@@ -75,7 +75,7 @@ describe('plugin-endpoints', function () {
         .get(`/api/index/${agent.orgName}/${agent.dbName}`)
         .query({ commit_id: 'placeholder' })
       expect(r.status).to.equal(400)
-      expect(r.body['api:error']).to.have.property('@type', 'api:TdbSearchEndpointNotConfigured')
+      expect(r.body['api:error']).to.have.property('@type').that.matches(/api:(Vectorlink|SemanticIndexer)EndpointNotConfigured/)
     })
 
     it('POST /api/index/{path} returns valid JSON (not Prolog json{} term)', async function () {

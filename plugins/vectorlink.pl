@@ -1,4 +1,4 @@
-:- module(tdb_search, [
+:- module(vectorlink, [
     % Push driver
     io_push_delta/4,
     io_index_branch/3,
@@ -21,13 +21,13 @@
     maybe_nudge_push/6,
     maybe_nudge_push_async/4,
     % Config
-    tdb_search_endpoint/1,
-    clean_tdb_search_env/0
+    vectorlink_endpoint/1,
+    clean_vectorlink_env/0
 ]).
 
-/** <module> tdb-search plugin — push-based indexing + search fronting
+/** <module> vectorlink plugin — push-based indexing + search fronting
 
-Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
+Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 - Push driver: GET /last-indexed → compute delta → POST /push (NDJSON stream)
 - Auto-push-on-commit hook (fire-and-forget, never blocks commit)
 - Search fronting: /api/search, /api/similar, /api/duplicates,
@@ -87,32 +87,32 @@ Activates when TERMINUSDB_TDB_SEARCH_ENDPOINT is set. Provides:
 % Config predicates — plugin-owned, using generic plugin_api env helpers
 % ==========================================================================
 
-tdb_search_endpoint(Endpoint) :-
-    plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint).
+vectorlink_endpoint(Endpoint) :-
+    plugin_env('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint).
 
-:- multifile plugins:tdb_search_admin_user/1.
-plugins:tdb_search_admin_user(User) :-
+:- multifile plugins:vectorlink_admin_user/1.
+plugins:vectorlink_admin_user(User) :-
     plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, User).
 
-:- multifile plugins:tdb_search_admin_secret/1.
-plugins:tdb_search_admin_secret(Secret) :-
+:- multifile plugins:vectorlink_admin_secret/1.
+plugins:vectorlink_admin_secret(Secret) :-
     plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, Secret).
 
-clean_tdb_search_env :-
-    abolish_plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT'),
+clean_vectorlink_env :-
+    abolish_plugin_env('TERMINUSDB_VECTORLINK_ENDPOINT'),
     abolish_plugin_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin),
     abolish_plugin_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root),
-    unsetenv('TERMINUSDB_TDB_SEARCH_ENDPOINT'),
+    unsetenv('TERMINUSDB_VECTORLINK_ENDPOINT'),
     unsetenv('TERMINUSDB_SEARCH_ADMIN_USER'),
     unsetenv('TERMINUSDB_SEARCH_ADMIN_SECRET').
 
 % ==========================================================================
-% HTTP Basic auth header for tdb-search calls
+% HTTP Basic auth header for vectorlink calls
 % ==========================================================================
 
-tdb_search_auth_header(authorization(basic(User, Secret))) :-
-    plugins:tdb_search_admin_user(User),
-    plugins:tdb_search_admin_secret(Secret).
+vectorlink_auth_header(authorization(basic(User, Secret))) :-
+    plugins:vectorlink_admin_user(User),
+    plugins:vectorlink_admin_secret(Secret).
 
 % ==========================================================================
 % Embedding queries + api_index_jobs (moved from api_indexer.pl)
@@ -257,7 +257,7 @@ build_last_indexed_url(Endpoint, Domain, Branch, URL) :-
            [Endpoint, Enc_Domain, Enc_Branch]).
 
 tdb_http_get(URL, Status, Body) :-
-    tdb_search_auth_header(authorization(basic(User, Secret))),
+    vectorlink_auth_header(authorization(basic(User, Secret))),
     format(atom(Creds), "~w:~w", [User, Secret]),
     base64(Creds, B64),
     format(atom(AuthHeader), "Basic ~w", [B64]),
@@ -275,7 +275,7 @@ io_get_last_indexed(Endpoint, Domain, Branch, Result) :-
     tdb_http_get(URL, Status, Body_String),
     do_or_die(
         Status =:= 200,
-        error(tdb_search_last_indexed_failed(Status, Body_String), _)),
+        error(vectorlink_last_indexed_failed(Status, Body_String), _)),
     atom_json_dict(Body_String, Result, [default_tag(json)]).
 
 io_stream_push(Endpoint, Domain, Branch, Target_Commit,
@@ -289,7 +289,7 @@ io_stream_push(Endpoint, Domain, Branch, Target_Commit,
     setup_call_cleanup(
         tmp_file_stream(text, NDFile, NDStream),
         (   set_stream(NDStream, encoding(utf8)),
-            tdb_search:api_index_jobs(
+            vectorlink:api_index_jobs(
                 System_DB,
                 Auth,
                 NDStream,
@@ -305,7 +305,7 @@ io_stream_push(Endpoint, Domain, Branch, Target_Commit,
         (   catch(close(NDStream), _, true),
             catch(delete_file(NDFile), _, true)
         )),
-    tdb_search_auth_header(authorization(basic(User, Secret))),
+    vectorlink_auth_header(authorization(basic(User, Secret))),
     format(atom(Creds), "~w:~w", [User, Secret]),
     base64(Creds, B64),
     format(atom(AuthHeader), "Basic ~w", [B64]),
@@ -322,7 +322,7 @@ io_stream_push(Endpoint, Domain, Branch, Target_Commit,
 handle_push_response(200, Task_Id, accepted(Task_Id)) :- !.
 handle_push_response(409, _Body, conflict_already_pushed) :- !.
 handle_push_response(Status, Body, _) :-
-    throw(error(tdb_search_push_failed(Status, Body), _)).
+    throw(error(vectorlink_push_failed(Status, Body), _)).
 
 %% Read NDJSON progress lines from a streaming push response.
 %% The stream sends {"status":"progress",...} lines and ends with
@@ -348,13 +348,13 @@ read_stream_to_final_status(In, Status, Result) :-
         ->  true
         ;   ErrMsg = "unknown error"
         ),
-        throw(error(tdb_search_push_failed(200, ErrMsg), _))
-    ;   throw(error(tdb_search_push_stream_unexpected(Lines), _))
+        throw(error(vectorlink_push_failed(200, ErrMsg), _))
+    ;   throw(error(vectorlink_push_stream_unexpected(Lines), _))
     ).
 read_stream_to_final_status(In, Status, _) :-
     read_string(In, _, Body),
     close(In),
-    throw(error(tdb_search_push_failed(Status, Body), _)).
+    throw(error(vectorlink_push_failed(Status, Body), _)).
 
 %% Read all lines from a stream into a list of atom strings.
 read_ndjson_lines(In, Lines) :-
@@ -376,25 +376,25 @@ io_await_task_completion(Endpoint, Task_Id) :-
 
 io_await_task_completion_(_Endpoint, Task_Id, _Backoff, 0) :-
     !,
-    throw(error(tdb_search_task_poll_timeout(Task_Id), _)).
+    throw(error(vectorlink_task_poll_timeout(Task_Id), _)).
 io_await_task_completion_(Endpoint, Task_Id, Backoff, Retries_Left) :-
     io_check_task(Endpoint, Task_Id, Status),
     (   Status = complete
     ->  true
     ;   Status = error(ErrorMsg)
-    ->  throw(error(tdb_search_task_failed(Task_Id, ErrorMsg), _))
+    ->  throw(error(vectorlink_task_failed(Task_Id, ErrorMsg), _))
     ;   Status = pending
     ->  sleep(Backoff),
         Next_Backoff is min(Backoff * 2, 2.0),
         Next_Retries is Retries_Left - 1,
         io_await_task_completion_(Endpoint, Task_Id, Next_Backoff, Next_Retries)
-    ;   throw(error(tdb_search_task_unknown_status(Task_Id, Status), _))
+    ;   throw(error(vectorlink_task_unknown_status(Task_Id, Status), _))
     ).
 
 io_check_task(Endpoint, Task_Id, Status) :-
     plugin_api:encode_query_value(Task_Id, Enc_Task_Id),
     format(atom(URL), "~w/check?task_id=~w", [Endpoint, Enc_Task_Id]),
-    tdb_search_auth_header(authorization(basic(User, Secret))),
+    vectorlink_auth_header(authorization(basic(User, Secret))),
     format(atom(Creds), "~w:~w", [User, Secret]),
     base64(Creds, B64),
     format(atom(AuthHeader), "Basic ~w", [B64]),
@@ -409,7 +409,7 @@ io_check_task(Endpoint, Task_Id, Status) :-
         ),
         Error,
         (   Error = error(existence_error(url, _), _)
-        ->  throw(error(tdb_search_check_failed(0, 'connection failed'), _))
+        ->  throw(error(vectorlink_check_failed(0, 'connection failed'), _))
         ;   throw(Error)
         )
     ).
@@ -426,19 +426,19 @@ interpret_check_response(200, Body_String, Status) :-
     ->  Status = complete
     ;   Status_Tag == 'Pending'
     ->  Status = pending
-    ;   throw(error(tdb_search_check_unexpected_status(Status_Tag, Body_String), _))
+    ;   throw(error(vectorlink_check_unexpected_status(Status_Tag, Body_String), _))
     ).
 interpret_check_response(500, Body_String, error(Body_String)) :- !.
 interpret_check_response(404, Body_String, error(Body_String)) :- !.
 interpret_check_response(Other_Status, Body_String, _) :-
-    throw(error(tdb_search_check_failed(Other_Status, Body_String), _)).
+    throw(error(vectorlink_check_failed(Other_Status, Body_String), _)).
 
 io_resolve_409(Endpoint, Domain, Branch, Commit) :-
     io_poll_until_indexed(Endpoint, Domain, Branch, Commit, 0.2, 30).
 
 io_poll_until_indexed(_Endpoint, _Domain, _Branch, _Commit, _Backoff, 0) :-
     !,
-    throw(error(tdb_search_409_resolution_timeout, _)).
+    throw(error(vectorlink_409_resolution_timeout, _)).
 io_poll_until_indexed(Endpoint, Domain, Branch, Commit, Backoff, Retries) :-
     io_get_last_indexed(Endpoint, Domain, Branch, Result),
     get_dict(commit, Result, Engine_Commit_Raw),
@@ -522,7 +522,7 @@ io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
         commits_after(Engine_Commit, History_Oldest_First, Forward_Range),
         do_or_die(
             Forward_Range \== [],
-            error(tdb_search_push_no_forward_range(Engine_Commit), _)),
+            error(vectorlink_push_no_forward_range(Engine_Commit), _)),
         io_push_commit_chain(Endpoint, Domain, Branch_Name,
                              Engine_Commit, Forward_Range,
                              System_DB, Auth, Path)
@@ -531,7 +531,7 @@ io_push_delta_(Endpoint, Domain, Branch_Name, Head_Commit_Id,
 commits_after(Last_Commit, History, Forward_Range) :-
     (   append(_, [Last_Commit | Forward_Range], History)
     ->  true
-    ;   throw(error(tdb_search_last_indexed_not_in_history(Last_Commit), _))
+    ;   throw(error(vectorlink_last_indexed_not_in_history(Last_Commit), _))
     ).
 
 io_push_commit_chain(_Endpoint, _Domain, _Branch, _Parent, [],
@@ -559,7 +559,7 @@ path_to_domain(Path, Domain) :-
 %% descriptor_domain(+Descriptor, -Domain) is det.
 %
 %  Extracts the org/db domain from a descriptor, matching what the
-%  Rust indexer pushes to tdb-search (BranchKey::domain()).
+%  Rust indexer pushes to vectorlink (BranchKey::domain()).
 descriptor_domain(Descriptor, Domain) :-
     plugin_api:descriptor_to_path(Descriptor, Path),
     path_to_domain(Path, Domain).
@@ -628,8 +628,8 @@ branch_path_for_notify(Path, Branch_Name, Branch_Path) :-
 io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     branch_path_for_notify(Path, Branch_Name, Branch_Path),
     do_or_die(
-        tdb_search_endpoint(_Endpoint),
-        error(tdb_search_endpoint_not_configured(io_push_delta), _)),
+        vectorlink_endpoint(_Endpoint),
+        error(vectorlink_endpoint_not_configured(io_push_delta), _)),
     (   plugin_api:indexer_available
     ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
             plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)
@@ -642,8 +642,8 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
 io_index_branch(System_DB, Auth, Path) :-
     validate_index_path(Path),
     do_or_die(
-        tdb_search_endpoint(_Endpoint),
-        error(tdb_search_endpoint_not_configured(io_index_branch), _)),
+        vectorlink_endpoint(_Endpoint),
+        error(vectorlink_endpoint_not_configured(io_index_branch), _)),
     plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
     do_or_die(
         (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
@@ -652,7 +652,7 @@ io_index_branch(System_DB, Auth, Path) :-
         ->  branch_for_commit(Repo_Desc, Commit_Id, Branch_Name)
         ),
         error(push_requires_branch_descriptor(Path), _)),
-    tdb_search:branch_path_for_notify(Path, Branch_Name, Branch_Path),
+    vectorlink:branch_path_for_notify(Path, Branch_Name, Branch_Path),
     (   plugin_api:indexer_available
     ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
             plugin_api:indexer_reindex(Branch_Path, Branch_Name, Store_Clustering)
@@ -695,12 +695,12 @@ branch_for_commit(Repo_Desc, Commit_Id, Branch_Name) :-
 
 assert_search_backend :-
     do_or_die(
-        tdb_search_endpoint(_),
-        error(search_requires_tdb_search_backend, _)).
+        vectorlink_endpoint(_),
+        error(search_requires_vectorlink_backend, _)).
 
 search_auth_header(authorization(basic(User, Secret))) :-
-    plugins:tdb_search_admin_user(User),
-    plugins:tdb_search_admin_secret(Secret).
+    plugins:vectorlink_admin_user(User),
+    plugins:vectorlink_admin_secret(Secret).
 
 ancestor_window(Repository_Descriptor, Head_Commit_Uri, Max_Count, Ancestors) :-
     commit_uri_to_history_commit_ids(Repository_Descriptor,
@@ -789,7 +789,7 @@ io_similar_forward(Endpoint, Domain, Search_Ref, Ancestors,
 %%                          +Extra_Params, +Post_Body, -Response_Body,
 %%                          -Data_Version_Header) is det.
 %
-%  Forwards a similar request as POST with a JSON body to tdb-search.
+%  Forwards a similar request as POST with a JSON body to vectorlink.
 %  Used for text-based similarity search where the body contains
 %  {text: "..."} instead of an id lookup.
 io_similar_forward_post(Endpoint, Domain, Search_Ref, Ancestors,
@@ -819,7 +819,7 @@ io_statistics_forward(Endpoint, Domain, Search_Ref, Ancestors,
 
 %% io_statistics_for_domain(+Endpoint, +Domain, -Stats) is det.
 %
-%  Queries tdb-search /statistics?domain=... for domain-scoped stats
+%  Queries vectorlink /statistics?domain=... for domain-scoped stats
 %  (documents, chunks, indexed_commits, pending_index_fragments).
 %  Used by the index status endpoint to enrich the response with
 %  engine-side counts. Fails on non-200 or parse error.
@@ -830,7 +830,7 @@ io_statistics_for_domain(Endpoint, Domain, Stats) :-
     tdb_http_get(URL, Status, Body_String),
     do_or_die(
         Status =:= 200,
-        error(tdb_search_statistics_failed(Status, Body_String), _)),
+        error(vectorlink_statistics_failed(Status, Body_String), _)),
     atom_json_dict(Body_String, Stats, [default_tag(json)]).
 
 build_suggest_url(Endpoint, Domain, Search_Ref, Ancestors, URL) :-
@@ -886,7 +886,7 @@ handle_compare_response(Status, _Body, _URL) :-
     Status < 300,
     !.
 handle_compare_response(Status, Body, URL) :-
-    throw(error(tdb_search_forward_failed(Status, Body, URL), _)).
+    throw(error(vectorlink_forward_failed(Status, Body, URL), _)).
 
 io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header) :-
     setup_call_cleanup(
@@ -904,7 +904,7 @@ io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header) :-
 %% io_forward_post(+URL, +AuthHeader, +Post_Body, -Response_Body,
 %%                  -Data_Version_Header) is det.
 %
-%  Forwards a POST request with a JSON body to tdb-search.
+%  Forwards a POST request with a JSON body to vectorlink.
 io_forward_post(URL, AuthHeader, Post_Body, Response_Body, Data_Version_Header) :-
     setup_call_cleanup(
         http_open(URL, In,
@@ -931,7 +931,7 @@ handle_forward_response(Status, _Body, _URL) :-
     Status < 300,
     !.
 handle_forward_response(Status, Body, URL) :-
-    throw(error(tdb_search_forward_failed(Status, Body, URL), _)).
+    throw(error(vectorlink_forward_failed(Status, Body, URL), _)).
 
 append_extra_params(Base_URL, [], Base_URL) :- !.
 append_extra_params(Base_URL, Params, Full_URL) :-
@@ -1140,7 +1140,7 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
  */
 maybe_nudge_push_async(System_DB, Auth, Path, Branch) :-
     (   catch(
-            (   tdb_search_endpoint(Endpoint),
+            (   vectorlink_endpoint(Endpoint),
                 resolve_absolute_string_descriptor(Path, Descriptor),
                 descriptor_domain(Descriptor, Domain),
                 io_get_last_indexed(Endpoint, Domain, Branch, Result),
@@ -1234,7 +1234,7 @@ handle_delete_domain_response(Status, _Body, _URL) :-
     !.
 handle_delete_domain_response(404, _Body, _URL) :- !.
 handle_delete_domain_response(Status, Body, URL) :-
-    throw(error(tdb_search_delete_domain_failed(Status, Body, URL), _)).
+    throw(error(vectorlink_delete_domain_failed(Status, Body, URL), _)).
 
 % ==========================================================================
 % Post-delete hook
@@ -1244,12 +1244,12 @@ handle_delete_domain_response(Status, Body, URL) :-
 
 %% post_server_startup_hook(+Port) is det.
 %
-%  Called after the SWI-Prolog server starts. Wires the tdb-search URL
+%  Called after the SWI-Prolog server starts. Wires the vectorlink URL
 %  and auth header into the Rust IndexerRegistry via the indexer_set_config
-%  FFI predicate. This runs once at boot, after tdb_search_endpoint/1 is
+%  FFI predicate. This runs once at boot, after vectorlink_endpoint/1 is
 %  configured but before any commits arrive.
 plugins:post_server_startup_hook(_Port) :-
-    (   tdb_search_endpoint(Endpoint),
+    (   vectorlink_endpoint(Endpoint),
         plugin_api:indexer_available
     ->  (   search_auth_header(authorization(basic(User, Secret)))
         ->  format(atom(Creds), "~w:~w", [User, Secret]),
@@ -1272,7 +1272,7 @@ plugins:post_server_startup_hook(_Port) :-
 :- multifile plugins:post_delete_db_hook/2.
 
 plugins:post_delete_db_hook(Organization, DB_Name) :-
-    (   tdb_search_endpoint(Endpoint)
+    (   vectorlink_endpoint(Endpoint)
     ->  format(atom(Domain), "~w/~w", [Organization, DB_Name]),
         catch(io_delete_domain(Endpoint, Domain),
               Delete_Error,
@@ -1296,7 +1296,7 @@ plugins:post_delete_db_hook(Organization, DB_Name) :-
 % Commit resolution: use the descriptor's commit or branch name.
 %
 % If the URL path is /commit/<id> (commit_descriptor), search that commit.
-% Otherwise (branch_descriptor), pass the branch name to tdb-search which
+% Otherwise (branch_descriptor), pass the branch name to vectorlink which
 % resolves it to the latest indexed commit internally.
 % ==========================================================================
 
@@ -1309,8 +1309,8 @@ plugins:post_delete_db_hook(Organization, DB_Name) :-
 resolve_search_commit(Descriptor, Search_Ref, Commit_Uri, Ancestors) :-
     (   commit_descriptor{commit_id: Commit_Id} :< Descriptor
     ->  get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-        tdb_search:commit_id_uri(Repository_Descriptor, Commit_Id, Commit_Uri),
-        tdb_search:ancestor_window(Repository_Descriptor, Commit_Uri, 100, Ancestors),
+        vectorlink:commit_id_uri(Repository_Descriptor, Commit_Id, Commit_Uri),
+        vectorlink:ancestor_window(Repository_Descriptor, Commit_Uri, 100, Ancestors),
         Search_Ref = commit(Commit_Id)
     ;   branch_descriptor{branch_name: Branch_Name} :< Descriptor,
         Commit_Uri = '',
@@ -1337,12 +1337,12 @@ commit_timestamp(Repository_Descriptor, Commit_Id, Timestamp) :-
 %  timestamp, and calls reply_search_response with both.
 reply_search_with_metadata(Request, Response_Body, Data_Version_Header,
                            Repository_Descriptor) :-
-    tdb_search:extract_commit_from_data_version(Data_Version_Header, Served_Commit),
+    vectorlink:extract_commit_from_data_version(Data_Version_Header, Served_Commit),
     (   Served_Commit \== none
-    ->  tdb_search:commit_timestamp(Repository_Descriptor, Served_Commit, Timestamp)
+    ->  vectorlink:commit_timestamp(Repository_Descriptor, Served_Commit, Timestamp)
     ;   Timestamp = none
     ),
-    tdb_search:reply_search_response(Request, Response_Body, Data_Version_Header,
+    vectorlink:reply_search_response(Request, Response_Body, Data_Version_Header,
                                      Served_Commit, Timestamp).
 
 % ==========================================================================
@@ -1361,8 +1361,8 @@ search_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(search_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(search_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -1371,24 +1371,24 @@ search_handler(post, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:nudge_commit(Search_Ref, Nudge_Commit),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            tdb_search:search_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:nudge_commit(Search_Ref, Nudge_Commit),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:search_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_search_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                (   vectorlink:io_search_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
-                    tdb_search:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
+                    vectorlink:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
                                      System_DB, Auth, Path, Branch_Name),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                    vectorlink:reply_search_with_metadata(Request, Final_Body,
                                        Data_Version_Header, Repository_Descriptor)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -1404,8 +1404,8 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(suggest_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(suggest_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -1414,21 +1414,21 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            tdb_search:search_extra_params(Search, _{}, Prefixes, Extra_Params),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:search_extra_params(Search, _{}, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_suggest_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                (   vectorlink:io_suggest_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                    vectorlink:reply_search_with_metadata(Request, Final_Body,
                                        Data_Version_Header, Repository_Descriptor)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -1447,8 +1447,8 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(similar_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(similar_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -1457,42 +1457,42 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:nudge_commit(Search_Ref, Nudge_Commit),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            tdb_search:similar_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:nudge_commit(Search_Ref, Nudge_Commit),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:similar_extra_params(Search, Body, Prefixes, Extra_Params),
             (   memberchk(text=Text, Extra_Params),
-                tdb_search:search_scalar_present(Text)
+                vectorlink:search_scalar_present(Text)
             ->  Post_Body = _{text: Text},
                 catch(
-                    (   tdb_search:io_similar_forward_post(Endpoint, Domain, Search_Ref, Ancestors,
+                    (   vectorlink:io_similar_forward_post(Endpoint, Domain, Search_Ref, Ancestors,
                                            Extra_Params, Post_Body, Response_Body, Data_Version_Header),
-                        tdb_search:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
+                        vectorlink:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
                                          System_DB, Auth, Path, Branch_Name),
-                        tdb_search:maybe_compact_response(Compress, Response_Body,
+                        vectorlink:maybe_compact_response(Compress, Response_Body,
                                            Descriptor, Final_Body),
-                        tdb_search:reply_search_with_metadata(Request, Final_Body,
+                        vectorlink:reply_search_with_metadata(Request, Final_Body,
                                            Data_Version_Header, Repository_Descriptor)
                     ),
-                    error(tdb_search_forward_failed(404, Engine_Body, _), _),
-                    (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                    error(vectorlink_forward_failed(404, Engine_Body, _), _),
+                    (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                         throw(error(search_not_indexed(Path, Engine_Body), _))
                     )
                 )
             ;   catch(
-                    (   tdb_search:io_similar_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                    (   vectorlink:io_similar_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                            Extra_Params, Response_Body, Data_Version_Header),
-                        tdb_search:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
+                        vectorlink:maybe_nudge_push(Data_Version_Header, Nudge_Commit,
                                          System_DB, Auth, Path, Branch_Name),
-                        tdb_search:maybe_compact_response(Compress, Response_Body,
+                        vectorlink:maybe_compact_response(Compress, Response_Body,
                                            Descriptor, Final_Body),
-                        tdb_search:reply_search_with_metadata(Request, Final_Body,
+                        vectorlink:reply_search_with_metadata(Request, Final_Body,
                                            Data_Version_Header, Repository_Descriptor)
                     ),
-                    error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                    (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                    error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                    (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                         throw(error(search_not_indexed(Path, Engine_Body), _))
                     )
                 )
@@ -1510,8 +1510,8 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(duplicates_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -1520,21 +1520,21 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            tdb_search:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
             catch(
-                (   tdb_search:io_duplicates_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                (   vectorlink:io_duplicates_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                           Extra_Params, Response_Body, Data_Version_Header),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                    vectorlink:reply_search_with_metadata(Request, Final_Body,
                                        Data_Version_Header, Repository_Descriptor)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -1551,8 +1551,8 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(resolve_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -1561,21 +1561,21 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            tdb_search:resolve_forward_body(Body, Prefixes, Forward_Body),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:resolve_forward_body(Body, Prefixes, Forward_Body),
             catch(
-                (   tdb_search:io_resolve_forward(Endpoint, Domain, Search_Ref, Ancestors,
+                (   vectorlink:io_resolve_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                        Forward_Body, Response_Body, Data_Version_Header),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:extract_commit_from_data_version(Data_Version_Header, Served_Commit),
+                    vectorlink:extract_commit_from_data_version(Data_Version_Header, Served_Commit),
                     (   Served_Commit \== none
-                    ->  tdb_search:commit_timestamp(Repository_Descriptor, Served_Commit, Timestamp)
+                    ->  vectorlink:commit_timestamp(Repository_Descriptor, Served_Commit, Timestamp)
                     ;   Search_Ref = commit(CId)
-                    ->  tdb_search:commit_timestamp(Repository_Descriptor, CId, Timestamp)
+                    ->  vectorlink:commit_timestamp(Repository_Descriptor, CId, Timestamp)
                     ;   Timestamp = none
                     ),
                     plugin_api:write_cors_headers(Request),
@@ -1594,8 +1594,8 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
                     format("Content-Type: application/json~n~n"),
                     write(Final_Body)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -1642,8 +1642,8 @@ compare_handler(post, Request, _System_DB, Auth) :-
         search,
         Request,
         (
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(compare_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(compare_handler), _)),
             do_or_die(
                 (   memberchk(method=Method, Search),
                     Method \== ''
@@ -1672,8 +1672,8 @@ compare_handler(post, Request, _System_DB, Auth) :-
                 ),
                 error(missing_parameter(target), _)),
             Forward_Body = _{source: Source, target: Target},
-            tdb_search:io_compare_forward(Endpoint, Method, Role, Forward_Body, Response_Body),
-            tdb_search:reply_compare_response(Request, Response_Body)
+            vectorlink:io_compare_forward(Endpoint, Method, Role, Forward_Body, Response_Body),
+            vectorlink:reply_compare_response(Request, Response_Body)
         )
     ).
 
@@ -1797,7 +1797,7 @@ reply_search_response(Request, Response_Body, Data_Version_Header) :-
 %% reply_search_response(+Request, +Response_Body, +Data_Version_Header,
 %%                        +Served_Commit, +Served_Timestamp) is det.
 %
-%  Writes CORS headers, the TerminusDB-Data-Version header (from tdb-search),
+%  Writes CORS headers, the TerminusDB-Data-Version header (from vectorlink),
 %  and optional TerminusDB-Served-Commit / TerminusDB-Served-Timestamp headers
 %  when the served commit is known. The served commit may differ from the
 %  requested commit when the indexer is catching up (fallback to last-indexed).
@@ -1852,7 +1852,7 @@ reply_embeddings_stream_headers(Request, Served_Commit, Store_Clustering, Total_
 %%                                 +Last_Commit, +Engine_Stats, -Response) is det.
 %
 %  Constructs the index status API response dict from the Rust FFI
-%  progress dict, the last indexed commit from tdb-search, and the
+%  progress dict, the last indexed commit from vectorlink, and the
 %  engine statistics. Handles missing keys defensively — Indexer_Progress
 %  may be a minimal dict like json{status:not_found} with no
 %  branch_processing key.
@@ -1976,8 +1976,8 @@ index_handler(get, Path, Request, System_DB, Auth) :-
         index,
         Request,
         (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(index_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(index_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -1985,8 +1985,8 @@ index_handler(get, Path, Request, System_DB, Auth) :-
                     Branch_Name = none
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
-            tdb_search:descriptor_graphspec(Descriptor, Branch_Path),
-            tdb_search:descriptor_domain(Descriptor, Domain),
+            vectorlink:descriptor_graphspec(Descriptor, Branch_Path),
+            vectorlink:descriptor_domain(Descriptor, Domain),
             % 1. Get indexer progress from the Rust IndexerRegistry.
             %    The FFI returns a JSON string (not a Prolog dict) because
             %    swipl-rs's serialize_to_term doesn't respect
@@ -1998,12 +1998,12 @@ index_handler(get, Path, Request, System_DB, Auth) :-
                 )
             ;   Indexer_Progress = json{status:indexer_unavailable}
             ),
-            % 2. Query tdb-search /last-indexed synchronously for the engine's
+            % 2. Query vectorlink /last-indexed synchronously for the engine's
             %    current indexed commit.
             catch(
-                (   tdb_search:io_get_last_indexed(Endpoint, Domain, Branch_Name, Last_Indexed),
+                (   vectorlink:io_get_last_indexed(Endpoint, Domain, Branch_Name, Last_Indexed),
                     get_dict(commit, Last_Indexed, Last_Commit_Raw),
-                    tdb_search:normalise_commit_value(Last_Commit_Raw, Last_Commit)
+                    vectorlink:normalise_commit_value(Last_Commit_Raw, Last_Commit)
                 ),
                 _,
                 Last_Commit = null
@@ -2011,16 +2011,16 @@ index_handler(get, Path, Request, System_DB, Auth) :-
             % 2b. (not_found → completed override is handled in
             %     assemble_index_status_response, where it's unit-tested.)
             
-            % 3. Query tdb-search /statistics?domain=... for engine-side counts.
+            % 3. Query vectorlink /statistics?domain=... for engine-side counts.
             catch(
-                tdb_search:io_statistics_for_domain(Endpoint, Domain, Engine_Stats),
+                vectorlink:io_statistics_for_domain(Endpoint, Domain, Engine_Stats),
                 _,
                 Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                                     pending_index_fragments:0,
                                     store_clustering:null}
             ),
             % 4. Assemble the response using the extracted predicate.
-            tdb_search:assemble_index_status_response(
+            vectorlink:assemble_index_status_response(
                 Indexer_Progress, Branch_Name, Last_Commit, Engine_Stats,
                 Response0),
             plugin_api:write_cors_headers(Request),
@@ -2035,13 +2035,13 @@ index_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, _Descriptor),
             catch(
-                (   tdb_search:io_index_branch(System_DB, Auth, Path),
+                (   vectorlink:io_index_branch(System_DB, Auth, Path),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
                     json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
                 ),
                 Error,
-                (   (   Error = error(tdb_search_409_resolution_timeout, _)
+                (   (   Error = error(vectorlink_409_resolution_timeout, _)
                     ->  true
                     ;   Error = error(socket_error(epipe, _), _)
                     ->  true
@@ -2062,10 +2062,10 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
         index,
         Request,
         (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(index_handler), _)),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:io_delete_domain(Endpoint, Domain),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(index_handler), _)),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:io_delete_domain(Endpoint, Domain),
             format(string(Message), "Index for ~w deleted", [Path]),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
@@ -2080,9 +2080,9 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
 
 %% build_embeddings_url(+Endpoint, +Domain, +Commit, +Doc_Ids, +Doc_Types, +Ancestors, -URL) is det.
 %
-%  Constructs the tdb-search /embeddings URL with query parameters.
+%  Constructs the vectorlink /embeddings URL with query parameters.
 %  Doc_Ids and Doc_Types are sent as comma-separated single params
-%  (doc_ids=A,B&doc_types=X,Y) matching tdb-search's EmbeddingsParams struct.
+%  (doc_ids=A,B&doc_types=X,Y) matching vectorlink's EmbeddingsParams struct.
 build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors, URL) :-
     plugin_api:encode_query_value(Domain, Enc_Domain),
     search_ref_param(Search_Ref, Ref_Params),
@@ -2105,7 +2105,7 @@ build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors
 %% io_embeddings_forward(+Endpoint, +Domain, +Search_Ref, +Doc_Ids, +Doc_Types, +Ancestors,
 %%                       +Extra_Params, -Response_Body) is det.
 %
-%  Forwards a GET /embeddings request to the tdb-search engine.
+%  Forwards a GET /embeddings request to the vectorlink engine.
 io_embeddings_forward(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                      Extra_Params, Response_Body) :-
     assert_search_backend,
@@ -2127,9 +2127,9 @@ io_embeddings_forward(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestor
 %%                              +Ancestors, +Extra_Params, +Request, +Prefixes,
 %%                              -Served_Commit, -Store_Clustering, -Total_Count) is det.
 %
-%  Forwards a GET /embeddings request to tdb-search with Accept: application/x-ndjson.
+%  Forwards a GET /embeddings request to vectorlink with Accept: application/x-ndjson.
 %  Writes CGI headers to current_output, then streams the NDJSON response body
-%  line-by-line from tdb-search to current_output (the CGI pipe stream).
+%  line-by-line from vectorlink to current_output (the CGI pipe stream).
 %  If Prefixes is not 'none', compacts doc_id fields in each NDJSON line.
 %  This achieves true end-to-end streaming without buffering the full response.
 io_embeddings_forward_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors,
@@ -2161,7 +2161,7 @@ io_embeddings_forward_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, A
 %%   +Doc_Types, +Ancestors, +Request, +Prefixes,
 %%   -Served_Commit, -Store_Clustering, -Total_Count) is det.
 %
-%  POSTs a JSON body to tdb-search /embeddings with stream=true,
+%  POSTs a JSON body to vectorlink /embeddings with stream=true,
 %  then streams the NDJSON response back with per-line doc_id compaction.
 io_embeddings_forward_post_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                   Request, Prefixes,
@@ -2206,7 +2206,7 @@ io_embeddings_forward_post_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Typ
 %%  avoiding full JSON parse/serialize which is too slow for large
 %%  embedding arrays (768 floats per line, 2000+ lines).
 %%  The doc_id is always the first key in the NDJSON output from
-%%  tdb-search, so we can safely target "doc_id":"<iri>" at the
+%%  vectorlink, so we can safely target "doc_id":"<iri>" at the
 %%  start of the line without risking corruption of embedding data.
 %%  Handles escaped quotes (\"") in the IRI by skipping them when
 %%  searching for the closing quote.
@@ -2309,9 +2309,9 @@ stream_ndjson_from(In, Prefixes) :-
 %% embeddings_handler(+Method, +Path, +Request, +System_DB, +Auth)
 %
 %  HTTP handler for GET/POST /api/plugin/search-embeddings/<path>.
-%  GET: proxies to tdb-search GET /embeddings with query params.
+%  GET: proxies to vectorlink GET /embeddings with query params.
 %  POST: reads JSON body with doc_ids/doc_types, expands compact IDs,
-%        forwards to tdb-search POST /embeddings with stream=true,
+%        forwards to vectorlink POST /embeddings with stream=true,
 %        streams NDJSON back with per-line doc_id compaction.
 embeddings_handler(get, Path, Request, System_DB, Auth) :-
     (   memberchk(search(Search), Request)
@@ -2327,8 +2327,8 @@ embeddings_handler(get, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(embeddings_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -2337,27 +2337,27 @@ embeddings_handler(get, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
-            tdb_search:embeddings_extra_params(Search, Prefixes, Doc_Ids, Doc_Types, Extra_Params),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:embeddings_extra_params(Search, Prefixes, Doc_Ids, Doc_Types, Extra_Params),
             catch(
                 (   Streaming == true
-                ->  tdb_search:io_embeddings_forward_stream(Endpoint, Domain,
+                ->  vectorlink:io_embeddings_forward_stream(Endpoint, Domain,
                                       Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                       Extra_Params, Request, Prefixes,
                                       _Served_Commit, _Store_Clustering, _Total_Count)
-                ;   tdb_search:io_embeddings_forward(Endpoint, Domain,
+                ;   vectorlink:io_embeddings_forward(Endpoint, Domain,
                                       Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                       Extra_Params, Response_Body),
-                    tdb_search:maybe_compact_response(Compress, Response_Body,
+                    vectorlink:maybe_compact_response(Compress, Response_Body,
                                        Descriptor, Final_Body),
-                    tdb_search:reply_search_with_metadata(Request, Final_Body,
+                    vectorlink:reply_search_with_metadata(Request, Final_Body,
                                        none, Repository_Descriptor)
                 ),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -2373,8 +2373,8 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
         Request,
         (
             plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
-            do_or_die(tdb_search:tdb_search_endpoint(Endpoint),
-                      error(tdb_search_endpoint_not_configured(embeddings_handler), _)),
+            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
+                      error(vectorlink_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
                 (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
                 ->  true
@@ -2383,10 +2383,10 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
                 ),
                 error(search_requires_branch_descriptor(Path), _)),
             get_dict(repository_descriptor, Descriptor, _Repository_Descriptor),
-            tdb_search:descriptor_domain(Descriptor, Domain),
-            tdb_search:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
-            tdb_search:compress_flag(Search, Compress),
-            tdb_search:maybe_prefixes(Compress, Descriptor, Prefixes),
+            vectorlink:descriptor_domain(Descriptor, Domain),
+            vectorlink:resolve_search_commit(Descriptor, Search_Ref, _Commit_Uri, Ancestors),
+            vectorlink:compress_flag(Search, Compress),
+            vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             %% Read JSON body from request (plugin API populates payload for JSON POST)
             (   memberchk(payload(Body), Request),
                 is_dict(Body)
@@ -2395,7 +2395,7 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
             ),
             %% Extract and expand doc_ids from body
             (   get_dict(doc_ids, Body, Raw_Doc_Ids)
-            ->  maplist(tdb_search:expand_doc_id(Prefixes), Raw_Doc_Ids, Doc_Ids)
+            ->  maplist(vectorlink:expand_doc_id(Prefixes), Raw_Doc_Ids, Doc_Ids)
             ;   Doc_Ids = []
             ),
             %% Extract doc_types from body
@@ -2404,12 +2404,12 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
             ;   Doc_Types = []
             ),
             catch(
-                tdb_search:io_embeddings_forward_post_stream(Endpoint, Domain,
+                vectorlink:io_embeddings_forward_post_stream(Endpoint, Domain,
                                       Search_Ref, Doc_Ids, Doc_Types, Ancestors,
                                       Request, Prefixes,
                                       _Served_Commit, _Store_Clustering, _Total_Count),
-                error(tdb_search_forward_failed(404, Engine_Body, _Fail_URL), _),
-                (   tdb_search:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
+                error(vectorlink_forward_failed(404, Engine_Body, _Fail_URL), _),
+                (   vectorlink:maybe_nudge_push_async(System_DB, Auth, Path, Branch_Name),
                     throw(error(search_not_indexed(Path, Engine_Body), _))
                 )
             )
@@ -2443,34 +2443,34 @@ embeddings_extra_param(Params, count=Count) :-
 % ==========================================================================
 
 :- plugin_api:register_route(api(index/Path),
-    plugin_api:cors_handler(Method, tdb_search:index_handler(Path)),
+    plugin_api:cors_handler(Method, vectorlink:index_handler(Path)),
     [method(Method), prefix, time_limit(infinite),
      methods([options,get,post,delete])]).
 
 :- plugin_api:register_route(api(search/Path),
-    plugin_api:cors_handler(Method, tdb_search:search_handler(Path)),
+    plugin_api:cors_handler(Method, vectorlink:search_handler(Path)),
     [method(Method), prefix, time_limit(infinite), methods([options,get,post])]).
 
 :- plugin_api:register_route(api(suggest/Path),
-    plugin_api:cors_handler(Method, tdb_search:suggest_handler(Path)),
+    plugin_api:cors_handler(Method, vectorlink:suggest_handler(Path)),
     [method(Method), prefix, time_limit(infinite), methods([options,get])]).
 
 :- plugin_api:register_route(api(similar/Path),
-    plugin_api:cors_handler(Method, tdb_search:similar_handler(Path)),
+    plugin_api:cors_handler(Method, vectorlink:similar_handler(Path)),
     [method(Method), prefix, time_limit(infinite), methods([options,get,post])]).
 
 :- plugin_api:register_route(api(duplicates/Path),
-    plugin_api:cors_handler(Method, tdb_search:duplicates_handler(Path)),
+    plugin_api:cors_handler(Method, vectorlink:duplicates_handler(Path)),
     [method(Method), prefix, time_limit(infinite), methods([options,get])]).
 
 % /api/resolve route moved to search_resolve.pl plugin.
 
 :- plugin_api:register_route(api(compare),
-    plugin_api:cors_handler(Method, tdb_search:compare_handler),
+    plugin_api:cors_handler(Method, vectorlink:compare_handler),
     [method(Method), time_limit(infinite), methods([options,post])]).
 
 :- plugin_api:register_route(api(plugin/'search-embeddings'/Path),
-    plugin_api:cors_handler(Method, tdb_search:embeddings_handler(Path)),
+    plugin_api:cors_handler(Method, vectorlink:embeddings_handler(Path)),
     [method(Method), prefix, time_limit(infinite), tdb_stream, methods([options,get,post])]).
 
 % ==========================================================================
@@ -2630,11 +2630,11 @@ push_stub_embeddings(Request) :-
     ).
 
 % ==========================================================================
-% clean_tdb_search_test_env — test helper to clear plugin config tables + env vars
+% clean_vectorlink_test_env — test helper to clear plugin config tables + env vars
 % ==========================================================================
 
-clean_tdb_search_test_env :-
-    abolish_plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT'),
+clean_vectorlink_test_env :-
+    abolish_plugin_env('TERMINUSDB_VECTORLINK_ENDPOINT'),
     abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, _)),
     abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, _)),
     (   current_predicate(config:clear_indexer_backend_config/0)
@@ -2643,7 +2643,7 @@ clean_tdb_search_test_env :-
     ),
     unsetenv('TERMINUSDB_INDEXER_BACKEND'),
     unsetenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT'),
-    unsetenv('TERMINUSDB_TDB_SEARCH_ENDPOINT'),
+    unsetenv('TERMINUSDB_VECTORLINK_ENDPOINT'),
     unsetenv('TERMINUSDB_SEARCH_ADMIN_USER'),
     unsetenv('TERMINUSDB_SEARCH_ADMIN_SECRET').
 
@@ -2671,169 +2671,169 @@ silence_user_error(Goal) :-
 %
 % These tests verify config-layer behaviour: indexer_backend/1,
 % check_indexer_backend_config/0 (both in config(terminus_config)),
-% and the plugin-owned tdb_search_endpoint/1, tdb_search_admin_user/1,
-% tdb_search_admin_secret/1.
+% and the plugin-owned vectorlink_endpoint/1, vectorlink_admin_user/1,
+% vectorlink_admin_secret/1.
 %
 % They cannot live in terminus_config.pl because config is loaded before
 % set_test_options(load(always)) during bootstrap, so plunit blocks there
 % are discarded.
 % ==========================================================================
 
-:- begin_tests(tdb_search_indexer_backend_selector).
+:- begin_tests(vectorlink_indexer_backend_selector).
 
 test("default backend is none when unset",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
        true(Backend == none)
      ]) :-
     config:indexer_backend(Backend).
 
 test("none with no endpoints set passes the startup check",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env)
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env)
      ]) :-
     config:check_indexer_backend_config.
 
 test("explicit none with no endpoints passes the startup check",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', none))),
-       cleanup(clean_tdb_search_test_env)
+       cleanup(clean_vectorlink_test_env)
      ]) :-
     config:check_indexer_backend_config.
 
 test("unknown backend value fails loud",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', wibble))),
-       cleanup(clean_tdb_search_test_env),
+       cleanup(clean_vectorlink_test_env),
        throws(error(bad_env_var_value('TERMINUSDB_INDEXER_BACKEND', wibble), _))
      ]) :-
     config:indexer_backend(_).
 
 test("unknown backend value refuses startup",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', nonsense))),
-       cleanup(clean_tdb_search_test_env),
+       cleanup(clean_vectorlink_test_env),
        throws(error(bad_env_var_value('TERMINUSDB_INDEXER_BACKEND', nonsense), _))
      ]) :-
     config:check_indexer_backend_config.
 
 test("http_legacy_vectorlink with its endpoint resolves and passes the check",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', http_legacy_vectorlink),
               setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'))),
-       cleanup(clean_tdb_search_test_env),
+       cleanup(clean_vectorlink_test_env),
        true(Backend == http_legacy_vectorlink)
      ]) :-
     config:check_indexer_backend_config,
     config:indexer_backend(Backend).
 
-test("http_tdb_search with its endpoint resolves and passes the check",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
-       cleanup(clean_tdb_search_test_env),
-       true(Endpoint == 'http://tdb-search:8080')
+test("http_vectorlink with its endpoint resolves and passes the check",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_vectorlink_test_env),
+       true(Endpoint == 'http://vectorlink:8080')
      ]) :-
     config:check_indexer_backend_config,
-    tdb_search_endpoint(Endpoint).
+    vectorlink_endpoint(Endpoint).
 
 test("http_legacy_vectorlink without its endpoint refuses startup",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', http_legacy_vectorlink))),
-       cleanup(clean_tdb_search_test_env),
+       cleanup(clean_vectorlink_test_env),
        throws(error(indexer_backend_incomplete(http_legacy_vectorlink, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
-test("http_tdb_search without its endpoint refuses startup",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search))),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(indexer_backend_incomplete(http_tdb_search, _), _))
+test("http_vectorlink without its endpoint refuses startup",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink))),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(indexer_backend_incomplete(http_vectorlink, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
 test("none with legacy endpoint set is ambiguous and refuses startup",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'))),
-       cleanup(clean_tdb_search_test_env),
+       cleanup(clean_vectorlink_test_env),
        throws(error(indexer_backend_ambiguous(none, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
-test("none with tdb-search endpoint set is ambiguous and refuses startup",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
-       cleanup(clean_tdb_search_test_env),
+test("none with vectorlink endpoint set is ambiguous and refuses startup",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(indexer_backend_ambiguous(none, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
 test("http_legacy_vectorlink with both endpoints set is ambiguous and refuses startup",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', http_legacy_vectorlink),
               setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
-       cleanup(clean_tdb_search_test_env),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(indexer_backend_ambiguous(http_legacy_vectorlink, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
-test("http_tdb_search with both endpoints set is ambiguous and refuses startup",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_INDEXER_BACKEND', http_tdb_search),
+test("http_vectorlink with both endpoints set is ambiguous and refuses startup",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', http_vectorlink),
               setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://tdb-search:8080'))),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(indexer_backend_ambiguous(http_tdb_search, _), _))
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(indexer_backend_ambiguous(http_vectorlink, _), _))
      ]) :-
     config:check_indexer_backend_config.
 
 test("admin user defaults to admin",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               unsetenv('TERMINUSDB_SEARCH_ADMIN_USER'))),
-       cleanup((clean_tdb_search_test_env,
+       cleanup((clean_vectorlink_test_env,
                 config:clear_indexer_backend_config)),
        true(User == admin)
      ]) :-
-    plugins:tdb_search_admin_user(User).
+    plugins:vectorlink_admin_user(User).
 
 test("admin secret defaults to root",
-     [ setup((clean_tdb_search_test_env,
+     [ setup((clean_vectorlink_test_env,
               unsetenv('TERMINUSDB_SEARCH_ADMIN_SECRET'))),
-       cleanup((clean_tdb_search_test_env,
+       cleanup((clean_vectorlink_test_env,
                 config:clear_indexer_backend_config)),
        true(Secret == root)
      ]) :-
-    plugins:tdb_search_admin_secret(Secret).
+    plugins:vectorlink_admin_secret(Secret).
 
-:- end_tests(tdb_search_indexer_backend_selector).
+:- end_tests(vectorlink_indexer_backend_selector).
 
 % ==========================================================================
 % Push driver unit tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_push_driver).
+:- begin_tests(vectorlink_push_driver).
 
 test("path_to_domain extracts org/db from short path",
      [true(Domain == 'admin/testdb')]) :-
-    tdb_search:path_to_domain("admin/testdb", Domain).
+    vectorlink:path_to_domain("admin/testdb", Domain).
 
 test("path_to_domain extracts org/db from full branch path",
      [true(Domain == 'myorg/mydb')]) :-
-    tdb_search:path_to_domain("myorg/mydb/local/branch/main", Domain).
+    vectorlink:path_to_domain("myorg/mydb/local/branch/main", Domain).
 
 test("path_to_domain extracts org/db from commit path",
      [true(Domain == 'org/db')]) :-
-    tdb_search:path_to_domain("org/db/local/commit/abc123", Domain).
+    vectorlink:path_to_domain("org/db/local/commit/abc123", Domain).
 
 test("path_to_domain fails on single-segment path",
      [throws(error(invalid_path_for_domain(_), _))]) :-
-    tdb_search:path_to_domain("onlyone", _).
+    vectorlink:path_to_domain("onlyone", _).
 
 test("path_to_domain fails on empty path",
      [throws(error(invalid_path_for_domain(_), _))]) :-
-    tdb_search:path_to_domain("", _).
+    vectorlink:path_to_domain("", _).
 
 test("descriptor_graphspec produces full graphspec for main branch",
      [ setup(setup_temp_store(State)),
@@ -2842,7 +2842,7 @@ test("descriptor_graphspec produces full graphspec for main branch",
      ]) :-
     create_db_without_schema("admin", "testdb"),
     resolve_absolute_string_descriptor("admin/testdb", Descriptor),
-    tdb_search:descriptor_graphspec(Descriptor, GraphSpec).
+    vectorlink:descriptor_graphspec(Descriptor, GraphSpec).
 
 test("descriptor_graphspec produces full graphspec for feature branch",
      [ setup(setup_temp_store(State)),
@@ -2856,7 +2856,7 @@ test("descriptor_graphspec produces full graphspec for feature branch",
                   "admin/testdb/local/branch/feature-x",
                   branch("admin/testdb"), _),
     resolve_absolute_string_descriptor("admin/testdb/local/branch/feature-x", FeatureDesc),
-    tdb_search:descriptor_graphspec(FeatureDesc, GraphSpec).
+    vectorlink:descriptor_graphspec(FeatureDesc, GraphSpec).
 
 test("descriptor_graphspec graphspec branch agrees with descriptor branch_name",
      [ setup(setup_temp_store(State)),
@@ -2865,55 +2865,55 @@ test("descriptor_graphspec graphspec branch agrees with descriptor branch_name",
     create_db_without_schema("admin", "testdb2"),
     resolve_absolute_string_descriptor("admin/testdb2", Descriptor),
     branch_descriptor{branch_name: Branch} :< Descriptor,
-    tdb_search:descriptor_graphspec(Descriptor, GraphSpec),
+    vectorlink:descriptor_graphspec(Descriptor, GraphSpec),
     atom_string(GraphSpec, GS_String),
     format(atom(Expected_Suffix), "/branch/~w", [Branch]),
     sub_atom(GS_String, _, _, _, Expected_Suffix).
 
 test("build_push_url with parent_commit includes parent_commit param",
      [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1&parent_commit=prev1&stream=true')]) :-
-    tdb_search:build_push_url("http://engine:8080", "admin/db", "main",
+    vectorlink:build_push_url("http://engine:8080", "admin/db", "main",
                                "head1", "prev1", URL).
 
 test("build_push_url with none parent omits parent_commit param",
      [true(URL == 'http://engine:8080/push?domain=admin%2fdb&branch=main&target_commit=head1&stream=true')]) :-
-    tdb_search:build_push_url("http://engine:8080", "admin/db", "main",
+    vectorlink:build_push_url("http://engine:8080", "admin/db", "main",
                                "head1", none, URL).
 
 test("handle_push_response 200 returns accepted(Task_Id)",
      [true(Result == accepted("task-abc"))]) :-
-    tdb_search:handle_push_response(200, "task-abc", Result).
+    vectorlink:handle_push_response(200, "task-abc", Result).
 
 test("handle_push_response 409 returns conflict_already_pushed",
      [true(Result == conflict_already_pushed)]) :-
-    tdb_search:handle_push_response(409, "Conflict", Result).
+    vectorlink:handle_push_response(409, "Conflict", Result).
 
 test("handle_push_response 401 throws loud failure",
-     [throws(error(tdb_search_push_failed(401, "Unauthorized"), _))]) :-
-    tdb_search:handle_push_response(401, "Unauthorized", _).
+     [throws(error(vectorlink_push_failed(401, "Unauthorized"), _))]) :-
+    vectorlink:handle_push_response(401, "Unauthorized", _).
 
 test("handle_push_response 500 throws loud failure",
-     [throws(error(tdb_search_push_failed(500, "Internal error"), _))]) :-
-    tdb_search:handle_push_response(500, "Internal error", _).
+     [throws(error(vectorlink_push_failed(500, "Internal error"), _))]) :-
+    vectorlink:handle_push_response(500, "Internal error", _).
 
 test("io_push_delta refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(tdb_search_endpoint_not_configured(io_push_delta), _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(vectorlink_endpoint_not_configured(io_push_delta), _))
      ]) :-
     io_push_delta(_, _, "admin/testdb", "main").
 
 test("io_index_branch refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(tdb_search_endpoint_not_configured(io_index_branch), _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(vectorlink_endpoint_not_configured(io_index_branch), _))
      ]) :-
     io_index_branch(_, _, "admin/testdb").
 
 test("io_push_delta delegates to indexer_notify (push architecture)",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "testdb2"),
-              clean_tdb_search_test_env,
+              clean_vectorlink_test_env,
               resolve_absolute_string_descriptor("admin/testdb2", Desc),
               get_dict(repository_descriptor, Desc, Repo_Desc),
               branch_head_commit(Repo_Desc, "main", Head_Uri),
@@ -2925,11 +2925,11 @@ test("io_push_delta delegates to indexer_notify (push architecture)",
               start_push_stub(Port),
               assertz(stub_last_indexed_response(Last_Indexed_Json)),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL),
               plugin_api:indexer_set_config(Endpoint_URL, "")
              )),
        cleanup((stop_push_stub(Port),
-                clean_tdb_search_test_env,
+                clean_vectorlink_test_env,
                 catch(plugin_api:indexer_set_config("", ""), _, true),
                 teardown_temp_store(State)))
      ]) :-
@@ -2939,198 +2939,198 @@ test("io_push_delta delegates to indexer_notify (push architecture)",
 
 test("commits_after returns suffix after the given commit",
      [true(Forward == ["c2", "c3", "c4"])]) :-
-    tdb_search:commits_after("c1", ["c0", "c1", "c2", "c3", "c4"], Forward).
+    vectorlink:commits_after("c1", ["c0", "c1", "c2", "c3", "c4"], Forward).
 
 test("commits_after returns empty list when commit is last",
      [true(Forward == [])]) :-
-    tdb_search:commits_after("c4", ["c0", "c1", "c2", "c3", "c4"], Forward).
+    vectorlink:commits_after("c4", ["c0", "c1", "c2", "c3", "c4"], Forward).
 
 test("commits_after throws when commit is not in history",
-     [throws(error(tdb_search_last_indexed_not_in_history("missing"), _))]) :-
-    tdb_search:commits_after("missing", ["c0", "c1", "c2"], _).
+     [throws(error(vectorlink_last_indexed_not_in_history("missing"), _))]) :-
+    vectorlink:commits_after("missing", ["c0", "c1", "c2"], _).
 
 test("commits_after returns single-element suffix for second-to-last",
      [true(Forward == ["c2"])]) :-
-    tdb_search:commits_after("c1", ["c0", "c1", "c2"], Forward).
+    vectorlink:commits_after("c1", ["c0", "c1", "c2"], Forward).
 
 test("normalise_commit_value handles JSON null (@(null))",
      [true(Result == null)]) :-
-    tdb_search:normalise_commit_value(@(null), Result).
+    vectorlink:normalise_commit_value(@(null), Result).
 
 test("normalise_commit_value handles plain null atom",
      [true(Result == null)]) :-
-    tdb_search:normalise_commit_value(null, Result).
+    vectorlink:normalise_commit_value(null, Result).
 
 test("normalise_commit_value coerces atom to string",
      [true(Result == "abc123")]) :-
-    tdb_search:normalise_commit_value(abc123, Result).
+    vectorlink:normalise_commit_value(abc123, Result).
 
 test("normalise_commit_value passes through strings",
      [true(Result == "def456")]) :-
-    tdb_search:normalise_commit_value("def456", Result).
+    vectorlink:normalise_commit_value("def456", Result).
 
 test("build_push_url encodes slash in domain path",
      [true(URL == 'http://engine:8080/push?domain=org%2fdb%2flocal%2fbranch%2fmain&branch=main&target_commit=c1&stream=true')]) :-
-    tdb_search:build_push_url("http://engine:8080", "org/db/local/branch/main",
+    vectorlink:build_push_url("http://engine:8080", "org/db/local/branch/main",
                                "main", "c1", none, URL).
 
 test("build_push_url encodes ampersand and equals in branch name",
      [true(sub_atom(URL, _, _, _, 'branch=a%26b%3dc'))]) :-
-    tdb_search:build_push_url("http://engine:8080", "d", "a&b=c",
+    vectorlink:build_push_url("http://engine:8080", "d", "a&b=c",
                                "c1", none, URL).
 
 test("build_last_indexed_url encodes slash in domain",
      [true(URL == 'http://engine:8080/last-indexed?domain=admin%2fdb&branch=main')]) :-
-    tdb_search:build_last_indexed_url("http://engine:8080", "admin/db", "main", URL).
+    vectorlink:build_last_indexed_url("http://engine:8080", "admin/db", "main", URL).
 
 test("build_last_indexed_url encodes special chars in branch",
      [true(sub_atom(URL, _, _, _, 'branch=feat%2fx'))]) :-
-    tdb_search:build_last_indexed_url("http://engine:8080", "d", "feat/x", URL).
+    vectorlink:build_last_indexed_url("http://engine:8080", "d", "feat/x", URL).
 
 test("interpret_check_response handles string 'Complete' from atom_json_dict",
      [true(Status == complete)]) :-
-    tdb_search:interpret_check_response(200, '{"status":"Complete"}', Status).
+    vectorlink:interpret_check_response(200, '{"status":"Complete"}', Status).
 
 test("interpret_check_response handles string 'Pending' from atom_json_dict",
      [true(Status == pending)]) :-
-    tdb_search:interpret_check_response(200, '{"status":"Pending"}', Status).
+    vectorlink:interpret_check_response(200, '{"status":"Pending"}', Status).
 
 test("interpret_check_response 500 returns error term",
      [true(Status == error("server crashed"))]) :-
-    tdb_search:interpret_check_response(500, "server crashed", Status).
+    vectorlink:interpret_check_response(500, "server crashed", Status).
 
 test("validate_index_path accepts 2-segment path (org/db)") :-
-    tdb_search:validate_index_path("admin/testdb").
+    vectorlink:validate_index_path("admin/testdb").
 
 test("validate_index_path accepts 5-segment branch path") :-
-    tdb_search:validate_index_path("admin/testdb/local/branch/main").
+    vectorlink:validate_index_path("admin/testdb/local/branch/main").
 
 test("validate_index_path accepts 5-segment commit path") :-
-    tdb_search:validate_index_path("admin/testdb/local/commit/abc123").
+    vectorlink:validate_index_path("admin/testdb/local/commit/abc123").
 
 test("validate_index_path accepts atom input") :-
-    tdb_search:validate_index_path('org/db').
+    vectorlink:validate_index_path('org/db').
 
 test("validate_index_path accepts 5-segment with unusual branch name") :-
-    tdb_search:validate_index_path("org/db/local/branch/feat-x").
+    vectorlink:validate_index_path("org/db/local/branch/feat-x").
 
 test("validate_index_path rejects 1-segment path",
      [throws(error(invalid_index_path(_, wrong_segment_count(1, expected_2_or_5)), _))]) :-
-    tdb_search:validate_index_path("onlyone").
+    vectorlink:validate_index_path("onlyone").
 
 test("validate_index_path rejects 3-segment path",
      [throws(error(invalid_index_path(_, wrong_segment_count(3, expected_2_or_5)), _))]) :-
-    tdb_search:validate_index_path("admin/testdb/local").
+    vectorlink:validate_index_path("admin/testdb/local").
 
 test("validate_index_path rejects 4-segment path",
      [throws(error(invalid_index_path(_, wrong_segment_count(4, expected_2_or_5)), _))]) :-
-    tdb_search:validate_index_path("admin/testdb/local/branch").
+    vectorlink:validate_index_path("admin/testdb/local/branch").
 
 test("validate_index_path rejects 6-segment path",
      [throws(error(invalid_index_path(_, wrong_segment_count(6, expected_2_or_5)), _))]) :-
-    tdb_search:validate_index_path("admin/db/local/branch/main/extra").
+    vectorlink:validate_index_path("admin/db/local/branch/main/extra").
 
 test("validate_index_path rejects 5-segment with bad segment-4 (not branch/commit)",
      [throws(error(invalid_index_path(_, bad_segment_4(_, expected_branch_or_commit)), _))]) :-
-    tdb_search:validate_index_path("admin/db/local/tag/v1.0").
+    vectorlink:validate_index_path("admin/db/local/tag/v1.0").
 
 test("validate_index_path rejects _meta path (3-segment system form)",
      [throws(error(invalid_index_path(_, wrong_segment_count(3, expected_2_or_5)), _))]) :-
-    tdb_search:validate_index_path("admin/db/_meta").
+    vectorlink:validate_index_path("admin/db/_meta").
 
 test("validate_index_path rejects empty string",
      [throws(error(invalid_index_path(_, wrong_segment_count(0, expected_2_or_5)), _))]) :-
-    tdb_search:validate_index_path("").
+    vectorlink:validate_index_path("").
 
 test("branch_path_for_notify expands 2-segment path to 5-segment branch path",
      [true(Branch_Path == 'admin/testdb/local/branch/main')]) :-
-    tdb_search:branch_path_for_notify("admin/testdb", "main", Branch_Path).
+    vectorlink:branch_path_for_notify("admin/testdb", "main", Branch_Path).
 
 test("branch_path_for_notify passes 5-segment branch path through as-is",
      [true(Branch_Path == "admin/testdb/local/branch/main")]) :-
-    tdb_search:branch_path_for_notify("admin/testdb/local/branch/main", "main", Branch_Path).
+    vectorlink:branch_path_for_notify("admin/testdb/local/branch/main", "main", Branch_Path).
 
 test("branch_path_for_notify does not double a 5-segment branch path",
      [true(Branch_Path == "admin/product_assortment/local/branch/main")]) :-
-    tdb_search:branch_path_for_notify("admin/product_assortment/local/branch/main", "main", Branch_Path).
+    vectorlink:branch_path_for_notify("admin/product_assortment/local/branch/main", "main", Branch_Path).
 
 test("branch_path_for_notify handles atom input",
      [true(Branch_Path == 'admin/testdb/local/branch/main')]) :-
-    tdb_search:branch_path_for_notify('admin/testdb', 'main', Branch_Path).
+    vectorlink:branch_path_for_notify('admin/testdb', 'main', Branch_Path).
 
 test("branch_path_for_notify handles DB named local (2-segment)",
      [true(Branch_Path == 'admin/local/local/branch/main')]) :-
-    tdb_search:branch_path_for_notify("admin/local", "main", Branch_Path).
+    vectorlink:branch_path_for_notify("admin/local", "main", Branch_Path).
 
 test("branch_path_for_notify rejects 10-segment doubled path",
      [throws(error(invalid_index_path(_, wrong_segment_count(10, expected_2_or_5)), _))]) :-
-    tdb_search:branch_path_for_notify("admin/db/local/branch/main/local/branch/main/local/branch", "main", _).
+    vectorlink:branch_path_for_notify("admin/db/local/branch/main/local/branch/main/local/branch", "main", _).
 
 test("branch_path_for_notify rejects 3-segment path",
      [throws(error(invalid_index_path(_, wrong_segment_count(3, expected_2_or_5)), _))]) :-
-    tdb_search:branch_path_for_notify("admin/testdb/local", "main", _).
+    vectorlink:branch_path_for_notify("admin/testdb/local", "main", _).
 
 test("io_index_branch rejects 3-segment path before any I/O",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
-       cleanup(clean_tdb_search_test_env),
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(invalid_index_path("admin/testdb/local",
                         wrong_segment_count(3, expected_2_or_5)), _))
      ]) :-
     io_index_branch(_, _, "admin/testdb/local").
 
 test("io_index_branch rejects 4-segment path before any I/O",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
-       cleanup(clean_tdb_search_test_env),
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(invalid_index_path("admin/testdb/local/branch",
                         wrong_segment_count(4, expected_2_or_5)), _))
      ]) :-
     io_index_branch(_, _, "admin/testdb/local/branch").
 
 test("io_index_branch rejects _meta path before any I/O",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
-       cleanup(clean_tdb_search_test_env),
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(invalid_index_path("admin/db/_meta",
                         wrong_segment_count(3, expected_2_or_5)), _))
      ]) :-
     io_index_branch(_, _, "admin/db/_meta").
 
 test("io_index_branch rejects 5-segment with bad segment-4 before any I/O",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
-       cleanup(clean_tdb_search_test_env),
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(invalid_index_path("admin/db/local/tag/v1",
                         bad_segment_4(_, expected_branch_or_commit)), _))
      ]) :-
     io_index_branch(_, _, "admin/db/local/tag/v1").
 
 test("io_push_delta rejects 3-segment path before any I/O",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
-       cleanup(clean_tdb_search_test_env),
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(invalid_index_path("admin/testdb/local",
                         wrong_segment_count(3, expected_2_or_5)), _))
      ]) :-
     io_push_delta(_, _, "admin/testdb/local", "main").
 
 test("io_push_delta rejects _meta path before any I/O",
-     [ setup((clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999'))),
-       cleanup(clean_tdb_search_test_env),
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999'))),
+       cleanup(clean_vectorlink_test_env),
        throws(error(invalid_index_path("admin/db/_meta",
                         wrong_segment_count(3, expected_2_or_5)), _))
      ]) :-
     io_push_delta(_, _, "admin/db/_meta", "main").
 
-:- end_tests(tdb_search_push_driver).
+:- end_tests(vectorlink_push_driver).
 
 % ==========================================================================
 % Auto-push-on-commit hook tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_auto_push_hook).
+:- begin_tests(vectorlink_auto_push_hook).
 
 test("validation_is_index_enabled succeeds for schema with embedding metadata",
      [ setup((setup_temp_store(State),
@@ -3189,23 +3189,23 @@ test("validation_is_index_enabled fails for schema without embedding metadata",
     },
     api_indexer:validation_is_index_enabled(Validation).
 
-test("post_commit_hook is no-op when tdb_search endpoint is not set",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env)
+test("post_commit_hook is no-op when vectorlink endpoint is not set",
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env)
      ]) :-
-    \+ tdb_search:tdb_search_endpoint(_).
+    \+ vectorlink:vectorlink_endpoint(_).
 
 test("post_commit_hook spawns worker for indexed branch",
      [ setup((setup_temp_store(State),
               create_db_with_test_schema("admin", "hookdb3"),
-              clean_tdb_search_test_env,
+              clean_vectorlink_test_env,
               start_push_stub(Port),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL),
               setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
              )),
        cleanup((stop_push_stub(Port),
-                clean_tdb_search_test_env,
+                clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     open_descriptor(system_descriptor{}, System),
@@ -3241,11 +3241,11 @@ test("post_commit_hook spawns worker for indexed branch",
 test("post_commit_hook returns quickly even if engine is slow",
      [ setup((setup_temp_store(State),
               create_db_with_test_schema("admin", "hookdb4"),
-              clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:1'),
+              clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:1'),
               setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
              )),
-       cleanup((clean_tdb_search_test_env,
+       cleanup((clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     open_descriptor(system_descriptor{}, System),
@@ -3280,66 +3280,66 @@ test("post_commit_hook returns quickly even if engine is slow",
     Elapsed is T1 - T0,
     Elapsed < 5.0.
 
-:- end_tests(tdb_search_auto_push_hook).
+:- end_tests(vectorlink_auto_push_hook).
 
 % ==========================================================================
 % Search fronting + authz parity tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_search_fronting).
+:- begin_tests(vectorlink_search_fronting).
 
 test("build_search_url constructs correct URL with ancestors",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
-    tdb_search:build_search_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_search_url("http://engine:8080", "admin/db", commit("abc123"),
                                 ["prev1", "prev2"], URL).
 
 test("build_search_url with no ancestors omits ancestor params",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_search_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_search_url("http://engine:8080", "admin/db", commit("abc123"),
                                 [], URL).
 
 test("build_suggest_url constructs correct URL with ancestors",
      [true(URL == 'http://engine:8080/suggest?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
-    tdb_search:build_suggest_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_suggest_url("http://engine:8080", "admin/db", commit("abc123"),
                                  ["prev1", "prev2"], URL).
 
 test("build_suggest_url with no ancestors omits ancestor params",
      [true(URL == 'http://engine:8080/suggest?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_suggest_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_suggest_url("http://engine:8080", "admin/db", commit("abc123"),
                                  [], URL).
 
 test("build_similar_url constructs correct URL",
      [true(URL == 'http://engine:8080/similar?domain=org%2fmydb&commit=def456&ancestor=anc1')]) :-
-    tdb_search:build_similar_url("http://engine:8080", "org/mydb", commit("def456"),
+    vectorlink:build_similar_url("http://engine:8080", "org/mydb", commit("def456"),
                                  ["anc1"], URL).
 
 test("build_duplicates_url constructs correct URL without ancestors",
      [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&commit=c99')]) :-
-    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", commit("c99"), [], URL).
+    vectorlink:build_duplicates_url("http://engine:8080", "admin/db", commit("c99"), [], URL).
 
 test("build_statistics_url constructs scoped URL with domain and commit",
      [true(URL == 'http://engine:8080/statistics?domain=admin%2fmydb&commit=abc123')]) :-
-    tdb_search:build_statistics_url("http://engine:8080", "admin/mydb", commit("abc123"),
+    vectorlink:build_statistics_url("http://engine:8080", "admin/mydb", commit("abc123"),
                                     [], URL).
 
 test("build_statistics_url includes ancestor params",
      [true(sub_atom(URL, _, _, _, '&ancestor=anc1'))]) :-
-    tdb_search:build_statistics_url("http://engine:8080", "admin/db", commit("c1"),
+    vectorlink:build_statistics_url("http://engine:8080", "admin/db", commit("c1"),
                                     ["anc1"], URL).
 
 test("build_search_url encodes slashes in domain",
      [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
-    tdb_search:build_search_url("http://e:80", "org/db/local/branch/main",
+    vectorlink:build_search_url("http://e:80", "org/db/local/branch/main",
                                 commit("c1"), [], URL).
 
 test("build_search_url with branch ref constructs branch param",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&branch=main')]) :-
-    tdb_search:build_search_url("http://engine:8080", "admin/db", branch("main"),
+    vectorlink:build_search_url("http://engine:8080", "admin/db", branch("main"),
                                 [], URL).
 
 test("build_duplicates_url with branch ref constructs branch param",
      [true(URL == 'http://engine:8080/duplicates?domain=admin%2fdb&branch=main')]) :-
-    tdb_search:build_duplicates_url("http://engine:8080", "admin/db", branch("main"), [], URL).
+    vectorlink:build_duplicates_url("http://engine:8080", "admin/db", branch("main"), [], URL).
 
 test("ancestor_window returns ancestors nearest first excluding HEAD",
      [ setup(setup_temp_store(State)),
@@ -3378,37 +3378,37 @@ test("ancestor_window respects max count",
     length(Ancestors, 1).
 
 test("io_search_forward refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_search_forward("http://x:80", "d", commit("c"), [], [], _, _).
 
 test("io_similar_forward refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_similar_forward("http://x:80", "d", commit("c"), [], [], _, _).
 
 test("io_duplicates_forward refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_duplicates_forward("http://x:80", "d", commit("c"), [], [], _, _).
 
 test("io_statistics_forward refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_statistics_forward("http://x:80", "admin/db", commit("c0"), [], _, _).
 
 test("io_statistics_for_domain refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_statistics_for_domain("http://x:80", "admin/db", _).
 
@@ -3438,13 +3438,13 @@ test("authz parity: denied caller search never reaches engine stub",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "guardeddb"),
               add_user("DeniedUser", some('pass456'), _URI),
-              clean_tdb_search_test_env,
+              clean_vectorlink_test_env,
               start_push_stub(Port),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL)
              )),
        cleanup((stop_push_stub(Port),
-                clean_tdb_search_test_env,
+                clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     once(( open_descriptor(system_descriptor{}, System_DB),
@@ -3452,7 +3452,7 @@ test("authz parity: denied caller search never reaches engine stub",
            catch(
                (   resolve_descriptor_auth(read, System_DB, Auth,
                                            "admin/guardeddb", instance, _Desc),
-                   tdb_search:tdb_search_endpoint(Endpoint),
+                   vectorlink:vectorlink_endpoint(Endpoint),
                    io_search_forward(Endpoint, "admin/guardeddb", commit("fake_commit"),
                                      [], [], _Response, _DV)
                ),
@@ -3477,13 +3477,13 @@ test("authz parity: denied caller statistics never reaches engine stub",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "guardedstatsdb"),
               add_user("StatsDeniedUser", some('pass012'), _URI),
-              clean_tdb_search_test_env,
+              clean_vectorlink_test_env,
               start_push_stub(Port),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL)
              )),
        cleanup((stop_push_stub(Port),
-                clean_tdb_search_test_env,
+                clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     once(( open_descriptor(system_descriptor{}, System_DB),
@@ -3491,7 +3491,7 @@ test("authz parity: denied caller statistics never reaches engine stub",
            catch(
                (   resolve_descriptor_auth(read, System_DB, Auth,
                                            "admin/guardedstatsdb", instance, _Desc),
-                   tdb_search:tdb_search_endpoint(Endpoint),
+                   vectorlink:vectorlink_endpoint(Endpoint),
                    io_statistics_forward(Endpoint, "admin/guardedstatsdb", commit("fake_commit"),
                                          [], _Response, _DV)
                ),
@@ -3503,20 +3503,20 @@ test("authz parity: denied caller statistics never reaches engine stub",
 test("maybe_nudge_push does nothing when data version matches",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "nudgedb"),
-              clean_tdb_search_test_env,
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', 'http://127.0.0.1:9999')
+              clean_vectorlink_test_env,
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://127.0.0.1:9999')
              )),
-       cleanup((clean_tdb_search_test_env,
+       cleanup((clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
-    tdb_search:maybe_nudge_push("commit:abc123", "abc123",
+    vectorlink:maybe_nudge_push("commit:abc123", "abc123",
                                 _, _, "admin/nudgedb", "main").
 
 test("maybe_nudge_push with none header does nothing",
      [ setup(setup_temp_store(State)),
        cleanup(teardown_temp_store(State))
      ]) :-
-    tdb_search:maybe_nudge_push(none, "abc123", _, _, "admin/db", "main").
+    vectorlink:maybe_nudge_push(none, "abc123", _, _, "admin/db", "main").
 
 test("authz parity: denied caller cannot resolve (resolve_descriptor_auth throws)",
      [ setup((setup_temp_store(State),
@@ -3544,13 +3544,13 @@ test("authz parity: denied caller resolve never reaches engine stub",
      [ setup((setup_temp_store(State),
               create_db_without_schema("admin", "guardedresolvedb"),
               add_user("ResolveBlockedUser", some('pass654'), _URI),
-              clean_tdb_search_test_env,
+              clean_vectorlink_test_env,
               start_push_stub(Port),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL)
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL)
              )),
        cleanup((stop_push_stub(Port),
-                clean_tdb_search_test_env,
+                clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     once(( open_descriptor(system_descriptor{}, System_DB),
@@ -3558,7 +3558,7 @@ test("authz parity: denied caller resolve never reaches engine stub",
            catch(
                (   resolve_descriptor_auth(read, System_DB, Auth,
                                            "admin/guardedresolvedb", instance, _Desc),
-                   tdb_search:tdb_search_endpoint(Endpoint),
+                   vectorlink:vectorlink_endpoint(Endpoint),
                    io_resolve_forward(Endpoint, "admin/guardedresolvedb", commit("fake_commit"),
                                       [], _{}, _Response, _DV)
                ),
@@ -3567,59 +3567,59 @@ test("authz parity: denied caller resolve never reaches engine stub",
            ),
            \+ stub_received(_, _) )).
 
-:- end_tests(tdb_search_search_fronting).
+:- end_tests(vectorlink_search_fronting).
 
 % ==========================================================================
 % Resolve URL construction tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_resolve_url_construction).
+:- begin_tests(vectorlink_resolve_url_construction).
 
 test("build_resolve_url constructs correct URL",
      [true(URL == 'http://engine:8080/candidates?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_resolve_url("http://engine:8080", "admin/db", commit("abc123"), URL).
+    vectorlink:build_resolve_url("http://engine:8080", "admin/db", commit("abc123"), URL).
 
 test("build_resolve_url encodes slashes in domain",
      [true(sub_atom(URL, _, _, _, 'domain=org%2fdb%2flocal%2fbranch%2fmain'))]) :-
-    tdb_search:build_resolve_url("http://e:80", "org/db/local/branch/main", commit("c1"), URL).
+    vectorlink:build_resolve_url("http://e:80", "org/db/local/branch/main", commit("c1"), URL).
 
 test("io_resolve_forward refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_resolve_forward("http://x:80", "d", commit("c"), [], _{}, _, _).
 
-:- end_tests(tdb_search_resolve_url_construction).
+:- end_tests(vectorlink_resolve_url_construction).
 
 % ==========================================================================
 % DELETE /domain trigger tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_delete_domain_trigger).
+:- begin_tests(vectorlink_delete_domain_trigger).
 
 test("build_delete_domain_url constructs correct URL",
      [true(URL == 'http://engine:8080/domain?domain=admin%2fmydb')]) :-
-    tdb_search:build_delete_domain_url("http://engine:8080", "admin/mydb", URL).
+    vectorlink:build_delete_domain_url("http://engine:8080", "admin/mydb", URL).
 
 test("io_delete_domain refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
-    tdb_search:io_delete_domain("http://x:80", "admin/mydb").
+    vectorlink:io_delete_domain("http://x:80", "admin/mydb").
 
 test("delete_db triggers post_delete_db_hook (stub receives DELETE)",
      [ setup((setup_temp_store(State),
-              clean_tdb_search_test_env,
+              clean_vectorlink_test_env,
               start_push_stub(Port),
               format(atom(Endpoint_URL), "http://127.0.0.1:~w", [Port]),
-              setenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', Endpoint_URL),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL),
               setenv('TERMINUSDB_SEARCH_ADMIN_USER', admin),
               setenv('TERMINUSDB_SEARCH_ADMIN_SECRET', root)
              )),
        cleanup((stop_push_stub(Port),
-                clean_tdb_search_test_env,
+                clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     create_db_without_schema("admin", "deleteme"),
@@ -3629,84 +3629,84 @@ test("delete_db triggers post_delete_db_hook (stub receives DELETE)",
     \+ database_exists("admin", "deleteme"),
     stub_received(domain_delete, _).
 
-test("post_delete_db_hook is silent no-op when tdb_search endpoint is not set",
+test("post_delete_db_hook is silent no-op when vectorlink endpoint is not set",
      [ setup((setup_temp_store(State),
-              clean_tdb_search_test_env
+              clean_vectorlink_test_env
              )),
-       cleanup((clean_tdb_search_test_env,
+       cleanup((clean_vectorlink_test_env,
                 teardown_temp_store(State)))
      ]) :-
     ignore(plugins:post_delete_db_hook("admin", "nonexistent")).
 
-:- end_tests(tdb_search_delete_domain_trigger).
+:- end_tests(vectorlink_delete_domain_trigger).
 
 % ==========================================================================
 % Search fronting params tests (body/query parameter merge)
 % ==========================================================================
 
-:- begin_tests(tdb_search_fronting_params).
+:- begin_tests(vectorlink_fronting_params).
 
 test("search q: body value overrides query value",
      [true(Params == [q="from-body"])]) :-
-    tdb_search:search_extra_params([q='from-query'], _{q: "from-body"}, Params).
+    vectorlink:search_extra_params([q='from-query'], _{q: "from-body"}, Params).
 
 test("search q: query used when body absent (GET path, empty body)",
      [true(Params == [q='from-query'])]) :-
-    tdb_search:search_extra_params([q='from-query'], _{}, Params).
+    vectorlink:search_extra_params([q='from-query'], _{}, Params).
 
 test("search q: empty body value falls back to query",
      [true(Params == [q='from-query'])]) :-
-    tdb_search:search_extra_params([q='from-query'], _{q: ""}, Params).
+    vectorlink:search_extra_params([q='from-query'], _{q: ""}, Params).
 
 test("search scalar absent in both body and query is omitted",
      [true(Params == [])]) :-
-    tdb_search:search_extra_params([], _{}, Params).
+    vectorlink:search_extra_params([], _{}, Params).
 
 test("search doc_type: body list overrides query repeated values",
      [true(Params == [doc_type=repeated(["A", "B"])])]) :-
-    tdb_search:search_extra_params([doc_type='X', doc_type='Y'],
+    vectorlink:search_extra_params([doc_type='X', doc_type='Y'],
                         _{doc_type: ["A", "B"]}, Params).
 
 test("search doc_type: query repeated used when body absent",
      [true(Params == [doc_type=repeated(['X', 'Y'])])]) :-
-    tdb_search:search_extra_params([doc_type='X', doc_type='Y'], _{}, Params).
+    vectorlink:search_extra_params([doc_type='X', doc_type='Y'], _{}, Params).
 
 test("search never forwards domain/commit/ancestor from body",
      [true(Params == [q="hi"])]) :-
-    tdb_search:search_extra_params([],
+    vectorlink:search_extra_params([],
                         _{q: "hi", domain: "evil/db", commit: "deadbeef",
                           ancestors: ["x"]},
                         Params).
 
 test("search never forwards domain/commit from query",
      [true(Params == [q='hi'])]) :-
-    tdb_search:search_extra_params([q='hi', domain='evil/db', commit='deadbeef'],
+    vectorlink:search_extra_params([q='hi', domain='evil/db', commit='deadbeef'],
                         _{}, Params).
 
 test("search ignores unknown body fields (allowlist only)",
      [true(Params == [q="hi"])]) :-
-    tdb_search:search_extra_params([], _{q: "hi", wibble: "nope", '$inject': 1}, Params).
+    vectorlink:search_extra_params([], _{q: "hi", wibble: "nope", '$inject': 1}, Params).
 
 test("similar id: body value overrides query value and normalizes doc id",
      [true(Params == [id='terminusdb:///data/body-id'])]) :-
-    tdb_search:similar_extra_params([id='query-id'], _{id: "body-id"}, Params).
+    vectorlink:similar_extra_params([id='query-id'], _{id: "body-id"}, Params).
 
 test("duplicates threshold: body value overrides query value",
      [true(Params == [threshold=0.25])]) :-
-    tdb_search:duplicates_extra_params([threshold='0.9'], _{threshold: 0.25}, Params).
+    vectorlink:duplicates_extra_params([threshold='0.9'], _{threshold: 0.25}, Params).
 
 test("duplicates target_doc_type: body list overrides query repeated",
      [true(Params == [target_doc_type=repeated(["Buy"])])]) :-
-    tdb_search:duplicates_extra_params([target_doc_type='Abt'],
+    vectorlink:duplicates_extra_params([target_doc_type='Abt'],
                             _{target_doc_type: ["Buy"]}, Params).
 
-:- end_tests(tdb_search_fronting_params).
+:- end_tests(vectorlink_fronting_params).
 
 % ==========================================================================
 % Index status API response assembly tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_index_status_response).
+:- begin_tests(vectorlink_index_status_response).
 
 test("not_found response has status not_found and empty branch_processing",
      [true((Status == not_found, BP == json{commits_processed:0, total_commits:0,
@@ -3714,7 +3714,7 @@ test("not_found response has status not_found and empty branch_processing",
     Indexer_Progress = json{status:not_found},
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(branch_processing, Response, BP).
@@ -3735,7 +3735,7 @@ test("indexing response includes document progress in engine section",
     },
     Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(engine, Response, Engine),
@@ -3757,7 +3757,7 @@ test("indexing response does not include document counters in branch_processing"
     },
     Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "abc123", Engine_Stats, Response),
     get_dict(branch_processing, Response, BP).
 
@@ -3775,7 +3775,7 @@ test("completed response has status completed and engine shows totals",
     },
     Engine_Stats = json{documents:150, chunks:300, indexed_commits:3,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "head123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(branch_processing, Response, BP),
@@ -3798,7 +3798,7 @@ test("error response includes error message",
     },
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(error, Response, Error).
@@ -3810,14 +3810,14 @@ test("engine section includes searchable_documents and text_segments_indexed fro
             processed_documents:30, total_documents:75, documents_sent:60}},
     Engine_Stats = json{documents:75, chunks:200, indexed_commits:1,
                         pending_index_fragments:2},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(searchable_documents, Engine, Searchable),
     get_dict(text_segments_indexed, Engine, Segments),
     get_dict(documents_sent, Engine, Sent).
 
-:- end_tests(tdb_search_index_status_response).
+:- end_tests(vectorlink_index_status_response).
 
 % ==========================================================================
 % IRI compaction / expansion tests
@@ -3828,7 +3828,7 @@ abt_buy_prefixes(Prefixes) :-
     Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
                  '@schema': "terminusdb:///schema#"}.
 
-:- begin_tests(tdb_search_id_compaction).
+:- begin_tests(vectorlink_id_compaction).
 
 test("compress_dict_uri with @base strips to bare relative IRI",
      [true(Compact == 'Abt/1101')]) :-
@@ -3963,44 +3963,44 @@ test("compact_key leaves non-IRI keys unchanged",
     abt_buy_prefixes(Prefixes),
     compact_key(name, Prefixes, Key).
 
-:- end_tests(tdb_search_id_compaction).
+:- end_tests(vectorlink_id_compaction).
 
 % ==========================================================================
 % Compress query parameter tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_compress_param).
+:- begin_tests(vectorlink_compress_param).
 
 test("search_extra_params/4 with none uses old normalize for doc_id",
      [true(Params == [doc_id=repeated(['terminusdb:///data/doc1'])])]) :-
-    tdb_search:search_extra_params([doc_id='doc1'], _{}, none, Params).
+    vectorlink:search_extra_params([doc_id='doc1'], _{}, none, Params).
 
 test("search_extra_params/4 with prefixes expands compact doc_id",
      [true(Params == [doc_id=repeated(['terminusdb:///data/admin/abt_buy_e2e/Abt/1101'])])]) :-
     Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
                  '@schema': "terminusdb:///schema#"},
-    tdb_search:search_extra_params([doc_id='Abt/1101'], _{}, Prefixes, Params).
+    vectorlink:search_extra_params([doc_id='Abt/1101'], _{}, Prefixes, Params).
 
 test("similar_extra_params/4 with none preserves old normalize behavior",
      [true(Params == [id='terminusdb:///data/body-id'])]) :-
-    tdb_search:similar_extra_params([id='query-id'], _{id: "body-id"},
+    vectorlink:similar_extra_params([id='query-id'], _{id: "body-id"},
                                     none, Params).
 
 test("similar_extra_params/4 with prefixes expands compact id",
      [true(Params == [id='terminusdb:///data/admin/abt_buy_e2e/Abt/1101'])]) :-
     Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
                  '@schema': "terminusdb:///schema#"},
-    tdb_search:similar_extra_params([id='Abt/1101'], _{}, Prefixes, Params).
+    vectorlink:similar_extra_params([id='Abt/1101'], _{}, Prefixes, Params).
 
 test("duplicates_extra_params/4 with none preserves old normalize behavior",
      [true(Params == [doc_id=repeated(['terminusdb:///data/doc1'])])]) :-
-    tdb_search:duplicates_extra_params([doc_id='doc1'], _{}, none, Params).
+    vectorlink:duplicates_extra_params([doc_id='doc1'], _{}, none, Params).
 
 test("duplicates_extra_params/4 with prefixes expands compact target_doc_id",
      [true(Params == [target_doc_id=repeated(['terminusdb:///data/admin/abt_buy_e2e/Buy/2001'])])]) :-
     Prefixes = _{'@base': "terminusdb:///data/admin/abt_buy_e2e/",
                  '@schema': "terminusdb:///schema#"},
-    tdb_search:duplicates_extra_params([target_doc_id='Buy/2001'], _{},
+    vectorlink:duplicates_extra_params([target_doc_id='Buy/2001'], _{},
                                        Prefixes, Params).
 
 test("compress_flag defaults to true when parameter absent",
@@ -4015,67 +4015,67 @@ test("compress_flag reads true from query parameter",
      [true(Compress == true)]) :-
     compress_flag([compress='true'], Compress).
 
-:- end_tests(tdb_search_compress_param).
+:- end_tests(vectorlink_compress_param).
 
 % ==========================================================================
 % Embeddings proxy tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_embeddings_proxy).
+:- begin_tests(vectorlink_embeddings_proxy).
 
 test("build_embeddings_url constructs correct URL with no doc_ids",
      [true(URL == 'http://engine:8080/embeddings?domain=admin%2fdb&commit=abc123')]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"), [], [], [], URL).
+    vectorlink:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"), [], [], [], URL).
 
 test("build_embeddings_url constructs correct URL with doc_ids as comma-separated",
      [true(sub_atom(URL, _, _, _, 'doc_ids=doc%2f1,doc%2f2'))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     ["doc/1", "doc/2"], [], [], URL).
 
 test("build_embeddings_url includes ancestor params",
      [true(sub_atom(URL, _, _, _, '&ancestor=anc1'))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     [], [], ["anc1"], URL).
 
 test("io_embeddings_forward refuses when endpoint is not configured",
-     [ setup(clean_tdb_search_test_env),
-       cleanup(clean_tdb_search_test_env),
-       throws(error(search_requires_tdb_search_backend, _))
+     [ setup(clean_vectorlink_test_env),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(search_requires_vectorlink_backend, _))
      ]) :-
     io_embeddings_forward("http://x:80", "admin/db", commit("abc123"), [], [], [], [], _).
 
 test("embeddings_extra_params extracts and normalizes doc_ids from query",
      [true(Doc_Ids == ['terminusdb:///data/doc1'])]) :-
-    tdb_search:embeddings_extra_params([doc_id='doc1'], none, Doc_Ids, _, _).
+    vectorlink:embeddings_extra_params([doc_id='doc1'], none, Doc_Ids, _, _).
 
 test("embeddings_extra_params with no doc_ids returns empty list",
      [true(Doc_Ids == [])]) :-
-    tdb_search:embeddings_extra_params([], none, Doc_Ids, _, _).
+    vectorlink:embeddings_extra_params([], none, Doc_Ids, _, _).
 
 test("embeddings_extra_params extracts doc_types from query",
      [true(Doc_Types == ['Product', 'Customer'])]) :-
-    tdb_search:embeddings_extra_params([doc_type='Product', doc_type='Customer'],
+    vectorlink:embeddings_extra_params([doc_type='Product', doc_type='Customer'],
                             none, _, Doc_Types, _).
 
 test("embeddings_extra_params extracts both doc_ids and doc_types",
      [true((Doc_Ids == ['terminusdb:///data/doc1'],
             Doc_Types == ['Product']))]) :-
-    tdb_search:embeddings_extra_params([doc_id='doc1', doc_type='Product'],
+    vectorlink:embeddings_extra_params([doc_id='doc1', doc_type='Product'],
                             none, Doc_Ids, Doc_Types, _).
 
 test("embeddings_extra_params with no params returns empty for both",
      [true((Doc_Ids == [], Doc_Types == []))]) :-
-    tdb_search:embeddings_extra_params([], none, Doc_Ids, Doc_Types, _).
+    vectorlink:embeddings_extra_params([], none, Doc_Ids, Doc_Types, _).
 
 test("build_embeddings_url constructs correct URL with doc_types as comma-separated",
      [true(sub_atom(URL, _, _, _, 'doc_types=Product,Customer'))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     [], ["Product", "Customer"], [], URL).
 
 test("build_embeddings_url constructs correct URL with both doc_ids and doc_types",
      [true((sub_atom(URL, _, _, _, 'doc_ids=doc%2f1'),
             sub_atom(URL, _, _, _, 'doc_types=Product')))]) :-
-    tdb_search:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
+    vectorlink:build_embeddings_url("http://engine:8080", "admin/db", commit("abc123"),
                                     ["doc/1"], ["Product"], [], URL).
 
 test("stream_ndjson_from reads lines and writes to current_output",
@@ -4197,20 +4197,20 @@ test("find_closing_quote fails on string with no quote",
      [fail]) :-
     find_closing_quote("no quote here", 0, _).
 
-:- end_tests(tdb_search_embeddings_proxy).
+:- end_tests(vectorlink_embeddings_proxy).
 
 % ==========================================================================
 % store_clustering in index status response tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_store_clustering_status).
+:- begin_tests(vectorlink_store_clustering_status).
 
 test("index status response includes store_clustering true from engine stats",
      [true(Store_Clustering == true)]) :-
     Indexer_Progress = json{status:completed},
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0, store_clustering:true},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
@@ -4220,7 +4220,7 @@ test("index status response includes store_clustering false from engine stats",
     Indexer_Progress = json{status:completed},
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0, store_clustering:false},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
@@ -4230,25 +4230,25 @@ test("index status response defaults store_clustering to null when absent",
     Indexer_Progress = json{status:completed},
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
-:- end_tests(tdb_search_store_clustering_status).
+:- end_tests(vectorlink_store_clustering_status).
 
 % ==========================================================================
 % not_found → completed override tests
 % ==========================================================================
 
-:- begin_tests(tdb_search_not_found_override).
+:- begin_tests(vectorlink_not_found_override).
 
 test("not_found with valid last_indexed commit should be overridden to completed",
      [true(Status == completed)]) :-
     Indexer_Progress = json{status:not_found},
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status).
 
@@ -4257,7 +4257,7 @@ test("not_found with null last_indexed commit stays not_found",
     Indexer_Progress = json{status:not_found},
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", null, Engine_Stats, Response),
     get_dict(status, Response, Status).
 
@@ -4266,7 +4266,7 @@ test("indexer_unavailable with valid last_indexed commit becomes completed",
     Indexer_Progress = json{status:indexer_unavailable},
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status).
 
@@ -4275,8 +4275,8 @@ test("indexer_unavailable with null last_indexed commit stays indexer_unavailabl
     Indexer_Progress = json{status:indexer_unavailable},
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
-    tdb_search:assemble_index_status_response(
+    vectorlink:assemble_index_status_response(
         Indexer_Progress, "main", null, Engine_Stats, Response),
     get_dict(status, Response, Status).
 
-:- end_tests(tdb_search_not_found_override).
+:- end_tests(vectorlink_not_found_override).

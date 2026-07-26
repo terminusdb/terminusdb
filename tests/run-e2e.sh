@@ -2,7 +2,7 @@
 # E2E test runner: brings up the full plugin stack, waits for readiness,
 # runs the mocha e2e suite, then tears down.
 #
-# Stack: TerminusDB + tdb-search + legacy_vectorlink + Ollama (embeddings)
+# Stack: TerminusDB + vectorlink + legacy_vectorlink + Ollama (embeddings)
 #
 # Usage:
 #   ./tests/run-e2e.sh              # up, test, down
@@ -58,18 +58,18 @@ if [ "$NO_UP" = false ]; then
     exit 1
   fi
 
-  echo "→ waiting for tdb-search engine to be ready"
+  echo "→ waiting for vectorlink engine to be ready"
   for _ in $(seq 1 60); do
     if curl -fsS "http://localhost:$SEARCH_PORT/health/live" >/dev/null 2>&1; then
-      echo "  ✓ tdb-search ready at http://localhost:$SEARCH_PORT"
+      echo "  ✓ vectorlink ready at http://localhost:$SEARCH_PORT"
       break
     fi
     sleep 2
   done
 
   if ! curl -fsS "http://localhost:$SEARCH_PORT/health/live" >/dev/null 2>&1; then
-    echo "✗ tdb-search did not become ready" >&2
-    docker compose -f "$COMPOSE_FILE" logs tdb-search >&2 || true
+    echo "✗ vectorlink did not become ready" >&2
+    docker compose -f "$COMPOSE_FILE" logs vectorlink >&2 || true
     exit 1
   fi
 

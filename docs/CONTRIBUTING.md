@@ -122,8 +122,8 @@ together — use it instead of the standalone TerminusDB test server script.
 
 ```bash
 # Set the indexer backend and tdb-search endpoint before starting
-export TERMINUSDB_INDEXER_BACKEND=http_tdb_search
-export TERMINUSDB_TDB_SEARCH_ENDPOINT=http://127.0.0.1:7372
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
 
 # Start both tdb-search (port 7372) and TerminusDB (port 7373)
 ../tdb-search/tests/tdb-search-server.sh start
@@ -141,11 +141,11 @@ export TERMINUSDB_TDB_SEARCH_ENDPOINT=http://127.0.0.1:7372
 ../tdb-search/tests/tdb-search-server.sh stop
 ```
 
-**Important:** The `TERMINUSDB_INDEXER_BACKEND` and `TERMINUSDB_TDB_SEARCH_ENDPOINT`
+**Important:** The `TERMINUSDB_INDEXER_BACKEND` and `TERMINUSDB_VECTORLINK_ENDPOINT`
 environment variables must be exported before calling the tdb-search restart script,
 because it internally calls the TerminusDB test server script and passes the
 environment through. Without these variables, the indexer backend defaults to `none`
-and indexing requests will fail with `tdb-search endpoint is not configured`.
+and indexing requests will fail with `vectorlink endpoint is not configured`.
 
 **Server Details:**
 - TerminusDB URL: `http://127.0.0.1:7373`
@@ -160,8 +160,8 @@ and indexing requests will fail with `tdb-search endpoint is not configured`.
 rm src/rust/librust.{dylib,so}; make dev
 
 # 2. Restart both servers with indexer enabled
-export TERMINUSDB_INDEXER_BACKEND=http_tdb_search
-export TERMINUSDB_TDB_SEARCH_ENDPOINT=http://127.0.0.1:7372
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
 ../tdb-search/tests/tdb-search-server.sh restart
 ```
 
@@ -184,8 +184,8 @@ See [Release Build and Restart](#release-build-and-restart) for details.
 rm -rf /tmp/tdb-search-data/*
 
 # Restart both
-export TERMINUSDB_INDEXER_BACKEND=http_tdb_search
-export TERMINUSDB_TDB_SEARCH_ENDPOINT=http://127.0.0.1:7372
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
 ../tdb-search/tests/tdb-search-server.sh start
 ```
 

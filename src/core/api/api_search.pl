@@ -34,7 +34,7 @@ This module provides the pure URL construction + I/O forwarding predicates.
 The authz gate itself lives in the route handler (routes.pl) because it
 needs System_DB and Auth from the HTTP dispatch.
 
-Gated on indexer_backend(http_tdb_search); clear error if called when
+Gated on indexer_backend(http_vectorlink); clear error if called when
 backend is none or http_legacy_vectorlink.
 */
 
@@ -64,28 +64,28 @@ backend is none or http_legacy_vectorlink.
 :- use_module(core(plugins)).
 
 % ==========================================================================
-% Backend gate — all search forwarding requires http_tdb_search.
+% Backend gate — all search forwarding requires http_vectorlink.
 % ==========================================================================
 
 /**
  * assert_search_backend is det.
  *
- * Fails loud if the indexer backend is not http_tdb_search. Called at the
+ * Fails loud if the indexer backend is not http_vectorlink. Called at the
  * top of every forwarding predicate to prevent any engine communication
  * under the wrong backend.
  */
 assert_search_backend :-
     do_or_die(
-        indexer_backend(http_tdb_search),
-        error(search_requires_tdb_search_backend, _)).
+        indexer_backend(http_vectorlink),
+        error(search_requires_vectorlink_backend, _)).
 
 % ==========================================================================
 % HTTP Basic auth header (reuses the T3 credential config).
 % ==========================================================================
 
 search_auth_header(authorization(basic(User, Secret))) :-
-    plugins:tdb_search_admin_user(User),
-    plugins:tdb_search_admin_secret(Secret).
+    plugins:vectorlink_admin_user(User),
+    plugins:vectorlink_admin_secret(Secret).
 
 % ==========================================================================
 % Ancestor window computation.
@@ -346,7 +346,7 @@ handle_compare_response(Status, _Body, _URL) :-
     Status < 300,
     !.
 handle_compare_response(Status, Body, URL) :-
-    throw(error(tdb_search_forward_failed(Status, Body, URL), _)).
+    throw(error(vectorlink_forward_failed(Status, Body, URL), _)).
 
 % ==========================================================================
 % Internal: HTTP GET forwarding with response header extraction.
@@ -398,7 +398,7 @@ handle_forward_response(Status, _Body, _URL) :-
     Status < 300,
     !.
 handle_forward_response(Status, Body, URL) :-
-    throw(error(tdb_search_forward_failed(Status, Body, URL), _)).
+    throw(error(vectorlink_forward_failed(Status, Body, URL), _)).
 
 % ==========================================================================
 % Internal: query parameter construction.
@@ -582,4 +582,4 @@ handle_delete_domain_response(Status, _Body, _URL) :-
     !.
 handle_delete_domain_response(404, _Body, _URL) :- !.
 handle_delete_domain_response(Status, Body, URL) :-
-    throw(error(tdb_search_delete_domain_failed(Status, Body, URL), _)).
+    throw(error(vectorlink_delete_domain_failed(Status, Body, URL), _)).

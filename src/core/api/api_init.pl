@@ -420,12 +420,12 @@ test("TERMINUSDB_SERVER_DB_PATH=/absolute/path",
 :- end_tests(env_vars).
 
 % ==========================================================================
-% The following test suites have been moved to plugins/tdb_search.pl:
-%   - indexer_backend_selector  → tdb_search_indexer_backend_selector
-%   - push_driver               → tdb_search_push_driver
-%   - auto_push_hook            → tdb_search_auto_push_hook
-%   - search_fronting           → tdb_search_search_fronting
-%   - resolve_url_construction  → tdb_search_resolve_url_construction
-%   - delete_domain_trigger     → tdb_search_delete_domain_trigger
-%   - search_fronting_params    → tdb_search_fronting_params (from routes.pl)
+% The following test suites have been moved to plugins/vectorlink.pl:
+%   - indexer_backend_selector  → vectorlink_indexer_backend_selector
+%   - push_driver               → vectorlink_push_driver
+%   - auto_push_hook            → vectorlink_auto_push_hook
+%   - search_fronting           → vectorlink_search_fronting
+%   - resolve_url_construction  → vectorlink_resolve_url_construction
+%   - delete_domain_trigger     → vectorlink_delete_domain_trigger
+%   - search_fronting_params    → vectorlink_fronting_params (from routes.pl)
 % ==========================================================================

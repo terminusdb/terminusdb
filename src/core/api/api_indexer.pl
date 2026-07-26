@@ -199,24 +199,24 @@ validate_index_segments(N, _Segments, Path) :-
  * io_push_delta(+System_DB, +Auth, +Path, +Branch_Name) is det.
  *
  * Thin wrapper around the indexer_notify/4 FFI predicate. Validates the
- * path, checks that the tdb_search endpoint is configured, and delegates
+ * path, checks that the vectorlink endpoint is configured, and delegates
  * to the Rust IndexerRegistry which handles NDJSON generation, HTTP
  * streaming, 409 resolution, and task polling internally.
  *
  * Fails loud on:
  *   - invalid path (not 2-or-5 segment form)
- *   - indexer_backend not http_tdb_search (wrong backend)
- *   - tdb_search endpoint not configured
+ *   - indexer_backend not http_vectorlink (wrong backend)
+ *   - vectorlink endpoint not configured
  *   - indexer_notify FFI not loaded (Rust runtime not available)
  */
 io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     validate_index_path(Path),
     do_or_die(
-        indexer_backend(http_tdb_search),
-        error(indexer_backend_not_tdb_search(io_push_delta), _)),
+        indexer_backend(http_vectorlink),
+        error(indexer_backend_not_vectorlink(io_push_delta), _)),
     do_or_die(
-        tdb_search_endpoint(_Endpoint),
-        error(tdb_search_endpoint_not_configured(io_push_delta), _)),
+        vectorlink_endpoint(_Endpoint),
+        error(vectorlink_endpoint_not_configured(io_push_delta), _)),
     (   atom_concat(_, '/local/branch/', Path)
     ->  Branch_Path = Path
     ;   format(atom(Branch_Path), "~w/local/branch/~w", [Path, Branch_Name])
@@ -242,7 +242,7 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
 commits_after(Last_Commit, History, Forward_Range) :-
     (   append(_, [Last_Commit | Forward_Range], History)
     ->  true
-    ;   throw(error(tdb_search_last_indexed_not_in_history(Last_Commit), _))
+    ;   throw(error(vectorlink_last_indexed_not_in_history(Last_Commit), _))
     ).
 
 /**
@@ -271,7 +271,7 @@ path_to_domain(Path, Domain) :-
  * io_index_branch(+System_DB, +Auth, +Path) is det.
  *
  * Explicit "index this branch now" entrypoint. Validates path structure,
- * then resolves descriptor and drives a push. Gated on http_tdb_search.
+ * then resolves descriptor and drives a push. Gated on http_vectorlink.
  *
  * The Path MUST conform to the driver input contract (2-seg or 5-seg form).
  * Validation fires BEFORE descriptor resolution or any I/O.
@@ -280,8 +280,8 @@ io_index_branch(System_DB, Auth, Path) :-
     % Validate path structure FIRST — before any descriptor resolution or I/O.
     validate_index_path(Path),
     do_or_die(
-        indexer_backend(http_tdb_search),
-        error(indexer_backend_not_tdb_search(io_index_branch), _)),
+        indexer_backend(http_vectorlink),
+        error(indexer_backend_not_vectorlink(io_index_branch), _)),
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
     do_or_die(
         branch_descriptor{branch_name: Branch_Name} :< Descriptor,
@@ -292,7 +292,7 @@ io_index_branch(System_DB, Auth, Path) :-
 % Auto-push-on-commit hook
 %
 % Fires after every commit (multifile post_commit_hook/2 from plugins.pl).
-% GATE: only acts when indexer_backend = http_tdb_search AND the committed
+% GATE: only acts when indexer_backend = http_vectorlink AND the committed
 % data product's schema has store_indices enabled in @metadata.terminusdb.options.
 %
 % OPTIMISED COMMIT PATH:
@@ -321,8 +321,8 @@ io_index_branch(System_DB, Auth, Path) :-
 :- multifile plugins:post_commit_hook/2.
 
 plugins:post_commit_hook(Validations, _Meta_Data) :-
-    % Gate 1: backend must be http_tdb_search. Cheap tabled check.
-    indexer_backend(http_tdb_search),
+    % Gate 1: backend must be http_vectorlink. Cheap tabled check.
+    indexer_backend(http_vectorlink),
     % Gate 2: FFI predicate must be registered (Rust runtime loaded).
     plugin_api:indexer_available,
     % Gate 3: for each branch validation, call indexer_notify.

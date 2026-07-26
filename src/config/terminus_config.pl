@@ -57,7 +57,7 @@
 :- use_module(library(yall)).
 
 :- dynamic legacy_vectorlink:semantic_indexer_endpoint/1.
-:- dynamic tdb_search:tdb_search_endpoint/1.
+:- dynamic vectorlink:vectorlink_endpoint/1.
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
@@ -385,26 +385,26 @@ expose_stack_traces :-
  *
  * Exactly one indexer backend may be active at a time. The selector makes the
  * choice explicit and refuses to start on any ambiguous configuration, so that
- * the legacy pull path (`http_legacy_vectorlink`) and the push path (`http_tdb_search`)
+ * the legacy pull path (`http_legacy_vectorlink`) and the push path (`http_vectorlink`)
  * can never both be wired, and no endpoint is ever consulted for an inactive
  * backend.
  *
- *   TERMINUSDB_INDEXER_BACKEND        ∈ {none, http_legacy_vectorlink, http_tdb_search}
+ *   TERMINUSDB_INDEXER_BACKEND        ∈ {none, http_legacy_vectorlink, http_vectorlink}
  *                                       default `none`.
  *   TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT  the legacy pull host
  *                                       (read only when backend = http_legacy_vectorlink).
- *   TERMINUSDB_TDB_SEARCH_ENDPOINT    the push/search host
- *                                       (read only when backend = http_tdb_search).
- *   TERMINUSDB_SEARCH_ADMIN_USER      HTTP Basic user for the tdb-search backend
+ *   TERMINUSDB_VECTORLINK_ENDPOINT    the push/search host
+ *                                       (read only when backend = http_vectorlink).
+ *   TERMINUSDB_SEARCH_ADMIN_USER      HTTP Basic user for the vectorlink backend
  *                                       (default `admin`).
- *   TERMINUSDB_SEARCH_ADMIN_SECRET    HTTP Basic secret for the tdb-search backend
+ *   TERMINUSDB_SEARCH_ADMIN_SECRET    HTTP Basic secret for the vectorlink backend
  *                                       (default `root`; must change for any
  *                                       exposed deployment).
  */
 
 valid_indexer_backend(none).
 valid_indexer_backend(http_legacy_vectorlink).
-valid_indexer_backend(http_tdb_search).
+valid_indexer_backend(http_vectorlink).
 
 /**
  * indexer_backend(-Backend) is det.
@@ -422,13 +422,13 @@ indexer_backend(Backend) :-
               error(bad_env_var_value(Env_Var, Value), _)).
 
 /* For testing: clear the tabled selector predicates after mutating env vars.
- * The tdb_search_* predicates are now owned by the tdb_search plugin and
+ * The vectorlink_* predicates are now owned by the vectorlink plugin and
  * use plugin_api_config's tabled env helpers. We clear those tables too.
  */
 clear_indexer_backend_config :-
     abolish_table_subgoals(indexer_backend(_)),
     (   current_predicate(plugin_api_config:plugin_env/2)
-    ->  abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_TDB_SEARCH_ENDPOINT', _)),
+    ->  abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_VECTORLINK_ENDPOINT', _)),
         abolish_table_subgoals(plugin_api_config:plugin_env('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', _)),
         abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_USER', admin, _)),
         abolish_table_subgoals(plugin_api_config:plugin_consume_env_default('TERMINUSDB_SEARCH_ADMIN_SECRET', root, _))
@@ -447,10 +447,10 @@ clear_indexer_backend_config :-
  * Rules:
  *   - unknown TERMINUSDB_INDEXER_BACKEND value          -> throw (via indexer_backend/1)
  *   - backend = none, but any indexer endpoint is set   -> throw (endpoint without a backend)
- *   - backend = http_legacy_vectorlink, tdb-search endpoint set -> throw (two backends configured)
- *   - backend = http_tdb_search, legacy endpoint set     -> throw (two backends configured)
+ *   - backend = http_legacy_vectorlink, vectorlink endpoint set -> throw (two backends configured)
+ *   - backend = http_vectorlink, legacy endpoint set     -> throw (two backends configured)
  *   - backend = http_legacy_vectorlink, no legacy endpoint      -> throw (active backend missing endpoint)
- *   - backend = http_tdb_search, no tdb-search endpoint  -> throw (active backend missing endpoint)
+ *   - backend = http_vectorlink, no vectorlink endpoint  -> throw (active backend missing endpoint)
  */
 check_indexer_backend_config :-
     indexer_backend(Backend),
@@ -461,10 +461,10 @@ check_indexer_backend_config :-
     ->  Legacy_Endpoint_Set = true
     ;   Legacy_Endpoint_Set = false
     ),
-    (   current_predicate(tdb_search:tdb_search_endpoint/1),
-        tdb_search:tdb_search_endpoint(_)
+    (   current_predicate(vectorlink:vectorlink_endpoint/1),
+        vectorlink:vectorlink_endpoint(_)
     ->  Search_Endpoint_Set = true
-    ;   getenv('TERMINUSDB_TDB_SEARCH_ENDPOINT', _)
+    ;   getenv('TERMINUSDB_VECTORLINK_ENDPOINT', _)
     ->  Search_Endpoint_Set = true
     ;   Search_Endpoint_Set = false
     ),
@@ -476,21 +476,21 @@ check_indexer_backend_config_(none, Legacy_Set, Search_Set) :-
                      'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but TERMINUSDB_INDEXER_BACKEND is none'), _)),
     die_if(Search_Set == true,
            error(indexer_backend_ambiguous(none,
-                     'TERMINUSDB_TDB_SEARCH_ENDPOINT is set but TERMINUSDB_INDEXER_BACKEND is none'), _)).
+                     'TERMINUSDB_VECTORLINK_ENDPOINT is set but TERMINUSDB_INDEXER_BACKEND is none'), _)).
 check_indexer_backend_config_(http_legacy_vectorlink, Legacy_Set, Search_Set) :-
     die_if(Search_Set == true,
            error(indexer_backend_ambiguous(http_legacy_vectorlink,
-                     'TERMINUSDB_TDB_SEARCH_ENDPOINT is set but the active backend is http_legacy_vectorlink'), _)),
+                     'TERMINUSDB_VECTORLINK_ENDPOINT is set but the active backend is http_legacy_vectorlink'), _)),
     do_or_die(Legacy_Set == true,
               error(indexer_backend_incomplete(http_legacy_vectorlink,
                      'TERMINUSDB_INDEXER_BACKEND is http_legacy_vectorlink but TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is not set'), _)).
-check_indexer_backend_config_(http_tdb_search, Legacy_Set, Search_Set) :-
+check_indexer_backend_config_(http_vectorlink, Legacy_Set, Search_Set) :-
     die_if(Legacy_Set == true,
-           error(indexer_backend_ambiguous(http_tdb_search,
-                     'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but the active backend is http_tdb_search'), _)),
+           error(indexer_backend_ambiguous(http_vectorlink,
+                     'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but the active backend is http_vectorlink'), _)),
     do_or_die(Search_Set == true,
-              error(indexer_backend_incomplete(http_tdb_search,
-                     'TERMINUSDB_INDEXER_BACKEND is http_tdb_search but TERMINUSDB_TDB_SEARCH_ENDPOINT is not set'), _)).
+              error(indexer_backend_incomplete(http_vectorlink,
+                     'TERMINUSDB_INDEXER_BACKEND is http_vectorlink but TERMINUSDB_VECTORLINK_ENDPOINT is not set'), _)).
 
 :- table doc_work_limit/1.
 doc_work_limit(Limit) :-

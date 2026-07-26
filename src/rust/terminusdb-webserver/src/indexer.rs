@@ -9,7 +9,7 @@
 //!
 //! FFI predicates registered for Prolog:
 //! - `indexer_notify(+Path, +BranchName, +StoreClustering, +HasEmbeddings)`: notify that a commit happened
-//! - `indexer_set_config(+TdbSearchUrl, +AuthHeader)`: set tdb-search URL/auth
+//! - `indexer_set_config(+VectorlinkUrl, +AuthHeader)`: set vectorlink URL/auth
 //! - `indexer_progress(+Path, +BranchName, -Progress)`: query progress
 //! - `indexer_abort_domain(+Domain)`: abort all tasks for a domain
 
@@ -36,7 +36,7 @@ pub struct BranchKey {
 impl BranchKey {
     /// Extract the domain (first two segments: org/db) from the full
     /// branch path (e.g. "admin/db/local/branch/main" → "admin/db").
-    /// tdb-search expects the domain as org/db, not the full branch path.
+    /// vectorlink expects the domain as org/db, not the full branch path.
     fn domain(&self) -> &str {
         let parts: Vec<&str> = self.path.splitn(3, '/').collect();
         if parts.len() >= 2 {
@@ -58,7 +58,7 @@ enum TaskResult {
     AtHead,
     /// An error occurred.
     Error(String),
-    /// tdb-search returned 503 (compaction in progress). Retry the same commit.
+    /// vectorlink returned 503 (compaction in progress). Retry the same commit.
     Retry,
 }
 
@@ -69,12 +69,12 @@ pub struct BranchProgress {
     status: StdMutex<IndexStatus>,
     /// The commit ID currently being processed (None when idle).
     current_commit: StdMutex<Option<String>>,
-    /// Documents indexed by tdb-search so far in the current commit
-    /// (from tdb-search response stream progress updates).
+    /// Documents indexed by vectorlink so far in the current commit
+    /// (from vectorlink response stream progress updates).
     processed_documents: AtomicU64,
     /// Total documents to process in the current commit.
     total_documents: AtomicU64,
-    /// NDJSON lines sent over the pipe to tdb-search so far.
+    /// NDJSON lines sent over the pipe to vectorlink so far.
     /// This is a throughput metric — it reflects how many documents
     /// have been streamed, not how many have been embedded.
     documents_sent: AtomicU64,
@@ -187,7 +187,7 @@ impl BranchProgress {
     }
 
     /// Set the processed documents counter to an absolute value.
-    /// Used to sync with tdb-search's real indexing progress from its
+    /// Used to sync with vectorlink's real indexing progress from its
     /// response stream (indexed count), which reflects actual embedding
     /// completion rather than just NDJSON lines sent over the pipe.
     fn set_processed_documents(&self, n: u64) {
@@ -240,7 +240,7 @@ struct BranchTask {
     next_commit: StdMutex<Option<String>>,
     /// Cancellation token — when set, the task should exit.
     cancel: tokio_util::sync::CancellationToken,
-    /// Whether to request clustering embeddings from tdb-search on push.
+    /// Whether to request clustering embeddings from vectorlink on push.
     /// Read from the schema @context @metadata.terminusdb.options at notify time.
     store_clustering: std::sync::atomic::AtomicBool,
     /// When true, the next on_task_complete(NextCommit) should ignore
@@ -255,7 +255,7 @@ pub struct IndexerRegistry {
     tasks: StdMutex<HashMap<BranchKey, Arc<BranchTask>>>,
     pending_queue: StdMutex<VecDeque<BranchKey>>,
     current_branch: StdMutex<Option<BranchKey>>,
-    tdb_search_url: StdMutex<Option<String>>,
+    vectorlink_url: StdMutex<Option<String>>,
     auth_header: StdMutex<Option<String>>,
     http_client: reqwest::Client,
     /// Cache of domains known to have no embedding types in their schema.
@@ -273,7 +273,7 @@ impl IndexerRegistry {
             tasks: StdMutex::new(HashMap::new()),
             pending_queue: StdMutex::new(VecDeque::new()),
             current_branch: StdMutex::new(None),
-            tdb_search_url: StdMutex::new(None),
+            vectorlink_url: StdMutex::new(None),
             auth_header: StdMutex::new(None),
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(300))
@@ -284,14 +284,14 @@ impl IndexerRegistry {
     }
 
     fn set_config(&self, url: String, auth: String) {
-        *self.tdb_search_url.lock().unwrap() = Some(url);
+        *self.vectorlink_url.lock().unwrap() = Some(url);
         *self.auth_header.lock().unwrap() = Some(auth);
     }
 
     fn get_config(&self) -> Result<(String, String), String> {
-        let url = self.tdb_search_url.lock().unwrap().clone()
+        let url = self.vectorlink_url.lock().unwrap().clone()
             .filter(|u| !u.is_empty())
-            .ok_or("tdb_search_url not set")?;
+            .ok_or("vectorlink_url not set")?;
         let auth = self.auth_header.lock().unwrap().clone()
             .unwrap_or_default();
         Ok((url, auth))
@@ -382,7 +382,7 @@ impl IndexerRegistry {
     }
 
     /// Re-index a branch from scratch. Aborts any running task for this
-    /// branch, calls DELETE /domain on tdb-search to wipe all document data
+    /// branch, calls DELETE /domain on vectorlink to wipe all document data
     /// and tags (so /last-indexed returns null), then creates a fresh task
     /// that will start from the oldest commit.
     fn reindex(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
@@ -410,9 +410,9 @@ impl IndexerRegistry {
             }
         }
 
-        // 2. Call DELETE /branch-index on tdb-search (async), then create
+        // 2. Call DELETE /branch-index on vectorlink (async), then create
         //    a fresh task and enqueue it after the delete completes.
-        let (tdb_search_url, auth_header) = self.get_config()?;
+        let (vectorlink_url, auth_header) = self.get_config()?;
         let http_client = self.http_client.clone();
         let domain = key.domain().to_string();
         let branch_clone = branch.clone();
@@ -425,14 +425,14 @@ impl IndexerRegistry {
                     None => return Err("registry not initialized".to_string()),
                 };
                 h.spawn(async move {
-                    // Delete the entire domain on tdb-search. This removes all
+                    // Delete the entire domain on vectorlink. This removes all
                     // document data, tags, and in-memory state — not just the
                     // branch tags. Using /domain (not /branch-index) ensures
                     // old documents are wiped, so re-indexed pushes insert
                     // fresh data instead of silently upserting existing docs.
                     let delete_url = format!(
                         "{}/domain?domain={}",
-                        tdb_search_url.trim_end_matches('/'),
+                        vectorlink_url.trim_end_matches('/'),
                         urlencoding::encode(&domain),
                     );
                     crate::log::log_info(format!(
@@ -573,7 +573,7 @@ impl IndexerRegistry {
         // sits in the queue for a long time.
         progress.set_pending_commit(next_commit.clone().unwrap_or_default());
 
-        let (tdb_search_url, auth_header) = match self.get_config() {
+        let (vectorlink_url, auth_header) = match self.get_config() {
             Ok(c) => c,
             Err(e) => {
                 crate::log::log_error(format!("[indexer] config not set: {}", e));
@@ -607,7 +607,7 @@ impl IndexerRegistry {
                     let result = std::panic::AssertUnwindSafe(
                         run_commit_task(
                             key_clone.clone(),
-                            tdb_search_url,
+                            vectorlink_url,
                             auth_header,
                             http_client,
                             progress.clone(),
@@ -745,7 +745,7 @@ impl IndexerRegistry {
                         if elapsed >= MAX_RETRY_DURATION {
                             drop(tasks);
                             let msg = format!(
-                                "indexing task for {} {} failed: tdb-search returned 503 \
+                                "indexing task for {} {} failed: vectorlink returned 503 \
                                  (compaction in progress) for {}s — exceeded max retry duration of {}s",
                                 key.path, key.branch,
                                 elapsed.as_secs(), MAX_RETRY_DURATION.as_secs()
@@ -770,7 +770,7 @@ impl IndexerRegistry {
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
                     crate::log::log_info(format!(
-                        "[indexer] task for {} {} will retry (503 from tdb-search, \
+                        "[indexer] task for {} {} will retry (503 from vectorlink, \
                          retry cycle {}s / {}s max)",
                         key.path, key.branch, elapsed, MAX_RETRY_DURATION.as_secs()
                     ));
@@ -877,7 +877,7 @@ impl IndexerRegistry {
             // set_current_commit, not set_pending_commit).
             if let Some(ref commit) = current_commit {
                 // Skip if all documents have been processed — the task is
-                // waiting for the tdb-search response, not stuck.
+                // waiting for the vectorlink response, not stuck.
                 if total_docs > 0 && processed_docs >= total_docs {
                     continue;
                 }
@@ -949,12 +949,12 @@ fn indexer_registry() -> &'static Arc<IndexerRegistry> {
 
 /// Process a single commit: dispatch to Prolog via Pipe, read CGI headers
 /// (extracting X-Next-Commit), then raw-forward the NDJSON body to
-/// tdb-search /push.
+/// vectorlink /push.
 ///
 /// Returns the TaskResult so the scheduler can decide what to do next.
 async fn run_commit_task(
     key: BranchKey,
-    tdb_search_url: String,
+    vectorlink_url: String,
     auth_header: String,
     http_client: reqwest::Client,
     progress: Arc<BranchProgress>,
@@ -967,17 +967,17 @@ async fn run_commit_task(
     }
 
     // 1. Determine which commit to process.
-    // If next_commit is None, query tdb-search /last-indexed to find the starting point.
+    // If next_commit is None, query vectorlink /last-indexed to find the starting point.
     // mode=next means "find the next commit after the given one" (used when
-    //   the commit is the last-indexed commit from tdb-search).
+    //   the commit is the last-indexed commit from vectorlink).
     // mode=process means "process this commit directly" (used when
     //   the commit comes from the NextCommit chain).
     // mode=first means "find the first commit in the branch" (used when
-    //   tdb-search has never indexed this branch, commit is empty).
+    //   vectorlink has never indexed this branch, commit is empty).
     let (commit_id, mode) = match next_commit {
         Some(c) => (c, "process"),
         None => {
-            match get_last_indexed(&http_client, &tdb_search_url, &key, &auth_header).await {
+            match get_last_indexed(&http_client, &vectorlink_url, &key, &auth_header).await {
                 Ok(c) if !c.is_empty() => {
                     // We have a last-indexed commit. We need to find the next commit
                     // after it. The Prolog handler will do this — we pass the
@@ -1046,7 +1046,7 @@ async fn run_commit_task(
     ));
 
     // 5. Read from the pipe: parse CGI headers, extract X-Next-Commit,
-    //    then raw-forward the body to tdb-search /push.
+    //    then raw-forward the body to vectorlink /push.
     let mut pipe_receiver = match PipeReceiver::from_owned_fd(output_read) {
         Ok(r) => r,
         Err(e) => {
@@ -1166,10 +1166,10 @@ async fn run_commit_task(
         Some(commit) => TaskResult::NextCommit(commit.to_string()),
     };
 
-    // 6. Stream the NDJSON body (leftover + remaining pipe data) to tdb-search /push.
+    // 6. Stream the NDJSON body (leftover + remaining pipe data) to vectorlink /push.
     let push_result = post_push_stream(
         &http_client,
-        &tdb_search_url,
+        &vectorlink_url,
         &key,
         &actual_commit_id,
         &parent_commit,
@@ -1198,17 +1198,17 @@ async fn run_commit_task(
 
 // ───────────────────────── HTTP helpers ─────────────────────────
 
-/// GET /last-indexed from tdb-search.
+/// GET /last-indexed from vectorlink.
 /// Returns the commit ID string, or empty string if never indexed (null).
 async fn get_last_indexed(
     http_client: &reqwest::Client,
-    tdb_search_url: &str,
+    vectorlink_url: &str,
     key: &BranchKey,
     auth_header: &str,
 ) -> Result<String, String> {
     let url = format!(
         "{}/last-indexed?domain={}&branch={}",
-        tdb_search_url.trim_end_matches('/'),
+        vectorlink_url.trim_end_matches('/'),
         urlencoding::encode(key.domain()),
         urlencoding::encode(&key.branch),
     );
@@ -1238,7 +1238,7 @@ async fn get_last_indexed(
     Ok(commit.unwrap_or("").to_string())
 }
 
-/// POST NDJSON stream to tdb-search /push.
+/// POST NDJSON stream to vectorlink /push.
 ///
 /// Takes leftover bytes (from CGI header reading) and the pipe receiver,
 /// and streams all remaining bytes as the request body.
@@ -1247,7 +1247,7 @@ async fn get_last_indexed(
 /// Returns Ok(()) on success (2xx or 409), Err on failure.
 async fn post_push_stream(
     http_client: &reqwest::Client,
-    tdb_search_url: &str,
+    vectorlink_url: &str,
     key: &BranchKey,
     commit_id: &str,
     parent_commit: &str,
@@ -1271,7 +1271,7 @@ async fn post_push_stream(
     let url = if parent_commit == "none" || parent_commit.is_empty() {
         format!(
             "{}/push?domain={}&branch={}&target_commit={}&stream=true{}",
-            tdb_search_url.trim_end_matches('/'),
+            vectorlink_url.trim_end_matches('/'),
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
@@ -1280,7 +1280,7 @@ async fn post_push_stream(
     } else {
         format!(
             "{}/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true{}",
-            tdb_search_url.trim_end_matches('/'),
+            vectorlink_url.trim_end_matches('/'),
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
@@ -1397,7 +1397,7 @@ async fn post_push_stream(
             status, resp_body
         ));
         if status.as_u16() == 409 {
-            // 409 Conflict: commit already indexed by tdb-search.
+            // 409 Conflict: commit already indexed by vectorlink.
             // This is a safe no-op — treat as success.
             return Ok(());
         }
@@ -1453,7 +1453,7 @@ async fn post_push_stream(
                                         .and_then(|v| v.as_u64())
                                         .unwrap_or(0);
                                     // Update BranchProgress with the real
-                                    // indexing progress from tdb-search.
+                                    // indexing progress from vectorlink.
                                     // This reflects actual embedding completion,
                                     // not just NDJSON lines sent over the pipe.
                                     progress.set_processed_documents(indexed);
@@ -1472,7 +1472,7 @@ async fn post_push_stream(
                                         indexed_documents
                                     ));
                                     // Ensure processed_documents reflects the
-                                    // final count from tdb-search.
+                                    // final count from vectorlink.
                                     progress.set_processed_documents(indexed_documents);
                                     terminal_status = Some("complete".to_owned());
                                 }
@@ -1539,9 +1539,9 @@ async fn post_push_stream(
 // ───────────────────────── FFI Predicates ─────────────────────────
 
 predicates! {
-    /// Set the tdb-search URL and auth header for the IndexerRegistry.
+    /// Set the vectorlink URL and auth header for the IndexerRegistry.
     /// Called once at startup from Prolog.
-    /// Signature: indexer_set_config(+TdbSearchUrl, +AuthHeader)
+    /// Signature: indexer_set_config(+VectorlinkUrl, +AuthHeader)
     #[module("$appserver")]
     pub semidet fn indexer_set_config(_context, url_term, auth_term) {
         let url: PrologText = url_term.get_ex()?;
@@ -1635,7 +1635,7 @@ predicates! {
 
     /// Abort all indexing tasks for a domain.
     /// Called from post_delete_db_hook after io_delete_domain/2 does the
-    /// tdb-search DELETE.
+    /// vectorlink DELETE.
     /// Signature: indexer_abort_domain(+Domain)
     #[module("$appserver")]
     pub semidet fn indexer_abort_domain(_context, domain_term) {
@@ -1645,7 +1645,7 @@ predicates! {
     }
 
     /// Re-index a branch from scratch. Aborts any running task, wipes the
-    /// branch's index on tdb-search, then starts fresh from the oldest commit.
+    /// branch's index on vectorlink, then starts fresh from the oldest commit.
     /// Signature: indexer_reindex(+Path, +BranchName, +StoreClustering)
     #[module("$appserver")]
     pub semidet fn indexer_reindex(_context, path_term, branch_term, store_clustering_term) {
@@ -2314,7 +2314,7 @@ mod tests {
         registry.no_embedding_cache.lock().unwrap().insert(path.clone());
         assert!(registry.no_embedding_cache.lock().unwrap().contains(&path));
 
-        // reindex will fail because there's no real tdb-search, but it
+        // reindex will fail because there's no real vectorlink, but it
         // should still clear the cache first.
         let _ = registry.reindex(path.clone(), "main".to_string(), false);
         assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),

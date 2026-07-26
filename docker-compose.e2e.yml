@@ -1,8 +1,8 @@
-# E2E test stack: TerminusDB + tdb-search + legacy_vectorlink + Ollama
+# E2E test stack: TerminusDB + vectorlink + legacy_vectorlink + Ollama
 #
 # Brings up the full plugin ecosystem for end-to-end testing:
-#   - terminusdb: built from source with tdb_search + legacy_vectorlink plugins
-#   - tdb-search: search engine (built from sibling ../tdb-search repo)
+#   - terminusdb: built from source with vectorlink + legacy_vectorlink plugins
+#   - vectorlink: search engine (built from sibling ../tdb-search repo)
 #   - legacy_vectorlink: legacy semantic indexer (pre-built image, deprecated in 12.1)
 #   - embeddings: Ollama serving nomic-embed-v2 for vector embeddings
 #
@@ -31,9 +31,9 @@ services:
       # Plugin paths inside the container
       - TERMINUSDB_ADDON_PATH=/app/terminusdb
       - TERMINUSDB_PLUGINS_PATH=/app/terminusdb/plugins
-      # tdb-search plugin config
-      - TERMINUSDB_INDEXER_BACKEND=http_tdb_search
-      - TERMINUSDB_TDB_SEARCH_ENDPOINT=http://tdb-search:8080
+      # vectorlink plugin config
+      - TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+      - TERMINUSDB_VECTORLINK_ENDPOINT=http://vectorlink:8080
       - TERMINUSDB_SEARCH_ADMIN_SECRET=root
       # legacy_vectorlink plugin config
       - TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT=http://legacy-vectorlink:8080
@@ -85,13 +85,13 @@ services:
         echo "Model ready."
     restart: "no"
 
-  tdb-search:
+  vectorlink:
     build:
       context: ../tdb-search
       dockerfile: Dockerfile
-    image: tdb-search:e2e
-    container_name: tdb-search-e2e
-    hostname: tdb-search-e2e
+    image: vectorlink:e2e
+    container_name: vectorlink-e2e
+    hostname: vectorlink-e2e
     environment:
       - TDB_SEARCH_ADMIN_USER=admin
       - TDB_SEARCH_ADMIN_SECRET=root
@@ -104,7 +104,7 @@ services:
     ports:
       - "127.0.0.1:8090:8080"
     volumes:
-      - e2e-tdb-search-data:/data
+      - e2e-vectorlink-data:/data
     depends_on:
       terminusdb:
         condition: service_healthy
@@ -137,5 +137,5 @@ services:
 volumes:
   terminusdb-e2e-storage:
   e2e-ollama-models:
-  e2e-tdb-search-data:
+  e2e-vectorlink-data:
   e2e-legacy-vectorlink-storage:

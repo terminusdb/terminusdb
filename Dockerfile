@@ -96,7 +96,7 @@ RUN mkdir -p storage \
     && chown -R 1000:1000 storage
 ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
 COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/tdb_search.pl ${TERMINUSDB_PLUGINS_PATH}/
+COPY plugins/vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/search_resolve.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/legacy_vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/json2markdown.pl ${TERMINUSDB_PLUGINS_PATH}/

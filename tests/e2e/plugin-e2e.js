@@ -1,5 +1,5 @@
 /**
- * E2E plugin tests — TerminusDB + tdb-search + legacy_vectorlink + Ollama
+ * E2E plugin tests — TerminusDB + vectorlink + legacy_vectorlink + Ollama
  *
  * Exercises the full plugin API surface through TerminusDB's HTTP endpoints:
  *   - /api/search/{path}     (GET, POST)
@@ -31,7 +31,7 @@
  *
  * Environment:
  *   TERMINUSDB_BASE_URL — TerminusDB server URL (default http://localhost:6370)
- *   TDB_SEARCH_URL      — tdb-search engine direct URL (default http://localhost:8090)
+ *   TDB_SEARCH_URL      — vectorlink engine direct URL (default http://localhost:8090)
  *   TERMINUSDB_USER     — admin user (default admin)
  *   TERMINUSDB_PASSWORD — admin password (default root)
  */
@@ -55,7 +55,7 @@ function makeAgent () {
   }).auth()
 }
 
-// Helper: direct call to the tdb-search engine (bypassing TerminusDB).
+// Helper: direct call to the vectorlink engine (bypassing TerminusDB).
 // Uses HTTP Basic auth with the same admin/root credentials.
 function searchEngine () {
   return superagent
@@ -108,13 +108,13 @@ describe('plugin-e2e', function () {
       expect(r.body['@type']).to.match(/^api:Info/)
     })
 
-    it('tdb-search engine /health/live returns 200', async function () {
+    it('vectorlink engine /health/live returns 200', async function () {
       const r = await searchEngine().get('/health/live')
       expect(r.status).to.equal(200)
       expect(r.body).to.have.property('status', 'ok')
     })
 
-    it('tdb-search engine /health/ready returns 200 or 503', async function () {
+    it('vectorlink engine /health/ready returns 200 or 503', async function () {
       const r = await searchEngine().get('/health/ready')
       expect([200, 503]).to.include(r.status)
       expect(r.body).to.have.property('ready')
@@ -197,14 +197,14 @@ describe('plugin-e2e', function () {
       expect([401, 400]).to.include(r.status)
     })
 
-    it('tdb-search engine rejects unauthenticated requests', async function () {
+    it('vectorlink engine rejects unauthenticated requests', async function () {
       const r = await superagent
         .get(`${SEARCH_URL}/statistics`)
         .ok((res) => res.status < 500)
       expect(r.status).to.equal(401)
     })
 
-    it('tdb-search engine accepts authenticated requests', async function () {
+    it('vectorlink engine accepts authenticated requests', async function () {
       const r = await superagent
         .get(`${SEARCH_URL}/statistics`)
         .auth('admin', 'root')
@@ -216,7 +216,7 @@ describe('plugin-e2e', function () {
   // ─────────────────────────────────────────────────────────────────────────
   // 4. Full data flow — create DB, insert, search, similar, etc.
   // ─────────────────────────────────────────────────────────────────────────
-  describe('full data flow with tdb-search', function () {
+  describe('full data flow with vectorlink', function () {
     before(async function () {
       // Create a database without schema (schema documents need a schema first).
       await db.create(agent, { schema: false })

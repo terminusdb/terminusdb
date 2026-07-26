@@ -337,7 +337,7 @@ discovers both Prolog and native plugins automatically.
   configuration) — these are documented separately and may change
   to accommodate build tooling evolution
 - The wire format of internal protocols between TerminusDB and its
-  shipped plugins (e.g. the tdb-search push protocol) — these are
+  shipped plugins (e.g. the vectorlink push protocol) — these are
   internal to each plugin and versioned independently
 
 ## Versioning

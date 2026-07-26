@@ -307,7 +307,7 @@ api_global_error_jsonld(error(search_not_indexed(Path, _Engine_Body), _), Type, 
             }.
 % Generic handler for engine forward failures (non-404 status codes).
 % Maps 4xx engine errors to api:failure (400) and 5xx to api:server_error (500).
-api_global_error_jsonld(error(tdb_search_forward_failed(Status, _Body, _URL), _), Type, JSON) :-
+api_global_error_jsonld(error(vectorlink_forward_failed(Status, _Body, _URL), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg),
            "Search engine returned unexpected status ~w",
@@ -3018,12 +3018,12 @@ generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
-generic_exception_jsonld(tdb_search_endpoint_not_configured(Context), JSON) :-
-    format(string(Msg), "tdb-search endpoint is not configured (called from ~w)", [Context]),
+generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "vectorlink endpoint is not configured (called from ~w)", [Context]),
     JSON = _{'@type' : 'api:EndpointNotConfigured',
              'api:status' : 'api:failure',
              'api:message' : Msg,
-             'api:error' : _{'@type' : 'api:TdbSearchEndpointNotConfigured',
+             'api:error' : _{'@type' : 'api:VectorlinkEndpointNotConfigured',
                              'api:context' : Context}}.
 generic_exception_jsonld(semantic_indexer_endpoint_not_configured(Context), JSON) :-
     format(string(Msg), "semantic indexer endpoint is not configured (called from ~w)", [Context]),

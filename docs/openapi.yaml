@@ -3597,9 +3597,9 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Search Family (Phase 6 Capability B — tdb-search fronting)
+  # Search Family (Phase 6 Capability B — vectorlink fronting)
   #
-  # The tdb_search indexer sidecar has a public API for a pluggable engine
+  # The vectorlink indexer sidecar has a public API for a pluggable engine
   # with complete version history that is a separate engine from TerminusDB
   # It enables vector search to be integrated with pluggable engines that
   # provide a standard set of functionalities upheld by vector search engines
