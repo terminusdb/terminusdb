@@ -268,4 +268,65 @@ test(structural_change_requires_instance_validation,
     !,
     needs_schema_instance_validation(Validation_Object).
 
+test(context_metadata_only_change_skips_instance_validation,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "test"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Desc),
+
+    write_schema(metadata_test_schema, Desc),
+
+    with_test_transaction(Desc, C1,
+        insert_document(C1, _{'@type': "Thing", name: "foo"}, _Id),
+        _),
+
+    get_schema_document(Desc, '@context', ContextDoc),
+    UpdatedDoc = (ContextDoc.put('@metadata',
+                                 _{terminusdb: _{options: ["store_clustering"]}})),
+
+    create_context(Desc, commit_info{author: "test", message: "update context metadata"}, C2),
+    replace_schema_document(C2, UpdatedDoc),
+
+    query_context_transaction_objects(C2, Transactions),
+    transaction_objects_to_validation_objects(Transactions, Validation_Objects0),
+    (   infer_weakening_migration(Validation_Objects0, Validation_Objects, _)
+    ->  true
+    ;   Validation_Objects = Validation_Objects0
+    ),
+    member(Validation_Object, Validation_Objects),
+    needs_schema_validation(Validation_Object),
+    !,
+    \+ needs_schema_instance_validation(Validation_Object).
+
+test(context_base_change_requires_instance_validation,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin", "test"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/test", Desc),
+
+    write_schema(metadata_test_schema, Desc),
+
+    with_test_transaction(Desc, C1,
+        insert_document(C1, _{'@type': "Thing", name: "foo"}, _Id),
+        _),
+
+    get_schema_document(Desc, '@context', ContextDoc),
+    UpdatedDoc = (ContextDoc.put('@base', "http://changed/")),
+
+    create_context(Desc, commit_info{author: "test", message: "change base"}, C2),
+    replace_schema_document(C2, UpdatedDoc),
+
+    query_context_transaction_objects(C2, Transactions),
+    transaction_objects_to_validation_objects(Transactions, Validation_Objects0),
+    (   infer_weakening_migration(Validation_Objects0, Validation_Objects, _)
+    ->  true
+    ;   Validation_Objects = Validation_Objects0
+    ),
+    member(Validation_Object, Validation_Objects),
+    needs_schema_validation(Validation_Object),
+    !,
+    needs_schema_instance_validation(Validation_Object).
+
 :- end_tests(metadata_only_schema_change).
