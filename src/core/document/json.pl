@@ -2928,7 +2928,7 @@ get_schema_document(DB, '@context', Document) :-
     !,
     database_context_object(DB, Context_Object),
     % TODO: should database_prefixes even return an object where type is Context instead of @context?
-    Document = (Context_Object.put('@type', '@context')).
+    Document = (Context_Object.put('@type', "@context")).
 get_schema_document(DB, Id, Document) :-
     database_prefixes(DB, DB_Prefixes),
     default_prefixes(Defaults),
