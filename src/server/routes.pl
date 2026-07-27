@@ -103,6 +103,11 @@
 
 :- listen(http(Term), http_request_logger(Term)).
 
+% Meta-predicate declarations must appear before any caller to satisfy xref.
+:- meta_predicate cors_catch(+, 0).
+:- meta_predicate call_http_handler(+,3,?,?,?).
+:- meta_predicate api_report_errors(?,?,0).
+
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Set base location
@@ -3494,8 +3499,6 @@ cors_handler(_Method, Goal, _Options, R) :-
                [status(500), width(0)]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
-:- meta_predicate cors_catch(+, 0).
-:- meta_predicate call_http_handler(+,3,?,?,?).
 cors_catch(Request, Goal) :-
     catch(Goal,
           E,
@@ -3695,7 +3698,6 @@ api_error_http_reply(API, Error, Type, Request) :-
     json_http_code(JSON_Final,Status),
     cors_reply_json(Request,JSON_Final,[status(Status),serialize_unknown(true)]).
 
-:- meta_predicate api_report_errors(?,?,0).
 api_report_errors(API,Request,Goal) :-
     catch_with_backtrace(
         Goal,

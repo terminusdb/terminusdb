@@ -14,6 +14,7 @@
 :- use_module(api_remote).
 
 :- meta_predicate clone(+,+,+,+,+,+,+,+,+,3,-).
+:- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
@@ -66,7 +67,6 @@ do_clone_(Auth,Account,DB,Remote,Source, Fetch_Predicate,Meta_Data) :-
     Meta_Data = _{ applied_commits : Applied_Commits }.
 
 
-:- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     % Create DB
     create_db_unfinalized(System_DB, Auth, Account, DB, Label, Comment, false, Public, _{'@base' : 'http://example.com/', '@schema' : 'http://example.com#'}, Db_Uri),

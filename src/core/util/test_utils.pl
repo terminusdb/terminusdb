@@ -645,10 +645,10 @@ test_woql_label_descriptor(Name, Descriptor) :-
                      instance: Instance_Name
                  }.
 
+:- meta_predicate with_test_transaction(+, -, :, -).
 :- meta_predicate with_test_transaction(+, -, :).
 with_test_transaction(Descriptor, Context, Goal) :-
     with_test_transaction(Descriptor, Context, Goal, _).
-:- meta_predicate with_test_transaction(+, -, :, -).
 with_test_transaction(Descriptor, Context, Goal, Result) :-
     do_or_die(var(Context),
               error(test_transaction_initiated_with_bound_context, _)),

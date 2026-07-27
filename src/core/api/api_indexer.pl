@@ -55,7 +55,7 @@ embedding_type_queries(Commit_Descriptor, TypeQueries) :-
         TypeQueries
     ).
 
-%% api_indexable(some(Previous_Commit_Id), Descriptor, Commit_Id, Type, Operation) is nondet.
+%% api_indexable(+Previous_Commit_Id, +Descriptor, -Commit_Id, -Type, -Operation) is nondet.
 %%
 %%  Uses the fast Rust $changes:collect_changed_documents_filtered/5 predicate
 %%  to enumerate changed documents for the given type between the previous
@@ -71,7 +71,7 @@ api_indexable(some(_Previous_Commit_Id), Descriptor, Commit_Id, Type, Operation)
     '$changes':collect_changed_documents_filtered(Transaction, [TypeAtom], Id, ChangeType),
     change_type_to_op(ChangeType, Id, Operation).
 
-%% api_indexable(none, Descriptor, Commit_Id, Type, Operation) is nondet.
+%% api_indexable(+Previous_Commit_Id, +Descriptor, -Commit_Id, -Type, -Operation) is nondet.
 %%
 %%  First commit (no previous): all documents of the given type are Inserted.
 %%  Uses direct ask query since there is no delta to compute.
