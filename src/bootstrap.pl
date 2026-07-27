@@ -21,6 +21,7 @@
 
 :- use_module(server(routes)).
 :- use_module(core(plugin_api)).
+:- use_module(core(json2markdown)).
 :- use_module(core(plugin_raw_api)).
 :- use_module(server(main)).
 :- use_module(cli(main)).
