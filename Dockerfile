@@ -4,6 +4,7 @@
 # Set the swipl version by argument (see Makefile for the default!)
 ARG SWIPL_VERSION=10.0.1
 ARG SKIP_TESTS=false
+ARG TDB_ADMIN_VERSION
 
 # Minimal SWI-Prolog
 FROM swipl:${SWIPL_VERSION} AS swipl_minimal
@@ -44,6 +45,15 @@ FROM rust_builder_base AS rust_builder
 ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
 ARG SKIP_TESTS=false
 RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo swipl test --release))
+
+# Download the pre-built tdb-admin dist package from GitHub releases.
+FROM alpine:latest AS admin_dist
+ARG TDB_ADMIN_VERSION
+RUN apk add --no-cache curl tar
+RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
+    mkdir -p /admin/dist && \
+    curl -fsSL "https://github.com/terminusdb-org/tdb-admin/releases/download/${TDB_ADMIN_VERSION}/tdb-admin-${TDB_ADMIN_VER}.tar.gz" \
+    | tar xzf - -C /admin/dist
 
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM pack_installer AS base
@@ -99,7 +109,10 @@ COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/search_resolve.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/legacy_vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
+COPY plugins/webserver_spa.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/
+COPY dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
+COPY --from=admin_dist /admin/dist /app/terminusdb/app/admin/dist
 CMD ["/app/terminusdb/init_docker.sh"]

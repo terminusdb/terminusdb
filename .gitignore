@@ -34,3 +34,4 @@ admin?2fdb-*.bundle
 .terminusdb-test.pid
 tests/.terminusdb-test-7373.log
 tests/.terminusdb-test-7373.pid
+dashboard/src/assets/openapi.json
