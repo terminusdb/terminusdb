@@ -15,7 +15,6 @@
 
 :- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 :- meta_predicate clone(+,+,+,+,+,+,+,+,+,3,-).
-:- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 clone(System_DB, Auth, Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predicate,Meta_Data) :-
     setup_call_catcher_cleanup(
         true,
