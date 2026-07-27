@@ -213,6 +213,7 @@ impl BranchProgress {
     }
 
     /// Get the no_embedding cache flag.
+    #[allow(dead_code)]
     fn is_no_embedding(&self) -> bool {
         self.no_embedding.load(Ordering::SeqCst)
     }
