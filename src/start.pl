@@ -85,6 +85,7 @@ user:message_hook(syntax_error(Term), warning, Lines) :-
 
 :- use_module(core(query/json_woql),[initialise_woql_contexts/0]).
 :- use_module(core(api), [initialize_flags/0, bootstrap_files/0]).
+:- use_module(core(json2markdown)).
 :- use_module(config(terminus_config)).
 
 :- set_test_options([run(manual),concurrent(true)]).
