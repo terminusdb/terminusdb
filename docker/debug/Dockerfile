@@ -117,4 +117,5 @@ COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/
+COPY dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
 CMD ["/app/terminusdb/init_docker.sh"]

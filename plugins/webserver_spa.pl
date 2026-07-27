@@ -13,3 +13,4 @@
 %  include `fallback(File)` and `auth(none | authenticated)`.
 appserver_hooks:appserver_static_path('/app/admin', 'app/admin/dist', [fallback('index.html'), auth(none)]).
 appserver_hooks:appserver_static_path('/app/data',  'app/data/dist',  [fallback('index.html'), auth(none)]).
+appserver_hooks:appserver_static_path('/dashboard',  'dashboard/src',  [fallback('index.html'), auth(none)]).
