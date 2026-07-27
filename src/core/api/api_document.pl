@@ -1770,7 +1770,6 @@ default_schema_insert_options(Options) :-
 
 :- dynamic execute_commit_package/2.
 :- dynamic commit_package_test_handler/1.
-:- dynamic json2markdown:json_to_markdown/2.
 
 run_commit_package(Package) :-
     execute_commit_package(Package, Result),

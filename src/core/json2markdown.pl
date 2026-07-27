@@ -1,17 +1,18 @@
 :- module(json2markdown, [
     clean_json2markdown_env/0,
-    json_to_markdown/2
+    json_to_markdown/2,
+    matches_document/1
 ]).
 
-/** <module> json2markdown plugin — default embedding for JSONDocument
+/** <module> json2markdown — default embedding for JSONDocument
 
 Provides a fallback embedding string for documents that have no
 schema-defined embedding query+template. Converts the JSON document
-dict to a Markdown representation inspired by 
+dict to a Markdown representation inspired by
 https://github.com/memochou1993/json2markdown
 
 Original Copyright (c) 2024 memochou1993. MIT Licensed.
-This plugin Copyright (c) 2026 Philippe Höij. MIT Licensed.
+This module Copyright (c) 2026 Philippe Höij. MIT Licensed.
 
 Activation:
   - Always active for sys#JSONDocument types.
@@ -70,7 +71,7 @@ split_comma_separated(Raw, Items) :-
 % ==========================================================================
 % Document matching
 %
-% This plugin is a catch-all fallback for raw JSON documents (those stored
+% This module is a catch-all fallback for raw JSON documents (those stored
 % with raw_json=true). It matches any document whose @id starts with
 % "JSONDocument/", regardless of what @type the JSON payload declares.
 %
@@ -305,7 +306,7 @@ heading(Level, Key) :-
 heading_inline(Level, Key) :-
     (   Level =< 6
     ->  hashes(Level, Hashes),
-       format("~w ~w~n", [Hashes, Key])
+        format("~w ~w~n", [Hashes, Key])
     ;   format("**~w**~n", [Key])
     ).
 
