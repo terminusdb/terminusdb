@@ -734,7 +734,7 @@ infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     create_class_dictionary(Before_Transaction, Before),
     create_class_dictionary(After_Transaction, After),
     schema_inference_rule(Rule, Before, After, Operations),
-    migration_list_to_ast_list(Operations_List,Operations),
+    migration_list_to_ast_list(Operations_List, Operations),
     !,
     perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
     atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
