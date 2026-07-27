@@ -29,7 +29,7 @@ services:
       - "TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:?error}"
     volumes:
       - ./storage:/app/terminusdb/storage
-  vectorlink:
+  legacy_vectorlink:
     image: terminusdb/vectorlink:v0.0.8
     env_file: .env
     environment:
@@ -48,7 +48,7 @@ services:
       - SERVER_ENDPOINT=http://terminusdb-server:6363
       - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
       # Add your OpenAI key in a .env file
-      - OPENAI_SERVER_URL=http://vectorlink:8080
+      - OPENAI_SERVER_URL=http://legacy_vectorlink:8080
       - "USER_KEY=${TERMINUSDB_ADMIN_PASS:?error}"
 
       # There are multiple ways to configure TerminusDB security through

@@ -279,6 +279,50 @@ api_global_error_jsonld(error(document_not_found(Id, Document), _), Type, JSON) 
                               'api:document': Document },
              'api:message' : Msg
             }.
+% Search-family handler received a non-branch descriptor path.
+% Returns a structured 400 response.
+api_global_error_jsonld(error(search_requires_branch_descriptor(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search operations require a branch descriptor path, got: ~w",
+           [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SearchRequiresBranchDescriptor',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+% Search-family handler received 404 from engine (not indexed yet).
+% Returns a structured 404 response instead of an unhandled 500.
+api_global_error_jsonld(error(search_not_indexed(Path, _Engine_Body), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "No indexed data for ~w — the data product has not been indexed yet or indexing is in progress. A background index has been triggered; retry shortly.",
+           [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:SearchNotIndexed',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+% Generic handler for engine forward failures (non-404 status codes).
+% Maps 4xx engine errors to api:failure (400) and 5xx to api:server_error (500).
+api_global_error_jsonld(error(vectorlink_forward_failed(Status, _Body, _URL), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search engine returned unexpected status ~w",
+           [Status]),
+    (   Status >= 400,
+        Status < 500
+    ->  Api_Status = "api:failure"
+    ;   Api_Status = "api:server_error"
+    ),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : Api_Status,
+             'api:error' : _{ '@type' : 'api:SearchEngineError',
+                              'api:status_code' : Status },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted_Id, Generated_Id), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Document was submitted with id ~q, but id ~q was generated", [Submitted_Id, Generated_Id]),
@@ -1849,6 +1893,8 @@ error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
 error_type_(concat, 'api:ConcatErrorResponse').
 error_type_(index, 'api:IndexErrorResponse').
+error_type_(search, 'api:SearchErrorResponse').
+error_type_(suggest, 'api:SearchErrorResponse').
 error_type_(server, 'api:ServerErrorResponse').
 
 % Info endpoint errors
@@ -2972,6 +3018,29 @@ generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "vectorlink endpoint is not configured (called from ~w)", [Context]),
+    JSON = _{'@type' : 'api:EndpointNotConfigured',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEndpointNotConfigured',
+                             'api:context' : Context}}.
+generic_exception_jsonld(semantic_indexer_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "semantic indexer endpoint is not configured (called from ~w)", [Context]),
+    JSON = _{'@type' : 'api:EndpointNotConfigured',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:SemanticIndexerEndpointNotConfigured',
+                             'api:context' : Context}}.
+generic_exception_jsonld(permission_error(http_method, Method, Location), JSON) :-
+    format(string(Msg), "HTTP method ~w is not allowed for ~w", [Method, Location]),
+    upcase_atom(Method, Method_Upper),
+    JSON = _{'@type' : 'api:MethodNotAllowedErrorResponse',
+             'api:status' : 'api:method_not_allowed',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:MethodNotAllowed',
+                             'api:method' : Method_Upper,
+                             'api:path' : Location}}.
 generic_exception_jsonld(Error, _Context, JSON) :-
     !,
     generic_exception_jsonld(Error, JSON).

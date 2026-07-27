@@ -59,6 +59,11 @@ tags:
   description: Remote operations and synchronization
 - name: Account management
   description: User roles and capabilities
+- name: Search & Entity Resolution
+  description: |
+    Semantic search, similarity, near-duplicate detection, batch entity resolution, and stateless text comparison.
+
+    **Backend requirement:** These endpoints require the search backend to be enabled on the server. When the search backend is unavailable, all endpoints in this group return **503**. Search and entity resolution is an **optional**, separately-enabled capability — it is not part of the always-on core TerminusDB API.
 paths:
   /:
     get:
@@ -2575,6 +2580,17 @@ paths:
           schema:
             type: integer
             example: 10
+        - name: with_counts
+          description: >-
+            When true, each commit in the response is enriched with
+            added_count, changed_count, and deleted_count fields showing
+            the number of documents that were inserted, modified, or deleted
+            in that commit.
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: "Successful log request"
@@ -2606,6 +2622,18 @@ paths:
                     "timestamp":
                       type: number
                       example: 1660919664.9129035
+                    "added_count":
+                      type: integer
+                      description: Number of documents added in this commit (only present when with_counts=true)
+                      example: 3
+                    "changed_count":
+                      type: integer
+                      description: Number of documents changed in this commit (only present when with_counts=true)
+                      example: 1
+                    "deleted_count":
+                      type: integer
+                      description: Number of documents deleted in this commit (only present when with_counts=true)
+                      example: 0
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
@@ -2613,6 +2641,73 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
+  /changes/{path}:
+    get:
+      operationId: getChanges
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Get document changes for a specific commit or branch"
+      description: |
+        Returns the set of document IDs that were added, changed, or deleted
+        in the given commit. The path may be a branch path (returns changes
+        on the branch head) or a commit path (returns changes for that
+        specific commit).
+
+        Computes document-level additions, modifications, and deletions.
+
+        **Example:**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/changes/admin/mydb/local/commit/abc123"
+        ```
+
+        **Example: With count limit**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/changes/admin/mydb/local/branch/main?count=10"
+        ```
+      tags:
+        - Change management
+      parameters:
+        - $ref: '#/components/parameters/commit_path'
+        - name: count
+          description: Maximum number of IDs to return per category (added, changed, deleted). -1 means unlimited.
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: -1
+            example: 100
+      responses:
+        200:
+          description: "Successful changes request"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: array
+                    items:
+                      type: string
+                    description: Document IDs that were inserted in this commit
+                    example: ["terminusdb:///data/Person/jane"]
+                  changed:
+                    type: array
+                    items:
+                      type: string
+                    description: Document IDs that were modified in this commit
+                    example: ["terminusdb:///data/Person/bob"]
+                  deleted:
+                    type: array
+                    items:
+                      type: string
+                    description: Document IDs that were deleted in this commit
+                    example: ["terminusdb:///data/Person/alice"]
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database or commit not found
   /history/{path}:
     get:
       operationId: getDocumentHistory
@@ -3501,6 +3596,620 @@ paths:
         403:
           $ref: '#/components/responses/ForbiddenError'
 
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Search Family (Phase 6 Capability B — vectorlink fronting)
+  #
+  # The vectorlink indexer sidecar has a public API for a pluggable engine
+  # with complete version history that is a separate engine from TerminusDB
+  # It enables vector search to be integrated with pluggable engines that
+  # provide a standard set of functionalities upheld by vector search engines
+  # 
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  /search/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: searchGet
+      summary: Semantic / full-text / hybrid search (GET, cacheable).
+      description: |
+        Read-only, cacheable search against a data product branch. The query
+        text is the `q` parameter. Results paginate with `start` (default 0)
+        and `count` (default 50). The `TerminusDB-Data-Version` response header
+        reports the commit actually served (the nearest indexed ancestor); if it
+        differs from the branch HEAD, the result is stale and a background
+        re-index is triggered.
+
+        **Identical documents:** when a result's content is literally identical to
+        the query text, the reported distance is 0; any difference yields a
+        non-zero distance.
+
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
+
+        **Response codes:**
+        - **200**: Search results
+        - **400**: Invalid or missing query parameters
+        - **401**: Authentication required
+        - **403**: Caller lacks read access to the data product
+        - **404**: No indexed ancestor exists for this branch
+        - **503**: Search backend unavailable
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - name: q
+          in: query
+          required: true
+          description: The query text (required on GET).
+          schema:
+            type: string
+          example: "Wise old man"
+        - $ref: '#/components/parameters/search_start'
+        - $ref: '#/components/parameters/search_count'
+        - $ref: '#/components/parameters/search_mode'
+        - $ref: '#/components/parameters/search_doc_type'
+        - $ref: '#/components/parameters/search_doc_id'
+        - $ref: '#/components/parameters/search_snippet'
+      responses:
+        200:
+          $ref: '#/components/responses/SearchOk'
+        400:
+          $ref: '#/components/responses/SearchBadRequest'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: searchPost
+      summary: Semantic / full-text / hybrid search (POST, structured).
+      description: |
+        Structured search via JSON body. Every parameter may be given as a query
+        parameter or in the JSON body; the body value takes precedence. `q` must
+        be present in the body or the query string.
+
+        The descriptor path in the URL determines the domain and commit —
+        these values are always server-derived and never sourced from the
+        request body or query string.
+
+        **Identical documents:** when a result's content is literally identical to
+        the query text, the reported distance is 0; any difference yields a
+        non-zero distance.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - name: q
+          in: query
+          required: false
+          description: Query text (body `q` takes precedence).
+          schema:
+            type: string
+        - $ref: '#/components/parameters/search_start'
+        - $ref: '#/components/parameters/search_count'
+        - $ref: '#/components/parameters/search_mode'
+        - $ref: '#/components/parameters/search_doc_type'
+        - $ref: '#/components/parameters/search_doc_id'
+        - $ref: '#/components/parameters/search_snippet'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequestBody'
+            examples:
+              minimal:
+                value:
+                  q: "Wise old man"
+              filtered:
+                value:
+                  q: "Wise old man"
+                  mode: hybrid
+                  start: 0
+                  count: 20
+                  doc_type: ["People"]
+      responses:
+        200:
+          $ref: '#/components/responses/SearchOk'
+        400:
+          $ref: '#/components/responses/SearchBadRequest'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /similar/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: similarGet
+      summary: Documents similar to a known indexed document (GET).
+      description: |
+        Finds documents similar to a given document by looking up its stored
+        vectors and running a nearest-neighbour search. Returns the same
+        response shape and staleness header as `/search`; paginates with
+        `start` and `count`. Use `doc_type` and `doc_id` filters to scope
+        the candidate pool.
+
+        **Identical documents:** when a neighbour's content is literally identical
+        to the source document, the reported distance is 0; any difference yields
+        a non-zero distance.
+
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - name: id
+          in: query
+          required: true
+          description: Full document IRI to find neighbours of.
+          schema:
+            type: string
+          example: "terminusdb:///data/People/1"
+        - $ref: '#/components/parameters/search_start'
+        - $ref: '#/components/parameters/search_count'
+        - $ref: '#/components/parameters/search_doc_type'
+        - $ref: '#/components/parameters/search_doc_id'
+        - $ref: '#/components/parameters/search_snippet'
+      responses:
+        200:
+          $ref: '#/components/responses/SearchOk'
+        400:
+          description: The id is not present in the index, or a parameter is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: similarPost
+      summary: Documents similar to a known indexed document (POST).
+      description: |
+        Accepts parameters in the JSON body instead of the query string.
+        Same semantics as GET /similar. Preferred when `doc_id` candidate
+        pools are large and would overflow a GET URL. Body values override
+        same-named query parameters.
+
+        **Identical documents:** when a neighbour's content is literally identical
+        to the source document, the reported distance is 0; any difference yields
+        a non-zero distance.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - name: id
+          in: query
+          required: false
+          description: Full document IRI (body `id` takes precedence).
+          schema:
+            type: string
+        - $ref: '#/components/parameters/search_start'
+        - $ref: '#/components/parameters/search_count'
+        - $ref: '#/components/parameters/search_snippet'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimilarRequestBody'
+            examples:
+              candidatePool:
+                summary: Similarity scoped to a candidate pool
+                value:
+                  id: "terminusdb:///data/People/1"
+                  doc_id: ["terminusdb:///data/People/20", "terminusdb:///data/People/30"]
+                  doc_type: ["People"]
+      responses:
+        200:
+          $ref: '#/components/responses/SearchOk'
+        400:
+          description: The id is not present in the index, or a parameter is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /duplicates/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: duplicates
+      summary: Scoped near-duplicate document groups (bounded).
+      description: |
+        Detects near-duplicate documents within a data product. For each
+        indexed document in the set population, a nearest-neighbour query
+        finds cross-document matches within `threshold`. Results are grouped
+        at the document level (lower id first); a document is never grouped
+        with itself.
+
+        **Scope:** the `doc_type`/`doc_id` parameters define the set
+        population. The `target_doc_type`/`target_doc_id` parameters, when
+        present, define a second target population so that every group
+        straddles set-to-target (cross-catalogue entity resolution). When
+        omitted, the scan is within-set deduplication.
+
+        `threshold` is on the [0, 1] cosine distance scale (0 = identical,
+        0.5 = unrelated, 1 = opposite).
+
+        **Identical documents:** when two documents contain literally identical
+        content, the distance between them is 0; any difference yields a non-zero
+        distance.
+
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - name: threshold
+          in: query
+          required: false
+          description: |
+            Maximum [0, 1] cosine distance for two documents to count as a
+            near-duplicate (0 = identical, 0.5 = unrelated, 1 = opposite).
+          schema:
+            type: number
+            format: float
+            default: 0.0
+        - $ref: '#/components/parameters/search_doc_type'
+        - $ref: '#/components/parameters/search_doc_id'
+        - name: target_doc_type
+          in: query
+          required: false
+          description: |
+            Restrict near-duplicate neighbours to these document types (the
+            target population). Repeated key.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: target_doc_id
+          in: query
+          required: false
+          description: |
+            Restrict near-duplicate neighbours to these document IDs (the
+            target population). Repeated key.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/search_snippet'
+        - $ref: '#/components/parameters/search_start'
+        - $ref: '#/components/parameters/search_count'
+      responses:
+        200:
+          description: |
+            Array of near-duplicate groups, sorted nearest-first. Each group
+            is a `group` array of members (lower id first) plus the [0, 1]
+            cosine `distance` of the best matching chunks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicateGroups'
+              examples:
+                groups:
+                  value:
+                    - group:
+                        - { id: "terminusdb:///data/Product/10" }
+                        - { id: "terminusdb:///data/Product/57" }
+                      distance: 0.06
+                withSnippet:
+                  summary: With snippet=true
+                  value:
+                    - group:
+                        - { id: "terminusdb:///data/Product/10", snippet: "Sony 5 disc CD changer ..." }
+                        - { id: "terminusdb:///data/Product/57", snippet: "Sony 5-disc CD player ..." }
+                      distance: 0.04
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /resolve/{path}:
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: resolve
+      summary: Batch entity resolution over stored vectors.
+      description: |
+        Server-side batch entity resolution. Performs reciprocal
+        nearest-neighbour retrieval over stored vectors, then applies a
+        3-threshold matching algorithm to produce a 3-partition output
+        (matched, set_only, target_only).
+
+        The set and target populations are defined by `set_doc_types`/
+        `set_doc_ids` and `target_doc_types`/`target_doc_ids` in the request
+        body (same scoping as `/duplicates`). When no target is specified,
+        target equals set (within-set deduplication).
+
+        `threshold` is the gather cap (maximum distance for a candidate
+        neighbour to be considered). The three `tau_*` values are independent
+        matching thresholds applied after gathering:
+        - `tau_one_to_one` (required): one-to-one mutual-best core threshold
+        - `tau_one_to_many` (optional): set-side extras threshold
+        - `tau_many_to_one` (optional): target-side extras threshold
+        All tau values must be less than or equal to `threshold`.
+
+        `k` controls how many candidates are evaluated per document in the
+        set (default 5).
+
+        **Identical documents:** when two documents contain literally identical
+        content, the distance between them is 0; any difference yields a non-zero
+        distance.
+
+        The descriptor path determines the single domain for this resolution.
+        Cross-data-product resolution is not supported.
+
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any search is executed.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveRequestBody'
+            examples:
+              crossSet:
+                summary: Cross-set entity resolution
+                value:
+                  set_doc_types: ["Product"]
+                  target_doc_types: ["Catalogue"]
+                  threshold: 0.5
+                  tau_one_to_one: 0.45
+                  tau_one_to_many: 0.2
+                  tau_many_to_one: 0.2
+                  k: 5
+      responses:
+        200:
+          description: |
+            3-partition resolve output: matched pairs, unmatched set records,
+            unmatched target records, plus resolution statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResult'
+              examples:
+                result:
+                  value:
+                    matched:
+                      - set_id: "terminusdb:///data/Product/A"
+                        target_id: "terminusdb:///data/Catalogue/X"
+                        distance: 0.12
+                        stage: core
+                    set_only: ["terminusdb:///data/Product/C"]
+                    target_only: ["terminusdb:///data/Catalogue/Z"]
+                    stats:
+                      k: 5
+                      threshold: 0.5
+                      tau_one_to_one: 0.45
+                      tau_one_to_many: 0.2
+                      tau_many_to_one: 0.2
+                      edge_count: 142
+                      core_count: 80
+                      set_extra_count: 12
+                      target_extra_count: 5
+                      matched_count: 97
+                      set_only_count: 15
+                      target_only_count: 8
+                      set_points: 1087
+                      target_points: 1086
+                      elapsed_ms: 2400
+        400:
+          description: Invalid parameters (tau > threshold, out-of-range, missing required).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /compare:
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: compare
+      summary: Stateless semantic distance between two texts.
+      description: |
+        Embeds `source` and `target` and returns the normalised cosine
+        distance on the same [0, 1] scale as `/search`, `/similar`,
+        `/duplicates`, and `/resolve` (0 = identical, ~0.5 = unrelated,
+        1 = opposite).
+
+        **Identical-input shortcut:** when `source` and `target` are the
+        exact same string, distance 0.0 is returned immediately without
+        embedding. For near-identical but non-equal texts, expect a distance
+        floor of approximately 0.16.
+
+        **Stateless:** no dataset, no index, no domain. A convenience
+        endpoint for comparing two texts without provisioning an index.
+
+        **Authorization:** requires a valid authenticated user. No
+        per-data-product access check is applied — the endpoint only
+        embeds caller-supplied text. Anonymous access is rejected (401).
+
+        The `method` query parameter is required. Currently the only
+        supported value is `embedding`. Unknown or missing values return 400.
+      parameters:
+        - name: method
+          in: query
+          required: true
+          description: |
+            The comparison method. Must be `embedding` (the only currently
+            supported value). Unknown values give 400 (extensible for future methods).
+          schema:
+            type: string
+            enum: [embedding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompareRequestBody'
+            examples:
+              basic:
+                summary: Compare two product descriptions
+                value:
+                  source: "Sony 5-disc CD changer with carousel"
+                  target: "Sony 5 disc CD player carousel mechanism"
+      responses:
+        200:
+          description: |
+            The semantic distance between the two texts on the [0, 1] reference
+            scale. Includes which embedding role was applied to each side.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompareResult'
+              examples:
+                similar:
+                  summary: Two similar texts
+                  value:
+                    distance: 0.034
+                    source_role: query
+                    target_role: document
+                unrelated:
+                  summary: Two unrelated texts
+                  value:
+                    distance: 0.48
+                    source_role: query
+                    target_role: document
+        400:
+          description: Missing or unsupported `method`, or missing `source`/`target` in body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /statistics/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: statistics
+      summary: Index statistics for a data product (domain-scoped).
+      description: |
+        Returns operational counters scoped to the addressed data product.
+        Statistics are always scoped to a single domain (derived from the
+        descriptor path in the URL).
+
+        **Authorization:** requires read access to the addressed data product.
+        Denied callers receive 403 before any statistics are returned.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      responses:
+        200:
+          description: Domain-scoped index statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Statistics'
+              examples:
+                scoped:
+                  summary: Domain-scoped statistics
+                  value:
+                    domains: 1
+                    branches: 1
+                    indexed_commits: 1
+                    documents: 2173
+                    chunks: 4200
+                    pending_index_fragments: 0
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
 components:
 
   parameters:
@@ -3632,6 +4341,89 @@ components:
       schema:
         type: string
         example: MyNewDatabase
+
+    # ─── Search & Entity Resolution parameters ───────────────────────────
+    search_path:
+      name: path
+      in: path
+      description: |
+        Descriptor path identifying the data product branch to search. The path
+        is resolved server-side to a domain (graphspec), HEAD commit, and ancestor
+        window. Supports the standard TerminusDB path formats.
+      required: true
+      schema:
+        type: string
+      examples:
+        default_branch:
+          value: admin/mydb
+          summary: Main branch of admin/mydb (autocompleted to admin/mydb/local/branch/main)
+        explicit_branch:
+          value: admin/mydb/local/branch/dev
+          summary: Branch 'dev' of admin/mydb
+    search_start:
+      name: start
+      in: query
+      required: false
+      description: Zero-based offset of the first result to return (pagination).
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    search_count:
+      name: count
+      in: query
+      required: false
+      description: Max results to return (pagination page size).
+      schema:
+        type: integer
+        minimum: 1
+        default: 50
+    search_mode:
+      name: mode
+      in: query
+      required: false
+      description: Search mode. Omitted gives hybrid.
+      schema:
+        type: string
+        enum: [vector, fts, hybrid]
+        default: hybrid
+    search_snippet:
+      name: snippet
+      in: query
+      required: false
+      description: |
+        When true, include the matched chunk's text as `chunk.snippet` in each
+        hit. Omitted/false keeps responses small.
+      schema:
+        type: boolean
+        default: false
+    search_doc_type:
+      name: doc_type
+      in: query
+      required: false
+      description: |
+        Restrict to these document types. Repeated key
+        (`?doc_type=People&doc_type=Species`). On POST, prefer the JSON array.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    search_doc_id:
+      name: doc_id
+      in: query
+      required: false
+      description: |
+        Restrict to these full document IRIs. Repeated key. On POST, prefer
+        the JSON array.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+
   schemas:
     WoqlQuery:
       type: object
@@ -3707,6 +4499,396 @@ components:
       required:
         - '@type'
         - 'api:status'
+
+    # ─── Search & Entity Resolution schemas ──────────────────────────────
+
+    SearchError:
+      type: object
+      additionalProperties: true
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable cause.
+      example:
+        error: "search backend unavailable"
+
+    SearchHit:
+      type: object
+      required: [id, distance, chunk]
+      properties:
+        id:
+          type: string
+          description: |
+            Document IRI. Results always dedup to one hit per document; chunk
+            ids are never separate result rows.
+        distance:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalised cosine distance: 0 identical, 0.5 unrelated, 1 opposite.
+            This is the distance of the document's BEST-matching chunk.
+        chunk:
+          type: object
+          description: |
+            Which part of the document matched. The document's score is its
+            best-matching chunk; this object locates that chunk so a caller
+            can jump to the relevant passage.
+          required: [index, count, token_start, doc_token_len, location]
+          properties:
+            index:
+              type: integer
+              minimum: 0
+              description: 0-based index of the best-matching chunk within the document.
+            count:
+              type: integer
+              minimum: 1
+              description: Total number of chunks the document was split into.
+            token_start:
+              type: integer
+              minimum: 0
+              description: Start token offset of the matched chunk within the document.
+            doc_token_len:
+              type: integer
+              minimum: 0
+              description: Document length in the embedding model's tokens.
+            location:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: |
+                Convenience fraction = token_start / doc_token_len (0.0 = beginning,
+                1.0 = end). 0.0 when doc_token_len is 0.
+            snippet:
+              type: string
+              description: |
+                The matched chunk's text. Present only when `snippet=true` is
+                requested (omitted by default).
+
+    SearchResults:
+      type: array
+      description: Ranked nearest-first; empty array means genuinely no match (never an error).
+      items:
+        $ref: '#/components/schemas/SearchHit'
+
+    SearchRequestBody:
+      type: object
+      description: |
+        POST /search body. Every field may also be supplied as a query parameter;
+        when a field is present here it wins and the same-named query parameter
+        is discarded (not merged). `q` must be present here or in the query.
+        Note: `domain`, `commit`, and `ancestors` are server-derived from the
+        URL descriptor path and are NEVER accepted from the request body.
+      properties:
+        q:
+          type: string
+          description: Query text (embedded for vector; full-text terms for fts/hybrid).
+          example: "Wise old man"
+        mode:
+          type: string
+          enum: [vector, fts, hybrid]
+          default: hybrid
+        start:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Zero-based offset (pagination).
+        count:
+          type: integer
+          minimum: 1
+          default: 50
+          description: Max results to return (pagination page size).
+        doc_type:
+          type: array
+          items:
+            type: string
+          description: Restrict to these document types (IN).
+        doc_id:
+          type: array
+          items:
+            type: string
+          description: Restrict to these full document IRIs (IN).
+        snippet:
+          type: boolean
+          default: false
+          description: Include the matched chunk's text as `chunk.snippet` in each hit.
+
+    SimilarRequestBody:
+      type: object
+      description: |
+        POST /similar body. `id` must be present here or in the query. Body
+        values override same-named query parameters.
+        Note: `domain`, `commit`, and `ancestors` are server-derived.
+      properties:
+        id:
+          type: string
+          description: Full document IRI to find neighbours of.
+          example: "terminusdb:///data/People/1"
+        start:
+          type: integer
+          minimum: 0
+          default: 0
+        count:
+          type: integer
+          minimum: 1
+          default: 10
+        doc_type:
+          type: array
+          items:
+            type: string
+          description: Restrict to these document types (IN).
+        doc_id:
+          type: array
+          items:
+            type: string
+          description: Restrict to these full document IRIs — the candidate pool (IN).
+        snippet:
+          type: boolean
+          default: false
+
+    DuplicateGroups:
+      type: array
+      description: |
+        Near-duplicate groups, sorted nearest-first. The `group` array is
+        symmetric (member order is canonical: lower id first).
+      items:
+        type: object
+        required: [group, distance]
+        properties:
+          group:
+            type: array
+            minItems: 2
+            description: The member documents of this near-duplicate group.
+            items:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  description: The member document id.
+                snippet:
+                  type: string
+                  description: |
+                    The member's matched chunk text. Present only when
+                    `snippet=true` was requested.
+          distance:
+            type: number
+            format: float
+            description: |
+              [0, 1] cosine distance of the group's best matching chunks
+              (0 = identical, 0.5 = unrelated, 1 = opposite).
+
+    ResolveRequestBody:
+      type: object
+      required: [threshold, tau_one_to_one]
+      description: |
+        POST /resolve body. The caller supplies population scoping and threshold
+        parameters. `domain`, `commit`, and `ancestors` are server-derived from
+        the URL descriptor path and injected by the server — any attempt to
+        supply them in the body is overwritten (defence in depth).
+      properties:
+        set_doc_types:
+          type: array
+          items:
+            type: string
+          description: Document types defining the SET population.
+        set_doc_ids:
+          type: array
+          items:
+            type: string
+          description: Document IDs defining the SET population.
+        target_doc_types:
+          type: array
+          items:
+            type: string
+          description: Document types defining the TARGET population.
+        target_doc_ids:
+          type: array
+          items:
+            type: string
+          description: Document IDs defining the TARGET population.
+        threshold:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            GATHER cap: max [0,1] cosine distance for a candidate NN to be
+            considered. The recall lever.
+        tau_one_to_one:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            1:1 mutual-best CORE threshold. Must be <= threshold. Required.
+        tau_one_to_many:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Set-side extras threshold. Null/absent to disable. Must be <= threshold.
+        tau_many_to_one:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Target-side extras threshold. Null/absent to disable. Must be <= threshold.
+        k:
+          type: integer
+          minimum: 1
+          default: 5
+          description: NN fan-out per point (how many candidates to evaluate per document).
+
+    ResolveResult:
+      type: object
+      required: [matched, set_only, target_only, stats]
+      properties:
+        matched:
+          type: array
+          description: Resolved match pairs with stage and distance.
+          items:
+            type: object
+            required: [set_id, target_id, distance, stage]
+            properties:
+              set_id:
+                type: string
+                description: The matched set record.
+              target_id:
+                type: string
+                description: The matched target record.
+              distance:
+                type: number
+                format: float
+                description: "[0,1] cosine distance between matched records."
+              stage:
+                type: string
+                enum: [core, set_extra, target_extra]
+                description: Which resolution stage produced this match.
+        set_only:
+          type: array
+          items:
+            type: string
+          description: Set records with no match under any active tau.
+        target_only:
+          type: array
+          items:
+            type: string
+          description: Target records with no match under any active tau.
+        stats:
+          type: object
+          description: Resolution statistics.
+          properties:
+            k:
+              type: integer
+            threshold:
+              type: number
+              format: float
+            tau_one_to_one:
+              type: number
+              format: float
+            tau_one_to_many:
+              type: number
+              format: float
+            tau_many_to_one:
+              type: number
+              format: float
+            edge_count:
+              type: integer
+            core_count:
+              type: integer
+            set_extra_count:
+              type: integer
+            target_extra_count:
+              type: integer
+            matched_count:
+              type: integer
+            set_only_count:
+              type: integer
+            target_only_count:
+              type: integer
+            set_points:
+              type: integer
+            target_points:
+              type: integer
+            elapsed_ms:
+              type: integer
+              description: Wall-clock milliseconds for the batch resolve.
+
+    CompareRequestBody:
+      type: object
+      required: [source, target]
+      description: |
+        POST /compare body. Both fields are plain text strings to be embedded
+        and compared.
+      properties:
+        source:
+          type: string
+          description: |
+            The source text. Embedded with the Query role prefix (asymmetric
+            embedding).
+          example: "Sony 5-disc CD changer with carousel"
+        target:
+          type: string
+          description: |
+            The target text. Embedded with the Document role prefix (asymmetric
+            embedding).
+          example: "Sony 5 disc CD player carousel mechanism"
+
+    CompareResult:
+      type: object
+      required: [distance, source_role, target_role]
+      properties:
+        distance:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: |
+            Normalized cosine distance on the [0, 1] reference scale — the SAME
+            scale as /search, /similar, /duplicates, and /resolve.
+            0 = identical, ~0.5 = unrelated, 1 = opposite.
+        source_role:
+          type: string
+          description: The embedding role applied to the source text. Currently always "query".
+          example: query
+        target_role:
+          type: string
+          description: The embedding role applied to the target text. Currently always "document".
+          example: document
+
+    Statistics:
+      type: object
+      required: [domains, branches, indexed_commits, documents, chunks, pending_index_fragments]
+      properties:
+        domains:
+          type: integer
+          description: Databases with at least one index.
+        branches:
+          type: integer
+          description: Distinct branches across all domains.
+        indexed_commits:
+          type: integer
+          description: Searchable commits (snapshots).
+        documents:
+          type: integer
+          description: Distinct documents currently indexed.
+        chunks:
+          type: integer
+          description: Total chunk rows across active snapshots.
+        pending_index_fragments:
+          type: integer
+          description: |
+            Number of data fragments not yet covered by the vector ANN index.
+            Higher values mean more data is being flat-scanned alongside the
+            index (correct results, higher latency). Returns to 0 after the
+            indexing queue drains.
+
   responses:
     IncorrectAuthenticationError:
       description: Authentication information is missing or invalid
@@ -3752,6 +4934,67 @@ components:
               scope:
                 type: string
                 example: Database/admin/test
+
+    # ─── Search & Entity Resolution responses ────────────────────────────
+    SearchOk:
+      description: |
+        Ranked results, nearest first. The `TerminusDB-Data-Version` response
+        header reports the commit actually served (the nearest indexed ancestor
+        under lag); if it differs from the branch HEAD, the result is stale.
+        An empty array means genuinely no match — never an error.
+      headers:
+        TerminusDB-Data-Version:
+          description: |
+            The data-version actually served, in `commit:<hash>` form. Under lag
+            this is the nearest indexed ancestor, so comparing it to the branch
+            HEAD detects staleness.
+          schema:
+            type: string
+            pattern: '^commit:[a-zA-Z0-9]+'
+            example: "commit:abc123def456"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SearchResults'
+          examples:
+            hits:
+              value:
+                - id: "terminusdb:///data/People/20"
+                  distance: 0.0939
+                  chunk:
+                    index: 0
+                    count: 1
+                    token_start: 0
+                    doc_token_len: 41
+                    location: 0.0
+            hitsWithSnippet:
+              summary: With snippet=true
+              value:
+                - id: "terminusdb:///data/People/20"
+                  distance: 0.0939
+                  chunk:
+                    index: 0
+                    count: 1
+                    token_start: 0
+                    doc_token_len: 41
+                    location: 0.0
+                    snippet: "The person's name is Yoda. A wise old Jedi master ..."
+    SearchBadRequest:
+      description: |
+        Invalid or missing search parameter (missing q in both body and query,
+        invalid mode/start/count/doc_type, or the search backend is not configured).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SearchError'
+          examples:
+            missingQ:
+              value:
+                error: "missing required parameter: q"
+            backendNotConfigured:
+              value:
+                error: "search backend unavailable"
+
   securitySchemes:
     basicAuth:
       type: http

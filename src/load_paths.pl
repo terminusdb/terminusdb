@@ -84,8 +84,12 @@ add_test_path :-
 :- add_test_path.
 
 add_plugin_path :-
-    user:file_search_path(terminus_home, Dir),
-    directory_file_path(Dir,'plugins',Config),
+    (   getenv('TERMINUSDB_PLUGINS_PATH', Value),
+        absolute_file_name(Value, Config)
+    ->  true
+    ;   user:file_search_path(terminus_home, Dir),
+        directory_file_path(Dir,'plugins',Config)
+    ),
     asserta(user:file_search_path(plugins, Config)).
 
 :- add_plugin_path.

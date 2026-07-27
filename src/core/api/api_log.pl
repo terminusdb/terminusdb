@@ -1,4 +1,4 @@
-:- module(api_log, [api_log/5, format_log/3]).
+:- module(api_log, [api_log/5, api_log_streaming/4, format_log/3]).
 
 :- use_module(core(util)).
 :- use_module(core(document)).
@@ -9,6 +9,38 @@
 :- use_module(library(lists)).
 :- use_module(library(json)).
 :- use_module(library(option)).
+
+%% commit_change_counts(+Repository_Descriptor, +Commit_Id, -Added, -Changed, -Deleted) is det.
+%
+%  Opens the commit transaction and uses the Rust collect_changed_documents
+%  to compute document change counts in a single pass. Returns zeros when
+%  the commit has no parent (initial commit), where collect_changed_documents
+%  fails because there is no parent layer to diff against. Any other error
+%  from resolve_relative_descriptor or open_descriptor propagates.
+commit_change_counts(Repository_Descriptor, Commit_Id, Added, Changed, Deleted) :-
+    resolve_relative_descriptor(Repository_Descriptor,
+                                ["commit", Commit_Id],
+                                Commit_Descriptor),
+    open_descriptor(Commit_Descriptor, Transaction),
+    (   '$changes':collect_changed_documents(Transaction, Added_List, Changed_List, Deleted_List)
+    ->  length(Added_List, Added),
+        length(Changed_List, Changed),
+        length(Deleted_List, Deleted)
+    ;   Added = 0, Changed = 0, Deleted = 0
+    ).
+
+%% maybe_add_change_counts(+Repository_Descriptor, +Commit_Doc0, -Commit_Doc, +Options) is det.
+%
+%  When the with_counts option is true, enriches the commit document with
+%  added_count, changed_count, and deleted_count fields.
+maybe_add_change_counts(Repository_Descriptor, Commit_Doc0, Commit_Doc, Options) :-
+    (   option(with_counts(true), Options)
+    ->  get_dict(identifier, Commit_Doc0, Commit_Id),
+        commit_change_counts(Repository_Descriptor, Commit_Id, Added, Changed, Deleted),
+        put_dict(_{added_count: Added, changed_count: Changed, deleted_count: Deleted},
+                 Commit_Doc0, Commit_Doc)
+    ;   Commit_Doc0 = Commit_Doc
+    ).
 
 descriptor_type_has_history(branch_descriptor).
 descriptor_type_has_history(commit_descriptor).
@@ -52,12 +84,106 @@ api_log(System_DB, Auth, Path, Log, Options) :-
                 get_document(Repository_Descriptor, This_Uri, Commit_Doc0),
                 (   get_dict(migration, Commit_Doc0, Migration_String)
                 ->  atom_json_dict(Migration_String, Migration, [at(json)]),
-                    put_dict(migration, Commit_Doc0, Migration, Commit_Doc)
-                ;   Commit_Doc0 = Commit_Doc
-                )
+                    put_dict(migration, Commit_Doc0, Migration, Commit_Doc1)
+                ;   Commit_Doc0 = Commit_Doc1
+                ),
+                maybe_add_change_counts(Repository_Descriptor, Commit_Doc1, Commit_Doc, Options)
             ),
             Rev_Log),
     reverse(Rev_Log, Log).
+
+%% api_log_streaming(+System_DB, +Auth, +Path, +Options) is det.
+%
+%  Stream commit log as NDJSON, one commit document per line.
+%  Walks the parent chain from the branch head (newest) to the root
+%  (oldest), writing each commit document as it is found. True
+%  incremental streaming — no list materialization or reversal.
+%
+%  Options:
+%    start - number of initial commits to skip (default 0)
+%    count - maximum commits to emit (-1 = unlimited, default -1)
+api_log_streaming(System_DB, Auth, Path, Options) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path,Descriptor),
+        error(invalid_absolute_path(Path),_)),
+
+    do_or_die(descriptor_has_history(Descriptor),
+              error(resource_has_no_history(Descriptor), _)),
+
+    check_descriptor_auth(System_DB, Descriptor, '@schema':'Action/meta_read_access', Auth),
+
+    do_or_die(
+        open_descriptor(Descriptor, _Branch_Transaction),
+        error(unresolvable_absolute_descriptor(Descriptor),_)),
+
+    loggable_commit_uri(Descriptor, Repository_Descriptor, Commit_Uri),
+
+    %% Open the repository descriptor once and reuse the transaction
+    %% object for all commit lookups. Without this, each get_document
+    %% and commit_uri_to_parent_uri call re-opens the descriptor (133+
+    %% redundant open_descriptor calls per request), creating new layer
+    %% references and tabled predicate entries that leak atoms.
+    do_or_die(
+        open_descriptor(Repository_Descriptor, Repo_Transaction),
+        error(unresolvable_absolute_descriptor(Repository_Descriptor),_)),
+
+    option(start(Start), Options, 0),
+    option(count(Count), Options, -1),
+    option(with_counts(With_Counts), Options, false),
+    stream_commit_history(Repo_Transaction, Commit_Uri, Start, Count, With_Counts, Repository_Descriptor).
+
+%% stream_commit_history(+Context, +Commit_Uri, +Start, +Count, +With_Counts, +Repository_Descriptor)
+%
+%  Walk the parent chain newest-to-oldest, writing each commit as a
+%  JSON line to current_output with flush. No list accumulation.
+%
+%  Start: commits to skip before emitting (0 = start from head)
+%  Count: max commits to emit (-1 = unlimited, 0 = stop immediately)
+%  With_Counts: if true, enrich each commit with added_count/changed_count/deleted_count
+stream_commit_history(_, _, _, 0, _, _) :- !.
+stream_commit_history(Context, Commit_Uri, Start, Count, With_Counts, Repository_Descriptor) :-
+    (   Start > 0
+    ->  (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
+        ->  NextStart is Start - 1,
+            stream_commit_history(Context, Parent_Uri, NextStart, Count, With_Counts, Repository_Descriptor)
+        ;   true
+        )
+    ;  write_commit_json_line(Context, Commit_Uri, With_Counts, Repository_Descriptor),
+        (   Count > 0
+        ->  Remaining is Count - 1
+        ;   Remaining = -1
+        ),
+        (   Remaining =:= 0
+        ->  true
+        ;   (   commit_uri_to_parent_uri(Context, Commit_Uri, Parent_Uri)
+            ->  stream_commit_history(Context, Parent_Uri, 0, Remaining, With_Counts, Repository_Descriptor)
+            ;   true
+            )
+        )
+    ).
+
+%% write_commit_json_line(+Context, +Commit_Uri, +With_Counts, +Repository_Descriptor)
+%
+%  Retrieve a single commit document and write it as a JSON line
+%  to current_output, then flush to push data to the pipe immediately.
+%  When With_Counts is true, enriches the document with change counts.
+write_commit_json_line(Context, Commit_Uri, With_Counts, Repository_Descriptor) :-
+    get_document(Context, Commit_Uri, Commit_Doc0),
+    (   get_dict(migration, Commit_Doc0, Migration_String)
+    ->  atom_json_dict(Migration_String, Migration, [at(json)]),
+        put_dict(migration, Commit_Doc0, Migration, Commit_Doc1)
+    ;   Commit_Doc0 = Commit_Doc1
+    ),
+    (   With_Counts
+    ->  get_dict(identifier, Commit_Doc1, Commit_Id),
+        commit_change_counts(Repository_Descriptor, Commit_Id, Added, Changed, Deleted),
+        put_dict(_{added_count: Added, changed_count: Changed, deleted_count: Deleted},
+                 Commit_Doc1, Commit_Doc)
+    ;   Commit_Doc1 = Commit_Doc
+    ),
+    json_write_dict(current_output, Commit_Doc, [width(0)]),
+    nl,
+    flush_output.
 
 format_log(Stream, Log, Options) :-
     forall(

@@ -12,15 +12,26 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util)).
+:- use_module(core(util/test_utils),
+             [setup_temp_store/1, teardown_temp_store/1,
+              create_db_without_schema/2, create_db_with_empty_schema/2,
+              create_db_with_test_schema/2]).
+:- use_module(core(api/api_document), [api_insert_documents/9]).
+:- use_module(core(api/db_branch), [branch_create/5]).
 :- use_module(core(document)).
-:- use_module(core(query), [expand/2, default_prefixes/1, create_context/3]).
-:- use_module(core(transaction), [open_descriptor/2]).
+:- use_module(core(query), [expand/2, default_prefixes/1, create_context/3,
+                            resolve_absolute_string_descriptor/2,
+                            ask/2]).
+:- use_module(core(transaction), [open_descriptor/2, with_transaction/3]).
+:- use_module(core(transaction/ref_entity),
+             [branch_head_commit/3, commit_id_uri/3]).
 :- use_module(core(account), [generate_password_hash/2]).
 
 :- use_module(config(terminus_config)).
 
 :- use_module(library(semweb/turtle)).
 :- use_module(library(terminus_store)).
+:- use_module(library(http/http_authenticate), [http_authorization_data/2]).
 :- use_module(library(json)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
@@ -407,3 +418,14 @@ test("TERMINUSDB_SERVER_DB_PATH=/absolute/path",
     config:default_database_path(DB_Path).
 
 :- end_tests(env_vars).
+
+% ==========================================================================
+% The following test suites have been moved to plugins/vectorlink.pl:
+%   - indexer_backend_selector  → vectorlink_indexer_backend_selector
+%   - push_driver               → vectorlink_push_driver
+%   - auto_push_hook            → vectorlink_auto_push_hook
+%   - search_fronting           → vectorlink_search_fronting
+%   - resolve_url_construction  → vectorlink_resolve_url_construction
+%   - delete_domain_trigger     → vectorlink_delete_domain_trigger
+%   - search_fronting_params    → vectorlink_fronting_params (from routes.pl)
+% ==========================================================================

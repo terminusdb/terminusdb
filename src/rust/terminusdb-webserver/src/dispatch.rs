@@ -160,14 +160,11 @@ impl StreamRegistry {
 
     pub fn send(&mut self, id: StreamId, bytes: axum::body::Bytes) -> Result<(), String> {
         match self.senders.get(&id) {
-            Some(sender) => match sender.try_send(bytes) {
+            Some(sender) => match sender.blocking_send(bytes) {
                 Ok(()) => Ok(()),
-                Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err(_) => {
                     self.senders.remove(&id);
                     Err("stream closed".to_string())
-                }
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    Err("stream buffer full".to_string())
                 }
             },
             None => Err("stream not found".to_string()),
@@ -191,6 +188,7 @@ enum BroadcastCommand {
         channel: String,
         stream_id: StreamId,
         sender: mpsc::Sender<axum::body::Bytes>,
+        idle_timeout: Option<std::time::Duration>,
     },
     Unsubscribe {
         channel: String,
@@ -258,12 +256,14 @@ impl BroadcastRegistry {
         channel: String,
         stream_id: StreamId,
         sender: mpsc::Sender<axum::body::Bytes>,
+        idle_timeout: Option<std::time::Duration>,
     ) {
         self.ensure_forwarder();
         let _ = self.tx.send(BroadcastCommand::Subscribe {
             channel,
             stream_id,
             sender,
+            idle_timeout,
         });
     }
 
@@ -359,11 +359,12 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                 channel,
                 stream_id,
                 sender,
+                idle_timeout,
             } => {
                 // Create a bounded per-subscriber buffer and spawn a
                 // per-subscriber task that drains it into the stream.
                 let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
-                let task = tokio::spawn(subscriber_task(sub_rx, sender));
+                let task = tokio::spawn(subscriber_task(sub_rx, sender, idle_timeout));
                 channels
                     .entry(channel)
                     .or_default()
@@ -391,16 +392,30 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                     // Fan out with try_send — non-blocking, CPU-only.
                     // A full buffer means the subscriber is too slow;
                     // disconnect it rather than blocking the forwarder.
+                    let mut full_count = 0u32;
+                    let mut closed_count = 0u32;
                     let failed: Vec<StreamId> = subs
                         .iter()
                         .filter_map(|(id, sub)| {
                             match sub.tx.try_send(bytes.clone()) {
                                 Ok(()) => None,
-                                Err(mpsc::error::TrySendError::Full(_)) => Some(*id),
-                                Err(mpsc::error::TrySendError::Closed(_)) => Some(*id),
+                                Err(mpsc::error::TrySendError::Full(_)) => {
+                                    full_count += 1;
+                                    Some(*id)
+                                }
+                                Err(mpsc::error::TrySendError::Closed(_)) => {
+                                    closed_count += 1;
+                                    Some(*id)
+                                }
                             }
                         })
                         .collect();
+                    if full_count > 0 || closed_count > 0 {
+                        crate::log::log_info(format!(
+                            "broadcast send: disconnected {} subscribers (buffer_full={} closed={}) from channel '{}', remaining={}",
+                            failed.len(), full_count, closed_count, channel, subs.len() - failed.len()
+                        ));
+                    }
                     for id in failed {
                         if let Some(sub) = subs.remove(&id) {
                             sub.task.abort();
@@ -417,19 +432,58 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
 /// backpressures on the stream's mpsc channel, which backpressures on the
 /// TCP socket. A slow client only blocks this task, not the forwarder.
 ///
+/// If `idle_timeout` is set, the task exits after that duration of
+/// inactivity (no messages received). Each received message resets the
+/// timer. This replaces per-stream Prolog OS threads with a lightweight
+/// tokio task — no OS thread per client.
+///
 /// The task exits (and cleans up) when either side closes:
 /// - The per-subscriber buffer sender is dropped (forwarder removed the
 ///   subscriber, or the forwarder task ended) → `recv().await` returns None
 /// - The stream's mpsc receiver is dropped (client disconnected) →
 ///   `send().await` returns Err
+/// - The idle timeout fires with no messages → exit, which drops
+///   stream_tx, causing the ReceiverStream to see EOF
 async fn subscriber_task(
     mut rx: mpsc::Receiver<axum::body::Bytes>,
     stream_tx: mpsc::Sender<axum::body::Bytes>,
+    idle_timeout: Option<std::time::Duration>,
 ) {
-    while let Some(bytes) = rx.recv().await {
-        if stream_tx.send(bytes).await.is_err() {
-            // Stream closed — client disconnected. Exit.
-            break;
+    match idle_timeout {
+        Some(timeout) => {
+            loop {
+                let sleep = tokio::time::sleep(timeout);
+                tokio::pin!(sleep);
+
+                tokio::select! {
+                    result = rx.recv() => {
+                        match result {
+                            None => break,
+                            Some(bytes) => {
+                                if stream_tx.send(bytes).await.is_err() {
+                                    break;
+                                }
+                                // Loop restarts the sleep timer.
+                            }
+                        }
+                    }
+                    _ = &mut sleep => {
+                        // Idle timeout — no messages for the timeout
+                        // duration. Exit to close the stream.
+                        crate::log::log_info(format!(
+                            "subscriber_task: idle timeout fired, closing stream"
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+        None => {
+            while let Some(bytes) = rx.recv().await {
+                if stream_tx.send(bytes).await.is_err() {
+                    break;
+                }
+            }
         }
     }
 }
@@ -506,7 +560,7 @@ pub fn input_stream_registry() -> Arc<Mutex<InputStreamRegistry>> {
 }
 
 /// Request to be dispatched to the single SWI-Prolog engine.
-struct DispatchRequest {
+pub struct DispatchRequest {
     request_json: serde_json::Value,
     handler_module: String,
     handler_name: String,
@@ -523,19 +577,22 @@ impl DispatchRequest {
 }
 
 /// Request to be dispatched through OS pipes (plugin routes).
-struct PipeDispatchRequest {
-    request_json: serde_json::Value,
-    handler_module: String,
-    handler_name: String,
-    input_read_fd: Option<i32>,
-    output_write_fd: i32,
-    binary: bool,
+pub struct PipeDispatchRequest {
+    pub(crate) request_json: serde_json::Value,
+    pub(crate) handler_module: String,
+    pub(crate) handler_name: String,
+    pub(crate) input_read_fd: Option<i32>,
+    pub(crate) output_write_fd: i32,
+    pub(crate) binary: bool,
 }
 
 /// Message sent to the single-engine dispatcher queue.
-enum DispatchMessage {
+pub enum DispatchMessage {
     Pipe(PipeDispatchRequest),
     Stream(DispatchRequest),
+    /// Cancel an in-flight pipe request by signalling the Prolog worker.
+    /// The argument is the output write FD passed to the worker.
+    CancelPipe(i32),
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -546,7 +603,7 @@ static IN_FLIGHT_REQUESTS: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new
 
 /// Return the dispatcher queue sender, panicking if the dispatcher is not
 /// initialized.
-fn dispatch_queue() -> mpsc::Sender<DispatchMessage> {
+pub fn dispatch_queue() -> mpsc::Sender<DispatchMessage> {
     DISPATCH_QUEUE
         .get()
         .expect("request dispatcher not initialized")
@@ -629,6 +686,14 @@ pub fn init_dispatcher() {
                         );
                     }
                 }
+                DispatchMessage::CancelPipe(output_write_fd) => {
+                    if let Err(e) = cancel_pipe_to_prolog(&context, output_write_fd) {
+                        crate::log::log_error(format!(
+                            "[terminusdb-webserver] cancel_pipe_request failed for FD {}: {}",
+                            output_write_fd, e
+                        ));
+                    }
+                }
                 DispatchMessage::Stream(req) => {
                     if let Err(e) = dispatch_stream_to_prolog(&context, &req) {
                         crate::log::log_error(format!(
@@ -661,7 +726,16 @@ pub fn init_dispatcher() {
 fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> PrologResult<()> {
     let f = context.open_frame();
     let workers_term = f.new_term_ref();
-    workers_term.put(&16u64).map_err(|_| PrologError::Failure)?;
+    let pool_size: u64 = std::env::var("TERMINUSDB_WORKER_POOL_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .or_else(|| {
+            std::env::var("TERMINUSDB_SERVER_WORKERS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or(16);
+    workers_term.put(&pool_size).map_err(|_| PrologError::Failure)?;
 
     let init_callable = CallablePredicate::new(Predicate::new(
         Functor::new(Atom::new("init_request_worker_pool"), 1),
@@ -741,6 +815,28 @@ fn dispatch_pipe_to_prolog(
     ])
 }
 
+/// Call the Prolog predicate `cancel_pipe_request/1` to signal the worker
+/// thread handling the given output pipe FD that the client has disconnected.
+/// The worker receives `error(client_disconnected, _)` via `thread_signal/2`,
+/// which is delivered at the next goal boundary (e.g. between `id_triple`
+/// calls in a WOQL query loop).
+fn cancel_pipe_to_prolog(
+    context: &Context<impl QueryableContextType>,
+    output_write_fd: i32,
+) -> PrologResult<()> {
+    let fd_term = context.new_term_ref();
+    fd_term
+        .put(&(output_write_fd as i64))
+        .map_err(|_| PrologError::Failure)?;
+
+    let callable = CallablePredicate::new(Predicate::new(
+        Functor::new(Atom::new("cancel_pipe_request"), 1),
+        Module::new(Atom::new("request_worker_pool")),
+    ))
+    .map_err(|_| PrologError::Failure)?;
+    context.call_once(callable, [&fd_term])
+}
+
 fn dispatch_stream_to_prolog(
     context: &Context<impl QueryableContextType>,
     req: &DispatchRequest,
@@ -784,6 +880,17 @@ fn dispatch_stream_to_prolog(
     ])
 }
 
+/// Write a string to a file descriptor.
+#[allow(dead_code)]
+fn write_to_fd(fd: i32, data: &str) -> std::io::Result<()> {
+    use std::os::fd::BorrowedFd;
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    nix::unistd::write(borrowed, data.as_bytes())
+        .map(|_| ())
+        .map_err(std::io::Error::from)
+}
+
+
 /// Register a new response stream and return its id and the receiver.
 ///
 /// The buffer is larger than `SUBSCRIBER_BUFFER` (64) because this
@@ -805,16 +912,16 @@ fn dispatch_stream_to_prolog(
 /// they received (from the `commit.identifier` field in each NDJSON
 /// event) and use it as the `since` parameter on reconnect.
 ///
-/// Memory: 128 slots × 40 bytes = 5KB per client, 50MB at 10000 clients.
+/// Memory: 256 slots × 40 bytes = 10KB per client, 100MB at 10000 clients.
 fn create_response_stream() -> (u64, mpsc::Receiver<axum::body::Bytes>) {
-    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
+    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(256);
     let stream_id = stream_registry().lock().unwrap().add(tx);
     (stream_id, rx)
 }
 
 /// Register a new input stream and return its id and the sender.
 fn create_input_stream() -> (u64, mpsc::Sender<axum::body::Bytes>) {
-    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(128);
+    let (tx, rx) = mpsc::channel::<axum::body::Bytes>(256);
     let stream_id = input_stream_registry().lock().unwrap().add(rx);
     (stream_id, tx)
 }
@@ -1313,8 +1420,8 @@ mod tests {
         assert_eq!(params.get("id"), Some(&"123".to_string()));
         assert_eq!(params.get("path"), Some(&"a/b/c".to_string()));
 
-        params = extract_route_params("/static/*path", "/static/app/alpha/index.html");
-        assert_eq!(params.get("path"), Some(&"app/alpha/index.html".to_string()));
+        params = extract_route_params("/static/*path", "/static/app/admin/index.html");
+        assert_eq!(params.get("path"), Some(&"app/admin/index.html".to_string()));
 
         params = extract_route_params("/api/info", "/api/info");
         assert!(params.is_empty());
@@ -1453,7 +1560,7 @@ mod tests {
         write.write_all(cgi_output).unwrap();
         drop(write);
 
-        let stream = CgiPipeStream::new(read, Vec::new());
+        let stream = CgiPipeStream::new(read, Vec::new(), None);
         let collected: Vec<u8> = stream
             .map(|chunk| chunk.unwrap().to_vec())
             .concat()
@@ -1474,7 +1581,7 @@ mod tests {
         write.write_all(cgi_output).unwrap();
         drop(write);
 
-        let stream = CgiPipeStream::new(read, Vec::new());
+        let stream = CgiPipeStream::new(read, Vec::new(), None);
         let collected: Vec<u8> = stream
             .map(|chunk| chunk.unwrap().to_vec())
             .concat()
@@ -1491,7 +1598,7 @@ mod tests {
         );
 
         let leftover = b"left".to_vec();
-        let mut stream = CgiPipeStream::new(read, leftover);
+        let mut stream = CgiPipeStream::new(read, leftover, None);
 
         let first = stream.next().await.unwrap().unwrap();
         assert_eq!(first, "left");
@@ -1504,15 +1611,15 @@ mod tests {
         assert!(stream.next().await.is_none());
     }
 
-    #[tokio::test]
-    async fn stream_registry_sends_and_removes_on_close() {
+    #[test]
+    fn stream_registry_sends_and_removes_on_close() {
         let mut registry = StreamRegistry::new();
         let (tx, mut rx) = mpsc::channel::<axum::body::Bytes>(10);
         let id = registry.add(tx);
 
         let event = axum::body::Bytes::from(r#"{"event":"test"}"#);
         assert!(registry.send(id, event.clone()).is_ok());
-        let received = rx.recv().await.unwrap();
+        let received = rx.blocking_recv().unwrap();
         assert_eq!(received, event);
 
         drop(rx);
@@ -1556,8 +1663,8 @@ mod tests {
         let (tx1, mut rx1) = mpsc::channel::<axum::body::Bytes>(10);
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("actions".to_string(), 1, tx1);
-        broadcast_registry.subscribe("actions".to_string(), 2, tx2);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None);
 
         let event = axum::body::Bytes::from(r#"{"action":"test"}"#);
         assert!(broadcast_registry.send("actions", event.clone()).is_ok());
@@ -1582,8 +1689,8 @@ mod tests {
         // Subscriber 2: normal channel that we will drain
         let (tx2, mut rx2) = mpsc::channel::<axum::body::Bytes>(10);
 
-        broadcast_registry.subscribe("actions".to_string(), 1, tx1);
-        broadcast_registry.subscribe("actions".to_string(), 2, tx2);
+        broadcast_registry.subscribe("actions".to_string(), 1, tx1, None);
+        broadcast_registry.subscribe("actions".to_string(), 2, tx2, None);
 
         // Send event 1 — both subscribers should get it (subscriber 1's
         // per-subscriber buffer has room for 64 events)
@@ -1784,6 +1891,13 @@ async fn dispatch_request_via_pipe(
         return plugin_error_response("Plugin handler failed").into_response();
     }
 
+    // Create a cancel guard that covers the entire request lifecycle from
+    // dispatch to response completion. If the HTTP response future is dropped
+    // at any point (client disconnect during header reading or body
+    // streaming), this guard sends a CancelPipe message to the dispatch
+    // queue, which signals the Prolog worker to abort via thread_signal/2.
+    let mut cancel_guard = PipeCancelGuard::new(output_write_fd, dispatch_queue());
+
     if let Some(input_file) = input_write {
         tokio::task::spawn_blocking(move || {
             let mut file = input_file;
@@ -1797,6 +1911,7 @@ async fn dispatch_request_via_pipe(
         Ok(result) => result,
         Err(e) => {
             crate::log::log_error(format!("failed to read CGI headers from pipe: {}", e));
+            // The guard will fire on drop, sending a cancel to the worker.
             return plugin_error_response("Plugin handler failed").into_response();
         }
     };
@@ -1830,6 +1945,9 @@ async fn dispatch_request_via_pipe(
                     }
                 }
                 body.truncate(read);
+                // The Prolog worker has finished writing the full response.
+                // Disarm the cancel guard so we don't send a spurious cancel.
+                cancel_guard.disarm();
                 return builder
                     .body(Body::from(axum::body::Bytes::from(body)))
                     .unwrap()
@@ -1839,13 +1957,15 @@ async fn dispatch_request_via_pipe(
     }
 
     // No Content-Length — stream with chunked transfer encoding.
-    let body_stream = CgiPipeStream::new(output_receiver, leftover);
+    // Transfer the cancel guard into the stream so that if the client
+    // disconnects during streaming, the Prolog worker is signalled to abort.
+    let body_stream = CgiPipeStream::new(output_receiver, leftover, Some(cancel_guard));
     builder.body(Body::from_stream(body_stream)).unwrap().into_response()
 }
 
 /// Read CGI headers from the pipe receiver, returning the parsed status, header
 /// map, and any bytes that were read past the header separator.
-async fn read_cgi_headers(
+pub(crate) async fn read_cgi_headers(
     receiver: &mut Receiver,
 ) -> Result<(u16, HeaderMap, Vec<u8>), String> {
     let mut buf = Vec::new();
@@ -1872,7 +1992,7 @@ async fn read_cgi_headers(
 /// Content-Length is preserved so that hyper can use it for keep-alive when
 /// the handler sets it (e.g. reply_json). When Content-Length is absent
 /// (streaming responses like NDJSON), hyper uses chunked transfer encoding.
-fn parse_cgi_headers(buf: &[u8]) -> Option<(u16, HeaderMap, usize)> {
+pub(crate) fn parse_cgi_headers(buf: &[u8]) -> Option<(u16, HeaderMap, usize)> {
     let separator_pos = find_header_separator(buf)?;
     let header_bytes = &buf[..separator_pos];
     let body_start = if buf[separator_pos..].starts_with(b"\r\n\r\n") {
@@ -1913,20 +2033,65 @@ fn find_header_separator(buf: &[u8]) -> Option<usize> {
     (0..buf.len().saturating_sub(3)).find(|&i| &buf[i..i + 4] == b"\r\n\r\n")
 }
 
+/// Guard that sends a `CancelPipe` message to the dispatch queue when dropped.
+/// This is held by `CgiPipeStream` so that when the HTTP response future is
+/// dropped (client disconnect), the Prolog worker handling this pipe FD is
+/// signalled to abort its work via `thread_signal/2`.
+struct PipeCancelGuard {
+    output_write_fd: i32,
+    queue: mpsc::Sender<DispatchMessage>,
+    cancelled: bool,
+}
+
+impl PipeCancelGuard {
+    fn new(output_write_fd: i32, queue: mpsc::Sender<DispatchMessage>) -> Self {
+        Self {
+            output_write_fd,
+            queue,
+            cancelled: false,
+        }
+    }
+
+    /// Mark the guard as consumed so Drop does not send a cancel message.
+    /// Called when the stream completes normally (EOF or error).
+    fn disarm(&mut self) {
+        self.cancelled = true;
+    }
+}
+
+impl Drop for PipeCancelGuard {
+    fn drop(&mut self) {
+        if !self.cancelled {
+            let fd = self.output_write_fd;
+            let queue = self.queue.clone();
+            // Send the cancel message asynchronously. If the queue is full
+            // or closed, there's nothing we can do — the watchdog will
+            // catch it as a safety net.
+            tokio::spawn(async move {
+                let _ = queue.send(DispatchMessage::CancelPipe(fd)).await;
+            });
+        }
+    }
+}
+
 /// Stream that yields bytes from the pipe receiver, prefixed by the bytes that
-/// were read while parsing the CGI headers.
+/// were read while parsing the CGI headers. When dropped before EOF (client
+/// disconnect), the `PipeCancelGuard` sends a cancel message to the dispatch
+/// queue so the Prolog worker is signalled to abort.
 struct CgiPipeStream {
     receiver: Receiver,
     leftover: Vec<u8>,
     leftover_yielded: bool,
+    cancel_guard: Option<PipeCancelGuard>,
 }
 
 impl CgiPipeStream {
-    fn new(receiver: Receiver, leftover: Vec<u8>) -> Self {
+    fn new(receiver: Receiver, leftover: Vec<u8>, cancel_guard: Option<PipeCancelGuard>) -> Self {
         Self {
             receiver,
             leftover,
             leftover_yielded: false,
+            cancel_guard,
         }
     }
 }
@@ -1950,12 +2115,23 @@ impl Stream for CgiPipeStream {
             Poll::Ready(Ok(())) => {
                 let n = read_buf.filled().len();
                 if n == 0 {
+                    // EOF — disarm the cancel guard so we don't send a
+                    // spurious cancel message for a completed request.
+                    if let Some(guard) = &mut this.cancel_guard {
+                        guard.disarm();
+                    }
                     Poll::Ready(None)
                 } else {
                     Poll::Ready(Some(Ok(axum::body::Bytes::copy_from_slice(&buf[..n]))))
                 }
             }
-            Poll::Ready(Err(_)) => Poll::Ready(None),
+            Poll::Ready(Err(_)) => {
+                // Error — disarm and return None.
+                if let Some(guard) = &mut this.cancel_guard {
+                    guard.disarm();
+                }
+                Poll::Ready(None)
+            }
             Poll::Pending => Poll::Pending,
         }
     }
@@ -2042,18 +2218,16 @@ async fn dispatch_stream_request(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let (parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-        Ok(bytes) => bytes,
-        Err(_) => return plugin_error_response("failed to read request body"),
-    };
     let content_encoding = parts
         .headers
         .get(header::CONTENT_ENCODING)
         .and_then(|v| v.to_str().ok());
-    let body_bytes = match decompress_request_body(content_encoding, &body_bytes) {
-        Ok(bytes) => bytes,
-        Err(msg) => return plugin_error_response(&msg),
-    };
+    let content_type = parts
+        .headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let has_content_length = parts.headers.contains_key(header::CONTENT_LENGTH);
 
     let method = parts.method.to_string();
     let path = normalize_dispatch_path(parts.uri.path());
@@ -2062,9 +2236,6 @@ async fn dispatch_stream_request(
         .headers
         .iter()
         .filter_map(|(k, v)| {
-            // Strip Content-Encoding: the body has already been decompressed
-            // by the Rust server. If we leave it in, the Prolog handler will
-            // try to decompress the already-decompressed data.
             if k == header::CONTENT_ENCODING {
                 return None;
             }
@@ -2078,14 +2249,77 @@ async fn dispatch_stream_request(
         .map(|(k, v)| (k, json!(v)))
         .collect();
 
-    let request_json = json!({
-        "method": method,
-        "path": path,
-        "query": query,
-        "headers": headers,
-        "body": "",
-        "params": params,
-    });
+    // When Content-Length is present and no compression, use the fast
+    // buffered path: read full body, pre-parse NDJSON into native dicts,
+    // and include parsed_body in the request. This eliminates
+    // json_read_dict overhead on the Prolog side.
+    //
+    // When chunked (no Content-Length) or compressed, stream body chunks
+    // through the input channel as they arrive. Prolog drains them via
+    // appserver_stream_recv/2. No parsed_body — Prolog parses NDJSON
+    // from the drained body. This enables true streaming with lower
+    // latency at the cost of Prolog-side JSON parsing.
+    let can_pre_parse = has_content_length
+        && content_encoding.is_none()
+        && content_type.contains("application/x-ndjson");
+
+    let mut body_opt = Some(body);
+
+    let (buffered_body, parsed_body) = if can_pre_parse {
+        let body = body_opt.take().unwrap();
+        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+            Ok(bytes) => bytes,
+            Err(_) => return plugin_error_response("failed to read request body"),
+        };
+        // For large bodies, skip pre-parsing to avoid dispatch thread
+        // serialize_to_term bottleneck. Worker threads parse via
+        // json_read_all_from_stream in parallel. Don't include the body
+        // string in request_json either — the worker reads it from the
+        // input stream.
+        if body_bytes.len() < 100_000 {
+            let parsed_body: Vec<serde_json::Value> = body_bytes
+                .split(|&b| b == b'\n')
+                .filter(|line| !line.is_empty())
+                .filter_map(|line| serde_json::from_slice(line).ok())
+                .collect();
+            (Some(body_bytes), parsed_body)
+        } else {
+            // Large body: send via input stream only, don't serialize in JSON.
+            (Some(body_bytes), Vec::new())
+        }
+    } else {
+        (None, Vec::new())
+    };
+
+    let request_json = if parsed_body.is_empty() {
+        // For large NDJSON bodies (>= 100KB), don't serialize the body
+        // string into request_json — the worker reads it from the input
+        // stream. For small bodies that failed to parse as NDJSON lines,
+        // include the body string as fallback.
+        let body_str = buffered_body
+            .as_ref()
+            .filter(|b| b.len() < 100_000)
+            .map(|b| String::from_utf8_lossy(b).to_string())
+            .unwrap_or_default();
+        json!({
+            "method": method,
+            "path": path,
+            "query": query,
+            "headers": headers,
+            "body": body_str,
+            "params": params,
+        })
+    } else {
+        json!({
+            "method": method,
+            "path": path,
+            "query": query,
+            "headers": headers,
+            "body": "",
+            "params": params,
+            "parsed_body": parsed_body,
+        })
+    };
     crate::log::log_info(format!("{} {} (stream)", method, path));
 
     let (input_stream_id, input_tx) = create_input_stream();
@@ -2123,11 +2357,34 @@ async fn dispatch_stream_request(
             return plugin_error_response("dispatch queue closed");
         }
 
-        if input_tx.send(axum::body::Bytes::from(body_bytes)).await.is_err() {
-            stream_registry().lock().unwrap().remove(response_stream_id);
-            return plugin_error_response("failed to send request body");
+        if let Some(bytes) = buffered_body {
+            // Buffered path: send entire body as one chunk, then close.
+            if input_tx.send(bytes).await.is_err() {
+                stream_registry().lock().unwrap().remove(response_stream_id);
+                return plugin_error_response("failed to send request body");
+            }
+            drop(input_tx);
+        } else {
+            // Streaming path: forward body chunks to Prolog as they arrive.
+            let body = body_opt.take().unwrap();
+            tokio::spawn(async move {
+                let mut body = body;
+                use http_body_util::BodyExt;
+                while let Some(chunk_result) = body.frame().await {
+                    match chunk_result {
+                        Ok(frame) => {
+                            if let Ok(bytes) = frame.into_data() {
+                                if input_tx.send(bytes).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                drop(input_tx);
+            });
         }
-        drop(input_tx);
 
         tokio::task::spawn_blocking(move || {
             let first = response_rx

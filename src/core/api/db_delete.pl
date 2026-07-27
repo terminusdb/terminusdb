@@ -16,6 +16,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(document/meta_commit_queue)).
 :- use_module(core(account)).
+:- use_module(core(plugins)).
 
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -79,7 +80,9 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
     ->  force_delete_db(Organization, DB_Name)
     ;   do_or_die(delete_database_label(Organization, DB_Name),
                   error(database_files_do_not_exist(Organization, DB_Name), _)),
-        delete_db_from_system(Organization, DB_Name)).
+        delete_db_from_system(Organization, DB_Name),
+        ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true))
+    ).
 
 /**
 * Deletes the database label for the global store. Fails if the label does not
@@ -101,4 +104,5 @@ delete_database_label(Organization, DB_Name) :-
  */
 force_delete_db(Organization, DB_Name) :-
     ignore(delete_database_label(Organization, DB_Name)),
-    ignore(delete_db_from_system(Organization, DB_Name)).
+    ignore(delete_db_from_system(Organization, DB_Name)),
+    ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true)).

@@ -86,6 +86,12 @@ For rapid iteration during development, use the test server script:
 ./tests/terminusdb-test-server.sh clean
 ```
 
+For a **release build** (production-quality binary) with one command:
+```bash
+make build-restart
+```
+See [Release Build and Restart](#release-build-and-restart) for details.
+
 **Benefits:**
 - **Fast rebuild cycle**: Only rebuilds Rust if sources changed with `make dev`
 - **Safe by default**: Preserves storage unless `--clean` flag is used
@@ -99,6 +105,133 @@ For rapid iteration during development, use the test server script:
 - URL: `http://127.0.0.1:6363`
 - User: `admin`
 - Pass: `root`
+
+### Paired Development with tdb-search (Indexing + Search)
+
+When working on the indexer or search functionality, you need both TerminusDB and
+[tdb-search](https://github.com/dfrnt-com/tdb-search) running simultaneously.
+The tdb-search repository includes a paired server script that manages both servers
+together — use it instead of the standalone TerminusDB test server script.
+
+**Prerequisites:**
+- tdb-search repo cloned as a sibling of the terminusdb repo
+- [Ollama](https://ollama.ai) running locally with an embedding model (e.g. `nomic-embed-text-v2-moe`)
+- tdb-search binary built: `cd ../tdb-search && cargo build`
+
+**Starting both servers:**
+
+```bash
+# Set the indexer backend and tdb-search endpoint before starting
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
+
+# Start both tdb-search (port 7372) and TerminusDB (port 7373)
+../tdb-search/tests/tdb-search-server.sh start
+
+# Restart both servers (keeps storage)
+../tdb-search/tests/tdb-search-server.sh restart
+
+# Check status of both servers
+../tdb-search/tests/tdb-search-server.sh status
+
+# View tdb-search logs
+../tdb-search/tests/tdb-search-server.sh logs
+
+# Stop both servers
+../tdb-search/tests/tdb-search-server.sh stop
+```
+
+**Important:** The `TERMINUSDB_INDEXER_BACKEND` and `TERMINUSDB_VECTORLINK_ENDPOINT`
+environment variables must be exported before calling the tdb-search restart script,
+because it internally calls the TerminusDB test server script and passes the
+environment through. Without these variables, the indexer backend defaults to `none`
+and indexing requests will fail with `vectorlink endpoint is not configured`.
+
+**Server Details:**
+- TerminusDB URL: `http://127.0.0.1:7373`
+- tdb-search URL: `http://127.0.0.1:7372`
+- User: `admin`
+- Pass: `root`
+
+**Quick restart after code changes (both servers):**
+
+```bash
+# 1. Rebuild TerminusDB (from terminusdb repo root)
+rm src/rust/librust.{dylib,so}; make dev
+
+# 2. Restart both servers with indexer enabled
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
+../tdb-search/tests/tdb-search-server.sh restart
+```
+
+For a **release build** instead of dev, use the one-liner:
+```bash
+make build-restart-search
+```
+See [Release Build and Restart](#release-build-and-restart) for details.
+
+**Cleaning all data (both servers):**
+
+```bash
+# Stop both servers
+../tdb-search/tests/tdb-search-server.sh stop
+
+# Wipe TerminusDB storage
+./tests/terminusdb-test-server.sh clean
+
+# Wipe tdb-search data
+rm -rf /tmp/tdb-search-data/*
+
+# Restart both
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
+../tdb-search/tests/tdb-search-server.sh start
+```
+
+### Release Build and Restart
+
+The development sections above use `make dev` which produces a development
+binary (no stripping, dynamic linking, and 10x larger and 10x slower than the release build). For testing with a **release build**
+— the same build used in production — use the combined build-and-restart
+targets:
+
+**Standalone (port 6363):**
+
+```bash
+make build-restart
+```
+
+This runs `make` (release build) and then `tests/terminusdb-test-server.sh restart`,
+giving you a production-quality binary on the default test port 6363.
+See [Local Development Server](#local-development-server-fastest---recommended)
+for details on the test server script.
+
+**Paired with tdb-search (TerminusDB on port 7373, tdb-search on port 7372):**
+
+```bash
+make build-restart-search
+```
+
+This runs `make` (release build) and then `../tdb-search/tests/tdb-search-server.sh restart`,
+which restarts both tdb-search (port 7372) and TerminusDB (port 7373) with the
+indexer backend enabled. The tdb-search server script also builds tdb-search
+in release mode if the binary is missing or stale.
+See [Paired Development with tdb-search](#paired-development-with-tdb-search-indexing--search)
+for prerequisites and environment variable details.
+
+> **Note:** The `make build-restart-search` target requires the tdb-search repo
+> cloned as a sibling of the terminusdb repo, and
+> [Ollama](https://ollama.ai) running locally with an embedding model.
+
+**Cross-reference summary:**
+
+| Mode | Port(s) | Build target | Restart script |
+|------|---------|-------------|----------------|
+| Standalone (dev) | 6363 | `make dev` | `./tests/terminusdb-test-server.sh restart` |
+| Standalone (release) | 6363 | `make build-restart` | (included) |
+| Paired (dev) | 7373 + 7372 | `make dev` | `../tdb-search/tests/tdb-search-server.sh restart` |
+| Paired (release) | 7373 + 7372 | `make build-restart-search` | (included) |
 
 ### Manual Development Workflow
 

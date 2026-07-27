@@ -51,6 +51,8 @@ Default_Or_Error := error
                  |  default(Default)
 Op := delete_class(Name)
     | replace_context(Context)
+    | replace_context_metadata(Metadata)
+    | replace_context_documentation(Documentation)
     | create_class(ClassDocument)
     | expand_enum(Class,Values)
     | replace_class_metadata(Class,Metadata)
@@ -222,6 +224,20 @@ not_unfoldable(Class, Before, After) :-
 replace_context(Context, Before, After) :-
     throw(error(not_implemented('replace_context'), _)),
     put_dict(_{'@context' : Context}, Before, After).
+
+
+/* replace_context_metadata(Metadata) */
+replace_context_metadata(Metadata, Before, After) :-
+    get_dict('@context', Before, Context),
+    put_dict(_{'@metadata' : Metadata}, Context, New_Context),
+    put_dict(_{'@context' : New_Context}, Before, After).
+
+
+/* replace_context_documentation(Documentation) */
+replace_context_documentation(Documentation, Before, After) :-
+    get_dict('@context', Before, Context),
+    put_dict(_{'@documentation' : Documentation}, Context, New_Context),
+    put_dict(_{'@context' : New_Context}, Before, After).
 
 
 /* delete_class_property(Class,Property) */
@@ -540,6 +556,59 @@ frame_supermap(Schema,Supermap) :-
         Class_Supers),
     dict_create(Supermap, supermap, Class_Supers).
 
+/*
+ * context_weakened(+Old_Context, +New_Context, -Operations) is semidet.
+ *
+ * True when the only differences between Old_Context and New_Context
+ * are in @metadata and/or @documentation. Changes to @base or @schema
+ * affect interpretation of instance data URIs and are not yet weakening.
+ */
+context_weakened(Old_Context, New_Context, _Operations) :-
+    (   Old_Context = New_Context
+    ->  !, fail
+    ;   true
+    ),
+    % Extract the structural fields that affect instance data
+    context_structural_fields(Old_Context, Old_Base, Old_Schema),
+    context_structural_fields(New_Context, New_Base, New_Schema),
+    (   Old_Base \= New_Base
+    ;   Old_Schema \= New_Schema
+    ),
+    !,
+    throw(error(weakening_failure(json{ reason: not_a_weakening_context_changed,
+                                        message: "The change of context may cause changes of instance data"}), _)).
+
+context_weakened(Old_Context, New_Context, Operations) :-
+    findall(Op,
+            (   context_metadata_changed(Old_Context, New_Context, Op)
+            ;   context_documentation_changed(Old_Context, New_Context, Op)
+            ),
+            Operations).
+
+context_structural_fields(Context, Base, Schema) :-
+    (   get_dict('@base', Context, Base)
+    ->  true
+    ;   Base = ''
+    ),
+    (   get_dict('@schema', Context, Schema)
+    ->  true
+    ;   Schema = ''
+    ).
+
+context_metadata_changed(Old_Context, New_Context, replace_context_metadata(New_Metadata)) :-
+    get_dict('@metadata', New_Context, New_Metadata),
+    (   get_dict('@metadata', Old_Context, Old_Metadata)
+    ->  Old_Metadata \= New_Metadata
+    ;   true
+    ).
+
+context_documentation_changed(Old_Context, New_Context, replace_context_documentation(New_Docs)) :-
+    get_dict('@documentation', New_Context, New_Docs),
+    (   get_dict('@documentation', Old_Context, Old_Docs)
+    ->  Old_Docs \= New_Docs
+    ;   true
+    ).
+
 schema_weakening(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
     dict_keys(Weakened,New),
@@ -570,11 +639,7 @@ schema_weakening(Schema,Weakened,Operations) :-
                 get_dict(Key,Schema,Old_Class),
                 get_dict(Key,Weakened,New_Class),
                 (   Key = '@context'
-                ->  (   Old_Class = New_Class % no change
-                    ->  fail
-                    ;   throw(error(
-                                  weakening_failure(json{ reason: not_a_weakening_context_changed,
-                                                          message: "The change of context may cause changes of instance data"}), _)))
+                ->  context_weakened(Old_Class, New_Class, Intermediate_Operations)
                 ;   class_weakened(Key,Old_Class,New_Class,Supermap,Intermediate_Operations)
                 )
             ),
@@ -669,7 +734,7 @@ infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     create_class_dictionary(Before_Transaction, Before),
     create_class_dictionary(After_Transaction, After),
     schema_inference_rule(Rule, Before, After, Operations),
-    migration_list_to_ast_list(Operations_List,Operations),
+    migration_list_to_ast_list(Operations_List, Operations),
     !,
     perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
     atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
@@ -1268,6 +1333,8 @@ interpret_instance_operation_(unfoldable(_), _Before, _After, 0).
 interpret_instance_operation_(not_unfoldable(_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_context_metadata(_), _Before, _After, 0).
+interpret_instance_operation_(replace_context_documentation(_), _Before, _After, 0).
 interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
     (   database_context_object(Before,Old_Context)
     ->  count_solutions(
@@ -1681,6 +1748,10 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
 operation_is_weakening(create_class(_)).
 operation_is_weakening(create_class_property(_,_,_)).
 operation_is_weakening(upcast_class_property(_,_,_)).
+operation_is_weakening(replace_class_metadata(_,_)).
+operation_is_weakening(replace_class_documentation(_,_)).
+operation_is_weakening(replace_context_metadata(_)).
+operation_is_weakening(replace_context_documentation(_)).
 
 operations_are_weakening(L) :-
     maplist(operation_is_weakening, L).
@@ -1740,6 +1811,97 @@ test(weaken_enum_success, []) :-
                                       '@value':['IT', 'Marketing', 'Finance']}}, Operations),
 
     Operations = [  expand_enum('Team',['Finance']) ].
+
+test(context_metadata_only_change_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@metadata':json{foo:1}}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@metadata':json{foo:2}}},
+        Operations),
+    Operations = [replace_context_metadata(json{foo:2})].
+
+test(context_documentation_only_change_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@documentation':json{'@title':"Old"}}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@documentation':json{'@title':"New"}}},
+        Operations),
+    Operations = [replace_context_documentation(json{'@title':"New"})].
+
+test(context_metadata_and_documentation_change_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@metadata':json{foo:1},
+                             '@documentation':json{'@title':"Old"}}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@metadata':json{foo:2},
+                             '@documentation':json{'@title':"New"}}},
+        Operations),
+    msort(Operations, [replace_context_documentation(json{'@title':"New"}),
+                       replace_context_metadata(json{foo:2})]).
+
+test(context_base_change_is_not_weakening, [
+         error(weakening_failure(json{reason:not_a_weakening_context_changed,
+                                      message:"The change of context may cause changes of instance data"}), _)
+     ]) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'}},
+        json{'@context':json{'@base':"http://j/",
+                             '@schema':"http://s/",
+                             '@type':'Context'}},
+        _Operations).
+
+test(context_schema_change_is_not_weakening, [
+         error(weakening_failure(json{reason:not_a_weakening_context_changed,
+                                      message:"The change of context may cause changes of instance data"}), _)
+     ]) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://t/",
+                             '@type':'Context'}},
+        _Operations).
+
+test(context_metadata_added_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context',
+                             '@metadata':json{foo:1}}},
+        Operations),
+    Operations = [replace_context_metadata(json{foo:1})].
+
+test(context_no_change_produces_no_operations, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'}},
+        Operations),
+    Operations = [].
 
 before1('
 { "@base": "terminusdb:///data/",

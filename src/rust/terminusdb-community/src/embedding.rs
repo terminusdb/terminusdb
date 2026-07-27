@@ -2,6 +2,7 @@ use std::{collections::HashMap, io::Write, sync::Arc};
 
 use crate::{
     graphql::{
+        post_process_graphql_numbers,
         schema::TerminusTypeCollectionInfo, type_collection_from_term, GraphQLExecutionContext,
     },
     template::handlebars_from_term,
@@ -279,7 +280,7 @@ impl EmbeddingContext {
 
         if self.templates.has_template(&type_name) {
             match self.templates.render(&*type_name, &doc) {
-                Ok(result) => Ok(result),
+                Ok(result) => Ok(post_process_graphql_numbers(result)),
                 Err(e) => {
                     let msg = e.to_string();
                     let line = e.line_no.unwrap_or(0) as u64;
@@ -296,7 +297,7 @@ impl EmbeddingContext {
         } else {
             let result = serde_json::to_string(&doc)
                 .expect("Couldn't turn a graphql result document into a json string");
-            Ok(result)
+            Ok(post_process_graphql_numbers(result))
         }
     }
 }

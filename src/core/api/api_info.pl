@@ -4,9 +4,15 @@
 :- use_module(core(triple)).
 :- use_module(config(terminus_config), [terminusdb_version/1,
                                         is_memory_mode/0,
-                                        is_enterprise/0]).
+                                        is_enterprise/0,
+                                        indexer_backend/1]).
 
 :- use_module(library(terminus_store), [terminus_store_version/1]).
+
+% indexer_available/0 is a semidet predicate exported by plugin_api.
+% It succeeds when the Rust indexer FFI predicates are registered.
+% We use autoload instead of explicit import to avoid load-order issues.
+:- autoload(core(plugin_api), [indexer_available/0]).
 
 info(_System_DB, Auth, Info) :-
     terminusdb_version(TerminusDB_Version),
@@ -21,11 +27,13 @@ info(_System_DB, Auth, Info) :-
     server_edition(Edition),
     http_engine(Http_Engine),
 
+    indexer_info(Indexer_Info),
     (   is_anonymous_authority(Auth)
     ->  Info = _{
                authority: Auth,
                edition: Edition,
                http_engine: Http_Engine,
+               indexer: Indexer_Info,
                storage:
                _{
                    version: Storage_Version_String
@@ -35,6 +43,7 @@ info(_System_DB, Auth, Info) :-
                authority: Auth,
                edition: Edition,
                http_engine: Http_Engine,
+               indexer: Indexer_Info,
                terminusdb :
                _{
                    version : TerminusDB_Version,
@@ -77,6 +86,32 @@ http_engine(Engine) :-
         )
     ;   Engine = metal
     ).
+
+%% indexer_info(-Info) is det.
+%
+%  Reports the indexer backend configuration and availability.
+%  - backend: the configured backend atom (none, http_vectorlink, http_legacy_vectorlink)
+%  - configured: true when backend is not 'none'
+%  - available: true when the Rust indexer FFI predicates are registered
+%    (i.e. the indexer runtime is loaded and operational)
+indexer_info(Info) :-
+    (   catch(indexer_backend(Backend), _, Backend = none)
+    ->  true
+    ;   Backend = none
+    ),
+    (   Backend \= none
+    ->  Configured = true
+    ;   Configured = false
+    ),
+    (   catch(indexer_available, _, fail)
+    ->  Available = true
+    ;   Available = false
+    ),
+    Info = _{
+        backend: Backend,
+        configured: Configured,
+        available: Available
+    }.
 
 %% is_anonymous_authority(+Auth) is semidet.
 %
@@ -141,6 +176,22 @@ test(is_anonymous_authority_uri) :-
 test(is_not_anonymous_authority_for_admin) :-
     \+ is_anonymous_authority('terminusdb://system/data/User/admin').
 
+% indexer_info/1 always produces a dict with backend, configured, and available.
+test(indexer_info_produces_dict) :-
+    indexer_info(Info),
+    get_dict(backend, Info, _),
+    get_dict(configured, Info, _),
+    get_dict(available, Info, _).
+
+% indexer_info/1 reports configured=false when backend is none.
+test(indexer_info_none_backend_not_configured,
+     [setup(terminus_config:clear_indexer_backend_config),
+      cleanup(terminus_config:clear_indexer_backend_config)]) :-
+    indexer_info(Info),
+    get_dict(backend, Info, Backend),
+    Backend == none,
+    get_dict(configured, Info, false).
+
 % info/3 for a logged-in user includes all sections.
 test(info_logged_in_includes_all_sections,
      [setup((setup_temp_store(State),
@@ -153,11 +204,13 @@ test(info_logged_in_includes_all_sections,
     get_dict(authority, Info, Auth),
     get_dict(edition, Info, _),
     get_dict(http_engine, Info, _),
+    get_dict(indexer, Info, _),
     get_dict(terminusdb, Info, _),
     get_dict(terminusdb_store, Info, _),
     get_dict(storage, Info, _).
 
-% info/3 for an anonymous user omits terminusdb and terminusdb_store.
+% info/3 for an anonymous user omits terminusdb and terminusdb_store
+% but still includes the indexer section.
 test(info_anonymous_omits_version_sections,
      [setup((setup_temp_store(State),
              set_memory_mode)),
@@ -168,6 +221,7 @@ test(info_anonymous_omits_version_sections,
     get_dict(authority, Info, 'terminusdb://system/data/User/anonymous'),
     get_dict(edition, Info, _),
     get_dict(http_engine, Info, _),
+    get_dict(indexer, Info, _),
     get_dict(storage, Info, _),
     \+ get_dict(terminusdb, Info, _),
     \+ get_dict(terminusdb_store, Info, _).

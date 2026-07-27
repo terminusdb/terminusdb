@@ -238,11 +238,11 @@ abolish_trampoline :-
  *
  * The body is assumed semidet.
  */
+:- meta_predicate with_transaction(?,0,?,+).
 :- meta_predicate with_transaction(?,0,?).
 with_transaction(Query_Context,Body,Meta_Data) :-
     with_transaction(Query_Context,Body,Meta_Data, []).
 
-:- meta_predicate with_transaction(?,0,?,+).
 with_transaction(Query_Context,
                  Body,
                  Meta_Data,
@@ -253,7 +253,6 @@ with_transaction(Query_Context,
         post_transaction_tabling % Do some cleanup of schema compilation etc.
     ).
 
-:- meta_predicate with_transaction(?,0,?,+).
 with_transaction_(Query_Context,
                   Body,
                   Meta_Data,

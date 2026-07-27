@@ -50,6 +50,12 @@ migration_dict_to_ast(json{ '@type' : "ExpandEnum",
 migration_dict_to_ast(json{ '@type' : "ReplaceContext",
                             context : Context },
                       replace_context(Context)).
+migration_dict_to_ast(json{ '@type' : "ReplaceContextMetadata",
+                            metadata : Metadata },
+                      replace_context_metadata(Metadata)).
+migration_dict_to_ast(json{ '@type' : "ReplaceContextDocumentation",
+                            documentation : Documentation },
+                      replace_context_documentation(Documentation)).
 migration_dict_to_ast(json{ '@type' : "DeleteClassProperty",
                             class: Class,
                             property: Property},

@@ -70,7 +70,7 @@ endif
 default: $(TARGET)
 
 .PHONY: dev
-dev: $(RUST_TARGET) dev-build
+dev: $(RUST_TARGET) plugins-rust dev-build
 
 .PHONY: i
 i: $(RUST_TARGET)
@@ -93,7 +93,7 @@ download-lint: $(SWIPL_LINT_PATH)
 
 .PHONY: lint
 lint: $(SWIPL_LINT_PATH)
-	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -s $(SWIPL_LINT_PATH) -g lint_files -t halt
+	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -g "use_module(library(plunit))" -s $(SWIPL_LINT_PATH) -g lint_files -t halt
 
 .PHONY: clean
 clean:
@@ -129,9 +129,16 @@ $(TARGET): $(shell find $(SRC_DIRS) -not -path 'src/rust/*' \( -name '*.pl' -o -
 $(RUST_TARGET):
 	@$(MAKE) -f distribution/Makefile.rust $@
 
+.PHONY: plugins-rust
+plugins-rust:
+	@$(MAKE) -f distribution/Makefile.rust $@
+
 $(SWIPL_LINT_PATH):
 	curl -L --create-dirs -o $@ "https://raw.githubusercontent.com/terminusdb-labs/swipl-lint/$(SWIPL_LINT_VERSION)/pl_lint.pl"
 	# Fix the broken config loader and avoid halt/1 inside :- initialization/1,
 	# which no longer terminates the process in SWI-Prolog 10.
 	sed -i.bak -e "s#catch(\['\./\.lint_config\.pl'\], _, true)#catch(consult('./.lint_config.pl'), _, true)#" $@
 	sed -i.bak -e "s/:- initialization(lint_files)./:- export(lint_files\/0)./" $@
+	# Add ignore_module/1 support for suppressing $-prefixed runtime module warnings.
+	awk '{print} /:- dynamic ignore_file\/1\./ {print ":- dynamic ignore_module/1."}' $@ > $@.tmp && mv $@.tmp $@
+	awk '{print} /atom_string\(ModuleAtom, Module\),/ {print "    (   catch(ignore_module(ModuleAtom), _, false)"; print "    ->  fail"; print "    ;   true"; print "    ),"}' $@ > $@.tmp && mv $@.tmp $@

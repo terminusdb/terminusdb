@@ -1,7 +1,7 @@
 # TerminusDB gitignore defaults
 tus
 .DS_Store
-tests/.terminusdb-test-storage
+tests/.terminusdb-test-storage*
 tests/benchmark/benchmark_results
 tests/benchmark_results
 node_modules
@@ -9,7 +9,7 @@ node_modules
 \#*\#
 .\#*
 .deps
-config.pl
+/src/config/terminus_config.pl
 *.index.v1-1
 prefix.db
 tmp/*
@@ -32,3 +32,5 @@ tests/.terminusdb-test-storage
 admin?2fdb-*.bundle
 .terminusdb-test.log
 .terminusdb-test.pid
+tests/.terminusdb-test-7373.log
+tests/.terminusdb-test-7373.pid

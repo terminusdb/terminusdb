@@ -42,6 +42,9 @@
 
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
+% Meta-predicate declaration must appear before any caller to satisfy xref.
+:- meta_predicate api_report_errors(?,0).
+
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
@@ -2758,7 +2761,6 @@ report_parse_error(error(syntax_error('disallowed: <shortflag>=<value>'),_), Com
 report_parse_error(error(type_error(flag_value,_),_), _) =>
     true.
 
-:- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
     catch_with_backtrace(
         Goal,

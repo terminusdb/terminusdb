@@ -3,7 +3,10 @@
               db_handler/5,
               db_handler/6,
               authenticate/3,
+              cors_handler/3,
+              cors_handler/4,
               write_cors_headers/1,
+              api_report_errors/3,
               customise_exception/1
           ]).
 
@@ -53,6 +56,7 @@
 :- use_module(library(http/http_dispatch)).
 :- use_module(server(routes/tdb_http_handler)).
 :- use_module(server(routes/request_worker_pool)).
+:- use_module(server(routes/indexer_worker)).
 :- use_module(library(http/http_server_files)).
 :- use_module(library(http/html_write)).
 :- use_module(library(http/http_path)).
@@ -98,6 +102,11 @@
 :- endif.
 
 :- listen(http(Term), http_request_logger(Term)).
+
+% Meta-predicate declarations must appear before any caller to satisfy xref.
+:- meta_predicate cors_catch(+, 0).
+:- meta_predicate call_http_handler(+,3,?,?,?).
+:- meta_predicate api_report_errors(?,?,0).
 
 %%%%%%%%%%%%% API Paths %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -162,9 +171,23 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         (   param_value_search_optional(Search, start, integer, 0, Start),
             param_value_search_optional(Search, count, integer, -1, Count),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
-            Options = opts{ start: Start, count: Count, verbose: Verbose},
-            api_log(System_DB, Auth, Path, Log, Options),
-            cors_reply_json(Request, Log))).
+            param_value_search_optional(Search, stream, boolean, false, Stream),
+            param_value_search_optional(Search, with_counts, boolean, false, With_Counts),
+            Options = opts{ start: Start, count: Count, verbose: Verbose, with_counts: With_Counts},
+            (   Stream = true
+            ->  write_cors_headers(Request),
+                format('Status: 200~n'),
+                format('Content-Type: application/x-ndjson~n'),
+                format('Cache-Control: no-cache~n'),
+                format('X-Accel-Buffering: no~n'),
+                format('Connection: close~n'),
+                format("Transfer-Encoding: chunked~n~n"),
+                flush_output,
+                api_log:api_log_streaming(System_DB, Auth, Path, Options)
+            ;   api_log(System_DB, Auth, Path, Log, Options),
+                cors_reply_json(Request, Log)
+            )
+        )).
 
 
 %%%%%%%%%%%%%%%%%%%% Info Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2864,6 +2887,37 @@ diff_handler(post, Path, Request, System_DB, Auth) :-
         )
     ).
 
+%%%%%%%%%%%%%%%%%%%% Changes handler %%%%%%%%%%%%%%%%%%%%%%%%%
+:- tdb_http_handler(api(changes/Path), cors_handler(Method, changes_handler(Path)),
+                [method(Method),
+                 prefix,
+                 time_limit(infinite),
+                 methods([options,get])]).
+
+/*
+ * changes_handler(Mode, Path, Request, System, Auth) is det.
+ *
+ * Returns the set of document IDs that were added, changed, or deleted
+ * in the given commit. The path may be a branch path (returns changes
+ * on the branch head) or a commit path (returns changes for that
+ * specific commit).
+ *
+ * Query parameters:
+ *   count - maximum number of IDs to return per category (default: unlimited)
+ */
+changes_handler(get, Path, Request, System_DB, Auth) :-
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
+    api_report_errors(
+        changes,
+        Request,
+        (   param_value_search_optional(Search, count, integer, -1, Count),
+            api_changes(System_DB, Auth, Path, Changes, _{count: Count}),
+            cors_reply_json(Request, Changes)
+        )
+    ).
+
 %%%%%%%%%%%%%%%%%%%% Apply handler %%%%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(apply/Path), cors_handler(Method, apply_handler(Path)),
                 [method(Method),
@@ -3277,50 +3331,8 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
         )
     ).
 
-%%%%%%%%%%%%%%%%%%%% Index Candidate Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
-:- tdb_http_handler(api(index/Path), cors_handler(Method, index_handler(Path)),
-                [method(Method),
-                 prefix,
-                 time_limit(infinite),
-                 methods([options,get,post,put])]).
-
-index_handler(get,Path,Request,System_DB,Auth) :-
-    (   memberchk(search(Search), Request)
-    ->  true
-    ;   Search = []),
-
-    api_report_errors(
-        index,
-        Request,
-        (
-            param_value_search_required(Search, commit_id, text, Commit_Id),
-            param_value_search_optional(Search, previous_commit_id, text, none, Previous_Commit_Id),
-            (   Previous_Commit_Id = none
-            ->  Maybe_Previous_Commit_Id = Previous_Commit_Id
-            ;   Maybe_Previous_Commit_Id = some(Previous_Commit_Id)
-            ),
-            api_index_jobs(
-                System_DB,
-                Auth,
-                current_output,
-                [Stream]>>(
-                    write(Stream,'Status: 200'),nl(Stream),
-                    write(Stream,'Content-Type: application/json'),nl(Stream),
-                    format("Transfer-Encoding: chunked~n"),
-                    nl(Stream)),
-                Path,
-                Commit_Id,
-                Maybe_Previous_Commit_Id,
-                [])
-        )
-    ).
-
-
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
 http:location(graphql,api(graphql),[]).
-:- http_handler(graphql(.), cors_handler(Method, graphql_handler(""), [add_payload(false),skip_authentication(true)]),
-                [method(Method),
-                 methods([options,get,post])]).
 :- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
                 [method(Method),
                  prefix,
@@ -3487,8 +3499,6 @@ cors_handler(_Method, Goal, _Options, R) :-
                [status(500), width(0)]).
 
 % Evil mechanism for catching, putting CORS headers and re-throwing.
-:- meta_predicate cors_catch(+, 0).
-:- meta_predicate call_http_handler(+,3,?,?,?).
 cors_catch(Request, Goal) :-
     catch(Goal,
           E,
@@ -3688,7 +3698,6 @@ api_error_http_reply(API, Error, Type, Request) :-
     json_http_code(JSON_Final,Status),
     cors_reply_json(Request,JSON_Final,[status(Status),serialize_unknown(true)]).
 
-:- meta_predicate api_report_errors(?,?,0).
 api_report_errors(API,Request,Goal) :-
     catch_with_backtrace(
         Goal,
@@ -4428,6 +4437,7 @@ extract_http_info(Request, Method, Url, Path, Remote_Ip, User_Agent, Size, Opera
 
 get_current_id_from_stream(Id) :-
     current_output(CGI),
+    is_cgi_stream(CGI),
     cgi_property(CGI, id(Id)).
 
 save_request(Request) :-
@@ -4451,6 +4461,16 @@ save_request(Request) :-
 http:request_expansion(Request, Request) :-
     save_request(Request).
 
+http_request_logger(request_finished(Local_Id, Code, Status, Cpu, Bytes)) :-
+    % Always retract saved_request/5 to prevent unbounded accumulation.
+    % The retraction must happen regardless of log level.
+    (   retract(saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs))
+    ->  (   info_log_enabled
+        ->  http_request_log_finished(Local_Id, Code, Status, Cpu, Bytes,
+                                       Start, Path, Submitted_Operation_Id, Initial_Http_Pairs)
+        ;   true)
+    ;   true),  % nothing to retract — request may have been logged differently
+    !.
 http_request_logger(_) :-
     % Skip work if info log is not enabled
     \+ info_log_enabled,
@@ -4476,11 +4496,9 @@ http_request_logger(request_start(Local_Id, Request)) :-
                   Request_Id,
                    Dict).
 
-http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
+http_request_log_finished(Local_Id, Code, _Status, _Cpu, Bytes,
+                           Start, Path, Submitted_Operation_Id, Initial_Http_Pairs) :-
     term_string(Bytes, Bytes_String),
-
-    saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs),
-    retract(saved_request(Local_Id, Start, Path, Submitted_Operation_Id, Initial_Http_Pairs)),
     get_time(Now),
     Latency is Now - Start,
     format(string(Latency_String), "~9fs", [Latency]),

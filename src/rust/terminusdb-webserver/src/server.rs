@@ -1,14 +1,66 @@
 use axum::{
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
+use axum::middleware::Next;
+use axum::extract::Request;
 use serde_json::json;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::routes::root_redirect;
+
+/// Global counter for active HTTP connections.
+static ACTIVE_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Get the current number of active connections.
+pub fn active_connections() -> u64 {
+    ACTIVE_CONNECTIONS.load(Ordering::SeqCst)
+}
+
+/// Middleware that tracks active connections by incrementing on entry
+/// and decrementing when the response completes.
+async fn connection_counter_middleware(req: Request, next: Next) -> impl IntoResponse {
+    ACTIVE_CONNECTIONS.fetch_add(1, Ordering::SeqCst);
+    let resp = next.run(req).await;
+    ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::SeqCst);
+    resp
+}
+
+/// Middleware that intercepts Axum's default 405 Method Not Allowed responses
+/// (which have an empty body) and replaces them with a standardized JSON-LD
+/// error response matching the Prolog backend's format.
+async fn method_not_allowed_middleware(req: Request, next: Next) -> Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    let response = next.run(req).await;
+    if response.status() == StatusCode::METHOD_NOT_ALLOWED {
+        let allow = response
+            .headers()
+            .get(axum::http::header::ALLOW)
+            .cloned();
+        let body = Json(json!({
+            "@type": "api:MethodNotAllowedErrorResponse",
+            "api:status": "api:method_not_allowed",
+            "api:message": format!("HTTP method {} is not allowed for {}", method, path),
+            "api:error": {
+                "@type": "api:MethodNotAllowed",
+                "api:method": method.as_str().to_uppercase(),
+                "api:path": path
+            }
+        }));
+        let mut new_response = (StatusCode::METHOD_NOT_ALLOWED, body).into_response();
+        if let Some(allow) = allow {
+            new_response.headers_mut().insert(axum::http::header::ALLOW, allow);
+        }
+        new_response
+    } else {
+        response
+    }
+}
 
 /// Build the Axum application router.
 ///
@@ -164,7 +216,9 @@ pub fn start_with_routes(
                 .merge(plugin_router)
                 .merge(static_router)
                 .merge(stream_router)
-                .fallback(fallback_not_found);
+                .fallback(fallback_not_found)
+                .layer(axum::middleware::from_fn(method_not_allowed_middleware))
+                .layer(axum::middleware::from_fn(connection_counter_middleware));
             let tokio_listener = match tokio::net::TcpListener::from_std(listener) {
                 Ok(listener) => listener,
                 Err(e) => {
@@ -221,7 +275,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
         assert_eq!(
             response.headers().get("location").unwrap().to_str().unwrap(),
-            "/app/alpha"
+            "/app/admin"
         );
     }
 

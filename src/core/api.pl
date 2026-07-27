@@ -216,7 +216,10 @@
               api_concat/6,
 
               % api_indexer
-              api_index_jobs/8
+              api_index_jobs/8,
+
+              % api_changes.pl
+              api_changes/5
           ]).
 
 :- use_module(api/api_init).
@@ -256,4 +259,6 @@
 :- use_module(api/api_history).
 :- use_module(api/api_migration).
 :- use_module(api/api_indexer).
+:- use_module(api/api_search).
 :- use_module(api/api_merge).
+:- use_module(api/api_changes).

@@ -3,6 +3,7 @@ use swipl::fli::{
     IOENC_ENC_OCTET, IOENC_ENC_UTF8, PL_unify_stream, Sclose, Sfdopen, Ssetenc,
 };
 use swipl::prelude::*;
+use swipl::term::Nil;
 
 use crate::dispatch::{collect_routes, collect_static_paths, collect_streams};
 use crate::server;
@@ -20,7 +21,8 @@ fn term_to_string(term: &Term) -> PrologResult<String> {
 predicates! {
     /// Start the Rust webserver on the given port.
     ///
-    /// Signature: `appserver_start(+Port)` where Port is an integer.
+    /// Signature: `appserver_start(+Port, +RootRedirect)` where Port is an
+    /// integer and RootRedirect is a string/atom for the root `/` redirect target.
     ///
     /// Routes are collected from `appserver_hooks:appserver_route/3` and
     /// static file serving paths from `appserver_hooks:appserver_static_path/3`.
@@ -28,7 +30,7 @@ predicates! {
     /// Fails if the port is outside the valid TCP range (1..65535) or if the
     /// server cannot bind to it.
     #[module("$appserver")]
-    pub semidet fn appserver_start(context, port_term) {
+    pub semidet fn appserver_start(context, port_term, redirect_term) {
         let port: u64 = port_term.get_ex()?;
         if port == 0 || port > u16::MAX as u64 {
             crate::log::log_error(format!(
@@ -37,6 +39,8 @@ predicates! {
             ));
             return Err(PrologError::Failure);
         }
+        let redirect_target: String = term_to_string(&redirect_term)?;
+        crate::config::set_root_redirect_target(redirect_target);
         let routes = collect_routes(context)?;
         let static_paths = collect_static_paths(context)?;
         let streams = collect_streams(context)?;
@@ -98,6 +102,33 @@ predicates! {
             .map_err(|_| PrologError::Failure)
     }
 
+    /// Send a batch of Prolog dicts as NDJSON in a single FFI call.
+    ///
+    /// Signature: `appserver_stream_send_batch(+StreamId, +ListOfDicts)` where
+    /// StreamId is the identifier given to the stream handler and ListOfDicts
+    /// is a Prolog list of dicts. Each dict is deserialized to a serde_json::Value
+    /// and serialized to a JSON line with a trailing newline. The entire batch
+    /// is sent as a single chunk via one `send` call, amortizing FFI overhead
+    /// and mpsc lock contention.
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_send_batch(context, stream_id_term, list_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        let mut bytes = Vec::with_capacity(4096);
+        for term in context.term_list_iter(&list_term) {
+            let value: serde_json::Value = context
+                .deserialize_from_term(&term)
+                .map_err(|_| PrologError::Failure)?;
+            serde_json::to_writer(&mut bytes, &value)
+                .map_err(|_| PrologError::Failure)?;
+            bytes.push(b'\n');
+        }
+        crate::dispatch::stream_registry()
+            .lock()
+            .unwrap()
+            .send(stream_id, axum::body::Bytes::from(bytes))
+            .map_err(|_| PrologError::Failure)
+    }
+
     /// Close an active streaming response.
     ///
     /// Signature: `appserver_stream_close(+StreamId)`. Removes the stream
@@ -134,16 +165,26 @@ predicates! {
         }
     }
 
-    /// Subscribe an existing stream to a named broadcast channel.
+    /// Subscribe an existing stream to a named broadcast channel with idle timeout.
     ///
-    /// Signature: `appserver_broadcast_subscribe(+Channel, +StreamId)`.
+    /// Signature: `appserver_broadcast_subscribe(+Channel, +StreamId, +IdleTimeout)`.
     /// The channel name is an atom or string. After subscribing, any data sent
     /// to the channel with `appserver_broadcast_send/2` is forwarded to
     /// this stream by a background tokio task.
+    ///
+    /// IdleTimeout is the idle timeout in seconds: if no messages arrive
+    /// for this duration, the stream is closed. 0 or negative means no
+    /// timeout (stream stays open until client disconnects).
     #[module("$appserver")]
-    pub semidet fn appserver_broadcast_subscribe(_context, channel_term, stream_id_term) {
+    pub semidet fn appserver_broadcast_subscribe(_context, channel_term, stream_id_term, timeout_term) {
         let channel = term_to_string(channel_term)?;
         let stream_id: u64 = stream_id_term.get_ex()?;
+        let timeout_secs: i64 = timeout_term.get_ex()?;
+        let idle_timeout = if timeout_secs > 0 {
+            Some(std::time::Duration::from_secs(timeout_secs as u64))
+        } else {
+            None
+        };
 
         // Clone the stream's mpsc::Sender so the forwarder task can
         // write to it without holding the stream_registry mutex.
@@ -159,7 +200,7 @@ predicates! {
         crate::dispatch::broadcast_registry()
             .lock()
             .unwrap()
-            .subscribe(channel, stream_id, stream_sender);
+            .subscribe(channel, stream_id, stream_sender, idle_timeout);
         Ok(())
     }
 
@@ -258,9 +299,6 @@ predicates! {
             Some(bytes) => {
                 // Put the receiver back so the worker can read the next chunk.
                 registry.replace(stream_id, receiver);
-                // Use unify instead of put — PL_unify_* works with term refs
-                // from the Prolog call frame, while PL_put_* requires a
-                // foreign frame which the semidet trampoline doesn't open.
                 let f = context.open_frame();
                 let tmp = f.new_term_ref();
                 tmp.put(&bytes[..]).map_err(|_| PrologError::Failure)?;
@@ -270,7 +308,7 @@ predicates! {
             }
             None => {
                 // Stream is closed and fully consumed. Leave the receiver out
-                // of the registry.
+                // of the registry so subsequent calls fail fast.
                 let f = context.open_frame();
                 let tmp = f.new_term_ref();
                 tmp.put(&Atom::new("end_of_stream")).map_err(|_| PrologError::Failure)?;
@@ -373,19 +411,99 @@ predicates! {
         }
         Ok(())
     }
+
+    /// Receive the next chunk from an input stream, split into complete lines.
+    ///
+    /// Signature: `appserver_stream_recv_lines(+StreamId, -Lines, -Remaining)`.
+    /// Lines is a Prolog list of strings (one per complete line, without the
+    /// trailing newline). Remaining is the partial line at the end of the chunk
+    /// (no trailing newline), or "" if the chunk ended on a newline. If the
+    /// stream is closed, Lines = [] and Remaining = end_of_stream.
+    #[module("$appserver")]
+    pub semidet fn appserver_stream_recv_lines(context, stream_id_term, lines_term, remaining_term) {
+        let stream_id: u64 = stream_id_term.get_ex()?;
+        let registry_arc = crate::dispatch::input_stream_registry();
+        let mut registry = registry_arc.lock().unwrap();
+        let mut receiver = registry
+            .take(stream_id)
+            .ok_or(PrologError::Failure)?;
+        drop(registry);
+        let result = receiver.blocking_recv();
+        let mut registry = registry_arc.lock().unwrap();
+        match result {
+            Some(bytes) => {
+                registry.replace(stream_id, receiver);
+
+                let text = String::from_utf8_lossy(&bytes);
+                let mut lines: Vec<&str> = Vec::new();
+                let mut remaining = "";
+                let mut last_end = 0;
+                for (i, b) in text.bytes().enumerate() {
+                    if b == b'\n' {
+                        lines.push(&text[last_end..i]);
+                        last_end = i + 1;
+                    }
+                }
+                if last_end < text.len() {
+                    remaining = &text[last_end..];
+                }
+
+                // Build Prolog list directly into lines_term using context.
+                // Use unify (not put) for head values — put overwrites the term ref
+                // instead of binding the list cell's head variable.
+                let mut tails: Vec<Term<'_>> = Vec::with_capacity(lines.len());
+                let mut cur = lines_term;
+                for line in &lines {
+                    let (head, tail) = context.unify_list_functor(cur)?;
+                    let str_tmp = context.new_term_ref();
+                    str_tmp.put(*line).map_err(|_| PrologError::Failure)?;
+                    head.unify(&str_tmp).map_err(|_| PrologError::Failure)?;
+                    tails.push(tail);
+                    cur = tails.last().unwrap();
+                }
+                cur.unify(&Nil).map_err(|_| PrologError::Failure)?;
+
+                // Unify remaining_term.
+                let rem_tmp = context.new_term_ref();
+                rem_tmp.put(remaining).map_err(|_| PrologError::Failure)?;
+                remaining_term.unify(&rem_tmp).map_err(|_| PrologError::Failure)
+            }
+            None => {
+                lines_term.unify(&Nil).map_err(|_| PrologError::Failure)?;
+                let rem_tmp = context.new_term_ref();
+                rem_tmp.put(&Atom::new("end_of_stream")).map_err(|_| PrologError::Failure)?;
+                remaining_term.unify(&rem_tmp).map_err(|_| PrologError::Failure)
+            }
+        }
+        .map_err(|_| PrologError::Failure)
+    }
+
+    /// Get the current number of active HTTP connections in the Rust webserver.
+    ///
+    /// Signature: `appserver_active_connections(-Count)` where Count is a
+    /// non-negative integer.
+    #[module("$appserver")]
+    pub semidet fn appserver_active_connections(_context, count_term) {
+        let count = crate::server::active_connections();
+        count_term.unify(count).map_err(|_| PrologError::Failure)
+    }
 }
 
 pub fn register() {
     register_appserver_start();
     register_appserver_stream_send();
     register_appserver_stream_send_raw();
+    register_appserver_stream_send_batch();
     register_appserver_stream_close();
+    register_appserver_stream_exists();
     register_appserver_broadcast_subscribe();
     register_appserver_broadcast_unsubscribe();
     register_appserver_broadcast_unsubscribe_all();
     register_appserver_broadcast_send();
     register_appserver_broadcast_send_raw();
     register_appserver_stream_recv();
+    register_appserver_stream_recv_lines();
     register_appserver_open_fd_stream();
     register_appserver_close_fd();
+    register_appserver_active_connections();
 }

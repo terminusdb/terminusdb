@@ -1,8 +1,6 @@
 :- module(webserver_events, []).
 
-:- use_module(core(appserver_hooks)).
-:- use_module(core(plugins)).
-:- use_module(core(util/json_log)).
+:- use_module(core(plugin_api)).
 :- use_module(library(lists)).
 
 :- dynamic event_stream/1.

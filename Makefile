@@ -25,6 +25,20 @@ dev:
 restart:
 	tests/terminusdb-test-server.sh restart
 
+# Build the release binary and restart the standalone test server (port 6363).
+.PHONY: build-restart
+build-restart:
+	@$(MAKE) -f distribution/Makefile.prolog
+	tests/terminusdb-test-server.sh restart
+
+# Build the release binary and restart both TerminusDB (port 7373) and
+# tdb-search (port 7372) for paired indexing/search development.
+# Requires the tdb-search repo as a sibling of the terminusdb repo.
+.PHONY: build-restart-search
+build-restart-search:
+	@$(MAKE) -f distribution/Makefile.prolog
+	../tdb-search/tests/tdb-search-server.sh restart
+
 .PHONY: server-clean
 server-clean:
 	tests/terminusdb-test-server.sh start --clean
@@ -108,6 +122,11 @@ lint-openapi:
 .PHONY: rust
 rust:
 	@$(MAKE) -f distribution/Makefile.rust
+
+# Build Rust plugin crates and copy shared objects to plugins/.
+.PHONY: plugins-rust
+plugins-rust:
+	@$(MAKE) -f distribution/Makefile.rust $@
 
 # Run unit tests in swipl; all, or just one suite.
 # make test OR make test SUITE='[json,terminus_store,tables]'
@@ -196,5 +215,20 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
+# Run end-to-end plugin tests (TerminusDB + tdb-search + vectorlink + Ollama).
+# Brings up the full stack via docker-compose.e2e.yml, runs the e2e mocha suite,
+# then tears down. Use --no-down to keep the stack running for debugging.
+#
+# Usage:
+#   make test-e2e              # full: build, up, test, down
+#   make test-e2e ARGS=--no-down  # keep stack running after tests
+#   make test-e2e ARGS=--no-up    # run against an already-running stack
+.PHONY: test-e2e
+test-e2e:
+	./tests/run-e2e.sh $(ARGS)
+
+.PHONY: pr-light
+pr-light: lint lint-mocha lint-openapi clippy dev restart test test-int
+
 .PHONY: pr
-pr: lint lint-mocha lint-openapi clippy clean dev restart test test-int
+pr: clean pr-light
