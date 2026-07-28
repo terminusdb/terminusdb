@@ -720,12 +720,14 @@ database_schema_context_object(Schema, Context) :-
     xrdf(Schema, ID, sys:schema, Schema_String^^_),
     (   get_schema_context_documentation(Schema, ID, Documentation)
     ->  put_dict(
-            _{ '@base' : Base_String,
+            _{ '@type' : "@context",
+               '@base' : Base_String,
                '@schema' : Schema_String,
                '@documentation' : Documentation},
             Prefixes, Context0)
     ;   put_dict(
-            _{ '@base' : Base_String,
+            _{ '@type' : "@context",
+               '@base' : Base_String,
                '@schema' : Schema_String},
             Prefixes, Context0)
     ),
@@ -4141,16 +4143,16 @@ replace_schema_document(DB, Document, Id) :-
 replace_schema_document(Transaction, Document, Create, Id) :-
     is_transaction(Transaction),
     !,
-    (   get_dict('@id', Document, Id)
+    (   get_dict('@type', Document, "@context")
+    ->  replace_context_document(Transaction, Document),
+        Id='@context'
+    ;   get_dict('@id', Document, Id)
     ->  catch(delete_schema_document(Transaction, Id),
               error(document_not_found(_), _),
               (   Create = true
               ->  true
               ;   throw(error(document_not_found(Id, Document), _)))),
         insert_schema_document_unsafe(Transaction, Document)
-    ;   get_dict('@type', Document, "@context")
-    ->  replace_context_document(Transaction, Document),
-        Id='@context'
     ;   throw(error(missing_field('@id', Document), _))
     ).
 replace_schema_document(Query_Context, Document, Create, Id) :-
@@ -4505,7 +4507,7 @@ test(insert_retrieve_context_with_documentation, [
                          '@description':"This is the WOQL schema. It gives a complete specification of the syntax of the WOQL query language. This allows WOQL queries to be checked for syntactic correctness, helps to prevent errors and detect conflicts in merge of queries, and allows the storage and retrieval of queries so that queries can be associated with data products.",
                          '@title':"WOQL schema"},
       '@schema':"http://s/",
-      '@type':'Context'}.
+      '@type':"@context"}.
 
 schema1('
 { "@type" : "@context",
@@ -15409,7 +15411,7 @@ test(schema_read_context,
                    '@language':"ka",
                    '@title':"მაგალითი სქემა"}],
           '@schema':"terminusdb:///schema#",
-          '@type':'Context',
+          '@type':"@context",
           xsd:"http://www.w3.org/2001/XMLSchema#"}.
 
 test(class_frame,
@@ -15608,7 +15610,7 @@ test(schema_metadata,
           '@title':"Example Schema"},
       '@metadata':json{remain:json{value:true},some:[1,2,3],things:null},
       '@schema':"terminusdb:///schema#",
-      '@type':'Context'}.
+      '@type':"@context"}.
 
 metadata_class('
 { "@base": "terminusdb:///data/",
