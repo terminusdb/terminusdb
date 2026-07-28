@@ -73,9 +73,9 @@ appserver_static_options(Options, Normalized) :-
 normalize_static_paths :-
     retractall(appserver_hooks:appserver_static_path_normalized(_, _, _)),
     forall(
-        (   appserver_hooks:appserver_static_path(Prefix, Directory)
-        ->  Options = []
-        ;   appserver_hooks:appserver_static_path(Prefix, Directory, Options)
+        (   appserver_hooks:appserver_static_path(Prefix, Directory, Options)
+        ;   appserver_hooks:appserver_static_path(Prefix, Directory),
+            Options = []
         ),
         (   appserver_static_options(Options, Normalized),
             assertz(appserver_hooks:appserver_static_path_normalized(
