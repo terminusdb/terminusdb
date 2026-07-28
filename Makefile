@@ -8,7 +8,7 @@ TDB_ADMIN_VERSION ?= v0.1.1-rc3
 
 # Version-tagged release of tdb-data to download for the embedded data explorer.
 # Must match a tag in https://github.com/terminusdb-org/tdb-data/releases
-TDB_DATA_VERSION ?= v0.1.0-rc1
+TDB_DATA_VERSION ?= v0.1.0-rc2
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
