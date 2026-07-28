@@ -54,6 +54,15 @@ RUN make DIST=enterprise
 # Build the ${DIST} dylib.
 FROM rust_builder_${DIST} AS rust_builder
 
+# Build the dashboard (converts openapi.yaml to openapi.json)
+FROM node:22-slim AS dashboard_build
+WORKDIR /app/dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --omit=dev
+COPY dashboard/build.js .
+COPY docs/openapi.yaml ../docs/openapi.yaml
+RUN node build.js
+
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM pack_installer AS base
 RUN set -eux; \
@@ -117,5 +126,5 @@ COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/
-COPY dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
+COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
 CMD ["/app/terminusdb/init_docker.sh"]

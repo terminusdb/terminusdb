@@ -55,6 +55,15 @@ RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
     curl -fsSL "https://github.com/terminusdb-org/tdb-admin/releases/download/${TDB_ADMIN_VERSION}/tdb-admin-${TDB_ADMIN_VER}.tar.gz" \
     | tar xzf - -C /admin/dist
 
+# Build the dashboard (converts openapi.yaml to openapi.json)
+FROM node:22-slim AS dashboard_build
+WORKDIR /app/dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --omit=dev
+COPY dashboard/build.js .
+COPY docs/openapi.yaml ../docs/openapi.yaml
+RUN node build.js
+
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM pack_installer AS base
 RUN set -eux; \
@@ -113,6 +122,6 @@ COPY plugins/webserver_spa.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/
-COPY dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
+COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
 COPY --from=admin_dist /admin/dist /app/terminusdb/app/admin/dist
 CMD ["/app/terminusdb/init_docker.sh"]

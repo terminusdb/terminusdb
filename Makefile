@@ -255,7 +255,7 @@ test-e2e:
 	./tests/run-e2e.sh $(ARGS)
 
 .PHONY: pr-light
-pr-light: lint lint-mocha lint-openapi clippy dev restart test test-int
+pr-light: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int
 
 .PHONY: pr
 pr: clean pr-light
