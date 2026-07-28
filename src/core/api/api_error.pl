@@ -2762,6 +2762,26 @@ api_document_error_jsonld(Type, error(no_embedding_query_for_type(DocType), _), 
                               'api:document_type' : DocType },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(embedding_query_parsing_failed(DocType, ParseError), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Embedding query could not be parsed for type ~q: ~w", [DocType, ParseError]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddingQueryParsingFailed',
+                              'api:document_type' : DocType,
+                              'api:parse_error' : ParseError },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(embedding_query_validation_failed(DocType, ValidationError), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Embedding query could not be validated for type ~q: ~w", [DocType, ValidationError]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddingQueryValidationFailed',
+                              'api:document_type' : DocType,
+                              'api:validation_error' : ValidationError },
+             'api:message' : Msg
+            }.
 
 /**
  * generic_exception_jsonld(Error,JSON) is det.

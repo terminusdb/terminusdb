@@ -1375,9 +1375,9 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
     put_dict(transaction, Config2, Transaction, ConfigWithCtx),
 
     Request = ConfigWithCtx.request,
-    document_stream_headers(Format, Request, DataVersion),
-
     document_stream_start(Format, ConfigWithCtx, StreamState),
+
+    document_stream_headers(Format, Request, DataVersion),
 
     (   nonvar(Query)
     ->  die_if(Graph_Type \= instance,
