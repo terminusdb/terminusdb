@@ -29,6 +29,14 @@ dev:
 	rm src/rust/librust.* || true
 	@$(MAKE) -f distribution/Makefile.prolog $@
 
+.PHONY: start
+start:
+	tests/terminusdb-test-server.sh start
+
+.PHONY: stop
+stop:
+	tests/terminusdb-test-server.sh stop
+
 .PHONY: restart
 restart:
 	tests/terminusdb-test-server.sh restart

@@ -9,13 +9,13 @@
  
 services:
   terminusdb-server:
-    image: terminusdb/terminusdb-server:latest
+    image: terminusdb/terminusdb-server:12.1-rc
     container_name: terminusdb-server
     pull_policy: always
     hostname: terminusdb-server
     tty: true
     ports:
-      - 6364:6363
+      - 6363:6363
     env_file: .env
     environment:
       - TERMINUSDB_SERVER_PORT=6363
@@ -27,40 +27,126 @@ services:
       # Admin-Password should be changed before exposing to the internet:
       # (Create a .env file from .env.example and add a password)
       - "TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:?error}"
+
+      # vectorlink (tdb-search) plugin config
+      - TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+      - TERMINUSDB_VECTORLINK_ENDPOINT=http://vectorlink:8080
+      - "TERMINUSDB_SEARCH_ADMIN_SECRET=${TDB_SEARCH_ADMIN_SECRET:-root}"
     volumes:
-      - ./storage:/app/terminusdb/storage
-  legacy_vectorlink:
-    image: terminusdb/vectorlink:v0.0.8
-    env_file: .env
+      - ./storage/terminusdb:/app/terminusdb/storage
+    depends_on:
+      vectorlink:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Ollama embedding sidecar — serves nomic-embed-text-v2-moe via /v1/embeddings.
+  # CPU-only (no GPU required). The model is pulled on first start by embeddings-init.
+  embeddings:
+    image: ollama/ollama:latest
+    pull_policy: missing
+    container_name: terminusdb-ollama
+    hostname: terminusdb-ollama
     environment:
-      - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
-      - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
+      # Keep the model resident indefinitely (never unload on idle).
+      - OLLAMA_KEEP_ALIVE=-1
     volumes:
-      - ./vector_storage:/app/storage
-    command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage"]
-  change-request-api:
-    image: terminusdb/terminusdb-change-request-api:v0.0.9
-    restart: always
-    env_file: .env
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # One-shot init: pull the nomic model if not already present.
+  embeddings-init:
+    image: ollama/ollama:latest
+    pull_policy: missing
+    depends_on:
+      embeddings:
+        condition: service_healthy
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://embeddings:11434
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        ollama pull hf.co/nomic-ai/nomic-embed-text-v2-moe-GGUF:Q8_0 || true
+        ollama cp hf.co/nomic-ai/nomic-embed-text-v2-moe-GGUF:Q8_0 nomic-embed-v2 2>/dev/null || true
+        echo "Model ready."
+    restart: "no"
+
+  # vectorlink (tdb-search) — the new search and indexing engine.
+  # Replaces the legacy_vectorlink semantic indexer.
+  vectorlink:
+    image: ghcr.io/terminusdb-org/vectorlink:dev
+    pull_policy: always
+    container_name: vectorlink
+    hostname: vectorlink
+    environment:
+      - TDB_SEARCH_ADMIN_USER=admin
+      - "TDB_SEARCH_ADMIN_SECRET=${TDB_SEARCH_ADMIN_SECRET:-root}"
+      - TDB_SEARCH_EMBED_PROVIDER=openai_compatible
+      - TDB_SEARCH_EMBED_URL=http://embeddings:11434
+      - TDB_SEARCH_MODEL=nomic-embed-v2
+      - TDB_SEARCH_DIM=768
+      - TDB_SEARCH_DATA_DIR=/data
+      - TDB_SEARCH_TOKENIZER_PATH=/opt/tdb-search/tokenizer.json.bz2
     ports:
-      - 6363:3035
-    environment:
-      - SERVER_ENDPOINT=http://terminusdb-server:6363
-      - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
-      # Add your OpenAI key in a .env file
-      - OPENAI_SERVER_URL=http://legacy_vectorlink:8080
-      - "USER_KEY=${TERMINUSDB_ADMIN_PASS:?error}"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./storage/vectorlink:/data
+    depends_on:
+      embeddings:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && echo -e \"GET /health/live HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && timeout 2 grep -q 200 <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
 
-      # There are multiple ways to configure TerminusDB security through
-      # environment variables. Several reasonable options are included below.
-      # Uncomment the option you decide on and comment out others.
-      # Don't forget to change the default password in the .env file
+  # --- Legacy / optional services (commented out) ---
 
-      # TerminusDB should be set up behind a TLS-terminating reverse
-      # proxy with admin authentication provided by password.
+  # legacy_vectorlink:
+  #   image: terminusdb/vectorlink:v0.0.8
+  #   env_file: .env
+  #   environment:
+  #     - TERMINUSDB_CONTENT_ENDPOINT=http://terminusdb-server:6363/api/index
+  #     - TERMINUSDB_USER_FORWARD_HEADER=X-User-Forward
+  #   volumes:
+  #     - ./vector_storage:/app/storage
+  #   command: ["./terminusdb-semantic-indexer", "serve", "--directory", "/app/storage"]
 
-      # The storage path of terminusdb databases is /app/terminusdb/storage in case
-      # you want to persist storage somewhere else.
+  # change-request-api:
+  #   image: terminusdb/terminusdb-change-request-api:v0.0.9
+  #   restart: always
+  #   env_file: .env
+  #   ports:
+  #     - 6365:3035
+  #   environment:
+  #     - SERVER_ENDPOINT=http://terminusdb-server:6363
+  #     - USE_CHANGE_REQUEST=${USE_CHANGE_REQUEST:-true}
+  #     - OPENAI_SERVER_URL=http://vectorlink:8080
+  #     - "USER_KEY=${TERMINUSDB_ADMIN_PASS:?error}"
 
-      # To change the terminusdb password if already set, to match the .env:
-      # docker compose exec -ti terminusdb-server ./terminusdb user password admin -p [FancyPassword]
+  # There are multiple ways to configure TerminusDB security through
+  # environment variables. Several reasonable options are included below.
+  # Uncomment the option you decide on and comment out others.
+  # Don't forget to change the default password in the .env file
+
+  # TerminusDB should be set up behind a TLS-terminating reverse
+  # proxy with admin authentication provided by password.
+
+  # The storage path of terminusdb databases is /app/terminusdb/storage in case
+  # you want to persist storage somewhere else.
+
+  # To change the terminusdb password if already set, to match the .env:
+  # docker compose exec -ti terminusdb-server ./terminusdb user password admin -p [FancyPassword]
+
+volumes:
+  ollama-models:
+  vectorlink-data:
