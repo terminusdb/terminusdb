@@ -5,69 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TerminusDB API</title>
     <meta name="description" content="Interactive TerminusDB API navigator — browse, explore, and try every endpoint directly from your browser.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'nonce---TDB--CSP--DYNAMIC--CSP--NONCE--' https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.63.0/dist/browser/standalone.js; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' https://fonts.scalar.com; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+    <meta name="csp-nonce" content="--TDB--CSP--DYNAMIC--CSP--NONCE--">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306b6d4' stroke-width='2'%3E%3Cpath d='M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="output.css">
 </head>
 <body>
     <div id="scalar-api"></div>
 
-    <script>
-    (function () {
-        // Fetch the OpenAPI spec, inject into Scalar
-        fetch('assets/openapi.json')
-            .then(function (r) { return r.json(); })
-            .then(function (spec) {
-                // Dynamically load Scalar
-                var s = document.createElement('script');
-                s.id = 'scalar-widget';
-                s.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@latest/dist/browser/standalone.js';
-                s.onload = function () {
-                    // Scalar is available as window.Scalar
-                    if (window.Scalar && window.Scalar.createApiReference) {
-                        window.Scalar.createApiReference('#scalar-api', {
-                            spec: spec,
-                            hideModels: false,
-                            hideSearch: false,
-                            darkMode: true,
-                            theme: 'purple',
-                            layout: 'modern',
-                            showSidebar: true,
-                            defaultOpenAllTags: false,
-                            hideClientButton: false,
-                            scalarServer: window.location.origin + '/api',
-                            authentication: {
-                                preferredSecurityScheme: 'basicAuth',
-                            },
-                        });
-                    } else {
-                        // Fallback: use the older APIReference widget approach
-                        var div = document.getElementById('scalar-api');
-                        var widget = document.createElement('script');
-                        widget.id = 'scalar-widget-config';
-                        widget.type = 'application/json';
-                        widget.textContent = JSON.stringify({
-                            spec: spec,
-                            darkMode: true,
-                            theme: 'purple',
-                            layout: 'modern',
-                            showSidebar: true,
-                            defaultOpenAllTags: false,
-                            hideClientButton: false,
-                        });
-                        div.appendChild(widget);
-                    }
-                };
-                document.head.appendChild(s);
-            })
-            .catch(function (err) {
-                document.getElementById('scalar-api').innerHTML =
-                    '<div style="padding:2rem;text-align:center;font-family:system-ui,sans-serif;color:#94a3b8">' +
-                    '<h2 style="color:#fff;margin-bottom:0.5rem">Could not load API spec</h2>' +
-                    '<p>Make sure the dashboard has been built with <code>npm run build</code> ' +
-                    'in the <code>dashboard/</code> directory.</p></div>';
-                console.error('Failed to load openapi.json:', err);
-            });
-    })();
-    </script>
+    <script src="assets/scalar-init.js" nonce="--TDB--CSP--DYNAMIC--CSP--NONCE--"></script>
 </body>
 </html>

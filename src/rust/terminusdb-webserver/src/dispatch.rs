@@ -2,6 +2,7 @@ use axum::{
     body::Body,
     extract::Path,
     http::{header, HeaderMap, Request, StatusCode},
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
@@ -46,7 +47,9 @@ pub struct PluginStaticPath {
     pub prefix: String,
     pub directory: String,
     pub fallback: Option<String>,
+    pub not_found: Option<String>,
     pub auth: String,
+    pub csp_nonce: bool,
 }
 
 /// A streaming endpoint registered by a Prolog plugin.
@@ -1012,19 +1015,21 @@ pub fn collect_routes(context: &Context<impl QueryableContextType>) -> PrologRes
 ///
 /// Plugins register via `appserver_hooks:appserver_static_path/3` with
 /// an option list. Prolog normalizes these into
-/// `appserver_hooks:appserver_static_path_normalized/4`, which this
+/// `appserver_hooks:appserver_static_path_normalized/3`, which this
 /// function reads.
 ///
-/// Arguments are: prefix, directory, fallback file, auth style.
+/// Arguments are: prefix, directory, options dict.
+/// The options dict has keys `fallback` (atom), `auth` (atom),
+/// and `csp_nonce` (atom: true/false).
 pub fn collect_static_paths(
     context: &Context<impl QueryableContextType>,
 ) -> PrologResult<Vec<PluginStaticPath>> {
     let frame = context.open_frame();
-    let [prefix_term, directory_term, fallback_term, auth_term] = frame.new_term_refs();
+    let [prefix_term, directory_term, options_term] = frame.new_term_refs();
 
     let open_call = frame.open(
-        pred!("appserver_hooks:appserver_static_path_normalized/4"),
-        [&prefix_term, &directory_term, &fallback_term, &auth_term],
+        pred!("appserver_hooks:appserver_static_path_normalized/3"),
+        [&prefix_term, &directory_term, &options_term],
     );
 
     let mut paths = Vec::new();
@@ -1034,8 +1039,11 @@ pub fn collect_static_paths(
         let directory = resolve_static_directory(&directory)
             .to_string_lossy()
             .into_owned();
-        let fallback: Atom = fallback_term.get_ex()?;
-        let auth: Atom = auth_term.get_ex()?;
+
+        let fallback: Atom = options_term.get_dict_key("fallback")?;
+        let not_found: Atom = options_term.get_dict_key("not_found")?;
+        let auth: Atom = options_term.get_dict_key("auth")?;
+        let csp_nonce: Atom = options_term.get_dict_key("csp_nonce")?;
 
         let fallback = if fallback.name().is_empty() {
             None
@@ -1043,11 +1051,19 @@ pub fn collect_static_paths(
             Some(fallback.name())
         };
 
+        let not_found = if not_found.name().is_empty() {
+            None
+        } else {
+            Some(not_found.name())
+        };
+
         paths.push(PluginStaticPath {
             prefix,
             directory,
             fallback,
+            not_found,
             auth: auth.name(),
+            csp_nonce: csp_nonce.name() == "true",
         });
     }
 
@@ -1174,27 +1190,123 @@ pub fn build_static_router(static_paths: Vec<PluginStaticPath>) -> Router {
     for static_path in static_paths {
         let dir = PathBuf::from(&static_path.directory);
         let fallback = static_path.fallback.as_ref().map(|f| dir.join(f));
+        let not_found = static_path.not_found.as_ref().map(|f| dir.join(f));
+        let csp_nonce = static_path.csp_nonce;
 
         let root_handler = {
             let dir = dir.clone();
             let fallback = fallback.clone();
-            move || async move { serve_static_file(&dir, fallback.as_deref(), "/").await }
+            let not_found = not_found.clone();
+            move || async move { serve_static_file(&dir, fallback.as_deref(), not_found.as_deref(), "/").await }
         };
 
         let sub_handler = {
             let dir = dir.clone();
             let fallback = fallback.clone();
+            let not_found = not_found.clone();
             move |Path(uri_path): Path<String>| async move {
-                serve_static_file(&dir, fallback.as_deref(), &uri_path).await
+                serve_static_file(&dir, fallback.as_deref(), not_found.as_deref(), &uri_path).await
             }
         };
 
-        router = router
+        let prefix_routes = Router::new()
             .route(&static_path.prefix, get(root_handler.clone()))
             .route(&format!("{}/", static_path.prefix), get(root_handler))
             .route(&format!("{}/{{*path}}", static_path.prefix), get(sub_handler));
+
+        if csp_nonce {
+            router = router.merge(
+                prefix_routes.layer(axum::middleware::from_fn(csp_nonce_middleware)),
+            );
+        } else {
+            router = router.merge(prefix_routes);
+        }
     }
     router
+}
+
+/// Placeholder string in HTML files that gets replaced with a per-request nonce.
+const CSP_NONCE_PLACEHOLDER: &str = "--TDB--CSP--DYNAMIC--CSP--NONCE--";
+
+/// Middleware that generates a unique nonce per request and replaces all
+/// occurrences of `--TDB--CSP--DYNAMIC--CSP--NONCE--` in HTML responses with
+/// `NONCE-<uuid>`. This allows CSP meta tags and script nonce attributes to
+/// be dynamically secured without `'unsafe-inline'`.
+///
+/// Only applies to responses with `Content-Type: text/html`. Non-HTML
+/// responses pass through with only the `frame-ancestors` header added.
+async fn csp_nonce_middleware(req: Request<Body>, next: Next) -> Response {
+    let mut response = next.run(req).await;
+
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_static("frame-ancestors 'self'"),
+    );
+
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if !content_type.starts_with("text/html") {
+        return response;
+    }
+
+    let nonce = format!("tdb-csp-{}", uuid::Uuid::new_v4());
+
+    let body = response.into_body();
+    match axum::body::to_bytes(body, 10 * 1024 * 1024).await {
+        Ok(bytes) => {
+            let replaced = replace_placeholder(&bytes, CSP_NONCE_PLACEHOLDER, &nonce);
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .header(
+                    header::CONTENT_SECURITY_POLICY,
+                    axum::http::HeaderValue::from_static("frame-ancestors 'self'"),
+                )
+                .body(Body::from(replaced))
+                .unwrap()
+        }
+        Err(_) => Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::from("Failed to process response body"))
+            .unwrap(),
+    }
+}
+
+/// Replace all occurrences of `placeholder` in `bytes` with `replacement`.
+/// Returns a new Vec<u8>. If the placeholder is not found, returns the
+/// original bytes unchanged.
+fn replace_placeholder(bytes: &[u8], placeholder: &str, replacement: &str) -> Vec<u8> {
+    let placeholder_bytes = placeholder.as_bytes();
+    if placeholder_bytes.is_empty() || placeholder_bytes.len() > bytes.len() {
+        return bytes.to_vec();
+    }
+
+    let mut result = Vec::with_capacity(bytes.len() + replacement.len());
+    let mut i = 0;
+    let mut found = false;
+
+    while i < bytes.len() {
+        if i + placeholder_bytes.len() <= bytes.len()
+            && &bytes[i..i + placeholder_bytes.len()] == placeholder_bytes
+        {
+            result.extend_from_slice(replacement.as_bytes());
+            i += placeholder_bytes.len();
+            found = true;
+        } else {
+            result.push(bytes[i]);
+            i += 1;
+        }
+    }
+
+    if found {
+        result
+    } else {
+        bytes.to_vec()
+    }
 }
 
 /// Build a router for plugin-registered streaming endpoints.
@@ -1237,8 +1349,9 @@ pub fn build_stream_router(streams: Vec<PluginStream>) -> Router {
 /// The request path is resolved relative to `dir`, percent-decoded, and checked
 /// for directory traversal. The canonical path is then verified to be within
 /// `dir` (after resolving symlinks). Missing files, unsafe paths, and symlink
-/// escapes all result in a 404 response.
-async fn serve_static_file(dir: &StdPath, fallback: Option<&StdPath>, uri_path: &str) -> Response<Body> {
+/// escapes result in a 404 response — served from `not_found` if configured,
+/// otherwise a default JSON 404.
+async fn serve_static_file(dir: &StdPath, fallback: Option<&StdPath>, not_found: Option<&StdPath>, uri_path: &str) -> Response<Body> {
     let canonical_dir = match tokio::fs::canonicalize(dir).await {
         Ok(d) => d,
         Err(_) => return not_found_response(),
@@ -1251,7 +1364,7 @@ async fn serve_static_file(dir: &StdPath, fallback: Option<&StdPath>, uri_path: 
             Component::Normal(name) => candidate.push(name),
             Component::RootDir => {}
             // Reject `..`, Windows prefixes, and other special components.
-            _ => return not_found_response(),
+            _ => return not_found_response_with(&canonical_dir, not_found).await,
         }
     }
 
@@ -1267,7 +1380,7 @@ async fn serve_static_file(dir: &StdPath, fallback: Option<&StdPath>, uri_path: 
         }
     }
 
-    not_found_response()
+    not_found_response_with(&canonical_dir, not_found).await
 }
 
 /// Canonicalize `candidate` and return it only if it is a file inside `dir`.
@@ -1326,6 +1439,30 @@ fn not_found_response() -> Response<Body> {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap()
+}
+
+/// Return a 404 response, serving a custom file if one is configured.
+///
+/// When `not_found` is provided and the file exists and resolves to a real
+/// file (not a symlink) within the canonical serving directory, it is served
+/// with a 404 status code and the appropriate MIME type. Otherwise the
+/// default JSON 404 response is returned.
+async fn not_found_response_with(
+    canonical_dir: &StdPath,
+    not_found: Option<&StdPath>,
+) -> Response<Body> {
+    if let Some(path) = not_found {
+        if let Some(validated) = canonical_file_within_dir(canonical_dir, path, false).await {
+            if let Ok(bytes) = tokio::fs::read(&validated).await {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .header(header::CONTENT_TYPE, static_mime_type(&validated))
+                    .body(Body::from(bytes))
+                    .unwrap();
+            }
+        }
+    }
+    not_found_response()
 }
 
 /// Simple MIME type mapping based on file extension.

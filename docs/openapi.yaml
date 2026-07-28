@@ -3415,7 +3415,7 @@ paths:
       x-python-client: Client::get_user
       x-js-client: not_implemented
       tags:
-        - Account Management
+        - Account management
       summary: Get a user by name
       parameters:
         - name: capability
@@ -3441,7 +3441,7 @@ paths:
       x-python-client: Client::delete_user
       x-js-client: AccessControl.deleteUser
       tags:
-        - Account Management
+        - Account management
       summary: Delete a user
       responses:
         204:
@@ -3971,7 +3971,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SearchError'
 
-  /resolve/{path}:
+  /plugin/search-resolve/{path}:
     post:
       tags: [Search & Entity Resolution]
       operationId: resolve
@@ -4203,6 +4203,376 @@ paths:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
           $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /index/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: getIndexStatus
+      summary: Indexing progress and engine statistics for a branch.
+      description: |
+        Returns the current indexing status (idle, indexing, completed, error),
+        branch processing progress, last indexed commit, and engine-side
+        statistics (searchable documents, chunks, pending fragments).
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      responses:
+        200:
+          description: Index status response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatus'
+              examples:
+                indexing:
+                  summary: Branch currently indexing
+                  value:
+                    status: indexing
+                    error: null
+                    branch: main
+                    last_indexed_commit: "abc123"
+                    branch_processing:
+                      commits_processed: 2
+                      total_commits: 5
+                      current_commit: "def456"
+                      upcoming_commit: "ghi789"
+                    engine:
+                      processed_documents: 30
+                      total_documents: 75
+                      documents_sent: 60
+                      searchable_documents: 50
+                      text_segments_indexed: 120
+                      commits_received: 1
+                      pending_indexing: 2
+                      store_clustering: null
+                completed:
+                  summary: Index up to date
+                  value:
+                    status: completed
+                    error: null
+                    branch: main
+                    last_indexed_commit: "abc123"
+                    branch_processing:
+                      commits_processed: 0
+                      total_commits: 0
+                      current_commit: null
+                      upcoming_commit: null
+                    engine:
+                      processed_documents: 0
+                      total_documents: 0
+                      documents_sent: 0
+                      searchable_documents: 2173
+                      text_segments_indexed: 4200
+                      commits_received: 1
+                      pending_indexing: 0
+                      store_clustering: null
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: triggerIndex
+      summary: Trigger an explicit reindex of a branch.
+      description: |
+        Kicks off an asynchronous index build for the addressed branch.
+        If an index is already in progress for this branch, the request
+        returns success with a message indicating the index is already
+        running (idempotent).
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      responses:
+        200:
+          description: Index triggered successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponse'
+              examples:
+                triggered:
+                  value:
+                    '@type': api:IndexResponse
+                    api:status: api:success
+                alreadyRunning:
+                  summary: Index already in progress
+                  value:
+                    '@type': api:IndexResponse
+                    api:status: api:success
+                    api:message: Index already in progress for this branch
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    delete:
+      tags: [Search & Entity Resolution]
+      operationId: deleteIndex
+      summary: Delete the index for a data product.
+      description: |
+        Removes all indexed data for the addressed data product's domain
+        from the search engine. This is a destructive operation — the
+        index will need to be rebuilt with a POST to the same endpoint.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      responses:
+        200:
+          description: Index deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponse'
+              examples:
+                deleted:
+                  value:
+                    '@type': api:IndexResponse
+                    api:status: api:success
+                    api:message: Index for admin/mydb deleted
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /suggest/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: suggest
+      summary: Autocomplete suggestions for indexed documents.
+      description: |
+        Returns document ID suggestions matching a prefix query. Useful for
+        autocomplete UIs. Accepts the same query parameters as `/search`
+        (doc_type, doc_id, start, count, snippet) plus `q` for the prefix text.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - name: q
+          in: query
+          required: true
+          description: The prefix text to suggest completions for.
+          schema:
+            type: string
+          example: "Yod"
+        - $ref: '#/components/parameters/search_start'
+        - $ref: '#/components/parameters/search_count'
+        - $ref: '#/components/parameters/search_doc_type'
+        - $ref: '#/components/parameters/search_doc_id'
+      responses:
+        200:
+          description: Suggestion results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+        400:
+          $ref: '#/components/responses/SearchBadRequest'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /plugin/search-candidates/{path}:
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: candidates
+      summary: Raw KNN candidate gathering (proxy to vectorlink).
+      description: |
+        Forwards a batch candidate-gathering request to the vectorlink
+        engine's `/candidates` endpoint. Returns raw bidirectional KNN
+        candidate pairs without any matching algorithm applied.
+
+        The set and target populations are defined by `set_doc_types`/
+        `set_doc_ids` and `target_doc_types`/`target_doc_ids` in the
+        request body. `k` controls the fan-out per document (default 5).
+        `threshold_set` and `threshold_target` are optional distance caps.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidatesRequestBody'
+            examples:
+              basic:
+                value:
+                  set_doc_types: ["Product"]
+                  target_doc_types: ["Catalogue"]
+                  k: 5
+                  threshold_set: 0.5
+      responses:
+        200:
+          description: Raw candidate pairs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatesResult'
+        400:
+          $ref: '#/components/responses/SearchBadRequest'
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /plugin/search-embeddings/{path}:
+    get:
+      tags: [Search & Entity Resolution]
+      operationId: getEmbeddings
+      summary: Retrieve stored embeddings for documents (GET).
+      description: |
+        Proxies to the vectorlink `/embeddings` endpoint. Returns stored
+        embedding vectors for documents matching the given `doc_id` and/or
+        `doc_type` query parameters. Supports NDJSON streaming when the
+        `Accept: application/x-ndjson` header is set.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+        - $ref: '#/components/parameters/search_doc_type'
+        - $ref: '#/components/parameters/search_doc_id'
+        - name: count
+          in: query
+          required: false
+          description: Maximum number of embeddings to return.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+      responses:
+        200:
+          description: Embedding vectors (JSON or NDJSON stream).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingsResult'
+            application/x-ndjson:
+              schema:
+                type: string
+                description: NDJSON stream, one embedding object per line.
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    post:
+      tags: [Search & Entity Resolution]
+      operationId: postEmbeddings
+      summary: Retrieve stored embeddings for documents (POST, streaming).
+      description: |
+        Reads `doc_ids` and `doc_types` from the JSON body, expands compact
+        IDs using schema prefixes, and forwards to the vectorlink engine
+        with streaming enabled. Returns NDJSON with per-line doc_id
+        compaction.
+
+        **Authorization:** requires read access to the addressed data product.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                doc_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Full or compact document IRIs to retrieve embeddings for.
+                doc_types:
+                  type: array
+                  items:
+                    type: string
+                  description: Document types to retrieve embeddings for.
+            examples:
+              byId:
+                value:
+                  doc_ids: ["terminusdb:///data/People/20"]
+              byType:
+                value:
+                  doc_types: ["People"]
+      responses:
+        200:
+          description: NDJSON stream of embedding objects.
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+                description: NDJSON stream, one embedding object per line.
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: No indexed ancestor exists for this branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
         503:
           description: Search backend unavailable.
           content:
@@ -4888,6 +5258,150 @@ components:
             Higher values mean more data is being flat-scanned alongside the
             index (correct results, higher latency). Returns to 0 after the
             indexing queue drains.
+
+    IndexStatus:
+      type: object
+      required: [status, branch, last_indexed_commit, branch_processing, engine]
+      properties:
+        status:
+          type: string
+          enum: [idle, indexing, completed, error, not_found, indexer_unavailable]
+          description: Current indexing state of the branch.
+        error:
+          type: string
+          nullable: true
+          description: Error message if status is "error", otherwise null.
+        branch:
+          type: string
+          nullable: true
+          description: Branch name being indexed (null for commit-scoped requests).
+        last_indexed_commit:
+          type: string
+          nullable: true
+          description: Commit ID of the last successfully indexed commit.
+        branch_processing:
+          type: object
+          properties:
+            commits_processed:
+              type: integer
+            total_commits:
+              type: integer
+            current_commit:
+              type: string
+              nullable: true
+            upcoming_commit:
+              type: string
+              nullable: true
+        engine:
+          type: object
+          properties:
+            processed_documents:
+              type: integer
+            total_documents:
+              type: integer
+            documents_sent:
+              type: integer
+            searchable_documents:
+              type: integer
+            text_segments_indexed:
+              type: integer
+            commits_received:
+              type: integer
+            pending_indexing:
+              type: integer
+            store_clustering:
+              type: boolean
+              nullable: true
+
+    IndexResponse:
+      type: object
+      required: ['@type', api:status]
+      properties:
+        '@type':
+          type: string
+          example: api:IndexResponse
+        api:status:
+          type: string
+          example: api:success
+        api:message:
+          type: string
+          description: Optional message (e.g. "Index already in progress for this branch").
+
+    CandidatesRequestBody:
+      type: object
+      description: |
+        POST /plugin/search-candidates body. Population scoping and KNN
+        parameters. `domain`, `commit`, and `ancestors` are server-derived.
+      properties:
+        set_doc_types:
+          type: array
+          items:
+            type: string
+        set_doc_ids:
+          type: array
+          items:
+            type: string
+        target_doc_types:
+          type: array
+          items:
+            type: string
+        target_doc_ids:
+          type: array
+          items:
+            type: string
+        k:
+          type: integer
+          minimum: 1
+          default: 5
+        threshold_set:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        threshold_target:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        include:
+          type: array
+          items:
+            type: string
+          description: Optional fields to include in the response.
+
+    CandidatesResult:
+      type: object
+      description: Raw KNN candidate pairs from the vectorlink engine.
+      properties:
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              set_id:
+                type: string
+              target_id:
+                type: string
+              distance:
+                type: number
+                format: float
+                minimum: 0
+                maximum: 1
+
+    EmbeddingsResult:
+      type: object
+      description: Stored embedding vectors for the requested documents.
+      properties:
+        doc_id:
+          type: string
+        embedding:
+          type: array
+          items:
+            type: number
+            format: float
+        chunk_index:
+          type: integer
+          description: Chunk index within the document (0 for single-chunk docs).
 
   responses:
     IncorrectAuthenticationError:
