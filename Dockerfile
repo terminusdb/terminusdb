@@ -4,7 +4,7 @@
 # Set the swipl version by argument (see Makefile for the default!)
 ARG SWIPL_VERSION=10.0.1
 ARG SKIP_TESTS=false
-ARG TDB_ADMIN_VERSION
+ARG TDB_ADMIN_VERSION=v0.1.1-rc3
 
 # Minimal SWI-Prolog
 FROM swipl:${SWIPL_VERSION} AS swipl_minimal
@@ -48,7 +48,7 @@ RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo 
 
 # Download the pre-built tdb-admin dist package from GitHub releases.
 FROM alpine:latest AS admin_dist
-ARG TDB_ADMIN_VERSION
+ARG TDB_ADMIN_VERSION=v0.1.1-rc3
 RUN apk add --no-cache curl tar
 RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
     mkdir -p /admin/dist && \
