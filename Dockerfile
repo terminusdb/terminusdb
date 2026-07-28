@@ -5,6 +5,7 @@
 ARG SWIPL_VERSION=10.0.1
 ARG SKIP_TESTS=false
 ARG TDB_ADMIN_VERSION=v0.1.1-rc3
+ARG TDB_DATA_VERSION=v0.1.0-rc1
 
 # Minimal SWI-Prolog
 FROM swipl:${SWIPL_VERSION} AS swipl_minimal
@@ -54,6 +55,15 @@ RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
     mkdir -p /admin/dist && \
     curl -fsSL "https://github.com/terminusdb-org/tdb-admin/releases/download/${TDB_ADMIN_VERSION}/tdb-admin-${TDB_ADMIN_VER}.tar.gz" \
     | tar xzf - -C /admin/dist
+
+# Download the pre-built tdb-data dist package from GitHub releases.
+FROM alpine:latest AS data_dist
+ARG TDB_DATA_VERSION=v0.1.0-rc1
+RUN apk add --no-cache curl tar
+RUN TDB_DATA_VER="${TDB_DATA_VERSION#v}" && \
+    mkdir -p /data/dist && \
+    curl -fsSL "https://github.com/terminusdb-org/tdb-data/releases/download/${TDB_DATA_VERSION}/tdb-data-${TDB_DATA_VER}.tar.gz" \
+    | tar xzf - -C /data/dist
 
 # Build the dashboard (converts openapi.yaml to openapi.json)
 FROM node:22-slim AS dashboard_build
@@ -125,4 +135,5 @@ COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/
 COPY dashboard/src/assets/scalar-init.js /app/terminusdb/dashboard/assets/
 COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
 COPY --from=admin_dist /admin/dist /app/terminusdb/app/admin/dist
+COPY --from=data_dist /data/dist /app/terminusdb/app/data/dist
 CMD ["/app/terminusdb/init_docker.sh"]
