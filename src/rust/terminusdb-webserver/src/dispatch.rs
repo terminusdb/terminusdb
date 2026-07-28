@@ -1506,7 +1506,9 @@ mod tests {
             prefix: "/app".to_string(),
             directory: app_dir.to_string_lossy().into_owned(),
             fallback: None,
+            not_found: None,
             auth: "none".to_string(),
+            csp_nonce: false,
         }]);
 
         let response = router
@@ -1538,7 +1540,9 @@ mod tests {
             prefix: "/app".to_string(),
             directory: app_dir.to_string_lossy().into_owned(),
             fallback: None,
+            not_found: None,
             auth: "none".to_string(),
+            csp_nonce: false,
         }]);
 
         let response = router
@@ -1775,7 +1779,9 @@ mod tests {
             prefix: "/app".to_string(),
             directory: app_dir.to_string_lossy().into_owned(),
             fallback: None,
+            not_found: None,
             auth: "none".to_string(),
+            csp_nonce: false,
         }]);
 
         let response = router
