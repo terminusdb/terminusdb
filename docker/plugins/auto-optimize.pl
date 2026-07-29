@@ -152,12 +152,20 @@ do_garbage_collect :-
     maybe_print_stats('POST-GC'),
     json_log_debug("Ran garbage_collect").
 
+% Periodic deep cleanup: abolish all tabled results and reclaim atoms.
+% Fires at 10% of GC cycles (~0.05% of commits). Both operations are
+% global and can block other threads, so we run them together as a
+% rare periodic cleanup rather than independently.
 maybe_abolish_tables :-
     abolish_tables_chance(Chance),
     random(X),
     (   X < Chance
     ->  abolish_all_tables,
-        json_log_info("GC: abolished all tables (periodic cleanup)")
+        statistics(atoms, AtomsBefore),
+        garbage_collect_atoms,
+        statistics(atoms, AtomsAfter),
+        format(atom(Msg), "GC: periodic deep cleanup - abolished tables, reclaimed atoms (~w -> ~w)", [AtomsBefore, AtomsAfter]),
+        json_log_info(Msg)
     ;   true
     ).
 
