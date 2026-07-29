@@ -193,6 +193,8 @@ test:
 test-int: server-clean
 ifdef SUITE
 	sh -c "cd tests ; npx mocha 'test/$(SUITE).js'"
+else ifdef MOCHA_IGNORE
+	sh -c "cd tests ; npx mocha $(shell echo '$(MOCHA_IGNORE)' | sed 's/,/ --ignore /g' | sed 's/^/--ignore /')"
 else
 	sh -c "cd tests ; npx mocha"
 endif
