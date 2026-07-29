@@ -4,7 +4,7 @@ ARG SWIPL_VERSION=10.0.1
 ARG DIST=community
 ARG SKIP_TESTS=false
 ARG TDB_ADMIN_VERSION=v0.1.1-rc3
-ARG TDB_DATA_VERSION=v0.1.0-rc1
+ARG TDB_DATA_VERSION=v0.1.0-rc2
 
 # Minimal SWI-Prolog
 FROM swipl:${SWIPL_VERSION} AS swipl_minimal
@@ -76,7 +76,7 @@ RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
 
 # Download the pre-built tdb-data dist package from GitHub releases.
 FROM alpine:latest AS data_dist
-ARG TDB_DATA_VERSION=v0.1.0-rc1
+ARG TDB_DATA_VERSION=v0.1.0-rc2
 RUN apk add --no-cache curl tar
 RUN TDB_DATA_VER="${TDB_DATA_VERSION#v}" && \
     mkdir -p /data/dist && \
