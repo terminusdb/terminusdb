@@ -147,11 +147,11 @@ COPY plugins/vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/search_resolve.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/legacy_vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/webserver_spa.pl ${TERMINUSDB_PLUGINS_PATH}/
-RUN mkdir -p /app/terminusdb/dashboard/assets
-COPY dashboard/src/index.html /app/terminusdb/dashboard/
-COPY dashboard/src/output.css /app/terminusdb/dashboard/assets/
-COPY dashboard/src/assets/scalar-init.js /app/terminusdb/dashboard/assets/
-COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/assets/
+RUN mkdir -p /app/terminusdb/dashboard/src/assets
+COPY dashboard/src/index.html /app/terminusdb/dashboard/src/
+COPY dashboard/src/output.css /app/terminusdb/dashboard/src/assets/
+COPY dashboard/src/assets/scalar-init.js /app/terminusdb/dashboard/src/assets/
+COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/src/assets/
 COPY --from=admin_dist /admin/dist /app/terminusdb/app/admin/dist
 COPY --from=data_dist /data/dist /app/terminusdb/app/data/dist
 CMD ["/app/terminusdb/init_docker.sh"]
