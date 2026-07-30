@@ -1968,7 +1968,7 @@ index_handler(get, Path, Request, System_DB, Auth) :-
             %    skip_serializing_if for Option fields. We parse it here.
             (   plugin_api:indexer_available
             ->  (   plugin_api:indexer_progress(Branch_Path, Branch_Name, Progress_JSON)
-                ->  atom_json_dict(Progress_JSON, Indexer_Progress, [default_tag(json)])
+                ->  json:atom_json_dict(Progress_JSON, Indexer_Progress, [default_tag(json)])
                 ;   Indexer_Progress = json{status:not_found}
                 )
             ;   Indexer_Progress = json{status:indexer_unavailable}
@@ -2000,7 +2000,7 @@ index_handler(get, Path, Request, System_DB, Auth) :-
                 Response0),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
-            json_write_dict(current_output, Response0, [width(0)])
+            json:json_write_dict(current_output, Response0, [width(0)])
         )
     ).
 
@@ -2013,7 +2013,7 @@ index_handler(post, Path, Request, System_DB, Auth) :-
                 (   vectorlink:io_index_branch(System_DB, Auth, Path),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
-                    json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
+                    json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
                 ),
                 Error,
                 (   (   Error = error(vectorlink_409_resolution_timeout, _)
@@ -2024,7 +2024,7 @@ index_handler(post, Path, Request, System_DB, Auth) :-
                     ),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
-                    json_write_dict(current_output, json{'@type':'api:IndexResponse',
+                    json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
                                 'api:status':'api:success',
                                 'api:message':'Index already in progress for this branch'}, [width(0)])
                 )
@@ -2044,7 +2044,7 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
             format(string(Message), "Index for ~w deleted", [Path]),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
-            json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',
+            json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',
                         'api:message':Message}, [width(0)])
         )
     ).
