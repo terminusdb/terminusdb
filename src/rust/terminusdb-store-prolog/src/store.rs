@@ -277,6 +277,42 @@ predicates! {
         Ok(())
     }
 
+    /// Associate a cached layer with a database name for bulk invalidation.
+    pub semidet fn associate_layer_database(context, store_term, layer_id_term, database_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let layer_id_string: PrologText = layer_id_term.get_ex()?;
+        let database: PrologText = database_term.get_ex()?;
+        let name = context.try_or_die(string_to_name(&layer_id_string))?;
+        store.associate_layer_with_database(name, &*database);
+        Ok(())
+    }
+
+    /// Invalidate all cached layers associated with a database.
+    /// Returns the number of layers invalidated.
+    pub semidet fn invalidate_database_layers(_context, store_term, database_term, count_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let database: PrologText = database_term.get_ex()?;
+        let count = store.invalidate_database_layers(&*database);
+        count_term.unify(count as u64)
+    }
+
+    /// Get all layer IDs currently in the cache as a Prolog list of atoms.
+    pub semidet fn cached_layer_ids(context, store_term, ids_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let ids = store.cached_layer_ids();
+        // Build list left-to-right using unify_list_functor, close with Nil.
+        // Keep tails alive in a Vec (same pattern as terminusdb-webserver).
+        let mut tails: Vec<Term<'_>> = Vec::with_capacity(ids.len());
+        let mut cur = ids_term;
+        for id in &ids {
+            let (head, tail) = context.unify_list_functor(cur)?;
+            head.unify(name_to_string(*id))?;
+            tails.push(tail);
+            cur = tails.last().unwrap();
+        }
+        cur.unify(&Nil)
+    }
+
     /// Get the current process resident set size (RSS) in bytes.
     /// Fails if the value cannot be determined on this platform.
     pub semidet fn process_rss_bytes(_context, bytes_term) {

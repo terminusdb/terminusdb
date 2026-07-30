@@ -81,6 +81,12 @@ read_write_obj_to_graph_validation_obj(Read_Write_Obj, Graph_Validation_Obj, Map
     ;   nb_commit(Layer_Builder, New_Layer),
         '$change_window':layer_changes(New_Layer, Added, Removed),
         Layer_Changes = Added-Removed,
+        descriptor_database_composite(Descriptor, Db_Composite),
+        (   Db_Composite \= none
+        ->  layer_to_id(New_Layer, New_Layer_Id),
+            storage(Store),
+            terminus_store:associate_layer_database(Store, New_Layer_Id, Db_Composite)
+        ;   true),
         graph_inserts_deletes(Graph_Validation_Obj, N, M),
         \+ (N = 0, M = 0)
     ->  Changed = true
