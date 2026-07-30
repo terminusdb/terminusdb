@@ -208,33 +208,6 @@ predicates! {
         }
     }
 
-    #[name("store_id_layer")]
-    pub semidet fn store_id_layer_4(context, store_term, id_term, layer_term, database_term) {
-        if layer_term.is_var() {
-            let store: WrappedStore = store_term.get_ex()?;
-            let id: PrologText = id_term.get_ex()?;
-            let name = context.try_or_die(string_to_name(&id))?;
-
-            match context.try_or_die(store.get_layer_from_id(name))? {
-                Some(layer) => {
-                    layer_term.unify(&WrappedLayer(layer))?;
-                    let database: PrologText = database_term.get_ex()?;
-                    if &*database != "none" {
-                        store.associate_layer_with_database(name, &*database);
-                    }
-                    Ok(())
-                }
-                None => Err(PrologError::Failure)
-            }
-        }
-        else {
-            let layer: WrappedLayer = layer_term.get_ex()?;
-            let name = name_to_string(layer.name());
-
-            id_term.unify(name)
-        }
-    }
-
     pub nondet fn id_triple<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, subject_id_term, predicate_id_term, object_id_term) {
         setup => {
             let layer: WrappedLayer = layer_term.get_ex()?;

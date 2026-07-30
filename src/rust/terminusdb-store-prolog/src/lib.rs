@@ -72,9 +72,5 @@ pub fn install(module: Option<&str>) {
     store::register_lru_cache_used_bytes_in_module(module);
     store::register_cleanup_layer_cache_in_module(module);
     store::register_invalidate_layer_cache_entry_in_module(module);
-    store::register_associate_layer_database_in_module(module);
-    store::register_invalidate_database_layers_in_module(module);
-    store::register_cached_layer_ids_in_module(module);
     store::register_process_rss_bytes_in_module(module);
-    layer::register_store_id_layer_4_in_module(module);
 }

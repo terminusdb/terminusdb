@@ -835,13 +835,11 @@ apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_U
     layer_id_uri(Them_Repo_Askable, Them_Layer_Id, Them_Layer_Uri),
 
     triple_store(Store),
-    context_database_name(Them_Repo_Askable, Them_Db_Composite),
-    store_id_layer(Store, Them_Layer_Id, Them_Layer, Them_Db_Composite),
+    store_id_layer(Store, Them_Layer_Id, Them_Layer),
 
     (   layer_uri_for_commit(Us_Repo_Context, Us_Commit_Uri, Type, Us_Layer_Uri)
     ->  layer_id_uri(Us_Repo_Context, Us_Layer_Id, Us_Layer_Uri),
-        context_database_name(Us_Repo_Context, Us_Db_Composite),
-        store_id_layer(Store, Us_Layer_Id, Us_Layer, Us_Db_Composite),
+        store_id_layer(Store, Us_Layer_Id, Us_Layer),
         open_write(Us_Layer,Builder)
     ;   open_write(Store,Builder)
     ),
@@ -849,11 +847,6 @@ apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_U
     % commit new layer to store..
     nb_apply_delta(Builder,Them_Layer),
     nb_commit(Builder,New_Layer),
-    layer_to_id(New_Layer, New_Layer_Id),
-    context_database_name(Us_Repo_Context, Us_Db_Composite),
-    (   Us_Db_Composite \= none
-    ->  terminus_store:associate_layer_database(Store, New_Layer_Id, Us_Db_Composite)
-    ;   true),
     store_id_layer(Store, New_Layer_Id, New_Layer),
 
     insert_layer_object(Us_Repo_Context, New_Layer_Id, New_Layer_Uri).

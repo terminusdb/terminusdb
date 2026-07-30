@@ -27,10 +27,7 @@
               should_retain_layers_for_descriptor/1,
               retain_descriptor_layers/2,
               db_creation_bypass/2,
-              db_currently_creating/2,
-              descriptor_database_composite/2,
-              repository_descriptor_database_name/2,
-              context_database_name/2
+              db_currently_creating/2
           ]).
 
 /** <module> Descriptor Manipulation
@@ -305,8 +302,7 @@ open_read_write_obj(Descriptor,
         },
         once(has_repository(Repo_Layer_Desc, Repository_Name)),
         ignore((   repository_head(Repo_Layer_Desc, Repository_Name, Commit_Layer_Id),
-                   organization_database_name(Organization_Name, Database_Name, Composite),
-                   store_id_layer(Store, Commit_Layer_Id, Layer, Composite)))
+                   store_id_layer(Store, Commit_Layer_Id, Layer)))
     ;   Type = schema
     ->  New_Map = Map,
         ref_ontology(Ref_Name),
@@ -339,8 +335,7 @@ open_read_write_obj(Descriptor,
         ignore((layer_uri_for_commit(Repo_Context, Commit_Uri, Type, Layer_Uri),
                 layer_id_uri(Repo_Context, Layer_Id, Layer_Uri),
                 storage(Store),
-                organization_database_name(Organization_Name, Database_Name, Composite),
-                store_id_layer(Store, Layer_Id, Layer, Composite)))
+                store_id_layer(Store, Layer_Id, Layer)))
     ;   Layer = _),
 
     Augmented_Descriptor = (Descriptor.put('commit_type', Commit_Type)),
@@ -368,8 +363,7 @@ open_read_write_obj(Descriptor,
         layer_uri_for_commit(Repo_Context, Commit_Uri, Type, Layer_Uri),
         layer_id_uri(Repo_Context, Layer_Id, Layer_Uri),
         storage(Store),
-        organization_database_name(Organization_Name, Database_Name, Composite),
-        store_id_layer(Store, Layer_Id, Layer, Composite)
+        store_id_layer(Store, Layer_Id, Layer)
     ->  true
     ;   Layer = _),
     graph_descriptor_layer_to_read_write_obj(Descriptor, Layer, Read_Write_Obj).
@@ -380,50 +374,6 @@ read_write_obj_reader(Read_Write_Obj, _Layer) :-
     fail.
 read_write_obj_reader(Read_Write_Obj, Layer) :-
     Layer = Read_Write_Obj.read.
-
-/**
- * descriptor_database_composite(Descriptor, Composite) is det.
- *
- * Extract the database composite name (e.g. "admin|testdb") from a
- * descriptor that has organization_name and database_name fields.
- * Returns the atom 'none' for descriptors without these fields.
- */
-descriptor_database_composite(Descriptor, Composite) :-
-    (   _{organization_name: Org, database_name: DB} :< Descriptor
-    ->  organization_database_name(Org, DB, Composite)
-    ;   Composite = none
-    ).
-
-/**
- * repository_descriptor_database_name(Repo_Descriptor, Composite) is det.
- *
- * Extract the database composite name from a repository_descriptor by
- * looking at its nested database_descriptor.
- */
-repository_descriptor_database_name(Repo_Descriptor, Composite) :-
-    DB_Desc = Repo_Descriptor.database_descriptor,
-    organization_database_name(DB_Desc.organization_name, DB_Desc.database_name, Composite).
-
-/**
- * context_database_name(Context, Composite) is det.
- *
- * Extract the database composite name from a query context or askable.
- * Works with query_context (extracts descriptor from transaction_objects),
- * repository_descriptor, branch_descriptor, commit_descriptor, or any
- * descriptor with organization_name/database_name fields.
- * Returns 'none' if no database context can be found.
- */
-context_database_name(Context, Composite) :-
-    (   query_context{ transaction_objects : [Transaction_Object | _] } :< Context
-    ->  Descriptor = Transaction_Object.descriptor,
-        (   repository_descriptor{ database_descriptor : DB_Desc } :< Descriptor
-        ->  organization_database_name(DB_Desc.organization_name, DB_Desc.database_name, Composite)
-        ;   descriptor_database_composite(Descriptor, Composite)
-        )
-    ;   repository_descriptor{ database_descriptor : DB_Desc } :< Context
-    ->  organization_database_name(DB_Desc.organization_name, DB_Desc.database_name, Composite)
-    ;   descriptor_database_composite(Context, Composite)
-    ).
 
 /**
  * read_write_obj_builder(Read_Write_Obj, Layer_Builder) is semidet.

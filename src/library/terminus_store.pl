@@ -67,7 +67,6 @@
 
               layer_to_id/2,
               store_id_layer/3,
-              store_id_layer/4,
 
               pack_export/3,
               pack_layerids_and_parents/2,
@@ -88,9 +87,6 @@
               lru_cache_used_bytes/2,
               cleanup_layer_cache/2,
               invalidate_layer_cache_entry/2,
-              associate_layer_database/3,
-              invalidate_database_layers/3,
-              cached_layer_ids/2,
               process_rss_bytes/1
             ]).
 
