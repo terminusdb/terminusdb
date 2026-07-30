@@ -63,7 +63,7 @@ plugin_error_response(error(authentication_incorrect(_), _), Response) :- !,
         },
         headers: _{'Content-Type': 'application/json'}
     }.
-plugin_error_response(error(access_not_authorised(_, Action, _), _), Response) :- !,
+plugin_error_response(error(access_not_authorised(_, _Action, _), _), Response) :- !,
     Response = _{
         status: 403,
         body: _{
