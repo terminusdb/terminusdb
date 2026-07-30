@@ -13,10 +13,19 @@ appserver_hooks:appserver_stream(get, '/api/v1/ext/debug-log', webserver_actions
 
 %% actions_handler(+Request, +StreamId, -Response) is det.
 %
-%  Subscribe this connection to the `actions` broadcast channel. Log entries
-%  are pushed by `appserver_broadcast_send/2` and forwarded to every
-%  subscriber by Rust, so the stream flushes continuously as the server acts.
-actions_handler(_Request, StreamId, Response) :-
+%  Authenticate the listener, require meta_read_access on the system,
+%  then subscribe this connection to the `actions` broadcast channel.
+%  Log entries are pushed by `appserver_broadcast_send/2` and forwarded
+%  to every subscriber by Rust, so the stream flushes continuously.
+%
+%  Errors (authentication_incorrect, access_not_authorised, etc.) are
+%  thrown and mapped to HTTP responses by the worker pool's
+%  handle_plugin_stream_request catch wrapper.
+actions_handler(Request, StreamId, Response) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    plugin_api:authenticate_from_request(Request, System_DB, Auth),
+    check_descriptor_auth(System_DB, system_descriptor{},
+                          '@schema':'Action/meta_read_access', Auth),
     '$appserver':appserver_broadcast_subscribe(actions, StreamId, 0),
     Response = _{
         status: 200,

@@ -15,10 +15,19 @@ appserver_hooks:appserver_stream(get, '/api/v1/ext/events', webserver_events:eve
 
 %% events_handler(+Request, +StreamId, -Response) is det.
 %
-%  Remember the stream id so the post_commit_hook can broadcast to it.
+%  Authenticate the listener, require meta_read_access on the system,
+%  then register the stream so the post_commit_hook can broadcast to it.
 %  The stream is removed automatically when Rust detects the client has
 %  disconnected, but a failed send will also retract it here.
-events_handler(_Request, StreamId, Response) :-
+%
+%  Errors (authentication_incorrect, access_not_authorised, etc.) are
+%  thrown and mapped to HTTP responses by the worker pool's
+%  handle_plugin_stream_request catch wrapper.
+events_handler(Request, StreamId, Response) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    plugin_api:authenticate_from_request(Request, System_DB, Auth),
+    check_descriptor_auth(System_DB, system_descriptor{},
+                          '@schema':'Action/meta_read_access', Auth),
     assertz(event_stream(StreamId)),
     Response = _{
         status: 200,

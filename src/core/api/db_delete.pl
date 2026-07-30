@@ -94,7 +94,12 @@ delete_database_label(Organization, DB_Name) :-
     with_meta_commit_lock(
         Named_Graph_Name,
         safe_delete_named_graph(Store, Named_Graph_Name)
-    ).
+    ),
+    % Purge dead layer cache entries left behind by the deleted database.
+    % Without this, stale Weak references accumulate until the cache's
+    % 20% dead-entry threshold triggers an inline cleanup, which may
+    % never happen if live entries keep being added.
+    terminus_store:cleanup_layer_cache(Store, _Removed).
 
 /**
  * force_delete_db(+Organization, +DB_Name) is semidet.

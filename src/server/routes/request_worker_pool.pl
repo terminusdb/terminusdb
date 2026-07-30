@@ -21,6 +21,7 @@
 :- use_module(library(unix)).
 :- use_module(library(uri)).
 :- use_module(core(appserver_hooks)).
+:- use_module(core(plugin_api), [plugin_error_response/2]).
 :- use_module(core(util), [saved_request/5]).
 :- use_module(core(util/json_log)).
 :- use_module(server(routes/srv_http)).
@@ -889,29 +890,11 @@ handle_plugin_stream_request(HandlerModule, HandlerName, Request, _SWIRequest, R
         (   call(HandlerModule:Goal)
         ->  true
         ;   json_log_error_formatted("Plugin stream handler ~w:~w failed", [HandlerModule, HandlerName]),
-            Response = _{
-                status: 500,
-                body: _{
-                    '@type': 'api:ErrorResponse',
-                    'api:status': 'api:failure',
-                    'api:error': _{'@type': 'api:InternalServerError'},
-                    'api:message': 'Internal server error'
-                },
-                headers: _{'Content-Type': 'application/json'}
-            }
+            plugin_api:plugin_error_response(failure, Response)
         ),
         Error,
         (   json_log_error_formatted("Plugin stream handler ~w:~w error: ~q", [HandlerModule, HandlerName, Error]),
-            Response = _{
-                status: 500,
-                body: _{
-                    '@type': 'api:ErrorResponse',
-                    'api:status': 'api:failure',
-                    'api:error': _{'@type': 'api:InternalServerError'},
-                    'api:message': 'Internal server error'
-                },
-                headers: _{'Content-Type': 'application/json'}
-            }
+            plugin_api:plugin_error_response(Error, Response)
         )
     ).
 

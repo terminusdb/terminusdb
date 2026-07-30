@@ -2,6 +2,14 @@ DIST ?= community
 # Default was 9.2.9
 SWIPL_VERSION ?= 10.0.1
 
+# Version-tagged release of tdb-admin to download for the embedded admin panel.
+# Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
+TDB_ADMIN_VERSION ?= v0.1.1-rc3
+
+# Version-tagged release of tdb-data to download for the embedded data explorer.
+# Must match a tag in https://github.com/terminusdb-org/tdb-data/releases
+TDB_DATA_VERSION ?= v0.1.0-rc2
+
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
 TARGET=terminusdb
@@ -20,6 +28,14 @@ dev:
 	rm src/rust/librust.* || true
 	rm src/rust/librust.* || true
 	@$(MAKE) -f distribution/Makefile.prolog $@
+
+.PHONY: start
+start:
+	tests/terminusdb-test-server.sh start
+
+.PHONY: stop
+stop:
+	tests/terminusdb-test-server.sh stop
 
 .PHONY: restart
 restart:
@@ -56,6 +72,8 @@ docker:
 	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
 	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
 	  --build-arg DIST="$(DIST)" \
+	  --build-arg TDB_ADMIN_VERSION="$(TDB_ADMIN_VERSION)" \
+	  --build-arg TDB_DATA_VERSION="$(TDB_DATA_VERSION)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
 # Build the Docker image for development using local swipl-rs sources.
@@ -70,6 +88,8 @@ docker-debug:
 	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
 	  --build-arg DIST="$(DIST)" \
 	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
+	  --build-arg TDB_ADMIN_VERSION="$(TDB_ADMIN_VERSION)" \
+	  --build-arg TDB_DATA_VERSION="$(TDB_DATA_VERSION)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
 # Install minimal pack dependencies.
@@ -128,6 +148,37 @@ rust:
 plugins-rust:
 	@$(MAKE) -f distribution/Makefile.rust $@
 
+# Download and extract the tdb-admin dist package from GitHub releases.
+# The tarball contains only the built dist/ folder (no source code).
+# Requires TDB_ADMIN_VERSION to match a published release tag (with leading 'v').
+.PHONY: admin-dist
+admin-dist:
+	@echo "Downloading tdb-admin dist $(TDB_ADMIN_VERSION)..."
+	rm -rf app/admin/dist
+	mkdir -p app/admin/dist
+	$(eval TDB_ADMIN_VER := $(TDB_ADMIN_VERSION:v%=%))
+	curl -fsSL "https://github.com/terminusdb-org/tdb-admin/releases/download/$(TDB_ADMIN_VERSION)/tdb-admin-$(TDB_ADMIN_VER).tar.gz" \
+		| tar xzf - -C app/admin/dist
+	@echo "tdb-admin dist extracted to app/admin/dist/"
+
+# Download and extract the tdb-data dist package from GitHub releases.
+# The tarball contains only the built dist/ folder (no source code).
+# Requires TDB_DATA_VERSION to match a published release tag (with leading 'v').
+.PHONY: data-dist
+data-dist:
+	@echo "Downloading tdb-data dist $(TDB_DATA_VERSION)..."
+	rm -rf app/data/dist
+	mkdir -p app/data/dist
+	$(eval TDB_DATA_VER := $(TDB_DATA_VERSION:v%=%))
+	curl -fsSL "https://github.com/terminusdb-org/tdb-data/releases/download/$(TDB_DATA_VERSION)/tdb-data-$(TDB_DATA_VER).tar.gz" \
+		| tar xzf - -C app/data/dist
+	@echo "tdb-data dist extracted to app/data/dist/"
+
+# Build the static Scalar API dashboard (converts openapi.yaml to JSON).
+.PHONY: dashboard
+dashboard:
+	cd dashboard && npm install && npm run build
+
 # Run unit tests in swipl; all, or just one suite.
 # make test OR make test SUITE='[json,terminus_store,tables]'
 .PHONY: test
@@ -142,6 +193,8 @@ test:
 test-int: server-clean
 ifdef SUITE
 	sh -c "cd tests ; npx mocha 'test/$(SUITE).js'"
+else ifdef MOCHA_IGNORE
+	sh -c "cd tests ; npx mocha $(shell echo '$(MOCHA_IGNORE)' | sed 's/,/ --ignore /g' | sed 's/^/--ignore /')"
 else
 	sh -c "cd tests ; npx mocha"
 endif
@@ -180,7 +233,7 @@ prolog-clean:
 
 # Remove everything.
 .PHONY: clean
-clean: realclean-rust clean-deps prolog-clean docs-clean
+clean: realclean-rust clean-deps prolog-clean docs-clean dashboard-clean
 
 # Remove the dylib.
 .PHONY: clean-rust
@@ -200,6 +253,10 @@ clean-deps:
 .PHONY: docs-clean
 docs-clean:
 	@rm -f $(RONN_FILE)
+
+.PHONY: dashboard-clean
+dashboard-clean:
+	@rm -f dashboard/src/assets/openapi.json
 
 # Build the documentation.
 .PHONY: docs
@@ -228,7 +285,7 @@ test-e2e:
 	./tests/run-e2e.sh $(ARGS)
 
 .PHONY: pr-light
-pr-light: lint lint-mocha lint-openapi clippy dev restart test test-int
+pr-light: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int
 
 .PHONY: pr
 pr: clean pr-light

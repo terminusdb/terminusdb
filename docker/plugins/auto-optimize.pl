@@ -136,13 +136,38 @@ print_stack_statistics_json(Label) :-
     },
     json_log_debug(Stats).
 
+% Probability of running abolish_all_tables during GC.
+% This is a rare global table cleanup — most GC cycles just collect
+% atoms and trim stacks. At 10%, this fires roughly once per 2000
+% commits (0.5% GC chance × 10% abolish chance), which is frequent
+% enough to reclaim stale tabled results without thrashing.
+abolish_tables_chance(0.10).
+
 % Actual GC work - runs in dedicated thread
 do_garbage_collect :-
     maybe_print_stats('PRE-GC'),
     garbage_collect,
     trim_stacks,
+    maybe_abolish_tables,
     maybe_print_stats('POST-GC'),
     json_log_debug("Ran garbage_collect").
+
+% Periodic deep cleanup: abolish all tabled results and reclaim atoms.
+% Fires at 10% of GC cycles (~0.05% of commits). Both operations are
+% global and can block other threads, so we run them together as a
+% rare periodic cleanup rather than independently.
+maybe_abolish_tables :-
+    abolish_tables_chance(Chance),
+    random(X),
+    (   X < Chance
+    ->  abolish_all_tables,
+        statistics(atoms, AtomsBefore),
+        garbage_collect_atoms,
+        statistics(atoms, AtomsAfter),
+        format(atom(Msg), "GC: periodic deep cleanup - abolished tables, reclaimed atoms (~w -> ~w)", [AtomsBefore, AtomsAfter]),
+        json_log_info(Msg)
+    ;   true
+    ).
 
 maybe_print_stats(Label) :-
     log_level('DEBUG'),
