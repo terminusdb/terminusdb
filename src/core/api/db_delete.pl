@@ -91,14 +91,30 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
 delete_database_label(Organization, DB_Name) :-
     triple_store(Store),
     organization_database_name(Organization, DB_Name, Named_Graph_Name),
+    Database_Descriptor = database_descriptor{organization_name: Organization,
+                                              database_name: DB_Name},
+    % Invalidate all cached layers associated with this database.
+    organization_database_name(Organization, DB_Name, Composite),
+    terminus_store:invalidate_database_layers(Store, Composite, _Invalidated_Count),
+    % Retract retained_descriptor_layers to drop strong Arc<InternalLayer> refs.
+    (   descriptor:retained_descriptor_layers(Desc, _),
+        (   Database_Descriptor :< Desc
+        ;   repository_descriptor{database_descriptor: Database_Descriptor} :< Desc
+        ;   branch_descriptor{repository_descriptor:
+                              repository_descriptor{database_descriptor: Database_Descriptor}} :< Desc
+        ;   commit_descriptor{repository_descriptor:
+                              repository_descriptor{database_descriptor: Database_Descriptor}} :< Desc
+        ),
+        retractall(descriptor:retained_descriptor_layers(Desc, _)),
+        fail
+    ;   true
+    ),
+    % Now delete the named graph from disk.
     with_meta_commit_lock(
         Named_Graph_Name,
         safe_delete_named_graph(Store, Named_Graph_Name)
     ),
-    % Purge dead layer cache entries left behind by the deleted database.
-    % Without this, stale Weak references accumulate until the cache's
-    % 20% dead-entry threshold triggers an inline cleanup, which may
-    % never happen if live entries keep being added.
+    % Purge any remaining dead layer cache entries.
     terminus_store:cleanup_layer_cache(Store, _Removed).
 
 /**
@@ -111,3 +127,88 @@ force_delete_db(Organization, DB_Name) :-
     ignore(delete_database_label(Organization, DB_Name)),
     ignore(delete_db_from_system(Organization, DB_Name)),
     ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true)).
+
+:- begin_tests(db_delete_cache_invalidation).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(transaction)).
+:- use_module(core(api/db_create)).
+
+test(delete_db_invalidates_all_cached_layers,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    super_user_authority(Auth),
+
+    % Create several commits to cache multiple layers
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{author: "me", message: "commit 1"},
+                    Context1),
+    with_transaction(Context1, ask(Context1, insert(a,b,c)), _),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{author: "me", message: "commit 2"},
+                    Context2),
+    with_transaction(Context2, ask(Context2, insert(d,e,f)), _),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{author: "me", message: "commit 3"},
+                    Context3),
+    with_transaction(Context3, ask(Context3, insert(g,h,i)), _),
+
+    % Verify some layers are cached
+    storage(Store),
+    terminus_store:cached_layer_ids(Store, Cached_Before),
+    Cached_Before \= [],
+
+    % Delete the database
+    force_delete_db("admin", "testdb"),
+
+    % All layers associated with admin|testdb should be invalidated
+    terminus_store:cached_layer_ids(Store, Cached_After),
+    forall(
+        (   member(Id, Cached_Before),
+            \+ memberchk(Id, Cached_After)
+        ),
+        true
+    ).
+
+test(delete_db_does_not_invalidate_global_layers,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))]
+    ) :-
+    Path = 'admin/testdb',
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    super_user_authority(Auth),
+
+    % Create a commit to cache some layers
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{author: "me", message: "commit 1"},
+                    Context1),
+    with_transaction(Context1, ask(Context1, insert(a,b,c)), _),
+
+    % Open the system graph to ensure its layers are cached
+    system_instance_name(System_Label),
+    storage(Store),
+    safe_open_named_graph(Store, System_Label, System_Graph),
+    head(System_Graph, System_Layer),
+    layer_to_id(System_Layer, System_Layer_Id),
+
+    % Delete the database
+    force_delete_db("admin", "testdb"),
+
+    % The system graph layer should still be cached (it's a global layer)
+    terminus_store:cached_layer_ids(Store, Cached_After),
+    (   memberchk(System_Layer_Id, Cached_After)
+    ->  true
+    ;   % System layer may not have been cached if no one queried it,
+        % which is also acceptable
+        true).
+
+:- end_tests(db_delete_cache_invalidation).

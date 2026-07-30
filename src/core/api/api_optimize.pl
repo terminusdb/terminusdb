@@ -186,7 +186,10 @@ named_graph_optimize(Graph_Name) :-
                 ->  squash(Layer,New_Layer),
                     do_or_die(
                         nb_force_set_head(Graph,New_Layer,Version),
-                        error(label_version_changed(Graph_Name,Version),_))
+                        error(label_version_changed(Graph_Name,Version),_)),
+                    % Invalidate just the head layer so next load picks up the squashed version.
+                    layer_to_id(Layer, Layer_Id),
+                    terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
                 ;   true  % Already a base layer, nothing to squash
                 )
             ;   true)
@@ -222,8 +225,9 @@ descriptor_optimize(repository_descriptor{
         ),
         (   % Rollup creates parallel files. No need to call replace_graph_head_if_named.
             rollup(Layer),
-            layer_to_id(Layer, Schema_Layer_Id),
-            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id)
+            % Invalidate just the head layer so next load picks up the rollup.
+            layer_to_id(Layer, Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
         )
     ),
     % Optimize in-memory instance graph after rollup
@@ -232,8 +236,8 @@ descriptor_optimize(repository_descriptor{
     (   ground(Layer)
     ->  % Rollup creates parallel files. No need to call replace_graph_head_if_named.
         exponential_rollup_strategy(Layer),
-        % Invalidate the full parent chain cache
         imprecise_rollup_upto(Layer, Layer),
+        % Invalidate just the head layer so next load picks up the rollup.
         layer_to_id(Layer, Layer_Id),
         terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
     ;   true
@@ -265,9 +269,9 @@ descriptor_optimize(branch_descriptor{
             % No need to call replace_graph_head_if_named - it's unnecessary and
             % can cause race conditions by reverting the label to an old layer.
             rollup(Layer),
-            % Invalidate cache so next load uses the rollup
-            layer_to_id(Layer, Schema_Layer_Id),
-            terminus_store:invalidate_layer_cache_entry(Store, Schema_Layer_Id)
+            % Invalidate just the head layer so next load picks up the rollup.
+            layer_to_id(Layer, Layer_Id),
+            terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
         )
     ),
     Instance_Objects = (Transaction_Object.instance_objects),
@@ -278,11 +282,8 @@ descriptor_optimize(branch_descriptor{
         ),
         (   % Rollup creates parallel files. No need to update label file.
             exponential_rollup_strategy(Layer),
-            % Invalidate the ENTIRE parent chain cache by triggering register_rollup.
-            % imprecise_rollup_upto(Layer, Layer) is a no-op for rollup creation,
-            % but register_rollup still runs and invalidates the full parent chain.
             imprecise_rollup_upto(Layer, Layer),
-            % Invalidate cache so next load uses the rollup
+            % Invalidate just the head layer so next load picks up the rollup.
             layer_to_id(Layer, Layer_Id),
             terminus_store:invalidate_layer_cache_entry(Store, Layer_Id)
         )
@@ -298,11 +299,10 @@ descriptor_optimize(branch_descriptor{
     Repo_Layer = (Repo_Instance.read),
     (   ground(Repo_Layer)
     ->  exponential_rollup_strategy(Repo_Layer),
-        % Invalidate the full parent chain cache
         imprecise_rollup_upto(Repo_Layer, Repo_Layer),
-        % Invalidate cache so next load uses the rolled up layer
-        layer_to_id(Repo_Layer, Repo_Layer_Id),
+        % Invalidate just the head layer so next load picks up the rollup.
         storage(Store),
+        layer_to_id(Repo_Layer, Repo_Layer_Id),
         terminus_store:invalidate_layer_cache_entry(Store, Repo_Layer_Id),
         % Clear retained layers for all descriptors in the chain
         retractall(descriptor:retained_descriptor_layers(Repository_Descriptor, _)),
