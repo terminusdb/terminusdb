@@ -66,18 +66,12 @@ appserver_hooks:appserver_stream(get, '/api/v1/ext/commits/*branch_path',
 %
 %  Authenticate the listener, check branch authorization, send initial
 %  commit chunk(s), register the stream for live updates, and set up
-%  the timeout. Follows the same pattern as webserver_events.pl but
-%  with per-branch filtering and initial catch-up data.
+%  the timeout.
+%
+%  Errors (authentication_incorrect, access_not_authorised, etc.) are
+%  thrown and mapped to HTTP responses by the worker pool's
+%  handle_plugin_stream_request catch wrapper.
 commits_handler(Request, StreamId, Response) :-
-    catch(
-        commits_handler_safe(Request, StreamId, Response),
-        Error,
-        (   json_log_error_formatted("commits_handler error: ~q", [Error]),
-            error_response(Error, Response)
-        )
-    ).
-
-commits_handler_safe(Request, StreamId, Response) :-
     %% Extract the branch path from the wildcard path parameter.
     get_dict(params, Request, Params),
     get_dict(branch_path, Params, BranchPathRaw),
@@ -106,7 +100,12 @@ commits_handler_safe(Request, StreamId, Response) :-
     open_descriptor(system_descriptor{}, System_DB),
 
     %% Authenticate using the request headers.
-    authenticate_from_request(Request, System_DB, Auth),
+    plugin_api:authenticate_from_request(Request, System_DB, Auth),
+
+    %% Require meta_read_access on the system — the endpoint reveals
+    %% database and branch metadata to the listener.
+    check_descriptor_auth(System_DB, system_descriptor{},
+                          '@schema':'Action/meta_read_access', Auth),
 
     %% Resolve the branch descriptor and check authorization.
     do_or_die(
@@ -189,25 +188,6 @@ stream_commit_data(System_DB, Descriptor, BranchPath, Since, Timeout, StreamId) 
             catch('$appserver':appserver_stream_close(StreamId), _, true)
         )
     ).
-
-%%%%%%%%%%%%%%%%%%%% Authentication %%%%%%%%%%%%%%%%%%%%%%%%%
-
-%% authenticate_from_request(+Request, +System_DB, -Auth) is det.
-%
-%  Extract the Authorization header from the request dict and
-%  authenticate the user. Throws on auth failure.
-authenticate_from_request(Request, System_DB, Auth) :-
-    get_dict(headers, Request, HeadersDict),
-    (   get_dict('Authorization', HeadersDict, AuthValue)
-    ->  true
-    ;   get_dict('authorization', HeadersDict, AuthValue)
-    ->  true
-    ;   throw(error(authentication_incorrect(no_authorization_header), _))
-    ),
-    %% Build a minimal SWI request list for authenticate/3.
-    atom_string(AuthAtom, AuthValue),
-    SWIRequest = [authorization(AuthAtom), peer(ip(127,0,0,1))],
-    routes:authenticate(System_DB, SWIRequest, Auth).
 
 %%%%%%%%%%%%%%%%%%%% Two-Phase Catch-Up %%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -720,65 +700,6 @@ setup_timeout(StreamId, Timeout, Thread) :-
         [detached(true)]
     ).
 setup_timeout(_, _, none).
-
-%% error_response(+Error, -Response) is det.
-%
-%  Build an error response dict from an error term.
-error_response(error(authentication_incorrect(_), _), Response) :- !,
-    Response = _{
-        status: 401,
-        body: _{
-            '@type': 'api:ErrorResponse',
-            'api:status': 'api:failure',
-            'api:error': _{'@type': 'api:AuthenticationError'},
-            'api:message': 'Authentication failed'
-        },
-        headers: _{'Content-Type': 'application/json'}
-    }.
-error_response(error(not_a_branch_descriptor(_), _), Response) :- !,
-    Response = _{
-        status: 400,
-        body: _{
-            '@type': 'api:ErrorResponse',
-            'api:status': 'api:failure',
-            'api:error': _{'@type': 'api:BadArgumentError'},
-            'api:message': 'Path is not a branch descriptor'
-        },
-        headers: _{'Content-Type': 'application/json'}
-    }.
-error_response(error(invalid_absolute_path(_), _), Response) :- !,
-    Response = _{
-        status: 404,
-        body: _{
-            '@type': 'api:ErrorResponse',
-            'api:status': 'api:not_found',
-            'api:error': _{'@type': 'api:PathNotFoundError'},
-            'api:message': 'Branch not found'
-        },
-        headers: _{'Content-Type': 'application/json'}
-    }.
-error_response(error(access_not_authorised(_), _), Response) :- !,
-    Response = _{
-        status: 403,
-        body: _{
-            '@type': 'api:ErrorResponse',
-            'api:status': 'api:failure',
-            'api:error': _{'@type': 'api:AuthorizationError'},
-            'api:message': 'Access not authorised'
-        },
-        headers: _{'Content-Type': 'application/json'}
-    }.
-error_response(_, Response) :-
-    Response = _{
-        status: 500,
-        body: _{
-            '@type': 'api:ErrorResponse',
-            'api:status': 'api:failure',
-            'api:error': _{'@type': 'api:InternalServerError'},
-            'api:message': 'Internal server error'
-        },
-        headers: _{'Content-Type': 'application/json'}
-    }.
 
 %%%%%%%%%%%%%%%%%%%% Unit Tests %%%%%%%%%%%%%%%%%%%%%%%%%
 
