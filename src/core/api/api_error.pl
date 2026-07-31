@@ -305,6 +305,20 @@ api_global_error_jsonld(error(search_not_indexed(Path, _Engine_Body), _), Type, 
                               'api:path' : Path },
              'api:message' : Msg
             }.
+% Search engine served a commit that does not exist in the TerminusDB
+% commit graph. This indicates a data integrity issue — vectorlink has
+% indexed data for a commit TerminusDB does not know about.
+api_global_error_jsonld(error(search_served_commit_not_found(Commit_Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search engine served a commit (~w) that does not exist in the TerminusDB commit graph. This may indicate stale or orphaned index data.",
+           [Commit_Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:SearchServedCommitNotFound',
+                              'api:commit_id' : Commit_Id },
+             'api:message' : Msg
+            }.
 % Generic handler for engine forward failures (non-404 status codes).
 % Maps 4xx engine errors to api:failure (400) and 5xx to api:server_error (500).
 api_global_error_jsonld(error(vectorlink_forward_failed(Status, _Body, _URL), _), Type, JSON) :-

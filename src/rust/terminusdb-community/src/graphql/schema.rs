@@ -55,6 +55,7 @@ pub struct TerminusContext<'a> {
     pub instance: Option<SyncStoreLayer>,
     pub type_collection: TerminusTypeCollectionInfo,
     pub document_context: Arc<Lazy<DocumentContext<SyncStoreLayer>>>,
+    pub compress_ids: bool,
 }
 
 impl<'a> TerminusContext<'a> {
@@ -68,6 +69,7 @@ impl<'a> TerminusContext<'a> {
         author_term: &'a Term,
         message_term: &'a Term,
         type_collection: TerminusTypeCollectionInfo,
+        compress_ids: bool,
     ) -> PrologResult<TerminusContext<'a>> {
         let user: Atom = auth_term.get_ex()?;
         let system =
@@ -105,6 +107,7 @@ impl<'a> TerminusContext<'a> {
             instance,
             type_collection,
             document_context: Arc::new(Lazy::new()),
+            compress_ids,
         })
     }
 
@@ -773,9 +776,16 @@ impl GraphQLValue for TerminusType {
             // point. not having it here would be a weird bug.
             let instance = executor.context().instance.as_ref()?;
             if field_name.as_str() == "_id" {
-                return Some(Ok(Value::Scalar(DefaultScalarValue::String(
-                    instance.id_subject(self.id)?,
-                ))));
+                let full_id = instance.id_subject(self.id)?;
+                let id = if executor.context().compress_ids {
+                    executor
+                        .context()
+                        .document_context()
+                        .compress_instance_id(&full_id)
+                } else {
+                    full_id
+                };
+                return Some(Ok(Value::Scalar(DefaultScalarValue::String(id))));
             }
             if field_name.as_str() == "_json" {
                 let document_context = executor.context().document_context();

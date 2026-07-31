@@ -1,4 +1,4 @@
-:- module(api_graphql, [handle_graphql_request/10]).
+:- module(api_graphql, [handle_graphql_request/11]).
 
 :- use_module(core(util)).
 :- use_module(core(transaction)).
@@ -37,7 +37,17 @@ post_process_graphql_decimals(ResponseIn, ResponseOut) :-
     % Continue with any other decimal-like fields
     re_replace('"([a-zA-Z_][a-zA-Z0-9_]*)":"([0-9]+\\.[0-9]+)"'/g, '"\\1":\\2', Temp, ResponseOut).
 
-handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data) :-
+%% handle_graphql_request(+System_DB, +Auth, +Method, +Path_Atom,
+%%                        +Input_Stream, -Response, -Content_Type,
+%%                        -Content_Length, -New_Data_Version,
+%%                        -Transaction_Meta_Data, +Compress_Ids) is det.
+%
+%  Handles a GraphQL request. Compress_Ids is a boolean atom (true/false)
+%  extracted from the compress_ids query parameter by the route handler.
+%  When true (default), document IDs in responses are compact (prefixed).
+%  When false, full IRIs are returned. This affects _id field resolution
+%  and mutation result IDs (_insertDocuments, _replaceDocuments, _deleteDocuments).
+handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids) :-
     atom_string(Path_Atom, Path),
     (   Path == ""
     %->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
@@ -85,7 +95,7 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
         create_context(Transaction, Commit_Info, C),
         catch(
             with_transaction(C,
-                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, ResponseRaw, Is_Error, Author, Message),
+                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, ResponseRaw, Is_Error, Author, Message, Compress_Ids),
                                  die_if(Is_Error = true,
                                         response(ResponseRaw)),
                                  (   var(Author)

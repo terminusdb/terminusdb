@@ -3346,9 +3346,13 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     memberchk(input(Input), Request),
     memberchk(content_type(Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
 
-    catch((      authenticate(System_DB, Request, Auth),
-                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data),
+    catch((      param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
+                 authenticate(System_DB, Request, Auth),
+                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids),
                  transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                  write_cors_headers(Request),
                  write_data_version_header(New_Data_Version),
@@ -3391,6 +3395,12 @@ handle_graphql_error(error(unresolvable_absolute_descriptor(Desc), _), Request) 
     cors_reply_json(Request,
                     json{'errors': [json{message: Msg}]},
                     [status(403)]).
+handle_graphql_error(error(bad_parameter_type(Param, Type, Value), _), Request) :-
+    format(string(Msg), "Invalid value for parameter ~q (expected ~q): ~q",
+           [Param, Type, Value]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(400)]).
 handle_graphql_error(E, Request) :-
     format(string(Msg), "Unexpected error in graphql: ~q",
            [E]),
