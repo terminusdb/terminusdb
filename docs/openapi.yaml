@@ -1113,6 +1113,16 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: compress_ids
+          in: query
+          required: false
+          description: |
+            Compress the returned document IDs using prefixes.
+            When true (default), IDs are returned in compressed form (e.g. `Character/Yoda`).
+            When false, IDs are returned as full IRIs (e.g. `terminusdb:///data/Character/Yoda`).
+          schema:
+            type: boolean
+            default: true
       responses:
         200:
           description: Documents added successfully
@@ -1213,6 +1223,16 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: compress_ids
+          in: query
+          required: false
+          description: |
+            Compress the returned document IDs using prefixes.
+            When true (default), IDs are returned in compressed form (e.g. `Character/Yoda`).
+            When false, IDs are returned as full IRIs (e.g. `terminusdb:///data/Character/Yoda`).
+          schema:
+            type: boolean
+            default: true
       responses:
         200:
           description: Documents replaced successfully

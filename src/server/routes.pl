@@ -592,6 +592,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
             param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
+            param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -605,6 +606,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           allow_destructive_migration: Allow_Destructive_Migration,
                           merge_repeats: Merge_Repeats,
                           overwrite: Overwrite,
+                          compress_ids: Compress_Ids,
                           input_format: InputFormat
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
@@ -680,6 +682,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
+            param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -691,6 +694,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 require_migration: Require_Migration,
                 allow_destructive_migration: Allow_Destructive_Migration,
                 merge_repeats: Merge_Repeats,
+                compress_ids: Compress_Ids,
                 input_format: InputFormat
             },
             api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
