@@ -6,7 +6,7 @@ const {
   gql, HttpLink,
 } = require('@apollo/client/core')
 
-function createGraphQLClient(agent, compressIds) {
+function createGraphQLClient (agent, compressIds) {
   const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
   const base = agent.baseUrl
   const uri = compressIds === null
@@ -31,7 +31,7 @@ function createGraphQLClient(agent, compressIds) {
   })
 }
 
-async function rawGraphQL(agent, compressIds, query) {
+async function rawGraphQL (agent, compressIds, query) {
   const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
   const base = agent.baseUrl
   const uri = compressIds === null
@@ -41,7 +41,7 @@ async function rawGraphQL(agent, compressIds, query) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': util.authorizationHeader(agent),
+      Authorization: util.authorizationHeader(agent),
     },
     body: JSON.stringify({ query }),
   })
@@ -134,25 +134,25 @@ describe('GraphQL compress_ids', function () {
 
   it('_insertDocuments returns compressed IDs when compress_ids=true', async function () {
     const { body } = await rawGraphQL(agent, true,
-      `mutation { _insertDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"Bob\\",\\"age\\":25}") }`)
+      String.raw`mutation { _insertDocuments(json: "{\"@type\":\"Person\",\"name\":\"Bob\",\"age\":25}") }`)
     expect(body.data._insertDocuments).to.include('Person/Bob')
   })
 
   it('_insertDocuments returns full IRIs when compress_ids=false', async function () {
     const { body } = await rawGraphQL(agent, false,
-      `mutation { _insertDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"Charlie\\",\\"age\\":40}") }`)
+      String.raw`mutation { _insertDocuments(json: "{\"@type\":\"Person\",\"name\":\"Charlie\",\"age\":40}") }`)
     expect(body.data._insertDocuments).to.include('terminusdb:///data/Person/Charlie')
   })
 
   it('_insertDocuments returns compressed IDs when compress_ids defaults', async function () {
     const { body } = await rawGraphQL(agent, null,
-      `mutation { _insertDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"Dave\\",\\"age\\":50}") }`)
+      String.raw`mutation { _insertDocuments(json: "{\"@type\":\"Person\",\"name\":\"Dave\",\"age\":50}") }`)
     expect(body.data._insertDocuments).to.include('Person/Dave')
   })
 
   it('_insertDocuments returns compressed IDs with default param after explicit false query', async function () {
     await rawGraphQL(agent, false,
-      `mutation { _insertDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"Eve\\",\\"age\\":35}") }`)
+      String.raw`mutation { _insertDocuments(json: "{\"@type\":\"Person\",\"name\":\"Eve\",\"age\":35}") }`)
 
     const client = createGraphQLClient(agent, null)
     const QUERY = gql`
@@ -173,13 +173,13 @@ describe('GraphQL compress_ids', function () {
 
   it('_replaceDocuments returns compressed IDs when compress_ids=true', async function () {
     const { body } = await rawGraphQL(agent, true,
-      `mutation { _replaceDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"Alice\\",\\"age\\":31}") }`)
+      String.raw`mutation { _replaceDocuments(json: "{\"@type\":\"Person\",\"name\":\"Alice\",\"age\":31}") }`)
     expect(body.data._replaceDocuments).to.include('Person/Alice')
   })
 
   it('_replaceDocuments returns full IRIs when compress_ids=false', async function () {
     const { body } = await rawGraphQL(agent, false,
-      `mutation { _replaceDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"Bob\\",\\"age\\":26}") }`)
+      String.raw`mutation { _replaceDocuments(json: "{\"@type\":\"Person\",\"name\":\"Bob\",\"age\":26}") }`)
     expect(body.data._replaceDocuments).to.include('terminusdb:///data/Person/Bob')
   })
 
@@ -189,7 +189,7 @@ describe('GraphQL compress_ids', function () {
 
   it('_deleteDocuments returns compressed IDs when compress_ids=true', async function () {
     const { body: insertBody } = await rawGraphQL(agent, false,
-      `mutation { _insertDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"ToDelete\\",\\"age\\":99}") }`)
+      String.raw`mutation { _insertDocuments(json: "{\"@type\":\"Person\",\"name\":\"ToDelete\",\"age\":99}") }`)
     const fullId = insertBody.data._insertDocuments[0]
 
     const { body } = await rawGraphQL(agent, true,
@@ -199,7 +199,7 @@ describe('GraphQL compress_ids', function () {
 
   it('_deleteDocuments returns full IRIs when compress_ids=false', async function () {
     const { body: insertBody } = await rawGraphQL(agent, false,
-      `mutation { _insertDocuments(json: "{\\"@type\\":\\"Person\\",\\"name\\":\\"ToDelete2\\",\\"age\\":98}") }`)
+      String.raw`mutation { _insertDocuments(json: "{\"@type\":\"Person\",\"name\":\"ToDelete2\",\"age\":98}") }`)
     const fullId = insertBody.data._insertDocuments[0]
 
     const { body } = await rawGraphQL(agent, false,
