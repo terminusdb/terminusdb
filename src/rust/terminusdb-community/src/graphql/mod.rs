@@ -14,6 +14,7 @@ use std::{
     num::NonZeroUsize,
     sync::{Arc, Mutex},
 };
+
 use swipl::prelude::*;
 
 /// Post-processes GraphQL JSON or Handlebars text to convert high-precision
@@ -105,9 +106,20 @@ use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use self::{
     frame::{AllFrames, UncleanAllFrames},
     mutation::TerminusMutationRoot,
-    schema::{TerminusContext, TerminusTypeCollection, TerminusTypeCollectionInfo},
+    schema::{
+        DefaultTerminusTypeCollection, TerminusContext, TerminusTypeCollection,
+        TerminusTypeCollectionInfo,
+    },
+    subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot},
     system::{SystemData, SystemRoot},
 };
+
+type SubscriptionRootNode = RootNode<
+    'static,
+    TerminusTypeCollection<SubscriptionResolveContext>,
+    EmptyMutation<SubscriptionResolveContext>,
+    TerminusSubscriptionRoot<SubscriptionResolveContext>,
+>;
 
 pub fn type_collection_from_term<'a, C: QueryableContextType>(
     context: &Context<'a, C>,
@@ -127,9 +139,9 @@ pub fn type_collection_from_term<'a, C: QueryableContextType>(
 pub struct GraphQLExecutionContext {
     pub(crate) root_node: RootNode<
         'static,
-        TerminusTypeCollection,
+        DefaultTerminusTypeCollection,
         TerminusMutationRoot,
-        EmptySubscription<TerminusContext<'static>>,
+        TerminusSubscriptionRoot<TerminusContext<'static>>,
     >,
     pub(crate) context: TerminusContext<'static>,
 }
@@ -140,12 +152,12 @@ impl GraphQLExecutionContext {
         context: TerminusContext<'static>,
     ) -> Self {
         let root_node = RootNode::new_with_info(
-            TerminusTypeCollection,
+            DefaultTerminusTypeCollection::default(),
             TerminusMutationRoot,
-            EmptySubscription::<TerminusContext<'static>>::new(),
+            TerminusSubscriptionRoot::<TerminusContext<'static>>::new(),
+            type_collection.clone(),
+            (),
             type_collection,
-            (),
-            (),
         );
 
         Self { root_node, context }
@@ -217,6 +229,34 @@ impl GraphQLExecutionContext {
 lazy_static! {
     static ref GRAPHQL_CONTEXT_CACHE: Arc<Mutex<LruCache<[u32; 5], TerminusTypeCollectionInfo>>> =
         Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap())));
+}
+
+lazy_static! {
+    static ref SUBSCRIPTION_ROOT_NODE_CACHE: Arc<Mutex<LruCache<[u32; 5], Arc<SubscriptionRootNode>>>> =
+        Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap())));
+}
+
+pub fn get_or_create_subscription_root_node(
+    type_collection: &TerminusTypeCollectionInfo,
+) -> Arc<SubscriptionRootNode> {
+    let key = type_collection.allframes.cache_key();
+    {
+        let mut cache = SUBSCRIPTION_ROOT_NODE_CACHE.lock().unwrap();
+        if let Some(node) = cache.get(&key) {
+            return node.clone();
+        }
+    }
+    let node = Arc::new(RootNode::new_with_info(
+        TerminusTypeCollection::<SubscriptionResolveContext>::default(),
+        EmptyMutation::<SubscriptionResolveContext>::new(),
+        TerminusSubscriptionRoot::<SubscriptionResolveContext>::new(),
+        type_collection.clone(),
+        (),
+        type_collection.clone(),
+    ));
+    let mut cache = SUBSCRIPTION_ROOT_NODE_CACHE.lock().unwrap();
+    cache.put(key, node.clone());
+    node
 }
 
 fn get_graphql_context_from_cache<C: QueryableContextType>(

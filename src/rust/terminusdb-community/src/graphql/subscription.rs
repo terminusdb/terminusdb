@@ -8,8 +8,8 @@
 use std::sync::Arc;
 
 use juniper::{
-    parser::parse_document_source, DefaultScalarValue, Definition, EmptyMutation,
-    GraphQLType, GraphQLValue, RootNode,
+    parser::parse_document_source, DefaultScalarValue, Definition,
+    GraphQLType, GraphQLValue,
 };
 use lazy_init::Lazy;
 use sha2::{Digest, Sha256};
@@ -19,7 +19,7 @@ use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use crate::doc::DocumentContext;
 use crate::graphql::frame::TypeDefinition;
 use crate::graphql::schema::{
-    TerminusContext, TerminusResolveContext, TerminusTypeCollection, TerminusTypeCollectionInfo,
+    TerminusResolveContext, TerminusTypeCollectionInfo,
 };
 
 /// Context for resolving GraphQL subscription events outside of Juniper.
@@ -98,14 +98,7 @@ pub fn parse_subscription_query(
     query: &str,
     type_collection: &TerminusTypeCollectionInfo,
 ) -> Result<ParsedSubscription, String> {
-    let root_node = RootNode::new_with_info(
-        TerminusTypeCollection,
-        EmptyMutation::<TerminusContext<'static>>::new(),
-        TerminusSubscriptionRoot,
-        type_collection.clone(),
-        (),
-        type_collection.clone(),
-    );
+    let root_node = crate::graphql::get_or_create_subscription_root_node(type_collection);
 
     let source = Box::new(query.to_string());
     let document = parse_document_source(&source, &root_node.schema)
@@ -261,9 +254,19 @@ fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<Default
 /// for every class in the schema. This type is only used for schema
 /// generation and introspection — actual event resolution is done
 /// manually in the WebSocket handler.
-pub struct TerminusSubscriptionRoot;
+pub struct TerminusSubscriptionRoot<C: TerminusResolveContext> {
+    _phantom: std::marker::PhantomData<C>,
+}
 
-impl GraphQLType for TerminusSubscriptionRoot {
+impl<C: TerminusResolveContext> TerminusSubscriptionRoot<C> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Subscription")
     }
@@ -305,13 +308,13 @@ impl GraphQLType for TerminusSubscriptionRoot {
         }
 
         registry
-            .build_object_type::<TerminusSubscriptionRoot>(info, &fields)
+            .build_object_type::<TerminusSubscriptionRoot<C>>(info, &fields)
             .into_meta()
     }
 }
 
-impl GraphQLValue for TerminusSubscriptionRoot {
-    type Context = TerminusContext<'static>;
+impl<C: TerminusResolveContext> GraphQLValue for TerminusSubscriptionRoot<C> {
+    type Context = C;
     type TypeInfo = TerminusTypeCollectionInfo;
 
     fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {

@@ -38,7 +38,7 @@ use super::query::{run_count_query, run_filter_query};
 /// Prolog via FFI, while `SubscriptionResolveContext` returns `Ok(None)`
 /// because restriction filters are rejected at subscription registration
 /// time.
-pub trait TerminusResolveContext {
+pub trait TerminusResolveContext: 'static {
     /// Schema layer for type lookups.
     fn schema(&self) -> &SyncStoreLayer;
 
@@ -62,6 +62,21 @@ pub trait TerminusResolveContext {
         _id: u64,
     ) -> Result<Option<String>, juniper::FieldError> {
         Ok(None)
+    }
+
+    /// Get all document IDs matching a restriction.
+    ///
+    /// Default implementation returns an error — restrictions are not
+    /// supported in subscription contexts. `TerminusContext` overrides
+    /// this to call into Prolog via FFI.
+    fn ids_from_restriction(
+        &self,
+        _restriction: &RestrictionDefinition,
+    ) -> Result<Vec<u64>, juniper::FieldError> {
+        Err(juniper::FieldError::new(
+            "Restriction filters are not supported in subscriptions",
+            juniper::Value::null(),
+        ))
     }
 }
 
@@ -151,7 +166,7 @@ impl<'a> TerminusContext<'a> {
     }
 }
 
-impl<'a> TerminusResolveContext for TerminusContext<'a> {
+impl TerminusResolveContext for TerminusContext<'static> {
     fn schema(&self) -> &SyncStoreLayer {
         &self.schema
     }
@@ -176,9 +191,33 @@ impl<'a> TerminusResolveContext for TerminusContext<'a> {
         let result = pl_id_matches_restriction(self, restriction, id);
         result_to_execution_result(&self.context, result)
     }
+
+    fn ids_from_restriction(
+        &self,
+        restriction: &RestrictionDefinition,
+    ) -> Result<Vec<u64>, juniper::FieldError> {
+        let result = pl_ids_from_restriction(self, restriction).map(|mut r| {
+            r.sort();
+            r.dedup();
+            r
+        });
+        result_to_execution_result(&self.context, result)
+    }
 }
 
-pub struct TerminusTypeCollection;
+pub struct TerminusTypeCollection<C: TerminusResolveContext> {
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> Default for TerminusTypeCollection<C> {
+    fn default() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+pub type DefaultTerminusTypeCollection = TerminusTypeCollection<TerminusContext<'static>>;
 
 pub struct TerminusOrderingInfo {
     ordering_name: GraphQLName<'static>,
@@ -243,7 +282,7 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
     false
 }
 
-impl GraphQLType for TerminusTypeCollection {
+impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
     }
@@ -265,7 +304,7 @@ impl GraphQLType for TerminusTypeCollection {
                         class: name.as_static(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType>>(name.as_str(), &newinfo);
+                    let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -282,7 +321,7 @@ impl GraphQLType for TerminusTypeCollection {
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType>>(name.as_str(), &newinfo);
+                let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -320,7 +359,7 @@ impl GraphQLType for TerminusTypeCollection {
         fields.push(registry.field::<System>("_system", &()));
         */
         registry
-            .build_object_type::<TerminusTypeCollection>(info, &fields)
+            .build_object_type::<TerminusTypeCollection<C>>(info, &fields)
             .into_meta()
     }
 }
@@ -387,19 +426,6 @@ fn pl_ids_from_restriction(
     Ok(result)
 }
 
-fn ids_from_restriction(
-    context: &TerminusContext,
-    restriction: &RestrictionDefinition,
-) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
-        r.sort();
-        r.dedup();
-
-        r
-    });
-    result_to_execution_result(&context.context, result)
-}
-
 fn pl_id_matches_restriction(
     context: &TerminusContext,
     restriction: &ShortName,
@@ -427,17 +453,16 @@ fn pl_id_matches_restriction(
     }
 }
 
-pub fn id_matches_restriction(
-    context: &TerminusContext,
+pub fn id_matches_restriction<C: TerminusResolveContext>(
+    context: &C,
     restriction: &ShortName,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
-    let result = pl_id_matches_restriction(context, restriction, id);
-    result_to_execution_result(&context.context, result)
+    context.id_matches_restriction(restriction, id)
 }
 
-impl GraphQLValue for TerminusTypeCollection {
-    type Context = TerminusContext<'static>;
+impl<C: TerminusResolveContext> GraphQLValue for TerminusTypeCollection<C> {
+    type Context = C;
 
     type TypeInfo = TerminusTypeCollectionInfo;
 
@@ -460,7 +485,7 @@ impl GraphQLValue for TerminusTypeCollection {
                 let id: String = arguments.get("id").unwrap();
                 let id: NodeVariety = node_variety(&id);
                 let expanded_id = context
-                    .type_collection
+                    .type_collection()
                     .allframes
                     .context
                     .expand_instance(&id);
@@ -477,7 +502,7 @@ impl GraphQLValue for TerminusTypeCollection {
             }
             "_count" => {
                 let context = executor.context();
-                let instance = match context.instance.as_ref() {
+                let instance = match context.instance() {
                     Some(i) => i,
                     None => return Ok(Value::scalar(0)),
                 };
@@ -506,13 +531,13 @@ impl GraphQLValue for TerminusTypeCollection {
                 if let Some(restriction) = info.allframes.restrictions.get(&field_name) {
                     // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
                     type_name = &restriction.on;
-                    let id_list = ids_from_restriction(executor.context(), restriction)?;
+                    let id_list = executor.context().ids_from_restriction(restriction)?;
                     zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
                 } else {
                     type_name = &field_name;
                     zero_iter = None;
                 }
-                let objects = match executor.context().instance.as_ref() {
+                let objects = match executor.context().instance() {
                     Some(instance) => run_filter_query(
                         executor.context(),
                         instance,
@@ -522,7 +547,7 @@ impl GraphQLValue for TerminusTypeCollection {
                         zero_iter,
                     )
                     .into_iter()
-                    .map(TerminusType::new)
+                    .map(TerminusType::<C>::new)
                     .collect(),
                     None => vec![],
                 };
@@ -544,13 +569,19 @@ pub struct TerminusTypeInfo {
     allframes: Arc<AllFrames>,
 }
 
-pub struct TerminusType {
+pub struct TerminusType<C: TerminusResolveContext> {
     id: u64,
+    _phantom: std::marker::PhantomData<C>,
 }
 
-impl TerminusType {
+pub type DefaultTerminusType = TerminusType<TerminusContext<'static>>;
+
+impl<C: TerminusResolveContext> TerminusType<C> {
     fn new(id: u64) -> Self {
-        Self { id }
+        Self {
+            id,
+            _phantom: std::marker::PhantomData,
+        }
     }
 
     fn register_field<'r, T: GraphQLType>(
@@ -582,7 +613,7 @@ impl TerminusType {
             .iter()
             .map(|(field_name, field_definition)| {
                 if let Some(document_type) = field_definition.document_type(frames) {
-                    let field = Self::register_field::<TerminusType>(
+                    let field = Self::register_field::<TerminusType<C>>(
                         registry,
                         field_name.as_str(),
                         &TerminusTypeInfo {
@@ -693,7 +724,7 @@ impl TerminusType {
                     class: class.as_static(),
                     allframes: frames.clone(),
                 };
-                let field = Self::register_field::<TerminusType>(
+                let field = Self::register_field::<TerminusType<C>>(
                     registry,
                     field_name.as_str(),
                     &new_info,
@@ -717,7 +748,7 @@ impl TerminusType {
                 class: class.as_static(),
                 allframes: frames.clone(),
             };
-            let field = Self::register_field::<TerminusType>(
+            let field = Self::register_field::<TerminusType<C>>(
                 registry,
                 field_name.as_str(),
                 &new_info,
@@ -754,12 +785,12 @@ impl TerminusType {
         fields.extend(standard_type_operators(registry));
 
         registry
-            .build_object_type::<TerminusType>(info, &fields)
+            .build_object_type::<TerminusType<C>>(info, &fields)
             .into_meta()
     }
 }
 
-impl GraphQLType for TerminusType {
+impl<C: TerminusResolveContext> GraphQLType for TerminusType<C> {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some(info.class.as_str())
     }
@@ -814,8 +845,8 @@ fn subject_has_type(instance: &dyn Layer, subject_id: u64, class: &str) -> bool 
     }
 }
 
-impl GraphQLValue for TerminusType {
-    type Context = TerminusContext<'static>;
+impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
+    type Context = C;
 
     type TypeInfo = TerminusTypeInfo;
 
@@ -835,7 +866,7 @@ impl GraphQLValue for TerminusType {
             // TODO: should this really be with a `?`? having an id,
             // we should always have had this instance layer at some
             // point. not having it here would be a weird bug.
-            let instance = executor.context().instance.as_ref()?;
+            let instance = executor.context().instance()?;
             if field_name.as_str() == "_id" {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
@@ -1137,8 +1168,8 @@ impl GraphQLValue for TerminusType {
     }
 }
 
-fn extract_fragment(
-    executor: &juniper::Executor<TerminusContext<'static>, DefaultScalarValue>,
+fn extract_fragment<C: TerminusResolveContext>(
+    executor: &juniper::Executor<C, DefaultScalarValue>,
     info: &TerminusTypeInfo,
     instance: &SyncStoreLayer,
     object_id: u64,
@@ -1152,7 +1183,7 @@ fn extract_fragment(
                 class: doc_type.as_static(),
                 allframes: info.allframes.clone(),
             },
-            &TerminusType::new(object_id),
+            &TerminusType::<C>::new(object_id),
         ))
     } else if let Some(enum_type) = enum_type {
         let value = extract_enum_fragment(info, instance, object_id, enum_type);
@@ -1359,18 +1390,18 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-fn collect_into_graphql_list<'a>(
+fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
     doc_type: Option<&'a GraphQLName<'a>>,
     enum_type: Option<&'a GraphQLName<'a>>,
     is_json: bool,
-    executor: &'a juniper::Executor<TerminusContext<'static>>,
+    executor: &'a juniper::Executor<C>,
     info: &'a TerminusTypeInfo,
     arguments: &'a juniper::Arguments,
     object_ids: ClonableIterator<'a, u64>,
     instance: &'a SyncStoreLayer,
 ) -> Option<Result<Value, juniper::FieldError>> {
     if let Some(doc_type) = doc_type {
-        let object_ids = match executor.context().instance.as_ref() {
+        let object_ids = match executor.context().instance() {
             Some(instance) => run_filter_query(
                 executor.context(),
                 instance,
@@ -1381,7 +1412,7 @@ fn collect_into_graphql_list<'a>(
             ),
             None => vec![],
         };
-        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
+        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::<C>::new).collect();
         Some(executor.resolve(
             &TerminusTypeInfo {
                 class: doc_type.as_static(),
