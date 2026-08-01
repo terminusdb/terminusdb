@@ -24,6 +24,12 @@ graphql_ws_handler.
 %% graphql_cohort(CohortKey, BranchPath, RawChannel, MemberCount)
 :- dynamic graphql_cohort/4.
 
+%% graphql_cohort_selection(CohortKey, SelectionSet)
+%% Stores the normalized selection set string for a cohort. Needed by the
+%% resolver to know which fields to include when calling get_document/3.
+%% Asserted once when the cohort is first created.
+:- dynamic graphql_cohort_selection/2.
+
 %% graphql_broadcast_sent(BranchPath, CommitId)
 %% Dedup predicate to prevent duplicate broadcasts when post_commit_hook
 %% fires multiple times for the same commit.
@@ -34,22 +40,24 @@ graphql_ws_handler.
 
 %% ---------------------------------------------------------------------------
 %% register_subscription(+BranchPath, +QueryString, +Variables,
-%%                       +OperationName, -CohortKey, -RawChannel) is det.
+%%                       +OperationName, +Auth, -CohortKey, -RawChannel) is det.
 %%
 %% Called via one-shot pipe dispatch from Rust.
 %% Opens a transaction, gets frames, calls Rust FFI to parse the query,
-%% then delegates to register_subscription_parsed/5 for cohort bookkeeping.
+%% checks descriptor auth, then delegates to register_subscription_parsed/7
+%% for cohort bookkeeping.
 %% ---------------------------------------------------------------------------
 register_subscription(BranchPath, QueryString, _Variables, _OperationName,
-                      CohortKey, RawChannel) :-
-    %% Validate BranchPath is a non-empty atom or string
-    (   atom(BranchPath) -> BranchPathAtom = BranchPath
-    ;   string(BranchPath) -> atom_string(BranchPathAtom, BranchPath)
-    ;   throw(error(type_error(branch_path, BranchPath), _))
-    ),
-    BranchPathAtom \== '',
+                      Auth, CohortKey, RawChannel) :-
+    %% BranchPath is always an atom (from atomic_list_concat in the handler)
+    atom(BranchPath),
+    BranchPath \== '',
     %% Open transaction for this branch to get frames
-    resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
+    resolve_absolute_string_descriptor(BranchPath, Descriptor),
+    %% Check read access on the branch descriptor
+    open_descriptor(system_descriptor{}, System_DB),
+    check_descriptor_auth(System_DB, Descriptor,
+                                       '@schema':'Action/read_access', Auth),
     open_descriptor(Descriptor, Transaction),
     %% Get or create GraphQL context (same as api_graphql.pl)
     (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
@@ -65,10 +73,17 @@ register_subscription(BranchPath, QueryString, _Variables, _OperationName,
     get_dict(operation, Parsed, Operation),
     get_dict(filter_canonical_json, Parsed, FilterJson),
     get_dict(selection_set_hash, Parsed, SelectionHash),
-    %% Delegate to register_subscription_parsed/5
-    register_subscription_parsed(BranchPathAtom, ClassName, Operation,
+    get_dict(selection_set, Parsed, SelectionSet),
+    %% Delegate to register_subscription_parsed/7
+    register_subscription_parsed(BranchPath, ClassName, Operation,
                                  FilterJson, SelectionHash,
-                                 CohortKey, RawChannel).
+                                 CohortKey, RawChannel),
+    %% Store selection set for this cohort (idempotent — same selection set
+    %% for all members since it's part of the cohort key via the hash).
+    (   graphql_cohort_selection(CohortKey, _)
+    ->  true
+    ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet))
+    ).
 
 %% ---------------------------------------------------------------------------
 %% register_subscription_parsed(+BranchPath, +ClassName, +Operation,
@@ -81,28 +96,30 @@ register_subscription(BranchPath, QueryString, _Variables, _OperationName,
 register_subscription_parsed(BranchPath, ClassName, Operation,
                              _FilterJson, SelectionHash,
                              CohortKey, RawChannel) :-
-    %% Validate inputs
-    (   atom(BranchPath) -> BranchPathAtom = BranchPath
-    ;   string(BranchPath) -> atom_string(BranchPathAtom, BranchPath)
-    ;   throw(error(type_error(branch_path, BranchPath), _))
-    ),
-    BranchPathAtom \== '',
-    atom(ClassName), ClassName \== '',
+    %% All inputs are atoms — BranchPath from atomic_list_concat,
+    %% ClassName/Operation/SelectionHash from FFI Atom::new.
+    atom(BranchPath),
+    BranchPath \== '',
+    atom(ClassName),
+    ClassName \== '',
+    atom(Operation),
     memberchk(Operation, [added, changed, deleted]),
+    atom(SelectionHash),
+    SelectionHash \== '',
     !,
     %% Construct cohort key as a compound term — no separator collision,
     %% structured unification for extraction, validated components.
-    CohortKey = cohort(BranchPathAtom, ClassName, Operation, SelectionHash),
+    CohortKey = cohort(BranchPath, ClassName, Operation, SelectionHash),
     %% Register under mutex to ensure atomic cohort creation
     with_mutex(graphql_cohort_registry,
-        (   (   graphql_cohort(CohortKey, BranchPathAtom, RawChannel, Count)
+        (   (   graphql_cohort(CohortKey, BranchPath, RawChannel, Count)
             ->  NewCount is Count + 1,
-                retract(graphql_cohort(CohortKey, BranchPathAtom, RawChannel, Count)),
-                assertz(graphql_cohort(CohortKey, BranchPathAtom, RawChannel, NewCount))
+                retract(graphql_cohort(CohortKey, BranchPath, RawChannel, Count)),
+                assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, NewCount))
             ;   %% Construct channel name from the canonical term representation
                 term_to_atom(CohortKey, CohortKeyAtom),
                 atom_concat('graphql_raw_', CohortKeyAtom, RawChannel),
-                assertz(graphql_cohort(CohortKey, BranchPathAtom, RawChannel, 1))
+                assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, 1))
             )
         )),
     !.
@@ -116,18 +133,22 @@ register_subscription_parsed(_, _, _, _, _, _, _) :-
 %% and cleans up empty cohorts.
 %% ---------------------------------------------------------------------------
 
-unregister_subscription(CohortKey, StreamId) :-
+unregister_subscription(CohortKey, _StreamId) :-
     with_mutex(graphql_cohort_registry,
-        (   retract(graphql_subscription(StreamId, CohortKey, _, _))
-        ->  (   retract(graphql_cohort(CohortKey, BranchPath, RawChannel, Count))
+        (   %% Retract graphql_subscription if it exists (test path).
+            %% register_subscription doesn't assert this —
+            %% the cohort count is the source of truth.
+            ignore(retract(graphql_subscription(_, CohortKey, _, _))),
+            %% Decrement cohort count; idempotent if not found
+            (   retract(graphql_cohort(CohortKey, BranchPath, RawChannel, Count))
             ->  NewCount is Count - 1,
                 (   NewCount > 0
                 ->  assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, NewCount))
-                ;   true
+                ;   %% Cohort is empty — clean up selection set
+                    retractall(graphql_cohort_selection(CohortKey, _))
                 )
             ;   true
             )
-        ;   true
         )).
 
 %% ---------------------------------------------------------------------------
@@ -141,7 +162,7 @@ decrement_cohort(CohortKey) :-
     ->  NewCount is Count - 1,
         (   NewCount > 0
         ->  assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, NewCount))
-        ;   true
+        ;   retractall(graphql_cohort_selection(CohortKey, _))
         )
     ;   true
     ).
@@ -198,38 +219,80 @@ broadcast_graphql_events(Validation_Objects, Meta_Data) :-
 %%
 %% Sends events for a single branch commit, with dedup.
 send_graphql_events(Validation_Object, BranchPath, CommitIdAtom) :-
-    (   atom(CommitIdAtom) -> CommitIdKey = CommitIdAtom
-    ;   atom_string(CommitIdKey, CommitIdAtom)
-    ),
-    (   graphql_broadcast_sent(BranchPath, CommitIdKey)
+    %% CommitIdAtom is always an atom (from extract_data_version)
+    (   graphql_broadcast_sent(BranchPath, CommitIdAtom)
     ->  true
     ;   do_broadcast_graphql_events(Validation_Object, BranchPath, CommitIdAtom),
-        assertz(graphql_broadcast_sent(BranchPath, CommitIdKey))
+        assertz(graphql_broadcast_sent(BranchPath, CommitIdAtom))
     ).
 
 %% do_broadcast_graphql_events(+Validation_Object, +BranchPath, +CommitIdAtom) is det.
 %%
-%% Collects changed documents filtered by active subscription types,
-%% and broadcasts compact events to the Rust BroadcastRegistry.
-do_broadcast_graphql_events(Validation_Object, BranchPath, _CommitIdAtom) :-
+%% Collects changed documents filtered by active subscription types
+%% and broadcasts compact events to cohort channels via the Rust
+%% BroadcastRegistry.
+do_broadcast_graphql_events(Validation_Object, BranchPath, CommitIdAtom) :-
     (   graphql_cohort(_, BranchPath, _, _)
-    ->  get_dict(descriptor, Validation_Object, Descriptor),
-        open_descriptor(Descriptor, Transaction),
-        database_schema(Transaction, Schema),
-        database_instance(Transaction, Instance),
-        forall(
-            graphql_cohort(CohortKey, BranchPath, RawChannel, _),
-            broadcast_cohort_events(CohortKey, RawChannel, Schema, Instance)
+    ->  %% Collect all type IRIs that have active subscriptions
+        findall(TypeIRI, active_subscription_type(BranchPath, TypeIRI), TypeIRIs),
+        (   TypeIRIs == []
+        ->  true
+        ;   forall(
+                '$changes':collect_changed_documents_filtered(
+                    Validation_Object, TypeIRIs, DocIRI, ChangeType),
+                broadcast_graphql_event(BranchPath, DocIRI, ChangeType, CommitIdAtom)
+            )
         )
     ;   true
     ).
 
-%% broadcast_cohort_events(+CohortKey, +RawChannel, +Schema, +Instance) is det.
+%% broadcast_graphql_event(+BranchPath, +DocIRI, +ChangeType, +CommitIdKey) is det.
 %%
-%% Broadcasts events for a single cohort. Phase 4 will implement the actual
-%% event resolution and broadcasting via the Rust BroadcastRegistry.
-broadcast_cohort_events(_CohortKey, _RawChannel, _Schema, _Instance) :-
-    true.
+%% For each changed document, determines its class(es) and broadcasts
+%% a compact event to each matching cohort's raw channel.
+broadcast_graphql_event(BranchPath, DocIRI, ChangeType, CommitIdKey) :-
+    findall(Class, document_class(BranchPath, DocIRI, Class), Classes),
+    forall(
+        (   member(Class, Classes),
+            operation_change_type(ChangeType, _Operation),
+            graphql_cohort(CohortKey, BranchPath, RawChannel, _),
+            cohort_class(CohortKey, ClassName),
+            class_matches(Class, ClassName, BranchPath)
+        ),
+        (   %% Compact event: only what the resolver needs to identify the document.
+            Event = _{ doc_iri: DocIRI,
+                       change_type: ChangeType,
+                       commit_id: CommitIdKey
+                     },
+            with_output_to(string(JsonStr),
+                json_write_dict(current_output, Event,
+                                [as(string), width(0)])),
+            '$appserver':appserver_broadcast_send_raw(RawChannel, JsonStr)
+        )
+    ).
+
+%% operation_change_type(+ChangeType, -Operation) is det.
+%%
+%% Maps the Rust change type atom to the subscription operation suffix.
+operation_change_type(added, added).
+operation_change_type(changed, changed).
+operation_change_type(deleted, deleted).
+
+%% class_matches(+DocClass, +SubscribedClass, +BranchPath) is semidet.
+%%
+%% Checks whether a document's class matches the subscribed class,
+%% including subclass relationships (inheritance).
+class_matches(DocClass, SubscribedClass, BranchPath) :-
+    (   DocClass == SubscribedClass
+    ->  true
+    ;   resolve_absolute_string_descriptor(BranchPath, Descriptor),
+        open_descriptor(Descriptor, Transaction),
+        database_schema(Transaction, Schema),
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand_schema(DocClass, Prefixes, DocClassIRI),
+        prefix_expand_schema(SubscribedClass, Prefixes, SubscribedClassIRI),
+        schema_subclass_of(Schema, DocClassIRI, SubscribedClassIRI)
+    ).
 
 %% ---------------------------------------------------------------------------
 %% descriptor_to_branch_path is provided by webserver_commits — use that
@@ -260,10 +323,21 @@ cohort_class(cohort(_, ClassName, _, _), ClassName).
 
 %% class_to_type_iri(+BranchPath, +ClassName, -TypeIRI) is nondet.
 %%
-%% Resolves a class name to its IRI in the schema, and finds all
-%% subclass IRIs on backtracking. Phase 4 will implement proper resolution.
-class_to_type_iri(_BranchPath, _ClassName, _TypeIRI) :-
-    fail.
+%% Resolves a GraphQL class name to its schema IRI, and finds all
+%% subclass IRIs on backtracking. This is used by
+%% active_subscription_type/2 to collect all type IRIs that need
+%% filtering in collect_changed_documents_filtered/4.
+class_to_type_iri(BranchPath, ClassName, TypeIRI) :-
+    resolve_absolute_string_descriptor(BranchPath, Descriptor),
+    open_descriptor(Descriptor, Transaction),
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand_schema(ClassName, Prefixes, ClassIRI),
+    (   TypeIRI = ClassIRI
+    ;   database_schema(Transaction, Schema),
+        schema_subclass_of(Schema, SubClassIRI, ClassIRI),
+        \+ schema_is_abstract(Schema, SubClassIRI),
+        TypeIRI = SubClassIRI
+    ).
 
 %% ---------------------------------------------------------------------------
 %% document_class(+BranchPath, +DocIRI, -Class) is nondet.
@@ -276,18 +350,134 @@ document_class(BranchPath, DocIRI, Class) :-
     resolve_absolute_string_descriptor(BranchPath, Descriptor),
     open_descriptor(Descriptor, Transaction),
     database_instance(Transaction, Instance),
-    once(rdf(Instance, DocIRI, rdf:type, ClassIRI)),
-    class_iri_to_name(ClassIRI, Class).
+    global_prefix_expand(rdf:type, RDF_Type),
+    xrdf(Instance, DocIRI, RDF_Type, ClassIRI),
+    database_prefixes(Transaction, Prefixes),
+    compress_schema_uri(ClassIRI, Prefixes, Class).
 
-%% class_iri_to_name(+ClassIRI, -ClassName) is det.
+%% ---------------------------------------------------------------------------
+%% CGI handler for WebSocket subscribe dispatch
 %%
-%% Converts a class IRI to its GraphQL class name. Placeholder.
-class_iri_to_name(ClassIRI, ClassName) :-
-    (   atom(ClassIRI)
-    ->  atom_string(ClassIRI, ClassStr)
-    ;   ClassIRI = ClassStr
+%% Called via pipe dispatch from Rust when a WebSocket client sends a
+%% `subscribe` message. Receives a request dict with path, payload, etc.
+%% Returns a response dict with status, body, and headers.
+%% ---------------------------------------------------------------------------
+
+graphql_subscribe_handler(Request, Response) :-
+    (   get_dict(payload, Request, Payload)
+    ->  true
+    ;   Payload = _{}
     ),
-    atom_string(ClassName, ClassStr).
+    (   get_dict(path, Request, Path)
+    ->  true
+    ;   Path = ""
+    ),
+    %% Extract branch path from the URL path.
+    %% Path is like "/api/graphql-ws/org/db/local/branch/main"
+    atom_string(PathAtom, Path),
+    split_string(PathAtom, '/', '', PathParts),
+    %% Drop the first two segments ("api", "graphql-ws")
+    append(["api", "graphql-ws"], BranchParts, PathParts),
+    atomic_list_concat(BranchParts, '/', BranchPath),
+    %% Extract subscription parameters from the payload
+    get_dict(query, Payload, QueryString),
+    (   get_dict(variables, Payload, Variables)
+    ->  true
+    ;   Variables = _{}
+    ),
+    (   get_dict(operationName, Payload, OperationName)
+    ->  true
+    ;   OperationName = ''
+    ),
+    %% Authenticate: returns Auth URI or fails with 401
+    (   graphql_authenticate(Request, Auth)
+    ->  %% Registration
+        catch(
+            (   register_subscription(BranchPath, QueryString, Variables, OperationName,
+                                      Auth, CohortKey, RawChannel)
+            ->  term_to_atom(CohortKey, CohortKeyAtom),
+                CohortKey = cohort(_, ClassName, Operation, _),
+                atom_concat(ClassName, '_', Temp),
+                atom_concat(Temp, Operation, FieldName),
+                plugin_json_response(200,
+                    _{cohort_key: CohortKeyAtom,
+                      raw_channel: RawChannel,
+                      field_name: FieldName},
+                    Response)
+            ;   plugin_json_response(500,
+                    _{error: "subscription_registration_failed"},
+                    Response)
+            ),
+            Error,
+            (   format(string(Msg), "Subscription registration failed: ~w", [Error]),
+                plugin_json_response(500, _{error: Msg}, Response)
+            )
+        )
+    ;   plugin_json_response(401, _{error: "authentication_failed"}, Response)
+    ).
+
+%% ---------------------------------------------------------------------------
+%% graphql_authenticate(+Request, -Auth) is semidet.
+%%
+%% Authenticates using the standard plugin_api mechanism. When no
+%% Authorization header is present, falls back to anonymous (same as
+%% routes:authenticate/3's final clause). Fails on invalid auth.
+%% ---------------------------------------------------------------------------
+graphql_authenticate(Request, Auth) :-
+    (   get_dict(headers, Request, _)
+    ->  open_descriptor(system_descriptor{}, System_DB),
+        catch(plugin_api:authenticate_from_request(Request, System_DB, Auth),
+              error(authentication_incorrect(no_authorization_header), _),
+              Auth = 'terminusdb://system/data/User/anonymous')
+    ;   Auth = 'terminusdb://system/data/User/anonymous'
+    ).
+
+%% ---------------------------------------------------------------------------
+%% graphql_authenticate_handler(+Request, -Response) is det.
+%%
+%% Called via one-shot pipe dispatch from Rust to validate an auth token
+%% before upgrading a WebSocket connection. Returns the Auth URI on success
+%% or 401 on failure.
+%% ---------------------------------------------------------------------------
+graphql_authenticate_handler(Request, Response) :-
+    (   graphql_authenticate(Request, Auth)
+    ->  term_to_atom(Auth, AuthAtom),
+        plugin_json_response(200, _{auth: AuthAtom}, Response)
+    ;   plugin_json_response(401, _{error: "authentication_failed"}, Response)
+    ).
+
+%% ---------------------------------------------------------------------------
+%% graphql_unregister_handler(+Request, -Response) is det.
+%%
+%% Called via one-shot pipe dispatch from Rust when a subscription is
+%% completed or a WebSocket connection is closed. Delegates to
+%% unregister_subscription/2 to clean up Prolog-side cohort state.
+%% Unregistration is idempotent — always returns 200.
+%%
+%% Security: This handler is not registered via appserver_route/4 and is
+%% therefore not reachable by external HTTP requests. The only path to
+%% this handler is through PipeDispatchRequest sent from the Rust WebSocket
+%% handler, which passes the cohort key from its own state.subscriptions
+%% map (keyed by client-supplied subscription ID, not cohort key). The
+%% client never sends a cohort key directly. No auth is asserted here
+%% because the isolation is structural (routing), not runtime — adding an
+%% auth check would give false confidence without addressing the real
+%% attack surface (the Rust-side subscription ID lookup).
+%% ---------------------------------------------------------------------------
+graphql_unregister_handler(Request, Response) :-
+    (   get_dict(payload, Request, Payload)
+    ->  true
+    ;   Payload = _{}
+    ),
+    (   get_dict(cohort_key, Payload, CohortKeyAtom)
+    ->  atom_to_term(CohortKeyAtom, CohortKey, []),
+        catch(ignore(unregister_subscription(CohortKey, _)),
+              Error,
+              format(user_error, "Unregister failed: ~w~n", [Error])),
+        plugin_json_response(200, _{ok: true}, Response)
+    ;   plugin_json_response(400, _{error: "missing_cohort_key"}, Response)
+    ).
+
 
 %% ---------------------------------------------------------------------------
 %% PLUnit tests
@@ -393,8 +583,88 @@ test(register_rejects_non_atom_branch_path,
         register_subscription_parsed(42, 'Person', added,
                                       '{}', 'hash1', _, _),
         Error,
-        Error = error(type_error(branch_path, 42), _)
+        Error = error(subscription_registration_failed, _)
     ).
+
+%% FFI returns atoms for class_name and operation — verify
+%% register_subscription_parsed accepts atom inputs (production path).
+test(register_with_atom_inputs_like_ffi,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    register_subscription_parsed('test/db/local/branch/main',
+                                 'Person', added,
+                                 '{}', 'hash1',
+                                 CohortKey, _),
+    CohortKey = cohort('test/db/local/branch/main', 'Person', added, 'hash1').
+
+test(register_rejects_invalid_operation,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    catch(
+        register_subscription_parsed('test/db/local/branch/main',
+                                     'Person', invalid_op,
+                                     '{}', 'hash1', _, _),
+        Error,
+        Error = error(subscription_registration_failed, _)
+    ).
+
+%% graphql_authenticate with no header returns anonymous user.
+test(graphql_authenticate_anonymous_no_headers) :-
+    graphql_authenticate(_{}, Auth),
+    Auth == 'terminusdb://system/data/User/anonymous'.
+
+test(graphql_authenticate_anonymous_empty_header) :-
+    graphql_authenticate(_{headers: _{}}, Auth),
+    Auth == 'terminusdb://system/data/User/anonymous'.
+
+%% graphql_authenticate_handler returns 200 with anonymous auth
+%% when no Authorization header is present.
+test(graphql_authenticate_handler_no_header_returns_200) :-
+    graphql_authenticate_handler(_{headers: _{}}, Response),
+    get_dict(status, Response, 200).
+
+%% register_subscription doesn't assert gql_subscription/4 —
+%% only gql_cohort/4. unregister_subscription/2 must still decrement the
+%% cohort count even without gql_subscription facts.
+test(unregister_without_gql_subscription_decrements_cohort,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    %% Register a cohort (no gql_subscription asserted — production path)
+    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
+                                 '{}', 'hash1', CohortKey, _),
+    webserver_graphql_subs:graphql_cohort(CohortKey, _, _, 1),
+    %% Unregister without any gql_subscription fact — should still decrement
+    unregister_subscription(CohortKey, fake_stream),
+    %% Cohort count reaches 0 → cohort is retracted entirely
+    \+ webserver_graphql_subs:graphql_cohort(CohortKey, _, _, _).
+
+%% graphql_cohort_selection is stored when a cohort is created and
+%% cleaned up when the last member unregisters.
+test(cohort_selection_stored_and_cleaned_up,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    %% Simulate what register_subscription/7 does: register cohort, then
+    %% assert the selection set (production path stores it after FFI parse).
+    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
+                                 '{}', 'hash1', CohortKey, _),
+    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}")),
+    %% Selection set is stored
+    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}"),
+    %% Unregister the only member
+    unregister_subscription(CohortKey, fake_stream),
+    %% Selection set is cleaned up when cohort becomes empty
+    \+ webserver_graphql_subs:graphql_cohort_selection(CohortKey, _).
+
+%% graphql_cohort_selection is NOT cleaned up while cohort still has members.
+test(cohort_selection_survives_partial_unregister,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
+                                 '{}', 'hash1', CohortKey, _),
+    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}")),
+    %% Second member joins same cohort
+    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
+                                 '{}', 'hash1', _, _),
+    graphql_cohort(CohortKey, _, _, 2),
+    %% Unregister one member
+    unregister_subscription(CohortKey, stream1),
+    %% Selection set still exists — cohort has 1 member left
+    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}").
 
 :- end_tests(webserver_graphql_subs).
 
@@ -402,5 +672,6 @@ test(register_rejects_non_atom_branch_path,
 cleanup_cohorts :-
     retractall(webserver_graphql_subs:graphql_subscription(_, _, _, _)),
     retractall(webserver_graphql_subs:graphql_cohort(_, _, _, _)),
+    retractall(webserver_graphql_subs:graphql_cohort_selection(_, _)),
     retractall(webserver_graphql_subs:graphql_broadcast_sent(_, _)).
 

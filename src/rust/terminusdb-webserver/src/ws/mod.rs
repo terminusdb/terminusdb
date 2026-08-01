@@ -8,7 +8,7 @@ use axum::{
         ws::{Message, WebSocketUpgrade},
         Path,
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
 use serde::Deserialize;
@@ -18,11 +18,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use futures::{SinkExt, StreamExt};
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 
 use crate::dispatch::{broadcast_registry, StreamId};
 
-/// Maximum number of active subscriptions per WebSocket connection.
+/// Maximum number of active HTTP connections in the Rust webserver.
 const MAX_SUBSCRIPTIONS_PER_CONNECTION: usize = 100;
 
 /// Rate limiting: max subscriptions created within the rate limit window.
@@ -48,6 +49,283 @@ const SUBSCRIBER_BUFFER: usize = 64;
 /// They don't need to correspond to stream_registry IDs — the BroadcastRegistry
 /// uses them as opaque keys for unsubscribe.
 static WS_STREAM_ID_COUNTER: AtomicU64 = AtomicU64::new(1_000_000);
+
+/// Result of a subscribe dispatch to Prolog.
+#[derive(Debug, Deserialize)]
+struct SubscribeResult {
+    cohort_key: String,
+    raw_channel: String,
+    field_name: String,
+}
+
+/// Dispatch a subscribe request to Prolog via a synchronous pipe dispatch.
+///
+/// Creates pipes, sends a `PipeDispatchRequest` to the worker pool with
+/// the subscribe payload, reads the CGI response, and parses the JSON body
+/// to extract `cohort_key`, `raw_channel`, and `field_name`.
+async fn dispatch_subscribe_to_prolog(
+    branch_path: &str,
+    query: &str,
+    variables: &Value,
+    operation_name: &str,
+    auth_header: &str,
+) -> Result<SubscribeResult, String> {
+    use crate::dispatch::{DispatchMessage, PipeDispatchRequest};
+    use nix::unistd::pipe;
+    use std::os::fd::IntoRawFd;
+    use tokio::net::unix::pipe::Receiver;
+
+    let payload = json!({
+        "query": query,
+        "variables": variables,
+        "operationName": operation_name,
+    });
+
+    let mut headers = serde_json::Map::new();
+    if !auth_header.is_empty() {
+        headers.insert("Authorization".to_string(), json!(auth_header));
+    }
+
+    let request_json = json!({
+        "method": "POST",
+        "path": format!("/api/graphql-ws/{}", branch_path),
+        "query": "",
+        "headers": headers,
+        "body": "",
+        "params": {},
+        "payload": payload,
+    });
+
+    // Create output pipe.
+    let (output_read, output_write) = pipe().map_err(|e| format!("pipe creation failed: {}", e))?;
+    let output_write_fd = output_write.into_raw_fd();
+
+    let dispatch_req = PipeDispatchRequest {
+        request_json,
+        handler_module: "webserver_graphql_subs".to_string(),
+        handler_name: "graphql_subscribe_handler".to_string(),
+        input_read_fd: None,
+        output_write_fd,
+        binary: false,
+    };
+
+    // Send to dispatch queue.
+    let queue = dispatch_queue_safe()?;
+    if let Err(e) = queue.send(DispatchMessage::Pipe(dispatch_req)).await {
+        return Err(format!("dispatch queue send failed: {}", e));
+    }
+
+    // Read the CGI response from the output pipe.
+    let mut output_receiver = Receiver::from_owned_fd(output_read)
+        .map_err(|e| format!("failed to create pipe receiver: {}", e))?;
+    let (status, _headers, body_bytes) = read_cgi_response(&mut output_receiver).await?;
+
+    if status != 200 {
+        let body_str = String::from_utf8_lossy(&body_bytes);
+        return Err(format!("subscribe dispatch returned status {}: {}", status, body_str));
+    }
+
+    // Parse the JSON body.
+    let result: SubscribeResult = serde_json::from_slice(&body_bytes)
+        .map_err(|e| format!("failed to parse subscribe response: {}", e))?;
+
+    Ok(result)
+}
+
+/// Dispatch an authentication request to Prolog via pipe dispatch.
+///
+/// Sends the auth header to `graphql_authenticate_handler` in Prolog,
+/// which validates it and returns the Auth URI. Returns `Ok(auth_uri)` on
+/// success or `Err(message)` on failure.
+async fn dispatch_authenticate_to_prolog(auth_header: &str) -> Result<String, String> {
+    use crate::dispatch::{DispatchMessage, PipeDispatchRequest};
+    use nix::unistd::pipe;
+    use std::os::fd::IntoRawFd;
+    use tokio::net::unix::pipe::Receiver;
+
+    let mut headers = serde_json::Map::new();
+    headers.insert("Authorization".to_string(), json!(auth_header));
+
+    let request_json = json!({
+        "method": "POST",
+        "path": "/api/graphql-ws/auth",
+        "query": "",
+        "headers": headers,
+        "body": "",
+        "params": {},
+    });
+
+    let (output_read, output_write) = pipe().map_err(|e| format!("pipe creation failed: {}", e))?;
+    let output_write_fd = output_write.into_raw_fd();
+
+    let dispatch_req = PipeDispatchRequest {
+        request_json,
+        handler_module: "webserver_graphql_subs".to_string(),
+        handler_name: "graphql_authenticate_handler".to_string(),
+        input_read_fd: None,
+        output_write_fd,
+        binary: false,
+    };
+
+    let queue = dispatch_queue_safe()?;
+    if let Err(e) = queue.send(DispatchMessage::Pipe(dispatch_req)).await {
+        return Err(format!("dispatch queue send failed: {}", e));
+    }
+
+    let mut output_receiver = Receiver::from_owned_fd(output_read)
+        .map_err(|e| format!("failed to create pipe receiver: {}", e))?;
+    let (status, _headers, body_bytes) = read_cgi_response(&mut output_receiver).await?;
+
+    if status != 200 {
+        return Err("Authentication failed".to_string());
+    }
+
+    let result: serde_json::Value = serde_json::from_slice(&body_bytes)
+        .map_err(|e| format!("failed to parse auth response: {}", e))?;
+
+    result
+        .get("auth")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "missing auth field in response".to_string())
+}
+
+/// Dispatch an unregister request to Prolog via pipe dispatch.
+///
+/// Notifies Prolog to decrement the cohort member count for the given
+/// cohort key. Called when a subscription is completed or a WebSocket
+/// connection is closed.
+async fn dispatch_unregister_to_prolog(cohort_key: &str) -> Result<(), String> {
+    use crate::dispatch::{DispatchMessage, PipeDispatchRequest};
+    use nix::unistd::pipe;
+    use std::os::fd::IntoRawFd;
+    use tokio::net::unix::pipe::Receiver;
+
+    let payload = json!({
+        "cohort_key": cohort_key,
+    });
+
+    let request_json = json!({
+        "method": "POST",
+        "path": "/api/graphql-ws/unregister",
+        "query": "",
+        "headers": {},
+        "body": "",
+        "params": {},
+        "payload": payload,
+    });
+
+    let (output_read, output_write) = pipe().map_err(|e| format!("pipe creation failed: {}", e))?;
+    let output_write_fd = output_write.into_raw_fd();
+
+    let dispatch_req = PipeDispatchRequest {
+        request_json,
+        handler_module: "webserver_graphql_subs".to_string(),
+        handler_name: "graphql_unregister_handler".to_string(),
+        input_read_fd: None,
+        output_write_fd,
+        binary: false,
+    };
+
+    let queue = dispatch_queue_safe()?;
+    if let Err(e) = queue.send(DispatchMessage::Pipe(dispatch_req)).await {
+        return Err(format!("dispatch queue send failed: {}", e));
+    }
+
+    let mut output_receiver = Receiver::from_owned_fd(output_read)
+        .map_err(|e| format!("failed to create pipe receiver: {}", e))?;
+    let (status, _headers, _body_bytes) = read_cgi_response(&mut output_receiver).await?;
+
+    if status != 200 {
+        return Err(format!("unregister dispatch returned status {}", status));
+    }
+
+    Ok(())
+}
+
+/// Safe wrapper around dispatch_queue that returns an error instead of
+/// panicking when the dispatcher is not initialized (e.g., in unit tests).
+fn dispatch_queue_safe() -> Result<mpsc::Sender<crate::dispatch::DispatchMessage>, String> {
+    let result = std::panic::catch_unwind(|| {
+        crate::dispatch::dispatch_queue()
+    });
+    result.map_err(|_| "dispatch queue not initialized".to_string())
+}
+
+/// Read a complete CGI response (headers + body) from a pipe receiver.
+/// Returns (status, headers, body_bytes).
+async fn read_cgi_response(
+    reader: &mut tokio::net::unix::pipe::Receiver,
+) -> Result<(u16, Vec<(String, String)>, Vec<u8>), String> {
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut header_end: Option<usize> = None;
+
+    // Phase 1: Read until we find the header separator.
+    while header_end.is_none() {
+        let n = reader.read(&mut chunk).await.map_err(|e| format!("read error: {}", e))?;
+        if n == 0 {
+            return Err("EOF before CGI header separator".to_string());
+        }
+        buf.extend_from_slice(&chunk[..n]);
+        // Check for \n\n separator.
+        if let Some(pos) = buf.windows(2).position(|w| w == b"\n\n") {
+            header_end = Some(pos + 2);
+        }
+        // Check for \r\n\r\n separator.
+        else if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            header_end = Some(pos + 4);
+        }
+    }
+
+    let header_end = header_end.unwrap();
+    let header_bytes = &buf[..header_end];
+    let header_str = std::str::from_utf8(header_bytes)
+        .map_err(|e| format!("invalid UTF-8 in headers: {}", e))?;
+
+    let mut status: u16 = 200;
+    let mut headers = Vec::new();
+    for line in header_str.lines() {
+        if let Some(colon_pos) = line.find(':') {
+            let key = line[..colon_pos].trim().to_string();
+            let value = line[colon_pos + 1..].trim().to_string();
+            if key.eq_ignore_ascii_case("status") {
+                let code_str = value.split_whitespace().next().unwrap_or("200");
+                status = code_str.parse().unwrap_or(200);
+            } else if !key.eq_ignore_ascii_case("transfer-encoding")
+                && !key.eq_ignore_ascii_case("connection")
+            {
+                headers.push((key, value));
+            }
+        }
+    }
+
+    let mut body = buf[header_end..].to_vec();
+
+    // Phase 2: Read the body.
+    let content_length = headers.iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+        .and_then(|(_, v)| v.parse::<usize>().ok());
+
+    if let Some(cl) = content_length {
+        // Read until we have Content-Length bytes.
+        while body.len() < cl {
+            let n = reader.read(&mut chunk).await.map_err(|e| format!("read error: {}", e))?;
+            if n == 0 { break; }
+            body.extend_from_slice(&chunk[..n]);
+        }
+        body.truncate(cl);
+    } else {
+        // No Content-Length — read until EOF (worker closes pipe after response).
+        loop {
+            let n = reader.read(&mut chunk).await.map_err(|e| format!("read error: {}", e))?;
+            if n == 0 { break; }
+            body.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    Ok((status, headers, body))
+}
 
 /// Generate a unique StreamId for a WebSocket subscription.
 fn next_ws_stream_id() -> StreamId {
@@ -286,16 +564,20 @@ pub struct WsConnectionState {
     pub ws_tx: mpsc::Sender<Message>,
     /// Branch path extracted from the URL.
     pub branch_path: String,
+    /// Authorization header value extracted from the HTTP upgrade request
+    /// or from `connection_init` payload. Empty string means anonymous.
+    pub auth_header: String,
 }
 
 impl WsConnectionState {
-    pub fn new(ws_tx: mpsc::Sender<Message>, branch_path: String) -> Self {
+    pub fn new(ws_tx: mpsc::Sender<Message>, branch_path: String, auth_header: String) -> Self {
         Self {
             initialized: false,
             subscriptions: HashMap::new(),
             subscription_timestamps: VecDeque::new(),
             ws_tx,
             branch_path,
+            auth_header,
         }
     }
 
@@ -354,12 +636,13 @@ async fn cohort_resolver_task(
             }
         };
 
-        // TODO: Look up SubscriptionResolveContext from SUBSCRIPTION_LAYER_CACHE
-        // keyed by (branch_path, event.commit_id).
-        // TODO: Resolve document IRI to subject ID.
-        // TODO: Check filter match using run_filter_query.
-        // TODO: Resolve selection set via execute_validated_query.
-        // For now, broadcast a placeholder event so the pipeline is testable.
+        // Document resolution is done via pipe dispatch to Prolog, which
+        // calls get_document/3 with the cohort's stored selection set and
+        // filter. This broadcasts the raw event so the pipeline is testable
+        // before the Prolog resolve handler is wired in.
+        // Alternative: build SubscriptionResolveContext in Rust and resolve
+        // via Juniper's execute_validated_query — avoids a Prolog round-trip
+        // but requires passing SyncStoreLayer handles through the pipe.
         let resolved = json!({
             "doc_iri": event.doc_iri,
             "change_type": event.change_type,
@@ -427,7 +710,7 @@ pub async fn handle_client_message(
     msg: WsClientMessage,
 ) -> HandleResult {
     match msg {
-        WsClientMessage::ConnectionInit { payload: _ } => {
+        WsClientMessage::ConnectionInit { payload } => {
             if state.initialized {
                 let _ = state
                     .ws_tx
@@ -438,6 +721,26 @@ pub async fn handle_client_message(
                     .await;
                 return HandleResult::Close(4429, "Too many initialisation requests".to_string());
             }
+            // If payload contains an `authorization` field, use that for auth.
+            // This supports browser WebSocket APIs that can't set HTTP headers.
+            if let Some(ref p) = payload {
+                if let Some(auth) = p.get("authorization").and_then(|v| v.as_str()) {
+                    if !auth.is_empty() {
+                        // Validate the auth token from the payload.
+                        if let Err(_) = dispatch_authenticate_to_prolog(auth).await {
+                            let _ = state
+                                .ws_tx
+                                .send(Message::Text(msg_error(
+                                    "null",
+                                    "Unauthorized",
+                                ).into()))
+                                .await;
+                            return HandleResult::Close(4401, "Unauthorized".to_string());
+                        }
+                        state.auth_header = auth.to_string();
+                    }
+                }
+            }
             state.initialized = true;
             let _ = state
                 .ws_tx
@@ -445,7 +748,7 @@ pub async fn handle_client_message(
                 .await;
             HandleResult::Continue
         }
-        WsClientMessage::Subscribe { id, payload: _payload } => {
+        WsClientMessage::Subscribe { id, payload } => {
             if !state.initialized {
                 let _ = state
                     .ws_tx
@@ -479,15 +782,37 @@ pub async fn handle_client_message(
                 return HandleResult::Continue;
             }
 
-            // TODO: Dispatch one-shot to Prolog via pipe dispatch.
-            // Prolog will call '$graphql:parse_subscription_query/3' (Rust FFI)
-            // to parse the query, then register_subscription_parsed/7 for
-            // cohort bookkeeping, and return the cohort key, raw channel,
-            // and field name.
-            // For now, use placeholder values.
-            let field_name = String::new();
-            let cohort_key = format!("placeholder_{}", state.branch_path);
-            let raw_channel = format!("graphql_raw_{}", cohort_key);
+            // Dispatch one-shot to Prolog via pipe dispatch.
+            // Prolog will parse the subscription query, register the cohort,
+            // and return the cohort key, raw channel, and field name.
+            let variables_json = payload.variables
+                .map(|m| Value::Object(m.into_iter().map(|(k, v)| (k, v)).collect()))
+                .unwrap_or(json!({}));
+            let operation_name_str = payload.operation_name.as_deref().unwrap_or("");
+            let subscribe_result = dispatch_subscribe_to_prolog(
+                &state.branch_path,
+                &payload.query,
+                &variables_json,
+                operation_name_str,
+                &state.auth_header,
+            ).await;
+
+            let (field_name, cohort_key, raw_channel) = match subscribe_result {
+                Ok(result) => (result.field_name, result.cohort_key, result.raw_channel),
+                Err(e) => {
+                    crate::log::log_error(format!(
+                        "[ws] subscribe dispatch failed: {}", e
+                    ));
+                    let _ = state
+                        .ws_tx
+                        .send(Message::Text(msg_error(
+                            &id,
+                            &format!("Subscription registration failed: {}", e),
+                        ).into()))
+                        .await;
+                    return HandleResult::Continue;
+                }
+            };
             let resolved_channel = format!("graphql_resolved_{}", cohort_key);
 
             // Create a direct mpsc channel for this subscriber.
@@ -597,6 +922,13 @@ pub async fn handle_client_message(
                     }
                 }
 
+                // Notify Prolog to decrement cohort member count.
+                if let Err(e) = dispatch_unregister_to_prolog(&cohort_key).await {
+                    crate::log::log_error(format!(
+                        "[ws] unregister dispatch to Prolog failed: {}", e
+                    ));
+                }
+
                 // Send complete confirmation.
                 let _ = state
                     .ws_tx
@@ -645,15 +977,37 @@ fn validate_branch_path(path: &str) -> bool {
 pub async fn handle_ws_connection(
     ws_upgrade: WebSocketUpgrade,
     Path(path): Path<String>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     if !validate_branch_path(&path) {
         return (StatusCode::BAD_REQUEST, "Invalid branch path").into_response();
     }
+    // Extract Authorization header from the HTTP upgrade request.
+    // Browser WebSocket APIs can't set headers, so this may be empty —
+    // in that case, auth can be provided via connection_init payload.
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    // If an Authorization header is present, validate it before upgrading.
+    // If no header is present, allow the upgrade — auth can come via
+    // connection_init payload, and per-subscription auth is always checked.
+    if !auth_header.is_empty() {
+        if let Err(e) = dispatch_authenticate_to_prolog(&auth_header).await {
+            crate::log::log_info(format!(
+                "[ws] rejecting WebSocket upgrade: auth failed (not logging token value)"
+            ));
+            return (StatusCode::UNAUTHORIZED, e).into_response();
+        }
+    }
+
     // Only accept the `graphql-transport-ws` subprotocol.
     ws_upgrade
         .protocols(["graphql-transport-ws"])
         .on_upgrade(move |socket| async move {
-            run_ws_connection(socket, path).await;
+            run_ws_connection(socket, path, auth_header).await;
         })
         .into_response()
 }
@@ -662,7 +1016,7 @@ pub async fn handle_ws_connection(
 ///
 /// Splits the WebSocket into sender and receiver, creates an outbound message
 /// channel, spawns a writer task, and runs the message loop on the receiver.
-async fn run_ws_connection(socket: axum::extract::ws::WebSocket, branch_path: String) {
+async fn run_ws_connection(socket: axum::extract::ws::WebSocket, branch_path: String, auth_header: String) {
     let (ws_tx, mut ws_rx) = socket.split();
     let _ = &ws_tx; // Suppress unused warning until Phase 4.
 
@@ -694,7 +1048,7 @@ async fn run_ws_connection(socket: axum::extract::ws::WebSocket, branch_path: St
         }
     });
 
-    let mut state = WsConnectionState::new(outbound_tx, branch_path);
+    let mut state = WsConnectionState::new(outbound_tx, branch_path, auth_header);
 
     // Main message loop.
     while let Some(msg_result) = ws_rx.next().await {
@@ -761,6 +1115,13 @@ async fn run_ws_connection(socket: axum::extract::ws::WebSocket, branch_path: St
         // Safety net: unsubscribe from all channels in case of any
         // missed registrations.
         broadcast_registry().lock().unwrap().unsubscribe_all(*stream_id);
+
+        // Notify Prolog to decrement cohort member count.
+        if let Err(e) = dispatch_unregister_to_prolog(cohort_key).await {
+            crate::log::log_error(format!(
+                "[ws] cleanup: unregister dispatch to Prolog failed: {}", e
+            ));
+        }
     }
 
     // Tear down empty cohorts.
@@ -989,7 +1350,7 @@ mod tests {
     #[tokio::test]
     async fn rate_limit_allows_burst_then_throttles() {
         let (tx, _rx) = mpsc::channel::<Message>(10);
-        let mut state = WsConnectionState::new(tx, "test".to_string());
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
 
         // First RATE_LIMIT_MAX subscriptions should pass.
         for _ in 0..RATE_LIMIT_MAX {
@@ -1003,7 +1364,7 @@ mod tests {
     #[test]
     fn subscription_capacity_check() {
         let (tx, _rx) = mpsc::channel::<Message>(10);
-        let mut state = WsConnectionState::new(tx, "test".to_string());
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
 
         // Fill up to MAX_SUBSCRIPTIONS_PER_CONNECTION.
         for i in 0..MAX_SUBSCRIPTIONS_PER_CONNECTION {
@@ -1099,7 +1460,7 @@ mod tests {
     #[tokio::test]
     async fn duplicate_connection_init_closes() {
         let (tx, mut rx) = mpsc::channel::<Message>(10);
-        let mut state = WsConnectionState::new(tx, "test".to_string());
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
         state.initialized = true;
 
         let msg = WsClientMessage::ConnectionInit { payload: None };
@@ -1116,5 +1477,47 @@ mod tests {
             Message::Text(t) => assert!(t.contains("Connection already initialized")),
             _ => panic!("expected Text message"),
         }
+    }
+
+    #[tokio::test]
+    async fn connection_init_payload_auth_rejected_without_prolog() {
+        // In unit tests, no Prolog dispatch queue is running, so auth
+        // validation via dispatch_authenticate_to_prolog will fail.
+        // This verifies that invalid/unverifiable auth tokens are rejected.
+        let (tx, _rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+        assert_eq!(state.auth_header, "");
+
+        let payload = json!({"authorization": "Bearer token123"});
+        let msg = WsClientMessage::ConnectionInit { payload: Some(payload) };
+        let result = handle_client_message(&mut state, msg).await;
+        match result {
+            HandleResult::Close(code, _) => assert_eq!(code, 4401),
+            _ => panic!("expected Close(4401) for unverifiable auth token"),
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_init_without_auth_keeps_empty() {
+        let (tx, _rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+
+        let msg = WsClientMessage::ConnectionInit { payload: None };
+        let result = handle_client_message(&mut state, msg).await;
+        assert!(matches!(result, HandleResult::Continue));
+        assert_eq!(state.auth_header, "");
+    }
+
+    #[tokio::test]
+    async fn connection_init_payload_without_auth_field_succeeds() {
+        // Payload without authorization field should not trigger validation
+        let (tx, _rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+
+        let payload = json!({"some_other_field": "value"});
+        let msg = WsClientMessage::ConnectionInit { payload: Some(payload) };
+        let result = handle_client_message(&mut state, msg).await;
+        assert!(matches!(result, HandleResult::Continue));
+        assert_eq!(state.auth_header, "");
     }
 }

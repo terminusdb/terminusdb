@@ -1152,35 +1152,14 @@ impl AllFrames {
         self.class_renaming.get_by_right(short_name).cloned()
     }
 
-    pub fn cache_key(&self) -> [u32; 5] {
+    pub fn cache_key(&self) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
+
+        let debug_str = format!("{:?}", self);
         let mut hasher = DefaultHasher::new();
-        self.frames.len().hash(&mut hasher);
-        self.restrictions.len().hash(&mut hasher);
-        self.context.base.hash(&mut hasher);
-        self.context.schema.hash(&mut hasher);
-        for key in self.frames.keys() {
-            key.hash(&mut hasher);
-        }
-        let h1 = (hasher.finish() & 0xFFFFFFFF) as u32;
-        let mut hasher2 = DefaultHasher::new();
-        for (_, td) in &self.frames {
-            std::mem::discriminant(td).hash(&mut hasher2);
-        }
-        let h2 = (hasher2.finish() & 0xFFFFFFFF) as u32;
-        let mut hasher3 = DefaultHasher::new();
-        for key in self.restrictions.keys() {
-            key.hash(&mut hasher3);
-        }
-        let h3 = (hasher3.finish() & 0xFFFFFFFF) as u32;
-        let mut hasher4 = DefaultHasher::new();
-        self.class_renaming.len().hash(&mut hasher4);
-        let h4 = (hasher4.finish() & 0xFFFFFFFF) as u32;
-        let mut hasher5 = DefaultHasher::new();
-        self.graphql_to_iri_renaming.len().hash(&mut hasher5);
-        let h5 = (hasher5.finish() & 0xFFFFFFFF) as u32;
-        [h1, h2, h3, h4, h5]
+        debug_str.hash(&mut hasher);
+        hasher.finish()
     }
 
     #[allow(dead_code)]

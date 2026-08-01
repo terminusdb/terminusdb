@@ -232,7 +232,7 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref SUBSCRIPTION_ROOT_NODE_CACHE: Arc<Mutex<LruCache<[u32; 5], Arc<SubscriptionRootNode>>>> =
+    static ref SUBSCRIPTION_ROOT_NODE_CACHE: Arc<Mutex<LruCache<u64, Arc<SubscriptionRootNode>>>> =
         Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap())));
 }
 
@@ -375,10 +375,11 @@ predicates! {
                 let dict = DictBuilder::new()
                     .tag("parsed")
                     .entry("field_name", parsed.field_name.clone())
-                    .entry("class_name", parsed.class_name.clone())
-                    .entry("operation", parsed.operation.clone())
+                    .entry("class_name", Atom::new(&parsed.class_name))
+                    .entry("operation", Atom::new(&parsed.operation))
                     .entry("filter_canonical_json", parsed.filter_canonical_json.clone())
-                    .entry("selection_set_hash", parsed.selection_set_hash.clone());
+                    .entry("selection_set", parsed.selection_set.clone())
+                    .entry("selection_set_hash", Atom::new(&parsed.selection_set_hash));
                 parsed_term.unify(dict)
             }
             Err(e) => context.raise_exception(&term!{context: error(graphql_subscription_parse_error(#e), _)}?)

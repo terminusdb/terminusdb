@@ -86,6 +86,7 @@ pub struct ParsedSubscription {
     pub class_name: String,
     pub operation: String,
     pub filter_canonical_json: String,
+    pub selection_set: String,
     pub selection_set_hash: String,
 }
 
@@ -179,6 +180,7 @@ pub fn parse_subscription_query(
         class_name,
         operation,
         filter_canonical_json,
+        selection_set: selection_set_str.clone(),
         selection_set_hash,
     })
 }
@@ -540,6 +542,32 @@ mod tests {
             &tc,
         ).unwrap();
         assert_eq!(result.filter_canonical_json, "{}");
+    }
+
+    #[test]
+    fn parse_returns_selection_set_string() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { Person_added { _id name } }",
+            &tc,
+        ).unwrap();
+        assert!(!result.selection_set.is_empty());
+        assert!(result.selection_set.contains("_id"));
+        assert!(result.selection_set.contains("name"));
+    }
+
+    #[test]
+    fn parse_different_selection_sets_different_strings() {
+        let tc = person_type_collection();
+        let r1 = parse_subscription_query(
+            "subscription { Person_added { _id } }",
+            &tc,
+        ).unwrap();
+        let r2 = parse_subscription_query(
+            "subscription { Person_added { _id name } }",
+            &tc,
+        ).unwrap();
+        assert_ne!(r1.selection_set, r2.selection_set);
     }
 
     #[test]

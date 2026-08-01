@@ -6,7 +6,11 @@
     schema_metadata_descriptor/3,
     database_prefixes/2,
     compress_dict_uri/3,
-    prefix_expand/3
+    compress_schema_uri/3,
+    prefix_expand/3,
+    prefix_expand_schema/3,
+    schema_subclass_of/3,
+    schema_is_abstract/2
 ]).
 
 :- reexport(core(document/history), [commits_changed_id/5, commit_info_dict/3]).
@@ -14,3 +18,5 @@
                              schema_metadata_descriptor/3,
                              database_prefixes/2]).
 :- reexport(core(query/jsonld), [compress_dict_uri/3, prefix_expand/3]).
+:- reexport(core(document/json), [prefix_expand_schema/3, compress_schema_uri/3]).
+:- reexport(core(document/schema), [schema_subclass_of/3, schema_is_abstract/2]).

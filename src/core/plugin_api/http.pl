@@ -5,6 +5,7 @@
     authenticate/3,
     authenticate_from_request/3,
     plugin_error_response/2,
+    plugin_json_response/3,
     write_cors_headers/1,
     api_report_errors/3,
     resolve_descriptor_auth/6
@@ -101,5 +102,20 @@ plugin_error_response(_, Response) :-
             'api:status': 'api:server_error',
             'api:message': 'An internal server error occurred.'
         },
+        headers: _{'Content-Type': 'application/json'}
+    }.
+
+%% plugin_json_response(+Status, +Dict, -Response) is det.
+%
+%  Build a response dict with body as a JSON string. For pipe-dispatched
+%  handlers (arity 2: +Request, -Response) where write_plugin_response
+%  writes the body with format(~s), the body must be a string — unlike
+%  plugin_error_response/2 which returns body as a dict for stream handlers.
+plugin_json_response(Status, Dict, Response) :-
+    with_output_to(string(Body),
+        json_write_dict(current_output, Dict, [as(string), width(0)])),
+    Response = _{
+        status: Status,
+        body: Body,
         headers: _{'Content-Type': 'application/json'}
     }.
