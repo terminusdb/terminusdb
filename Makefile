@@ -48,12 +48,12 @@ build-restart:
 	tests/terminusdb-test-server.sh restart
 
 # Build the release binary and restart both TerminusDB (port 7373) and
-# tdb-search (port 7372) for paired indexing/search development.
-# Requires the tdb-search repo as a sibling of the terminusdb repo.
+# vectorlink (port 7372) for paired indexing/search development.
+# Requires the vectorlink repo as a sibling of the terminusdb repo.
 .PHONY: build-restart-search
 build-restart-search:
 	@$(MAKE) -f distribution/Makefile.prolog
-	../tdb-search/tests/tdb-search-server.sh restart
+	../vectorlink/tests/vectorlink-server.sh restart
 
 .PHONY: server-clean
 server-clean:
@@ -272,7 +272,7 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
-# Run end-to-end plugin tests (TerminusDB + tdb-search + vectorlink + Ollama).
+# Run end-to-end plugin tests (TerminusDB + vectorlink + Ollama).
 # Brings up the full stack via docker-compose.e2e.yml, runs the e2e mocha suite,
 # then tears down. Use --no-down to keep the stack running for debugging.
 #
