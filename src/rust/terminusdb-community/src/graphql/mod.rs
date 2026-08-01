@@ -325,6 +325,25 @@ predicates! {
             Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
+
+    #[module("$graphql")]
+    semidet fn parse_subscription_query(context, graphql_context_term, query_string_term, parsed_term) {
+        let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
+        let query: String = query_string_term.get_ex()?;
+        match subscription::parse_subscription_query(&query, &type_collection) {
+            Ok(parsed) => {
+                let dict = DictBuilder::new()
+                    .tag("parsed")
+                    .entry("field_name", parsed.field_name.clone())
+                    .entry("class_name", parsed.class_name.clone())
+                    .entry("operation", parsed.operation.clone())
+                    .entry("filter_canonical_json", parsed.filter_canonical_json.clone())
+                    .entry("selection_set_hash", parsed.selection_set_hash.clone());
+                parsed_term.unify(dict)
+            }
+            Err(e) => context.raise_exception(&term!{context: error(graphql_subscription_parse_error(#e), _)}?)
+        }
+    }
 }
 
 pub fn register() {
@@ -332,4 +351,5 @@ pub fn register() {
     register_get_graphql_context();
     register_handle_request();
     register_handle_system_request();
+    register_parse_subscription_query();
 }

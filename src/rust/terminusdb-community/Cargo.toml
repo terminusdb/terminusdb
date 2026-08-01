@@ -28,6 +28,7 @@ juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-
 serde = {version="1.0", features=["derive"]}
 float-ord = "0.3"
 regex = "1"
+sha2 = "0.10"
 aho-corasick = "0.7"
 bimap = "0.6.2"
 ordered-float = "3.0"

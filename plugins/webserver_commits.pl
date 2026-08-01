@@ -390,6 +390,15 @@ plugins:post_commit_hook(Validation_Objects, Meta_Data) :-
         Error,
         json_log:json_log_error_formatted("post_commit_hook broadcast error: ~q", [Error])
     ),
+    !,
+    catch(
+        (   webserver_graphql_subs:broadcast_graphql_events(Validation_Objects, Meta_Data)
+        ->  true
+        ;   json_log:json_log_error_formatted("post_commit_hook: broadcast_graphql_events failed (no exception)", [])
+        ),
+        GraphQLError,
+        json_log:json_log_error_formatted("post_commit_hook: broadcast_graphql_events error: ~q", [GraphQLError])
+    ),
     !.
 plugins:post_commit_hook(_, _).
 
