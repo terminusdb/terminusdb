@@ -96,6 +96,7 @@ mod naming;
 pub mod query;
 mod sanitize;
 pub mod schema;
+mod subscription;
 mod system;
 mod top;
 

@@ -28,6 +28,43 @@ use super::frame::*;
 use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
 use super::query::{run_count_query, run_filter_query};
 
+/// Trait for resolving GraphQL fields against a TerminusDB store.
+///
+/// Implemented by `TerminusContext` (for HTTP GraphQL queries via Juniper)
+/// and `SubscriptionResolveContext` (for WebSocket subscription event
+/// resolution outside of Juniper).
+///
+/// The key difference is restriction checking: `TerminusContext` calls into
+/// Prolog via FFI, while `SubscriptionResolveContext` returns `Ok(None)`
+/// because restriction filters are rejected at subscription registration
+/// time.
+pub trait TerminusResolveContext {
+    /// Schema layer for type lookups.
+    fn schema(&self) -> &SyncStoreLayer;
+
+    /// Instance layer for document data, if available.
+    fn instance(&self) -> Option<&SyncStoreLayer>;
+
+    /// Type collection info (AllFrames) for GraphQL type resolution.
+    fn type_collection(&self) -> &TerminusTypeCollectionInfo;
+
+    /// Document context for full document retrieval.
+    fn document_context(&self) -> &DocumentContext<SyncStoreLayer>;
+
+    /// Check if a document ID matches a restriction. Returns `Ok(Some(reason))`
+    /// if it matches, `Ok(None)` if it doesn't, or an error.
+    ///
+    /// Default implementation returns `Ok(None)` — no restriction checking.
+    /// `TerminusContext` overrides this to call into Prolog.
+    fn id_matches_restriction(
+        &self,
+        _restriction: &ShortName,
+        _id: u64,
+    ) -> Result<Option<String>, juniper::FieldError> {
+        Ok(None)
+    }
+}
+
 pub enum NodeOrValue {
     Node(IriName),
     #[allow(dead_code)]
@@ -111,6 +148,33 @@ impl<'a> TerminusContext<'a> {
     pub fn document_context(&self) -> &DocumentContext<SyncStoreLayer> {
         self.document_context
             .get_or_create(|| DocumentContext::new(self.schema.clone(), self.instance.clone()))
+    }
+}
+
+impl<'a> TerminusResolveContext for TerminusContext<'a> {
+    fn schema(&self) -> &SyncStoreLayer {
+        &self.schema
+    }
+
+    fn instance(&self) -> Option<&SyncStoreLayer> {
+        self.instance.as_ref()
+    }
+
+    fn type_collection(&self) -> &TerminusTypeCollectionInfo {
+        &self.type_collection
+    }
+
+    fn document_context(&self) -> &DocumentContext<SyncStoreLayer> {
+        self.document_context()
+    }
+
+    fn id_matches_restriction(
+        &self,
+        restriction: &ShortName,
+        id: u64,
+    ) -> Result<Option<String>, juniper::FieldError> {
+        let result = pl_id_matches_restriction(self, restriction, id);
+        result_to_execution_result(&self.context, result)
     }
 }
 

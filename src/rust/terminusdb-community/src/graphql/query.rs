@@ -27,8 +27,8 @@ use super::frame::{
     Prefixes, TypeDefinition,
 };
 use super::schema::{
-    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
-    TerminusContext, TerminusOrderBy, TerminusOrdering,
+    TerminusResolveContext, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
+    TerminusOrderBy, TerminusOrdering,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
@@ -755,8 +755,8 @@ fn object_type_filter<'a>(
     }
 }
 
-fn compile_query<'a>(
-    context: &'a TerminusContext<'static>,
+fn compile_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     all_frames: &'a AllFrames,
     filter: Rc<FilterObject>,
@@ -770,7 +770,7 @@ fn compile_query<'a>(
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
-            id_matches_restriction(context, restriction_name, *id)
+            context.id_matches_restriction(restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -1209,8 +1209,8 @@ fn generate_initial_iterator<'a>(
     }
 }
 
-fn lookup_by_filter<'a>(
-    context: &'a TerminusContext<'static>,
+fn lookup_by_filter<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
@@ -1234,8 +1234,8 @@ fn lookup_by_filter<'a>(
     }
 }
 
-pub fn run_filter_query<'a>(
-    context: &'a TerminusContext<'static>,
+pub fn run_filter_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     arguments: &'a juniper::Arguments,
     class_name: &'a GraphQLName<'a>,
@@ -1351,8 +1351,8 @@ pub fn run_filter_query<'a>(
 }
 
 /// Run a count query - returns count of matching documents without collecting them
-pub fn run_count_query<'a>(
-    context: &'a TerminusContext<'static>,
+pub fn run_count_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     filter_input: &FilterInputObject,
     class_name: &'a GraphQLName<'a>,
