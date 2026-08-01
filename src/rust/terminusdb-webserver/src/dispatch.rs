@@ -61,6 +61,13 @@ pub struct PluginStream {
     pub handler: String,
 }
 
+/// A WebSocket route registered by a Prolog plugin.
+#[derive(Clone, Debug)]
+pub struct WsRoute {
+    pub method: String,
+    pub path: String,
+}
+
 /// Convert Prolog-style route patterns to Axum 0.8 syntax.
 ///
 /// Axum 0.8 changed:
@@ -1338,6 +1345,50 @@ pub fn build_stream_router(streams: Vec<PluginStream>) -> Router {
             "post" => router.route(&axum_path, post(route_handler)),
             "put" => router.route(&axum_path, axum::routing::put(route_handler)),
             "delete" => router.route(&axum_path, axum::routing::delete(route_handler)),
+            _ => router,
+        };
+    }
+    router
+}
+
+/// Collect WebSocket routes registered by Prolog plugins through the
+/// `appserver_hooks:appserver_ws/3` hook.
+///
+/// Each registration is: method, path. The actual WebSocket handling
+/// is done in Rust; the Prolog hook only tells Rust which paths to
+/// register as WebSocket upgrade endpoints.
+pub fn collect_ws_routes(context: &Context<impl QueryableContextType>) -> PrologResult<Vec<WsRoute>> {
+    let frame = context.open_frame();
+    let [method_term, path_term, _handler_term] = frame.new_term_refs();
+
+    let open_call = frame.open(
+        pred!("appserver_hooks:appserver_ws/3"),
+        [&method_term, &path_term, &_handler_term],
+    );
+
+    let mut routes = Vec::new();
+    while attempt_opt(open_call.next_solution())?.is_some() {
+        let method: Atom = method_term.get_ex()?;
+        let path = term_to_string(&path_term)?;
+        routes.push(WsRoute {
+            method: method.name(),
+            path,
+        });
+    }
+
+    Ok(routes)
+}
+
+/// Build a router for WebSocket upgrade endpoints.
+///
+/// Each route is registered as a GET handler that upgrades to WebSocket.
+/// The `ws::handle_ws_connection` function handles the actual protocol.
+pub fn build_ws_router(routes: Vec<WsRoute>) -> Router {
+    let mut router = Router::new();
+    for route in routes {
+        let axum_path = to_axum_pattern(&route.path);
+        router = match route.method.as_str() {
+            "get" => router.route(&axum_path, get(crate::ws::handle_ws_connection)),
             _ => router,
         };
     }

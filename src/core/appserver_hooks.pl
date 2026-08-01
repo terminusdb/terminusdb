@@ -3,7 +3,8 @@
               appserver_route/4,
               appserver_static_path/2,
               appserver_static_path/3,
-              appserver_stream/3
+              appserver_stream/3,
+              appserver_ws/3
           ]).
 
 :- use_module(library(lists)).
@@ -16,6 +17,8 @@
 :- multifile appserver_static_path/3.
 :- multifile appserver_stream/3.
 :- dynamic appserver_stream/3.
+:- multifile appserver_ws/3.
+:- dynamic appserver_ws/3.
 
 :- dynamic appserver_hooks:appserver_static_path_normalized/3.
 :- multifile appserver_hooks:appserver_static_path_normalized/3.
