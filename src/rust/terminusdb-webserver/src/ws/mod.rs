@@ -1520,4 +1520,517 @@ mod tests {
         assert!(matches!(result, HandleResult::Continue));
         assert_eq!(state.auth_header, "");
     }
+
+    // --- cohort_resolver_task tests ---
+
+    #[tokio::test]
+    async fn cohort_resolver_forwards_gql_event_to_resolved_channel() {
+        crate::dispatch::set_tokio_handle(tokio::runtime::Handle::current());
+        let resolved_channel = "graphql_resolved_test_cohort_1".to_string();
+        let (raw_tx, raw_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+
+        // Subscribe to the resolved channel so we can receive the forwarded event.
+        let (sub_tx, mut sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+        let sub_stream_id = next_ws_stream_id();
+        broadcast_registry().lock().unwrap().subscribe(
+            resolved_channel.clone(),
+            sub_stream_id,
+            sub_tx,
+            None,
+        );
+
+        // Spawn the cohort resolver task.
+        let task = tokio::spawn(cohort_resolver_task(
+            raw_rx,
+            resolved_channel.clone(),
+            "test/db/local/branch/main".to_string(),
+        ));
+
+        // Send a GqlEvent JSON to the raw channel.
+        let event_json = r#"{"doc_iri":"http://example.com/Person/1","change_type":"added","commit_id":"abc123"}"#;
+        raw_tx.send(axum::body::Bytes::from(event_json)).await.unwrap();
+
+        // Wait for the resolved event to arrive on the subscriber.
+        let received = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            sub_rx.recv(),
+        )
+        .await
+        .expect("timeout waiting for resolved event")
+        .expect("resolved channel closed");
+
+        let parsed: Value = serde_json::from_slice(&received).expect("resolved event is valid JSON");
+        assert_eq!(parsed["doc_iri"], "http://example.com/Person/1");
+        assert_eq!(parsed["change_type"], "added");
+        assert_eq!(parsed["commit_id"], "abc123");
+
+        // Clean up.
+        drop(raw_tx);
+        task.abort();
+        broadcast_registry().lock().unwrap().unsubscribe(&resolved_channel, sub_stream_id);
+    }
+
+    #[tokio::test]
+    async fn cohort_resolver_skips_invalid_json() {
+        crate::dispatch::set_tokio_handle(tokio::runtime::Handle::current());
+        let resolved_channel = "graphql_resolved_test_cohort_2".to_string();
+        let (raw_tx, raw_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+
+        let (sub_tx, mut sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+        let sub_stream_id = next_ws_stream_id();
+        broadcast_registry().lock().unwrap().subscribe(
+            resolved_channel.clone(),
+            sub_stream_id,
+            sub_tx,
+            None,
+        );
+
+        let task = tokio::spawn(cohort_resolver_task(
+            raw_rx,
+            resolved_channel.clone(),
+            "test/db/local/branch/main".to_string(),
+        ));
+
+        // Send invalid JSON — should be skipped, not crash the resolver.
+        raw_tx
+            .send(axum::body::Bytes::from("not valid json at all"))
+            .await
+            .unwrap();
+
+        // Send a valid event after the invalid one — should still work.
+        let event_json = r#"{"doc_iri":"http://example.com/Person/2","change_type":"changed","commit_id":"def456"}"#;
+        raw_tx.send(axum::body::Bytes::from(event_json)).await.unwrap();
+
+        let received = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            sub_rx.recv(),
+        )
+        .await
+        .expect("timeout waiting for resolved event after invalid JSON")
+        .expect("resolved channel closed");
+
+        let parsed: Value = serde_json::from_slice(&received).unwrap();
+        assert_eq!(parsed["doc_iri"], "http://example.com/Person/2");
+
+        drop(raw_tx);
+        task.abort();
+        broadcast_registry().lock().unwrap().unsubscribe(&resolved_channel, sub_stream_id);
+    }
+
+    #[tokio::test]
+    async fn cohort_resolver_stops_when_raw_channel_closed() {
+        let resolved_channel = "graphql_resolved_test_cohort_3".to_string();
+        let (raw_tx, raw_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+
+        let task = tokio::spawn(cohort_resolver_task(
+            raw_rx,
+            resolved_channel.clone(),
+            "test/db/local/branch/main".to_string(),
+        ));
+
+        // Close the raw channel by dropping the sender.
+        drop(raw_tx);
+
+        // The resolver task should exit cleanly.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            task,
+        )
+        .await
+        .expect("resolver task did not exit after raw channel closed");
+
+        assert!(result.is_ok(), "resolver task should complete without panic");
+    }
+
+    // --- ws_subscriber_task tests ---
+
+    #[tokio::test]
+    async fn ws_subscriber_wraps_resolved_data_in_next_message() {
+        let (resolved_tx, resolved_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+        let (ws_tx, mut ws_rx) = mpsc::channel::<Message>(10);
+
+        let task = tokio::spawn(ws_subscriber_task(
+            resolved_rx,
+            ws_tx,
+            "sub1".to_string(),
+            "Person_added".to_string(),
+        ));
+
+        // Send resolved JSON data.
+        let data = json!({"_id": "http://example.com/Person/1", "name": "Alice"});
+        resolved_tx
+            .send(axum::body::Bytes::from(data.to_string()))
+            .await
+            .unwrap();
+
+        let received = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            ws_rx.recv(),
+        )
+        .await
+        .expect("timeout waiting for next message")
+        .expect("ws channel closed");
+
+        match received {
+            Message::Text(t) => {
+                let v: Value = serde_json::from_str(&t).unwrap();
+                assert_eq!(v["type"], "next");
+                assert_eq!(v["id"], "sub1");
+                assert_eq!(v["payload"]["data"]["Person_added"]["_id"], "http://example.com/Person/1");
+                assert_eq!(v["payload"]["data"]["Person_added"]["name"], "Alice");
+            }
+            _ => panic!("expected Text message"),
+        }
+
+        drop(resolved_tx);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn ws_subscriber_stops_on_ws_close() {
+        let (resolved_tx, resolved_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+        let (ws_tx, ws_rx) = mpsc::channel::<Message>(10);
+
+        let task = tokio::spawn(ws_subscriber_task(
+            resolved_rx,
+            ws_tx,
+            "sub2".to_string(),
+            "Person_added".to_string(),
+        ));
+
+        // Drop the receiver — simulates WebSocket closed.
+        drop(ws_rx);
+
+        // Send data — ws_tx.send will fail, task should exit.
+        resolved_tx
+            .send(axum::body::Bytes::from(r#"{"_id":"doc1"}"#))
+            .await
+            .unwrap();
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            task,
+        )
+        .await
+        .expect("subscriber task did not exit after ws closed");
+
+        assert!(result.is_ok(), "subscriber task should complete without panic");
+    }
+
+    // --- cohort_resolver → ws_subscriber pipeline test ---
+
+    #[tokio::test]
+    async fn pipeline_cohort_resolver_to_ws_subscriber() {
+        crate::dispatch::set_tokio_handle(tokio::runtime::Handle::current());
+        let resolved_channel = "graphql_resolved_pipeline_test".to_string();
+        let (raw_tx, raw_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+        let (ws_tx, mut ws_rx) = mpsc::channel::<Message>(10);
+
+        // Spawn cohort resolver.
+        let resolver_task = tokio::spawn(cohort_resolver_task(
+            raw_rx,
+            resolved_channel.clone(),
+            "test/db/local/branch/main".to_string(),
+        ));
+
+        // Spawn ws subscriber that listens on the resolved channel.
+        // We need an intermediate subscriber to bridge BroadcastRegistry → ws_subscriber.
+        let (bridge_tx, bridge_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
+        let bridge_stream_id = next_ws_stream_id();
+        broadcast_registry().lock().unwrap().subscribe(
+            resolved_channel.clone(),
+            bridge_stream_id,
+            bridge_tx,
+            None,
+        );
+
+        let subscriber_task = tokio::spawn(ws_subscriber_task(
+            bridge_rx,
+            ws_tx,
+            "pipe-sub-1".to_string(),
+            "MyClass_added".to_string(),
+        ));
+
+        // Send a GqlEvent through the raw channel.
+        let event_json = r#"{"doc_iri":"http://example.com/MyClass/42","change_type":"added","commit_id":"commit-xyz"}"#;
+        raw_tx.send(axum::body::Bytes::from(event_json)).await.unwrap();
+
+        // The event should flow: raw → cohort_resolver → BroadcastRegistry → bridge → ws_subscriber → ws_rx
+        let received = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            ws_rx.recv(),
+        )
+        .await
+        .expect("timeout waiting for pipeline output")
+        .expect("ws channel closed");
+
+        match received {
+            Message::Text(t) => {
+                let v: Value = serde_json::from_str(&t).unwrap();
+                assert_eq!(v["type"], "next");
+                assert_eq!(v["id"], "pipe-sub-1");
+                assert_eq!(v["payload"]["data"]["MyClass_added"]["doc_iri"], "http://example.com/MyClass/42");
+                assert_eq!(v["payload"]["data"]["MyClass_added"]["change_type"], "added");
+                assert_eq!(v["payload"]["data"]["MyClass_added"]["commit_id"], "commit-xyz");
+            }
+            _ => panic!("expected Text message"),
+        }
+
+        // Clean up.
+        drop(raw_tx);
+        resolver_task.abort();
+        subscriber_task.abort();
+        broadcast_registry().lock().unwrap().unsubscribe(&resolved_channel, bridge_stream_id);
+    }
+
+    // --- validate_branch_path oversize test ---
+
+    #[test]
+    fn validate_branch_path_oversize_rejected() {
+        let long_segment = "a".repeat(1030);
+        let path = format!("{}/{}/{}/{}/{}", long_segment, "db", "local", "branch", "main");
+        assert!(!validate_branch_path(&path), "path >1024 chars should be rejected");
+    }
+
+    // --- read_cgi_response tests ---
+
+    #[tokio::test]
+    async fn read_cgi_response_parses_lf_separator() {
+        use nix::unistd::pipe;
+        use tokio::io::AsyncWriteExt;
+
+        let (read_fd, write_fd) = pipe().unwrap();
+
+        // Write CGI response with \n\n separator.
+        let response = "Status: 200 OK\nContent-Type: application/json\n\n{\"cohort_key\":\"test\"}";
+        let mut writer = tokio::net::unix::pipe::Sender::from_owned_fd(write_fd).unwrap();
+        writer.write_all(response.as_bytes()).await.unwrap();
+        drop(writer);
+
+        let mut reader = tokio::net::unix::pipe::Receiver::from_owned_fd(read_fd).unwrap();
+        let (status, headers, body) = read_cgi_response(&mut reader).await.unwrap();
+
+        assert_eq!(status, 200);
+        assert!(headers.iter().any(|(k, v)| k == "Content-Type" && v == "application/json"));
+        let body_str = String::from_utf8_lossy(&body);
+        assert!(body_str.contains("cohort_key"));
+    }
+
+    #[tokio::test]
+    async fn read_cgi_response_parses_crlf_separator() {
+        use nix::unistd::pipe;
+        use tokio::io::AsyncWriteExt;
+
+        let (read_fd, write_fd) = pipe().unwrap();
+
+        let response = "Status: 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\nAuth failed";
+        let mut writer = tokio::net::unix::pipe::Sender::from_owned_fd(write_fd).unwrap();
+        writer.write_all(response.as_bytes()).await.unwrap();
+        drop(writer);
+
+        let mut reader = tokio::net::unix::pipe::Receiver::from_owned_fd(read_fd).unwrap();
+        let (status, _headers, body) = read_cgi_response(&mut reader).await.unwrap();
+
+        assert_eq!(status, 401);
+        let body_str = String::from_utf8_lossy(&body);
+        assert_eq!(body_str, "Auth failed");
+    }
+
+    #[tokio::test]
+    async fn read_cgi_response_content_length_truncation() {
+        use nix::unistd::pipe;
+        use tokio::io::AsyncWriteExt;
+
+        let (read_fd, write_fd) = pipe().unwrap();
+
+        // Body has extra bytes beyond Content-Length — should be truncated.
+        let response = "Status: 200\nContent-Length: 5\n\nhelloEXTRA";
+        let mut writer = tokio::net::unix::pipe::Sender::from_owned_fd(write_fd).unwrap();
+        writer.write_all(response.as_bytes()).await.unwrap();
+        drop(writer);
+
+        let mut reader = tokio::net::unix::pipe::Receiver::from_owned_fd(read_fd).unwrap();
+        let (status, _headers, body) = read_cgi_response(&mut reader).await.unwrap();
+
+        assert_eq!(status, 200);
+        assert_eq!(body.len(), 5);
+        assert_eq!(&body, b"hello");
+    }
+
+    #[tokio::test]
+    async fn read_cgi_response_eof_before_separator_returns_error() {
+        use nix::unistd::pipe;
+        use tokio::io::AsyncWriteExt;
+
+        let (read_fd, write_fd) = pipe().unwrap();
+
+        // Write data without a header separator, then close.
+        let mut writer = tokio::net::unix::pipe::Sender::from_owned_fd(write_fd).unwrap();
+        writer.write_all(b"no separator here").await.unwrap();
+        drop(writer);
+
+        let mut reader = tokio::net::unix::pipe::Receiver::from_owned_fd(read_fd).unwrap();
+        let result = read_cgi_response(&mut reader).await;
+
+        assert!(result.is_err(), "should return error on EOF before separator");
+        let err = result.unwrap_err();
+        assert!(err.contains("EOF before CGI header separator"), "error should mention EOF, got: {}", err);
+    }
+
+    // --- handle_client_message Subscribe flow test (without Prolog) ---
+
+    #[tokio::test]
+    async fn subscribe_without_prolog_dispatch_returns_error() {
+        // In unit tests, no Prolog dispatch queue is running, so
+        // dispatch_subscribe_to_prolog will fail. This verifies that
+        // the subscribe flow properly reports the error to the client.
+        let (tx, mut rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test/db/local/branch/main".to_string(), "".to_string());
+        state.initialized = true;
+
+        let msg = WsClientMessage::Subscribe {
+            id: "sub-test".to_string(),
+            payload: SubscribePayload {
+                query: "subscription { Person_added { _id } }".to_string(),
+                variables: None,
+                operation_name: None,
+            },
+        };
+        let result = handle_client_message(&mut state, msg).await;
+
+        // Should continue (not close) — the error is sent as a ws error message.
+        assert!(matches!(result, HandleResult::Continue));
+
+        // Verify error message was sent.
+        let received = rx.recv().await.expect("should receive error message");
+        match received {
+            Message::Text(t) => {
+                let v: Value = serde_json::from_str(&t).unwrap();
+                assert_eq!(v["type"], "error");
+                assert_eq!(v["id"], "sub-test");
+                assert!(v["payload"]["message"].as_str().unwrap().contains("Subscription registration failed"));
+            }
+            _ => panic!("expected Text message"),
+        }
+
+        // No subscription should be recorded in state.
+        assert!(state.subscriptions.is_empty());
+    }
+
+    // --- handle_client_message Complete flow test ---
+
+    #[tokio::test]
+    async fn complete_removes_subscription_and_sends_confirmation() {
+        let (tx, mut rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+        state.initialized = true;
+
+        // Manually insert a fake subscription into state.
+        let cohort_key = "cohort(test/db/local/branch/main,Person,added,hash1)".to_string();
+        let stream_id = next_ws_stream_id();
+        state.subscriptions.insert(
+            "sub-1".to_string(),
+            (cohort_key.clone(), stream_id, "Person_added".to_string()),
+        );
+
+        let msg = WsClientMessage::Complete { id: "sub-1".to_string() };
+        let result = handle_client_message(&mut state, msg).await;
+
+        assert!(matches!(result, HandleResult::Continue));
+        assert!(state.subscriptions.is_empty(), "subscription should be removed from state");
+
+        // Verify complete confirmation was sent.
+        let received = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            rx.recv(),
+        )
+        .await
+        .expect("timeout waiting for complete message")
+        .expect("ws channel closed");
+
+        match received {
+            Message::Text(t) => {
+                let v: Value = serde_json::from_str(&t).unwrap();
+                assert_eq!(v["type"], "complete");
+                assert_eq!(v["id"], "sub-1");
+            }
+            _ => panic!("expected Text message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn complete_unknown_id_is_noop() {
+        let (tx, _rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+        state.initialized = true;
+
+        let msg = WsClientMessage::Complete { id: "nonexistent".to_string() };
+        let result = handle_client_message(&mut state, msg).await;
+
+        assert!(matches!(result, HandleResult::Continue));
+        assert!(state.subscriptions.is_empty());
+    }
+
+    // --- handle_client_message Ping/Pong test ---
+
+    #[tokio::test]
+    async fn ping_responds_with_pong() {
+        let (tx, mut rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+
+        let msg = WsClientMessage::Ping { payload: None };
+        let result = handle_client_message(&mut state, msg).await;
+
+        assert!(matches!(result, HandleResult::Continue));
+
+        let received = rx.recv().await.expect("should receive pong");
+        match received {
+            Message::Text(t) => {
+                let v: Value = serde_json::from_str(&t).unwrap();
+                assert_eq!(v["type"], "pong");
+            }
+            _ => panic!("expected Text message"),
+        }
+    }
+
+    // --- handle_client_message Subscribe without init test ---
+
+    #[tokio::test]
+    async fn subscribe_without_init_closes_with_4401() {
+        let (tx, _rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+        // state.initialized is false by default
+
+        let msg = WsClientMessage::Subscribe {
+            id: "sub-no-init".to_string(),
+            payload: SubscribePayload {
+                query: "subscription { Person_added { _id } }".to_string(),
+                variables: None,
+                operation_name: None,
+            },
+        };
+        let result = handle_client_message(&mut state, msg).await;
+
+        match result {
+            HandleResult::Close(code, _) => assert_eq!(code, 4401),
+            _ => panic!("expected Close(4401) for subscribe without init"),
+        }
+    }
+
+    // --- rate limit enforcement test ---
+
+    #[tokio::test]
+    async fn rate_limit_blocks_excess_subscriptions() {
+        let (tx, _rx) = mpsc::channel::<Message>(10);
+        let mut state = WsConnectionState::new(tx, "test".to_string(), "".to_string());
+        state.initialized = true;
+
+        // Exhaust the rate limit.
+        for _ in 0..RATE_LIMIT_MAX {
+            assert!(state.check_rate_limit());
+        }
+
+        // Next call should be rejected.
+        assert!(!state.check_rate_limit());
+    }
 }

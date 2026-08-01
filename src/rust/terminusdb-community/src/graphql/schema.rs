@@ -27,6 +27,7 @@ use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
 use super::query::{run_count_query, run_filter_query};
+use super::subscription::TerminusSubscriptionRoot;
 
 /// Trait for resolving GraphQL fields against a TerminusDB store.
 ///
@@ -1642,4 +1643,71 @@ where
 pub enum GraphType {
     InstanceGraph,
     SchemaGraph,
+}
+
+// --- TerminusSubscriptionRoot impls ---
+//
+// These impls live in schema.rs (not subscription.rs) because they need
+// access to TerminusTypeInfo's private fields and the private add_arguments()
+// function. TerminusSubscriptionRoot itself is defined in subscription.rs.
+
+impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("Subscription")
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let mut fields: Vec<_> = Vec::new();
+
+        for (name, typedef) in info.allframes.frames.iter() {
+            if let TypeDefinition::Class(class_definition) = typedef {
+                let newinfo = TerminusTypeInfo {
+                    class: name.as_static(),
+                    allframes: info.allframes.clone(),
+                };
+
+                for (op_name, description) in [
+                    (format!("{}_added", name.as_str()), "Fired when a document of this class is added"),
+                    (format!("{}_changed", name.as_str()), "Fired when a document of this class is changed"),
+                    (format!("{}_deleted", name.as_str()), "Fired when a document of this class is deleted"),
+                ] {
+                    let field = registry.field::<TerminusType<C>>(op_name.as_str(), &newinfo);
+                    let field = field.description(description);
+                    let field = add_arguments(&newinfo, registry, field, class_definition);
+                    fields.push(field);
+                }
+            }
+        }
+
+        registry
+            .build_object_type::<TerminusSubscriptionRoot<C>>(info, &fields)
+            .into_meta()
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for TerminusSubscriptionRoot<C> {
+    type Context = C;
+    type TypeInfo = TerminusTypeCollectionInfo;
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("TerminusSubscriptionRoot")
+    }
+
+    fn resolve_field(
+        &self,
+        _info: &Self::TypeInfo,
+        _field_name: &str,
+        _arguments: &juniper::Arguments,
+        _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        // This is never called — subscription execution bypasses Juniper.
+        // The GraphQLValue impl exists only for SDL generation.
+        Err("Subscription resolution is not handled by Juniper".into())
+    }
 }

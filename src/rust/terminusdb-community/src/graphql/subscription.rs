@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use juniper::{
     parser::parse_document_source, DefaultScalarValue, Definition,
-    GraphQLType, GraphQLValue,
 };
 use lazy_init::Lazy;
 use sha2::{Digest, Sha256};
@@ -17,7 +16,6 @@ use sha2::{Digest, Sha256};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::doc::DocumentContext;
-use crate::graphql::frame::TypeDefinition;
 use crate::graphql::schema::{
     TerminusResolveContext, TerminusTypeCollectionInfo,
 };
@@ -268,73 +266,9 @@ impl<C: TerminusResolveContext> TerminusSubscriptionRoot<C> {
     }
 }
 
-impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
-    fn name(_info: &Self::TypeInfo) -> Option<&str> {
-        Some("Subscription")
-    }
-
-    fn meta<'r>(
-        info: &Self::TypeInfo,
-        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
-    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
-    where
-        DefaultScalarValue: 'r,
-    {
-        let mut fields: Vec<_> = Vec::new();
-
-        for (name, typedef) in info.allframes.frames.iter() {
-            if let TypeDefinition::Class(_) = typedef {
-                let added_name = format!("{}_added", name.as_str());
-                let changed_name = format!("{}_changed", name.as_str());
-                let deleted_name = format!("{}_deleted", name.as_str());
-
-                // Each subscription field returns a JSON string.
-                // We use String as the return type since actual resolution
-                // bypasses Juniper — the SDL is for introspection only.
-                fields.push(
-                    registry
-                        .field::<String>(added_name.as_str(), &())
-                        .description("Fired when a document of this class is added"),
-                );
-                fields.push(
-                    registry
-                        .field::<String>(changed_name.as_str(), &())
-                        .description("Fired when a document of this class is changed"),
-                );
-                fields.push(
-                    registry
-                        .field::<String>(deleted_name.as_str(), &())
-                        .description("Fired when a document of this class is deleted"),
-                );
-            }
-        }
-
-        registry
-            .build_object_type::<TerminusSubscriptionRoot<C>>(info, &fields)
-            .into_meta()
-    }
-}
-
-impl<C: TerminusResolveContext> GraphQLValue for TerminusSubscriptionRoot<C> {
-    type Context = C;
-    type TypeInfo = TerminusTypeCollectionInfo;
-
-    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some("TerminusSubscriptionRoot")
-    }
-
-    fn resolve_field(
-        &self,
-        _info: &Self::TypeInfo,
-        _field_name: &str,
-        _arguments: &juniper::Arguments,
-        _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
-    ) -> juniper::ExecutionResult {
-        // This is never called — subscription execution bypasses Juniper.
-        // The GraphQLValue impl exists only for SDL generation.
-        Err("Subscription resolution is not handled by Juniper".into())
-    }
-}
+// GraphQLType and GraphQLValue impls for TerminusSubscriptionRoot<C> are
+// in schema.rs, where they have access to TerminusTypeInfo fields and
+// add_arguments() — both private to that module.
 
 #[cfg(test)]
 mod tests {
@@ -524,14 +458,10 @@ mod tests {
             "subscription { Person_added(filter: {name: {eq: \"Alice\"}}) { _id } }",
             &tc,
         );
-        // The filter may or may not parse depending on whether the schema
-        // has the filter input type. But the parsing should at least
-        // extract the field name correctly.
-        if let Ok(parsed) = result {
-            assert_eq!(parsed.field_name, "Person_added");
-            // Filter should be non-empty if extracted
-            assert_ne!(parsed.filter_canonical_json, "{}");
-        }
+        let parsed = result
+            .expect("filter parse should succeed with filter argument in schema");
+        assert_eq!(parsed.field_name, "Person_added");
+        assert_ne!(parsed.filter_canonical_json, "{}");
     }
 
     #[test]
@@ -578,5 +508,42 @@ mod tests {
             &tc,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn subscription_schema_has_proper_return_types() {
+        let tc = person_type_collection();
+        let root_node = crate::graphql::get_or_create_subscription_root_node(&tc);
+
+        let sub_type = root_node.schema.concrete_subscription_type()
+            .expect("Schema should have a subscription type");
+
+        let field = sub_type.field_by_name("Person_added")
+            .expect("Person_added field should exist");
+
+        match &field.field_type {
+            juniper::Type::Named(name) | juniper::Type::NonNullNamed(name) => {
+                assert_eq!(name.as_ref(), "Person",
+                    "Person_added should return type Person, not String");
+            }
+            other => panic!("Unexpected field type for Person_added: {:?}", other),
+        }
+
+        let args = field.arguments.as_ref()
+            .expect("Person_added should have arguments");
+        let has_filter = args.iter().any(|a| a.name == "filter");
+        assert!(has_filter, "Person_added should have a filter argument");
+
+        for op in ["Person_changed", "Person_deleted"] {
+            let f = sub_type.field_by_name(op)
+                .expect("{op} field should exist");
+            match &f.field_type {
+                juniper::Type::Named(name) | juniper::Type::NonNullNamed(name) => {
+                    assert_eq!(name.as_ref(), "Person",
+                        "{op} should return type Person, not String");
+                }
+                other => panic!("Unexpected field type for {op}: {:?}", other),
+            }
+        }
     }
 }
