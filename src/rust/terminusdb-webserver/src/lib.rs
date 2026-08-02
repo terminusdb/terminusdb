@@ -10,7 +10,6 @@ pub mod log;
 pub mod plugin;
 pub mod routes;
 pub mod server;
-pub mod ws;
 
 /// Install the webserver predicates into the Prolog runtime.
 ///

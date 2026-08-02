@@ -106,7 +106,7 @@ async fn fallback_not_found(uri: axum::http::Uri) -> impl IntoResponse {
 /// This spawns a tokio runtime on a background thread and returns
 /// immediately so the calling Prolog thread is not blocked.
 pub fn start(port: u16) -> Result<(), String> {
-    start_with_routes(port, Vec::new(), Vec::new(), Vec::new(), Vec::new())
+    start_with_routes(port, Vec::new(), Vec::new(), Vec::new())
 }
 
 /// Start the webserver with plugin routes, static file serving paths, and
@@ -121,7 +121,6 @@ pub fn start_with_routes(
     plugin_routes: Vec<crate::dispatch::PluginRoute>,
     plugin_static_paths: Vec<crate::dispatch::PluginStaticPath>,
     plugin_streams: Vec<crate::dispatch::PluginStream>,
-    ws_routes: Vec<crate::dispatch::WsRoute>,
 ) -> Result<(), String> {
     crate::dispatch::init_dispatcher();
 
@@ -213,12 +212,10 @@ pub fn start_with_routes(
             let plugin_router = crate::dispatch::build_plugin_router(plugin_routes);
             let static_router = crate::dispatch::build_static_router(plugin_static_paths);
             let stream_router = crate::dispatch::build_stream_router(plugin_streams);
-            let ws_router = crate::dispatch::build_ws_router(ws_routes);
             let app = app()
                 .merge(plugin_router)
                 .merge(static_router)
                 .merge(stream_router)
-                .merge(ws_router)
                 .fallback(fallback_not_found)
                 .layer(axum::middleware::from_fn(method_not_allowed_middleware))
                 .layer(axum::middleware::from_fn(connection_counter_middleware));

@@ -5,7 +5,7 @@ use swipl::fli::{
 use swipl::prelude::*;
 use swipl::term::Nil;
 
-use crate::dispatch::{collect_routes, collect_static_paths, collect_streams, collect_ws_routes};
+use crate::dispatch::{collect_routes, collect_static_paths, collect_streams};
 use crate::server;
 
 /// Convert a Prolog term to a Rust String, accepting either an atom or a string term.
@@ -44,8 +44,7 @@ predicates! {
         let routes = collect_routes(context)?;
         let static_paths = collect_static_paths(context)?;
         let streams = collect_streams(context)?;
-        let ws_routes = collect_ws_routes(context)?;
-        server::start_with_routes(port as u16, routes, static_paths, streams, ws_routes)
+        server::start_with_routes(port as u16, routes, static_paths, streams)
             .map_err(|e| {
                 crate::log::log_error(format!("[terminusdb-webserver] {}", e));
                 PrologError::Failure

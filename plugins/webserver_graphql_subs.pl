@@ -3,16 +3,7 @@
 :- use_module(core(plugin_api)).
 :- use_module(library(lists)).
 :- use_module(library(json)).
-
-%% Register the WebSocket route for GraphQL subscriptions.
-%% The actual WebSocket handling is in Rust; this hook only tells Rust
-%% to register the route at /api/graphql-ws/*path.
-:- multifile appserver_hooks:appserver_ws/3.
-appserver_hooks:appserver_ws(get, '/api/graphql-ws/*path',
-                              webserver_graphql_subs:graphql_ws_handler).
-
-%% Placeholder handler — the real work is done in Rust.
-graphql_ws_handler.
+:- use_module(library(yall)).
 
 %% ---------------------------------------------------------------------------
 %% Dynamic predicates
