@@ -17,12 +17,11 @@ async function optimizeDatabase (agent, path, branch) {
   }
 
   const steps = [
-    ['branch', `${path}/local/branch/${branch}`],
-    ['_commits', `${path}/local/_commits`],
-    ['_meta', `${path}/_meta`],
-    ['_system', '_system'],
+    `${path}/local/branch/${branch}`,
+    `${path}/local/_commits`,
+    `${path}/_meta`,
   ]
-  for (const [, descPath] of steps) {
+  for (const descPath of steps) {
     await optimizeDescriptor(agent, descPath)
   }
 }
@@ -83,21 +82,8 @@ async function optimizeRepository (agent, path) {
   }
 }
 
-/**
- * Optimize the system database graph.
- * The _system graph accumulates a commit for every database create/delete
- * and is never optimized by the auto-optimize plugin. Call this after
- * database creation or deletion in tests that create many databases.
- * @param {Object} agent - Authenticated agent instance
- * @returns {Promise} Resolves when optimization completes
- */
-async function optimizeSystem (agent) {
-  await optimizeDescriptor(agent, '_system')
-}
-
 module.exports = {
   optimizeDatabase,
   optimizeDescriptor,
   optimizeRepository,
-  optimizeSystem,
 }

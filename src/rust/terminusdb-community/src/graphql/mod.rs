@@ -1,6 +1,7 @@
 use juniper::{
     executor::{execute_validated_query, get_operation},
     http::{GraphQLRequest, GraphQLResponse},
+    parser::parse_document_source,
     DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, ExecutionError, GraphQLError,
     InputValue, RootNode, Value,
 };
@@ -302,7 +303,7 @@ predicates! {
         graphql_context_term.unify(type_collection)
     }
     #[module("$graphql")]
-    semidet fn handle_request(context, _method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term, is_error_term, author_term, message_term) {
+    semidet fn handle_request(context, method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term, is_error_term, author_term, message_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -315,6 +316,32 @@ predicates! {
             };
 
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
+
+        // Defense in depth: if the method is get, reject mutation operations.
+        // The Prolog layer should already enforce this via access control,
+        // but this ensures mutations cannot bypass security at the engine level.
+        let method: Atom = method_term.get_ex()?;
+        if method.name() == "get" {
+            if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&buf) {
+                if let Some(query_str) = json_val.get("query").and_then(|v| v.as_str()) {
+                    let root_node = get_or_create_subscription_root_node(&type_collection);
+                    let source = Box::new(query_str.to_string());
+                    if let Ok(document) = parse_document_source::<DefaultScalarValue>(&source, &root_node.schema) {
+                        for def in &document {
+                            if let Definition::Operation(op) = def {
+                                if op.item.operation_type == juniper::OperationType::Mutation {
+                                    let error_response = r#"{"errors":[{"message":"Mutations are not allowed via GET. Use POST instead."}]}"#;
+                                    is_error_term.unify(true)?;
+                                    return response_term.unify(error_response.to_string());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let execution_context = unsafe {GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term)? };
         execution_context.execute_query(request,
                                         |response: &GraphQLResponse| {
@@ -330,6 +357,88 @@ predicates! {
                                                 Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
                                             }
                                         })
+    }
+
+    /// get_operation_type(+GraphqlContext, +QueryString, -OperationType)
+    ///
+    /// Parses a GraphQL query string using the juniper parser and returns
+    /// the operation type as an atom: `query`, `mutation`, or `subscription`.
+    /// If parsing fails or the operation type cannot be determined, defaults
+    /// to `mutation` for safety (write access required).
+    #[module("$graphql")]
+    semidet fn get_operation_type(context, graphql_context_term, query_string_term, operation_type_term) {
+        let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
+        let query: String = query_string_term.get_ex()?;
+
+        let root_node = get_or_create_subscription_root_node(&type_collection);
+        let source = Box::new(query);
+        let document = match parse_document_source::<DefaultScalarValue>(&source, &root_node.schema) {
+            Ok(doc) => doc,
+            Err(_) => {
+                // Parse failure: default to mutation for safety
+                return operation_type_term.unify(Atom::new("mutation"));
+            }
+        };
+
+        // Find the first operation definition and return its type.
+        // If no operation is found, default to mutation.
+        for def in &document {
+            if let Definition::Operation(op) = def {
+                let op_type = match op.item.operation_type {
+                    juniper::OperationType::Query => "query",
+                    juniper::OperationType::Mutation => "mutation",
+                    juniper::OperationType::Subscription => "subscription",
+                };
+                return operation_type_term.unify(Atom::new(op_type));
+            }
+        }
+
+        // No operation found: default to mutation
+        operation_type_term.unify(Atom::new("mutation"))
+    }
+
+    /// get_operation_type_from_body(+GraphqlContext, +BodyString, -OperationType)
+    ///
+    /// Parses a GraphQL JSON request body using serde_json (fast) to extract
+    /// the query string, then uses the juniper parser to determine the
+    /// operation type. Returns `query`, `mutation`, or `subscription` as an
+    /// atom. If JSON parsing fails, the query field is missing, or operation
+    /// type cannot be determined, defaults to `mutation` for safety.
+    #[module("$graphql")]
+    semidet fn get_operation_type_from_body(context, graphql_context_term, body_string_term, operation_type_term) {
+        let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
+        let body: String = body_string_term.get_ex()?;
+
+        // Parse JSON body with serde_json — much faster than Prolog json_read_dict.
+        let query_string: String = match serde_json::from_str::<serde_json::Value>(&body) {
+            Ok(json) => {
+                match json.get("query").and_then(|v| v.as_str()) {
+                    Some(q) => q.to_string(),
+                    None => return operation_type_term.unify(Atom::new("mutation")),
+                }
+            }
+            Err(_) => return operation_type_term.unify(Atom::new("mutation")),
+        };
+
+        let root_node = get_or_create_subscription_root_node(&type_collection);
+        let source = Box::new(query_string);
+        let document = match parse_document_source::<DefaultScalarValue>(&source, &root_node.schema) {
+            Ok(doc) => doc,
+            Err(_) => return operation_type_term.unify(Atom::new("mutation")),
+        };
+
+        for def in &document {
+            if let Definition::Operation(op) = def {
+                let op_type = match op.item.operation_type {
+                    juniper::OperationType::Query => "query",
+                    juniper::OperationType::Mutation => "mutation",
+                    juniper::OperationType::Subscription => "subscription",
+                };
+                return operation_type_term.unify(Atom::new(op_type));
+            }
+        }
+
+        operation_type_term.unify(Atom::new("mutation"))
     }
 
     #[module("$graphql")]
@@ -460,6 +569,8 @@ pub fn register() {
     register_get_cached_graphql_context();
     register_get_graphql_context();
     register_handle_request();
+    register_get_operation_type();
+    register_get_operation_type_from_body();
     register_handle_system_request();
     register_parse_subscription_query();
     register_resolve_subscription_event();

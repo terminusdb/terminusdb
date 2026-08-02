@@ -2269,4 +2269,214 @@ query EverythingQuery {
       expect(result.data.User.length).to.be.greaterThan(0)
     })
   })
+
+  describe('GraphQL access control by operation type', function () {
+    let readOnlyAgent
+    let readOnlyAuth
+    let writeNoMetaAuth
+    let writeWithMetaAuth
+
+    before(async function () {
+      this.timeout(30000)
+      const base = agent.baseUrl
+
+      // Helper to create a user with a role and grant on this database
+      async function createUserWithRole (roleActions, roleSuffix) {
+        const username = roleSuffix + '-' + util.randomString()
+        const password = 'password-' + util.randomString()
+        await agent.agent.post('/api/users')
+          .send({ name: username, password })
+
+        const roleName = roleSuffix + '-role-' + util.randomString()
+        await agent.agent.post('/api/roles')
+          .send({
+            name: roleName,
+            action: roleActions,
+          })
+
+        await agent.agent.post('/api/capabilities')
+          .send({
+            operation: 'grant',
+            scope: `${agent.orgName}/${agent.dbName}`,
+            user: username,
+            roles: [roleName],
+            scope_type: 'database',
+          })
+
+        const userAgent = new Agent({ baseUrl: base, orgName: agent.orgName, dbName: agent.dbName })
+        userAgent.auth({ user: username, password })
+        return { userAgent, userAuth: util.authorizationHeader(userAgent) }
+      }
+
+      // Read-only user: instance_read + schema_read
+      const ro = await createUserWithRole(
+        ['instance_read_access', 'schema_read_access'],
+        'readonly-graphql',
+      )
+      readOnlyAgent = ro.userAgent
+      readOnlyAuth = ro.userAuth
+
+      // Write user without meta_read: instance_read + schema_read + instance_write
+      const wn = await createUserWithRole(
+        ['instance_read_access', 'schema_read_access', 'instance_write_access'],
+        'write-nometa-graphql',
+      )
+      writeNoMetaAuth = wn.userAuth
+
+      // Write user with meta_read: instance_read + schema_read + instance_write + meta_read
+      const wm = await createUserWithRole(
+        ['instance_read_access', 'schema_read_access', 'instance_write_access', 'meta_read_access'],
+        'write-meta-graphql',
+      )
+      writeWithMetaAuth = wm.userAuth
+    })
+
+    // --- Read-only user tests ---
+
+    it('allows read-only user GraphQL query via GET', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const query = encodeURIComponent('{ Person { _id name } }')
+      const res = await fetch(
+        `${readOnlyAgent.baseUrl}${graphqlPath}?query=${query}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: readOnlyAuth,
+            Accept: 'application/json',
+          },
+        },
+      )
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+
+    it('allows read-only user GraphQL query via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: readOnlyAuth,
+        },
+        body: JSON.stringify({
+          query: '{ Person { _id name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+
+    it('rejects read-only user GraphQL mutation via POST with 403', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: readOnlyAuth,
+        },
+        body: JSON.stringify({
+          query: 'mutation { Person { name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(403)
+    })
+
+    it('rejects read-only user GraphQL mutation via GET with 403', async function () {
+      // VULNERABILITY: A read-only user can execute a GraphQL mutation via GET
+      // because handle_graphql_request only checks assert_write_access when
+      // Method == post. GET bypasses the write access check entirely.
+      // After the fix, this should return 403.
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const mutationQuery = encodeURIComponent('mutation { Person { name } }')
+      const res = await fetch(
+        `${readOnlyAgent.baseUrl}${graphqlPath}?query=${mutationQuery}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: readOnlyAuth,
+            Accept: 'application/json',
+          },
+        },
+      )
+
+      expect(res.status).to.equal(403)
+    })
+
+    // --- Write user without meta_read tests ---
+
+    it('allows write-no-meta user GraphQL mutation via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeNoMetaAuth,
+        },
+        body: JSON.stringify({
+          query: 'mutation { Person { name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+    })
+
+    it('allows write-no-meta user GraphQL query via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeNoMetaAuth,
+        },
+        body: JSON.stringify({
+          query: '{ Person { _id name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+
+    // --- Write user with meta_read tests ---
+
+    it('allows write-meta user GraphQL mutation via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeWithMetaAuth,
+        },
+        body: JSON.stringify({
+          query: 'mutation { Person { name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+    })
+
+    it('allows write-meta user GraphQL query via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeWithMetaAuth,
+        },
+        body: JSON.stringify({
+          query: '{ Person { _id name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+  })
 })

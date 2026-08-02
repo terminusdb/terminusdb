@@ -20,6 +20,7 @@ function parseSSEBlock (eventBlock) {
     }
   }
   if (dataLine === null) return null
+  if (dataLine.trim() === '') return { _eventType: eventType, data: null }
   try {
     const parsed = JSON.parse(dataLine)
     if (parsed === null || typeof parsed !== 'object') {
@@ -421,8 +422,11 @@ describe('GraphQL subscriptions over SSE', function () {
       // Use parseSSEStream which correctly handles the event: next format.
       const parser = parseSSEStream(res.body)
 
-      // Give the subscription a moment to register, then insert two docs.
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      // Wait for the connected event to ensure subscription is registered.
+      let event
+      while ((event = await parser.next()) !== null) {
+        if (event._eventType === 'connected') break
+      }
       await document.insert(agent, {
         instance: [
           { '@type': 'Product', name: 'FirstInCommit', description: 'first' },
@@ -461,8 +465,11 @@ describe('GraphQL subscriptions over SSE', function () {
 
       const parser = parseSSEStream(res.body)
 
-      // Give the subscription a moment to register.
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      // Wait for the connected event to ensure subscription is registered.
+      let event
+      while ((event = await parser.next()) !== null) {
+        if (event._eventType === 'connected') break
+      }
 
       // First commit: insert one document.
       await document.insert(agent, {
@@ -643,6 +650,107 @@ describe('GraphQL subscriptions over SSE', function () {
 
       cancelBody(res)
       await db.delete(sysDbAgent)
+    })
+  })
+
+  describe('complete event on validation error', function () {
+    it('should receive next with errors and complete for invalid subscription query', async function () {
+      const res = await subscribeSSE('subscription { InvalidSyntax {{{ } }')
+      expect(res.status).to.equal(200)
+      expect(res.headers.get('content-type')).to.include('text/event-stream')
+
+      const parser = parseSSEStream(res.body)
+      const events = []
+      const collectTimeout = new Promise((_resolve, reject) =>
+        setTimeout(() => { parser.cancel(); reject(new Error('SSE timeout')) }, 10000))
+      await Promise.race([
+        (async () => {
+          while (true) {
+            const event = await parser.next()
+            if (event === null) break
+            events.push(event)
+          }
+        })(),
+        collectTimeout,
+      ])
+      const nextEvent = events.find(e => e._eventType === 'next')
+      expect(nextEvent).to.exist
+      expect(JSON.stringify(nextEvent)).to.include('errors')
+      const completeEvent = events.find(e => e._eventType === 'complete')
+      expect(completeEvent).to.exist
+    })
+  })
+
+  describe('finite operations over SSE', function () {
+    it('should execute query over SSE and return next then complete', async function () {
+      const auth = 'Basic ' + Buffer.from(agent.user + ':' + agent.password).toString('base64')
+      const res = await fetch(sseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          Authorization: auth,
+        },
+        body: JSON.stringify({ query: '{ Product { _id name } }' }),
+      })
+      expect(res.status).to.equal(200)
+      expect(res.headers.get('content-type')).to.include('text/event-stream')
+
+      const parser = parseSSEStream(res.body)
+      const events = []
+      const collectTimeout = new Promise((_resolve, reject) =>
+        setTimeout(() => { parser.cancel(); reject(new Error('SSE timeout')) }, 10000))
+      await Promise.race([
+        (async () => {
+          while (true) {
+            const event = await parser.next()
+            if (event === null) break
+            events.push(event)
+          }
+        })(),
+        collectTimeout,
+      ])
+      const nextEvent = events.find(e => e._eventType === 'next')
+      expect(nextEvent).to.exist
+      expect(JSON.stringify(nextEvent)).to.include('Product')
+      const completeEvent = events.find(e => e._eventType === 'complete')
+      expect(completeEvent).to.exist
+    })
+
+    it('should execute mutation over SSE and return next then complete', async function () {
+      const auth = 'Basic ' + Buffer.from(agent.user + ':' + agent.password).toString('base64')
+      const mutationQuery = 'mutation { _insertDocuments(json: "{\\"@type\\": \\"Product\\", \\"name\\": \\"SSEMutationTest\\", \\"description\\": \\"created via SSE mutation\\"}") }'
+      const res = await fetch(sseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          Authorization: auth,
+        },
+        body: JSON.stringify({ query: mutationQuery }),
+      })
+      expect(res.status).to.equal(200)
+      expect(res.headers.get('content-type')).to.include('text/event-stream')
+
+      const parser = parseSSEStream(res.body)
+      const events = []
+      const collectTimeout = new Promise((_resolve, reject) =>
+        setTimeout(() => { parser.cancel(); reject(new Error('SSE timeout')) }, 10000))
+      await Promise.race([
+        (async () => {
+          while (true) {
+            const event = await parser.next()
+            if (event === null) break
+            events.push(event)
+          }
+        })(),
+        collectTimeout,
+      ])
+      const nextEvent = events.find(e => e._eventType === 'next')
+      expect(nextEvent).to.exist
+      expect(JSON.stringify(nextEvent)).to.include('_insertDocuments')
+      const completeEvent = events.find(e => e._eventType === 'complete')
+      expect(completeEvent).to.exist
     })
   })
 })

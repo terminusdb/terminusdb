@@ -15,6 +15,7 @@ function parseSSEBlock (eventBlock) {
     }
   }
   if (dataLine === null) return null
+  if (dataLine.trim() === '') return { _eventType: eventType, data: null }
   try {
     const parsed = JSON.parse(dataLine)
     if (parsed === null || typeof parsed !== 'object') {
@@ -108,7 +109,8 @@ describe('GraphQL Subscriptions SSE', function () {
   })
 
   after(async function () {
-    // await db.delete(agent)
+    this.timeout(30000)
+    await db.delete(agent)
   })
 
   function graphqlEndpoint () {
@@ -271,6 +273,76 @@ describe('GraphQL Subscriptions SSE', function () {
     expect(response.status).to.equal(400)
     const body = await response.text()
     expect(body).to.include('invalid_query_body')
+  })
+
+  it('emits validation error as next event for invalid GraphQL subscription query', async function () {
+    const response = await fetch(graphqlUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        query: 'subscription { InvalidSyntax {{{ } }',
+      }),
+    })
+    expect(response.status).to.equal(200)
+    expect(response.headers.get('content-type')).to.include('text/event-stream')
+    const parser = parseSSEStream(response.body)
+    const events = []
+    const collectTimeout = new Promise((_resolve, reject) =>
+      setTimeout(() => { parser.cancel(); reject(new Error('SSE timeout')) }, 10000))
+    await Promise.race([
+      (async () => {
+        while (true) {
+          const event = await parser.next()
+          if (event === null) break
+          events.push(event)
+        }
+      })(),
+      collectTimeout,
+    ])
+    const nextEvent = events.find(e => e._eventType === 'next')
+    expect(nextEvent).to.exist
+    expect(JSON.stringify(nextEvent)).to.include('errors')
+    const completeEvent = events.find(e => e._eventType === 'complete')
+    expect(completeEvent).to.exist
+  })
+
+  it('executes finite GraphQL query over SSE with next and complete events', async function () {
+    const response = await fetch(graphqlUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        query: '{ Person { _id name } }',
+      }),
+    })
+    expect(response.status).to.equal(200)
+    expect(response.headers.get('content-type')).to.include('text/event-stream')
+    const parser = parseSSEStream(response.body)
+    const events = []
+    const collectTimeout = new Promise((_resolve, reject) =>
+      setTimeout(() => { parser.cancel(); reject(new Error('SSE timeout')) }, 10000))
+    await Promise.race([
+      (async () => {
+        while (true) {
+          const event = await parser.next()
+          if (event === null) break
+          events.push(event)
+        }
+      })(),
+      collectTimeout,
+    ])
+    const nextEvent = events.find(e => e._eventType === 'next')
+    expect(nextEvent).to.exist
+    expect(JSON.stringify(nextEvent)).to.include('Person')
+    const completeEvent = events.find(e => e._eventType === 'complete')
+    expect(completeEvent).to.exist
   })
 
   it('returns 401 without authentication', async function () {

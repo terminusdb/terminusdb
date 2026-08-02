@@ -46,14 +46,26 @@ function handleSSEEvent (event) {
     console.log(`[comment] ${event.trim()}`)
     return
   }
-  if (event.startsWith('data: ')) {
-    const json = event.slice(6)
-    try {
-      const parsed = JSON.parse(json)
-      console.log('[event]', JSON.stringify(parsed, null, 2))
-    } catch {
-      console.log('[event:raw]', json)
+  let eventType = 'message'
+  let dataLine = null
+  for (const line of event.split('\n')) {
+    if (line.startsWith('event: ')) {
+      eventType = line.slice(7).trim()
+    } else if (line.startsWith('data: ')) {
+      dataLine = line.slice(6)
+    } else if (line.startsWith('data:')) {
+      dataLine = line.slice(5)
     }
+  }
+  if (dataLine !== null) {
+    try {
+      const parsed = JSON.parse(dataLine)
+      console.log(`[${eventType}]`, JSON.stringify(parsed, null, 2))
+    } catch {
+      console.log(`[${eventType}:raw]`, dataLine)
+    }
+  } else {
+    console.log(`[${eventType}]`)
   }
 }
 

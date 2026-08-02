@@ -92,7 +92,7 @@ get_or_create_graphql_context(Transaction, Graphql_Context) :-
         '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)
     ).
 
-handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data) :-
+handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data) :-
     atom_string(Path_Atom, Path),
     (   Path == ""
     ->  throw(error(no_graphql_path_given, _))
@@ -103,34 +103,56 @@ handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Respons
         ),
         resolve_graphql_dbs(System_DB, Auth, Desc, Transaction, Commit_DB, Meta_DB),
         assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
-        (   Method == post
-        ->  assert_write_access(System_DB, Auth, Desc, filter{type: instance})
-        ;   true
-        ),
         get_or_create_graphql_context(Transaction, Graphql_Context),
 
-        Commit_Info0 = commit_info{author: Author, message: Message},
-        maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
-        create_context(Transaction, Commit_Info, C),
-        catch(
-            with_transaction(C,
-                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, ResponseRaw, Is_Error, Author, Message),
-                                 die_if(Is_Error = true,
-                                        response(ResponseRaw)),
-                                 (   var(Author)
-                                 ->  user_name_uri(System_DB, Author, Auth)
-                                 ;   true),
-                                 (   var(Message)
-                                 ->  Message = "Mutation through GraphQL"
-                                 ;   true)
-                             ),
+        %% Read the body to determine operation type and for execution.
+        %% The body is a JSON object with a "query" field.
+        read_body_string(Input_Stream, Content_Length, BodyString),
+        (   catch('$graphql':get_operation_type_from_body(Graphql_Context, BodyString, OperationType), _, fail)
+        ->  (   OperationType == mutation
+            ->  assert_write_access(System_DB, Auth, Desc, filter{type: instance}),
+                Effective_Method = post
+            ;   Effective_Method = get
+            )
+        ;   assert_write_access(System_DB, Auth, Desc, filter{type: instance}),
+            Effective_Method = post
+        ),
 
-                             Meta_Data),
-            response(ResponseRaw),
-            json_log_info_formatted("intercepted a failing graphql, not committing", [])),
-        Transaction_Meta_Data = Meta_Data,
-        meta_data_version(Transaction, Meta_Data, New_Data_Version),
-        % Post-process: convert decimal strings to JSON numbers
-        post_process_graphql_decimals(ResponseRaw, Response)
+        %% Re-open the body as a stream for handle_request to consume.
+        string_length(BodyString, BodyLength),
+        setup_call_cleanup(
+            open_string(BodyString, BodyIn),
+            (   Commit_Info0 = commit_info{author: Author, message: Message},
+                maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
+                create_context(Transaction, Commit_Info, C),
+                catch(
+                    with_transaction(C,
+                                     (   '$graphql':handle_request(Effective_Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, BodyLength, BodyIn, ResponseRaw, Is_Error, Author, Message),
+                                         die_if(Is_Error = true,
+                                                response(ResponseRaw)),
+                                         (   var(Author)
+                                         ->  user_name_uri(System_DB, Author, Auth)
+                                         ;   true),
+                                         (   var(Message)
+                                         ->  Message = "Mutation through GraphQL"
+                                         ;   true)
+                                     ),
+
+                                     Meta_Data),
+                    response(ResponseRaw),
+                    json_log_info_formatted("intercepted a failing graphql, not committing", [])),
+                Transaction_Meta_Data = Meta_Data,
+                meta_data_version(Transaction, Meta_Data, New_Data_Version),
+                % Post-process: convert decimal strings to JSON numbers
+                post_process_graphql_decimals(ResponseRaw, Response)
+            ),
+            close(BodyIn)
+        )
     ).
+
+%% read_body_string(+Stream, +Length, -String) is det.
+%%
+%% Reads exactly Length bytes from Stream into a string.
+read_body_string(Stream, Length, String) :-
+    read_string(Stream, Length, String).
 

@@ -8,6 +8,7 @@
 :- use_module(core(transaction/descriptor), [open_descriptor/2]).
 :- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2, resolve_relative_descriptor/3]).
 :- use_module(core(api/api_graphql), [get_or_create_graphql_context/2]).
+:- use_module(core(util/data_version), [transaction_retry_count_from_meta_data/2, serialize_data_version/2]).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(json)).
@@ -33,6 +34,8 @@
 :- multifile appserver_hooks:appserver_stream/3.
 appserver_hooks:appserver_stream(post, '/api/graphql/*path',
                                   webserver_graphql_subs:graphql_sse_handler).
+appserver_hooks:appserver_stream(get, '/api/graphql/*path',
+                                  webserver_graphql_subs:graphql_get_handler).
 appserver_hooks:appserver_stream(options, '/api/graphql/*path',
                                   webserver_graphql_subs:graphql_sse_options_handler).
 
@@ -54,7 +57,13 @@ appserver_hooks:appserver_stream(options, '/api/graphql/*path',
 %% Asserted on connect, retracted on disconnect.
 :- dynamic graphql_sse_subscription/3.
 
-%% Mutex for cohort registry operations
+%% Mutex for cohort registry operations.
+%%
+%% Concurrency audit: grep for assertz, retract, retractall in this file.
+%% Each unguarded mutation must be a single atomic op (safe under SWI-Prolog's
+%% logical update view). Compound read-modify-write sequences on
+%% graphql_cohort/4 or graphql_cohort_selection/3 must be inside
+%% with_mutex(graphql_cohort_registry, ...).
 :- mutex_create(graphql_cohort_registry, [alias(graphql_cohort_registry)]).
 
 %% ---------------------------------------------------------------------------
@@ -624,6 +633,45 @@ graphql_sse_options_handler(Request, _StreamId, Response) :-
         headers: CORSHeaders
     }.
 
+%% graphql_get_handler(+Request, +StreamId, -Response) is det.
+%%
+%% Handles GET requests to /api/graphql/*path. Extracts the GraphQL query
+%% from the URL query string parameter "query" and delegates to
+%% handle_graphql_request with method get. This preserves the old GET
+%% behaviour for GraphQL queries.
+graphql_get_handler(Request, _StreamId, Response) :-
+    catch(delegate_get_to_graphql(Request, Response),
+          Error,
+          (   json_log:json_log_error_formatted("[graphql-get] delegate error: ~w", [Error]),
+              sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"Internal server error\"}]}", Response)
+          )).
+
+%% delegate_get_to_graphql(+Request, -Response) is det.
+%%
+%% Extracts the query from the URL query string and delegates to
+%% handle_graphql_request with method get.
+delegate_get_to_graphql(Request, Response) :-
+    (   sse_authenticate_or_401(Request, System_DB, Auth, Response)
+    ->  get_dict(params, Request, Params),
+        get_dict(path, Params, PathRaw),
+        atom_string(PathAtom, PathRaw),
+        (   get_dict(query, Request, QueryString),
+            QueryString \= "",
+            QueryString \= null
+        ->  uri_query_components(QueryString, QueryPairs),
+            (   member(query=GraphQLQuery, QueryPairs), ground(GraphQLQuery)
+            ->  true
+            ;   sse_json_response(Request, 400, "{\"errors\":[{\"message\":\"Missing 'query' parameter\"}]}", Response),
+                !
+            ),
+            with_output_to(string(RequestBody),
+                json_write_dict(current_output, _{query: GraphQLQuery}, [as(string), width(0)])),
+            delegate_graphql_request(Request, System_DB, Auth, get, PathAtom, RequestBody, Response)
+        ;   sse_json_response(Request, 400, "{\"errors\":[{\"message\":\"Missing 'query' parameter\"}]}", Response)
+        )
+    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
+    ).
+
 %% graphql_sse_handler(+Request, +StreamId, -Response) is det.
 %%
 %% Dispatches on Accept header: SSE/NDJSON → subscription, else → GraphQL.
@@ -666,44 +714,113 @@ register_sse_subscription(Request, StreamId, Mode, Response) :-
 
 %% register_sse_subscription_authed(+Request, +StreamId, +Mode, +System_DB, +Auth,
 %%                                   +BranchPathRaw, -Response) is det.
+%%
+%% Reads the request body, resolves the descriptor, checks read access,
+%% opens the transaction, and uses the Rust parser (get_operation_type)
+%% to determine whether the operation is a subscription, query, or mutation.
+%% Routes subscriptions to registration and queries/mutations to finite
+%% execution over SSE.
 register_sse_subscription_authed(Request, StreamId, Mode, System_DB, Auth,
                                  BranchPathRaw, Response) :-
     catch(read_request_body(Request, BodyString), Error1,
           (   json_log:json_log_error_formatted("[graphql-sse] read_request_body error: ~w", [Error1]),
               BodyString = "")),
     (   sse_parse_body_query(BodyString, QueryString)
-    ->  register_sse_subscription_with_query(Request, StreamId, Mode, System_DB, Auth,
-                                             BranchPathRaw, QueryString, Response)
+    ->  atom_string(BranchPathAtom, BranchPathRaw),
+        resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
+        (   catch(assert_read_access(System_DB, Auth, Descriptor,
+                                     type_filter{types:[instance,schema]}), _, fail)
+        ->  do_or_die(open_descriptor(Descriptor, Transaction),
+                      error(unresolvable_absolute_descriptor(Descriptor), _)),
+            api_graphql:get_or_create_graphql_context(Transaction, Graphql_Context),
+            (   catch('$graphql':get_operation_type(Graphql_Context, QueryString, OperationType),
+                      _, fail)
+            ->  true
+            ;   OperationType = mutation
+            ),
+            (   OperationType == subscription
+            ->  register_sse_subscription_authorized(Request, StreamId, Mode, Descriptor,
+                                                     Graphql_Context, Transaction,
+                                                     QueryString, Response)
+            ;   execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
+                                                  BranchPathAtom, QueryString, Response)
+            )
+        ;   sse_json_response(Request, 403, "{\"error\":\"access_not_authorised\"}", Response)
+        )
     ;   sse_json_response(Request, 400, "{\"error\":\"invalid_query_body\"}", Response)
     ).
 
-%% register_sse_subscription_with_query(+Request, +StreamId, +Mode, +System_DB,
-%%   +Auth, +BranchPathRaw, +QueryString, -Response) is det.
-register_sse_subscription_with_query(Request, StreamId, Mode, System_DB, Auth,
-                                      BranchPathRaw, QueryString, Response) :-
-    atom_string(BranchPathAtom, BranchPathRaw),
-    resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
-    (   catch(assert_read_access(System_DB, Auth, Descriptor,
-                                 type_filter{types:[instance,schema]}), _, fail)
-    ->  register_sse_subscription_authorized(Request, StreamId, Mode, System_DB,
-                                             Descriptor,
-                                             QueryString, Response)
-    ;   sse_json_response(Request, 403, "{\"error\":\"access_not_authorised\"}", Response)
+%% graphql_finite_method(+System_DB, +Auth, +BranchPathAtom, -Method) is det.
+%%
+%% Determines the HTTP method for a finite GraphQL operation by attempting
+%% write access. If write access is granted, uses post (which enforces
+%% assert_write_access in handle_graphql_request). If write access is denied,
+%% falls back to get (read-only).
+graphql_finite_method(System_DB, Auth, BranchPathAtom, Method) :-
+    (   catch(
+            (   resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
+                assert_write_access(System_DB, Auth, Descriptor,
+                                    filter{type: instance})
+            ),
+            _, fail)
+    ->  Method = post
+    ;   Method = get
     ).
 
-%% register_sse_subscription_authorized(+Request, +StreamId, +Mode, +System_DB,
-%%   +Descriptor, +QueryString, -Response) is det.
-register_sse_subscription_authorized(Request, StreamId, Mode, _System_DB,
-                                      Descriptor,
+%% execute_finite_operation_over_sse(+Request, +StreamId, +Mode, +System_DB,
+%%   +Auth, +BranchPathAtom, +QueryString, -Response) is det.
+%%
+%% Executes a query or mutation and returns the result as a "next" event
+%% followed by a "complete" event over the SSE stream, then closes.
+%% Descriptor resolution and read access check are done by the caller.
+execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
+                                   BranchPathAtom, QueryString, Response) :-
+    graphql_finite_method(System_DB, Auth, BranchPathAtom, GraphqlMethod),
+    with_output_to(string(RequestBody),
+        json_write_dict(current_output, _{query: QueryString}, [as(string), width(0)])),
+    string_length(RequestBody, Content_Length),
+    setup_call_cleanup(
+        open_string(RequestBody, BodyIn),
+        (   catch(
+                handle_graphql_request(System_DB, Auth, GraphqlMethod, BranchPathAtom, BodyIn,
+                                       GraphqlResponse, 'application/json',
+                                       Content_Length, _NewDataVersion, _TransactionMetaData),
+                Error,
+                (   json_log:json_log_error_formatted("[graphql-sse] finite op error: ~w", [Error]),
+                    sse_plugin_error_to_graphql_json(Error, GraphqlResponse)
+                )
+            )
+        ->  sse_validation_error_response(Request, StreamId, Mode, GraphqlResponse, Response)
+        ;   sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"GraphQL request failed\"}]}", Response)
+        ),
+        close(BodyIn)
+    ).
+
+%% sse_plugin_error_to_graphql_json(+Error, -JsonString) is det.
+%%
+%% Converts a Prolog error term to a GraphQL errors JSON string using
+%% plugin_error_response for proper status and message mapping.
+sse_plugin_error_to_graphql_json(Error, JsonString) :-
+    plugin_api:plugin_error_response(Error, ErrResp),
+    get_dict(body, ErrResp, ErrBodyDict),
+    with_output_to(string(JsonString),
+        json_write_dict(current_output, ErrBodyDict, [as(string), width(0)])).
+
+%% register_sse_subscription_authorized(+Request, +StreamId, +Mode, +Descriptor,
+%%   +Graphql_Context, +Transaction, +QueryString, -Response) is det.
+%%
+%% Descriptor, read access, transaction, and GraphQL context are already
+%% resolved by the caller. Parses the subscription query and registers
+%% the subscription.
+register_sse_subscription_authorized(Request, StreamId, Mode, Descriptor,
+                                      Graphql_Context, Transaction,
                                       QueryString, Response) :-
-    do_or_die(open_descriptor(Descriptor, Transaction),
-              error(unresolvable_absolute_descriptor(Descriptor), _)),
-    api_graphql:get_or_create_graphql_context(Transaction, Graphql_Context),
     (   catch('$graphql':parse_subscription_query(Graphql_Context, QueryString, Parsed),
               Error, (json_log:json_log_error_formatted("[graphql-sse] parse error: ~w", [Error]), fail))
     ->  register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
                                          Graphql_Context, Transaction, Parsed, Response)
-    ;   sse_json_response(Request, 400, "{\"error\":\"subscription_parse_failed\"}", Response)
+    ;   sse_validation_error_response(Request, StreamId, Mode,
+        "{\"errors\":[{\"message\":\"Failed to parse subscription query\"}]}", Response)
     ).
 
 %% register_sse_subscription_parsed(+Request, +StreamId, +Mode, +Descriptor,
@@ -731,8 +848,8 @@ register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
 %% sse_post_response(+StreamId, +CohortKey, +RawChannel, +Timeout, +Mode) is det.
 %%
 %% Subscribes the stream to the broadcast channel after headers are sent,
-%% then sends the graphql-sse protocol "connected" event so the client
-%% knows the subscription is registered and ready to receive events.
+%% then sends the non-standard "connected" event so the client knows the
+%% subscription is registered and ready to receive events.
 sse_post_response(StreamId, _CohortKey, RawChannel, Timeout, Mode) :-
     (   Timeout == 0
     ->  TimeoutSecs = 0
@@ -743,13 +860,73 @@ sse_post_response(StreamId, _CohortKey, RawChannel, Timeout, Mode) :-
 
 %% send_connected_event(+Mode, +RawChannel) is det.
 %%
-%% Per the graphql-sse protocol, the server sends a "connected" event
-%% after the subscription is accepted. SSE uses the event stream format;
-%% NDJSON sends a bare null line.
+%% Non-standard extension: sends a "connected" event to the client after
+%% the subscription is accepted. This is NOT part of the graphql-sse
+%% protocol (https://github.com/enisdenjo/graphql-sse/blob/master/PROTOCOL.md).
+%% Strict graphql-sse clients ignore unknown event types per the SSE spec.
+%%
+%% Purpose: signals subscription readiness, solving the race condition
+%% between subscribe and the first event. Without this, a client cannot
+%% know when it is safe to trigger data operations that should produce
+%% subscription events.
+%%
+%% Format (SSE):   event: connected\ndata: null\n\n
+%% Format (NDJSON): null\n
 send_connected_event(sse, RawChannel) :-
     broadcast_raw_or_log(RawChannel, "event: connected\ndata: null\n").
 send_connected_event(ndjson, RawChannel) :-
     broadcast_raw_or_log(RawChannel, "null\n").
+
+%% send_complete_event(+Mode, +RawChannel) is det.
+%%
+%% Sends the graphql-sse protocol "complete" event when a subscription
+%% stream ends. SSE uses the event stream format with an empty data field;
+%% NDJSON sends an empty line.
+send_complete_event(sse, RawChannel) :-
+    broadcast_raw_or_log(RawChannel, "event: complete\ndata: \n").
+send_complete_event(ndjson, RawChannel) :-
+    broadcast_raw_or_log(RawChannel, "\n").
+
+%% sse_validation_error_response(+Request, +StreamId, +Mode, +ErrorJson, -Response) is det.
+%%
+%% Builds a 200 streaming SSE response that emits the validation error
+%% as a "next" event followed by a "complete" event, then closes the stream.
+%% Used when GraphQL subscription query parsing fails — per the graphql-sse
+%% protocol, validation errors must be reported through an accepted SSE
+%% connection, not as HTTP 400.
+sse_validation_error_response(Request, StreamId, Mode, ErrorJson, Response) :-
+    stream_cors_headers(Request, CORS),
+    (   Mode == ndjson
+    ->  ContentType = "application/x-ndjson"
+    ;   ContentType = "text/event-stream"
+    ),
+    Response = _{
+        status: 200,
+        headers: CORS.put('Content-Type', ContentType)
+                       .put('Cache-Control', "no-cache")
+                       .put('X-Accel-Buffering', "no")
+                       .put('Connection', "keep-alive"),
+        body: stream,
+        post_response: webserver_graphql_subs:send_validation_error_and_close(StreamId, Mode, ErrorJson)
+    }.
+
+%% send_validation_error_and_close(+StreamId, +Mode, +ErrorJson) is det.
+%%
+%% Sends a validation error as a "next" event, then a "complete" event,
+%% then closes the stream. Uses appserver_stream_send_raw directly since
+%% there is no broadcast subscription yet (the error occurs before
+%% subscription registration).
+send_validation_error_and_close(StreamId, Mode, ErrorJson) :-
+    (   Mode == ndjson
+    ->  format(string(NextLine), "~w~n", [ErrorJson]),
+        catch('$appserver':appserver_stream_send_raw(StreamId, NextLine), _, true),
+        catch('$appserver':appserver_stream_send_raw(StreamId, "\n"), _, true)
+    ;   format(string(NextLine), "event: next~ndata: ~w~n~n", [ErrorJson]),
+        catch('$appserver':appserver_stream_send_raw(StreamId, NextLine), _, true),
+        format(string(CompleteLine), "event: complete~ndata: ~n~n", []),
+        catch('$appserver':appserver_stream_send_raw(StreamId, CompleteLine), _, true)
+    ),
+    catch('$appserver':appserver_stream_close(StreamId), _, true).
 
 %% delegate_to_graphql(+Request, -Response) is det.
 %%
@@ -760,26 +937,62 @@ delegate_to_graphql(Request, Response) :-
     ->  get_dict(params, Request, Params),
         get_dict(path, Params, PathRaw),
         atom_string(PathAtom, PathRaw),
-        string_length(BodyString, Content_Length),
-        setup_call_cleanup(
-            open_string(BodyString, BodyIn),
-            (   catch(
-                    handle_graphql_request(System_DB, Auth, post, PathAtom, BodyIn,
-                                           GraphqlResponse, 'application/json',
-                                           Content_Length, _NewDataVersion, _TransactionMetaData),
-                    Error,
-                    sse_plugin_error_response(Request, Error, Response)
-                )
-            ->  (   nonvar(Response)
-                ->  true
-                ;   sse_json_response(Request, 200, GraphqlResponse, Response)
-                )
-            ;   sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"GraphQL request failed\"}]}", Response)
-            ),
-            close(BodyIn)
-        )
+        delegate_graphql_request(Request, System_DB, Auth, post, PathAtom, BodyString, Response)
     ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
     ).
+
+%% delegate_graphql_request(+Request, +System_DB, +Auth, +Method, +PathAtom,
+%%                          +BodyString, -Response) is det.
+%%
+%% Shared helper for delegate_to_graphql and delegate_get_to_graphql.
+%% Calls handle_graphql_request and builds the response with data version
+%% and retry count headers.
+delegate_graphql_request(Request, System_DB, Auth, Method, PathAtom, BodyString, Response) :-
+    string_length(BodyString, Content_Length),
+    setup_call_cleanup(
+        open_string(BodyString, BodyIn),
+        (   catch(
+                handle_graphql_request(System_DB, Auth, Method, PathAtom, BodyIn,
+                                       GraphqlResponse, 'application/json',
+                                       Content_Length, NewDataVersion, TransactionMetaData),
+                Error,
+                sse_plugin_error_response(Request, Error, Response)
+            )
+        ->  (   nonvar(Response)
+            ->  true
+            ;   build_graphql_success_response(Request, GraphqlResponse,
+                                               NewDataVersion, TransactionMetaData, Response)
+            )
+        ;   sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"GraphQL request failed\"}]}", Response)
+        ),
+        close(BodyIn)
+    ).
+
+%% build_graphql_success_response(+Request, +GraphqlResponse,
+%%                                +NewDataVersion, +TransactionMetaData,
+%%                                -Response) is det.
+%%
+%% Builds a 200 response dict with Content-Type, CORS, data version, and
+%% retry count headers.
+build_graphql_success_response(Request, GraphqlResponse, NewDataVersion, TransactionMetaData, Response) :-
+    transaction_retry_count_from_meta_data(TransactionMetaData, RetryCount),
+    number_string(RetryCount, RetryCountStr),
+    (   serialize_data_version(NewDataVersion, DataVersionStr)
+    ->  true
+    ;   DataVersionStr = ""
+    ),
+    stream_cors_headers(Request, CORS),
+    Headers0 = CORS.put('Content-Type', "application/json")
+             .put('TerminusDB-Transaction-Retry-Count', RetryCountStr),
+    (   DataVersionStr \= ""
+    ->  Headers = Headers0.put('TerminusDB-Data-Version', DataVersionStr)
+    ;   Headers = Headers0
+    ),
+    Response = _{
+        status: 200,
+        headers: Headers,
+        body: GraphqlResponse
+    }.
 
 %% sse_plugin_error_response(+Request, +Error, -Response) is det.
 %%
@@ -966,11 +1179,14 @@ sweep_stale_sse_streams :-
 
 %% cleanup_sse_stream(+StreamId) is det.
 %%
-%% Retracts the SSE subscription, unregisters the cohort, and unsubscribes
-%% from the broadcast channel. Idempotent.
+%% Sends the graphql-sse "complete" event, then retracts the SSE
+%% subscription, unregisters the cohort, and unsubscribes from the
+%% broadcast channel. Idempotent.
 cleanup_sse_stream(StreamId) :-
     (   retract(graphql_sse_subscription(StreamId, CohortKey, RawChannel))
-    ->  unregister_subscription(CohortKey, StreamId),
+    ->  cohort_mode(CohortKey, Mode),
+        send_complete_event(Mode, RawChannel),
+        unregister_subscription(CohortKey, StreamId),
         catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId), _, true)
     ;   true
     ).
@@ -1571,6 +1787,52 @@ test(send_sse_format) :-
         format(current_output, "event: next~ndata: ~w~n", ['{"data":{}}'])),
     once(sub_string(Line, _, _, _, "event: next")),
     once(sub_string(Line, _, _, _, "data: ")).
+
+%% complete event format tests
+
+test(complete_event_sse_format) :-
+    with_output_to(string(Line),
+        format(current_output, "event: complete~ndata: ~n", [])),
+    once(sub_string(Line, _, _, _, "event: complete")),
+    once(sub_string(Line, _, _, _, "data: ")).
+
+test(complete_event_ndjson_format) :-
+    %% NDJSON complete is an empty line
+    Line = "\n",
+    once(sub_string(Line, _, _, _, "\n")).
+
+test(send_complete_event_sse) :-
+    %% send_complete_event(sse, _) should produce "event: complete\ndata: \n"
+    with_output_to(string(Line),
+        format(current_output, "event: complete~ndata: ~n", [])),
+    once(sub_string(Line, _, _, _, "event: complete")),
+    once(sub_string(Line, _, _, _, "data: ")).
+
+%% validation error next event format tests
+
+test(validation_error_next_event_format) :-
+    %% GraphQL errors are sent as {"errors":[...]} in a next event
+    ErrorJson = "{\"errors\":[{\"message\":\"syntax error\"}]}",
+    with_output_to(string(Line),
+        format(current_output, "event: next~ndata: ~w~n", [ErrorJson])),
+    once(sub_string(Line, _, _, _, "event: next")),
+    once(sub_string(Line, _, _, _, "data: {\"errors\":")).
+
+test(sse_validation_error_response_returns_200_sse) :-
+    %% Validation error response must be 200 with text/event-stream
+    Request = _{headers: _{}},
+    sse_validation_error_response(Request, stream1, sse,
+        "{\"errors\":[{\"message\":\"bad query\"}]}", Response),
+    get_dict(status, Response, 200),
+    get_dict(headers, Response, Headers),
+    get_dict('Content-Type', Headers, "text/event-stream"),
+    get_dict(body, Response, stream),
+    get_dict(post_response, Response, PostResponse),
+    nonvar(PostResponse).
+
+%% Operation type detection (get_operation_type) requires a running
+%% database and GraphQL context, so it is tested via integration tests
+%% (graphql-subscriptions-sse.js finite operations over SSE).
 
 :- end_tests(webserver_graphql_subs_sse_pure).
 
