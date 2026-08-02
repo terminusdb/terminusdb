@@ -54,6 +54,13 @@ authenticate_from_request(Request, System_DB, Auth) :-
 %  Map common Prolog error terms to HTTP response dicts. Used by the
 %  worker pool's stream handler dispatch so plugins can simply throw
 %  errors without implementing their own catch/response formatting.
+%
+%  NOTE: This is the primary error-to-HTTP mapping for GraphQL requests
+%  on the Rust webserver, because the webserver_graphql_subs plugin
+%  bypasses graphql_handler/handle_graphql_error in routes.pl. If you
+%  add new error terms to api_graphql.pl or capabilities.pl, add matching
+%  clauses here. See the "GraphQL Route Registration Flow" comment in
+%  routes.pl (near graphql_handler) for the full dispatch diagram.
 plugin_error_response(error(authentication_incorrect(_), _), Response) :- !,
     Response = _{
         status: 401,

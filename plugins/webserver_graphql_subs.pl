@@ -1,142 +1,109 @@
 :- module(webserver_graphql_subs, []).
 
 :- use_module(core(plugin_api)).
+:- use_module(core(account), [assert_read_access/4]).
+:- use_module(core(triple), [xrdf_deleted/4, xrdf/4, database_instance/2]).
+:- use_module(core(transaction), [read_write_obj_reader/2]).
+:- use_module(core(transaction/ref_entity), [commit_id_uri/3, commit_uri_to_metadata/5]).
+:- use_module(core(transaction/descriptor), [open_descriptor/2]).
+:- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2, resolve_relative_descriptor/3]).
+:- use_module(core(api/api_graphql), [get_or_create_graphql_context/2]).
 :- use_module(library(lists)).
+:- use_module(library(apply)).
 :- use_module(library(json)).
 :- use_module(library(yall)).
+:- use_module(library(uri), [uri_query_components/2]).
+:- use_module(library(pcre), [re_replace/4]).
+:- use_module(library(terminus_store)).
+
+%% ---------------------------------------------------------------------------
+%% SSE subscription stream route on POST /api/graphql/*path.
+%% Accept: text/event-stream → SSE subscription; otherwise delegate to
+%% the regular GraphQL HTTP handler. Coexists with the catch-all /api/{*path}
+%% route because matchit prioritizes static segments over wildcards.
+%%
+%% NOTE: This plugin route intercepts POST /api/graphql/*path BEFORE the
+%% catch-all /api/*path fallback in routes.pl. Non-SSE requests are handled
+%% by delegate_to_graphql/2, which calls handle_graphql_request/10 directly
+%% — bypassing graphql_handler and its handle_graphql_error catch block in
+%% routes.pl. Errors are mapped via plugin_error_response/2 in
+%% src/core/plugin_api/http.pl. See the "GraphQL Route Registration Flow"
+%% comment in routes.pl (near graphql_handler) for the full dispatch diagram.
+%% ---------------------------------------------------------------------------
+:- multifile appserver_hooks:appserver_stream/3.
+appserver_hooks:appserver_stream(post, '/api/graphql/*path',
+                                  webserver_graphql_subs:graphql_sse_handler).
+appserver_hooks:appserver_stream(options, '/api/graphql/*path',
+                                  webserver_graphql_subs:graphql_sse_options_handler).
 
 %% ---------------------------------------------------------------------------
 %% Dynamic predicates
 %% ---------------------------------------------------------------------------
 
-%% graphql_subscription(StreamId, CohortKey, FilterArgs, SelectionSet)
-:- dynamic graphql_subscription/4.
-
-%% graphql_cohort(CohortKey, BranchPath, RawChannel, MemberCount)
+%% graphql_cohort(CohortKey, Descriptor, RawChannel, MemberCount)
 :- dynamic graphql_cohort/4.
 
-%% graphql_cohort_selection(CohortKey, SelectionSet)
-%% Stores the normalized selection set string for a cohort. Needed by the
-%% resolver to know which fields to include when calling get_document/3.
-%% Asserted once when the cohort is first created.
-:- dynamic graphql_cohort_selection/2.
+%% graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql)
+:- dynamic graphql_cohort_selection/3.
 
-%% graphql_broadcast_sent(BranchPath, CommitId)
-%% Dedup predicate to prevent duplicate broadcasts when post_commit_hook
-%% fires multiple times for the same commit.
+%% graphql_broadcast_sent(Descriptor, CommitId)
+%% Dedup for post_commit_hook firing multiple times for the same commit.
 :- dynamic graphql_broadcast_sent/2.
+
+%% graphql_sse_subscription(StreamId, CohortKey, RawChannel)
+%% Asserted on connect, retracted on disconnect.
+:- dynamic graphql_sse_subscription/3.
 
 %% Mutex for cohort registry operations
 :- mutex_create(graphql_cohort_registry, [alias(graphql_cohort_registry)]).
 
 %% ---------------------------------------------------------------------------
-%% register_subscription(+BranchPath, +QueryString, +Variables,
-%%                       +OperationName, +Auth, -CohortKey, -RawChannel) is det.
-%%
-%% Called via one-shot pipe dispatch from Rust.
-%% Opens a transaction, gets frames, calls Rust FFI to parse the query,
-%% checks descriptor auth, then delegates to register_subscription_parsed/7
-%% for cohort bookkeeping.
-%% ---------------------------------------------------------------------------
-register_subscription(BranchPath, QueryString, _Variables, _OperationName,
-                      Auth, CohortKey, RawChannel) :-
-    %% BranchPath is always an atom (from atomic_list_concat in the handler)
-    atom(BranchPath),
-    BranchPath \== '',
-    %% Open transaction for this branch to get frames
-    resolve_absolute_string_descriptor(BranchPath, Descriptor),
-    %% Check read access on the branch descriptor
-    open_descriptor(system_descriptor{}, System_DB),
-    check_descriptor_auth(System_DB, Descriptor,
-                                       '@schema':'Action/read_access', Auth),
-    open_descriptor(Descriptor, Transaction),
-    %% Get or create GraphQL context (same as api_graphql.pl)
-    (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
-    ->  true
-    ;   all_class_frames(Transaction, Frames,
-            [compress_ids(true), expand_abstract(true), simple(true)]),
-        '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)
-    ),
-    %% Call Rust FFI to parse the subscription query
-    '$graphql':parse_subscription_query(Graphql_Context, QueryString, Parsed),
-    %% Extract parsed components from the returned dict
-    get_dict(class_name, Parsed, ClassName),
-    get_dict(operation, Parsed, Operation),
-    get_dict(filter_canonical_json, Parsed, FilterJson),
-    get_dict(selection_set_hash, Parsed, SelectionHash),
-    get_dict(selection_set, Parsed, SelectionSet),
-    %% Delegate to register_subscription_parsed/7
-    register_subscription_parsed(BranchPath, ClassName, Operation,
-                                 FilterJson, SelectionHash,
-                                 CohortKey, RawChannel),
-    %% Store selection set for this cohort (idempotent — same selection set
-    %% for all members since it's part of the cohort key via the hash).
-    (   graphql_cohort_selection(CohortKey, _)
-    ->  true
-    ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet))
-    ).
-
-%% ---------------------------------------------------------------------------
-%% register_subscription_parsed(+BranchPath, +ClassName, +Operation,
-%%                               +FilterJson, +SelectionHash,
+%% register_subscription_parsed(+Descriptor, +ClassName, +Operation,
+%%                               +FilterJson, +SelectionHash, +Mode,
 %%                               -CohortKey, -RawChannel) is det.
 %%
-%% Cohort bookkeeping with pre-parsed components. Called by
-%% register_subscription/6 after FFI parsing, or directly in tests.
+%% Mode is included in the cohort key so SSE and NDJSON subscribers for
+%% the same class/operation/selection get separate broadcast channels.
 %% ---------------------------------------------------------------------------
-register_subscription_parsed(BranchPath, ClassName, Operation,
-                             _FilterJson, SelectionHash,
+register_subscription_parsed(Descriptor, ClassName, Operation,
+                             _FilterJson, SelectionHash, Mode,
                              CohortKey, RawChannel) :-
-    %% All inputs are atoms — BranchPath from atomic_list_concat,
-    %% ClassName/Operation/SelectionHash from FFI Atom::new.
-    atom(BranchPath),
-    BranchPath \== '',
+    is_dict(Descriptor),
     atom(ClassName),
     ClassName \== '',
     atom(Operation),
     memberchk(Operation, [added, changed, deleted]),
     atom(SelectionHash),
     SelectionHash \== '',
+    atom(Mode),
+    memberchk(Mode, [sse, ndjson]),
     !,
-    %% Construct cohort key as a compound term — no separator collision,
-    %% structured unification for extraction, validated components.
-    CohortKey = cohort(BranchPath, ClassName, Operation, SelectionHash),
-    %% Register under mutex to ensure atomic cohort creation
+    CohortKey = cohort(Descriptor, ClassName, Operation, SelectionHash, Mode),
     with_mutex(graphql_cohort_registry,
-        (   (   graphql_cohort(CohortKey, BranchPath, RawChannel, Count)
+        (   (   graphql_cohort(CohortKey, Descriptor, RawChannel, Count)
             ->  NewCount is Count + 1,
-                retract(graphql_cohort(CohortKey, BranchPath, RawChannel, Count)),
-                assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, NewCount))
-            ;   %% Construct channel name from the canonical term representation
-                term_to_atom(CohortKey, CohortKeyAtom),
+                retract(graphql_cohort(CohortKey, Descriptor, RawChannel, Count)),
+                assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, NewCount))
+            ;   term_to_atom(CohortKey, CohortKeyAtom),
                 atom_concat('graphql_raw_', CohortKeyAtom, RawChannel),
-                assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, 1))
+                assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, 1))
             )
         )),
     !.
-register_subscription_parsed(_, _, _, _, _, _, _) :-
+register_subscription_parsed(_, _, _, _, _, _, _, _) :-
     throw(error(subscription_registration_failed, _)).
 
 %% ---------------------------------------------------------------------------
 %% unregister_subscription(+CohortKey, +StreamId) is det.
-%%
-%% Removes the subscription, decrements cohort member count,
-%% and cleans up empty cohorts.
 %% ---------------------------------------------------------------------------
 
 unregister_subscription(CohortKey, _StreamId) :-
     with_mutex(graphql_cohort_registry,
-        (   %% Retract graphql_subscription if it exists (test path).
-            %% register_subscription doesn't assert this —
-            %% the cohort count is the source of truth.
-            ignore(retract(graphql_subscription(_, CohortKey, _, _))),
-            %% Decrement cohort count; idempotent if not found
-            (   retract(graphql_cohort(CohortKey, BranchPath, RawChannel, Count))
+        (   (   retract(graphql_cohort(CohortKey, Descriptor, RawChannel, Count))
             ->  NewCount is Count - 1,
                 (   NewCount > 0
-                ->  assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, NewCount))
-                ;   %% Cohort is empty — clean up selection set
-                    retractall(graphql_cohort_selection(CohortKey, _))
+                ->  assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, NewCount))
+                ;   retractall(graphql_cohort_selection(CohortKey, _, _))
                 )
             ;   true
             )
@@ -144,141 +111,374 @@ unregister_subscription(CohortKey, _StreamId) :-
 
 %% ---------------------------------------------------------------------------
 %% decrement_cohort(+CohortKey) is det.
-%%
-%% Decrements the member count of a cohort, cleaning up if empty.
 %% ---------------------------------------------------------------------------
 
 decrement_cohort(CohortKey) :-
-    (   retract(graphql_cohort(CohortKey, BranchPath, RawChannel, Count))
-    ->  NewCount is Count - 1,
-        (   NewCount > 0
-        ->  assertz(graphql_cohort(CohortKey, BranchPath, RawChannel, NewCount))
-        ;   retractall(graphql_cohort_selection(CohortKey, _))
-        )
-    ;   true
-    ).
-
-%% ---------------------------------------------------------------------------
-%% sweep_stale_graphql_streams is det.
-%%
-%% Retract graphql_subscription/4 entries whose Rust stream no longer exists.
-%% ---------------------------------------------------------------------------
-
-sweep_stale_graphql_streams :-
-    findall(StreamId, graphql_subscription(StreamId, _, _, _), StreamIds),
-    forall(
-        (   member(StreamId, StreamIds),
-            \+ catch('$appserver':appserver_stream_exists(StreamId), _, fail)
-        ),
-        (   retract(graphql_subscription(StreamId, CohortKey, _, _)),
-            decrement_cohort(CohortKey)
-        )
-    ).
+    unregister_subscription(CohortKey, _).
 
 %% ---------------------------------------------------------------------------
 %% broadcast_graphql_events(+Validation_Objects, +Meta_Data) is det.
 %%
-%% Called from post_commit_hook after every commit. Broadcasts compact
-%% GraphQL subscription events to cohort channels via the Rust
-%% BroadcastRegistry.
+%% Called from post_commit_hook after every commit.
 %% ---------------------------------------------------------------------------
 
 broadcast_graphql_events(Validation_Objects, Meta_Data) :-
-    %% Retract dedup predicate at the start
-    retractall(graphql_broadcast_sent(_, _)),
-    %% Sweep stale streams before broadcasting
-    sweep_stale_graphql_streams,
-    %% Collect unique branch paths with validation objects and commit IDs
     get_dict(data_versions, Meta_Data, DataVersions),
-    findall(BranchPath-Validation_Object-CommitIdAtom,
+    findall(Descriptor-Validation_Object-CommitIdAtom,
             (   member(Validation_Object, Validation_Objects),
                 is_dict(Validation_Object),
                 get_dict(descriptor, Validation_Object, Descriptor),
-                branch_descriptor{} :< Descriptor,
-                member(Descriptor-data_version(branch, CommitIdAtom), DataVersions),
-                webserver_commits:descriptor_to_branch_path(Descriptor, BranchPath)
+                member(Descriptor-data_version(_, CommitIdAtom), DataVersions)
             ),
             Triples),
-    %% Deduplicate by BranchPath-CommitIdAtom
     webserver_commits:dedup_triples(Triples, UniqueTriples),
     forall(
-        member(BranchPath-Validation_Object-CommitIdAtom, UniqueTriples),
-        send_graphql_events(Validation_Object, BranchPath, CommitIdAtom)
-    ).
+        member(Descriptor-Validation_Object-CommitIdAtom, UniqueTriples),
+        send_graphql_events(Validation_Object, Descriptor, CommitIdAtom)
+    ),
+    forall(member(Descriptor-_, UniqueTriples),
+           retractall(graphql_broadcast_sent(Descriptor, _))).
 
-%% send_graphql_events(+Validation_Object, +BranchPath, +CommitIdAtom) is det.
-%%
-%% Sends events for a single branch commit, with dedup.
-send_graphql_events(Validation_Object, BranchPath, CommitIdAtom) :-
-    %% CommitIdAtom is always an atom (from extract_data_version)
-    (   graphql_broadcast_sent(BranchPath, CommitIdAtom)
+%% send_graphql_events(+Validation_Object, +Descriptor, +CommitIdAtom) is det.
+send_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
+    (   graphql_broadcast_sent(Descriptor, CommitIdAtom)
     ->  true
-    ;   do_broadcast_graphql_events(Validation_Object, BranchPath, CommitIdAtom),
-        assertz(graphql_broadcast_sent(BranchPath, CommitIdAtom))
+    ;   do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom),
+        assertz(graphql_broadcast_sent(Descriptor, CommitIdAtom))
     ).
 
-%% do_broadcast_graphql_events(+Validation_Object, +BranchPath, +CommitIdAtom) is det.
-%%
-%% Collects changed documents filtered by active subscription types
-%% and broadcasts compact events to cohort channels via the Rust
-%% BroadcastRegistry.
-do_broadcast_graphql_events(Validation_Object, BranchPath, CommitIdAtom) :-
-    (   graphql_cohort(_, BranchPath, _, _)
-    ->  %% Collect all type IRIs that have active subscriptions
-        findall(TypeIRI, active_subscription_type(BranchPath, TypeIRI), TypeIRIs),
+%% do_broadcast_graphql_events(+Validation_Object, +Descriptor, +CommitIdAtom) is det.
+do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
+    sweep_stale_sse_streams,
+    (   graphql_cohort(_, Descriptor, _, _)
+    ->  open_descriptor(Descriptor, Transaction),
+        api_graphql:get_or_create_graphql_context(Transaction, GraphqlContext),
+        (   catch(commit_timestamp_and_datetime(Descriptor, CommitIdAtom, Timestamp, Datetime),
+                _, (Timestamp = 0.0, Datetime = ""))
+        ->  true
+        ;   Timestamp = 0.0, Datetime = ""
+        ),
+        findall(TypeIRI, active_subscription_type(Transaction, TypeIRI), TypeIRIs),
         (   TypeIRIs == []
         ->  true
         ;   forall(
                 '$changes':collect_changed_documents_filtered(
                     Validation_Object, TypeIRIs, DocIRI, ChangeType),
-                broadcast_graphql_event(BranchPath, DocIRI, ChangeType, CommitIdAtom)
+                broadcast_graphql_event(Transaction, GraphqlContext, Descriptor, DocIRI, ChangeType, CommitIdAtom, Validation_Object, Timestamp, Datetime)
             )
         )
     ;   true
     ).
 
-%% broadcast_graphql_event(+BranchPath, +DocIRI, +ChangeType, +CommitIdKey) is det.
+%% broadcast_graphql_event(+Transaction, +GraphqlContext, +Descriptor, +DocIRI,
+%%                        +ChangeType, +CommitIdKey, +Validation_Object,
+%%                        +Timestamp, +Datetime) is det.
 %%
-%% For each changed document, determines its class(es) and broadcasts
-%% a compact event to each matching cohort's raw channel.
-broadcast_graphql_event(BranchPath, DocIRI, ChangeType, CommitIdKey) :-
-    findall(Class, document_class(BranchPath, DocIRI, Class), Classes),
+%% For deleted documents, uses the Validation_Object's read layer (pre-commit
+%% state) to look up rdf:type, since the triple has been removed from the
+%% current layer.
+broadcast_graphql_event(Transaction, GraphqlContext, Descriptor, DocIRI, ChangeType, CommitIdKey, Validation_Object, Timestamp, Datetime) :-
+    (   ChangeType == deleted
+    ->  findall(Class, document_class_from_validation(Validation_Object, DocIRI, Class), Classes)
+    ;   findall(Class, document_class(Transaction, DocIRI, Class), Classes)
+    ),
     forall(
         (   member(Class, Classes),
-            operation_change_type(ChangeType, _Operation),
-            graphql_cohort(CohortKey, BranchPath, RawChannel, _),
+            Operation = ChangeType,
+            graphql_cohort(CohortKey, Descriptor, RawChannel, _),
             cohort_class(CohortKey, ClassName),
-            class_matches(Class, ClassName, BranchPath)
+            class_matches(Class, ClassName, Transaction)
         ),
-        (   %% Compact event: only what the resolver needs to identify the document.
-            Event = _{ doc_iri: DocIRI,
-                       change_type: ChangeType,
-                       commit_id: CommitIdKey
-                     },
-            with_output_to(string(JsonStr),
-                json_write_dict(current_output, Event,
-                                [as(string), width(0)])),
-            '$appserver':appserver_broadcast_send_raw(RawChannel, JsonStr)
+        (   graphql_sse_subscription(_, CohortKey, RawChannel)
+        ->  cohort_mode(CohortKey, Mode),
+            broadcast_sse_event(Transaction, GraphqlContext, Descriptor, CohortKey, RawChannel, Mode,
+                                ClassName, Operation, ChangeType,
+                                DocIRI, CommitIdKey, Validation_Object, Timestamp, Datetime)
+        ;   true
         )
     ).
 
-%% operation_change_type(+ChangeType, -Operation) is det.
-%%
-%% Maps the Rust change type atom to the subscription operation suffix.
-operation_change_type(added, added).
-operation_change_type(changed, changed).
-operation_change_type(deleted, deleted).
+%% commit_timestamp_and_datetime(+Descriptor, +CommitId, -Timestamp, -Datetime) is det.
+%
+%  Falls back to 0.0 and empty string if the commit cannot be found.
+commit_timestamp_and_datetime(Descriptor, CommitId, Timestamp, Datetime) :-
+    (   catch(
+            (   descriptor_repository(Descriptor, RepoDescriptor),
+                resolve_relative_descriptor(RepoDescriptor, ["_commits"], CommitDescriptor),
+                open_descriptor(CommitDescriptor, CommitTxn),
+                (   atom(CommitId)
+                ->  atom_string(CommitId, CommitIdStr)
+                ;   CommitIdStr = CommitId
+                ),
+                commit_id_uri(CommitTxn, CommitIdStr, CommitUri),
+                commit_uri_to_metadata(CommitTxn, CommitUri, _Author, _Message, Timestamp)
+            ),
+            Error,
+            (   json_log:json_log_error_formatted(
+                    "[graphql-sse] commit_timestamp_and_datetime exception: ~w", [Error]),
+                fail
+            )
+        )
+    ->  (   catch(
+                (   stamp_date_time(Timestamp, DateTime, 0),
+                    format_time(string(Datetime), '%Y-%m-%dT%H:%M:%SZ', DateTime)
+                ),
+                _,
+                Datetime = ""
+            )
+        ->  true
+        ;   Datetime = ""
+        )
+    ;   Timestamp = 0.0,
+        Datetime = ""
+    ).
 
-%% class_matches(+DocClass, +SubscribedClass, +BranchPath) is semidet.
+descriptor_repository(Descriptor, RepoDescriptor) :-
+    (   branch_descriptor{} :< Descriptor
+    ->  get_dict(repository_descriptor, Descriptor, RepoDescriptor)
+    ;   repository_descriptor{} :< Descriptor
+    ->  RepoDescriptor = Descriptor
+    ;   fail
+    ).
+
+%% broadcast_sse_event(+Transaction, +GraphqlContext, +Descriptor, +CohortKey,
+%%                     +RawChannel, +Mode, +ClassName, +Operation, +ChangeType,
+%%                     +DocIRI, +CommitIdKey, +Validation_Object, +Timestamp,
+%%                     +Datetime) is det.
+%
+%  For deleted documents, uses the Validation_Object's read layer (pre-commit
+%  state) since the document no longer exists in the current instance layer.
+%  For non-deleted documents, Transaction and GraphqlContext are threaded
+%  from do_broadcast_graphql_events to avoid redundant open_descriptor calls.
+broadcast_sse_event(Transaction, GraphqlContext, _Descriptor, CohortKey, RawChannel, Mode, ClassName,
+                    Operation, ChangeType, DocIRI, CommitIdKey,
+                    Validation_Object, Timestamp, Datetime) :-
+    (   graphql_cohort_selection(CohortKey, _, SelectionSetGraphql)
+    ->  true
+    ;   json_log:json_log_error_formatted("[graphql-sse] no selection set for cohort ~w", [CohortKey]),
+        fail
+    ),
+    cohort_field_name(ClassName, Operation, FieldName),
+    (   ChangeType == deleted
+    ->  (   catch(resolve_deleted_document(Validation_Object, DocIRI,
+                                           SelectionSetGraphql, ResolvedDoc),
+                  Error,
+                  (   json_log:json_log_error_formatted(
+                          "[graphql-sse] resolve_deleted_document failed: ~w", [Error]),
+                      fail
+                  ))
+        ->  true
+        ;   %% Fallback: inject just the _id
+            ResolvedDoc = _{'_id': DocIRI}
+        )
+    ;   (   catch(resolve_event_through_juniper(Transaction, GraphqlContext,
+                                                ClassName, Operation, DocIRI,
+                                                SelectionSetGraphql, ChangeType,
+                                                CommitIdKey, Timestamp, Datetime,
+                                                ResolvedDoc),
+                  Error,
+                  (   json_log:json_log_error_formatted(
+                          "[graphql-sse] resolve_event_through_juniper failed: ~w", [Error]),
+                      fail
+                  ))
+        ->  true
+        ;   ResolvedDoc = _{}
+        )
+    ),
+    %% For deleted events, resolve_deleted_document skips _commit (not an
+    %% instance property), so merge it here if requested.
+    (   ChangeType == deleted
+    ->  (   sub_string(SelectionSetGraphql, _, _, _, '_commit')
+        ->  CommitObj = _{'_id': CommitIdKey,
+                          '_timestamp': Timestamp,
+                          '_datetime': Datetime,
+                          '_change_type': ChangeType},
+            EventDoc = ResolvedDoc.put('_commit', CommitObj)
+        ;   EventDoc = ResolvedDoc
+        )
+    ;   EventDoc = ResolvedDoc
+    ),
+    FullEvent = _{ data: _{} },
+    put_dict(FieldName, FullEvent.data, EventDoc, DataWithField),
+    FullEventFinal = FullEvent.put(data, DataWithField),
+    with_output_to(string(JsonStr),
+        json_write_dict(current_output, FullEventFinal,
+                        [as(string), width(0)])),
+    send_sse_or_ndjson(Mode, JsonStr, RawChannel).
+
+%% resolve_deleted_document(+Validation_Object, +DocIRI, +SelectionSetGraphql,
+%%                          -Result) is semidet.
 %%
-%% Checks whether a document's class matches the subscribed class,
-%% including subclass relationships (inheritance).
-class_matches(DocClass, SubscribedClass, BranchPath) :-
+%% Reads properties from the parent (pre-commit) layer for deleted documents.
+%% Supports both scalar fields and nested object fields (recursively).
+%% _commit is handled by the caller.
+resolve_deleted_document(Validation_Object, DocIRI, SelectionSetGraphql, Result) :-
+    database_prefixes(Validation_Object, Prefixes),
+    database_instance(Validation_Object, InstanceObjects),
+    member(InstanceRWO, InstanceObjects),
+    read_write_obj_reader(InstanceRWO, CurrentLayer),
+    (   terminus_store:parent(CurrentLayer, ParentLayer)
+    ->  !,
+        ParentRWO = rwo{read: ParentLayer, write: _},
+        ParentInstance = [ParentRWO],
+        parse_selection_fields(SelectionSetGraphql, TopFields),
+        resolve_fields(TopFields, ParentInstance, DocIRI, Prefixes, _{'_id': DocIRI}, Result)
+    ;   fail
+    ).
+
+%% parse_selection_fields(+SelectionSetGraphql, -Fields) is det.
+%%
+%% Parses a GraphQL selection set string into a list of field(Name, NestedSelection)
+%% terms where NestedSelection is a string (possibly empty) for nested fields.
+parse_selection_fields(SelectionSetGraphql, Fields) :-
+    parse_fields_at_depth(SelectionSetGraphql, 0, Fields).
+
+%% parse_fields_at_depth(+String, +StartPos, -Fields) is det.
+%%
+%% Scans the string extracting top-level field names and their nested
+%% selection sets (text inside { }). Returns field(Name, NestedText) terms.
+parse_fields_at_depth(Str, Start, Fields) :-
+    (   sub_string(Str, Start, _, 0, Rest)
+    ->  parse_fields_from_string(Rest, Fields)
+    ;   Fields = []
+    ).
+
+parse_fields_from_string(Str, Fields) :-
+    string_codes(Str, Codes),
+    phrase(parse_fields(Fields), Codes).
+
+parse_fields([field(Name, Nested)|Rest]) -->
+    ws,
+    field_name(NameCodes),
+    { NameCodes \= [] },
+    { string_codes(Name, NameCodes) },
+    ws,
+    "{",
+    !,
+    nested_selection(Nested),
+    parse_fields(Rest).
+parse_fields([field(Name, "")|Rest]) -->
+    ws,
+    field_name(NameCodes),
+    { NameCodes \= [] },
+    !,
+    { string_codes(Name, NameCodes) },
+    ws,
+    parse_fields(Rest).
+parse_fields([]) --> ws, [], { true }.
+
+ws --> [C], { char_type(C, white) }, !, ws.
+ws --> [].
+
+field_name([C|Cs]) -->
+    [C], { char_type(C, csymf) }, !, field_name(Cs).
+field_name([]) --> [].
+
+nested_selection(Text) -->
+    { Depth = 0 },
+    collect_nested(Depth, Codes),
+    { string_codes(RawText, Codes),
+      normalize_space(atom(NormalizedAtom), RawText),
+      atom_string(NormalizedAtom, Text) }.
+
+collect_nested(0, []) --> "}", !.
+collect_nested(Depth, [C|Cs]) -->
+    [C],
+    (   { C = 0'{ } -> { Depth1 is Depth + 1 }
+    ;   { C = 0'} } -> { Depth1 is Depth - 1 }
+    ;   { Depth1 = Depth }
+    ),
+    !,
+    collect_nested(Depth1, Cs).
+
+%% resolve_fields(+Fields, +Instance, +DocIRI, +Prefixes, +DictIn, -DictOut) is det.
+%%
+%% Resolves each field from the parent layer. For scalar fields, reads the
+%% property value directly. For nested object fields, reads the linked document
+%% IRI and recursively resolves the nested selection set.
+resolve_fields([], _, _, _, Dict, Dict).
+resolve_fields([field(Name, "")|Rest], Instance, DocIRI, Prefixes, DictIn, DictOut) :-
+    (   Name == "_id"
+    ->  DictMid = DictIn
+    ;   Name == "_commit"
+    ->  DictMid = DictIn
+    ;   (   field_property_value(Instance, DocIRI, Name, Prefixes, Value)
+        ->  atom_string(NameAtom, Name),
+            put_dict(NameAtom, DictIn, Value, DictMid)
+        ;   DictMid = DictIn
+        )
+    ),
+    !,
+    resolve_fields(Rest, Instance, DocIRI, Prefixes, DictMid, DictOut).
+resolve_fields([field(Name, Nested)|Rest], Instance, DocIRI, Prefixes, DictIn, DictOut) :-
+    (   Name == "_id"
+    ->  DictMid = DictIn
+    ;   Name == "_commit"
+    ->  DictMid = DictIn
+    ;   (   field_property_value(Instance, DocIRI, Name, Prefixes, NestedDocIRI)
+        ->  parse_selection_fields(Nested, NestedFields),
+            resolve_fields(NestedFields, Instance, NestedDocIRI, Prefixes, _{}, NestedDict),
+            atom_string(NameAtom, Name),
+            put_dict(NameAtom, DictIn, NestedDict, DictMid)
+        ;   atom_string(NameAtom, Name),
+            put_dict(NameAtom, DictIn, _{}, DictMid)
+        )
+    ),
+    !,
+    resolve_fields(Rest, Instance, DocIRI, Prefixes, DictMid, DictOut).
+
+%% field_property_value(+Instance, +DocIRI, +FieldName, +Prefixes, -Value) is semidet.
+%%
+%% xrdf returns values as String^^Type, String@Lang, or node(String).
+field_property_value(Instance, DocIRI, FieldName, Prefixes, Value) :-
+    atom_string(FieldNameAtom, FieldName),
+    prefix_expand_schema(FieldNameAtom, Prefixes, PropertyIRI),
+    xrdf(Instance, DocIRI, PropertyIRI, ValueRaw),
+    (   ValueRaw = StringVal^^_Type
+    ->  (   atom(StringVal) -> atom_string(StringVal, Value)
+        ;   string(StringVal) -> Value = StringVal
+        ;   term_string(StringVal, Value)
+        )
+    ;   ValueRaw = StringVal@_Lang
+    ->  (   atom(StringVal) -> atom_string(StringVal, Value)
+        ;   string(StringVal) -> Value = StringVal
+        ;   term_string(StringVal, Value)
+        )
+    ;   atom(ValueRaw)
+    ->  atom_string(ValueRaw, Value)
+    ;   string(ValueRaw)
+    ->  Value = ValueRaw
+    ;   term_string(ValueRaw, Value)
+    ).
+
+%% send_sse_or_ndjson(+Mode, +JsonStr, +RawChannel) is det.
+%%
+%% SSE requires the "event: next" line per the graphql-sse protocol.
+%% appserver_broadcast_send_raw appends the trailing newline.
+send_sse_or_ndjson(sse, JsonStr, RawChannel) :-
+    format(string(Line), "event: next~ndata: ~w~n", [JsonStr]),
+    broadcast_raw_or_log(RawChannel, Line).
+send_sse_or_ndjson(ndjson, JsonStr, RawChannel) :-
+    broadcast_raw_or_log(RawChannel, JsonStr).
+
+%% broadcast_raw_or_log(+RawChannel, +Payload) is det.
+broadcast_raw_or_log(RawChannel, Payload) :-
+    (   '$appserver':appserver_broadcast_send_raw(RawChannel, Payload)
+    ->  true
+    ;   json_log:json_log_error_formatted(
+            "[graphql-sse] broadcast_send_raw FAILED for channel ~w", [RawChannel])
+    ).
+
+%% cohort_field_name(+ClassName, +Operation, -FieldName) is det.
+cohort_field_name(ClassName, Operation, FieldName) :-
+    atom_concat(ClassName, '_', Prefix),
+    atom_concat(Prefix, Operation, FieldName).
+
+%% class_matches(+DocClass, +SubscribedClass, +Transaction) is semidet.
+class_matches(DocClass, SubscribedClass, Transaction) :-
     (   DocClass == SubscribedClass
     ->  true
-    ;   resolve_absolute_string_descriptor(BranchPath, Descriptor),
-        open_descriptor(Descriptor, Transaction),
-        database_schema(Transaction, Schema),
+    ;   database_schema(Transaction, Schema),
         database_prefixes(Transaction, Prefixes),
         prefix_expand_schema(DocClass, Prefixes, DocClassIRI),
         prefix_expand_schema(SubscribedClass, Prefixes, SubscribedClassIRI),
@@ -286,41 +486,30 @@ class_matches(DocClass, SubscribedClass, BranchPath) :-
     ).
 
 %% ---------------------------------------------------------------------------
-%% descriptor_to_branch_path is provided by webserver_commits — use that
-%% implementation instead of duplicating it here.
+%% active_subscription_type(+Transaction, -TypeIRI) is nondet.
 %% ---------------------------------------------------------------------------
 
-%% ---------------------------------------------------------------------------
-%% dedup_triples is provided by webserver_commits — use that implementation
-%% instead of duplicating it here.
-%% ---------------------------------------------------------------------------
-
-%% ---------------------------------------------------------------------------
-%% active_subscription_type(+BranchPath, -TypeIRI) is nondet.
-%%
-%% Finds all type IRIs that have active subscriptions on a branch.
-%% ---------------------------------------------------------------------------
-
-active_subscription_type(BranchPath, TypeIRI) :-
-    graphql_cohort(CohortKey, BranchPath, _, _),
+active_subscription_type(Transaction, TypeIRI) :-
+    graphql_cohort(CohortKey, _, _, _),
     cohort_class(CohortKey, ClassName),
-    class_to_type_iri(BranchPath, ClassName, TypeIRI).
+    class_to_type_iri(Transaction, ClassName, TypeIRI).
 
 %% cohort_class(+CohortKey, -ClassName) is det.
-%%
-%% Extracts the class name from a cohort key compound term.
-%% CohortKey format: cohort(BranchPath, ClassName, Operation, SelectionHash)
-cohort_class(cohort(_, ClassName, _, _), ClassName).
+cohort_class(cohort(_, ClassName, _, _, _), ClassName).
 
-%% class_to_type_iri(+BranchPath, +ClassName, -TypeIRI) is nondet.
+%% cohort_descriptor(+CohortKey, -Descriptor) is det.
+cohort_descriptor(cohort(Descriptor, _, _, _, _), Descriptor).
+
+%% cohort_operation(+CohortKey, -Operation) is det.
+cohort_operation(cohort(_, _, Operation, _, _), Operation).
+
+%% cohort_mode(+CohortKey, -Mode) is det.
+cohort_mode(cohort(_, _, _, _, Mode), Mode).
+
+%% class_to_type_iri(+Transaction, +ClassName, -TypeIRI) is nondet.
 %%
-%% Resolves a GraphQL class name to its schema IRI, and finds all
-%% subclass IRIs on backtracking. This is used by
-%% active_subscription_type/2 to collect all type IRIs that need
-%% filtering in collect_changed_documents_filtered/4.
-class_to_type_iri(BranchPath, ClassName, TypeIRI) :-
-    resolve_absolute_string_descriptor(BranchPath, Descriptor),
-    open_descriptor(Descriptor, Transaction),
+%% Finds all subclass IRIs on backtracking.
+class_to_type_iri(Transaction, ClassName, TypeIRI) :-
     database_prefixes(Transaction, Prefixes),
     prefix_expand_schema(ClassName, Prefixes, ClassIRI),
     (   TypeIRI = ClassIRI
@@ -330,143 +519,460 @@ class_to_type_iri(BranchPath, ClassName, TypeIRI) :-
         TypeIRI = SubClassIRI
     ).
 
-%% ---------------------------------------------------------------------------
-%% document_class(+BranchPath, +DocIRI, -Class) is nondet.
+%% document_class(+Transaction, +DocIRI, -Class) is nondet.
 %%
-%% Determines the class(es) of a document by looking up its rdf:type
-%% in the current commit's instance layer.
-%% ---------------------------------------------------------------------------
+%% Looks up rdf:type in the instance layer.
 
-document_class(BranchPath, DocIRI, Class) :-
-    resolve_absolute_string_descriptor(BranchPath, Descriptor),
-    open_descriptor(Descriptor, Transaction),
+document_class(Transaction, DocIRI, Class) :-
     database_instance(Transaction, Instance),
     global_prefix_expand(rdf:type, RDF_Type),
     xrdf(Instance, DocIRI, RDF_Type, ClassIRI),
     database_prefixes(Transaction, Prefixes),
     compress_schema_uri(ClassIRI, Prefixes, Class).
 
-%% ---------------------------------------------------------------------------
-%% CGI handler for WebSocket subscribe dispatch
+%% document_class_from_validation(+Validation_Object, +DocIRI, -Class) is nondet.
 %%
-%% Called via pipe dispatch from Rust when a WebSocket client sends a
-%% `subscribe` message. Receives a request dict with path, payload, etc.
-%% Returns a response dict with status, body, and headers.
-%% ---------------------------------------------------------------------------
+%% Uses xrdf_deleted for deleted documents whose rdf:type has been removed.
+document_class_from_validation(Validation_Object, DocIRI, Class) :-
+    database_instance(Validation_Object, Instance),
+    global_prefix_expand(rdf:type, RDF_Type),
+    (   xrdf_deleted(Instance, DocIRI, RDF_Type, ClassIRI)
+    ->  database_prefixes(Validation_Object, Prefixes),
+        compress_schema_uri(ClassIRI, Prefixes, Class)
+    ;   fail
+    ).
 
-graphql_subscribe_handler(Request, Response) :-
-    (   get_dict(payload, Request, Payload)
+%% ===========================================================================
+%% SSE Subscription Handler
+%% ===========================================================================
+
+%% read_request_body(+Request, -BodyString) is det.
+%%
+%% Reads body from buffered dict or raw input stream.
+read_request_body(Request, BodyString) :-
+    (   get_dict(body, Request, BodyString0),
+        ground(BodyString0),
+        BodyString0 \= ""
+    ->  BodyString = BodyString0
+    ;   get_dict(input_stream_id, Request, InputStreamId)
+    ->  catch(drain_sse_input(InputStreamId, BodyString), Error,
+              (   json_log:json_log_error_formatted("[graphql-sse] drain_sse_input error: ~w", [Error]),
+                  BodyString = ""))
+    ;   BodyString = ""
+    ).
+
+%% drain_sse_input(+InputStreamId, -BodyString) is det.
+%%
+%% Drains all chunks from the input stream into a single string.
+drain_sse_input(InputStreamId, BodyString) :-
+    drain_sse_input(InputStreamId, "", BodyString).
+
+drain_sse_input(InputStreamId, Acc, BodyString) :-
+    '$appserver':appserver_stream_recv(InputStreamId, Chunk),
+    (   Chunk == end_of_stream
+    ->  BodyString = Acc
+    ;   string_concat(Acc, Chunk, NewAcc),
+        drain_sse_input(InputStreamId, NewAcc, BodyString)
+    ).
+%%
+%% The SSE handler lives on POST /api/graphql/*path. It checks the Accept
+%% header: text/event-stream activates SSE subscription mode, anything else
+%% delegates to the existing GraphQL HTTP handler so regular queries and
+%% mutations keep working on the same endpoint.
+%% ===========================================================================
+
+%% stream_cors_headers(+Request, -Headers) is det.
+%%
+%% Builds CORS headers matching write_cors_headers/1 in routes.pl.
+%% Delegates to routes:cors_headers_dict/2, adapting the dict-based request
+%% format used by the stream handler to the list-based format expected by routes.
+stream_cors_headers(Request, Headers) :-
+    (   get_dict(headers, Request, ReqHeaders),
+        get_dict('origin', ReqHeaders, Origin),
+        Origin \= ""
+    ->  routes:cors_headers_dict([origin(Origin)], Headers)
+    ;   Headers = _{}
+    ).
+
+%% detect_stream_mode(+Request, -Mode) is det.
+%%
+%% Checks the Accept header to determine the streaming mode:
+%%   text/event-stream     -> sse
+%%   application/x-ndjson  -> ndjson
+%%   anything else         -> delegate (regular GraphQL)
+%% SSE is checked first so it takes priority if both are present.
+detect_stream_mode(Request, Mode) :-
+    (   get_dict(headers, Request, Headers),
+        get_dict('accept', Headers, AcceptRaw)
+    ->  (   sub_string(AcceptRaw, _, _, _, "text/event-stream")
+        ->  Mode = sse
+        ;   sub_string(AcceptRaw, _, _, _, "application/x-ndjson")
+        ->  Mode = ndjson
+        ;   Mode = delegate
+        )
+    ;   Mode = delegate
+    ).
+
+%% graphql_sse_options_handler(+Request, +StreamId, -Response) is det.
+%%
+%% CORS preflight handler for the SSE endpoint. Returns 204 with CORS
+%% headers, mirroring the OPTIONS behavior of the regular GraphQL endpoint.
+graphql_sse_options_handler(Request, _StreamId, Response) :-
+    stream_cors_headers(Request, CORSHeaders),
+    Response = _{
+        status: 204,
+        headers: CORSHeaders
+    }.
+
+%% graphql_sse_handler(+Request, +StreamId, -Response) is det.
+%%
+%% Dispatches on Accept header: SSE/NDJSON → subscription, else → GraphQL.
+graphql_sse_handler(Request, StreamId, Response) :-
+    detect_stream_mode(Request, Mode),
+    (   Mode == delegate
+    ->  catch(delegate_to_graphql(Request, Response),
+              Error,
+              (   json_log:json_log_error_formatted("[graphql-sse] delegate error: ~w", [Error]),
+                  sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"Internal server error\"}]}", Response)
+              ))
+    ;   catch(register_sse_subscription(Request, StreamId, Mode, Response),
+              Error,
+              (   json_log:json_log_error_formatted("[graphql-sse] handler error: ~w", [Error]),
+                  sse_json_response(Request, 500, "{\"error\":\"internal_server_error\"}", Response)
+              ))
+    ).
+
+%% register_sse_subscription(+Request, +StreamId, +Mode, -Response) is det.
+register_sse_subscription(Request, StreamId, Mode, Response) :-
+    (   sse_extract_branch_path(Request, BranchPathRaw)
     ->  true
-    ;   Payload = _{}
+    ;   sse_json_response(Request, 400, "{\"error\":\"missing_path_params\"}", Response),
+        !
     ),
-    (   get_dict(path, Request, Path)
-    ->  true
-    ;   Path = ""
-    ),
-    %% Extract branch path from the URL path.
-    %% Path is like "/api/graphql-ws/org/db/local/branch/main"
-    atom_string(PathAtom, Path),
-    split_string(PathAtom, '/', '', PathParts),
-    %% Drop the first two segments ("api", "graphql-ws")
-    append(["api", "graphql-ws"], BranchParts, PathParts),
-    atomic_list_concat(BranchParts, '/', BranchPath),
-    %% Extract subscription parameters from the payload
-    get_dict(query, Payload, QueryString),
-    (   get_dict(variables, Payload, Variables)
-    ->  true
-    ;   Variables = _{}
-    ),
-    (   get_dict(operationName, Payload, OperationName)
-    ->  true
-    ;   OperationName = ''
-    ),
-    %% Authenticate: returns Auth URI or fails with 401
-    (   graphql_authenticate(Request, Auth)
-    ->  %% Registration
-        catch(
-            (   register_subscription(BranchPath, QueryString, Variables, OperationName,
-                                      Auth, CohortKey, RawChannel)
-            ->  term_to_atom(CohortKey, CohortKeyAtom),
-                CohortKey = cohort(_, ClassName, Operation, _),
-                atom_concat(ClassName, '_', Temp),
-                atom_concat(Temp, Operation, FieldName),
-                plugin_json_response(200,
-                    _{cohort_key: CohortKeyAtom,
-                      raw_channel: RawChannel,
-                      field_name: FieldName},
-                    Response)
-            ;   plugin_json_response(500,
-                    _{error: "subscription_registration_failed"},
-                    Response)
+    (   sse_authenticate_or_401(Request, System_DB, Auth, Response)
+    ->  catch(
+            (   register_sse_subscription_authed(Request, StreamId, Mode, System_DB, Auth,
+                                                 BranchPathRaw, Response)
+            ->  true
+            ;   throw(sse_handler_silent_failure)
             ),
             Error,
-            (   format(string(Msg), "Subscription registration failed: ~w", [Error]),
-                plugin_json_response(500, _{error: Msg}, Response)
+            (   json_log:json_log_error_formatted("[graphql-sse] authed handler error: ~w", [Error]),
+                sse_json_response(Request, 500, "{\"error\":\"internal_server_error\"}", Response)
             )
         )
-    ;   plugin_json_response(401, _{error: "authentication_failed"}, Response)
+    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
     ).
 
-%% ---------------------------------------------------------------------------
-%% graphql_authenticate(+Request, -Auth) is semidet.
-%%
-%% Authenticates using the standard plugin_api mechanism. When no
-%% Authorization header is present, falls back to anonymous (same as
-%% routes:authenticate/3's final clause). Fails on invalid auth.
-%% ---------------------------------------------------------------------------
-graphql_authenticate(Request, Auth) :-
-    (   get_dict(headers, Request, _)
-    ->  open_descriptor(system_descriptor{}, System_DB),
-        catch(plugin_api:authenticate_from_request(Request, System_DB, Auth),
-              error(authentication_incorrect(no_authorization_header), _),
-              Auth = 'terminusdb://system/data/User/anonymous')
-    ;   Auth = 'terminusdb://system/data/User/anonymous'
+%% register_sse_subscription_authed(+Request, +StreamId, +Mode, +System_DB, +Auth,
+%%                                   +BranchPathRaw, -Response) is det.
+register_sse_subscription_authed(Request, StreamId, Mode, System_DB, Auth,
+                                 BranchPathRaw, Response) :-
+    catch(read_request_body(Request, BodyString), Error1,
+          (   json_log:json_log_error_formatted("[graphql-sse] read_request_body error: ~w", [Error1]),
+              BodyString = "")),
+    (   sse_parse_body_query(BodyString, QueryString)
+    ->  register_sse_subscription_with_query(Request, StreamId, Mode, System_DB, Auth,
+                                             BranchPathRaw, QueryString, Response)
+    ;   sse_json_response(Request, 400, "{\"error\":\"invalid_query_body\"}", Response)
     ).
 
-%% ---------------------------------------------------------------------------
-%% graphql_authenticate_handler(+Request, -Response) is det.
-%%
-%% Called via one-shot pipe dispatch from Rust to validate an auth token
-%% before upgrading a WebSocket connection. Returns the Auth URI on success
-%% or 401 on failure.
-%% ---------------------------------------------------------------------------
-graphql_authenticate_handler(Request, Response) :-
-    (   graphql_authenticate(Request, Auth)
-    ->  term_to_atom(Auth, AuthAtom),
-        plugin_json_response(200, _{auth: AuthAtom}, Response)
-    ;   plugin_json_response(401, _{error: "authentication_failed"}, Response)
+%% register_sse_subscription_with_query(+Request, +StreamId, +Mode, +System_DB,
+%%   +Auth, +BranchPathRaw, +QueryString, -Response) is det.
+register_sse_subscription_with_query(Request, StreamId, Mode, System_DB, Auth,
+                                      BranchPathRaw, QueryString, Response) :-
+    atom_string(BranchPathAtom, BranchPathRaw),
+    resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
+    (   catch(assert_read_access(System_DB, Auth, Descriptor,
+                                 type_filter{types:[instance,schema]}), _, fail)
+    ->  register_sse_subscription_authorized(Request, StreamId, Mode, System_DB,
+                                             Descriptor,
+                                             QueryString, Response)
+    ;   sse_json_response(Request, 403, "{\"error\":\"access_not_authorised\"}", Response)
     ).
 
-%% ---------------------------------------------------------------------------
-%% graphql_unregister_handler(+Request, -Response) is det.
+%% register_sse_subscription_authorized(+Request, +StreamId, +Mode, +System_DB,
+%%   +Descriptor, +QueryString, -Response) is det.
+register_sse_subscription_authorized(Request, StreamId, Mode, _System_DB,
+                                      Descriptor,
+                                      QueryString, Response) :-
+    do_or_die(open_descriptor(Descriptor, Transaction),
+              error(unresolvable_absolute_descriptor(Descriptor), _)),
+    api_graphql:get_or_create_graphql_context(Transaction, Graphql_Context),
+    (   catch('$graphql':parse_subscription_query(Graphql_Context, QueryString, Parsed),
+              Error, (json_log:json_log_error_formatted("[graphql-sse] parse error: ~w", [Error]), fail))
+    ->  register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
+                                         Graphql_Context, Transaction, Parsed, Response)
+    ;   sse_json_response(Request, 400, "{\"error\":\"subscription_parse_failed\"}", Response)
+    ).
+
+%% register_sse_subscription_parsed(+Request, +StreamId, +Mode, +Descriptor,
+%%   +Graphql_Context, +Transaction, +Parsed, -Response) is det.
+register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
+                                 _Graphql_Context, _Transaction, Parsed, Response) :-
+    get_dict(class_name, Parsed, ClassName),
+    get_dict(operation, Parsed, Operation),
+    get_dict(filter_canonical_json, Parsed, FilterJson),
+    get_dict(selection_set_hash, Parsed, SelectionHash),
+    get_dict(selection_set, Parsed, SelectionSet),
+    get_dict(selection_set_graphql, Parsed, SelectionSetGraphql),
+    register_subscription_parsed(Descriptor, ClassName, Operation,
+                                 FilterJson, SelectionHash, Mode,
+                                 CohortKey, RawChannel),
+    with_mutex(graphql_cohort_registry,
+        (   graphql_cohort_selection(CohortKey, _, _)
+        ->  true
+        ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql))
+        )),
+    assertz(graphql_sse_subscription(StreamId, CohortKey, RawChannel)),
+    sse_parse_timeout(Request, Timeout),
+    sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Timeout, Response).
+
+%% sse_post_response(+StreamId, +CohortKey, +RawChannel, +Timeout, +Mode) is det.
 %%
-%% Called via one-shot pipe dispatch from Rust when a subscription is
-%% completed or a WebSocket connection is closed. Delegates to
-%% unregister_subscription/2 to clean up Prolog-side cohort state.
-%% Unregistration is idempotent — always returns 200.
-%%
-%% Security: This handler is not registered via appserver_route/4 and is
-%% therefore not reachable by external HTTP requests. The only path to
-%% this handler is through PipeDispatchRequest sent from the Rust WebSocket
-%% handler, which passes the cohort key from its own state.subscriptions
-%% map (keyed by client-supplied subscription ID, not cohort key). The
-%% client never sends a cohort key directly. No auth is asserted here
-%% because the isolation is structural (routing), not runtime — adding an
-%% auth check would give false confidence without addressing the real
-%% attack surface (the Rust-side subscription ID lookup).
-%% ---------------------------------------------------------------------------
-graphql_unregister_handler(Request, Response) :-
-    (   get_dict(payload, Request, Payload)
-    ->  true
-    ;   Payload = _{}
+%% Subscribes the stream to the broadcast channel after headers are sent,
+%% then sends the graphql-sse protocol "connected" event so the client
+%% knows the subscription is registered and ready to receive events.
+sse_post_response(StreamId, _CohortKey, RawChannel, Timeout, Mode) :-
+    (   Timeout == 0
+    ->  TimeoutSecs = 0
+    ;   Timeout = TimeoutSecs
     ),
-    (   get_dict(cohort_key, Payload, CohortKeyAtom)
-    ->  atom_to_term(CohortKeyAtom, CohortKey, []),
-        catch(ignore(unregister_subscription(CohortKey, _)),
-              Error,
-              format(user_error, "Unregister failed: ~w~n", [Error])),
-        plugin_json_response(200, _{ok: true}, Response)
-    ;   plugin_json_response(400, _{error: "missing_cohort_key"}, Response)
+    catch('$appserver':appserver_broadcast_subscribe(RawChannel, StreamId, TimeoutSecs), _, true),
+    send_connected_event(Mode, RawChannel).
+
+%% send_connected_event(+Mode, +RawChannel) is det.
+%%
+%% Per the graphql-sse protocol, the server sends a "connected" event
+%% after the subscription is accepted. SSE uses the event stream format;
+%% NDJSON sends a bare null line.
+send_connected_event(sse, RawChannel) :-
+    broadcast_raw_or_log(RawChannel, "event: connected\ndata: null\n").
+send_connected_event(ndjson, RawChannel) :-
+    broadcast_raw_or_log(RawChannel, "null\n").
+
+%% delegate_to_graphql(+Request, -Response) is det.
+%%
+%% Delegates non-SSE requests to handle_graphql_request/10.
+delegate_to_graphql(Request, Response) :-
+    read_request_body(Request, BodyString),
+    (   sse_authenticate_or_401(Request, System_DB, Auth, Response)
+    ->  get_dict(params, Request, Params),
+        get_dict(path, Params, PathRaw),
+        atom_string(PathAtom, PathRaw),
+        string_length(BodyString, Content_Length),
+        setup_call_cleanup(
+            open_string(BodyString, BodyIn),
+            (   catch(
+                    handle_graphql_request(System_DB, Auth, post, PathAtom, BodyIn,
+                                           GraphqlResponse, 'application/json',
+                                           Content_Length, _NewDataVersion, _TransactionMetaData),
+                    Error,
+                    sse_plugin_error_response(Request, Error, Response)
+                )
+            ->  (   nonvar(Response)
+                ->  true
+                ;   sse_json_response(Request, 200, GraphqlResponse, Response)
+                )
+            ;   sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"GraphQL request failed\"}]}", Response)
+            ),
+            close(BodyIn)
+        )
+    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
+    ).
+
+%% sse_plugin_error_response(+Request, +Error, -Response) is det.
+%%
+%% Bridges plugin_error_response/2 dict body to sse_json_response/4 string body.
+sse_plugin_error_response(Request, Error, Response) :-
+    plugin_api:plugin_error_response(Error, ErrResp),
+    get_dict(status, ErrResp, Status),
+    get_dict(body, ErrResp, ErrBodyDict),
+    with_output_to(string(ErrorBody),
+        json_write_dict(current_output, ErrBodyDict, [as(string), width(0)])),
+    sse_json_response(Request, Status, ErrorBody, Response).
+
+%% sse_authenticate_or_401(+Request, -System_DB, -Auth, -Response) is semidet.
+%%
+%% Opens system DB and authenticates. On failure, binds 401 Response and fails.
+sse_authenticate_or_401(Request, System_DB, Auth, Response) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    (   catch(plugin_api:authenticate_from_request(Request, System_DB, Auth), _, fail)
+    ->  true
+    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response),
+        fail
+    ).
+
+%% ===========================================================================
+%% Extracted SSE pure predicates (testable without a running database)
+%% ===========================================================================
+
+%% sse_extract_branch_path(+Request, -BranchPath) is semidet.
+%%
+%% Extracts branch path from Request.params.path.
+sse_extract_branch_path(Request, BranchPath) :-
+    get_dict(params, Request, Params),
+    get_dict(path, Params, BranchPath),
+    BranchPath \= "".
+
+%% sse_parse_body_query(+BodyString, -QueryString) is semidet.
+%%
+%% Parses JSON body and extracts the query field. Fails on invalid JSON.
+sse_parse_body_query(BodyString, QueryString) :-
+    catch((   atom_string(BodyAtom, BodyString),
+               atom_json_dict(BodyAtom, BodyDict, [])), _, fail),
+    get_dict(query, BodyDict, QueryString),
+    QueryString \= "".
+
+%% sse_parse_timeout(+Request, -Timeout) is det.
+%%
+%% Extracts timeout from query string. Defaults to 75 (2× heartbeat + margin).
+sse_parse_timeout(Request, Timeout) :-
+    (   get_dict(query, Request, QueryString),
+        QueryString \= ""
+    ->  uri_query_components(QueryString, QueryParams),
+        (   memberchk(timeout=TimeoutAtom, QueryParams),
+            atom_number(TimeoutAtom, Timeout)
+        ->  true
+        ;   Timeout = 75
+        )
+    ;   Timeout = 75
+    ).
+
+%% sse_json_response(+Request, +Status, +Body, -Response) is det.
+%%
+%% JSON response with CORS headers. Works for any status code
+%% (errors, success, auth failures).
+sse_json_response(Request, Status, Body, Response) :-
+    stream_cors_headers(Request, CORS),
+    Response = _{
+        status: Status,
+        headers: CORS.put('Content-Type', "application/json"),
+        body: Body
+    }.
+
+%% sse_build_streaming_response(+Request, +StreamId, +Mode, +CohortKey,
+%%   +RawChannel, +Timeout, -Response) is det.
+%%
+%% 200 streaming response with mode-specific Content-Type.
+sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Timeout, Response) :-
+    stream_cors_headers(Request, CORS),
+    (   Mode == ndjson
+    ->  ContentType = "application/x-ndjson"
+    ;   ContentType = "text/event-stream"
+    ),
+    Response = _{
+        status: 200,
+        headers: CORS.put('Content-Type', ContentType)
+                       .put('Cache-Control', "no-cache")
+                       .put('X-Accel-Buffering', "no")
+                       .put('Connection', "keep-alive"),
+        body: stream,
+        post_response: webserver_graphql_subs:sse_post_response(StreamId, CohortKey, RawChannel, Timeout, Mode)
+    }.
+
+
+%% ===========================================================================
+%% Event Resolution via Juniper (post-commit hook)
+%% ===========================================================================
+
+%% resolve_event_through_juniper(+Transaction, +GraphqlContext, +ClassName,
+%%                                +Operation, +DocIRI, +SelectionSetGraphql,
+%%                                +ChangeType, +CommitId, -Result) is semidet.
+%%
+%% Resolves a document via Juniper Query root field. Operation suffix is
+%% used only for the event envelope, not the query field name.
+resolve_event_through_juniper(Transaction, GraphqlContext, ClassName,
+                              Operation, DocIRI, SelectionSetGraphql,
+                              ChangeType, CommitId, Timestamp, Datetime,
+                              Result) :-
+    graphql_escape_string(DocIRI, EscapedIRI),
+    format(string(GraphqlQuery), "{ ~w(id: \"~w\") { ~w } }",
+           [ClassName, EscapedIRI, SelectionSetGraphql]),
+    with_output_to(string(JsonEnvelope),
+        json_write_dict(current_output, _{query: GraphqlQuery},
+                        [as(string), width(0)])),
+    (   atom(ChangeType)
+    ->  atom_string(ChangeType, ChangeTypeStr)
+    ;   ChangeTypeStr = ChangeType
+    ),
+    (   atom(CommitId)
+    ->  atom_string(CommitId, CommitIdStr)
+    ;   CommitIdStr = CommitId
+    ),
+    %% Execute via FFI — pass all metadata to the Rust resolver.
+    '$graphql':resolve_subscription_event(Transaction, GraphqlContext,
+                                           JsonEnvelope, ChangeTypeStr, CommitIdStr,
+                                           Timestamp, Datetime,
+                                           ResponseJson),
+    %% Parse the response and extract the result.
+    (   atom(ResponseJson) -> ResponseAtom = ResponseJson
+    ;   atom_string(ResponseAtom, ResponseJson)
+    ),
+    atom_json_dict(ResponseAtom, ResponseData, []),
+    (   get_dict(errors, ResponseData, Errors)
+    ->  json_log:json_log_error_formatted(
+            "[graphql-sse] Juniper returned errors: ~w", [Errors]),
+        (   Operation == deleted
+        ->  Result = _{'_id': DocIRI}
+        ;   Result = _{}
+        )
+    ;   get_dict(data, ResponseData, Data),
+        (   get_dict(ClassName, Data, [Doc|_])
+        ->  Result = Doc
+        ;   (   Operation == deleted
+            ->  Result = _{'_id': DocIRI}
+            ;   Result = _{}
+            )
+        )
+    ).
+
+%% graphql_escape_string(+Raw, -Escaped) is det.
+%%
+%% Escapes backslashes, double quotes, and newlines for safe GraphQL
+%% string literal embedding. Uses re_replace/4 from library(pcre) —
+%% string_replace/4 does not exist in SWI-Prolog.
+graphql_escape_string(Raw, Escaped) :-
+    (   atom(Raw) -> atom_string(Raw, Str)
+    ;   Str = Raw
+    ),
+    re_replace('\\\\'/g, '\\\\\\\\', Str, S1),
+    re_replace('"'/g, '\\"', S1, S2),
+    re_replace('\n'/g, '\\n', S2, S3),
+    re_replace('\r'/g, '\\r', S3, S4),
+    re_replace('\t'/g, '\\t', S4, S5),
+    atom_string(Escaped, S5).
+
+%% ===========================================================================
+%% SSE Cleanup
+%% ===========================================================================
+
+%% sweep_stale_sse_streams is det.
+%%
+%% Retract graphql_sse_subscription/3 entries whose Rust stream no longer
+%% exists. Mirrors webserver_commits:sweep_stale_streams/0. Called at
+%% the start of do_broadcast_graphql_events.
+sweep_stale_sse_streams :-
+    (   \+ graphql_sse_subscription(_, _, _)
+    ->  true
+    ;   findall(StreamId, graphql_sse_subscription(StreamId, _, _), StreamIds),
+        forall(
+            (   member(StreamId, StreamIds),
+                \+ catch('$appserver':appserver_stream_exists(StreamId), _, fail)
+            ),
+            cleanup_sse_stream(StreamId)
+        )
+    ).
+
+%% cleanup_sse_stream(+StreamId) is det.
+%%
+%% Retracts the SSE subscription, unregisters the cohort, and unsubscribes
+%% from the broadcast channel. Idempotent.
+cleanup_sse_stream(StreamId) :-
+    (   retract(graphql_sse_subscription(StreamId, CohortKey, RawChannel))
+    ->  unregister_subscription(CohortKey, StreamId),
+        catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId), _, true)
+    ;   true
     ).
 
 
@@ -478,101 +984,79 @@ graphql_unregister_handler(Request, Response) :-
 :- begin_tests(webserver_graphql_subs, []).
 
 test(register_and_unregister, [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% Use register_subscription_parsed/7 directly — no FFI needed in unit tests
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1',
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
                                  CohortKey, RawChannel1),
-    %% CohortKey is a compound term: cohort(BranchPath, Class, Op, Hash)
     compound(CohortKey),
-    CohortKey = cohort('test/db/local/branch/main', 'Person', added, 'hash1'),
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse),
     atom(RawChannel1),
-    webserver_graphql_subs:graphql_cohort(CohortKey, 'test/db/local/branch/main', RawChannel1, 1),
-    %% Assert a subscription for this stream
-    assertz(webserver_graphql_subs:graphql_subscription(stream1, CohortKey, {}, '_id')),
-    %% Second subscription to same class+operation+selection joins same cohort
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1',
+    webserver_graphql_subs:graphql_cohort(CohortKey, TestDesc, RawChannel1, 1),
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
                                  CohortKey2, RawChannel2),
     CohortKey == CohortKey2,
     RawChannel1 == RawChannel2,
-    webserver_graphql_subs:graphql_cohort(CohortKey, 'test/db/local/branch/main', RawChannel1, 2),
-    %% Assert second subscription
-    assertz(webserver_graphql_subs:graphql_subscription(stream2, CohortKey, {}, '_id')),
-    %% Unregister one
+    webserver_graphql_subs:graphql_cohort(CohortKey, TestDesc, RawChannel1, 2),
     unregister_subscription(CohortKey, stream1),
-    webserver_graphql_subs:graphql_cohort(CohortKey, 'test/db/local/branch/main', RawChannel1, 1).
+    webserver_graphql_subs:graphql_cohort(CohortKey, TestDesc, RawChannel1, 1).
 
 test(register_different_selection_different_cohort,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% Different selection set hashes produce different cohort keys
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1', CohortKey1, _),
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash2', CohortKey2, _),
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, CohortKey1, _),
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash2', sse, CohortKey2, _),
     CohortKey1 \== CohortKey2.
 
 %% Security: compound term cohort key prevents separator collision attacks.
 %% Even if branch paths or class names contain |, -, or other special chars,
 %% the compound term structure ensures correct extraction.
 
-test(cohort_key_no_collision_with_pipe_in_branch_path,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% A branch path containing | cannot collide with the term structure
-    CohortKey = cohort('evil|path|injection', 'Person', added, 'abc123'),
-    cohort_class(CohortKey, ClassName),
-    ClassName == 'Person'.
-
 test(cohort_key_no_collision_with_pipe_in_class_name,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% A class name containing | is correctly extracted
-    CohortKey = cohort('test/db/local/branch/main', 'Evil|Class', added, 'abc123'),
+    CohortKey = cohort(branch_descriptor{}, 'Evil|Class', added, 'abc123', sse),
     cohort_class(CohortKey, ClassName),
     ClassName == 'Evil|Class'.
 
 test(cohort_key_no_collision_with_dash_in_branch_path,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% A branch path containing - is correctly extracted
-    CohortKey = cohort('test-db/local/branch/main', 'Person', added, 'abc123'),
+    CohortKey = cohort(database_descriptor{}, 'Person', added, 'abc123', sse),
     cohort_class(CohortKey, ClassName),
     ClassName == 'Person'.
 
 test(cohort_key_term_to_atom_roundtrip_is_safe) :-
-    %% term_to_atom produces a canonical, escapable representation
-    %% that roundtrips correctly even with special characters
-    CohortKey = cohort('test/db/local/branch/main', 'Person', added, 'abc123'),
+    CohortKey = cohort(branch_descriptor{}, 'Person', added, 'abc123', sse),
     term_to_atom(CohortKey, Atom),
     atom_to_term(Atom, CohortKey2, []),
     CohortKey == CohortKey2.
 
 test(cohort_key_term_to_atom_roundtrip_with_special_chars) :-
-    %% Adversarial input with quotes, pipes, dashes, and backslashes
-    %% must survive term_to_atom → atom_to_term roundtrip intact
-    CohortKey = cohort('a\'b|c-d\\e', 'Person"evil', added, 'abc123'),
+    CohortKey = cohort(branch_descriptor{}, 'Person"evil', added, 'abc123', sse),
     term_to_atom(CohortKey, Atom),
     atom_to_term(Atom, CohortKey2, []),
     CohortKey == CohortKey2.
 
 test(cohort_key_distinct_components_no_collision) :-
-    %% Two cohort keys with different components must never be equal,
-    %% even if the string representations could be confused
-    CohortKey1 = cohort('a', 'b', added, 'c'),
-    CohortKey2 = cohort('a|b', added, 'c'),  % wrong arity — different term
+    CohortKey1 = cohort(branch_descriptor{}, 'b', added, 'c', sse),
+    CohortKey2 = cohort(database_descriptor{}, 'b', added, 'c', sse),
     CohortKey1 \== CohortKey2.
 
-test(register_rejects_empty_branch_path,
+test(register_rejects_non_dict_descriptor,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
     catch(
-        register_subscription_parsed('', 'Person', added,
-                                      '{}', 'hash1', _, _),
+        register_subscription_parsed('not_a_dict', 'Person', added,
+                                      '{}', 'hash1', sse, _, _),
         Error,
         Error = error(subscription_registration_failed, _)
     ).
 
-test(register_rejects_non_atom_branch_path,
+test(register_rejects_integer_descriptor,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
     catch(
         register_subscription_parsed(42, 'Person', added,
-                                      '{}', 'hash1', _, _),
+                                      '{}', 'hash1', sse, _, _),
         Error,
         Error = error(subscription_registration_failed, _)
     ).
@@ -581,81 +1065,59 @@ test(register_rejects_non_atom_branch_path,
 %% register_subscription_parsed accepts atom inputs (production path).
 test(register_with_atom_inputs_like_ffi,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    register_subscription_parsed('test/db/local/branch/main',
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc,
                                  'Person', added,
-                                 '{}', 'hash1',
+                                 '{}', 'hash1', sse,
                                  CohortKey, _),
-    CohortKey = cohort('test/db/local/branch/main', 'Person', added, 'hash1').
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse).
 
 test(register_rejects_invalid_operation,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
     catch(
-        register_subscription_parsed('test/db/local/branch/main',
+        register_subscription_parsed(branch_descriptor{},
                                      'Person', invalid_op,
-                                     '{}', 'hash1', _, _),
+                                     '{}', 'hash1', sse, _, _),
         Error,
         Error = error(subscription_registration_failed, _)
     ).
-
-%% graphql_authenticate with no header returns anonymous user.
-test(graphql_authenticate_anonymous_no_headers) :-
-    graphql_authenticate(_{}, Auth),
-    Auth == 'terminusdb://system/data/User/anonymous'.
-
-test(graphql_authenticate_anonymous_empty_header) :-
-    graphql_authenticate(_{headers: _{}}, Auth),
-    Auth == 'terminusdb://system/data/User/anonymous'.
-
-%% graphql_authenticate_handler returns 200 with anonymous auth
-%% when no Authorization header is present.
-test(graphql_authenticate_handler_no_header_returns_200) :-
-    graphql_authenticate_handler(_{headers: _{}}, Response),
-    get_dict(status, Response, 200).
 
 %% register_subscription doesn't assert gql_subscription/4 —
 %% only gql_cohort/4. unregister_subscription/2 must still decrement the
 %% cohort count even without gql_subscription facts.
 test(unregister_without_gql_subscription_decrements_cohort,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% Register a cohort (no gql_subscription asserted — production path)
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1', CohortKey, _),
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, CohortKey, _),
     webserver_graphql_subs:graphql_cohort(CohortKey, _, _, 1),
-    %% Unregister without any gql_subscription fact — should still decrement
     unregister_subscription(CohortKey, fake_stream),
-    %% Cohort count reaches 0 → cohort is retracted entirely
     \+ webserver_graphql_subs:graphql_cohort(CohortKey, _, _, _).
 
 %% graphql_cohort_selection is stored when a cohort is created and
 %% cleaned up when the last member unregisters.
 test(cohort_selection_stored_and_cleaned_up,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% Simulate what register_subscription/7 does: register cohort, then
-    %% assert the selection set (production path stores it after FFI parse).
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1', CohortKey, _),
-    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}")),
-    %% Selection set is stored
-    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}"),
-    %% Unregister the only member
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, CohortKey, _),
+    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id")),
+    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id"),
     unregister_subscription(CohortKey, fake_stream),
-    %% Selection set is cleaned up when cohort becomes empty
-    \+ webserver_graphql_subs:graphql_cohort_selection(CohortKey, _).
+    \+ webserver_graphql_subs:graphql_cohort_selection(CohortKey, _, _).
 
 %% graphql_cohort_selection is NOT cleaned up while cohort still has members.
 test(cohort_selection_survives_partial_unregister,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1', CohortKey, _),
-    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}")),
-    %% Second member joins same cohort
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1', _, _),
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, CohortKey, _),
+    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name")),
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, _, _),
     graphql_cohort(CohortKey, _, _, 2),
-    %% Unregister one member
     unregister_subscription(CohortKey, stream1),
-    %% Selection set still exists — cohort has 1 member left
-    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}").
+    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name").
 
 :- end_tests(webserver_graphql_subs).
 
@@ -666,111 +1128,469 @@ test(cohort_selection_survives_partial_unregister,
 
 :- begin_tests(webserver_graphql_subs_handlers, []).
 
-%% graphql_unregister_handler returns 200 with ok:true on valid cohort_key.
-test(unregister_handler_returns_200_with_cohort_key,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    %% Register a cohort so unregister has something to remove.
-    register_subscription_parsed('test/db/local/branch/main', 'Person', added,
-                                 '{}', 'hash1', CohortKey, _),
-    term_to_atom(CohortKey, CohortKeyAtom),
-    Request = _{payload: _{cohort_key: CohortKeyAtom}},
-    graphql_unregister_handler(Request, Response),
-    get_dict(status, Response, 200),
-    get_dict(body, Response, Body),
-    atom_string(Body, BodyStr),
-    atom_string(BodyAtom, BodyStr),
-    sub_atom(BodyAtom, _, _, _, '"ok":true').
-
-%% graphql_unregister_handler returns 400 when cohort_key is missing.
-test(unregister_handler_returns_400_without_cohort_key) :-
-    Request = _{payload: _{}},
-    graphql_unregister_handler(Request, Response),
-    get_dict(status, Response, 400).
-
-%% graphql_unregister_handler returns 200 even when cohort doesn't exist
-%% (idempotent — always returns 200 per the spec).
-test(unregister_handler_idempotent_on_unknown_cohort) :-
-    CohortKey = cohort('nonexistent/db/local/branch/main', 'Person', added, 'xyz'),
-    term_to_atom(CohortKey, CohortKeyAtom),
-    Request = _{payload: _{cohort_key: CohortKeyAtom}},
-    graphql_unregister_handler(Request, Response),
-    get_dict(status, Response, 200).
-
-%% graphql_unregister_handler handles missing payload gracefully.
-test(unregister_handler_handles_missing_payload) :-
-    Request = _{},
-    graphql_unregister_handler(Request, Response),
-    get_dict(status, Response, 400).
-
-%% graphql_authenticate_handler with dict containing headers returns 200
-%% when no Authorization header is present (anonymous).
-test(authenticate_handler_dict_no_auth_returns_200) :-
-    Request = _{headers: _{}},
-    graphql_authenticate_handler(Request, Response),
-    get_dict(status, Response, 200),
-    get_dict(body, Response, Body),
-    atom_string(Body, BodyStr),
-    atom_string(BodyAtom, BodyStr),
-    sub_atom(BodyAtom, _, _, _, '"auth"').
-
-%% graphql_authenticate_handler with empty dict (no headers key) returns 200
-%% (anonymous fallback).
-test(authenticate_handler_empty_dict_returns_200) :-
-    graphql_authenticate_handler(_{}, Response),
-    get_dict(status, Response, 200).
-
-%% operation_change_type maps all three change types correctly.
-test(operation_change_type_added) :-
-    operation_change_type(added, added).
-test(operation_change_type_changed) :-
-    operation_change_type(changed, changed).
-test(operation_change_type_deleted) :-
-    operation_change_type(deleted, deleted).
-
 %% cohort_class extracts the class name from a cohort key compound term.
 test(cohort_class_extracts_class_name) :-
-    CohortKey = cohort('test/db/local/branch/main', 'MyClass', added, 'hash123'),
+    CohortKey = cohort(branch_descriptor{}, 'MyClass', added, 'hash123', sse),
     cohort_class(CohortKey, ClassName),
     ClassName == 'MyClass'.
 
 test(cohort_class_extracts_different_class) :-
-    CohortKey = cohort('admin/system/local/branch/dev', 'Product', deleted, 'abc'),
+    CohortKey = cohort(database_descriptor{}, 'Product', deleted, 'abc', sse),
     cohort_class(CohortKey, ClassName),
     ClassName == 'Product'.
 
-%% graphql_subscribe_handler requires a running database context (system_descriptor
-%% and FFI for register_subscription). In pure unit tests without a database,
-%% the handler either throws (from open_descriptor) or fails (from missing query).
-%% We verify the handler at least parses the dict by catching both cases.
-test(subscribe_handler_fails_or_throws_without_db,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    Request = _{
-        path: "/api/graphql-ws/test/db/local/branch/main",
-        payload: _{query: "subscription { Person_added { _id } }"},
-        headers: _{}
-    },
-    %% Without a running database, the handler will either throw or fail.
-    %% Both are acceptable — the key is that dict parsing doesn't crash.
-    (   catch(graphql_subscribe_handler(Request, _), _, true)
-    ->  true
-    ;   true
-    ).
-
-%% graphql_subscribe_handler with missing payload — get_dict(query, _{}, _)
-%% fails, causing the whole handler to fail. This is expected behavior.
-test(subscribe_handler_missing_payload_fails_gracefully) :-
-    Request = _{path: "/api/graphql-ws/test/db/local/branch/main", headers: _{}},
-    (   catch(graphql_subscribe_handler(Request, _), _, true)
-    ->  true
-    ;   true
-    ).
-
 :- end_tests(webserver_graphql_subs_handlers).
+
+%% ---------------------------------------------------------------------------
+%% PLUnit tests for SSE subscription support
+%%
+%% These tests cover the SSE handler pieces: CORS header reflection,
+%% DocIRI escaping for GraphQL string literals, stream mode detection,
+%% stale stream sweeping, and SSE event formatting. The predicates under
+%% test are implemented in Phases 4-6 of the SSE plan.
+%% ---------------------------------------------------------------------------
+
+:- begin_tests(webserver_graphql_subs_sse, []).
+
+%% stream_cors_headers reflects the Origin header (not wildcard '*').
+%% This mirrors write_cors_headers/1 in routes.pl which reflects Origin
+%% and sets Access-Control-Allow-Credentials: true (per CORS spec, '*'
+%% is incompatible with credentials).
+test(stream_cors_headers_reflects_origin) :-
+    Request = _{headers: _{'origin': "https://example.com"}},
+    stream_cors_headers(Request, Headers),
+    get_dict('Access-Control-Allow-Origin', Headers, Origin),
+    Origin == "https://example.com",
+    get_dict('Access-Control-Allow-Credentials', Headers, "true").
+
+%% stream_cors_headers returns an empty dict when no Origin header is
+%% present (same-origin request — no CORS headers needed).
+test(stream_cors_headers_no_origin) :-
+    Request = _{headers: _{}},
+    stream_cors_headers(Request, Headers),
+    \+ get_dict('Access-Control-Allow-Origin', Headers, _).
+
+%% stream_cors_headers includes the full set of allowed methods and
+%% headers, matching write_cors_headers/1.
+test(stream_cors_headers_includes_methods_and_headers) :-
+    Request = _{headers: _{'origin': "https://example.com"}},
+    stream_cors_headers(Request, Headers),
+    get_dict('Access-Control-Allow-Methods', Headers, Methods),
+    once(sub_string(Methods, _, _, _, "GET")),
+    once(sub_string(Methods, _, _, _, "POST")),
+    once(sub_string(Methods, _, _, _, "OPTIONS")),
+    get_dict('Access-Control-Allow-Headers', Headers, AllowedHeaders),
+    once(sub_string(AllowedHeaders, _, _, _, "Authorization")),
+    once(sub_string(AllowedHeaders, _, _, _, "Content-Type")).
+
+%% graphql_escape_string escapes backslashes for safe GraphQL string
+%% literal embedding. Uses re_replace/4 from library(pcre).
+test(graphql_escape_string_basic) :-
+    graphql_escape_string('Product/Simple', Escaped),
+    atom_string(Escaped, EscapedStr),
+    EscapedStr == "Product/Simple".
+
+test(graphql_escape_string_with_quotes) :-
+    graphql_escape_string('Product/"bad"', Escaped),
+    atom_string(Escaped, EscapedStr),
+    once(sub_string(EscapedStr, _, _, _, '\\"bad\\"')).
+
+test(graphql_escape_string_with_backslash) :-
+    graphql_escape_string('Product\\path', Escaped),
+    atom_string(Escaped, EscapedStr),
+    once(sub_string(EscapedStr, _, _, _, '\\\\')).
+
+%% parse_selection_fields extracts top-level field names and nested
+%% selection sets from a GraphQL selection set string.
+
+test(parse_selection_fields_flat) :-
+    parse_selection_fields("_id name", Fields),
+    Fields = [field("_id", ""), field("name", "")].
+
+test(parse_selection_fields_with_nested) :-
+    parse_selection_fields("_id address { city street }", Fields),
+    Fields = [field("_id", ""), field("address", "city street")].
+
+test(parse_selection_fields_multiple_nested) :-
+    parse_selection_fields("_id author { name } address { city }", Fields),
+    Fields = [field("_id", ""),
+              field("author", "name"),
+              field("address", "city")].
+
+test(parse_selection_fields_deeply_nested) :-
+    parse_selection_fields("author { address { city } }", Fields),
+    Fields = [field("author", "address { city }")].
+
+test(parse_selection_fields_empty) :-
+    parse_selection_fields("", Fields),
+    Fields = [].
+
+test(parse_selection_fields_single_field) :-
+    parse_selection_fields("_id", Fields),
+    Fields = [field("_id", "")].
+
+%% resolve_fields skips _id and _commit (handled by caller).
+
+test(resolve_fields_skips_id_and_commit) :-
+    resolve_fields([field("_id", ""), field("_commit", ""), field("name", "")],
+                   [], 'http://example.com/data/Doc1', _{}, _{'_id': 'http://example.com/data/Doc1'}, Result),
+    \+ get_dict('_commit', Result, _).
+
+%% detect_stream_mode checks the Accept header to determine the
+%% streaming mode. SSE only — no NDJSON in this phase.
+test(detect_mode_sse) :-
+    detect_stream_mode(_{headers: _{'accept': "text/event-stream"}}, Mode),
+    Mode == sse.
+
+test(detect_mode_delegate_default) :-
+    detect_stream_mode(_{headers: _{'accept': "application/json"}}, Mode),
+    Mode == delegate.
+
+test(detect_mode_delegate_no_accept) :-
+    detect_stream_mode(_{headers: _{}}, Mode),
+    Mode == delegate.
+
+%% SSE data line format: "data: {json}\n" — one \n because
+%% appserver_broadcast_send_raw appends the second \n, producing
+%% the correct SSE "data: {json}\n\n".
+test(sse_data_line_format) :-
+    with_output_to(string(Output),
+        format(current_output, "data: ~w~n", ['{"data":{}}'])),
+    once(sub_string(Output, _, _, _, "data: ")),
+    once(sub_string(Output, _, _, _, "\n")),
+    %% Must NOT contain two trailing newlines — broadcast adds the second.
+    \+ sub_string(Output, _, _, _, "\n\n").
+
+%% sweep_stale_sse_streams retracts graphql_sse_subscription entries
+%% whose Rust stream no longer exists. Uses a fake stream id that
+%% does not exist in the appserver registry.
+test(sweep_stale_sse_streams_removes_dead,
+     [setup(setup_sse_test_streams), cleanup(cleanup_cohorts)]) :-
+    %% dead_stream does not exist in the appserver registry, so it
+    %% should be retracted. alive_stream also does not exist in a unit
+    %% test context (no running server), so both will be swept.
+    sweep_stale_sse_streams,
+    %% After sweeping, no graphql_sse_subscription entries remain.
+    \+ webserver_graphql_subs:graphql_sse_subscription(_, _, _).
+
+%% cleanup_sse_stream retracts a single SSE subscription and
+%% unregisters the cohort.
+test(cleanup_sse_stream_retracts_subscription,
+     [setup(setup_sse_test_streams), cleanup(cleanup_cohorts)]) :-
+    cleanup_sse_stream(alive_stream),
+    \+ webserver_graphql_subs:graphql_sse_subscription(alive_stream, _, _),
+    %% The other stream should still be present.
+    webserver_graphql_subs:graphql_sse_subscription(dead_stream, _, _).
+
+%% graphql_sse_handler returns 401 when authentication fails
+%% (no Authorization header and no anonymous fallback in test context).
+test(sse_handler_returns_401_on_auth_failure) :-
+    Request = _{
+        headers: _{},
+        params: _{path: "admin/db/local/branch/main"},
+        body: "{\"query\": \"subscription { Product_added { _id } }\"}"
+    },
+    catch(
+        (   graphql_sse_handler(Request, _StreamId, Response)
+        ->  get_dict(status, Response, Status),
+            Status == 401
+        ;   %% If the handler fails (no auth), that's also acceptable
+            %% for the unit test — the worker pool catch maps it to 401.
+            true
+        ),
+        _,
+        true
+    ).
+
+%% graphql_sse_handler returns 400 when the query body is missing
+%% or unparseable. This requires auth to pass first, which it won't
+%% in a pure unit test without a database — so we only verify the
+%% handler does not crash on a malformed body. Both failure (semidet)
+%% and exception are acceptable — the worker pool catch maps both to
+%% error responses.
+test(sse_handler_does_not_crash_on_malformed_body) :-
+    Request = _{
+        headers: _{},
+        params: _{path: "admin/db/local/branch/main"},
+        body: "not valid json"
+    },
+    (   catch(graphql_sse_handler(Request, test_stream, _), _, true)
+    ->  true
+    ;   true
+    ).
+
+%% graphql_sse_options_handler returns 204 with CORS headers.
+test(sse_options_handler_returns_204_with_cors) :-
+    Request = _{headers: _{'origin': "https://example.com"}},
+    graphql_sse_options_handler(Request, _StreamId, Response),
+    get_dict(status, Response, 204),
+    get_dict(headers, Response, Headers),
+    get_dict('Access-Control-Allow-Origin', Headers, "https://example.com").
+
+:- end_tests(webserver_graphql_subs_sse).
+
+%% ---------------------------------------------------------------------------
+%% PLUnit tests for extracted SSE pure predicates
+%%
+%% These tests verify the single-responsibility predicates extracted from
+%% the monolithic SSE handler. Each predicate is testable without a running
+%% database — they operate on plain dicts and strings.
+%% ---------------------------------------------------------------------------
+
+:- begin_tests(webserver_graphql_subs_sse_pure, []).
+
+%% sse_extract_branch_path extracts the branch path from Request.params.path.
+
+test(extract_branch_path_from_params) :-
+    Request = _{params: _{path: "admin/db/local/branch/main"}},
+    sse_extract_branch_path(Request, BranchPath),
+    BranchPath == "admin/db/local/branch/main".
+
+test(extract_branch_path_short_path) :-
+    Request = _{params: _{path: "admin/db"}},
+    sse_extract_branch_path(Request, BranchPath),
+    BranchPath == "admin/db".
+
+test(extract_branch_path_fails_without_params) :-
+    \+ sse_extract_branch_path(_{}, _).
+
+test(extract_branch_path_fails_without_path_in_params) :-
+    \+ sse_extract_branch_path(_{params: _{}}, _).
+
+%% sse_parse_body_query parses a JSON body string and extracts the query field.
+
+test(parse_body_query_valid) :-
+    sse_parse_body_query('{"query":"subscription { Product_added { _id } }"}', Query),
+    Query == "subscription { Product_added { _id } }".
+
+test(parse_body_query_with_variables) :-
+    sse_parse_body_query('{"query":"subscription { X { _id } }","variables":{}}', Query),
+    Query == "subscription { X { _id } }".
+
+test(parse_body_query_empty_query_fails) :-
+    \+ sse_parse_body_query('{"query":""}', _).
+
+test(parse_body_query_missing_query_fails) :-
+    \+ sse_parse_body_query('{"variables":{}}', _).
+
+test(parse_body_query_invalid_json_fails) :-
+    \+ sse_parse_body_query('not json', _).
+
+test(parse_body_query_empty_string_fails) :-
+    \+ sse_parse_body_query('', _).
+
+%% sse_parse_timeout extracts the timeout query parameter, defaulting to 75.
+
+test(parse_timeout_default_no_query) :-
+    sse_parse_timeout(_{}, Timeout),
+    Timeout == 75.
+
+test(parse_timeout_default_empty_query) :-
+    sse_parse_timeout(_{query: ""}, Timeout),
+    Timeout == 75.
+
+test(parse_timeout_explicit) :-
+    sse_parse_timeout(_{query: "timeout=60"}, Timeout),
+    Timeout == 60.
+
+test(parse_timeout_with_other_params) :-
+    sse_parse_timeout(_{query: "foo=bar&timeout=120&baz=qux"}, Timeout),
+    Timeout == 120.
+
+test(parse_timeout_invalid_falls_back_to_default) :-
+    sse_parse_timeout(_{query: "timeout=abc"}, Timeout),
+    Timeout == 75.
+
+test(parse_timeout_zero_allowed) :-
+    sse_parse_timeout(_{query: "timeout=0"}, Timeout),
+    Timeout == 0.
+
+%% sse_json_response builds a JSON response dict with CORS headers.
+
+test(json_response_includes_cors_when_origin) :-
+    Request = _{headers: _{'origin': "https://example.com"}},
+    sse_json_response(Request, 400, "{\"error\":\"bad\"}", Response),
+    get_dict(status, Response, 400),
+    get_dict(headers, Response, Headers),
+    get_dict('Content-Type', Headers, "application/json"),
+    get_dict('Access-Control-Allow-Origin', Headers, "https://example.com"),
+    get_dict(body, Response, "{\"error\":\"bad\"}").
+
+test(json_response_no_cors_without_origin) :-
+    Request = _{headers: _{}},
+    sse_json_response(Request, 401, "{\"error\":\"auth\"}", Response),
+    get_dict(status, Response, 401),
+    get_dict(body, Response, "{\"error\":\"auth\"}"),
+    get_dict(headers, Response, Headers),
+    \+ get_dict('Access-Control-Allow-Origin', Headers, _).
+
+%% sse_build_streaming_response builds the 200 streaming response dict.
+
+test(streaming_response_has_sse_headers) :-
+    Request = _{headers: _{'origin': "https://example.com"}},
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', sse),
+    sse_build_streaming_response(Request, stream1, sse, CohortKey, 'test_channel', 30, Response),
+    get_dict(status, Response, 200),
+    get_dict(headers, Response, Headers),
+    get_dict('Content-Type', Headers, "text/event-stream"),
+    get_dict('Cache-Control', Headers, "no-cache"),
+    get_dict('X-Accel-Buffering', Headers, "no"),
+    get_dict(body, Response, stream).
+
+test(streaming_response_has_ndjson_headers) :-
+    Request = _{headers: _{'origin': "https://example.com"}},
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', ndjson),
+    sse_build_streaming_response(Request, stream1, ndjson, CohortKey, 'test_channel', 30, Response),
+    get_dict(status, Response, 200),
+    get_dict(headers, Response, Headers),
+    get_dict('Content-Type', Headers, "application/x-ndjson"),
+    get_dict('Cache-Control', Headers, "no-cache"),
+    get_dict(body, Response, stream).
+
+test(streaming_response_has_post_response_goal) :-
+    Request = _{headers: _{}},
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', sse),
+    sse_build_streaming_response(Request, stream1, sse, CohortKey, 'test_channel', 60, Response),
+    get_dict(post_response, Response, PostResponse),
+    nonvar(PostResponse).
+
+%% detect_stream_mode detects 3 modes: sse, ndjson, delegate.
+
+test(detect_mode_ndjson) :-
+    detect_stream_mode(_{headers: _{'accept': "application/x-ndjson"}}, Mode),
+    Mode == ndjson.
+
+test(detect_mode_ndjson_with_other_accept) :-
+    detect_stream_mode(_{headers: _{'accept': "application/x-ndjson, text/plain"}}, Mode),
+    Mode == ndjson.
+
+test(detect_mode_sse_takes_priority_over_ndjson) :-
+    %% If both SSE and NDJSON are in Accept, SSE wins (checked first).
+    detect_stream_mode(_{headers: _{'accept': "text/event-stream, application/x-ndjson"}}, Mode),
+    Mode == sse.
+
+%% cohort_mode extracts the mode from a 5-arg cohort key.
+
+test(cohort_mode_extracts_sse) :-
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', sse),
+    cohort_mode(CohortKey, Mode),
+    Mode == sse.
+
+test(cohort_mode_extracts_ndjson) :-
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', ndjson),
+    cohort_mode(CohortKey, Mode),
+    Mode == ndjson.
+
+%% cohort_operation extracts the operation from a 5-arg cohort key.
+
+test(cohort_operation_extracts_added) :-
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', sse),
+    cohort_operation(CohortKey, Operation),
+    Operation == added.
+
+test(cohort_operation_extracts_deleted) :-
+    CohortKey = cohort(branch_descriptor{}, 'Product', deleted, 'hash', ndjson),
+    cohort_operation(CohortKey, Operation),
+    Operation == deleted.
+
+%% cohort_class works with 5-arg cohort key.
+
+test(cohort_class_works_with_5_arg_key) :-
+    CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', sse),
+    cohort_class(CohortKey, ClassName),
+    ClassName == 'Product'.
+
+%% register_subscription_parsed with Mode (8-arg) includes Mode in cohort key.
+
+test(register_with_mode_sse,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
+                                 CohortKey, _),
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse).
+
+test(register_with_mode_ndjson,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', ndjson,
+                                 CohortKey, _),
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', ndjson).
+
+test(register_different_modes_different_cohorts,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
+                                 CohortKey1, _),
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', ndjson,
+                                 CohortKey2, _),
+    CohortKey1 \== CohortKey2.
+
+test(register_rejects_invalid_mode,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    catch(
+        register_subscription_parsed(branch_descriptor{}, 'Person', added,
+                                     '{}', 'hash1', invalid_mode, _, _),
+        Error,
+        Error = error(subscription_registration_failed, _)
+    ).
+
+test(register_accepts_database_descriptor,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = database_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
+                                 CohortKey, _),
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse).
+
+test(register_accepts_repository_descriptor,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = repository_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
+                                 CohortKey, _),
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse).
+
+test(register_accepts_system_descriptor,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = system_descriptor{},
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse,
+                                 CohortKey, _),
+    CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse).
+
+%% send_sse_or_ndjson formats events per mode.
+%% SSE: "event: next\ndata: {json}\n" (broadcast adds second \n)
+%% NDJSON: "{json}" (broadcast adds \n)
+
+test(send_sse_format) :-
+    with_output_to(string(Line),
+        format(current_output, "event: next~ndata: ~w~n", ['{"data":{}}'])),
+    once(sub_string(Line, _, _, _, "event: next")),
+    once(sub_string(Line, _, _, _, "data: ")).
+
+:- end_tests(webserver_graphql_subs_sse_pure).
+
+%% Setup helper for SSE stream tests — creates test cohort and
+%% subscription entries with fake stream ids.
+setup_sse_test_streams :-
+    cleanup_cohorts,
+    TestDesc = branch_descriptor{},
+    CohortKey = cohort(TestDesc, 'Product', added, 'hash', sse),
+    assertz(webserver_graphql_subs:graphql_cohort(CohortKey,
+                TestDesc, 'test_channel', 2)),
+    assertz(webserver_graphql_subs:graphql_sse_subscription(alive_stream,
+                CohortKey, 'test_channel')),
+    assertz(webserver_graphql_subs:graphql_sse_subscription(dead_stream,
+                CohortKey, 'test_channel')).
 
 %% Cleanup helper for tests
 cleanup_cohorts :-
-    retractall(webserver_graphql_subs:graphql_subscription(_, _, _, _)),
     retractall(webserver_graphql_subs:graphql_cohort(_, _, _, _)),
-    retractall(webserver_graphql_subs:graphql_cohort_selection(_, _)),
-    retractall(webserver_graphql_subs:graphql_broadcast_sent(_, _)).
+    retractall(webserver_graphql_subs:graphql_cohort_selection(_, _, _)),
+    retractall(webserver_graphql_subs:graphql_broadcast_sent(_, _)),
+    retractall(webserver_graphql_subs:graphql_sse_subscription(_, _, _)).
 

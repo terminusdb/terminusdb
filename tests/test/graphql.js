@@ -2100,4 +2100,173 @@ query EverythingQuery {
       })
     })
   })
+
+  describe('system database GraphQL queries', function () {
+    let systemClient
+
+    before(async function () {
+      const base = agent.baseUrl
+      const systemPath = '/api/graphql/_system'
+
+      const authMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(agent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      const systemHttpLink = new HttpLink({ uri: `${base}${systemPath}`, fetch })
+      const systemComposedLink = concat(authMiddleware, systemHttpLink)
+      systemClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: systemComposedLink,
+      })
+    })
+
+    it('queries User from the system database', async function () {
+      const SYSTEM_USER_QUERY = gql`
+        query SystemUserQuery {
+          User {
+            _id
+            name
+          }
+        }
+      `
+
+      const result = await systemClient.query({ query: SYSTEM_USER_QUERY })
+
+      expect(result.data.User).to.be.an('array')
+      expect(result.data.User.length).to.be.greaterThan(0)
+      expect(result.data.User[0].name).to.be.a('string')
+    })
+
+    it('queries Database from the system database', async function () {
+      const SYSTEM_DB_QUERY = gql`
+        query SystemDatabaseQuery {
+          Database {
+            _id
+            name
+          }
+        }
+      `
+
+      const result = await systemClient.query({ query: SYSTEM_DB_QUERY })
+
+      expect(result.data.Database).to.be.an('array')
+      expect(result.data.Database.length).to.be.greaterThan(0)
+    })
+  })
+
+  describe('system database GraphQL access control', function () {
+    let nonAdminAgent
+    let nonAdminClient
+
+    before(async function () {
+      const base = agent.baseUrl
+      const systemPath = '/api/graphql/_system'
+
+      // Create a non-admin user via the /api/users endpoint
+      const username = 'graphql-test-user-' + util.randomString()
+      const password = 'test-password-' + util.randomString()
+      await agent.agent.post('/api/users')
+        .send({ name: username, password })
+
+      // Set up a non-admin agent
+      nonAdminAgent = new Agent({ baseUrl: base, orgName: 'admin', dbName: 'testdb' })
+      nonAdminAgent.auth({ user: username, password })
+
+      // Set up a GraphQL client for the non-admin user targeting _system
+      const nonAdminAuthMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(nonAdminAgent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      const nonAdminHttpLink = new HttpLink({ uri: `${base}${systemPath}`, fetch })
+      const nonAdminComposedLink = concat(nonAdminAuthMiddleware, nonAdminHttpLink)
+      nonAdminClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: nonAdminComposedLink,
+      })
+    })
+
+    it('rejects non-admin user GraphQL mutation (POST) to _system with 403', async function () {
+      const MUTATION = gql`
+        mutation CreateUser {
+          User {
+            name
+          }
+        }
+      `
+
+      try {
+        await nonAdminClient.mutate({ mutation: MUTATION })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        const status = error.networkError?.statusCode
+        expect(status).to.equal(403)
+      }
+    })
+
+    it('rejects non-admin user GraphQL query (GET) to _system with 403', async function () {
+      const QUERY = gql`
+        query SystemUserQuery {
+          User {
+            _id
+            name
+          }
+        }
+      `
+
+      try {
+        await nonAdminClient.query({ query: QUERY })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        const status = error.networkError?.statusCode
+        expect(status).to.equal(403)
+      }
+    })
+
+    it('allows admin user GraphQL query (GET) to _system', async function () {
+      const QUERY = gql`
+        query SystemUserQuery {
+          User {
+            _id
+            name
+          }
+        }
+      `
+
+      const base = agent.baseUrl
+      const systemPath = '/api/graphql/_system'
+
+      const adminAuthMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(agent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      const adminHttpLink = new HttpLink({ uri: `${base}${systemPath}`, fetch })
+      const adminComposedLink = concat(adminAuthMiddleware, adminHttpLink)
+      const adminClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: adminComposedLink,
+      })
+
+      const result = await adminClient.query({ query: QUERY })
+      expect(result.data.User).to.be.an('array')
+      expect(result.data.User.length).to.be.greaterThan(0)
+    })
+  })
 })

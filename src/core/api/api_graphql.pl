@@ -1,4 +1,8 @@
-:- module(api_graphql, [handle_graphql_request/10]).
+:- module(api_graphql, [
+              handle_graphql_request/10,
+              resolve_graphql_dbs/6,
+              get_or_create_graphql_context/2
+          ]).
 
 :- use_module(core(util)).
 :- use_module(core(transaction)).
@@ -37,48 +41,73 @@ post_process_graphql_decimals(ResponseIn, ResponseOut) :-
     % Continue with any other decimal-like fields
     re_replace('"([a-zA-Z_][a-zA-Z0-9_]*)":"([0-9]+\\.[0-9]+)"'/g, '"\\1":\\2', Temp, ResponseOut).
 
+%% resolve_graphql_dbs(+System_DB, +Auth, +Desc, +Transaction,
+%%                     -Commit_DB, -Meta_DB) is det.
+%%
+%% Dispatches on descriptor type to wire up Commit_DB and Meta_DB
+%% for access control. Shared between the HTTP GraphQL handler and
+%% the SSE subscription handler.
+resolve_graphql_dbs(System_DB, Auth, Desc, Transaction, Commit_DB, Meta_DB) :-
+    (   branch_descriptor{} :< Desc
+    ->  maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/commit_read_access',
+                            (Transaction.parent),
+                            Commit_DB),
+        maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/meta_read_access',
+                            (Transaction.parent.parent),
+                            Meta_DB)
+    ;   repository_descriptor{} :< Desc
+    ->  maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/commit_read_access',
+                            Transaction,
+                            Commit_DB),
+        maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/meta_read_access',
+                            (Transaction.parent),
+                            Meta_DB)
+    ;   database_descriptor{} :< Desc
+    ->  Commit_DB = none,
+        maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/meta_read_access',
+                            Transaction,
+                            Meta_DB)
+    ;   system_descriptor{} :< Desc
+    ->  Commit_DB = none,
+        Meta_DB = none
+    ;   Commit_DB = none,
+        Meta_DB = none
+    ).
+
+%% get_or_create_graphql_context(+Transaction, -Graphql_Context) is det.
+%%
+%% Returns a cached GraphQL context if available, otherwise builds one
+%% from class frames. Shared between the HTTP GraphQL handler and the
+%% SSE subscription handler.
+get_or_create_graphql_context(Transaction, Graphql_Context) :-
+    (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
+    ->  true
+    ;   all_class_frames(Transaction, Frames,
+            [compress_ids(true), expand_abstract(true), simple(true)]),
+        '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)
+    ).
+
 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data) :-
     atom_string(Path_Atom, Path),
     (   Path == ""
-    %->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
     ->  throw(error(no_graphql_path_given, _))
     ;   (   resolve_absolute_string_descriptor(Path, Desc)
         ->  do_or_die(open_descriptor(Desc, Transaction),
                       error(unresolvable_absolute_descriptor(Desc), _))
         ;   throw(error(invalid_absolute_path(Path), _))
         ),
-        (   branch_descriptor{} :< Desc
-        ->  maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/commit_read_access',
-                                (Transaction.parent),
-                                Commit_DB),
-            maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/meta_read_access',
-                                (Transaction.parent.parent),
-                                Meta_DB)
-        ;   repository_descriptor{} :< Desc
-        ->  maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/commit_read_access',
-                                Transaction,
-                                Commit_DB),
-            maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/meta_read_access',
-                                (Transaction.parent),
-                                Meta_DB)
-        ;   database_descriptor{} :< Desc
-        ->  Commit_DB = none,
-            maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/meta_read_access',
-                                (Transaction),
-                                Meta_DB)
-        ;   Commit_DB = none,
-            Meta_DB = none
-        ),
+        resolve_graphql_dbs(System_DB, Auth, Desc, Transaction, Commit_DB, Meta_DB),
         assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
-        (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
-        ->  true
-        ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-            '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
+        (   Method == post
+        ->  assert_write_access(System_DB, Auth, Desc, filter{type: instance})
+        ;   true
+        ),
+        get_or_create_graphql_context(Transaction, Graphql_Context),
 
         Commit_Info0 = commit_info{author: Author, message: Message},
         maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),

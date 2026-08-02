@@ -379,10 +379,79 @@ predicates! {
                     .entry("operation", Atom::new(&parsed.operation))
                     .entry("filter_canonical_json", parsed.filter_canonical_json.clone())
                     .entry("selection_set", parsed.selection_set.clone())
-                    .entry("selection_set_hash", Atom::new(&parsed.selection_set_hash));
+                    .entry("selection_set_hash", Atom::new(&parsed.selection_set_hash))
+                    .entry("selection_set_graphql", parsed.selection_set_graphql.clone());
                 parsed_term.unify(dict)
             }
             Err(e) => context.raise_exception(&term!{context: error(graphql_subscription_parse_error(#e), _)}?)
+        }
+    }
+
+    /// resolve_subscription_event(+Transaction, +GraphqlContext, +QueryString,
+    ///                             +ChangeType, +CommitId, +Timestamp, +Datetime,
+    ///                             -ResponseJson)
+    ///
+    /// Executes a GraphQL query (the Query-root resolution query built by
+    /// resolve_event_through_juniper/11 in Prolog) against the transaction's
+    /// instance and schema layers, returning the JSON response string.
+    ///
+    /// The transaction term is either a fresh open_descriptor transaction
+    /// (for non-deleted events) or the Validation_Object (for deleted events,
+    /// whose instance_objects.read layer contains the pre-commit state).
+    /// The graphql_context term is a TerminusTypeCollectionInfo created by
+    /// get_graphql_context (same as the regular GraphQL HTTP endpoint).
+    ///
+    /// ChangeType, CommitId, Timestamp, and Datetime carry subscription event
+    /// metadata that is made available to the GraphQL resolver as the nested
+    /// `_commit { _change_type _id _timestamp _datetime }` object. The fields
+    /// are only included in the response if the user explicitly requests
+    /// `_commit` in the selection set.
+    #[module("$graphql")]
+    semidet fn resolve_subscription_event(context, transaction_term, graphql_context_term, query_string_term, change_type_term, commit_id_term, timestamp_term, datetime_term, response_term) {
+        let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
+        let query: String = query_string_term.get_ex()?;
+        let change_type: String = change_type_term.get_ex()?;
+        let commit_id: String = commit_id_term.get_ex()?;
+        let timestamp: f64 = timestamp_term.get_ex()?;
+        let datetime: String = datetime_term.get_ex()?;
+
+        // Extract schema and instance layers from the transaction term.
+        // For deleted events, the transaction term is the Validation_Object,
+        // whose instance_objects.read layer is the pre-commit state.
+        let schema_layer = match transaction_schema_layer(context, transaction_term)? {
+            Some(layer) => layer,
+            None => return context.raise_exception(&term!{context: error(no_schema_layer_in_transaction, _)}?),
+        };
+        let instance_layer = transaction_instance_layer(context, transaction_term)?;
+
+        // Build the SubscriptionResolveContext with event metadata so the
+        // resolver can return the _commit nested object fields.
+        let resolve_context = subscription::SubscriptionResolveContext::with_metadata(
+            schema_layer,
+            instance_layer,
+            type_collection.clone(),
+            change_type,
+            commit_id,
+            timestamp,
+            datetime,
+        );
+
+        // Get the cached subscription root node (schema + subscription types).
+        let root_node = get_or_create_subscription_root_node(&type_collection);
+
+        // Parse the query string as a GraphQLRequest and execute it.
+        let request: GraphQLRequest = match serde_json::from_str(&query) {
+            Ok(r) => r,
+            Err(error) => return context.raise_exception(&term!{context: error(graphql_resolve_parse_error(#error.line() as u64, #error.column() as u64), _)}?),
+        };
+
+        let response = request.execute_sync(&root_node, &resolve_context);
+        match serde_json::to_string(&response) {
+            Ok(r) => {
+                let processed = post_process_graphql_numbers(r);
+                response_term.unify(processed)
+            }
+            Err(_) => context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
 }
@@ -393,4 +462,5 @@ pub fn register() {
     register_handle_request();
     register_handle_system_request();
     register_parse_subscription_query();
+    register_resolve_subscription_event();
 }

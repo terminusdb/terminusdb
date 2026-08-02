@@ -6,6 +6,7 @@
               cors_handler/3,
               cors_handler/4,
               write_cors_headers/1,
+              cors_headers_dict/2,
               api_report_errors/3,
               customise_exception/1
           ]).
@@ -121,6 +122,13 @@ http:location(api, '/api', []).
 % Wrapper that exposes the 404 handler through the Rust backend as well.
 % It must skip authentication so that unauthenticated missing-path requests
 % get the JSON 404 response instead of an auth challenge.
+%
+% NOTE: Some routes registered via SWI's http_handler (not tdb_http_handler)
+% are not known to the Rust webserver directly. They are reached through
+% this catch-all /api/*path fallback, which dispatches to SWI's
+% http_dispatch via http_dispatch_with_expansion. The GraphQL endpoint
+% is a notable example — see the "GraphQL Route Registration Flow"
+% comment near graphql_handler below for full details.
 :- tdb_http_handler('/api', cors_handler(Method, reply_404_not_found_handler),
                 [method(Method),
                  methods([options,get,post,put,delete,patch]),
@@ -3332,6 +3340,45 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
     ).
 
 %%%%%%%%%%%%%%%%%%%% GraphQL handler %%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  == GraphQL Route Registration Flow ==
+%
+%  The /api/graphql/*path endpoint has a non-obvious dispatch path
+%  because it involves three separate registration sites. This comment
+%  documents the full flow so future developers don't have to reverse-
+%  engineer it (as was needed to fix a 500-vs-403 error handling bug).
+%
+%  1. SWI http_handler registration (HERE, below)
+%     This registers the GraphQL route with SWI-Prolog's built-in HTTP
+%     dispatcher. It is NOT registered via tdb_http_handler, so the Rust
+%     webserver does not know about it directly.
+%
+%  2. Plugin stream route (plugins/webserver_graphql_subs.pl)
+%     The webserver_graphql_subs plugin registers a stream route for
+%     POST /api/graphql/*path via appserver_hooks:appserver_stream/3.
+%     The Rust webserver's matchit router prioritises static segments
+%     over wildcards, so this route takes precedence over the catch-all
+%     /api/*path fallback (registered in the "Fallback Path" section
+%     above, around line 125). The plugin's handler checks the
+%     Accept header: if text/event-stream, it starts an SSE subscription;
+%     otherwise it calls delegate_to_graphql/2, which calls
+%     handle_graphql_request/10 directly — bypassing graphql_handler
+%     below entirely.
+%
+%  3. Error handling (src/core/plugin_api/http.pl)
+%     Because the plugin bypasses graphql_handler (and its
+%     handle_graphql_error catch block), errors thrown inside
+%     handle_graphql_request are caught by delegate_to_graphql's own
+%     catch and mapped to HTTP responses via plugin_error_response/2.
+%     Any error term not covered by a clause in plugin_error_response/2
+%     falls through to the generic 500 catch-all. If you add new error
+%     terms in api_graphql.pl or capabilities.pl, you MUST add matching
+%     clauses in plugin_error_response/2 as well.
+%
+%  The graphql_handler below is only reached when the SWI HTTP server
+%  backend is used directly (not the Rust webserver). It is kept for
+%  backwards compatibility but is not the primary dispatch path.
+%
 http:location(graphql,api(graphql),[]).
 :- http_handler(graphql(Path), cors_handler(Method, graphql_handler(Path), [add_payload(false),skip_authentication(true)]),
                 [method(Method),
@@ -3844,19 +3891,41 @@ authenticate(_, _, Auth) :-
                    }).
 
 /*
+ * cors_headers_dict(+Request, -Headers) is det.
+ *
+ * Returns a dict of CORS headers matching write_cors_headers/1.
+ * Reflects the Origin header from the request (not '*') to support
+ * Access-Control-Allow-Credentials: true (per CORS spec, '*' is
+ * incompatible with credentials). Returns an empty dict when no Origin
+ * header is present (same-origin request).
+ */
+cors_headers_dict(Request, Headers) :-
+    (   memberchk(origin(Origin), Request)
+    ->  Headers = _{
+            'Access-Control-Allow-Origin': Origin,
+            'Access-Control-Allow-Credentials': "true",
+            'Access-Control-Allow-Methods': "GET, POST, PUT, DELETE, OPTIONS",
+            'Access-Control-Allow-Headers': "Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description, X-HTTP-METHOD-OVERRIDE",
+            'Access-Control-Max-Age': "1728000"
+        }
+    ;   Headers = _{}
+    ).
+
+/*
  * write_cors_headers(Request) is det.
  *
  * Writes cors headers associated with Resource_URI
  */
 write_cors_headers(Request) :-
-    (   memberchk(origin(Origin), Request)
-    ->  current_output(Out),
-        format(Out,'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\n',[]),
-        format(Out,'Access-Control-Allow-Credentials: true\n',[]),
-        format(Out,'Access-Control-Max-Age: 1728000\n',[]),
-        format(Out,'Access-Control-Allow-Headers: Authorization, Authorization-Remote, Accept, Accept-Encoding, Accept-Language, Host, Origin, Referer, Content-Type, Content-Length, Content-Range, Content-Disposition, Content-Description, X-HTTP-METHOD-OVERRIDE\n',[]),
-        format(Out,'Access-Control-Allow-Origin: ~s~n',[Origin])
-    ;   true).
+    cors_headers_dict(Request, Headers),
+    (   Headers = _{} -> true
+    ;   current_output(Out),
+        dict_pairs(Headers, _, Pairs),
+        forall(member(Key-Value, Pairs),
+               (   atom_string(Key, KeyStr),
+                   format(Out, '~s: ~s~n', [KeyStr, Value]))
+               )
+    ).
 
 write_json_ld_context_link_header(none) :- !.
 write_json_ld_context_link_header(some(ContextURI)) :-

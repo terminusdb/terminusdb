@@ -1,9 +1,7 @@
 //! GraphQL subscription types and resolution context.
 //!
-//! `TerminusSubscriptionRoot` exists only for schema generation and
-//! introspection. Actual subscription execution bypasses Juniper's async
-//! executor entirely — events are resolved manually using
-//! `SubscriptionResolveContext`.
+//! `TerminusSubscriptionRoot` is for schema generation only. Event resolution
+//! bypasses Juniper's async executor and uses `SubscriptionResolveContext`.
 
 use std::sync::Arc;
 
@@ -22,28 +20,41 @@ use crate::graphql::schema::{
 
 /// Context for resolving GraphQL subscription events outside of Juniper.
 ///
-/// Contains only the Rust-side data needed for field resolution. Prolog
-/// passes schema and instance layers via FFI after each commit; no per-event
-/// FFI calls are needed for resolution.
+/// Prolog passes schema and instance layers via FFI after each commit;
+/// no per-event FFI calls are needed. `change_type`, `commit_id`, `timestamp`,
+/// and `datetime` are `None` for regular GraphQL queries.
 #[derive(Clone)]
 pub struct SubscriptionResolveContext {
     pub schema: SyncStoreLayer,
     pub instance: Option<SyncStoreLayer>,
     pub type_collection: TerminusTypeCollectionInfo,
     pub document_context: Arc<Lazy<DocumentContext<SyncStoreLayer>>>,
+    pub change_type: Option<String>,
+    pub commit_id: Option<String>,
+    pub timestamp: Option<f64>,
+    pub datetime: Option<String>,
 }
 
 impl SubscriptionResolveContext {
-    pub fn new(
+    /// Create a context with subscription event metadata.
+    pub fn with_metadata(
         schema: SyncStoreLayer,
         instance: Option<SyncStoreLayer>,
         type_collection: TerminusTypeCollectionInfo,
+        change_type: String,
+        commit_id: String,
+        timestamp: f64,
+        datetime: String,
     ) -> Self {
         Self {
             schema,
             instance,
             type_collection,
             document_context: Arc::new(Lazy::new()),
+            change_type: Some(change_type),
+            commit_id: Some(commit_id),
+            timestamp: Some(timestamp),
+            datetime: Some(datetime),
         }
     }
 
@@ -54,10 +65,6 @@ impl SubscriptionResolveContext {
 }
 
 impl TerminusResolveContext for SubscriptionResolveContext {
-    fn schema(&self) -> &SyncStoreLayer {
-        &self.schema
-    }
-
     fn instance(&self) -> Option<&SyncStoreLayer> {
         self.instance.as_ref()
     }
@@ -70,14 +77,27 @@ impl TerminusResolveContext for SubscriptionResolveContext {
         self.document_context()
     }
 
+    fn change_type(&self) -> Option<&str> {
+        self.change_type.as_deref()
+    }
+
+    fn commit_id(&self) -> Option<&str> {
+        self.commit_id.as_deref()
+    }
+
+    fn timestamp(&self) -> Option<f64> {
+        self.timestamp
+    }
+
+    fn datetime(&self) -> Option<&str> {
+        self.datetime.as_deref()
+    }
+
     // Restrictions are rejected at subscription registration time,
     // so the default no-op implementation is correct.
 }
 
 /// Parsed components of a GraphQL subscription query.
-///
-/// Extracted by parsing the query string with Juniper's `parse_document_source`
-/// and walking the AST. Used by Prolog to compute the cohort key.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedSubscription {
     pub field_name: String,
@@ -86,13 +106,12 @@ pub struct ParsedSubscription {
     pub filter_canonical_json: String,
     pub selection_set: String,
     pub selection_set_hash: String,
+    /// Selection set as valid GraphQL text preserving field order, used for
+    /// Query-root resolution. Unlike `selection_set` (sorted for hashing).
+    pub selection_set_graphql: String,
 }
 
-/// Parse a GraphQL subscription query string and extract the components
-/// needed for cohort key computation.
-///
-/// Uses Juniper's `parse_document_source` — the same parser used by the
-/// HTTP GraphQL endpoint and the embedding query parser.
+/// Parse a GraphQL subscription query string into cohort key components.
 pub fn parse_subscription_query(
     query: &str,
     type_collection: &TerminusTypeCollectionInfo,
@@ -103,7 +122,6 @@ pub fn parse_subscription_query(
     let document = parse_document_source(&source, &root_node.schema)
         .map_err(|e| format!("GraphQL parse error: {}", e))?;
 
-    // Find the subscription operation in the parsed definitions.
     let mut subscription_op = None;
     for def in &document {
         if let Definition::Operation(op) = def {
@@ -118,7 +136,6 @@ pub fn parse_subscription_query(
         "No subscription operation found in query. Expected `subscription { ... }`".to_string()
     })?;
 
-    // Get the first field in the subscription's selection set.
     let first_field = op.selection_set.first().ok_or_else(|| {
         "Subscription operation has an empty selection set".to_string()
     })?;
@@ -130,7 +147,6 @@ pub fn parse_subscription_query(
 
     let field_name = field.name.item.to_string();
 
-    // Split field name on the last `_` to get class and operation.
     // e.g. "Person_added" -> ("Person", "added")
     let last_underscore = field_name.rfind('_').ok_or_else(|| {
         format!(
@@ -142,7 +158,6 @@ pub fn parse_subscription_query(
     let class_name = field_name[..last_underscore].to_string();
     let operation = field_name[last_underscore + 1..].to_string();
 
-    // Validate operation is one of the supported types.
     match operation.as_str() {
         "added" | "changed" | "deleted" => {}
         _ => return Err(format!(
@@ -151,7 +166,6 @@ pub fn parse_subscription_query(
         )),
     }
 
-    // Extract filter arguments and serialize to canonical JSON (sorted keys).
     let filter_canonical_json = if let Some(args) = &field.arguments {
         let mut map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
         for (key, val) in &args.item.items {
@@ -159,19 +173,40 @@ pub fn parse_subscription_query(
             let val_json = input_value_to_json(&val.item);
             map.insert(key_str, val_json);
         }
-        // serde_json::Map with BTreeMap ordering would be ideal, but
-        // serde_json::Map maintains insertion order by default. We sort
-        // by serializing through a BTreeMap.
+        // Sort via BTreeMap for canonical (deterministic) serialization.
         let sorted: std::collections::BTreeMap<_, _> = map.into_iter().collect();
         serde_json::to_string(&sorted).map_err(|e| format!("Failed to serialize filter: {}", e))?
     } else {
         "{}".to_string()
     };
 
-    // Extract and hash the selection set.
     let selection_set_str = selection_set_to_string(&field.selection_set);
     let hash = Sha256::digest(selection_set_str.as_bytes());
     let selection_set_hash = format!("{:x}", hash);
+
+    let selection_set_graphql = selection_set_to_graphql(&field.selection_set);
+
+    // Collect fragment definitions from the document so that fragment
+    // spreads in the selection set resolve correctly when the query is
+    // re-executed via resolve_subscription_event.
+    let fragments: Vec<String> = document
+        .iter()
+        .filter_map(|def| {
+            if let Definition::Fragment(frag) = def {
+                let name = frag.item.name.item.to_string();
+                let type_cond = frag.item.type_condition.item.to_string();
+                let body = selection_set_to_graphql(&Some(frag.item.selection_set.clone()));
+                Some(format!("fragment {} on {} {{ {} }}", name, type_cond, body))
+            } else {
+                None
+            }
+        })
+        .collect();
+    let selection_set_graphql = if fragments.is_empty() {
+        selection_set_graphql
+    } else {
+        format!("{} {}", selection_set_graphql, fragments.join(" "))
+    };
 
     Ok(ParsedSubscription {
         field_name,
@@ -180,11 +215,10 @@ pub fn parse_subscription_query(
         filter_canonical_json,
         selection_set: selection_set_str.clone(),
         selection_set_hash,
+        selection_set_graphql,
     })
 }
 
-/// Convert a Juniper `InputValue` to a `serde_json::Value` for canonical
-/// serialization.
 fn input_value_to_json(val: &juniper::InputValue<DefaultScalarValue>) -> serde_json::Value {
     use juniper::InputValue;
     match val {
@@ -212,9 +246,7 @@ fn input_value_to_json(val: &juniper::InputValue<DefaultScalarValue>) -> serde_j
     }
 }
 
-/// Normalize a selection set to a deterministic string representation
-/// for hashing. Field names are sorted, nested selection sets are
-/// recursively normalized.
+/// Deterministic string for hashing. Fields are sorted recursively.
 fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>) -> String {
     match selection_set {
         Some(items) => {
@@ -248,12 +280,47 @@ fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<Default
     }
 }
 
-/// Root subscription type for SDL generation.
-///
-/// Generates `{Class}_added`, `{Class}_changed`, `{Class}_deleted` fields
-/// for every class in the schema. This type is only used for schema
-/// generation and introspection — actual event resolution is done
-/// manually in the WebSocket handler.
+/// Query-ready GraphQL text preserving field order, for Query-root resolution.
+fn selection_set_to_graphql(selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>) -> String {
+    match selection_set {
+        Some(items) => {
+            let mut parts: Vec<String> = Vec::new();
+            for sel in items {
+                match sel {
+                    juniper::Selection::Field(f) => {
+                        let name = f.item.name.item.to_string();
+                        let alias = f.item.alias.as_ref().map(|a| a.item.to_string());
+                        let nested = selection_set_to_graphql(&f.item.selection_set);
+                        let field_str = match (alias, nested.is_empty()) {
+                            (Some(a), true) => format!("{}: {}", a, name),
+                            (Some(a), false) => format!("{}: {} {{ {} }}", a, name, nested),
+                            (None, true) => name,
+                            (None, false) => format!("{} {{ {} }}", name, nested),
+                        };
+                        parts.push(field_str);
+                    }
+                    juniper::Selection::FragmentSpread(fs) => {
+                        parts.push(format!("...{}", fs.item.name.item));
+                    }
+                    juniper::Selection::InlineFragment(ifr) => {
+                        let type_cond = ifr.item.type_condition.as_ref().map(|t| t.item.to_string()).unwrap_or_default();
+                        let nested = selection_set_to_graphql(&Some(ifr.item.selection_set.clone()));
+                        if type_cond.is_empty() {
+                            parts.push(format!("... {{ {} }}", nested));
+                        } else {
+                            parts.push(format!("... on {} {{ {} }}", type_cond, nested));
+                        }
+                    }
+                }
+            }
+            parts.join(" ")
+        }
+        None => String::new(),
+    }
+}
+
+/// Root subscription type for SDL generation. Not used for event resolution —
+/// that goes through `SubscriptionResolveContext`.
 pub struct TerminusSubscriptionRoot<C: TerminusResolveContext> {
     _phantom: std::marker::PhantomData<C>,
 }
@@ -266,9 +333,8 @@ impl<C: TerminusResolveContext> TerminusSubscriptionRoot<C> {
     }
 }
 
-// GraphQLType and GraphQLValue impls for TerminusSubscriptionRoot<C> are
-// in schema.rs, where they have access to TerminusTypeInfo fields and
-// add_arguments() — both private to that module.
+// GraphQLType/GraphQLValue impls are in schema.rs (needs access to private
+// TerminusTypeInfo fields and add_arguments()).
 
 #[cfg(test)]
 mod tests {
@@ -312,6 +378,36 @@ mod tests {
         let frames = Arc::new(empty_allframes());
         let type_collection = TerminusTypeCollectionInfo { allframes: frames };
         assert!(type_collection.allframes.frames.is_empty());
+    }
+
+    #[test]
+    fn commit_metadata_values_holds_all_fields() {
+        use crate::graphql::schema::CommitMetadataValues;
+        let cmv = CommitMetadataValues {
+            id: Some("abc123".to_string()),
+            timestamp: Some(1722528000.0),
+            datetime: Some("2024-08-01T16:00:00Z".to_string()),
+            change_type: Some("added".to_string()),
+        };
+        assert_eq!(cmv.id.as_deref(), Some("abc123"));
+        assert_eq!(cmv.timestamp, Some(1722528000.0));
+        assert_eq!(cmv.datetime.as_deref(), Some("2024-08-01T16:00:00Z"));
+        assert_eq!(cmv.change_type.as_deref(), Some("added"));
+    }
+
+    #[test]
+    fn commit_metadata_values_all_none() {
+        use crate::graphql::schema::CommitMetadataValues;
+        let cmv = CommitMetadataValues {
+            id: None,
+            timestamp: None,
+            datetime: None,
+            change_type: None,
+        };
+        assert!(cmv.id.is_none());
+        assert!(cmv.timestamp.is_none());
+        assert!(cmv.datetime.is_none());
+        assert!(cmv.change_type.is_none());
     }
 
     #[test]
@@ -395,14 +491,10 @@ mod tests {
             "subscription { Person_added }",
             &tc,
         );
-        // Person_added without a selection set — Juniper may parse this
-        // as a scalar field. The parse should still succeed but the
-        // selection_set will be None, producing an empty hash.
-        // This is acceptable — the hash will be consistent.
+        // Juniper may parse this as a scalar field with no selection set.
         let result = result;
         if let Ok(parsed) = result {
             assert_eq!(parsed.field_name, "Person_added");
-            // Empty selection set hashes to a deterministic value
             assert!(!parsed.selection_set_hash.is_empty());
         }
     }
@@ -446,8 +538,6 @@ mod tests {
             "subscription { Person_added { name _id } }",
             &tc,
         ).unwrap();
-        // Field order in selection set should not affect the hash
-        // because we sort fields before hashing.
         assert_eq!(r1.selection_set_hash, r2.selection_set_hash);
     }
 
@@ -487,6 +577,42 @@ mod tests {
     }
 
     #[test]
+    fn parse_returns_selection_set_graphql_flat_fields() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { Person_added { _id name } }",
+            &tc,
+        ).unwrap();
+        assert_eq!(result.selection_set_graphql, "_id name");
+    }
+
+    #[test]
+    fn parse_returns_selection_set_graphql_id_only() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { Person_added { _id } }",
+            &tc,
+        ).unwrap();
+        assert_eq!(result.selection_set_graphql, "_id");
+    }
+
+    #[test]
+    fn parse_returns_selection_set_graphql_preserves_order() {
+        let tc = person_type_collection();
+        let r1 = parse_subscription_query(
+            "subscription { Person_added { _id name } }",
+            &tc,
+        ).unwrap();
+        let r2 = parse_subscription_query(
+            "subscription { Person_added { name _id } }",
+            &tc,
+        ).unwrap();
+        assert_eq!(r1.selection_set_graphql, "_id name");
+        assert_eq!(r2.selection_set_graphql, "name _id");
+        assert_eq!(r1.selection_set_hash, r2.selection_set_hash);
+    }
+
+    #[test]
     fn parse_different_selection_sets_different_strings() {
         let tc = person_type_collection();
         let r1 = parse_subscription_query(
@@ -508,6 +634,29 @@ mod tests {
             &tc,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_returns_selection_set_graphql_with_fragment_definitions() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "fragment PersonFields on Person { _id name } subscription { Person_added { ...PersonFields } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert!(parsed.selection_set_graphql.contains("...PersonFields"),
+                "selection_set_graphql should contain fragment spread: {}",
+                parsed.selection_set_graphql);
+        assert!(parsed.selection_set_graphql.contains("fragment PersonFields on Person"),
+                "selection_set_graphql should contain fragment definition: {}",
+                parsed.selection_set_graphql);
+        assert!(parsed.selection_set_graphql.contains("_id"),
+                "selection_set_graphql should contain _id from fragment: {}",
+                parsed.selection_set_graphql);
+        assert!(parsed.selection_set_graphql.contains("name"),
+                "selection_set_graphql should contain name from fragment: {}",
+                parsed.selection_set_graphql);
     }
 
     #[test]
@@ -536,7 +685,7 @@ mod tests {
 
         for op in ["Person_changed", "Person_deleted"] {
             let f = sub_type.field_by_name(op)
-                .expect("{op} field should exist");
+                .expect(&format!("{op} field should exist"));
             match &f.field_type {
                 juniper::Type::Named(name) | juniper::Type::NonNullNamed(name) => {
                     assert_eq!(name.as_ref(), "Person",

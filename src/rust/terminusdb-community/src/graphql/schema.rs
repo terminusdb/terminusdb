@@ -32,7 +32,7 @@ use super::subscription::TerminusSubscriptionRoot;
 /// Trait for resolving GraphQL fields against a TerminusDB store.
 ///
 /// Implemented by `TerminusContext` (for HTTP GraphQL queries via Juniper)
-/// and `SubscriptionResolveContext` (for WebSocket subscription event
+/// and `SubscriptionResolveContext` (for SSE subscription event
 /// resolution outside of Juniper).
 ///
 /// The key difference is restriction checking: `TerminusContext` calls into
@@ -40,9 +40,6 @@ use super::subscription::TerminusSubscriptionRoot;
 /// because restriction filters are rejected at subscription registration
 /// time.
 pub trait TerminusResolveContext: 'static {
-    /// Schema layer for type lookups.
-    fn schema(&self) -> &SyncStoreLayer;
-
     /// Instance layer for document data, if available.
     fn instance(&self) -> Option<&SyncStoreLayer>;
 
@@ -78,6 +75,133 @@ pub trait TerminusResolveContext: 'static {
             "Restriction filters are not supported in subscriptions",
             juniper::Value::null(),
         ))
+    }
+
+    /// Subscription event metadata: the change type ("added", "changed",
+    /// "deleted"). Only available in subscription event resolution context.
+    /// Returns `None` for regular GraphQL queries.
+    fn change_type(&self) -> Option<&str> {
+        None
+    }
+
+    /// Subscription event metadata: the commit ID. Only available in
+    /// subscription event resolution context. Returns `None` for regular
+    /// GraphQL queries.
+    fn commit_id(&self) -> Option<&str> {
+        None
+    }
+
+    /// Subscription event metadata: the commit timestamp (Unix epoch seconds).
+    /// Only available in subscription event resolution context.
+    /// Returns `None` for regular GraphQL queries.
+    fn timestamp(&self) -> Option<f64> {
+        None
+    }
+
+    /// Subscription event metadata: the commit timestamp as an ISO8601 string.
+    /// Only available in subscription event resolution context.
+    /// Returns `None` for regular GraphQL queries.
+    fn datetime(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Subscription event metadata values carried by the resolve context.
+///
+/// Used by `CommitMetadata<C>` to resolve `_commit { _id _timestamp _datetime _change_type }`
+/// fields. All fields are `Option` — they are `None` for regular (non-subscription)
+/// GraphQL queries, and `Some` for subscription event resolution.
+#[derive(Clone, Debug)]
+pub struct CommitMetadataValues {
+    pub id: Option<String>,
+    pub timestamp: Option<f64>,
+    pub datetime: Option<String>,
+    pub change_type: Option<String>,
+}
+
+/// GraphQL type for the `_commit` nested object on every document type.
+///
+/// Exposes four fields: `_id`, `_timestamp`, `_datetime`, `_change_type`.
+/// For regular (non-subscription) queries, all fields return `null`.
+/// For subscription events, the values come from the `TerminusResolveContext`
+/// trait methods.
+pub struct CommitMetadata<C: TerminusResolveContext> {
+    values: CommitMetadataValues,
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> CommitMetadata<C> {
+    fn from_context(context: &C) -> Self {
+        Self {
+            values: CommitMetadataValues {
+                id: context.commit_id().map(|s| s.to_string()),
+                timestamp: context.timestamp(),
+                datetime: context.datetime().map(|s| s.to_string()),
+                change_type: context.change_type().map(|s| s.to_string()),
+            },
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for CommitMetadata<C> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("_CommitMetadata")
+    }
+
+    fn meta<'r>(
+        _info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let fields = vec![
+            registry.field::<String>("_id", &()),
+            registry.field::<f64>("_timestamp", &()),
+            registry.field::<String>("_datetime", &()),
+            registry.field::<String>("_change_type", &()),
+        ];
+        registry
+            .build_object_type::<CommitMetadata<C>>(&(), &fields)
+            .into_meta()
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for CommitMetadata<C> {
+    type Context = C;
+    type TypeInfo = ();
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("_CommitMetadata")
+    }
+
+    fn resolve_field(
+        &self,
+        _info: &Self::TypeInfo,
+        field_name: &str,
+        _arguments: &juniper::Arguments,
+        _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        match field_name {
+            "_id" => match &self.values.id {
+                Some(id) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(id.clone()))),
+                None => Ok(juniper::Value::Null),
+            },
+            "_timestamp" => match self.values.timestamp {
+                Some(ts) => Ok(juniper::Value::Scalar(DefaultScalarValue::Float(ts))),
+                None => Ok(juniper::Value::Null),
+            },
+            "_datetime" => match &self.values.datetime {
+                Some(dt) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(dt.clone()))),
+                None => Ok(juniper::Value::Null),
+            },
+            "_change_type" => match &self.values.change_type {
+                Some(ct) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(ct.clone()))),
+                None => Ok(juniper::Value::Null),
+            },
+            _ => Ok(juniper::Value::Null),
+        }
     }
 }
 
@@ -168,10 +292,6 @@ impl<'a> TerminusContext<'a> {
 }
 
 impl TerminusResolveContext for TerminusContext<'static> {
-    fn schema(&self) -> &SyncStoreLayer {
-        &self.schema
-    }
-
     fn instance(&self) -> Option<&SyncStoreLayer> {
         self.instance.as_ref()
     }
@@ -374,13 +494,15 @@ fn standard_collection_operators<'r>(
     .into_iter()
 }
 
-fn standard_type_operators<'r>(
+fn standard_type_operators<'r, C: TerminusResolveContext>(
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
 ) -> impl Iterator<Item = Field<'r, DefaultScalarValue>> {
+    let _ = std::marker::PhantomData::<C>;
     vec![
         registry.field::<ID>("_id", &()),
         registry.field::<ID>("_type", &()),
         registry.field::<GraphQLJSON>("_json", &()),
+        registry.field::<CommitMetadata<C>>("_commit", &()),
     ]
     .into_iter()
 }
@@ -575,6 +697,7 @@ pub struct TerminusType<C: TerminusResolveContext> {
     _phantom: std::marker::PhantomData<C>,
 }
 
+#[allow(dead_code)]
 pub type DefaultTerminusType = TerminusType<TerminusContext<'static>>;
 
 impl<C: TerminusResolveContext> TerminusType<C> {
@@ -783,7 +906,7 @@ impl<C: TerminusResolveContext> TerminusType<C> {
             fields.push(restriction_field);
         }
 
-        fields.extend(standard_type_operators(registry));
+        fields.extend(standard_type_operators::<C>(registry));
 
         registry
             .build_object_type::<TerminusType<C>>(info, &fields)
@@ -903,6 +1026,14 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                         )))
                     });
                 return ty;
+            }
+
+            // Subscription metadata: _commit is a nested object type.
+            // Construct a CommitMetadata from the context and resolve it
+            // via the executor. For regular queries, all fields return null.
+            if field_name.as_str() == "_commit" {
+                let commit_metadata = CommitMetadata::<C>::from_context(executor.context());
+                return Some(executor.resolve(&(), &commit_metadata).map(|r| r));
             }
 
             if let Some(reverse_link) = allframes.reverse_link(class, &field_name) {
