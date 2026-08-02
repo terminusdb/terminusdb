@@ -378,10 +378,6 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                 sender,
                 idle_timeout,
             } => {
-                crate::log::log_info(format!(
-                    "broadcast subscribe: channel='{}' stream_id={}",
-                    channel, stream_id
-                ));
                 let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
                 let task = tokio::spawn(subscriber_task(sub_rx, sender, idle_timeout));
                 channels

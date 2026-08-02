@@ -385,7 +385,6 @@ plugins:post_commit_hook(Validation_Objects, Meta_Data) :-
     catch(
         (   broadcast_commit_events(Validation_Objects, Meta_Data)
         ->  true
-        ;   json_log:json_log_error_formatted("post_commit_hook: broadcast_commit_events failed (no exception)", [])
         ),
         Error,
         json_log:json_log_error_formatted("post_commit_hook broadcast error: ~q", [Error])
