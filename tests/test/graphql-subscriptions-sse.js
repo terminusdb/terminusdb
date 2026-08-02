@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document } = require('../lib')
+const { Agent, db, document, optimize } = require('../lib')
 
 function cancelBody (res) {
   try { res?._abortController?.abort?.() } catch { /* already closed */ }
@@ -122,12 +122,15 @@ describe('GraphQL subscriptions over SSE', function () {
     agent.auth()
     await db.create(agent, { label: 'GraphQL SSE Subscriptions Test', schema: true })
     await document.insert(agent, { schema, fullReplace: true })
+    // Squash the commit graph after schema insert for deterministic performance.
+    const dbPath = `${agent.orgName}/${agent.dbName}`
+    await optimize.optimizeDatabase(agent, dbPath, 'main')
     branchPath = agent.orgName + '/' + agent.dbName + '/local/branch/main'
     sseUrl = agent.baseUrl + '/api/graphql/' + branchPath
   })
 
   after(async function () {
-    this.timeout(15000)
+    this.timeout(30000)
     await db.delete(agent)
   })
 
