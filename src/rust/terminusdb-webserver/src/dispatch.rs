@@ -378,8 +378,10 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                 sender,
                 idle_timeout,
             } => {
-                // Create a bounded per-subscriber buffer and spawn a
-                // per-subscriber task that drains it into the stream.
+                crate::log::log_info(format!(
+                    "broadcast subscribe: channel='{}' stream_id={}",
+                    channel, stream_id
+                ));
                 let (sub_tx, sub_rx) = mpsc::channel::<axum::body::Bytes>(SUBSCRIBER_BUFFER);
                 let task = tokio::spawn(subscriber_task(sub_rx, sender, idle_timeout));
                 channels
@@ -439,7 +441,9 @@ async fn run_forwarder(mut rx: mpsc::UnboundedReceiver<BroadcastCommand>) {
                         }
                     }
                 } else {
-                    // Channel not found — expected for commit streams when no subscriber
+                    // Silently skip — no subscribers on this channel.
+                    // Do NOT log this, as logging would trigger another
+                    // broadcast attempt, creating an infinite feedback loop.
                 }
             }
             BroadcastCommand::SendToAll { bytes } => {
