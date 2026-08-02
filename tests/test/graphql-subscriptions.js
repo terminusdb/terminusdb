@@ -1,5 +1,83 @@
 const { expect } = require('chai')
-const { Agent, api, db, document, util } = require('../lib')
+const { Agent, api, db, document, optimize, util } = require('../lib')
+
+function parseSSEBlock (eventBlock) {
+  if (eventBlock.startsWith(':')) return null
+  let eventType = 'message'
+  let dataLine = null
+  for (const line of eventBlock.split('\n')) {
+    if (line.startsWith('event: ')) {
+      eventType = line.slice(7).trim()
+    } else if (line.startsWith('data: ')) {
+      dataLine = line.slice(6)
+    } else if (line.startsWith('data:')) {
+      dataLine = line.slice(5)
+    }
+  }
+  if (dataLine === null) return null
+  try {
+    const parsed = JSON.parse(dataLine)
+    if (parsed === null || typeof parsed !== 'object') {
+      return { _eventType: eventType, data: parsed }
+    }
+    parsed._eventType = eventType
+    return parsed
+  } catch { /* skip unparseable */ }
+  return null
+}
+
+function parseSSEStream (body) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const queue = []
+  const state = { done: false }
+  let waitResolve
+  const pump = async () => {
+    while (!state.done) {
+      const { done: rdone, value } = await reader.read()
+      if (rdone) { state.done = true; break }
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop()
+      for (const eventBlock of events) {
+        const parsed = parseSSEBlock(eventBlock)
+        if (parsed) queue.push(parsed)
+      }
+      if (waitResolve) { waitResolve(); waitResolve = null }
+    }
+    if (waitResolve) { waitResolve(); waitResolve = null }
+  }
+  pump()
+  return {
+    async next () {
+      while (queue.length === 0 && !state.done) {
+        await new Promise((resolve) => { waitResolve = resolve })
+      }
+      return queue.length > 0 ? queue.shift() : null
+    },
+    cancel () {
+      state.done = true
+      try { reader.cancel() } catch { /* already closed */ }
+      try { reader.releaseLock() } catch { /* already released */ }
+      if (waitResolve) { waitResolve(); waitResolve = null }
+    },
+  }
+}
+
+async function waitForSSEEvent (body, predicate, timeoutMs) {
+  const parser = parseSSEStream(body)
+  const timeout = new Promise((_resolve, reject) =>
+    setTimeout(() => { parser.cancel(); reject(new Error('SSE timeout waiting for matching event')) }, timeoutMs || 15000))
+  const search = (async () => {
+    while (true) {
+      const event = await parser.next()
+      if (event === null) throw new Error('SSE stream ended without a matching event')
+      if (predicate(event)) { parser.cancel(); return event }
+    }
+  })()
+  return Promise.race([search, timeout])
+}
 
 describe('GraphQL Subscriptions SSE', function () {
   let agent
@@ -16,13 +94,17 @@ describe('GraphQL Subscriptions SSE', function () {
       '@fields': ['name'],
     },
     name: 'xsd:string',
-    age: 'xsd:decimal',
+    age: { '@type': 'Optional', '@class': 'xsd:decimal' },
   }]
 
   before(async function () {
+    this.timeout(180000)
     agent = new Agent().auth()
     await db.create(agent)
     await document.insert(agent, { schema, fullReplace: true })
+    // Squash the commit graph after schema insert for deterministic performance.
+    const dbPath = `${agent.orgName}/${agent.dbName}`
+    await optimize.optimizeDatabase(agent, dbPath, 'main')
   })
 
   after(async function () {
@@ -119,7 +201,6 @@ describe('GraphQL Subscriptions SSE', function () {
 
   it('SSE subscription delivers event after document insert', async function () {
     const controller = new AbortController()
-    // Start SSE subscription
     const response = await fetch(graphqlUrl(), {
       method: 'POST',
       headers: {
@@ -133,73 +214,19 @@ describe('GraphQL Subscriptions SSE', function () {
     })
     expect(response.status).to.equal(200)
 
-    // Read the stream until we get an event
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let receivedData = null
-    let buffer = ''
-    let connected = false
+    const eventPromise = waitForSSEEvent(response.body,
+      (e) => e._eventType === 'next' && e.data?.Person_added, 15000)
 
-    // Read chunks until we find the "connected" event, then insert
-    const readTimeout = new Promise((_resolve, reject) =>
-      setTimeout(() => reject(new Error('SSE read timeout')), 15000),
-    )
-
-    try {
-      // First, wait for the "connected" event from the server
-      while (!connected) {
-        const { done, value } = await Promise.race([
-          reader.read(),
-          readTimeout,
-        ])
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const events = buffer.split('\n\n')
-        buffer = events.pop()
-        for (const block of events) {
-          if (block.startsWith('event: connected')) {
-            connected = true
-            break
-          }
-        }
-      }
-    } finally {
-      // not here — we continue reading after insert
-    }
-
-    // Now insert a document to trigger the subscription event
-    const insertPromise = document.insert(agent, {
+    await document.insert(agent, {
       instance: [{ '@type': 'Person', name: 'SSETestPerson' }],
     })
 
-    try {
-      while (receivedData === null) {
-        const { done, value } = await Promise.race([
-          reader.read(),
-          readTimeout,
-        ])
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        // Look for SSE event format: "event: next\ndata: {...}\n\n"
-        const dataMatch = /data: (.+)/.exec(buffer)
-        if (dataMatch) {
-          receivedData = dataMatch[1]
-          break
-        }
-      }
-    } finally {
-      controller.abort()
-    }
+    const event = await eventPromise
+    controller.abort()
 
-    // Wait for insert to complete
-    await insertPromise
-
-    expect(receivedData).to.not.be.null
-    const parsed = JSON.parse(receivedData)
-    expect(parsed).to.have.property('data')
-    expect(parsed.data).to.have.property('Person_added')
-    expect(parsed.data.Person_added).to.have.property('name')
-    expect(parsed.data.Person_added.name).to.equal('SSETestPerson')
+    expect(event.data).to.have.property('Person_added')
+    expect(event.data.Person_added).to.have.property('name')
+    expect(event.data.Person_added.name).to.equal('SSETestPerson')
   })
 
   it('SSE subscription includes _commit metadata when requested', async function () {
@@ -217,67 +244,19 @@ describe('GraphQL Subscriptions SSE', function () {
     })
     expect(response.status).to.equal(200)
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let receivedData = null
-    let buffer = ''
-    let connected = false
+    const eventPromise = waitForSSEEvent(response.body,
+      (e) => e._eventType === 'next' && e.data?.Person_added?._commit, 15000)
 
-    const readTimeout = new Promise((_resolve, reject) =>
-      setTimeout(() => reject(new Error('SSE read timeout')), 15000),
-    )
-
-    try {
-      // First, wait for the "connected" event from the server
-      while (!connected) {
-        const { done, value } = await Promise.race([
-          reader.read(),
-          readTimeout,
-        ])
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const events = buffer.split('\n\n')
-        buffer = events.pop()
-        for (const block of events) {
-          if (block.startsWith('event: connected')) {
-            connected = true
-            break
-          }
-        }
-      }
-    } finally {
-      // continue reading after insert
-    }
-
-    const insertPromise = document.insert(agent, {
+    await document.insert(agent, {
       instance: [{ '@type': 'Person', name: 'SSECommitTest' }],
     })
 
-    try {
-      while (receivedData === null) {
-        const { done, value } = await Promise.race([
-          reader.read(),
-          readTimeout,
-        ])
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const dataMatch = /data: (.+)/.exec(buffer)
-        if (dataMatch) {
-          receivedData = dataMatch[1]
-          break
-        }
-      }
-    } finally {
-      controller.abort()
-    }
+    const event = await eventPromise
+    controller.abort()
 
-    await insertPromise
-
-    expect(receivedData).to.not.be.null
-    const parsed = JSON.parse(receivedData)
-    expect(parsed.data.Person_added).to.have.property('_commit')
-    expect(parsed.data.Person_added._commit).to.have.property('_id')
-    expect(parsed.data.Person_added._commit).to.have.property('_change_type', 'added')
+    expect(event.data.Person_added).to.have.property('_commit')
+    expect(event.data.Person_added._commit).to.have.property('_id')
+    expect(event.data.Person_added._commit).to.have.property('_change_type', 'added')
   })
 
   it('returns 400 for invalid subscription query body', async function () {
