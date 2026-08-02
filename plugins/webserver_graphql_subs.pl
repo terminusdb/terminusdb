@@ -11,6 +11,7 @@
 :- use_module(core(util/data_version), [transaction_retry_count_from_meta_data/2, serialize_data_version/2]).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
+:- use_module(library(aggregate)).
 :- use_module(library(json)).
 :- use_module(library(yall)).
 :- use_module(library(uri), [uri_query_components/2]).
@@ -57,6 +58,14 @@ appserver_hooks:appserver_stream(options, '/api/graphql/*path',
 %% Asserted on connect, retracted on disconnect.
 :- dynamic graphql_sse_subscription/3.
 
+%% Maximum number of concurrent SSE/NDJSON subscriptions per descriptor.
+%% This caps resource consumption — each subscription holds a broadcast
+%% channel open and consumes memory for cohort tracking. The previous
+%% implicit limit was effectively unbounded (1000+ in practice); 100 is
+%% a safer default that still supports reasonable fan-out.
+:- dynamic max_subscriptions_per_descriptor/1.
+max_subscriptions_per_descriptor(100).
+
 %% Mutex for cohort registry operations.
 %%
 %% Concurrency audit: grep for assertz, retract, retractall in this file.
@@ -93,7 +102,17 @@ register_subscription_parsed(Descriptor, ClassName, Operation,
             ->  NewCount is Count + 1,
                 retract(graphql_cohort(CohortKey, Descriptor, RawChannel, Count)),
                 assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, NewCount))
-            ;   term_to_atom(CohortKey, CohortKeyAtom),
+            ;   %% New cohort — check descriptor subscription limit first.
+                %% Count total active subscriptions across all cohorts for this descriptor.
+                aggregate_all(sum(MemberCount),
+                    graphql_cohort(_, Descriptor, _, MemberCount),
+                    TotalSubs),
+                max_subscriptions_per_descriptor(Max),
+                (   TotalSubs >= Max
+                ->  throw(error(subscription_limit_exceeded(Max), _))
+                ;   true
+                ),
+                term_to_atom(CohortKey, CohortKeyAtom),
                 atom_concat('graphql_raw_', CohortKeyAtom, RawChannel),
                 assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, 1))
             )
@@ -705,8 +724,12 @@ register_sse_subscription(Request, StreamId, Mode, Response) :-
             ;   throw(sse_handler_silent_failure)
             ),
             Error,
-            (   json_log:json_log_error_formatted("[graphql-sse] authed handler error: ~w", [Error]),
-                sse_json_response(Request, 500, "{\"error\":\"internal_server_error\"}", Response)
+            (   (   Error = error(subscription_limit_exceeded(Max), _)
+                ->  format(string(ErrBody), "{\"errors\":[{\"message\":\"Subscription limit exceeded (max ~w per descriptor)\"}]}", [Max]),
+                    sse_json_response(Request, 429, ErrBody, Response)
+                ;   json_log:json_log_error_formatted("[graphql-sse] authed handler error: ~w", [Error]),
+                    sse_json_response(Request, 500, "{\"error\":\"internal_server_error\"}", Response)
+                )
             )
         )
     ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
@@ -1334,6 +1357,73 @@ test(cohort_selection_survives_partial_unregister,
     graphql_cohort(CohortKey, _, _, 2),
     unregister_subscription(CohortKey, stream1),
     webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name").
+
+%% Subscription limit tests — verify that max_subscriptions_per_descriptor
+%% is enforced when creating new cohorts for a descriptor.
+
+test(subscription_limit_rejects_new_cohort_when_exceeded,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    %% Temporarily set limit to 1
+    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
+    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(1)),
+    %% First subscription succeeds (creates cohort with count 1)
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, _, _),
+    %% Second subscription for a *different* cohort on same descriptor should fail
+    catch(
+        register_subscription_parsed(TestDesc, 'Person', changed,
+                                      '{}', 'hash2', sse, _, _),
+        Error,
+        Error = error(subscription_limit_exceeded(1), _)
+    ),
+    %% Restore default
+    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
+    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(100)).
+
+test(subscription_limit_allows_increment_of_existing_cohort,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    %% Set limit to 1 — one subscription total
+    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
+    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(1)),
+    %% First subscription creates cohort
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, CohortKey, _),
+    %% Second subscription to SAME cohort should succeed (increment, not new)
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, _, _),
+    graphql_cohort(CohortKey, _, _, 2),
+    %% Restore default
+    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
+    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(100)).
+
+test(subscription_limit_default_is_100,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    max_subscriptions_per_descriptor(Max),
+    Max == 100.
+
+test(subscription_limit_counts_across_all_cohorts_for_descriptor,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    %% Set limit to 2
+    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
+    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(2)),
+    %% Two different cohorts, each with 1 member = 2 total
+    register_subscription_parsed(TestDesc, 'Person', added,
+                                 '{}', 'hash1', sse, _, _),
+    register_subscription_parsed(TestDesc, 'Product', added,
+                                 '{}', 'hash2', sse, _, _),
+    %% Third cohort should be rejected (total would be 3 > 2)
+    catch(
+        register_subscription_parsed(TestDesc, 'Order', added,
+                                      '{}', 'hash3', sse, _, _),
+        Error,
+        Error = error(subscription_limit_exceeded(2), _)
+    ),
+    %% Restore default
+    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
+    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(100)).
 
 :- end_tests(webserver_graphql_subs).
 

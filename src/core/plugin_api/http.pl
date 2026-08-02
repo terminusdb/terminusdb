@@ -101,6 +101,17 @@ plugin_error_response(error(invalid_absolute_path(_), _), Response) :- !,
         },
         headers: _{'Content-Type': 'application/json'}
     }.
+plugin_error_response(error(subscription_limit_exceeded(Max), _), Response) :- !,
+    format(string(Msg), "Subscription limit exceeded (max ~w per descriptor)", [Max]),
+    Response = _{
+        status: 429,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:too_many_requests',
+            'api:message': Msg
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
 plugin_error_response(_, Response) :-
     Response = _{
         status: 500,

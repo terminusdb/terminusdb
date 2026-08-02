@@ -476,6 +476,10 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
         }
         fields.push(count_field);
 
+        // _ChangeSet — batched changes per commit (Query root)
+        let cs_field = registry.field::<ChangeSet<C>>("_ChangeSet", info);
+        fields.push(cs_field);
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
@@ -502,7 +506,7 @@ fn standard_type_operators<'r, C: TerminusResolveContext>(
         registry.field::<ID>("_id", &()),
         registry.field::<ID>("_type", &()),
         registry.field::<GraphQLJSON>("_json", &()),
-        registry.field::<CommitMetadata<C>>("_commit", &()),
+        registry.field::<CommitMetadata<C>>("_CommitMetadata", &()),
     ]
     .into_iter()
 }
@@ -1028,10 +1032,10 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                 return ty;
             }
 
-            // Subscription metadata: _commit is a nested object type.
+            // Subscription metadata: _CommitMetadata is a nested object type.
             // Construct a CommitMetadata from the context and resolve it
             // via the executor. For regular queries, all fields return null.
-            if field_name.as_str() == "_commit" {
+            if field_name.as_str() == "_CommitMetadata" {
                 let commit_metadata = CommitMetadata::<C>::from_context(executor.context());
                 return Some(executor.resolve(&(), &commit_metadata).map(|r| r));
             }
@@ -1776,6 +1780,144 @@ pub enum GraphType {
     SchemaGraph,
 }
 
+// --- ChangeSet type ---
+//
+// GraphQL type `_ChangeSet` — batched changes per commit.
+// Exposes `{Class}_added`, `{Class}_changed`, `{Class}_deleted` fields per
+// class (each returning `Vec<TerminusType<C>>`), plus a `_CommitMetadata`
+// field for commit metadata. Used on both the Subscription root (for
+// parsing) and the Query root (for resolution and on-demand querying).
+
+pub struct ChangeSet<C: TerminusResolveContext> {
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> ChangeSet<C> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for ChangeSet<C> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("_ChangeSet")
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let mut fields: Vec<Field<'r, DefaultScalarValue>> = Vec::new();
+
+        for (name, typedef) in info.allframes.frames.iter() {
+            if let TypeDefinition::Class(_) = typedef {
+                let newinfo = TerminusTypeInfo {
+                    class: name.as_static(),
+                    allframes: info.allframes.clone(),
+                };
+
+                for (op_name, description) in [
+                    (format!("{}_added", name.as_str()), "Documents of this class added in the commit"),
+                    (format!("{}_changed", name.as_str()), "Documents of this class changed in the commit"),
+                    (format!("{}_deleted", name.as_str()), "Documents of this class deleted in the commit"),
+                ] {
+                    let field = registry.field::<Vec<TerminusType<C>>>(op_name.as_str(), &newinfo);
+                    let field = field.description(description);
+                    let field = field.argument(registry.arg::<Option<Vec<ID>>>("ids", &()));
+                    fields.push(field);
+                }
+            }
+        }
+
+        fields.push(registry.field::<CommitMetadata<C>>("_CommitMetadata", &()));
+
+        registry
+            .build_object_type::<ChangeSet<C>>(info, &fields)
+            .into_meta()
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
+    type Context = C;
+    type TypeInfo = TerminusTypeCollectionInfo;
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("_ChangeSet")
+    }
+
+    fn resolve_field(
+        &self,
+        info: &Self::TypeInfo,
+        field_name: &str,
+        arguments: &juniper::Arguments,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        if field_name == "_CommitMetadata" {
+            let commit_metadata = CommitMetadata::<C>::from_context(executor.context());
+            return executor.resolve(&(), &commit_metadata).map(|r| r);
+        }
+
+        // Parse "{Class}_{operation}" from field_name
+        let last_underscore = match field_name.rfind('_') {
+            Some(idx) => idx,
+            None => return Err(format!("Unknown _ChangeSet field: {}", field_name).into()),
+        };
+
+        let class_name = &field_name[..last_underscore];
+        let operation = &field_name[last_underscore + 1..];
+
+        match operation {
+            "added" | "changed" | "deleted" => {}
+            _ => return Err(format!("Unknown _ChangeSet operation: {}", operation).into()),
+        }
+
+        // Get document IDs from the `ids` argument
+        let ids: Vec<ID> = arguments.get::<Vec<ID>>("ids").unwrap_or_default();
+
+        if ids.is_empty() {
+            return executor.resolve(
+                &TerminusTypeInfo {
+                    class: GraphQLName(Cow::Owned(class_name.to_string())),
+                    allframes: info.allframes.clone(),
+                },
+                &Vec::<TerminusType<C>>::new(),
+            ).map(|r| r);
+        }
+
+        // Convert ID strings to internal u64 IDs using the instance layer
+        let instance = match executor.context().instance() {
+            Some(layer) => layer,
+            None => {
+                return executor.resolve(
+                    &TerminusTypeInfo {
+                        class: GraphQLName(Cow::Owned(class_name.to_string())),
+                        allframes: info.allframes.clone(),
+                    },
+                    &Vec::<TerminusType<C>>::new(),
+                ).map(|r| r);
+            }
+        };
+
+        let objects: Vec<TerminusType<C>> = ids
+            .iter()
+            .filter_map(|id| instance.subject_id(&id.to_string()).map(TerminusType::<C>::new))
+            .collect();
+
+        executor.resolve(
+            &TerminusTypeInfo {
+                class: GraphQLName(Cow::Owned(class_name.to_string())),
+                allframes: info.allframes.clone(),
+            },
+            &objects,
+        ).map(|r| r)
+    }
+}
+
 // --- TerminusSubscriptionRoot impls ---
 //
 // These impls live in schema.rs (not subscription.rs) because they need
@@ -1815,6 +1957,14 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
                 }
             }
         }
+
+        // _ChangeSet — batched changes per commit (Subscription root)
+        let cs_field = registry.field::<ChangeSet<C>>("_ChangeSet", info);
+        fields.push(cs_field);
+
+        // _CommitMetadata — commit metadata as top-level subscription field
+        let commit_field = registry.field::<CommitMetadata<C>>("_CommitMetadata", &());
+        fields.push(commit_field);
 
         registry
             .build_object_type::<TerminusSubscriptionRoot<C>>(info, &fields)
