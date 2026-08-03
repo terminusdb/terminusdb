@@ -39,7 +39,7 @@ use super::subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot};
 /// Prolog via FFI, while `SubscriptionResolveContext` returns `Ok(None)`
 /// because restriction filters are rejected at subscription registration
 /// time.
-pub trait TerminusResolveContext: 'static {
+pub trait TerminusResolveContext {
     /// Instance layer for document data, if available.
     fn instance(&self) -> Option<&SyncStoreLayer>;
 
@@ -298,7 +298,7 @@ impl<'a> TerminusContext<'a> {
     }
 }
 
-impl TerminusResolveContext for TerminusContext<'static> {
+impl<'a> TerminusResolveContext for TerminusContext<'a> {
     fn instance(&self) -> Option<&SyncStoreLayer> {
         self.instance.as_ref()
     }
@@ -345,7 +345,7 @@ impl<C: TerminusResolveContext> Default for TerminusTypeCollection<C> {
     }
 }
 
-pub type DefaultTerminusTypeCollection = TerminusTypeCollection<TerminusContext<'static>>;
+pub type TerminusTypeCollectionFor<'a> = TerminusTypeCollection<TerminusContext<'a>>;
 
 pub struct TerminusOrderingInfo {
     ordering_name: GraphQLName<'static>,
@@ -712,9 +712,6 @@ pub struct TerminusType<C: TerminusResolveContext> {
     id: u64,
     _phantom: std::marker::PhantomData<C>,
 }
-
-#[allow(dead_code)]
-pub type DefaultTerminusType = TerminusType<TerminusContext<'static>>;
 
 impl<C: TerminusResolveContext> TerminusType<C> {
     fn new(id: u64) -> Self {
@@ -1740,6 +1737,19 @@ where
     }
 }
 
+/// Checks if a string looks like a JSON object or array by examining its
+/// first and last non-whitespace characters. This is an intentional first-pass
+/// filter for the `JSON` scalar type: the `json` argument in mutations always
+/// expects a document (object) or list of documents (array), so bare JSON
+/// primitives like `"42"` or `"true"` are rejected at the GraphQL type layer.
+/// Malformed strings that pass this check (e.g. `"{not json}"`) are caught
+/// downstream by the Prolog document layer's JSON parser.
+pub(crate) fn is_json_value(s: &str) -> bool {
+    let trimmed = s.trim();
+    (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+}
+
 #[derive(Debug, Clone)]
 pub struct GraphQLJSON(pub String);
 
@@ -1753,7 +1763,7 @@ where
     }
 
     fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
-        value.as_string_value().map(|s| Self(s.to_owned()))
+        value.as_string_value().filter(|s| is_json_value(s)).map(|s| Self(s.to_owned()))
     }
 
     fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {

@@ -1,5 +1,6 @@
 const { expect } = require('chai')
 const { Agent, db, document, optimize } = require('../lib')
+const api = require('../lib/api')
 
 function cancelBody (res) {
   try { res?._abortController?.abort?.() } catch { /* already closed */ }
@@ -20,13 +21,14 @@ function parseSSEBlock (eventBlock) {
     }
   }
   if (dataLine === null) return null
-  if (dataLine.trim() === '') return { _eventType: eventType, data: null }
+  if (dataLine.trim() === '') return { _eventType: eventType, data: null, _rawData: '' }
   try {
     const parsed = JSON.parse(dataLine)
     if (parsed === null || typeof parsed !== 'object') {
-      return { _eventType: eventType, data: parsed }
+      return { _eventType: eventType, data: parsed, _rawData: dataLine }
     }
     parsed._eventType = eventType
+    parsed._rawData = dataLine
     return parsed
   } catch { /* skip unparseable */ }
   return null
@@ -127,6 +129,12 @@ describe('GraphQL subscriptions over SSE', function () {
     '@key': { '@type': 'Lexical', '@fields': ['name'] },
     name: 'xsd:string',
     breed: 'xsd:string',
+  }, {
+    '@id': 'NumericProduct',
+    '@type': 'Class',
+    '@key': { '@type': 'Lexical', '@fields': ['name'] },
+    name: 'xsd:string',
+    decimalValue: 'xsd:decimal',
   }]
 
   before(async function () {
@@ -995,6 +1003,103 @@ describe('GraphQL subscriptions over SSE', function () {
 
       cancelBody(res1)
       cancelBody(res2)
+    })
+  })
+
+  describe('subscription decimal precision with native JSON variables', function () {
+    it('should receive 20-digit decimal in _added event via GraphQL mutation with native JSON variable', async function () {
+      const res = await subscribeSSE('subscription { NumericProduct_added { _id name decimalValue } }')
+      const eventPromise = waitForSSEEvent(res.body,
+        (e) => e.data?.NumericProduct_added, 10000)
+
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: {
+          '@type': 'NumericProduct',
+          name: 'PrecisionTestGQL',
+          decimalValue: '0.11234567890123456789',
+        },
+      }
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const event = await eventPromise
+      expect(event.data.NumericProduct_added).to.exist
+      expect(event.data.NumericProduct_added.name).to.equal('PrecisionTestGQL')
+      // Verify precision via Document API (SSE events lose precision through Juniper's f64 serialization)
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericProduct/PrecisionTestGQL', type: 'NumericProduct', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      expect(docDecimalRaw).to.equal('0.11234567890123456789')
+      cancelBody(res)
+    })
+
+    it('should receive 20-digit decimal in _added event via Document API insert', async function () {
+      const res = await subscribeSSE('subscription { NumericProduct_added { _id name decimalValue } }')
+      const eventPromise = waitForSSEEvent(res.body,
+        (e) => e.data?.NumericProduct_added?.name === 'PrecisionTestDocAPI', 10000)
+
+      await document.insert(agent, {
+        instance: {
+          '@type': 'NumericProduct',
+          name: 'PrecisionTestDocAPI',
+          decimalValue: '0.98765432109876543219',
+        },
+      })
+
+      const event = await eventPromise
+      expect(event.data.NumericProduct_added).to.exist
+      // Verify precision via Document API (SSE events lose precision through Juniper's f64 serialization)
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericProduct/PrecisionTestDocAPI', type: 'NumericProduct', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      expect(docDecimalRaw).to.equal('0.98765432109876543219')
+      cancelBody(res)
+    })
+
+    it('should receive correct decimal after replace via GraphQL mutation with native JSON variable', async function () {
+      await document.insert(agent, {
+        instance: {
+          '@type': 'NumericProduct',
+          name: 'PrecisionReplace',
+          decimalValue: '0.11111111111111111111',
+        },
+      })
+
+      const res = await subscribeSSE('subscription { NumericProduct_changed { _id name decimalValue } }')
+      const eventPromise = waitForSSEEvent(res.body,
+        (e) => e.data?.NumericProduct_changed?.name === 'PrecisionReplace', 10000)
+
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const replaceMutation = `mutation($input: JSON!) {
+        _replaceDocuments(json: $input, create: true)
+      }`
+      const replaceVariables = {
+        input: {
+          '@type': 'NumericProduct',
+          name: 'PrecisionReplace',
+          decimalValue: '0.55445544554455445544',
+        },
+      }
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: replaceMutation, variables: replaceVariables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const event = await eventPromise
+      expect(event.data.NumericProduct_changed).to.exist
+      // Verify precision via Document API (SSE events lose precision through Juniper's f64 serialization)
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericProduct/PrecisionReplace', type: 'NumericProduct', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      expect(docDecimalRaw).to.equal('0.55445544554455445544')
+      cancelBody(res)
     })
   })
 })

@@ -1,10 +1,11 @@
 use juniper::{
     executor::{execute_validated_query, get_operation},
     http::{GraphQLRequest, GraphQLResponse},
-    parser::parse_document_source,
+    parser::{parse_document_source, Spanning},
     DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, ExecutionError, GraphQLError,
     InputValue, RootNode, Value,
 };
+use serde::Deserialize;
 use terminusdb_store_prolog::terminus_store::Layer;
 
 use lazy_static::lazy_static;
@@ -88,6 +89,221 @@ mod tests {
         let expected = "# Busbar Connectors.\n\nCategory code: 100.\nTaxonomy level: 3.\n\n  Sub-categories:\n  Industrial Busbar Connectors\n    (code 386),\n  Commercial Busbar Connectors\n    (code 387)\n  .";
         assert_eq!(post_process_graphql_numbers(input), expected);
     }
+
+    #[test]
+    fn test_native_json_object_variable() {
+        let json = serde_json::json!({"@type": "Product", "price": 19.99});
+        let result = json_value_to_input_value(json).unwrap();
+        let s = result.as_string_value().expect("expected string scalar");
+        assert!(s.contains("\"@type\":\"Product\""));
+        assert!(s.contains("19.99"));
+    }
+
+    #[test]
+    fn test_stringified_json_variable_backward_compat() {
+        let json = serde_json::json!("{\"@type\":\"Product\"}");
+        let result = json_value_to_input_value(json).unwrap();
+        let s = result.as_string_value().expect("expected string scalar");
+        assert_eq!(s, "{\"@type\":\"Product\"}");
+    }
+
+    #[test]
+    fn test_arbitrary_precision_decimal() {
+        // Use from_str instead of json! macro, since json! parses number
+        // literals as f64 first, losing precision before arbitrary_precision
+        // can preserve the original text.
+        let json: serde_json::Value = serde_json::from_str("123456789.12345678901234567891").unwrap();
+        let result = json_value_to_input_value(json).unwrap();
+        let s = result.as_string_value().expect("expected string scalar");
+        assert_eq!(s, "123456789.12345678901234567891");
+    }
+
+    #[test]
+    fn test_nested_json_object() {
+        let json = serde_json::json!({"items": [{"id": 1, "price": 10.5}]});
+        let result = json_value_to_input_value(json).unwrap();
+        let s = result.as_string_value().expect("expected string scalar");
+        assert!(s.contains("\"items\":[{\"id\":1,\"price\":10.5}]"));
+    }
+
+    #[test]
+    fn test_boolean_variable() {
+        let result = json_value_to_input_value(serde_json::Value::Bool(true)).unwrap();
+        assert_eq!(result, InputValue::scalar(true));
+    }
+
+    #[test]
+    fn test_integer_variable() {
+        let result = json_value_to_input_value(serde_json::json!(42)).unwrap();
+        assert_eq!(result, InputValue::scalar(42i32));
+    }
+
+    #[test]
+    fn test_string_variable() {
+        let result = json_value_to_input_value(serde_json::json!("foo")).unwrap();
+        assert_eq!(result, InputValue::scalar("foo"));
+    }
+
+    #[test]
+    fn test_array_variable_serialized_to_json_string() {
+        let result = json_value_to_input_value(serde_json::json!(["doc1", "doc2"])).unwrap();
+        let s = result.as_string_value().expect("expected string scalar");
+        assert_eq!(s, "[\"doc1\",\"doc2\"]");
+    }
+
+    #[test]
+    fn test_null_variable() {
+        let result = json_value_to_input_value(serde_json::Value::Null).unwrap();
+        assert_eq!(result, InputValue::null());
+    }
+
+    #[test]
+    fn test_full_request_deserialization() {
+        let body = r#"{"query":"mutation($input: JSON!){_insertDocuments(json:$input)}","variables":{"input":{"@type":"Product","price":19.99}}}"#;
+        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        assert_eq!(req.query, "mutation($input: JSON!){_insertDocuments(json:$input)}");
+        assert!(req.variables.is_some());
+        let vars = req.variables.unwrap();
+        let obj = vars.to_object_value().expect("expected object value");
+        let input = obj.get("input").expect("expected input variable");
+        let s = input.as_string_value().expect("expected string scalar");
+        assert!(s.contains("\"@type\":\"Product\""));
+        assert!(s.contains("19.99"));
+    }
+
+    #[test]
+    fn test_request_with_null_variables() {
+        let body = r#"{"query":"query { Foo { _id } }","variables":null}"#;
+        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        assert!(req.variables.is_none());
+    }
+
+    #[test]
+    fn test_request_with_absent_variables() {
+        let body = r#"{"query":"query { Foo { _id } }"}"#;
+        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        assert!(req.variables.is_none());
+    }
+
+    #[test]
+    fn test_request_with_empty_object_variables() {
+        let body = r#"{"query":"query { Foo { _id } }","variables":{}}"#;
+        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        assert!(req.variables.is_some());
+        let vars = req.variables.unwrap();
+        let obj = vars.to_object_value().expect("expected object value");
+        assert!(obj.is_empty());
+    }
+
+    #[test]
+    fn test_is_json_value_accepts_objects_and_arrays() {
+        use super::schema::is_json_value;
+        assert!(is_json_value("{\"a\":1}"));
+        assert!(is_json_value("[1,2,3]"));
+        assert!(is_json_value("  {\"a\":1}  "));
+        assert!(is_json_value("  [1,2]  "));
+        assert!(is_json_value("{}"));
+        assert!(is_json_value("[]"));
+    }
+
+    #[test]
+    fn test_is_json_value_rejects_primitives_and_non_json() {
+        use super::schema::is_json_value;
+        assert!(!is_json_value("42"));
+        assert!(!is_json_value("true"));
+        assert!(!is_json_value("hello"));
+        // is_json_value is a shape filter, not a parser; malformed JSON is caught downstream.
+        assert!(!is_json_value(""));
+        assert!(!is_json_value("   "));
+    }
+}
+
+/// Converts `serde_json::Value` to Juniper `InputValue`, preserving arbitrary-precision
+/// numbers as strings. Objects and arrays are serialized to JSON strings for
+/// `GraphQLJSON::from_input_value`. Integers in i32 range become native i32 scalars.
+fn json_value_to_input_value(
+    value: serde_json::Value,
+) -> Result<InputValue<DefaultScalarValue>, serde_json::Error> {
+    match value {
+        serde_json::Value::Null => Ok(InputValue::null()),
+        serde_json::Value::Bool(b) => Ok(InputValue::scalar(b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                if i >= i32::MIN as i64 && i <= i32::MAX as i64 {
+                    return Ok(InputValue::scalar(i as i32));
+                }
+            }
+            if let Some(u) = n.as_u64() {
+                if u <= i32::MAX as u64 {
+                    return Ok(InputValue::scalar(u as i32));
+                }
+            }
+            // Float or large integer: preserve as string
+            Ok(InputValue::scalar(n.to_string()))
+        }
+        serde_json::Value::String(s) => Ok(InputValue::scalar(s)),
+        serde_json::Value::Array(arr) => {
+            // Serialize as JSON string to preserve nested numbers and objects.
+            serde_json::to_string(&serde_json::Value::Array(arr)).map(InputValue::scalar)
+        }
+        serde_json::Value::Object(map) => {
+            // Serialize as JSON string to preserve numbers via arbitrary_precision.
+            serde_json::to_string(&serde_json::Value::Object(map)).map(InputValue::scalar)
+        }
+    }
+}
+
+/// Custom deserializer for `variables`: parses as `serde_json::Value` (preserving
+/// precision via `arbitrary_precision`), then converts to `InputValue`.
+fn deserialize_variables_preserving<'de, D>(
+    deserializer: D,
+) -> Result<Option<InputValue<DefaultScalarValue>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt_value: Option<serde_json::Value> = serde::Deserialize::deserialize(deserializer)?;
+    opt_value
+        .map(|value| match value {
+            serde_json::Value::Object(map) => {
+                let obj: Result<Vec<_>, _> = map
+                    .into_iter()
+                    .map(|(k, v)| {
+                        json_value_to_input_value(v).map(|iv| {
+                            (
+                                Spanning::unlocated(k),
+                                Spanning::unlocated(iv),
+                            )
+                        })
+                    })
+                    .collect();
+                obj.map(InputValue::Object)
+            }
+            other => json_value_to_input_value(other),
+        })
+        .transpose()
+        .map_err(serde::de::Error::custom)
+}
+
+/// GraphQL request with precision-preserving variable deserialization.
+#[derive(Deserialize)]
+struct VariablesPreservingRequest {
+    query: String,
+    #[serde(rename = "operationName")]
+    operation_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_variables_preserving")]
+    variables: Option<InputValue<DefaultScalarValue>>,
+}
+
+/// Parse JSON bytes into a `GraphQLRequest`, preserving variable precision.
+fn parse_graphql_request(buf: &[u8]) -> Result<GraphQLRequest, serde_json::Error> {
+    let req: VariablesPreservingRequest = serde_json::from_slice(buf)?;
+    Ok(GraphQLRequest::new(req.query, req.operation_name, req.variables))
+}
+
+/// Serialize a GraphQL response, post-processing number markers.
+fn serialize_graphql_response(response: &GraphQLResponse) -> Result<String, serde_json::Error> {
+    let json = serde_json::to_string(response)?;
+    Ok(post_process_graphql_numbers(json))
 }
 
 mod filter;
@@ -108,8 +324,8 @@ use self::{
     frame::{AllFrames, UncleanAllFrames},
     mutation::TerminusMutationRoot,
     schema::{
-        DefaultTerminusTypeCollection, TerminusContext, TerminusTypeCollection,
-        TerminusTypeCollectionInfo,
+        TerminusContext, TerminusTypeCollection,
+        TerminusTypeCollectionFor, TerminusTypeCollectionInfo,
     },
     subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot},
     system::{SystemData, SystemRoot},
@@ -137,25 +353,25 @@ pub fn type_collection_from_term<'a, C: QueryableContextType>(
     })
 }
 
-pub struct GraphQLExecutionContext {
+pub struct GraphQLExecutionContext<'a> {
     pub(crate) root_node: RootNode<
-        'static,
-        DefaultTerminusTypeCollection,
-        TerminusMutationRoot,
-        TerminusSubscriptionRoot<TerminusContext<'static>>,
+        'a,
+        TerminusTypeCollectionFor<'a>,
+        TerminusMutationRoot<'a>,
+        TerminusSubscriptionRoot<TerminusContext<'a>>,
     >,
-    pub(crate) context: TerminusContext<'static>,
+    pub(crate) context: TerminusContext<'a>,
 }
 
-impl GraphQLExecutionContext {
+impl<'a> GraphQLExecutionContext<'a> {
     pub fn new(
         type_collection: TerminusTypeCollectionInfo,
-        context: TerminusContext<'static>,
+        context: TerminusContext<'a>,
     ) -> Self {
         let root_node = RootNode::new_with_info(
-            DefaultTerminusTypeCollection::default(),
-            TerminusMutationRoot,
-            TerminusSubscriptionRoot::<TerminusContext<'static>>::new(),
+            TerminusTypeCollectionFor::<'a>::default(),
+            TerminusMutationRoot::<'a>::default(),
+            TerminusSubscriptionRoot::<TerminusContext<'a>>::new(),
             type_collection.clone(),
             (),
             type_collection,
@@ -164,7 +380,8 @@ impl GraphQLExecutionContext {
         Self { root_node, context }
     }
 
-    pub unsafe fn new_from_context_terms<'a, C: QueryableContextType>(
+    /// Creates a `GraphQLExecutionContext` from Prolog context terms.
+    pub fn new_from_context_terms<C: QueryableContextType>(
         type_collection: TerminusTypeCollectionInfo,
         context: &'a Context<'_, C>,
         auth_term: &Term,
@@ -174,7 +391,7 @@ impl GraphQLExecutionContext {
         transaction_term: &'a Term,
         author_term: &'a Term,
         message_term: &'a Term,
-    ) -> PrologResult<Self> {
+    ) -> PrologResult<GraphQLExecutionContext<'a>> {
         let context: GenericQueryableContext<'a> = context.into_generic();
         let graphql_context: TerminusContext<'a> = TerminusContext::new(
             context,
@@ -187,12 +404,10 @@ impl GraphQLExecutionContext {
             message_term,
             type_collection.clone(),
         )?;
-        let lifetime_erased_graphql_context: TerminusContext<'static> =
-            unsafe { std::mem::transmute(graphql_context) };
-        Ok(Self::new(type_collection, lifetime_erased_graphql_context))
+        Ok(Self::new(type_collection, graphql_context))
     }
 
-    pub fn prolog_context(&self) -> &GenericQueryableContext<'static> {
+    pub fn prolog_context(&self) -> &GenericQueryableContext<'a> {
         &self.context.context
     }
 
@@ -309,17 +524,14 @@ predicates! {
         let mut buf = vec![0;len];
         context.try_or_die_generic(input.read_exact(&mut buf))?;
 
-        let request =
-            match serde_json::from_slice::<GraphQLRequest>(&buf) {
-                Ok(r) => r,
-                Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
-            };
+        let request = match parse_graphql_request(&buf) {
+            Ok(r) => r,
+            Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
+        };
 
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
 
-        // Defense in depth: if the method is get, reject mutation operations.
-        // The Prolog layer should already enforce this via access control,
-        // but this ensures mutations cannot bypass security at the engine level.
+        // Defense in depth: reject mutations on GET.
         let method: Atom = method_term.get_ex()?;
         if method.name() == "get" {
             if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&buf) {
@@ -342,18 +554,15 @@ predicates! {
             }
         }
 
-        let execution_context = unsafe {GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term)? };
+        let execution_context = GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term)?;
         execution_context.execute_query(request,
                                         |response: &GraphQLResponse| {
                                             let errored = response.inner_ref().as_ref()
                                                 .map(|(_, errors)|!errors.is_empty())
                                                 .unwrap_or(false);
                                             is_error_term.unify(errored)?;
-                                            match serde_json::to_string(&response){
-                                                Ok(r) => {
-                                                    let processed = post_process_graphql_numbers(r);
-                                                    response_term.unify(processed)
-                                                },
+                                            match serialize_graphql_response(response) {
+                                                Ok(processed) => response_term.unify(processed),
                                                 Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
                                             }
                                         })
@@ -448,11 +657,10 @@ predicates! {
         let mut buf = vec![0;len];
         context.try_or_die_generic(input.read_exact(&mut buf))?;
 
-        let request =
-            match serde_json::from_slice::<GraphQLRequest>(&buf) {
-                Ok(r) => r,
-                Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
-            };
+        let request = match parse_graphql_request(&buf) {
+            Ok(r) => r,
+            Err(error) => return context.raise_exception(&term!{context: error(json_parse_error(#error.line() as u64, #error.column() as u64), _)}?)
+        };
 
         let user: Atom = auth_term.get_ex()?;
         let system = transaction_instance_layer(context, system_term)?.unwrap();
@@ -465,12 +673,8 @@ predicates! {
                                                 ());
         let system_data = SystemData { user, system };
         let response = request.execute_sync(&root_node, &system_data);
-        match serde_json::to_string(&response){
-            Ok(r) => {
-                // Post-process to convert high-precision markers to JSON numbers
-                let processed = post_process_graphql_numbers(r);
-                response_term.unify(processed)
-            },
+        match serialize_graphql_response(&response) {
+            Ok(processed) => response_term.unify(processed),
             Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
@@ -559,21 +763,16 @@ predicates! {
         );
         resolve_context.parent_instance = parent_layer;
 
-        // Get the cached subscription root node (schema + subscription types).
         let root_node = get_or_create_subscription_root_node(&type_collection);
 
-        // Parse the query string as a GraphQLRequest and execute it.
-        let request: GraphQLRequest = match serde_json::from_str(&query) {
+        let request: GraphQLRequest = match parse_graphql_request(query.as_bytes()) {
             Ok(r) => r,
             Err(error) => return context.raise_exception(&term!{context: error(graphql_resolve_parse_error(#error.line() as u64, #error.column() as u64), _)}?),
         };
 
         let response = request.execute_sync(&root_node, &resolve_context);
-        match serde_json::to_string(&response) {
-            Ok(r) => {
-                let processed = post_process_graphql_numbers(r);
-                response_term.unify(processed)
-            }
+        match serialize_graphql_response(&response) {
+            Ok(processed) => response_term.unify(processed),
             Err(_) => context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
@@ -700,18 +899,17 @@ predicates! {
         let query = format!("{{ _ChangeSet {{ {} }} }}", selection_set);
         let query_json = serde_json::json!({"query": query}).to_string();
 
+        // Internally generated query — no user variables to preserve.
         let request: GraphQLRequest = match serde_json::from_str(&query_json) {
             Ok(r) => r,
             Err(error) => return context.raise_exception(&term!{context: error(graphql_resolve_parse_error(#error.line() as u64, #error.column() as u64), _)}?),
         };
 
         let response = request.execute_sync(&root_node, &resolve_context);
-        let response_str = match serde_json::to_string(&response) {
-            Ok(r) => r,
+        match serialize_graphql_response(&response) {
+            Ok(processed) => response_term.unify(processed),
             Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
-        };
-        let processed = post_process_graphql_numbers(response_str);
-        response_term.unify(processed)
+        }
     }
 }
 

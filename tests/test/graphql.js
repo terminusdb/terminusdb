@@ -2479,4 +2479,55 @@ query EverythingQuery {
       expect(body.data.Person).to.be.an('array')
     })
   })
+
+  describe('native JSON object variables', function () {
+    it('should insert document with native JSON object variable', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: {
+          '@type': 'Person',
+          name: 'NativeVarTest',
+          age: '30',
+          order: 1,
+        },
+      }
+
+      const res = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(res.status).to.equal(200)
+      expect(res.body.errors, JSON.stringify(res.body.errors)).to.be.undefined
+      expect(res.body.data._insertDocuments).to.exist
+
+      const docResult = await document.get(agent, {
+        query: { type: 'Person', as_list: true },
+      })
+      const person = docResult.body.find((d) => d.name === 'NativeVarTest')
+      expect(person).to.exist
+      expect(person.age).to.equal(30)
+    })
+
+    it('should maintain backward compatibility with stringified JSON variable', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: '{"@type":"Person","name":"StringVarTest","age":"25","order":2}',
+      }
+
+      const res = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(res.status).to.equal(200)
+      expect(res.body.errors, JSON.stringify(res.body.errors)).to.be.undefined
+      expect(res.body.data._insertDocuments).to.exist
+
+      const docResult = await document.get(agent, {
+        query: { type: 'Person', as_list: true },
+      })
+      const person = docResult.body.find((d) => d.name === 'StringVarTest')
+      expect(person).to.exist
+      expect(person.age).to.equal(25)
+    })
+  })
 })

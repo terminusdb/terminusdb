@@ -25,6 +25,7 @@ use std::io::Write;
 use std::os::fd::{FromRawFd, IntoRawFd};
 use std::pin::Pin;
 use std::task::{Context as TaskContext, Poll};
+use crate::config::MAX_BODY_SIZE;
 use swipl::prelude::*;
 use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 use tokio::sync::mpsc;
@@ -2107,7 +2108,7 @@ async fn dispatch_request_via_pipe(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let (parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+    let body_bytes = match axum::body::to_bytes(body, *MAX_BODY_SIZE).await {
         Ok(bytes) => bytes,
         Err(_) => return plugin_error_response("failed to read request body").into_response(),
     };
@@ -2595,7 +2596,7 @@ async fn dispatch_stream_request(
 
     let (buffered_body, parsed_body) = if can_pre_parse {
         let body = body_opt.take().unwrap();
-        let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+        let body_bytes = match axum::body::to_bytes(body, *MAX_BODY_SIZE).await {
             Ok(bytes) => bytes,
             Err(_) => return plugin_error_response("failed to read request body"),
         };

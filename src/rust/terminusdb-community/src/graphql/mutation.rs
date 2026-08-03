@@ -10,9 +10,19 @@ use crate::graphql::schema::GraphQLJSON;
 
 use super::schema::{result_to_execution_result, GraphType, TerminusContext};
 
-pub struct TerminusMutationRoot;
+pub struct TerminusMutationRoot<'a> {
+    _phantom: std::marker::PhantomData<TerminusContext<'a>>,
+}
 
-impl GraphQLType for TerminusMutationRoot {
+impl<'a> Default for TerminusMutationRoot<'a> {
+    fn default() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a> GraphQLType for TerminusMutationRoot<'a> {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("TerminusMutation")
     }
@@ -46,7 +56,7 @@ impl GraphQLType for TerminusMutationRoot {
             .argument(registry.arg::<Option<String>>("message", &()));
 
         registry
-            .build_object_type::<TerminusMutationRoot>(
+            .build_object_type::<TerminusMutationRoot<'a>>(
                 &(),
                 &[
                     insert_documents_field,
@@ -59,8 +69,8 @@ impl GraphQLType for TerminusMutationRoot {
     }
 }
 
-fn check_write_auth(
-    executor: &juniper::Executor<TerminusContext<'static>, DefaultScalarValue>,
+fn check_write_auth<'a>(
+    executor: &juniper::Executor<TerminusContext<'a>, DefaultScalarValue>,
 ) -> PrologResult<bool> {
     let prolog_context = &executor.context().context;
     let system_transaction_term = &executor.context().system_transaction_term;
@@ -74,8 +84,8 @@ fn check_write_auth(
     ))?)
 }
 
-impl GraphQLValue for TerminusMutationRoot {
-    type Context = TerminusContext<'static>;
+impl<'a> GraphQLValue for TerminusMutationRoot<'a> {
+    type Context = TerminusContext<'a>;
     type TypeInfo = ();
 
     fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
@@ -182,10 +192,10 @@ impl GraphQLValue for TerminusMutationRoot {
     }
 }
 
-impl TerminusMutationRoot {
+impl<'a> TerminusMutationRoot<'a> {
     fn call_insert_doc(
         &self,
-        context: &GenericQueryableContext<'static>,
+        context: &GenericQueryableContext<'_>,
         transaction_term: &Term,
         json: &str,
         graph_type: &str,
@@ -230,7 +240,7 @@ impl TerminusMutationRoot {
 
     fn call_delete_doc(
         &self,
-        context: &GenericQueryableContext<'static>,
+        context: &GenericQueryableContext<'_>,
         transaction_term: &Term,
         ids: &[String],
         graph_type: &str,
@@ -258,7 +268,7 @@ impl TerminusMutationRoot {
 
     fn call_replace_doc(
         &self,
-        context: &GenericQueryableContext<'static>,
+        context: &GenericQueryableContext<'_>,
         transaction_term: &Term,
         json: &str,
         graph_type: &str,
