@@ -231,7 +231,7 @@ describe('GraphQL Subscriptions SSE', function () {
     expect(event.data.Person_added.name).to.equal('SSETestPerson')
   })
 
-  it('SSE subscription includes _commit metadata when requested', async function () {
+  it('SSE subscription includes _CommitMetadata metadata when requested', async function () {
     const controller = new AbortController()
     const response = await fetch(graphqlUrl(), {
       method: 'POST',
@@ -240,14 +240,14 @@ describe('GraphQL Subscriptions SSE', function () {
         Accept: 'text/event-stream',
       },
       body: JSON.stringify({
-        query: 'subscription { Person_added { _id name _commit { _id _change_type } } }',
+        query: 'subscription { Person_added { _id name _CommitMetadata { _id _change_type } } }',
       }),
       signal: controller.signal,
     })
     expect(response.status).to.equal(200)
 
     const eventPromise = waitForSSEEvent(response.body,
-      (e) => e._eventType === 'next' && e.data?.Person_added?._commit, 15000)
+      (e) => e._eventType === 'next' && e.data?.Person_added?._CommitMetadata, 15000)
 
     await document.insert(agent, {
       instance: [{ '@type': 'Person', name: 'SSECommitTest' }],
@@ -256,9 +256,9 @@ describe('GraphQL Subscriptions SSE', function () {
     const event = await eventPromise
     controller.abort()
 
-    expect(event.data.Person_added).to.have.property('_commit')
-    expect(event.data.Person_added._commit).to.have.property('_id')
-    expect(event.data.Person_added._commit).to.have.property('_change_type', 'added')
+    expect(event.data.Person_added).to.have.property('_CommitMetadata')
+    expect(event.data.Person_added._CommitMetadata).to.have.property('_id')
+    expect(event.data.Person_added._CommitMetadata).to.have.property('_change_type', 'added')
   })
 
   it('returns 400 for invalid subscription query body', async function () {

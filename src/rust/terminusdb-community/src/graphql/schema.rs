@@ -27,7 +27,7 @@ use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
 use super::query::{run_count_query, run_filter_query};
-use super::subscription::TerminusSubscriptionRoot;
+use super::subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot};
 
 /// Trait for resolving GraphQL fields against a TerminusDB store.
 ///
@@ -102,6 +102,13 @@ pub trait TerminusResolveContext: 'static {
     /// Only available in subscription event resolution context.
     /// Returns `None` for regular GraphQL queries.
     fn datetime(&self) -> Option<&str> {
+        None
+    }
+
+    /// Downcast to `SubscriptionResolveContext` for _ChangeSet resolution.
+    /// Returns `None` for regular `TerminusContext`, `Some(self)` for
+    /// `SubscriptionResolveContext`.
+    fn as_subscription_context(&self) -> Option<&SubscriptionResolveContext> {
         None
     }
 }
@@ -652,6 +659,10 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusTypeCollection<C> {
 
                 Err("_count requires exactly one model filter argument".into())
             }
+            "_ChangeSet" => {
+                let change_set = ChangeSet::<C>::new();
+                executor.resolve(info, &change_set)
+            }
             _ => {
                 let zero_iter;
                 let type_name;
@@ -995,6 +1006,24 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
             // we should always have had this instance layer at some
             // point. not having it here would be a weird bug.
             let instance = executor.context().instance()?;
+            // For deleted documents in _ChangeSet, the data may only exist
+            // in the parent layer. Fall back to parent_instance if the
+            // current instance doesn't have this subject.
+            // Only check when we have a subscription context (ChangeSet);
+            // skip for regular queries to avoid unnecessary I/O.
+            let instance = if let Some(sub_ctx) = executor.context().as_subscription_context() {
+                if let Some(parent) = sub_ctx.parent_instance() {
+                    if !instance.triples_s(self.id).next().is_some() {
+                        parent
+                    } else {
+                        instance
+                    }
+                } else {
+                    instance
+                }
+            } else {
+                instance
+            };
             if field_name.as_str() == "_id" {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
@@ -1854,7 +1883,7 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
         &self,
         info: &Self::TypeInfo,
         field_name: &str,
-        arguments: &juniper::Arguments,
+        _arguments: &juniper::Arguments,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult {
         if field_name == "_CommitMetadata" {
@@ -1876,8 +1905,12 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
             _ => return Err(format!("Unknown _ChangeSet operation: {}", operation).into()),
         }
 
-        // Get document IDs from the `ids` argument
-        let ids: Vec<ID> = arguments.get::<Vec<ID>>("ids").unwrap_or_default();
+        // Get document IDs from the resolve context (set by Rust FFI)
+        let sub_ctx = executor.context().as_subscription_context();
+
+        let ids: Vec<String> = sub_ctx
+            .map(|ctx| ctx.change_set_ids_for_field(field_name))
+            .unwrap_or_default();
 
         if ids.is_empty() {
             return executor.resolve(
@@ -1889,8 +1922,17 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
             ).map(|r| r);
         }
 
-        // Convert ID strings to internal u64 IDs using the instance layer
-        let instance = match executor.context().instance() {
+        // For deleted documents, use the parent layer (pre-commit state).
+        // For added/changed, use the current instance layer.
+        let resolve_layer = if operation == "deleted" {
+            sub_ctx
+                .and_then(|ctx| ctx.parent_instance())
+                .or_else(|| executor.context().instance())
+        } else {
+            executor.context().instance()
+        };
+
+        let instance = match resolve_layer {
             Some(layer) => layer,
             None => {
                 return executor.resolve(
@@ -1905,7 +1947,10 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
 
         let objects: Vec<TerminusType<C>> = ids
             .iter()
-            .filter_map(|id| instance.subject_id(&id.to_string()).map(TerminusType::<C>::new))
+            .filter_map(|id| {
+                let nid = instance.subject_id(id);
+                nid.map(TerminusType::<C>::new)
+            })
             .collect();
 
         executor.resolve(

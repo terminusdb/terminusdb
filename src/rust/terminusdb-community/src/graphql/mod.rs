@@ -526,16 +526,28 @@ predicates! {
 
         // Extract schema and instance layers from the transaction term.
         // For deleted events, the transaction term is the Validation_Object,
-        // whose instance_objects.read layer is the pre-commit state.
+        // whose instance_objects.read layer is the post-commit state.
+        // The parent of that layer is the pre-commit state where the
+        // document still exists.
         let schema_layer = match transaction_schema_layer(context, transaction_term)? {
             Some(layer) => layer,
             None => return context.raise_exception(&term!{context: error(no_schema_layer_in_transaction, _)}?),
         };
         let instance_layer = transaction_instance_layer(context, transaction_term)?;
 
+        // For deleted documents, use the parent (pre-commit) layer as the
+        // instance so that run_filter_query finds the document and
+        // TerminusType::resolve_field resolves fields from pre-commit state.
+        let (instance_layer, parent_layer) = if change_type == "deleted" {
+            let parent = instance_layer.as_ref().and_then(|l| l.parent().ok().flatten());
+            (parent.clone(), parent)
+        } else {
+            (instance_layer, None)
+        };
+
         // Build the SubscriptionResolveContext with event metadata so the
-        // resolver can return the _commit nested object fields.
-        let resolve_context = subscription::SubscriptionResolveContext::with_metadata(
+        // resolver can return the _CommitMetadata nested object fields.
+        let mut resolve_context = subscription::SubscriptionResolveContext::with_metadata(
             schema_layer,
             instance_layer,
             type_collection.clone(),
@@ -544,6 +556,7 @@ predicates! {
             timestamp,
             datetime,
         );
+        resolve_context.parent_instance = parent_layer;
 
         // Get the cached subscription root node (schema + subscription types).
         let root_node = get_or_create_subscription_root_node(&type_collection);
@@ -563,6 +576,129 @@ predicates! {
             Err(_) => context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
+
+    /// resolve_change_set_event(+Transaction, +GraphqlContext, +SelectionSet,
+    ///                           +CommitId, +Timestamp, +Datetime,
+    ///                           -ResponseJson)
+    ///
+    /// Executes a _ChangeSet GraphQL query entirely in Rust. This predicate:
+    /// 1. Calls changed_document_ids() to get all changed documents
+    /// 2. Groups them by class + operation (e.g. "Product_added")
+    /// 3. Gets the parent layer for deleted document resolution
+    /// 4. Builds SubscriptionResolveContext with change_set_ids
+    /// 5. Wraps the selection set in { _ChangeSet { ... } }
+    /// 6. Executes via Juniper and returns the JSON response
+    ///
+    /// Prolog only needs to call this and send the result via SSE.
+    #[module("$graphql")]
+    semidet fn resolve_change_set_event(context, transaction_term, graphql_context_term, selection_set_term, commit_id_term, timestamp_term, datetime_term, response_term) {
+        let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
+        let selection_set: String = selection_set_term.get_ex()?;
+        let commit_id: String = commit_id_term.get_ex()?;
+        let timestamp: f64 = timestamp_term.get_ex()?;
+        let datetime: String = datetime_term.get_ex()?;
+
+        // Extract schema and instance layers from the transaction term.
+        let schema_layer = match transaction_schema_layer(context, transaction_term)? {
+            Some(layer) => layer,
+            None => return context.raise_exception(&term!{context: error(no_schema_layer_in_transaction, _)}?),
+        };
+        let instance_layer = match transaction_instance_layer(context, transaction_term)? {
+            Some(layer) => layer,
+            None => return context.raise_exception(&term!{context: error(no_instance_layer_in_transaction, _)}?),
+        };
+
+        // Get parent layer for deleted document resolution.
+        let parent_layer = instance_layer.parent().ok().flatten();
+
+        // Collect all changed documents using the pure Rust function.
+        let changes = context.try_or_die(
+            crate::changes::changed_document_ids(&schema_layer, &instance_layer),
+        )?;
+
+        // Get rdf:type predicate ID for looking up class of Changed documents.
+        let rdf_type_id = instance_layer.predicate_id(crate::consts::RDF_TYPE);
+
+        // Group changes by "{Class}_{operation}" → Vec<document_iri>
+        let mut change_set_ids: HashMap<String, Vec<String>> = HashMap::new();
+
+        for (id, change_type) in changes {
+            // Determine the type_id and which layer to use for IRI lookups
+            let (type_id, op_name, lookup_layer) = match &change_type {
+                crate::changes::ChangeType::Added(tid) => (*tid, "added", &instance_layer),
+                crate::changes::ChangeType::Deleted(tid) => {
+                    // For deleted docs, use parent layer for type IRI lookup
+                    let layer = parent_layer.as_ref().unwrap_or(&instance_layer);
+                    (*tid, "deleted", layer)
+                }
+                crate::changes::ChangeType::Changed => {
+                    // For changed docs, look up rdf:type in the current instance
+                    match rdf_type_id.and_then(|rt| instance_layer.single_triple_sp(id, rt)) {
+                        Some(t) => (t.object, "changed", &instance_layer),
+                        None => continue, // skip if no rdf:type found
+                    }
+                }
+            };
+
+            // Get the class IRI string from the lookup layer
+            let class_iri = match lookup_layer.id_object_node(type_id) {
+                Some(iri) => iri,
+                None => continue,
+            };
+
+            // Convert class IRI to GraphQL class name using AllFrames
+            let graphql_name = match type_collection.allframes.iri_to_graphql_name_opt(
+                &self::frame::IriName(class_iri),
+            ) {
+                Some(name) => name,
+                None => continue,
+            };
+
+            // Get the document IRI string
+            let doc_iri = match lookup_layer.id_subject(id) {
+                Some(iri) => iri,
+                None => continue,
+            };
+
+            // Build the key: "{Class}_{operation}"
+            let key = format!("{}_{}", graphql_name.0, op_name);
+            change_set_ids.entry(key).or_default().push(doc_iri);
+        }
+
+        // Build the SubscriptionResolveContext with change_set_ids and parent layer.
+        let resolve_context = SubscriptionResolveContext::with_change_set_metadata(
+            schema_layer,
+            Some(instance_layer),
+            type_collection.clone(),
+            "commit".to_string(),
+            commit_id,
+            timestamp,
+            datetime,
+            change_set_ids,
+            parent_layer,
+        );
+
+        // Get the cached subscription root node (schema + subscription types).
+        let root_node = get_or_create_subscription_root_node(&type_collection);
+
+        // Wrap the selection set in a query: { _ChangeSet { <selection set> } }
+        // Use serde_json to properly escape the selection set string.
+        let query = format!("{{ _ChangeSet {{ {} }} }}", selection_set);
+        let query_json = serde_json::json!({"query": query}).to_string();
+
+        let request: GraphQLRequest = match serde_json::from_str(&query_json) {
+            Ok(r) => r,
+            Err(error) => return context.raise_exception(&term!{context: error(graphql_resolve_parse_error(#error.line() as u64, #error.column() as u64), _)}?),
+        };
+
+        let response = request.execute_sync(&root_node, &resolve_context);
+        let response_str = match serde_json::to_string(&response) {
+            Ok(r) => r,
+            Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
+        };
+        let processed = post_process_graphql_numbers(response_str);
+        response_term.unify(processed)
+    }
 }
 
 pub fn register() {
@@ -574,4 +710,5 @@ pub fn register() {
     register_handle_system_request();
     register_parse_subscription_query();
     register_resolve_subscription_event();
+    register_resolve_change_set_event();
 }

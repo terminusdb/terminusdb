@@ -3,6 +3,7 @@
 //! `TerminusSubscriptionRoot` is for schema generation only. Event resolution
 //! bypasses Juniper's async executor and uses `SubscriptionResolveContext`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use juniper::{
@@ -33,6 +34,14 @@ pub struct SubscriptionResolveContext {
     pub commit_id: Option<String>,
     pub timestamp: Option<f64>,
     pub datetime: Option<String>,
+    /// Changed document IDs for _ChangeSet resolution.
+    /// Maps "{Class}_{operation}" (e.g. "Product_added") to a list of
+    /// document IRIs. Only set for _ChangeSet event resolution.
+    pub change_set_ids: Option<HashMap<String, Vec<String>>>,
+    /// Parent layer for resolving deleted documents in _ChangeSet.
+    /// Obtained via `SyncStoreLayer::parent()` on the instance layer.
+    /// Only set for _ChangeSet event resolution.
+    pub parent_instance: Option<SyncStoreLayer>,
 }
 
 impl SubscriptionResolveContext {
@@ -55,7 +64,53 @@ impl SubscriptionResolveContext {
             commit_id: Some(commit_id),
             timestamp: Some(timestamp),
             datetime: Some(datetime),
+            change_set_ids: None,
+            parent_instance: None,
         }
+    }
+
+    /// Create a context with _ChangeSet event metadata.
+    /// `change_set_ids` maps "{Class}_{operation}" to document IRIs.
+    /// `parent_instance` is the parent layer for resolving deleted documents.
+    pub fn with_change_set_metadata(
+        schema: SyncStoreLayer,
+        instance: Option<SyncStoreLayer>,
+        type_collection: TerminusTypeCollectionInfo,
+        change_type: String,
+        commit_id: String,
+        timestamp: f64,
+        datetime: String,
+        change_set_ids: HashMap<String, Vec<String>>,
+        parent_instance: Option<SyncStoreLayer>,
+    ) -> Self {
+        Self {
+            schema,
+            instance,
+            type_collection,
+            document_context: Arc::new(Lazy::new()),
+            change_type: Some(change_type),
+            commit_id: Some(commit_id),
+            timestamp: Some(timestamp),
+            datetime: Some(datetime),
+            change_set_ids: Some(change_set_ids),
+            parent_instance,
+        }
+    }
+
+    /// Look up document IDs for a _ChangeSet field (e.g. "Product_added").
+    /// Returns an empty vector if the field has no changed documents.
+    pub fn change_set_ids_for_field(&self, field_name: &str) -> Vec<String> {
+        self.change_set_ids
+            .as_ref()
+            .and_then(|m| m.get(field_name))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Returns the parent instance layer for resolving deleted documents.
+    /// Only available in _ChangeSet event resolution context.
+    pub fn parent_instance(&self) -> Option<&SyncStoreLayer> {
+        self.parent_instance.as_ref()
     }
 
     pub fn document_context(&self) -> &DocumentContext<SyncStoreLayer> {
@@ -95,6 +150,13 @@ impl TerminusResolveContext for SubscriptionResolveContext {
 
     // Restrictions are rejected at subscription registration time,
     // so the default no-op implementation is correct.
+
+    /// Downcast to SubscriptionResolveContext for _ChangeSet resolution.
+    /// Returns Some(self) when called on SubscriptionResolveContext,
+    /// None for regular TerminusContext.
+    fn as_subscription_context(&self) -> Option<&SubscriptionResolveContext> {
+        Some(self)
+    }
 }
 
 /// Parsed components of a GraphQL subscription query.
@@ -147,24 +209,30 @@ pub fn parse_subscription_query(
 
     let field_name = field.name.item.to_string();
 
-    // e.g. "Person_added" -> ("Person", "added")
-    let last_underscore = field_name.rfind('_').ok_or_else(|| {
-        format!(
-            "Subscription field name '{}' does not contain '_' — expected format '{{Class}}_{{operation}}'",
-            field_name
-        )
-    })?;
+    let (class_name, operation) = if field_name == "_ChangeSet" {
+        ("_ChangeSet".to_string(), "change_set".to_string())
+    } else {
+        // e.g. "Person_added" -> ("Person", "added")
+        let last_underscore = field_name.rfind('_').ok_or_else(|| {
+            format!(
+                "Subscription field name '{}' does not contain '_' — expected format '{{Class}}_{{operation}}'",
+                field_name
+            )
+        })?;
 
-    let class_name = field_name[..last_underscore].to_string();
-    let operation = field_name[last_underscore + 1..].to_string();
+        let class_name = field_name[..last_underscore].to_string();
+        let operation = field_name[last_underscore + 1..].to_string();
 
-    match operation.as_str() {
-        "added" | "changed" | "deleted" => {}
-        _ => return Err(format!(
-            "Unknown subscription operation '{}'. Must be one of: added, changed, deleted",
-            operation
-        )),
-    }
+        match operation.as_str() {
+            "added" | "changed" | "deleted" => {}
+            _ => return Err(format!(
+                "Unknown subscription operation '{}'. Must be one of: added, changed, deleted",
+                operation
+            )),
+        }
+
+        (class_name, operation)
+    };
 
     let filter_canonical_json = if let Some(args) = &field.arguments {
         let mut map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
@@ -657,6 +725,80 @@ mod tests {
         assert!(parsed.selection_set_graphql.contains("name"),
                 "selection_set_graphql should contain name from fragment: {}",
                 parsed.selection_set_graphql);
+    }
+
+    #[test]
+    fn parse_ChangeSet_basic() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet { Person_added { _id } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.field_name, "_ChangeSet");
+        assert_eq!(parsed.class_name, "_ChangeSet");
+        assert_eq!(parsed.operation, "change_set");
+    }
+
+    #[test]
+    fn parse_ChangeSet_multiple_fields() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet { Person_added { _id name } Person_changed { _id name } Person_deleted { _id name } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.field_name, "_ChangeSet");
+        assert_eq!(parsed.class_name, "_ChangeSet");
+        assert_eq!(parsed.operation, "change_set");
+        assert!(!parsed.selection_set_hash.is_empty());
+        assert!(parsed.selection_set_graphql.contains("Person_added"));
+        assert!(parsed.selection_set_graphql.contains("Person_changed"));
+        assert!(parsed.selection_set_graphql.contains("Person_deleted"));
+    }
+
+    #[test]
+    fn parse_ChangeSet_different_selection_sets_different_hashes() {
+        let tc = person_type_collection();
+        let r1 = parse_subscription_query(
+            "subscription { _ChangeSet { Person_added { _id } } }",
+            &tc,
+        ).unwrap();
+        let r2 = parse_subscription_query(
+            "subscription { _ChangeSet { Person_added { _id name } } }",
+            &tc,
+        ).unwrap();
+        assert_ne!(r1.selection_set_hash, r2.selection_set_hash);
+    }
+
+    #[test]
+    fn parse_ChangeSet_with_filter() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet(filter: {types: [\"Person\"]}) { Person_added { _id } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert_ne!(parsed.filter_canonical_json, "{}");
+        assert!(parsed.filter_canonical_json.contains("types"));
+    }
+
+    #[test]
+    fn parse_ChangeSet_only_CommitMetadata() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet { _CommitMetadata { _id } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.field_name, "_ChangeSet");
+        assert_eq!(parsed.class_name, "_ChangeSet");
+        assert_eq!(parsed.operation, "change_set");
+        assert!(parsed.selection_set_graphql.contains("_CommitMetadata"));
     }
 
     #[test]

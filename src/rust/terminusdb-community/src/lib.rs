@@ -5,8 +5,8 @@ mod log;
 mod dict_lookup;
 
 mod change_window;
-mod changes;
-mod consts;
+pub mod changes;
+pub mod consts;
 mod doc;
 mod embedding;
 mod graphql;

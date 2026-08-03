@@ -90,7 +90,7 @@ register_subscription_parsed(Descriptor, ClassName, Operation,
     atom(ClassName),
     ClassName \== '',
     atom(Operation),
-    memberchk(Operation, [added, changed, deleted]),
+    memberchk(Operation, [added, changed, deleted, change_set]),
     atom(SelectionHash),
     SelectionHash \== '',
     atom(Mode),
@@ -194,6 +194,14 @@ do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
                     Validation_Object, TypeIRIs, DocIRI, ChangeType),
                 broadcast_graphql_event(Transaction, GraphqlContext, Descriptor, DocIRI, ChangeType, CommitIdAtom, Validation_Object, Timestamp, Datetime)
             )
+        ),
+        %% _ChangeSet broadcast — fires once per commit with batched changes.
+        %% Coexists with per-document broadcast above.
+        (   graphql_cohort(cohort(_, '_ChangeSet', change_set, _, _), Descriptor, _, _)
+        ->  do_broadcast_ChangeSet_events(Transaction, GraphqlContext,
+                                          Descriptor, CommitIdAtom,
+                                          Validation_Object, Timestamp, Datetime)
+        ;   true
         )
     ;   true
     ).
@@ -274,10 +282,12 @@ descriptor_repository(Descriptor, RepoDescriptor) :-
 %%                     +DocIRI, +CommitIdKey, +Validation_Object, +Timestamp,
 %%                     +Datetime) is det.
 %
-%  For deleted documents, uses the Validation_Object's read layer (pre-commit
-%  state) since the document no longer exists in the current instance layer.
-%  For non-deleted documents, Transaction and GraphqlContext are threaded
-%  from do_broadcast_graphql_events to avoid redundant open_descriptor calls.
+%  All document resolution — including deleted documents — is handled by
+%  resolve_event_through_juniper, which delegates to the Rust FFI
+%  resolve_subscription_event/7 predicate. For deleted documents, the
+%  Validation_Object is passed as the transaction term; its
+%  instance_objects.read layer is the pre-commit state where the document
+%  still exists. Rust resolves all fields including _CommitMetadata.
 broadcast_sse_event(Transaction, GraphqlContext, _Descriptor, CohortKey, RawChannel, Mode, ClassName,
                     Operation, ChangeType, DocIRI, CommitIdKey,
                     Validation_Object, Timestamp, Datetime) :-
@@ -287,197 +297,35 @@ broadcast_sse_event(Transaction, GraphqlContext, _Descriptor, CohortKey, RawChan
         fail
     ),
     cohort_field_name(ClassName, Operation, FieldName),
+    %% For deleted documents, use Validation_Object as the transaction so
+    %% Rust reads from the pre-commit layer. For non-deleted, use Transaction.
     (   ChangeType == deleted
-    ->  (   catch(resolve_deleted_document(Validation_Object, DocIRI,
-                                           SelectionSetGraphql, ResolvedDoc),
-                  Error,
-                  (   json_log:json_log_error_formatted(
-                          "[graphql-sse] resolve_deleted_document failed: ~w", [Error]),
-                      fail
-                  ))
-        ->  true
-        ;   %% Fallback: inject just the _id
-            ResolvedDoc = _{'_id': DocIRI}
-        )
-    ;   (   catch(resolve_event_through_juniper(Transaction, GraphqlContext,
-                                                ClassName, Operation, DocIRI,
-                                                SelectionSetGraphql, ChangeType,
-                                                CommitIdKey, Timestamp, Datetime,
-                                                ResolvedDoc),
-                  Error,
-                  (   json_log:json_log_error_formatted(
-                          "[graphql-sse] resolve_event_through_juniper failed: ~w", [Error]),
-                      fail
-                  ))
-        ->  true
+    ->  ResolveTransaction = Validation_Object
+    ;   ResolveTransaction = Transaction
+    ),
+    (   catch(resolve_event_through_juniper(ResolveTransaction, GraphqlContext,
+                                            ClassName, Operation, DocIRI,
+                                            SelectionSetGraphql, ChangeType,
+                                            CommitIdKey, Timestamp, Datetime,
+                                            ResolvedDoc),
+              Error,
+              (   json_log:json_log_error_formatted(
+                      "[graphql-sse] resolve_event_through_juniper failed: ~w", [Error]),
+                  fail
+              ))
+    ->  true
+    ;   (   ChangeType == deleted
+        ->  ResolvedDoc = _{'_id': DocIRI}
         ;   ResolvedDoc = _{}
         )
     ),
-    %% For deleted events, resolve_deleted_document skips _commit (not an
-    %% instance property), so merge it here if requested.
-    (   ChangeType == deleted
-    ->  (   sub_string(SelectionSetGraphql, _, _, _, '_commit')
-        ->  CommitObj = _{'_id': CommitIdKey,
-                          '_timestamp': Timestamp,
-                          '_datetime': Datetime,
-                          '_change_type': ChangeType},
-            EventDoc = ResolvedDoc.put('_commit', CommitObj)
-        ;   EventDoc = ResolvedDoc
-        )
-    ;   EventDoc = ResolvedDoc
-    ),
     FullEvent = _{ data: _{} },
-    put_dict(FieldName, FullEvent.data, EventDoc, DataWithField),
+    put_dict(FieldName, FullEvent.data, ResolvedDoc, DataWithField),
     FullEventFinal = FullEvent.put(data, DataWithField),
     with_output_to(string(JsonStr),
         json_write_dict(current_output, FullEventFinal,
                         [as(string), width(0)])),
     send_sse_or_ndjson(Mode, JsonStr, RawChannel).
-
-%% resolve_deleted_document(+Validation_Object, +DocIRI, +SelectionSetGraphql,
-%%                          -Result) is semidet.
-%%
-%% Reads properties from the parent (pre-commit) layer for deleted documents.
-%% Supports both scalar fields and nested object fields (recursively).
-%% _commit is handled by the caller.
-resolve_deleted_document(Validation_Object, DocIRI, SelectionSetGraphql, Result) :-
-    database_prefixes(Validation_Object, Prefixes),
-    database_instance(Validation_Object, InstanceObjects),
-    member(InstanceRWO, InstanceObjects),
-    read_write_obj_reader(InstanceRWO, CurrentLayer),
-    (   terminus_store:parent(CurrentLayer, ParentLayer)
-    ->  !,
-        ParentRWO = rwo{read: ParentLayer, write: _},
-        ParentInstance = [ParentRWO],
-        parse_selection_fields(SelectionSetGraphql, TopFields),
-        resolve_fields(TopFields, ParentInstance, DocIRI, Prefixes, _{'_id': DocIRI}, Result)
-    ;   fail
-    ).
-
-%% parse_selection_fields(+SelectionSetGraphql, -Fields) is det.
-%%
-%% Parses a GraphQL selection set string into a list of field(Name, NestedSelection)
-%% terms where NestedSelection is a string (possibly empty) for nested fields.
-parse_selection_fields(SelectionSetGraphql, Fields) :-
-    parse_fields_at_depth(SelectionSetGraphql, 0, Fields).
-
-%% parse_fields_at_depth(+String, +StartPos, -Fields) is det.
-%%
-%% Scans the string extracting top-level field names and their nested
-%% selection sets (text inside { }). Returns field(Name, NestedText) terms.
-parse_fields_at_depth(Str, Start, Fields) :-
-    (   sub_string(Str, Start, _, 0, Rest)
-    ->  parse_fields_from_string(Rest, Fields)
-    ;   Fields = []
-    ).
-
-parse_fields_from_string(Str, Fields) :-
-    string_codes(Str, Codes),
-    phrase(parse_fields(Fields), Codes).
-
-parse_fields([field(Name, Nested)|Rest]) -->
-    ws,
-    field_name(NameCodes),
-    { NameCodes \= [] },
-    { string_codes(Name, NameCodes) },
-    ws,
-    "{",
-    !,
-    nested_selection(Nested),
-    parse_fields(Rest).
-parse_fields([field(Name, "")|Rest]) -->
-    ws,
-    field_name(NameCodes),
-    { NameCodes \= [] },
-    !,
-    { string_codes(Name, NameCodes) },
-    ws,
-    parse_fields(Rest).
-parse_fields([]) --> ws, [], { true }.
-
-ws --> [C], { char_type(C, white) }, !, ws.
-ws --> [].
-
-field_name([C|Cs]) -->
-    [C], { char_type(C, csymf) }, !, field_name(Cs).
-field_name([]) --> [].
-
-nested_selection(Text) -->
-    { Depth = 0 },
-    collect_nested(Depth, Codes),
-    { string_codes(RawText, Codes),
-      normalize_space(atom(NormalizedAtom), RawText),
-      atom_string(NormalizedAtom, Text) }.
-
-collect_nested(0, []) --> "}", !.
-collect_nested(Depth, [C|Cs]) -->
-    [C],
-    (   { C = 0'{ } -> { Depth1 is Depth + 1 }
-    ;   { C = 0'} } -> { Depth1 is Depth - 1 }
-    ;   { Depth1 = Depth }
-    ),
-    !,
-    collect_nested(Depth1, Cs).
-
-%% resolve_fields(+Fields, +Instance, +DocIRI, +Prefixes, +DictIn, -DictOut) is det.
-%%
-%% Resolves each field from the parent layer. For scalar fields, reads the
-%% property value directly. For nested object fields, reads the linked document
-%% IRI and recursively resolves the nested selection set.
-resolve_fields([], _, _, _, Dict, Dict).
-resolve_fields([field(Name, "")|Rest], Instance, DocIRI, Prefixes, DictIn, DictOut) :-
-    (   Name == "_id"
-    ->  DictMid = DictIn
-    ;   Name == "_commit"
-    ->  DictMid = DictIn
-    ;   (   field_property_value(Instance, DocIRI, Name, Prefixes, Value)
-        ->  atom_string(NameAtom, Name),
-            put_dict(NameAtom, DictIn, Value, DictMid)
-        ;   DictMid = DictIn
-        )
-    ),
-    !,
-    resolve_fields(Rest, Instance, DocIRI, Prefixes, DictMid, DictOut).
-resolve_fields([field(Name, Nested)|Rest], Instance, DocIRI, Prefixes, DictIn, DictOut) :-
-    (   Name == "_id"
-    ->  DictMid = DictIn
-    ;   Name == "_commit"
-    ->  DictMid = DictIn
-    ;   (   field_property_value(Instance, DocIRI, Name, Prefixes, NestedDocIRI)
-        ->  parse_selection_fields(Nested, NestedFields),
-            resolve_fields(NestedFields, Instance, NestedDocIRI, Prefixes, _{}, NestedDict),
-            atom_string(NameAtom, Name),
-            put_dict(NameAtom, DictIn, NestedDict, DictMid)
-        ;   atom_string(NameAtom, Name),
-            put_dict(NameAtom, DictIn, _{}, DictMid)
-        )
-    ),
-    !,
-    resolve_fields(Rest, Instance, DocIRI, Prefixes, DictMid, DictOut).
-
-%% field_property_value(+Instance, +DocIRI, +FieldName, +Prefixes, -Value) is semidet.
-%%
-%% xrdf returns values as String^^Type, String@Lang, or node(String).
-field_property_value(Instance, DocIRI, FieldName, Prefixes, Value) :-
-    atom_string(FieldNameAtom, FieldName),
-    prefix_expand_schema(FieldNameAtom, Prefixes, PropertyIRI),
-    xrdf(Instance, DocIRI, PropertyIRI, ValueRaw),
-    (   ValueRaw = StringVal^^_Type
-    ->  (   atom(StringVal) -> atom_string(StringVal, Value)
-        ;   string(StringVal) -> Value = StringVal
-        ;   term_string(StringVal, Value)
-        )
-    ;   ValueRaw = StringVal@_Lang
-    ->  (   atom(StringVal) -> atom_string(StringVal, Value)
-        ;   string(StringVal) -> Value = StringVal
-        ;   term_string(StringVal, Value)
-        )
-    ;   atom(ValueRaw)
-    ->  atom_string(ValueRaw, Value)
-    ;   string(ValueRaw)
-    ->  Value = ValueRaw
-    ;   term_string(ValueRaw, Value)
-    ).
 
 %% send_sse_or_ndjson(+Mode, +JsonStr, +RawChannel) is det.
 %%
@@ -498,6 +346,7 @@ broadcast_raw_or_log(RawChannel, Payload) :-
     ).
 
 %% cohort_field_name(+ClassName, +Operation, -FieldName) is det.
+cohort_field_name('_ChangeSet', change_set, '_ChangeSet') :- !.
 cohort_field_name(ClassName, Operation, FieldName) :-
     atom_concat(ClassName, '_', Prefix),
     atom_concat(Prefix, Operation, FieldName).
@@ -1109,6 +958,82 @@ sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Tim
 
 
 %% ===========================================================================
+%% _ChangeSet batched event broadcast
+%% ===========================================================================
+
+%% do_broadcast_ChangeSet_events(+Transaction, +GraphqlContext, +Descriptor,
+%%                               +CommitIdAtom, +Validation_Object,
+%%                               +Timestamp, +Datetime) is det.
+%%
+%% Fires once per commit with batched per-type added/changed/deleted lists.
+%% All change collection, grouping, query building, and Juniper resolution is
+%% done in Rust via resolve_change_set_event/7. Prolog just calls it and sends
+%% the result via SSE.
+do_broadcast_ChangeSet_events(Transaction, GraphqlContext, Descriptor,
+                             CommitIdAtom, _Validation_Object,
+                             Timestamp, Datetime) :-
+    (   atom(CommitIdAtom) -> atom_string(CommitIdAtom, CommitIdStr)
+    ;   CommitIdStr = CommitIdAtom
+    ),
+    forall(
+        (   graphql_cohort(CohortKey, Descriptor, RawChannel, _),
+            cohort_class(CohortKey, '_ChangeSet'),
+            cohort_operation(CohortKey, change_set)
+        ),
+        (   graphql_sse_subscription(_, CohortKey, RawChannel)
+        ->  do_broadcast_single_ChangeSet(Transaction, GraphqlContext,
+                                          CohortKey, RawChannel,
+                                          CommitIdStr, Timestamp, Datetime)
+        ;   true
+        )
+    ).
+
+%% do_broadcast_single_ChangeSet(+Transaction, +GraphqlContext, +CohortKey,
+%%                               +RawChannel, +CommitIdStr,
+%%                               +Timestamp, +Datetime) is det.
+%%
+%% Gets the subscriber's selection set, calls resolve_change_set_event/7 which
+%% does everything in Rust (change collection, grouping, query building, Juniper
+%% resolution), and sends the result as one SSE event.
+do_broadcast_single_ChangeSet(Transaction, GraphqlContext, CohortKey, RawChannel,
+                             CommitIdStr, Timestamp, Datetime) :-
+    (   graphql_cohort_selection(CohortKey, _, SelectionSetGraphql)
+    ->  true
+    ;   json_log:json_log_error_formatted(
+            "[graphql-sse] no selection set for _ChangeSet cohort ~w", [CohortKey]),
+        fail
+    ),
+    catch(
+        (   '$graphql':resolve_change_set_event(Transaction, GraphqlContext,
+                                                 SelectionSetGraphql,
+                                                 CommitIdStr, Timestamp, Datetime,
+                                                 ResponseJson),
+            (   atom(ResponseJson) -> ResponseAtom = ResponseJson
+            ;   atom_string(ResponseAtom, ResponseJson)
+            ),
+            atom_json_dict(ResponseAtom, ResponseData, []),
+            (   get_dict(errors, ResponseData, Errors)
+            ->  json_log:json_log_error_formatted(
+                    "[graphql-sse] _ChangeSet Juniper errors: ~w", [Errors])
+            ;   get_dict(data, ResponseData, Data),
+                (   get_dict('_ChangeSet', Data, ChangeSetData)
+                ->  true
+                ;   ChangeSetData = _{}
+                ),
+                cohort_mode(CohortKey, Mode),
+                FullEvent = _{ data: _{ '_ChangeSet': ChangeSetData } },
+                with_output_to(string(JsonStr),
+                    json_write_dict(current_output, FullEvent,
+                                    [as(string), width(0)])),
+                send_sse_or_ndjson(Mode, JsonStr, RawChannel)
+            )
+        ),
+        Error,
+        json_log:json_log_error_formatted(
+            "[graphql-sse] do_broadcast_single_ChangeSet failed: ~w", [Error])
+    ).
+
+%% ===========================================================================
 %% Event Resolution via Juniper (post-commit hook)
 %% ===========================================================================
 
@@ -1154,8 +1079,14 @@ resolve_event_through_juniper(Transaction, GraphqlContext, ClassName,
         ;   Result = _{}
         )
     ;   get_dict(data, ResponseData, Data),
-        (   get_dict(ClassName, Data, [Doc|_])
-        ->  Result = Doc
+        (   is_dict(Data)
+        ->  (   get_dict(ClassName, Data, [Doc|_])
+            ->  Result = Doc
+            ;   (   Operation == deleted
+                ->  Result = _{'_id': DocIRI}
+                ;   Result = _{}
+                )
+            )
         ;   (   Operation == deleted
             ->  Result = _{'_id': DocIRI}
             ;   Result = _{}
@@ -1505,42 +1436,6 @@ test(graphql_escape_string_with_backslash) :-
     graphql_escape_string('Product\\path', Escaped),
     atom_string(Escaped, EscapedStr),
     once(sub_string(EscapedStr, _, _, _, '\\\\')).
-
-%% parse_selection_fields extracts top-level field names and nested
-%% selection sets from a GraphQL selection set string.
-
-test(parse_selection_fields_flat) :-
-    parse_selection_fields("_id name", Fields),
-    Fields = [field("_id", ""), field("name", "")].
-
-test(parse_selection_fields_with_nested) :-
-    parse_selection_fields("_id address { city street }", Fields),
-    Fields = [field("_id", ""), field("address", "city street")].
-
-test(parse_selection_fields_multiple_nested) :-
-    parse_selection_fields("_id author { name } address { city }", Fields),
-    Fields = [field("_id", ""),
-              field("author", "name"),
-              field("address", "city")].
-
-test(parse_selection_fields_deeply_nested) :-
-    parse_selection_fields("author { address { city } }", Fields),
-    Fields = [field("author", "address { city }")].
-
-test(parse_selection_fields_empty) :-
-    parse_selection_fields("", Fields),
-    Fields = [].
-
-test(parse_selection_fields_single_field) :-
-    parse_selection_fields("_id", Fields),
-    Fields = [field("_id", "")].
-
-%% resolve_fields skips _id and _commit (handled by caller).
-
-test(resolve_fields_skips_id_and_commit) :-
-    resolve_fields([field("_id", ""), field("_commit", ""), field("name", "")],
-                   [], 'http://example.com/data/Doc1', _{}, _{'_id': 'http://example.com/data/Doc1'}, Result),
-    \+ get_dict('_commit', Result, _).
 
 %% detect_stream_mode checks the Accept header to determine the
 %% streaming mode. SSE only — no NDJSON in this phase.
@@ -1925,6 +1820,58 @@ test(sse_validation_error_response_returns_200_sse) :-
 %% (graphql-subscriptions-sse.js finite operations over SSE).
 
 :- end_tests(webserver_graphql_subs_sse_pure).
+
+%% ---------------------------------------------------------------------------
+%% PLUnit tests for _ChangeSet cohort registration and broadcast logic
+%% ---------------------------------------------------------------------------
+
+:- begin_tests(webserver_graphql_subs_change_set, []).
+
+%% _ChangeSet cohort registration should accept change_set operation.
+%% Currently register_subscription_parsed validates memberchk(Operation,
+%% [added, changed, deleted]) — change_set is not in that list, so this
+%% test will fail until the validation is extended.
+test(change_set_cohort_registration,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, '_ChangeSet', change_set,
+                                 '{}', 'abc123', sse,
+                                _CohortKey, _RawChannel),
+    !,
+    graphql_cohort(CohortKey, TestDesc, _, 1),
+    cohort_class(CohortKey, ClassName),
+    ClassName == '_ChangeSet',
+    cohort_operation(CohortKey, Operation),
+    Operation == change_set.
+
+%% _ChangeSet cohort selection set is stored with full nested selection.
+test(change_set_cohort_selection_stored,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    TestDesc = branch_descriptor{},
+    register_subscription_parsed(TestDesc, '_ChangeSet', change_set,
+                                 '{}', 'abc123', sse,
+                                CohortKey, _RawChannel),
+    !,
+    SelectionSet = 'Person_added { _id name } Person_deleted { _id name }',
+    SelectionGraphql = 'Person_added { _id name } Person_deleted { _id name }',
+    assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionGraphql)),
+    graphql_cohort_selection(CohortKey, StoredSelection, StoredGraphql),
+    StoredSelection == SelectionSet,
+    StoredGraphql == SelectionGraphql.
+
+%% cohort_field_name special case for _ChangeSet.
+%% Without the fix, cohort_field_name('_ChangeSet', change_set, X) produces
+%% '_ChangeSet_change_set' instead of '_ChangeSet'.
+test(cohort_field_name_change_set) :-
+    cohort_field_name('_ChangeSet', change_set, FieldName),
+    FieldName == '_ChangeSet'.
+
+%% cohort_field_name still works for regular class/operation pairs.
+test(cohort_field_name_regular) :-
+    cohort_field_name('Person', added, FieldName),
+    FieldName == 'Person_added'.
+
+:- end_tests(webserver_graphql_subs_change_set).
 
 %% Setup helper for SSE stream tests — creates test cohort and
 %% subscription entries with fake stream ids.
