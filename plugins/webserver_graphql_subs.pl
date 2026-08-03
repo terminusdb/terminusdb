@@ -648,6 +648,11 @@ graphql_finite_method(System_DB, Auth, BranchPathAtom, Method) :-
 execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
                                    BranchPathAtom, QueryString, Response) :-
     graphql_finite_method(System_DB, Auth, BranchPathAtom, GraphqlMethod),
+    (   get_dict(search, Request, Search)
+    ->  true
+    ;   Search = []
+    ),
+    param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
     with_output_to(string(RequestBody),
         json_write_dict(current_output, _{query: QueryString}, [as(string), width(0)])),
     string_length(RequestBody, Content_Length),
@@ -656,7 +661,7 @@ execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
         (   catch(
                 handle_graphql_request(System_DB, Auth, GraphqlMethod, BranchPathAtom, BodyIn,
                                        GraphqlResponse, 'application/json',
-                                       Content_Length, _NewDataVersion, _TransactionMetaData, true),
+                                       Content_Length, _NewDataVersion, _TransactionMetaData, Compress_Ids),
                 Error,
                 (   json_log:json_log_error_formatted("[graphql-sse] finite op error: ~w", [Error]),
                     sse_plugin_error_to_graphql_json(Error, GraphqlResponse)
@@ -824,13 +829,18 @@ delegate_to_graphql(Request, Response) :-
 %% Calls handle_graphql_request and builds the response with data version
 %% and retry count headers.
 delegate_graphql_request(Request, System_DB, Auth, Method, PathAtom, BodyString, Response) :-
+    (   get_dict(search, Request, Search)
+    ->  true
+    ;   Search = []
+    ),
+    param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
     string_length(BodyString, Content_Length),
     setup_call_cleanup(
         open_string(BodyString, BodyIn),
         (   catch(
                 handle_graphql_request(System_DB, Auth, Method, PathAtom, BodyIn,
                                        GraphqlResponse, 'application/json',
-                                       Content_Length, NewDataVersion, TransactionMetaData, true),
+                                       Content_Length, NewDataVersion, TransactionMetaData, Compress_Ids),
                 Error,
                 sse_plugin_error_response(Request, Error, Response)
             )
