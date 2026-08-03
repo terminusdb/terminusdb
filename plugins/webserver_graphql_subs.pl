@@ -1505,17 +1505,9 @@ test(sse_handler_returns_401_on_auth_failure,
         params: _{path: "admin/db/local/branch/main"},
         body: "{\"query\": \"subscription { Product_added { _id } }\"}"
     },
-    catch(
-        (   graphql_sse_handler(Request, _StreamId, Response)
-        ->  get_dict(status, Response, Status),
-            Status == 401
-        ;   %% If the handler fails (no auth), that's also acceptable
-            %% for the unit test — the worker pool catch maps it to 401.
-            true
-        ),
-        _,
-        true
-    ).
+    graphql_sse_handler(Request, _StreamId, Response),
+    get_dict(status, Response, Status),
+    Status == 401.
 
 %% graphql_sse_handler returns 400 when the query body is missing
 %% or unparseable. This requires auth to pass first, which it won't
