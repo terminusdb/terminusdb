@@ -105,6 +105,13 @@ pub trait TerminusResolveContext {
         None
     }
 
+    /// Whether to return compressed document IDs (e.g. `Person/john`
+    /// instead of `terminusdb:///data/Person/john`). Defaults to `true`
+    /// to match the 12.1 default behavior.
+    fn compress_ids(&self) -> bool {
+        true
+    }
+
     /// Downcast to `SubscriptionResolveContext` for _ChangeSet resolution.
     /// Returns `None` for regular `TerminusContext`, `Some(self)` for
     /// `SubscriptionResolveContext`.
@@ -333,6 +340,10 @@ impl<'a> TerminusResolveContext for TerminusContext<'a> {
             r
         });
         result_to_execution_result(&self.context, result)
+    }
+
+    fn compress_ids(&self) -> bool {
+        self.compress_ids
     }
 }
 
@@ -1027,7 +1038,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
             };
             if field_name.as_str() == "_id" {
                 let full_id = instance.id_subject(self.id)?;
-                let id = if executor.context().compress_ids {
+                let id = if executor.context().compress_ids() {
                     executor
                         .context()
                         .document_context()

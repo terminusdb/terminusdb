@@ -3366,7 +3366,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
 %     above, around line 125). The plugin's handler checks the
 %     Accept header: if text/event-stream, it starts an SSE subscription;
 %     otherwise it calls delegate_to_graphql/2, which calls
-%     handle_graphql_request/10 directly — bypassing graphql_handler
+%     handle_graphql_request/11 directly — bypassing graphql_handler
 %     below entirely.
 %
 %  3. Error handling (src/core/plugin_api/http.pl)

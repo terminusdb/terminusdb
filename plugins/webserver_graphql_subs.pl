@@ -25,7 +25,7 @@
 %%
 %% NOTE: This plugin route intercepts POST /api/graphql/*path BEFORE the
 %% catch-all /api/*path fallback in routes.pl. Non-SSE requests are handled
-%% by delegate_to_graphql/2, which calls handle_graphql_request/10 directly
+%% by delegate_to_graphql/2, which calls handle_graphql_request/11 directly
 %% — bypassing graphql_handler and its handle_graphql_error catch block in
 %% routes.pl. Errors are mapped via plugin_error_response/2 in
 %% src/core/plugin_api/http.pl. See the "GraphQL Route Registration Flow"
@@ -656,7 +656,7 @@ execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
         (   catch(
                 handle_graphql_request(System_DB, Auth, GraphqlMethod, BranchPathAtom, BodyIn,
                                        GraphqlResponse, 'application/json',
-                                       Content_Length, _NewDataVersion, _TransactionMetaData),
+                                       Content_Length, _NewDataVersion, _TransactionMetaData, true),
                 Error,
                 (   json_log:json_log_error_formatted("[graphql-sse] finite op error: ~w", [Error]),
                     sse_plugin_error_to_graphql_json(Error, GraphqlResponse)
@@ -806,7 +806,7 @@ send_validation_error_and_close(StreamId, Mode, ErrorJson) :-
 
 %% delegate_to_graphql(+Request, -Response) is det.
 %%
-%% Delegates non-SSE requests to handle_graphql_request/10.
+%% Delegates non-SSE requests to handle_graphql_request/11.
 delegate_to_graphql(Request, Response) :-
     read_request_body(Request, BodyString),
     (   sse_authenticate_or_401(Request, System_DB, Auth, Response)
@@ -830,7 +830,7 @@ delegate_graphql_request(Request, System_DB, Auth, Method, PathAtom, BodyString,
         (   catch(
                 handle_graphql_request(System_DB, Auth, Method, PathAtom, BodyIn,
                                        GraphqlResponse, 'application/json',
-                                       Content_Length, NewDataVersion, TransactionMetaData),
+                                       Content_Length, NewDataVersion, TransactionMetaData, true),
                 Error,
                 sse_plugin_error_response(Request, Error, Response)
             )
