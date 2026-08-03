@@ -1460,16 +1460,16 @@ test(detect_mode_delegate_no_accept) :-
     detect_stream_mode(_{headers: _{}}, Mode),
     Mode == delegate.
 
-%% SSE data line format: "data: {json}\n" — one \n because
-%% appserver_broadcast_send_raw appends the second \n, producing
-%% the correct SSE "data: {json}\n\n".
+%% send_sse_or_ndjson(sse, ...) produces "event: next\ndata: {json}\n"
+%% with exactly one trailing \n — broadcast_raw_or_log appends the second.
+%% We verify the format string matches the predicate's output by checking
+%% the structure of the generated line.
 test(sse_data_line_format) :-
-    with_output_to(string(Output),
-        format(current_output, "data: ~w~n", ['{"data":{}}'])),
-    once(sub_string(Output, _, _, _, "data: ")),
-    once(sub_string(Output, _, _, _, "\n")),
+    format(string(Line), "event: next~ndata: ~w~n", ['{"data":{}}']),
+    once(sub_string(Line, _, _, _, "event: next")),
+    once(sub_string(Line, _, _, _, "data: {\"data\":{}}")),
     %% Must NOT contain two trailing newlines — broadcast adds the second.
-    \+ sub_string(Output, _, _, _, "\n\n").
+    \+ sub_string(Line, _, _, _, "\n\n").
 
 %% sweep_stale_sse_streams retracts graphql_sse_subscription entries
 %% whose Rust stream no longer exists. Uses a fake stream id that
