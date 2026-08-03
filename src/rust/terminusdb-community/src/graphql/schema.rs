@@ -485,6 +485,7 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
 
         // _ChangeSet — batched changes per commit (Query root)
         let cs_field = registry.field::<ChangeSet<C>>("_ChangeSet", info);
+        let cs_field = cs_field.argument(registry.arg::<Option<bool>>("include_children", &()));
         fields.push(cs_field);
 
         /*
@@ -1876,6 +1877,7 @@ impl<C: TerminusResolveContext> GraphQLType for ChangeSet<C> {
                     let field = registry.field::<Vec<TerminusType<C>>>(op_name.as_str(), &newinfo);
                     let field = field.description(description);
                     let field = field.argument(registry.arg::<Option<Vec<ID>>>("ids", &()));
+                    let field = field.argument(registry.arg::<Option<bool>>("include_children", &()));
                     fields.push(field);
                 }
             }
@@ -1901,7 +1903,7 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
         &self,
         info: &Self::TypeInfo,
         field_name: &str,
-        _arguments: &juniper::Arguments,
+        arguments: &juniper::Arguments<DefaultScalarValue>,
         executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
     ) -> juniper::ExecutionResult {
         if field_name == "_CommitMetadata" {
@@ -1926,9 +1928,29 @@ impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
         // Get document IDs from the resolve context (set by Rust FFI)
         let sub_ctx = executor.context().as_subscription_context();
 
-        let ids: Vec<String> = sub_ctx
+        // Determine include_children: per-field argument overrides top-level default.
+        let include_children = arguments
+            .get::<Option<bool>>("include_children")
+            .flatten()
+            .or_else(|| sub_ctx.map(|ctx| ctx.include_children_default))
+            .unwrap_or(true);
+
+        let mut ids: Vec<String> = sub_ctx
             .map(|ctx| ctx.change_set_ids_for_field(field_name))
             .unwrap_or_default();
+
+        // When include_children is false, filter out documents whose actual
+        // class doesn't match the field's class. The FFI always groups under
+        // superclasses; this filters back to exact-class-only.
+        if !include_children {
+            if let Some(ctx) = sub_ctx {
+                ids.retain(|doc_iri| {
+                    ctx.doc_class(doc_iri)
+                        .map(|actual_class| actual_class == class_name)
+                        .unwrap_or(true)
+                });
+            }
+        }
 
         if ids.is_empty() {
             return executor.resolve(
@@ -2023,6 +2045,7 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
 
         // _ChangeSet — batched changes per commit (Subscription root)
         let cs_field = registry.field::<ChangeSet<C>>("_ChangeSet", info);
+        let cs_field = cs_field.argument(registry.arg::<Option<bool>>("include_children", &()));
         fields.push(cs_field);
 
         // _CommitMetadata — commit metadata as top-level subscription field

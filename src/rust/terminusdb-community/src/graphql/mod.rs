@@ -489,7 +489,8 @@ predicates! {
                     .entry("filter_canonical_json", parsed.filter_canonical_json.clone())
                     .entry("selection_set", parsed.selection_set.clone())
                     .entry("selection_set_hash", Atom::new(&parsed.selection_set_hash))
-                    .entry("selection_set_graphql", parsed.selection_set_graphql.clone());
+                    .entry("selection_set_graphql", parsed.selection_set_graphql.clone())
+                    .entry("include_children", parsed.include_children);
                 parsed_term.unify(dict)
             }
             Err(e) => context.raise_exception(&term!{context: error(graphql_subscription_parse_error(#e), _)}?)
@@ -579,7 +580,7 @@ predicates! {
 
     /// resolve_change_set_event(+Transaction, +GraphqlContext, +SelectionSet,
     ///                           +CommitId, +Timestamp, +Datetime,
-    ///                           -ResponseJson)
+    ///                           +IncludeChildren, -ResponseJson)
     ///
     /// Executes a _ChangeSet GraphQL query entirely in Rust. This predicate:
     /// 1. Calls changed_document_ids() to get all changed documents
@@ -591,12 +592,13 @@ predicates! {
     ///
     /// Prolog only needs to call this and send the result via SSE.
     #[module("$graphql")]
-    semidet fn resolve_change_set_event(context, transaction_term, graphql_context_term, selection_set_term, commit_id_term, timestamp_term, datetime_term, response_term) {
+    semidet fn resolve_change_set_event(context, transaction_term, graphql_context_term, selection_set_term, commit_id_term, timestamp_term, datetime_term, include_children_term, response_term) {
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
         let selection_set: String = selection_set_term.get_ex()?;
         let commit_id: String = commit_id_term.get_ex()?;
         let timestamp: f64 = timestamp_term.get_ex()?;
         let datetime: String = datetime_term.get_ex()?;
+        let include_children: bool = include_children_term.get_ex()?;
 
         // Extract schema and instance layers from the transaction term.
         let schema_layer = match transaction_schema_layer(context, transaction_term)? {
@@ -621,6 +623,8 @@ predicates! {
 
         // Group changes by "{Class}_{operation}" → Vec<document_iri>
         let mut change_set_ids: HashMap<String, Vec<String>> = HashMap::new();
+        // Map document IRI → actual class GraphQL name for include_children filtering.
+        let mut doc_class_map: HashMap<String, String> = HashMap::new();
 
         for (id, change_type) in changes {
             // Determine the type_id and which layer to use for IRI lookups
@@ -660,6 +664,10 @@ predicates! {
                 None => continue,
             };
 
+            // Record the actual class name for this document IRI.
+            // Used by include_children filtering in ChangeSet::resolve_field.
+            doc_class_map.insert(doc_iri.clone(), graphql_name.0.to_string());
+
             // Group under the document's own class and all superclasses.
             // This ensures a Dog document appears in both Dog_added and
             // Animal_added when Dog inherits from Animal.
@@ -680,6 +688,8 @@ predicates! {
             datetime,
             change_set_ids,
             parent_layer,
+            doc_class_map,
+            include_children,
         );
 
         // Get the cached subscription root node (schema + subscription types).

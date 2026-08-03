@@ -42,6 +42,12 @@ pub struct SubscriptionResolveContext {
     /// Obtained via `SyncStoreLayer::parent()` on the instance layer.
     /// Only set for _ChangeSet event resolution.
     pub parent_instance: Option<SyncStoreLayer>,
+    /// Maps document IRI → actual class GraphQL name for include_children filtering.
+    /// Only set for _ChangeSet event resolution.
+    pub doc_class_map: Option<HashMap<String, String>>,
+    /// Default value for include_children argument on _ChangeSet.
+    /// Per-field arguments override this default.
+    pub include_children_default: bool,
 }
 
 impl SubscriptionResolveContext {
@@ -66,12 +72,16 @@ impl SubscriptionResolveContext {
             datetime: Some(datetime),
             change_set_ids: None,
             parent_instance: None,
+            doc_class_map: None,
+            include_children_default: true,
         }
     }
 
     /// Create a context with _ChangeSet event metadata.
     /// `change_set_ids` maps "{Class}_{operation}" to document IRIs.
     /// `parent_instance` is the parent layer for resolving deleted documents.
+    /// `doc_class_map` maps document IRI → actual class name for include_children filtering.
+    /// `include_children_default` is the top-level default for the include_children argument.
     pub fn with_change_set_metadata(
         schema: SyncStoreLayer,
         instance: Option<SyncStoreLayer>,
@@ -82,6 +92,8 @@ impl SubscriptionResolveContext {
         datetime: String,
         change_set_ids: HashMap<String, Vec<String>>,
         parent_instance: Option<SyncStoreLayer>,
+        doc_class_map: HashMap<String, String>,
+        include_children_default: bool,
     ) -> Self {
         Self {
             schema,
@@ -94,6 +106,8 @@ impl SubscriptionResolveContext {
             datetime: Some(datetime),
             change_set_ids: Some(change_set_ids),
             parent_instance,
+            doc_class_map: Some(doc_class_map),
+            include_children_default,
         }
     }
 
@@ -111,6 +125,14 @@ impl SubscriptionResolveContext {
     /// Only available in _ChangeSet event resolution context.
     pub fn parent_instance(&self) -> Option<&SyncStoreLayer> {
         self.parent_instance.as_ref()
+    }
+
+    /// Returns the actual class name for a document IRI, if available.
+    /// Used for include_children filtering in _ChangeSet resolution.
+    pub fn doc_class(&self, doc_iri: &str) -> Option<&str> {
+        self.doc_class_map
+            .as_ref()
+            .and_then(|m| m.get(doc_iri).map(|s| s.as_str()))
     }
 
     pub fn document_context(&self) -> &DocumentContext<SyncStoreLayer> {
@@ -171,6 +193,9 @@ pub struct ParsedSubscription {
     /// Selection set as valid GraphQL text preserving field order, used for
     /// Query-root resolution. Unlike `selection_set` (sorted for hashing).
     pub selection_set_graphql: String,
+    /// Top-level include_children argument value for _ChangeSet.
+    /// Defaults to true when not specified. Per-field arguments override this.
+    pub include_children: bool,
 }
 
 /// Parse a GraphQL subscription query string into cohort key components.
@@ -249,7 +274,26 @@ pub fn parse_subscription_query(
     };
 
     let selection_set_str = selection_set_to_string(&field.selection_set);
-    let hash = Sha256::digest(selection_set_str.as_bytes());
+
+    // Extract include_children from top-level arguments (default: true).
+    // This must be done before hashing so that subscriptions with different
+    // include_children values get different cohort keys.
+    let include_children = if let Some(args) = &field.arguments {
+        args.item.items.iter()
+            .find(|(k, _)| k.item == "include_children")
+            .and_then(|(_, v)| match &v.item {
+                juniper::InputValue::Scalar(juniper::DefaultScalarValue::Boolean(b)) => Some(*b),
+                _ => None,
+            })
+            .unwrap_or(true)
+    } else {
+        true
+    };
+
+    // Include include_children in the hash to ensure different values
+    // produce different cohort keys.
+    let hash_input = format!("{}|include_children={}", selection_set_str, include_children);
+    let hash = Sha256::digest(hash_input.as_bytes());
     let selection_set_hash = format!("{:x}", hash);
 
     let selection_set_graphql = selection_set_to_graphql(&field.selection_set);
@@ -284,6 +328,7 @@ pub fn parse_subscription_query(
         selection_set: selection_set_str.clone(),
         selection_set_hash,
         selection_set_graphql,
+        include_children,
     })
 }
 
@@ -314,6 +359,29 @@ fn input_value_to_json(val: &juniper::InputValue<DefaultScalarValue>) -> serde_j
     }
 }
 
+fn input_value_to_graphql(val: &juniper::InputValue<DefaultScalarValue>) -> String {
+    use juniper::InputValue;
+    match val {
+        InputValue::Null => "null".to_string(),
+        InputValue::Scalar(s) => match s {
+            DefaultScalarValue::Int(i) => i.to_string(),
+            DefaultScalarValue::Float(f) => f.to_string(),
+            DefaultScalarValue::String(s) => format!("\"{}\"", s),
+            DefaultScalarValue::Boolean(b) => b.to_string(),
+        },
+        InputValue::Enum(name) => name.clone(),
+        InputValue::Variable(name) => format!("${}", name),
+        InputValue::List(items) => {
+            format!("[{}]", items.iter().map(|i| input_value_to_graphql(&i.item)).collect::<Vec<_>>().join(", "))
+        }
+        InputValue::Object(entries) => {
+            format!("{{{}}}", entries.iter()
+                .map(|(k, v)| format!("{}: {}", k.item, input_value_to_graphql(&v.item)))
+                .collect::<Vec<_>>().join(", "))
+        }
+    }
+}
+
 /// Deterministic string for hashing. Fields are sorted recursively.
 fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>) -> String {
     match selection_set {
@@ -325,9 +393,22 @@ fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<Default
                         let name = f.item.name.item.to_string();
                         let alias = f.item.alias.as_ref().map(|a| a.item.to_string());
                         let nested = selection_set_to_string(&f.item.selection_set);
+                        let args_str = if let Some(args) = &f.item.arguments {
+                            let mut arg_parts: Vec<String> = args.item.items.iter()
+                                .map(|(k, v)| format!("{}={}", k.item, input_value_to_json(&v.item)))
+                                .collect();
+                            arg_parts.sort();
+                            if arg_parts.is_empty() {
+                                String::new()
+                            } else {
+                                format!("[{}]", arg_parts.join(","))
+                            }
+                        } else {
+                            String::new()
+                        };
                         let field_str = match alias {
-                            Some(a) => format!("{}:{}{{{}}}", a, name, nested),
-                            None => format!("{}{{{}}}", name, nested),
+                            Some(a) => format!("{}:{}{}{{{}}}", a, name, args_str, nested),
+                            None => format!("{}{}{{{}}}", name, args_str, nested),
                         };
                         field_strings.push(field_str);
                     }
@@ -359,11 +440,23 @@ fn selection_set_to_graphql(selection_set: &Option<Vec<juniper::Selection<Defaul
                         let name = f.item.name.item.to_string();
                         let alias = f.item.alias.as_ref().map(|a| a.item.to_string());
                         let nested = selection_set_to_graphql(&f.item.selection_set);
+                        let args_str = if let Some(args) = &f.item.arguments {
+                            let arg_parts: Vec<String> = args.item.items.iter()
+                                .map(|(k, v)| format!("{}: {}", k.item, input_value_to_graphql(&v.item)))
+                                .collect();
+                            if arg_parts.is_empty() {
+                                String::new()
+                            } else {
+                                format!("({})", arg_parts.join(", "))
+                            }
+                        } else {
+                            String::new()
+                        };
                         let field_str = match (alias, nested.is_empty()) {
-                            (Some(a), true) => format!("{}: {}", a, name),
-                            (Some(a), false) => format!("{}: {} {{ {} }}", a, name, nested),
-                            (None, true) => name,
-                            (None, false) => format!("{} {{ {} }}", name, nested),
+                            (Some(a), true) => format!("{}: {}{}", a, name, args_str),
+                            (Some(a), false) => format!("{}: {}{} {{ {} }}", a, name, args_str, nested),
+                            (None, true) => format!("{}{}", name, args_str),
+                            (None, false) => format!("{}{} {{ {} }}", name, args_str, nested),
                         };
                         parts.push(field_str);
                     }
@@ -784,6 +877,42 @@ mod tests {
         let parsed = result.unwrap();
         assert_ne!(parsed.filter_canonical_json, "{}");
         assert!(parsed.filter_canonical_json.contains("types"));
+    }
+
+    #[test]
+    fn parse_ChangeSet_include_children_false() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet(include_children: false) { Person_added { _id } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert!(!parsed.include_children, "include_children should be false");
+    }
+
+    #[test]
+    fn parse_ChangeSet_include_children_default_true() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet { Person_added { _id } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert!(parsed.include_children, "include_children should default to true");
+    }
+
+    #[test]
+    fn parse_ChangeSet_include_children_true() {
+        let tc = person_type_collection();
+        let result = parse_subscription_query(
+            "subscription { _ChangeSet(include_children: true) { Person_added { _id } } }",
+            &tc,
+        );
+        assert!(result.is_ok(), "parse failed: {:?}", result.err());
+        let parsed = result.unwrap();
+        assert!(parsed.include_children, "include_children should be true");
     }
 
     #[test]

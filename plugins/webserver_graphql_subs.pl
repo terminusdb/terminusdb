@@ -47,8 +47,8 @@ appserver_hooks:appserver_stream(options, '/api/graphql/*path',
 %% graphql_cohort(CohortKey, Descriptor, RawChannel, MemberCount)
 :- dynamic graphql_cohort/4.
 
-%% graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql)
-:- dynamic graphql_cohort_selection/3.
+%% graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql, IncludeChildren)
+:- dynamic graphql_cohort_selection/4.
 
 %% graphql_broadcast_sent(Descriptor, CommitId)
 %% Dedup for post_commit_hook firing multiple times for the same commit.
@@ -71,7 +71,7 @@ max_subscriptions_per_descriptor(100).
 %% Concurrency audit: grep for assertz, retract, retractall in this file.
 %% Each unguarded mutation must be a single atomic op (safe under SWI-Prolog's
 %% logical update view). Compound read-modify-write sequences on
-%% graphql_cohort/4 or graphql_cohort_selection/3 must be inside
+%% graphql_cohort/4 or graphql_cohort_selection/4 must be inside
 %% with_mutex(graphql_cohort_registry, ...).
 :- mutex_create(graphql_cohort_registry, [alias(graphql_cohort_registry)]).
 
@@ -131,7 +131,7 @@ unregister_subscription(CohortKey, _StreamId) :-
             ->  NewCount is Count - 1,
                 (   NewCount > 0
                 ->  assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, NewCount))
-                ;   retractall(graphql_cohort_selection(CohortKey, _, _))
+                ;   retractall(graphql_cohort_selection(CohortKey, _, _, _))
                 )
             ;   true
             )
@@ -292,7 +292,7 @@ descriptor_repository(Descriptor, RepoDescriptor) :-
 broadcast_sse_event(Transaction, GraphqlContext, _Descriptor, CohortKey, RawChannel, Mode, ClassName,
                     Operation, ChangeType, DocIRI, CommitIdKey,
                     Validation_Object, Timestamp, Datetime) :-
-    (   graphql_cohort_selection(CohortKey, _, SelectionSetGraphql)
+    (   graphql_cohort_selection(CohortKey, _, SelectionSetGraphql, _)
     ->  true
     ;   json_log:json_log_error_formatted("[graphql-sse] no selection set for cohort ~w", [CohortKey]),
         fail
@@ -706,13 +706,17 @@ register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
     get_dict(selection_set_hash, Parsed, SelectionHash),
     get_dict(selection_set, Parsed, SelectionSet),
     get_dict(selection_set_graphql, Parsed, SelectionSetGraphql),
+    (   get_dict(include_children, Parsed, IncludeChildren)
+    ->  true
+    ;   IncludeChildren = true
+    ),
     register_subscription_parsed(Descriptor, ClassName, Operation,
                                  FilterJson, SelectionHash, Mode,
                                  CohortKey, RawChannel),
     with_mutex(graphql_cohort_registry,
-        (   graphql_cohort_selection(CohortKey, _, _)
+        (   graphql_cohort_selection(CohortKey, _, _, _)
         ->  true
-        ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql))
+        ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql, IncludeChildren))
         )),
     assertz(graphql_sse_subscription(StreamId, CohortKey, RawChannel)),
     sse_parse_timeout(Request, Timeout),
@@ -993,12 +997,12 @@ do_broadcast_ChangeSet_events(Transaction, GraphqlContext, Descriptor,
 %%                               +RawChannel, +CommitIdStr,
 %%                               +Timestamp, +Datetime) is det.
 %%
-%% Gets the subscriber's selection set, calls resolve_change_set_event/7 which
+%% Gets the subscriber's selection set, calls resolve_change_set_event/8 which
 %% does everything in Rust (change collection, grouping, query building, Juniper
 %% resolution), and sends the result as one SSE event.
 do_broadcast_single_ChangeSet(Transaction, GraphqlContext, CohortKey, RawChannel,
                              CommitIdStr, Timestamp, Datetime) :-
-    (   graphql_cohort_selection(CohortKey, _, SelectionSetGraphql)
+    (   graphql_cohort_selection(CohortKey, _, SelectionSetGraphql, IncludeChildren)
     ->  true
     ;   json_log:json_log_error_formatted(
             "[graphql-sse] no selection set for _ChangeSet cohort ~w", [CohortKey]),
@@ -1008,6 +1012,7 @@ do_broadcast_single_ChangeSet(Transaction, GraphqlContext, CohortKey, RawChannel
         (   '$graphql':resolve_change_set_event(Transaction, GraphqlContext,
                                                  SelectionSetGraphql,
                                                  CommitIdStr, Timestamp, Datetime,
+                                                 IncludeChildren,
                                                  ResponseJson),
             (   atom(ResponseJson) -> ResponseAtom = ResponseJson
             ;   atom_string(ResponseAtom, ResponseJson)
@@ -1275,10 +1280,10 @@ test(cohort_selection_stored_and_cleaned_up,
     TestDesc = branch_descriptor{},
     register_subscription_parsed(TestDesc, 'Person', added,
                                  '{}', 'hash1', sse, CohortKey, _),
-    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id")),
-    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id"),
+    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id", true)),
+    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{}", "_id", true),
     unregister_subscription(CohortKey, fake_stream),
-    \+ webserver_graphql_subs:graphql_cohort_selection(CohortKey, _, _).
+    \+ webserver_graphql_subs:graphql_cohort_selection(CohortKey, _, _, _).
 
 %% graphql_cohort_selection is NOT cleaned up while cohort still has members.
 test(cohort_selection_survives_partial_unregister,
@@ -1286,12 +1291,12 @@ test(cohort_selection_survives_partial_unregister,
     TestDesc = branch_descriptor{},
     register_subscription_parsed(TestDesc, 'Person', added,
                                  '{}', 'hash1', sse, CohortKey, _),
-    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name")),
+    assertz(webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name", true)),
     register_subscription_parsed(TestDesc, 'Person', added,
                                  '{}', 'hash1', sse, _, _),
     graphql_cohort(CohortKey, _, _, 2),
     unregister_subscription(CohortKey, stream1),
-    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name").
+    webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name", true).
 
 %% Subscription limit tests — verify that max_subscriptions_per_descriptor
 %% is enforced when creating new cohorts for a descriptor.
@@ -1858,8 +1863,8 @@ test(change_set_cohort_selection_stored,
     !,
     SelectionSet = 'Person_added { _id name } Person_deleted { _id name }',
     SelectionGraphql = 'Person_added { _id name } Person_deleted { _id name }',
-    assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionGraphql)),
-    graphql_cohort_selection(CohortKey, StoredSelection, StoredGraphql),
+    assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionGraphql, true)),
+    graphql_cohort_selection(CohortKey, StoredSelection, StoredGraphql, true),
     StoredSelection == SelectionSet,
     StoredGraphql == SelectionGraphql.
 
@@ -1893,7 +1898,7 @@ setup_sse_test_streams :-
 %% Cleanup helper for tests
 cleanup_cohorts :-
     retractall(webserver_graphql_subs:graphql_cohort(_, _, _, _)),
-    retractall(webserver_graphql_subs:graphql_cohort_selection(_, _, _)),
+    retractall(webserver_graphql_subs:graphql_cohort_selection(_, _, _, _)),
     retractall(webserver_graphql_subs:graphql_broadcast_sent(_, _)),
     retractall(webserver_graphql_subs:graphql_sse_subscription(_, _, _)).
 

@@ -932,6 +932,44 @@ describe('GraphQL subscriptions over SSE', function () {
       cancelBody(res)
     })
 
+    it('should exclude subclass documents when include_children is false', async function () {
+      // Subscribe with include_children: false at the top level.
+      // Insert a Dog (which inherits from Animal). The Dog should NOT
+      // appear in Animal_added because subclass matching is disabled.
+      const res = await subscribeSSE('subscription { _ChangeSet(include_children: false) { Animal_added { _id name } } }')
+      const eventPromise = waitForSSEEvent(res.body,
+        (e) => e.data?._ChangeSet?.Animal_added, 10000)
+
+      await document.insert(agent, {
+        instance: [{ '@type': 'Dog', name: 'Buddy', breed: 'Poodle' }],
+      })
+
+      const event = await eventPromise
+      expect(event.data._ChangeSet.Animal_added).to.exist
+      // Dog should not appear in Animal_added when include_children is false.
+      // Only direct Animal documents would appear here (none in this case).
+      expect(event.data._ChangeSet.Animal_added.length).to.equal(0)
+      cancelBody(res)
+    })
+
+    it('should include subclass documents when per-field include_children overrides top-level false', async function () {
+      // Top-level include_children: false, but per-field override on
+      // Animal_added sets it back to true. Dog should appear.
+      const res = await subscribeSSE('subscription { _ChangeSet(include_children: false) { Animal_added(include_children: true) { _id name } } }')
+      const eventPromise = waitForSSEEvent(res.body,
+        (e) => e.data?._ChangeSet?.Animal_added, 10000)
+
+      await document.insert(agent, {
+        instance: [{ '@type': 'Dog', name: 'Max', breed: 'Beagle' }],
+      })
+
+      const event = await eventPromise
+      expect(event.data._ChangeSet.Animal_added).to.exist
+      expect(event.data._ChangeSet.Animal_added.length).to.equal(1)
+      expect(event.data._ChangeSet.Animal_added[0].name).to.equal('Max')
+      cancelBody(res)
+    })
+
     it('should deliver _ChangeSet events to two subscribers on the same cohort', async function () {
       const res1 = await subscribeSSE('subscription { _ChangeSet { Product_added { _id name } } }')
       const res2 = await subscribeSSE('subscription { _ChangeSet { Product_added { _id name } } }')
