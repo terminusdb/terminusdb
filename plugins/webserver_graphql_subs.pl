@@ -1494,7 +1494,12 @@ test(cleanup_sse_stream_retracts_subscription,
 
 %% graphql_sse_handler returns 401 when authentication fails
 %% (no Authorization header and no anonymous fallback in test context).
-test(sse_handler_returns_401_on_auth_failure) :-
+%% Uses setup_temp_store so open_descriptor(system_descriptor{}) succeeds,
+%% then authenticate_from_request fails on missing auth → 401.
+%% This ensures identical behavior in CI and local environments.
+test(sse_handler_returns_401_on_auth_failure,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
     Request = _{
         headers: _{},
         params: _{path: "admin/db/local/branch/main"},
