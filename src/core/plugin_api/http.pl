@@ -112,6 +112,16 @@ plugin_error_response(error(subscription_limit_exceeded(Max), _), Response) :- !
         },
         headers: _{'Content-Type': 'application/json'}
     }.
+plugin_error_response(error(requires_super_user, _), Response) :- !,
+    Response = _{
+        status: 403,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:forbidden',
+            'api:message': 'Super user access required'
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
 plugin_error_response(error(json_parse_error(_Line, _Col), _), Response) :- !,
     Response = _{
         status: 400,

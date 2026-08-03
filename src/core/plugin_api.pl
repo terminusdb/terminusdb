@@ -24,7 +24,8 @@
     indexer_set_config/2,
     indexer_progress/3,
     indexer_abort_domain/1,
-    indexer_available/0
+    indexer_available/0,
+    do_or_die/2
 ]).
 
 :- use_module(core(plugin_api/http)).
