@@ -8,7 +8,6 @@
 :- use_module(core(transaction/descriptor), [open_descriptor/2]).
 :- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2, resolve_relative_descriptor/3]).
 :- use_module(core(api/api_graphql), [get_or_create_graphql_context/2]).
-:- use_module(core(util/data_version), [transaction_retry_count_from_meta_data/2, serialize_data_version/2]).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(aggregate)).
