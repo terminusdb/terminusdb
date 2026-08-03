@@ -2100,4 +2100,434 @@ query EverythingQuery {
       })
     })
   })
+
+  describe('system database GraphQL queries', function () {
+    let systemClient
+
+    before(async function () {
+      const base = agent.baseUrl
+      const systemPath = '/api/graphql/_system'
+
+      const authMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(agent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      const systemHttpLink = new HttpLink({ uri: `${base}${systemPath}`, fetch })
+      const systemComposedLink = concat(authMiddleware, systemHttpLink)
+      systemClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: systemComposedLink,
+      })
+    })
+
+    it('queries User from the system database', async function () {
+      const SYSTEM_USER_QUERY = gql`
+        query SystemUserQuery {
+          User {
+            _id
+            name
+          }
+        }
+      `
+
+      const result = await systemClient.query({ query: SYSTEM_USER_QUERY })
+
+      expect(result.data.User).to.be.an('array')
+      expect(result.data.User.length).to.be.greaterThan(0)
+      expect(result.data.User[0].name).to.be.a('string')
+    })
+
+    it('queries Database from the system database', async function () {
+      const SYSTEM_DB_QUERY = gql`
+        query SystemDatabaseQuery {
+          Database {
+            _id
+            name
+          }
+        }
+      `
+
+      const result = await systemClient.query({ query: SYSTEM_DB_QUERY })
+
+      expect(result.data.Database).to.be.an('array')
+      expect(result.data.Database.length).to.be.greaterThan(0)
+    })
+  })
+
+  describe('system database GraphQL access control', function () {
+    let nonAdminAgent
+    let nonAdminClient
+
+    before(async function () {
+      const base = agent.baseUrl
+      const systemPath = '/api/graphql/_system'
+
+      // Create a non-admin user via the /api/users endpoint
+      const username = 'graphql-test-user-' + util.randomString()
+      const password = 'test-password-' + util.randomString()
+      await agent.agent.post('/api/users')
+        .send({ name: username, password })
+
+      // Set up a non-admin agent
+      nonAdminAgent = new Agent({ baseUrl: base, orgName: 'admin', dbName: 'testdb' })
+      nonAdminAgent.auth({ user: username, password })
+
+      // Set up a GraphQL client for the non-admin user targeting _system
+      const nonAdminAuthMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(nonAdminAgent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      const nonAdminHttpLink = new HttpLink({ uri: `${base}${systemPath}`, fetch })
+      const nonAdminComposedLink = concat(nonAdminAuthMiddleware, nonAdminHttpLink)
+      nonAdminClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: nonAdminComposedLink,
+      })
+    })
+
+    it('rejects non-admin user GraphQL mutation (POST) to _system with 403', async function () {
+      const MUTATION = gql`
+        mutation CreateUser {
+          User {
+            name
+          }
+        }
+      `
+
+      try {
+        await nonAdminClient.mutate({ mutation: MUTATION })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        const status = error.networkError?.statusCode
+        expect(status).to.equal(403)
+      }
+    })
+
+    it('rejects non-admin user GraphQL query (GET) to _system with 403', async function () {
+      const QUERY = gql`
+        query SystemUserQuery {
+          User {
+            _id
+            name
+          }
+        }
+      `
+
+      try {
+        await nonAdminClient.query({ query: QUERY })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        const status = error.networkError?.statusCode
+        expect(status).to.equal(403)
+      }
+    })
+
+    it('allows admin user GraphQL query (GET) to _system', async function () {
+      const QUERY = gql`
+        query SystemUserQuery {
+          User {
+            _id
+            name
+          }
+        }
+      `
+
+      const base = agent.baseUrl
+      const systemPath = '/api/graphql/_system'
+
+      const adminAuthMiddleware = new ApolloLink((operation, forward) => {
+        operation.setContext(({ headers = {} }) => ({
+          headers: {
+            ...headers,
+            authorization: util.authorizationHeader(agent),
+          },
+        }))
+        return forward(operation)
+      })
+
+      const adminHttpLink = new HttpLink({ uri: `${base}${systemPath}`, fetch })
+      const adminComposedLink = concat(adminAuthMiddleware, adminHttpLink)
+      const adminClient = new ApolloClient({
+        cache: new InMemoryCache({ addTypename: false }),
+        link: adminComposedLink,
+      })
+
+      const result = await adminClient.query({ query: QUERY })
+      expect(result.data.User).to.be.an('array')
+      expect(result.data.User.length).to.be.greaterThan(0)
+    })
+  })
+
+  describe('GraphQL access control by operation type', function () {
+    let readOnlyAgent
+    let readOnlyAuth
+    let writeNoMetaAuth
+    let writeWithMetaAuth
+
+    before(async function () {
+      this.timeout(30000)
+      const base = agent.baseUrl
+
+      // Helper to create a user with a role and grant on this database
+      async function createUserWithRole (roleActions, roleSuffix) {
+        const username = roleSuffix + '-' + util.randomString()
+        const password = 'password-' + util.randomString()
+        await agent.agent.post('/api/users')
+          .send({ name: username, password })
+
+        const roleName = roleSuffix + '-role-' + util.randomString()
+        await agent.agent.post('/api/roles')
+          .send({
+            name: roleName,
+            action: roleActions,
+          })
+
+        await agent.agent.post('/api/capabilities')
+          .send({
+            operation: 'grant',
+            scope: `${agent.orgName}/${agent.dbName}`,
+            user: username,
+            roles: [roleName],
+            scope_type: 'database',
+          })
+
+        const userAgent = new Agent({ baseUrl: base, orgName: agent.orgName, dbName: agent.dbName })
+        userAgent.auth({ user: username, password })
+        return { userAgent, userAuth: util.authorizationHeader(userAgent) }
+      }
+
+      // Read-only user: instance_read + schema_read
+      const ro = await createUserWithRole(
+        ['instance_read_access', 'schema_read_access'],
+        'readonly-graphql',
+      )
+      readOnlyAgent = ro.userAgent
+      readOnlyAuth = ro.userAuth
+
+      // Write user without meta_read: instance_read + schema_read + instance_write
+      const wn = await createUserWithRole(
+        ['instance_read_access', 'schema_read_access', 'instance_write_access'],
+        'write-nometa-graphql',
+      )
+      writeNoMetaAuth = wn.userAuth
+
+      // Write user with meta_read: instance_read + schema_read + instance_write + meta_read
+      const wm = await createUserWithRole(
+        ['instance_read_access', 'schema_read_access', 'instance_write_access', 'meta_read_access'],
+        'write-meta-graphql',
+      )
+      writeWithMetaAuth = wm.userAuth
+    })
+
+    // --- Read-only user tests ---
+
+    it('allows read-only user GraphQL query via GET', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const query = encodeURIComponent('{ Person { _id name } }')
+      const res = await fetch(
+        `${readOnlyAgent.baseUrl}${graphqlPath}?query=${query}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: readOnlyAuth,
+            Accept: 'application/json',
+          },
+        },
+      )
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+
+    it('allows read-only user GraphQL query via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: readOnlyAuth,
+        },
+        body: JSON.stringify({
+          query: '{ Person { _id name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+
+    it('rejects read-only user GraphQL mutation via POST with 403', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: readOnlyAuth,
+        },
+        body: JSON.stringify({
+          query: 'mutation { Person { name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(403)
+    })
+
+    it('rejects read-only user GraphQL mutation via GET with 403', async function () {
+      // VULNERABILITY: A read-only user can execute a GraphQL mutation via GET
+      // because handle_graphql_request only checks assert_write_access when
+      // Method == post. GET bypasses the write access check entirely.
+      // After the fix, this should return 403.
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const mutationQuery = encodeURIComponent('mutation { Person { name } }')
+      const res = await fetch(
+        `${readOnlyAgent.baseUrl}${graphqlPath}?query=${mutationQuery}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: readOnlyAuth,
+            Accept: 'application/json',
+          },
+        },
+      )
+
+      expect(res.status).to.equal(403)
+    })
+
+    // --- Write user without meta_read tests ---
+
+    it('allows write-no-meta user GraphQL mutation via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeNoMetaAuth,
+        },
+        body: JSON.stringify({
+          query: 'mutation { Person { name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+    })
+
+    it('allows write-no-meta user GraphQL query via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeNoMetaAuth,
+        },
+        body: JSON.stringify({
+          query: '{ Person { _id name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+
+    // --- Write user with meta_read tests ---
+
+    it('allows write-meta user GraphQL mutation via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeWithMetaAuth,
+        },
+        body: JSON.stringify({
+          query: 'mutation { Person { name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+    })
+
+    it('allows write-meta user GraphQL query via POST', async function () {
+      const graphqlPath = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const res = await fetch(`${readOnlyAgent.baseUrl}${graphqlPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: writeWithMetaAuth,
+        },
+        body: JSON.stringify({
+          query: '{ Person { _id name } }',
+        }),
+      })
+
+      expect(res.status).to.equal(200)
+      const body = await res.json()
+      expect(body.data.Person).to.be.an('array')
+    })
+  })
+
+  describe('native JSON object variables', function () {
+    it('should insert document with native JSON object variable', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: {
+          '@type': 'Person',
+          name: 'NativeVarTest',
+          age: '30',
+          order: 1,
+        },
+      }
+
+      const res = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(res.status).to.equal(200)
+      expect(res.body.errors, JSON.stringify(res.body.errors)).to.be.undefined
+      expect(res.body.data._insertDocuments).to.exist
+
+      const docResult = await document.get(agent, {
+        query: { type: 'Person', as_list: true },
+      })
+      const person = docResult.body.find((d) => d.name === 'NativeVarTest')
+      expect(person).to.exist
+      expect(person.age).to.equal(30)
+    })
+
+    it('should maintain backward compatibility with stringified JSON variable', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: '{"@type":"Person","name":"StringVarTest","age":"25","order":2}',
+      }
+
+      const res = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(res.status).to.equal(200)
+      expect(res.body.errors, JSON.stringify(res.body.errors)).to.be.undefined
+      expect(res.body.data._insertDocuments).to.exist
+
+      const docResult = await document.get(agent, {
+        query: { type: 'Person', as_list: true },
+      })
+      const person = docResult.body.find((d) => d.name === 'StringVarTest')
+      expect(person).to.exist
+      expect(person.age).to.equal(25)
+    })
+  })
 })

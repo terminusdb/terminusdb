@@ -689,7 +689,7 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                     )
                 )
             ;   catch(
-                    call_raw_plugin_handler(HandlerModule, HandlerName, SWIRequest, OutStream),
+                    call_raw_plugin_handler(HandlerModule, HandlerName, Request, OutStream),
                     Error,
                     (   json_log_error_formatted("Raw plugin handler error: ~q", [Error]),
                         catch(handle_worker_error(OutStream, Error), _, true)
@@ -1929,4 +1929,38 @@ test(handle_handler_error_no_headers_sent) :-
     delete_file(Tmp),
     assertion(sub_string(Result, _, _, _, 'Status: 500')).
 
+test(call_raw_plugin_handler_with_dict_passes_payload_and_path) :-
+    Request = _{method: "POST", path: "/api/graphql-ws/test/db/local/branch/main",
+                query: "", headers: _{},
+                payload: _{query: "subscription { Person_added { _id } }"}},
+    with_output_to(string(Result),
+        call_raw_plugin_handler(request_worker_pool, test_dict_handler, Request, current_output)),
+    assertion(sub_string(Result, _, _, _, 'Status: 200')),
+    assertion(sub_string(Result, _, _, _, '"has_payload":true')),
+    assertion(sub_string(Result, _, _, _, '/api/graphql-ws/test/db/local/branch/main')).
+
+test(call_raw_plugin_handler_with_dict_missing_payload) :-
+    Request = _{method: "POST", path: "/api/test", query: "", headers: _{}},
+    with_output_to(string(Result),
+        call_raw_plugin_handler(request_worker_pool, test_dict_handler, Request, current_output)),
+    assertion(sub_string(Result, _, _, _, 'Status: 200')),
+    assertion(sub_string(Result, _, _, _, '"has_payload":false')).
+
 :- end_tests(request_worker_pool).
+
+%% Test handler that echoes back fields from the Request dict.
+%% Defined outside the test block so call_raw_plugin_handler can resolve it.
+test_dict_handler(Request, Response) :-
+    (   get_dict(payload, Request, _)
+    ->  HasPayload = true
+    ;   HasPayload = false
+    ),
+    (   get_dict(path, Request, Path)
+    ->  true
+    ;   Path = ""
+    ),
+    with_output_to(string(Body),
+        json_write_dict(current_output,
+            _{path: Path, has_payload: HasPayload},
+            [as(string), width(0)])),
+    Response = _{status: 200, body: Body, headers: _{'Content-Type': 'application/json'}}.

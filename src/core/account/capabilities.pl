@@ -242,6 +242,12 @@ assert_write_access(Context) :-
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(DB, Auth, Access, Scope_Iri).
 assert_write_access(Context) :-
+    system_descriptor{} :< Context.default_collection,
+    !,
+    Auth = (Context.authorization),
+    DB = (Context.system),
+    assert_auth_action_scope(DB, Auth, '@schema':'Action/manage_capabilities', system).
+assert_write_access(Context) :-
     throw(error(write_access_malformed_context(Context))).
 
 /* Associated with the resource pre-pass checking */
@@ -286,6 +292,10 @@ assert_write_access(System, Auth, Collection, Filter) :-
     write_type_access(Filter.type,Access),
     organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
     assert_auth_action_scope(System, Auth, Access, Scope_Iri).
+assert_write_access(System, Auth, Collection, _Filter) :-
+    system_descriptor{} :< Collection,
+    !,
+    assert_auth_action_scope(System, Auth, '@schema':'Action/manage_capabilities', system).
 assert_write_access(_System, _Auth, Collection, _Filter) :-
     throw(error(write_access_malformed_collection(Collection))).
 
@@ -331,7 +341,7 @@ assert_read_access(Context) :-
     !,
     Auth = (Context.authorization),
     DB = (Context.system),
-    assert_auth_action_scope(DB, Auth, '@schema':'Action/meta_read_access', 'system').
+    assert_auth_action_scope(DB, Auth, '@schema':'Action/manage_capabilities', system).
 assert_read_access(Context) :-
     database_descriptor{
         organization_name: Organization_Name,
@@ -465,6 +475,10 @@ assert_read_access(System, Auth, Collection, Filter) :-
     forall(member(Type,Types),
            (   read_type_access(Type,Access),
                assert_auth_action_scope(System, Auth, Access, Scope_Iri))).
+assert_read_access(System, Auth, Collection, _Filter) :-
+    system_descriptor{} :< Collection,
+    !,
+    assert_auth_action_scope(System, Auth, '@schema':'Action/manage_capabilities', system).
 assert_read_access(_System, _Auth, Collection, _Filter) :-
     throw(error(read_access_malformed_collection(Collection))).
 
@@ -649,5 +663,57 @@ test(admin_has_access_to_all_dbs, [
     resolve_absolute_string_descriptor("Gavin/test1", GavinTestDB),
     check_descriptor_auth(system_descriptor{}, GavinTestDB, system:meta_write_access, Auth),
     check_descriptor_auth(system_descriptor{}, GavinTestDB, system:commit_write_access, Auth).
+
+test(super_user_read_access_to_system_descriptor, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    super_user_authority(Auth),
+    open_descriptor(system_descriptor{}, System_DB),
+    assert_read_access(System_DB, Auth, system_descriptor{}, type_filter{types:[instance,schema]}).
+
+test(non_super_user_read_access_to_system_descriptor_rejected, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    ask(System_DB, (t(Auth, name, "Gavin"^^xsd:string),
+                   t(Auth, rdf:type, '@schema':'User'))),
+    \+ is_super_user(Auth),
+    catch(assert_read_access(System_DB, Auth, system_descriptor{}, type_filter{types:[instance,schema]}),
+          error(access_not_authorised(_, '@schema':'Action/manage_capabilities', system), _),
+          true).
+
+test(super_user_write_access_to_system_descriptor, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    super_user_authority(Auth),
+    open_descriptor(system_descriptor{}, System_DB),
+    assert_write_access(System_DB, Auth, system_descriptor{}, filter{type: instance}).
+
+test(non_super_user_write_access_to_system_descriptor_rejected, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    ask(System_DB, (t(Auth, name, "Gavin"^^xsd:string),
+                   t(Auth, rdf:type, '@schema':'User'))),
+    \+ is_super_user(Auth),
+    catch(assert_write_access(System_DB, Auth, system_descriptor{}, filter{type: instance}),
+          error(access_not_authorised(_, '@schema':'Action/manage_capabilities', system), _),
+          true).
 
 :- end_tests(capabilities).

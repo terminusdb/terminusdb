@@ -66,7 +66,7 @@ map_apply_captures(Context,Options,Patch_And_Ids,Conflicts,Ids_List,Empty,Captur
         ).
 
 api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
-    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
+    resolve_descriptor_auth(write, System_DB, Auth, Path, instance, Branch_Descriptor),
     create_context(Branch_Descriptor, Commit_Info, Context),
     merge_options(Options, options{keep:json{'@id':true, '@type':true}}, Merged_Options),
     empty_assoc(Empty),
@@ -214,7 +214,7 @@ api_diff_all_documents(System_DB, Auth, Path, Before_Version, After_Version, Dif
            ).
 
 api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, After_Version, Options) :-
-    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Descriptor),
+    resolve_descriptor_auth(write, System_DB, Auth, Path, instance, Branch_Descriptor),
     coerce_to_commit(Branch_Descriptor, Before_Version, Before_Commit_Id),
     coerce_to_commit(Branch_Descriptor, After_Version, After_Commit_Id),
     create_context(Branch_Descriptor, Commit_Info, Context),
