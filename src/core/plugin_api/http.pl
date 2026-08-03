@@ -112,6 +112,16 @@ plugin_error_response(error(subscription_limit_exceeded(Max), _), Response) :- !
         },
         headers: _{'Content-Type': 'application/json'}
     }.
+plugin_error_response(error(json_parse_error(_Line, _Col), _), Response) :- !,
+    Response = _{
+        status: 400,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:bad_request',
+            'api:message': 'Malformed JSON in request body'
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
 plugin_error_response(_, Response) :-
     Response = _{
         status: 500,

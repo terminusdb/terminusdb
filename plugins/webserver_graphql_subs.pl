@@ -1509,22 +1509,24 @@ test(sse_handler_returns_401_on_auth_failure,
     get_dict(status, Response, Status),
     Status == 401.
 
-%% graphql_sse_handler returns 400 when the query body is missing
-%% or unparseable. This requires auth to pass first, which it won't
-%% in a pure unit test without a database — so we only verify the
-%% handler does not crash on a malformed body. Both failure (semidet)
-%% and exception are acceptable — the worker pool catch maps both to
-%% error responses.
-test(sse_handler_does_not_crash_on_malformed_body) :-
+%% graphql_sse_handler returns 400 when the query body is malformed JSON.
+%% Uses setup_temp_store + create_db + valid Basic auth so the request
+%% path resolves and authentication passes, then the malformed body
+%% triggers a 400 via the json_parse_error clause in plugin_error_response.
+test(sse_handler_returns_400_on_malformed_body,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "db"))),
+      cleanup(teardown_temp_store(State))]) :-
+    test_utils:admin_pass(Pass),
+    http_utils:basic_authorization(admin, Pass, AuthHeader),
     Request = _{
-        headers: _{},
+        headers: _{'Authorization': AuthHeader},
         params: _{path: "admin/db/local/branch/main"},
         body: "not valid json"
     },
-    (   catch(graphql_sse_handler(Request, test_stream, _), _, true)
-    ->  true
-    ;   true
-    ).
+    graphql_sse_handler(Request, test_stream, Response),
+    get_dict(status, Response, Status),
+    Status == 400.
 
 %% graphql_sse_options_handler returns 204 with CORS headers.
 test(sse_options_handler_returns_204_with_cors) :-
