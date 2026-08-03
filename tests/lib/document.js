@@ -141,8 +141,10 @@ function insert (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.doc.insertSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.doc.insertSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.doc.insertFailure(error)))
@@ -209,8 +211,10 @@ function replace (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.doc.replaceSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.doc.replaceSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.doc.replaceFailure(error)))
@@ -264,8 +268,10 @@ function delete_ (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.doc.deleteSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.doc.deleteSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.doc.deleteFailure(error)))

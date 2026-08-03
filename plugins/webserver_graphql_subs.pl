@@ -648,8 +648,10 @@ graphql_finite_method(System_DB, Auth, BranchPathAtom, Method) :-
 execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
                                    BranchPathAtom, QueryString, Response) :-
     graphql_finite_method(System_DB, Auth, BranchPathAtom, GraphqlMethod),
-    (   get_dict(search, Request, Search)
-    ->  true
+    (   get_dict(query, Request, UrlQuery),
+        UrlQuery \= "",
+        UrlQuery \= null
+    ->  uri_query_components(UrlQuery, Search)
     ;   Search = []
     ),
     param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
@@ -829,8 +831,10 @@ delegate_to_graphql(Request, Response) :-
 %% Calls handle_graphql_request and builds the response with data version
 %% and retry count headers.
 delegate_graphql_request(Request, System_DB, Auth, Method, PathAtom, BodyString, Response) :-
-    (   get_dict(search, Request, Search)
-    ->  true
+    (   get_dict(query, Request, QueryString),
+        QueryString \= "",
+        QueryString \= null
+    ->  uri_query_components(QueryString, Search)
     ;   Search = []
     ),
     param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),

@@ -209,7 +209,7 @@ impl EmbeddingContext {
         none_term.unify(atom!("none"))?;
         let true_term = context.new_term_ref();
         true_term.unify(atom!("true"))?;
-        let execution_context = 
+        let execution_context =
             GraphQLExecutionContext::new_from_context_terms(
                 self.types.clone(),
                 context,

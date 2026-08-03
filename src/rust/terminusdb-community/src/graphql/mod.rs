@@ -392,7 +392,7 @@ impl<'a> GraphQLExecutionContext<'a> {
         author_term: &'a Term,
         message_term: &'a Term,
         compress_ids_term: &Term,
-    ) -> PrologResult<Self> {
+    ) -> PrologResult<GraphQLExecutionContext<'a>> {
         let context: GenericQueryableContext<'a> = context.into_generic();
         let compress_ids: bool = compress_ids_term.get_ex::<Atom>()? == atom!("true");
         let graphql_context: TerminusContext<'a> = TerminusContext::new(
