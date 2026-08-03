@@ -1804,17 +1804,14 @@ test(sse_validation_error_response_returns_200_sse) :-
 
 :- begin_tests(webserver_graphql_subs_change_set, []).
 
-%% _ChangeSet cohort registration should accept change_set operation.
-%% Currently register_subscription_parsed validates memberchk(Operation,
-%% [added, changed, deleted]) — change_set is not in that list, so this
-%% test will fail until the validation is extended.
+%% _ChangeSet cohort registration accepts change_set operation and
+%% stores the cohort with class '_ChangeSet' and operation change_set.
 test(change_set_cohort_registration,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
     TestDesc = branch_descriptor{},
     register_subscription_parsed(TestDesc, '_ChangeSet', change_set,
                                  '{}', 'abc123', sse,
-                                _CohortKey, _RawChannel),
-    !,
+                                CohortKey, _RawChannel),
     graphql_cohort(CohortKey, TestDesc, _, 1),
     cohort_class(CohortKey, ClassName),
     ClassName == '_ChangeSet',
@@ -1822,13 +1819,14 @@ test(change_set_cohort_registration,
     Operation == change_set.
 
 %% _ChangeSet cohort selection set is stored with full nested selection.
+%% Verifies that graphql_cohort_selection facts can be asserted and queried
+%% with the include_children flag (4th arg = true).
 test(change_set_cohort_selection_stored,
      [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
     TestDesc = branch_descriptor{},
     register_subscription_parsed(TestDesc, '_ChangeSet', change_set,
                                  '{}', 'abc123', sse,
                                 CohortKey, _RawChannel),
-    !,
     SelectionSet = 'Person_added { _id name } Person_deleted { _id name }',
     SelectionGraphql = 'Person_added { _id name } Person_deleted { _id name }',
     assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionGraphql, true)),
