@@ -27,6 +27,190 @@ use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
 use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
 use super::query::{run_count_query, run_filter_query};
+use super::subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot};
+
+/// Trait for resolving GraphQL fields against a TerminusDB store.
+///
+/// Implemented by `TerminusContext` (for HTTP GraphQL queries via Juniper)
+/// and `SubscriptionResolveContext` (for SSE subscription event
+/// resolution outside of Juniper).
+///
+/// The key difference is restriction checking: `TerminusContext` calls into
+/// Prolog via FFI, while `SubscriptionResolveContext` returns `Ok(None)`
+/// because restriction filters are rejected at subscription registration
+/// time.
+pub trait TerminusResolveContext {
+    /// Instance layer for document data, if available.
+    fn instance(&self) -> Option<&SyncStoreLayer>;
+
+    /// Type collection info (AllFrames) for GraphQL type resolution.
+    fn type_collection(&self) -> &TerminusTypeCollectionInfo;
+
+    /// Document context for full document retrieval.
+    fn document_context(&self) -> &DocumentContext<SyncStoreLayer>;
+
+    /// Check if a document ID matches a restriction. Returns `Ok(Some(reason))`
+    /// if it matches, `Ok(None)` if it doesn't, or an error.
+    ///
+    /// Default implementation returns `Ok(None)` — no restriction checking.
+    /// `TerminusContext` overrides this to call into Prolog.
+    fn id_matches_restriction(
+        &self,
+        _restriction: &ShortName,
+        _id: u64,
+    ) -> Result<Option<String>, juniper::FieldError> {
+        Ok(None)
+    }
+
+    /// Get all document IDs matching a restriction.
+    ///
+    /// Default implementation returns an error — restrictions are not
+    /// supported in subscription contexts. `TerminusContext` overrides
+    /// this to call into Prolog via FFI.
+    fn ids_from_restriction(
+        &self,
+        _restriction: &RestrictionDefinition,
+    ) -> Result<Vec<u64>, juniper::FieldError> {
+        Err(juniper::FieldError::new(
+            "Restriction filters are not supported in subscriptions",
+            juniper::Value::null(),
+        ))
+    }
+
+    /// Subscription event metadata: the change type ("added", "changed",
+    /// "deleted"). Only available in subscription event resolution context.
+    /// Returns `None` for regular GraphQL queries.
+    fn change_type(&self) -> Option<&str> {
+        None
+    }
+
+    /// Subscription event metadata: the commit ID. Only available in
+    /// subscription event resolution context. Returns `None` for regular
+    /// GraphQL queries.
+    fn commit_id(&self) -> Option<&str> {
+        None
+    }
+
+    /// Subscription event metadata: the commit timestamp (Unix epoch seconds).
+    /// Only available in subscription event resolution context.
+    /// Returns `None` for regular GraphQL queries.
+    fn timestamp(&self) -> Option<f64> {
+        None
+    }
+
+    /// Subscription event metadata: the commit timestamp as an ISO8601 string.
+    /// Only available in subscription event resolution context.
+    /// Returns `None` for regular GraphQL queries.
+    fn datetime(&self) -> Option<&str> {
+        None
+    }
+
+    /// Downcast to `SubscriptionResolveContext` for _ChangeSet resolution.
+    /// Returns `None` for regular `TerminusContext`, `Some(self)` for
+    /// `SubscriptionResolveContext`.
+    fn as_subscription_context(&self) -> Option<&SubscriptionResolveContext> {
+        None
+    }
+}
+
+/// Subscription event metadata values carried by the resolve context.
+///
+/// Used by `CommitMetadata<C>` to resolve `_commit { _id _timestamp _datetime _change_type }`
+/// fields. All fields are `Option` — they are `None` for regular (non-subscription)
+/// GraphQL queries, and `Some` for subscription event resolution.
+#[derive(Clone, Debug)]
+pub struct CommitMetadataValues {
+    pub id: Option<String>,
+    pub timestamp: Option<f64>,
+    pub datetime: Option<String>,
+    pub change_type: Option<String>,
+}
+
+/// GraphQL type for the `_commit` nested object on every document type.
+///
+/// Exposes four fields: `_id`, `_timestamp`, `_datetime`, `_change_type`.
+/// For regular (non-subscription) queries, all fields return `null`.
+/// For subscription events, the values come from the `TerminusResolveContext`
+/// trait methods.
+pub struct CommitMetadata<C: TerminusResolveContext> {
+    values: CommitMetadataValues,
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> CommitMetadata<C> {
+    fn from_context(context: &C) -> Self {
+        Self {
+            values: CommitMetadataValues {
+                id: context.commit_id().map(|s| s.to_string()),
+                timestamp: context.timestamp(),
+                datetime: context.datetime().map(|s| s.to_string()),
+                change_type: context.change_type().map(|s| s.to_string()),
+            },
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for CommitMetadata<C> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("_CommitMetadata")
+    }
+
+    fn meta<'r>(
+        _info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let fields = vec![
+            registry.field::<String>("_id", &()),
+            registry.field::<f64>("_timestamp", &()),
+            registry.field::<String>("_datetime", &()),
+            registry.field::<String>("_change_type", &()),
+        ];
+        registry
+            .build_object_type::<CommitMetadata<C>>(&(), &fields)
+            .into_meta()
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for CommitMetadata<C> {
+    type Context = C;
+    type TypeInfo = ();
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("_CommitMetadata")
+    }
+
+    fn resolve_field(
+        &self,
+        _info: &Self::TypeInfo,
+        field_name: &str,
+        _arguments: &juniper::Arguments,
+        _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        match field_name {
+            "_id" => match &self.values.id {
+                Some(id) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(id.clone()))),
+                None => Ok(juniper::Value::Null),
+            },
+            "_timestamp" => match self.values.timestamp {
+                Some(ts) => Ok(juniper::Value::Scalar(DefaultScalarValue::Float(ts))),
+                None => Ok(juniper::Value::Null),
+            },
+            "_datetime" => match &self.values.datetime {
+                Some(dt) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(dt.clone()))),
+                None => Ok(juniper::Value::Null),
+            },
+            "_change_type" => match &self.values.change_type {
+                Some(ct) => Ok(juniper::Value::Scalar(DefaultScalarValue::String(ct.clone()))),
+                None => Ok(juniper::Value::Null),
+            },
+            _ => Ok(juniper::Value::Null),
+        }
+    }
+}
 
 pub enum NodeOrValue {
     Node(IriName),
@@ -114,7 +298,54 @@ impl<'a> TerminusContext<'a> {
     }
 }
 
-pub struct TerminusTypeCollection;
+impl<'a> TerminusResolveContext for TerminusContext<'a> {
+    fn instance(&self) -> Option<&SyncStoreLayer> {
+        self.instance.as_ref()
+    }
+
+    fn type_collection(&self) -> &TerminusTypeCollectionInfo {
+        &self.type_collection
+    }
+
+    fn document_context(&self) -> &DocumentContext<SyncStoreLayer> {
+        self.document_context()
+    }
+
+    fn id_matches_restriction(
+        &self,
+        restriction: &ShortName,
+        id: u64,
+    ) -> Result<Option<String>, juniper::FieldError> {
+        let result = pl_id_matches_restriction(self, restriction, id);
+        result_to_execution_result(&self.context, result)
+    }
+
+    fn ids_from_restriction(
+        &self,
+        restriction: &RestrictionDefinition,
+    ) -> Result<Vec<u64>, juniper::FieldError> {
+        let result = pl_ids_from_restriction(self, restriction).map(|mut r| {
+            r.sort();
+            r.dedup();
+            r
+        });
+        result_to_execution_result(&self.context, result)
+    }
+}
+
+pub struct TerminusTypeCollection<C: TerminusResolveContext> {
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> Default for TerminusTypeCollection<C> {
+    fn default() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+pub type TerminusTypeCollectionFor<'a> = TerminusTypeCollection<TerminusContext<'a>>;
 
 pub struct TerminusOrderingInfo {
     ordering_name: GraphQLName<'static>,
@@ -179,7 +410,7 @@ fn must_generate_ordering(class_definition: &ClassDefinition) -> bool {
     false
 }
 
-impl GraphQLType for TerminusTypeCollection {
+impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
     fn name(_info: &Self::TypeInfo) -> Option<&str> {
         Some("Query")
     }
@@ -201,7 +432,7 @@ impl GraphQLType for TerminusTypeCollection {
                         class: name.as_static(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType>>(name.as_str(), &newinfo);
+                    let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -218,7 +449,7 @@ impl GraphQLType for TerminusTypeCollection {
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType>>(name.as_str(), &newinfo);
+                let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -252,11 +483,16 @@ impl GraphQLType for TerminusTypeCollection {
         }
         fields.push(count_field);
 
+        // _ChangeSet — batched changes per commit (Query root)
+        let cs_field = registry.field::<ChangeSet<C>>("_ChangeSet", info);
+        let cs_field = cs_field.argument(registry.arg::<Option<bool>>("include_children", &()));
+        fields.push(cs_field);
+
         /*
         fields.push(registry.field::<System>("_system", &()));
         */
         registry
-            .build_object_type::<TerminusTypeCollection>(info, &fields)
+            .build_object_type::<TerminusTypeCollection<C>>(info, &fields)
             .into_meta()
     }
 }
@@ -270,13 +506,15 @@ fn standard_collection_operators<'r>(
     .into_iter()
 }
 
-fn standard_type_operators<'r>(
+fn standard_type_operators<'r, C: TerminusResolveContext>(
     registry: &mut juniper::Registry<'r, DefaultScalarValue>,
 ) -> impl Iterator<Item = Field<'r, DefaultScalarValue>> {
+    let _ = std::marker::PhantomData::<C>;
     vec![
         registry.field::<ID>("_id", &()),
         registry.field::<ID>("_type", &()),
         registry.field::<GraphQLJSON>("_json", &()),
+        registry.field::<CommitMetadata<C>>("_CommitMetadata", &()),
     ]
     .into_iter()
 }
@@ -323,19 +561,6 @@ fn pl_ids_from_restriction(
     Ok(result)
 }
 
-fn ids_from_restriction(
-    context: &TerminusContext,
-    restriction: &RestrictionDefinition,
-) -> Result<Vec<u64>, juniper::FieldError> {
-    let result = pl_ids_from_restriction(context, restriction).map(|mut r| {
-        r.sort();
-        r.dedup();
-
-        r
-    });
-    result_to_execution_result(&context.context, result)
-}
-
 fn pl_id_matches_restriction(
     context: &TerminusContext,
     restriction: &ShortName,
@@ -363,17 +588,16 @@ fn pl_id_matches_restriction(
     }
 }
 
-pub fn id_matches_restriction(
-    context: &TerminusContext,
+pub fn id_matches_restriction<C: TerminusResolveContext>(
+    context: &C,
     restriction: &ShortName,
     id: u64,
 ) -> Result<Option<String>, juniper::FieldError> {
-    let result = pl_id_matches_restriction(context, restriction, id);
-    result_to_execution_result(&context.context, result)
+    context.id_matches_restriction(restriction, id)
 }
 
-impl GraphQLValue for TerminusTypeCollection {
-    type Context = TerminusContext<'static>;
+impl<C: TerminusResolveContext> GraphQLValue for TerminusTypeCollection<C> {
+    type Context = C;
 
     type TypeInfo = TerminusTypeCollectionInfo;
 
@@ -396,7 +620,7 @@ impl GraphQLValue for TerminusTypeCollection {
                 let id: String = arguments.get("id").unwrap();
                 let id: NodeVariety = node_variety(&id);
                 let expanded_id = context
-                    .type_collection
+                    .type_collection()
                     .allframes
                     .context
                     .expand_instance(&id);
@@ -413,7 +637,7 @@ impl GraphQLValue for TerminusTypeCollection {
             }
             "_count" => {
                 let context = executor.context();
-                let instance = match context.instance.as_ref() {
+                let instance = match context.instance() {
                     Some(i) => i,
                     None => return Ok(Value::scalar(0)),
                 };
@@ -436,19 +660,23 @@ impl GraphQLValue for TerminusTypeCollection {
 
                 Err("_count requires exactly one model filter argument".into())
             }
+            "_ChangeSet" => {
+                let change_set = ChangeSet::<C>::new();
+                executor.resolve(info, &change_set)
+            }
             _ => {
                 let zero_iter;
                 let type_name;
                 if let Some(restriction) = info.allframes.restrictions.get(&field_name) {
                     // This is a restriction. We're gonna have to call into prolog to get an iri list and turn it into an iterator over ids to use as a zero iter
                     type_name = &restriction.on;
-                    let id_list = ids_from_restriction(executor.context(), restriction)?;
+                    let id_list = executor.context().ids_from_restriction(restriction)?;
                     zero_iter = Some(ClonableIterator::new(id_list.into_iter()));
                 } else {
                     type_name = &field_name;
                     zero_iter = None;
                 }
-                let objects = match executor.context().instance.as_ref() {
+                let objects = match executor.context().instance() {
                     Some(instance) => run_filter_query(
                         executor.context(),
                         instance,
@@ -458,7 +686,7 @@ impl GraphQLValue for TerminusTypeCollection {
                         zero_iter,
                     )
                     .into_iter()
-                    .map(TerminusType::new)
+                    .map(TerminusType::<C>::new)
                     .collect(),
                     None => vec![],
                 };
@@ -480,13 +708,17 @@ pub struct TerminusTypeInfo {
     allframes: Arc<AllFrames>,
 }
 
-pub struct TerminusType {
+pub struct TerminusType<C: TerminusResolveContext> {
     id: u64,
+    _phantom: std::marker::PhantomData<C>,
 }
 
-impl TerminusType {
+impl<C: TerminusResolveContext> TerminusType<C> {
     fn new(id: u64) -> Self {
-        Self { id }
+        Self {
+            id,
+            _phantom: std::marker::PhantomData,
+        }
     }
 
     fn register_field<'r, T: GraphQLType>(
@@ -518,7 +750,7 @@ impl TerminusType {
             .iter()
             .map(|(field_name, field_definition)| {
                 if let Some(document_type) = field_definition.document_type(frames) {
-                    let field = Self::register_field::<TerminusType>(
+                    let field = Self::register_field::<TerminusType<C>>(
                         registry,
                         field_name.as_str(),
                         &TerminusTypeInfo {
@@ -629,7 +861,7 @@ impl TerminusType {
                     class: class.as_static(),
                     allframes: frames.clone(),
                 };
-                let field = Self::register_field::<TerminusType>(
+                let field = Self::register_field::<TerminusType<C>>(
                     registry,
                     field_name.as_str(),
                     &new_info,
@@ -653,7 +885,7 @@ impl TerminusType {
                 class: class.as_static(),
                 allframes: frames.clone(),
             };
-            let field = Self::register_field::<TerminusType>(
+            let field = Self::register_field::<TerminusType<C>>(
                 registry,
                 field_name.as_str(),
                 &new_info,
@@ -687,15 +919,15 @@ impl TerminusType {
             fields.push(restriction_field);
         }
 
-        fields.extend(standard_type_operators(registry));
+        fields.extend(standard_type_operators::<C>(registry));
 
         registry
-            .build_object_type::<TerminusType>(info, &fields)
+            .build_object_type::<TerminusType<C>>(info, &fields)
             .into_meta()
     }
 }
 
-impl GraphQLType for TerminusType {
+impl<C: TerminusResolveContext> GraphQLType for TerminusType<C> {
     fn name(info: &Self::TypeInfo) -> Option<&str> {
         Some(info.class.as_str())
     }
@@ -750,8 +982,8 @@ fn subject_has_type(instance: &dyn Layer, subject_id: u64, class: &str) -> bool 
     }
 }
 
-impl GraphQLValue for TerminusType {
-    type Context = TerminusContext<'static>;
+impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
+    type Context = C;
 
     type TypeInfo = TerminusTypeInfo;
 
@@ -771,14 +1003,50 @@ impl GraphQLValue for TerminusType {
             // TODO: should this really be with a `?`? having an id,
             // we should always have had this instance layer at some
             // point. not having it here would be a weird bug.
-            let instance = executor.context().instance.as_ref()?;
+            let instance = executor.context().instance()?;
+            // For deleted documents in _ChangeSet, the data may only exist
+            // in the parent layer. Fall back to parent_instance if the
+            // current instance doesn't have this subject.
+            // Only check when we have a subscription context (ChangeSet);
+            // skip for regular queries to avoid unnecessary I/O.
+            let instance = if let Some(sub_ctx) = executor.context().as_subscription_context() {
+                if let Some(parent) = sub_ctx.parent_instance() {
+                    if !instance.triples_s(self.id).next().is_some() {
+                        parent
+                    } else {
+                        instance
+                    }
+                } else {
+                    instance
+                }
+            } else {
+                instance
+            };
             if field_name.as_str() == "_id" {
                 return Some(Ok(Value::Scalar(DefaultScalarValue::String(
                     instance.id_subject(self.id)?,
                 ))));
             }
             if field_name.as_str() == "_json" {
-                let document_context = executor.context().document_context();
+                // For deleted documents in _ChangeSet, the document may only
+                // exist in the parent layer. Use a DocumentContext built from
+                // the parent instance if the current instance doesn't have
+                // this subject.
+                let parent_doc_context;
+                let document_context = if let Some(sub_ctx) = executor.context().as_subscription_context() {
+                    if let Some(parent) = sub_ctx.parent_instance() {
+                        if !instance.triples_s(self.id).next().is_some() {
+                            parent_doc_context = DocumentContext::new(sub_ctx.schema.clone(), Some(parent.clone()));
+                            &parent_doc_context
+                        } else {
+                            executor.context().document_context()
+                        }
+                    } else {
+                        executor.context().document_context()
+                    }
+                } else {
+                    executor.context().document_context()
+                };
                 let doc = document_context.get_id_document(self.id, true, true);
                 match doc {
                     Ok(Some(doc)) => {
@@ -807,6 +1075,14 @@ impl GraphQLValue for TerminusType {
                         )))
                     });
                 return ty;
+            }
+
+            // Subscription metadata: _CommitMetadata is a nested object type.
+            // Construct a CommitMetadata from the context and resolve it
+            // via the executor. For regular queries, all fields return null.
+            if field_name.as_str() == "_CommitMetadata" {
+                let commit_metadata = CommitMetadata::<C>::from_context(executor.context());
+                return Some(executor.resolve(&(), &commit_metadata).map(|r| r));
             }
 
             if let Some(reverse_link) = allframes.reverse_link(class, &field_name) {
@@ -1073,8 +1349,8 @@ impl GraphQLValue for TerminusType {
     }
 }
 
-fn extract_fragment(
-    executor: &juniper::Executor<TerminusContext<'static>, DefaultScalarValue>,
+fn extract_fragment<C: TerminusResolveContext>(
+    executor: &juniper::Executor<C, DefaultScalarValue>,
     info: &TerminusTypeInfo,
     instance: &SyncStoreLayer,
     object_id: u64,
@@ -1088,7 +1364,7 @@ fn extract_fragment(
                 class: doc_type.as_static(),
                 allframes: info.allframes.clone(),
             },
-            &TerminusType::new(object_id),
+            &TerminusType::<C>::new(object_id),
         ))
     } else if let Some(enum_type) = enum_type {
         let value = extract_enum_fragment(info, instance, object_id, enum_type);
@@ -1295,18 +1571,18 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-fn collect_into_graphql_list<'a>(
+fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
     doc_type: Option<&'a GraphQLName<'a>>,
     enum_type: Option<&'a GraphQLName<'a>>,
     is_json: bool,
-    executor: &'a juniper::Executor<TerminusContext<'static>>,
+    executor: &'a juniper::Executor<C>,
     info: &'a TerminusTypeInfo,
     arguments: &'a juniper::Arguments,
     object_ids: ClonableIterator<'a, u64>,
     instance: &'a SyncStoreLayer,
 ) -> Option<Result<Value, juniper::FieldError>> {
     if let Some(doc_type) = doc_type {
-        let object_ids = match executor.context().instance.as_ref() {
+        let object_ids = match executor.context().instance() {
             Some(instance) => run_filter_query(
                 executor.context(),
                 instance,
@@ -1317,7 +1593,7 @@ fn collect_into_graphql_list<'a>(
             ),
             None => vec![],
         };
-        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::new).collect();
+        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::<C>::new).collect();
         Some(executor.resolve(
             &TerminusTypeInfo {
                 class: doc_type.as_static(),
@@ -1461,6 +1737,19 @@ where
     }
 }
 
+/// Checks if a string looks like a JSON object or array by examining its
+/// first and last non-whitespace characters. This is an intentional first-pass
+/// filter for the `JSON` scalar type: the `json` argument in mutations always
+/// expects a document (object) or list of documents (array), so bare JSON
+/// primitives like `"42"` or `"true"` are rejected at the GraphQL type layer.
+/// Malformed strings that pass this check (e.g. `"{not json}"`) are caught
+/// downstream by the Prolog document layer's JSON parser.
+pub(crate) fn is_json_value(s: &str) -> bool {
+    let trimmed = s.trim();
+    (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+}
+
 #[derive(Debug, Clone)]
 pub struct GraphQLJSON(pub String);
 
@@ -1474,7 +1763,7 @@ where
     }
 
     fn from_input_value(value: &juniper::InputValue) -> Option<Self> {
-        value.as_string_value().map(|s| Self(s.to_owned()))
+        value.as_string_value().filter(|s| is_json_value(s)).map(|s| Self(s.to_owned()))
     }
 
     fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
@@ -1547,4 +1836,255 @@ where
 pub enum GraphType {
     InstanceGraph,
     SchemaGraph,
+}
+
+// --- ChangeSet type ---
+//
+// GraphQL type `_ChangeSet` — batched changes per commit.
+// Exposes `{Class}_added`, `{Class}_changed`, `{Class}_deleted` fields per
+// class (each returning `Vec<TerminusType<C>>`), plus a `_CommitMetadata`
+// field for commit metadata. Used on both the Subscription root (for
+// parsing) and the Query root (for resolution and on-demand querying).
+
+pub struct ChangeSet<C: TerminusResolveContext> {
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> ChangeSet<C> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for ChangeSet<C> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("_ChangeSet")
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let mut fields: Vec<Field<'r, DefaultScalarValue>> = Vec::new();
+
+        for (name, typedef) in info.allframes.frames.iter() {
+            if let TypeDefinition::Class(_) = typedef {
+                let newinfo = TerminusTypeInfo {
+                    class: name.as_static(),
+                    allframes: info.allframes.clone(),
+                };
+
+                for (op_name, description) in [
+                    (format!("{}_added", name.as_str()), "Documents of this class added in the commit"),
+                    (format!("{}_changed", name.as_str()), "Documents of this class changed in the commit"),
+                    (format!("{}_deleted", name.as_str()), "Documents of this class deleted in the commit"),
+                ] {
+                    let field = registry.field::<Vec<TerminusType<C>>>(op_name.as_str(), &newinfo);
+                    let field = field.description(description);
+                    let field = field.argument(registry.arg::<Option<Vec<ID>>>("ids", &()));
+                    let field = field.argument(registry.arg::<Option<bool>>("include_children", &()));
+                    fields.push(field);
+                }
+            }
+        }
+
+        fields.push(registry.field::<CommitMetadata<C>>("_CommitMetadata", &()));
+
+        registry
+            .build_object_type::<ChangeSet<C>>(info, &fields)
+            .into_meta()
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for ChangeSet<C> {
+    type Context = C;
+    type TypeInfo = TerminusTypeCollectionInfo;
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("_ChangeSet")
+    }
+
+    fn resolve_field(
+        &self,
+        info: &Self::TypeInfo,
+        field_name: &str,
+        arguments: &juniper::Arguments<DefaultScalarValue>,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        if field_name == "_CommitMetadata" {
+            let commit_metadata = CommitMetadata::<C>::from_context(executor.context());
+            return executor.resolve(&(), &commit_metadata).map(|r| r);
+        }
+
+        // Parse "{Class}_{operation}" from field_name
+        let last_underscore = match field_name.rfind('_') {
+            Some(idx) => idx,
+            None => return Err(format!("Unknown _ChangeSet field: {}", field_name).into()),
+        };
+
+        let class_name = &field_name[..last_underscore];
+        let operation = &field_name[last_underscore + 1..];
+
+        match operation {
+            "added" | "changed" | "deleted" => {}
+            _ => return Err(format!("Unknown _ChangeSet operation: {}", operation).into()),
+        }
+
+        // Get document IDs from the resolve context (set by Rust FFI)
+        let sub_ctx = executor.context().as_subscription_context();
+
+        // Determine include_children: per-field argument overrides top-level default.
+        let include_children = arguments
+            .get::<Option<bool>>("include_children")
+            .flatten()
+            .or_else(|| sub_ctx.map(|ctx| ctx.include_children_default))
+            .unwrap_or(true);
+
+        let mut ids: Vec<String> = sub_ctx
+            .map(|ctx| ctx.change_set_ids_for_field(field_name))
+            .unwrap_or_default();
+
+        // When include_children is false, filter out documents whose actual
+        // class doesn't match the field's class. The FFI always groups under
+        // superclasses; this filters back to exact-class-only.
+        if !include_children {
+            if let Some(ctx) = sub_ctx {
+                ids.retain(|doc_iri| {
+                    ctx.doc_class(doc_iri)
+                        .map(|actual_class| actual_class == class_name)
+                        .unwrap_or(true)
+                });
+            }
+        }
+
+        if ids.is_empty() {
+            return executor.resolve(
+                &TerminusTypeInfo {
+                    class: GraphQLName(Cow::Owned(class_name.to_string())),
+                    allframes: info.allframes.clone(),
+                },
+                &Vec::<TerminusType<C>>::new(),
+            ).map(|r| r);
+        }
+
+        // For deleted documents, use the parent layer (pre-commit state).
+        // For added/changed, use the current instance layer.
+        let resolve_layer = if operation == "deleted" {
+            sub_ctx
+                .and_then(|ctx| ctx.parent_instance())
+                .or_else(|| executor.context().instance())
+        } else {
+            executor.context().instance()
+        };
+
+        let instance = match resolve_layer {
+            Some(layer) => layer,
+            None => {
+                return executor.resolve(
+                    &TerminusTypeInfo {
+                        class: GraphQLName(Cow::Owned(class_name.to_string())),
+                        allframes: info.allframes.clone(),
+                    },
+                    &Vec::<TerminusType<C>>::new(),
+                ).map(|r| r);
+            }
+        };
+
+        let objects: Vec<TerminusType<C>> = ids
+            .iter()
+            .filter_map(|id| {
+                let nid = instance.subject_id(id);
+                nid.map(TerminusType::<C>::new)
+            })
+            .collect();
+
+        executor.resolve(
+            &TerminusTypeInfo {
+                class: GraphQLName(Cow::Owned(class_name.to_string())),
+                allframes: info.allframes.clone(),
+            },
+            &objects,
+        ).map(|r| r)
+    }
+}
+
+// --- TerminusSubscriptionRoot impls ---
+//
+// These impls live in schema.rs (not subscription.rs) because they need
+// access to TerminusTypeInfo's private fields and the private add_arguments()
+// function. TerminusSubscriptionRoot itself is defined in subscription.rs.
+
+impl<C: TerminusResolveContext> GraphQLType for TerminusSubscriptionRoot<C> {
+    fn name(_info: &Self::TypeInfo) -> Option<&str> {
+        Some("Subscription")
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let mut fields: Vec<_> = Vec::new();
+
+        for (name, typedef) in info.allframes.frames.iter() {
+            if let TypeDefinition::Class(class_definition) = typedef {
+                let newinfo = TerminusTypeInfo {
+                    class: name.as_static(),
+                    allframes: info.allframes.clone(),
+                };
+
+                for (op_name, description) in [
+                    (format!("{}_added", name.as_str()), "Fired when a document of this class is added"),
+                    (format!("{}_changed", name.as_str()), "Fired when a document of this class is changed"),
+                    (format!("{}_deleted", name.as_str()), "Fired when a document of this class is deleted"),
+                ] {
+                    let field = registry.field::<TerminusType<C>>(op_name.as_str(), &newinfo);
+                    let field = field.description(description);
+                    let field = add_arguments(&newinfo, registry, field, class_definition);
+                    fields.push(field);
+                }
+            }
+        }
+
+        // _ChangeSet — batched changes per commit (Subscription root)
+        let cs_field = registry.field::<ChangeSet<C>>("_ChangeSet", info);
+        let cs_field = cs_field.argument(registry.arg::<Option<bool>>("include_children", &()));
+        fields.push(cs_field);
+
+        // _CommitMetadata — commit metadata as top-level subscription field
+        let commit_field = registry.field::<CommitMetadata<C>>("_CommitMetadata", &());
+        fields.push(commit_field);
+
+        registry
+            .build_object_type::<TerminusSubscriptionRoot<C>>(info, &fields)
+            .into_meta()
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for TerminusSubscriptionRoot<C> {
+    type Context = C;
+    type TypeInfo = TerminusTypeCollectionInfo;
+
+    fn type_name<'i>(&self, _info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some("TerminusSubscriptionRoot")
+    }
+
+    fn resolve_field(
+        &self,
+        _info: &Self::TypeInfo,
+        _field_name: &str,
+        _arguments: &juniper::Arguments,
+        _executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        // This is never called — subscription execution bypasses Juniper.
+        // The GraphQLValue impl exists only for SDL generation.
+        Err("Subscription resolution is not handled by Juniper".into())
+    }
 }

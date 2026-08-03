@@ -46,7 +46,8 @@
               check_indexer_backend_config/0,
               clear_indexer_backend_config/0,
               worker_elaboration_preference/1,
-              root_redirect_target/1
+              root_redirect_target/1,
+              max_body_size/1
 ]).
 
 :- use_module(library(pcre)).
@@ -101,6 +102,10 @@ server_enabled :-
 worker_amount(Value) :-
     current_prolog_flag(cpu_count,Integer),
     getenv_default_number('TERMINUSDB_SERVER_WORKERS', Integer, Value).
+
+:- table max_body_size/1 as shared.
+max_body_size(Value) :-
+    getenv_default_number('TERMINUSDB_MAX_BODY_SIZE', 33554432, Value).
 
 :- table max_transaction_retries/1 as shared.
 max_transaction_retries(Value) :-

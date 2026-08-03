@@ -7,6 +7,18 @@
 
 use std::sync::OnceLock;
 
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// Max non-streaming HTTP body size (bytes). Env: `TERMINUSDB_MAX_BODY_SIZE`. Default: 32 MB.
+    pub static ref MAX_BODY_SIZE: usize = {
+        std::env::var("TERMINUSDB_MAX_BODY_SIZE")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(32 * 1024 * 1024)
+    };
+}
+
 static ROOT_REDIRECT_TARGET: OnceLock<String> = OnceLock::new();
 
 /// Set the root redirect target, called once from `appserver_start/2`.

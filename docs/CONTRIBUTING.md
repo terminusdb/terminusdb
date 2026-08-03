@@ -677,6 +677,19 @@ fn helper_function(input: &Data) -> Result<Output> {
 
 ## Submitting Changes
 
+### GraphQL SSE Protocol Extensions
+
+The TerminusDB GraphQL SSE implementation follows the [graphql-sse protocol](https://github.com/enisdenjo/graphql-sse/blob/master/PROTOCOL.md) distinct connections mode. One non-standard extension is implemented:
+
+**`connected` event**
+
+After a subscription is accepted, the server sends a `connected` event before any `next` events. This is not part of the graphql-sse protocol. Strict clients ignore unknown event types per the SSE specification.
+
+- SSE format: `event: connected\ndata: null\n\n`
+- NDJSON format: `null\n`
+
+The purpose is to signal subscription readiness. Without it, clients cannot know when it is safe to trigger data operations that should produce subscription events, creating a race condition between subscribe and the first mutation.
+
 Before submitting a change, please run `make && ./terminusdb test` to make sure that all tests pass. Failure should result in a big fail message, and success with a final `true`. API tests will require that the admin password is `root` or that the environment variable `TERMINUSDB_ADMIN_PASS` is set prior to invocation of `terminusdb`.
 
 Please send a [GitHub Pull Request](https://github.com/terminusdb/terminusdb/pull/new/main) to the main branch.

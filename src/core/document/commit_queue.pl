@@ -24,7 +24,12 @@
               active_branch/2,
               pending_branches/1,
               schedule_database_optimization/1,
-              schedule_branch_optimization/1
+              schedule_database_optimization_with_reply/2,
+              schedule_branch_optimization/1,
+              branch_queue_empty/1,
+              database_active_branch_count/2,
+              increment_database_active_count/1,
+              decrement_database_active_count/1
           ]).
 
 :- use_module(config(terminus_config), [worker_amount/1]).
@@ -68,6 +73,11 @@
 % workers through a global task queue.
 :- dynamic pending_global_optimization/2.
 :- dynamic pending_global_optimization_due/1.
+
+% pending_optimization_reply(DatabaseKey, ReplyRecord) holds an optional
+% reply queue for a scheduled optimization. When set, run_database_optimization
+% sends the result back to the reply queue after completion.
+:- dynamic pending_optimization_reply/2.
 
 % database_active_branch_count(DatabaseKey, Count) tracks how many branches of
 % a given database currently have an active commit worker. Used to know when a
@@ -189,6 +199,17 @@ release_branch_lock(BranchKey) :-
 
 queue_empty(Queue) :-
     catch(message_queue_property(Queue, size(0)), _, fail).
+
+% branch_queue_empty(+BranchKey) is semidet.
+%
+% True when the branch queue for BranchKey does not exist or has no pending
+% messages. Used by the optimize endpoint to decide whether to run directly
+% or schedule through the commit queue.
+branch_queue_empty(BranchKey) :-
+    (   branch_commit_queue(BranchKey, Queue)
+    ->  queue_empty(Queue)
+    ;   true
+    ).
 
 enqueue_commit(BranchKey, Package) :-
     ensure_branch_queue(BranchKey, Queue),
@@ -330,6 +351,34 @@ decrement_database_active_branch_count(BranchKey, NewCount) :-
         assertz(database_active_branch_count(DatabaseKey, 0))
     ).
 
+% increment_database_active_count(+DatabaseKey) is det.
+%
+% Increments the active work counter for a database key directly (without
+% going through a branch key). Used by the optimize endpoint to mark
+% optimization work as active so concurrent optimize requests schedule
+% through the commit queue instead of running directly.
+increment_database_active_count(DatabaseKey) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retract(database_active_branch_count(DatabaseKey, Count))
+        ->  NewCount is Count + 1,
+            assertz(database_active_branch_count(DatabaseKey, NewCount))
+        ;   assertz(database_active_branch_count(DatabaseKey, 1))
+        )).
+
+% decrement_database_active_count(+DatabaseKey) is det.
+%
+% Decrements the active work counter for a database key directly.
+decrement_database_active_count(DatabaseKey) :-
+    with_mutex(commit_scheduler_mutex,
+        (   retract(database_active_branch_count(DatabaseKey, Count))
+        ->  NewCount is Count - 1,
+            (   NewCount < 0
+            ->  throw(error(active_branch_count_negative(DatabaseKey), _))
+            ;   assertz(database_active_branch_count(DatabaseKey, NewCount))
+            )
+        ;   true
+        )).
+
 % Optimization scheduling.
 %
 % schedule_branch_optimization(+BranchDescriptor) and
@@ -364,7 +413,8 @@ schedule_database_optimization(Descriptor) :-
     ),
     !,
     database_key_from_descriptor(Descriptor, DatabaseKey),
-    (   database_active_branch_count(DatabaseKey, _)
+    (   database_active_branch_count(DatabaseKey, Count),
+        Count > 0
     ->  with_mutex(commit_scheduler_mutex,
             (
                 (   (   pending_database_optimization(DatabaseKey, _)
@@ -397,6 +447,59 @@ schedule_database_optimization(Descriptor) :-
                 ;   true
                 ),
                 assertz(pending_global_optimization(DatabaseKey, Descriptor))
+            )
+        ),
+        wake_workers
+    ).
+
+% schedule_database_optimization_with_reply(+Descriptor, +ReplyRecord) is det.
+%
+% Like schedule_database_optimization/1, but also stores a reply record
+% (containing reply_queue and request_id) so that run_database_optimization
+% can send the result back to the caller. Used by the synchronous API
+% endpoint for non-branch descriptors.
+schedule_database_optimization_with_reply(Descriptor, ReplyRecord) :-
+    (   system_descriptor{} :< Descriptor
+    ;   database_descriptor{} :< Descriptor
+    ;   repository_descriptor{} :< Descriptor
+    ),
+    !,
+    database_key_from_descriptor(Descriptor, DatabaseKey),
+    (   database_active_branch_count(DatabaseKey, Count),
+        Count > 0
+    ->  with_mutex(commit_scheduler_mutex,
+            (
+                (   (   pending_database_optimization(DatabaseKey, _)
+                    ;   pending_database_optimization_due(DatabaseKey)
+                    )
+                ->  assertz(pending_database_optimization_due(DatabaseKey))
+                ;   true
+                ),
+                (   retract(pending_database_optimization(DatabaseKey, _))
+                ->  true
+                ;   true
+                ),
+                assertz(pending_database_optimization(DatabaseKey, Descriptor)),
+                retractall(pending_optimization_reply(DatabaseKey, _)),
+                assertz(pending_optimization_reply(DatabaseKey, ReplyRecord))
+            )
+        ),
+        wake_workers
+    ;   with_mutex(commit_scheduler_mutex,
+            (
+                (   (   pending_global_optimization(DatabaseKey, _)
+                    ;   pending_global_optimization_due(DatabaseKey)
+                    )
+                ->  assertz(pending_global_optimization_due(DatabaseKey))
+                ;   true
+                ),
+                (   retract(pending_global_optimization(DatabaseKey, _))
+                ->  true
+                ;   true
+                ),
+                assertz(pending_global_optimization(DatabaseKey, Descriptor)),
+                retractall(pending_optimization_reply(DatabaseKey, _)),
+                assertz(pending_optimization_reply(DatabaseKey, ReplyRecord))
             )
         ),
         wake_workers
@@ -457,20 +560,50 @@ run_branch_optimization(Descriptor) :-
 run_database_optimization(Descriptor) :-
     database_key_from_descriptor(Descriptor, DatabaseKey),
     catch(
-        with_meta_commit_lock(
-            DatabaseKey,
-            descriptor_optimize(Descriptor)
+        (   with_meta_commit_lock(
+                DatabaseKey,
+                descriptor_optimize(Descriptor)
+            ),
+            Result = optimize_success
         ),
         Error,
-        log_optimization_error(database, DatabaseKey, Error)
+        (   Result = error(Error),
+            log_optimization_error(database, DatabaseKey, Error)
+        )
+    ),
+    deliver_optimization_reply(DatabaseKey, Result).
+
+%% deliver_optimization_reply(+DatabaseKey, +Result) is det.
+%
+% If a reply record was registered for this DatabaseKey, send the result
+% back to the reply queue and clean up. Otherwise, this is a fire-and-forget
+% scheduled optimization with no caller waiting.
+deliver_optimization_reply(DatabaseKey, Result) :-
+    (   retract(pending_optimization_reply(DatabaseKey, ReplyRecord))
+    ->  (   get_dict(reply_queue, ReplyRecord, ReplyQueue),
+            get_dict(request_id, ReplyRecord, RequestId)
+        ->  catch(thread_send_message(ReplyQueue,
+                                      commit_result(Result, RequestId)),
+                  error(existence_error(message_queue, _), _),
+                  true)
+        ;   true
+        )
+    ;   true
     ).
 
 % try_global_optimization/0 is semidet.
 %
-% Called by idle commit workers. It atomically picks one pending global
-% optimization (and clears its due flag), runs it under the database meta lock,
+% Called by idle commit workers. It atomically picks one pending optimization
+% from either the global queue (pending_global_optimization) or the database
+% queue (pending_database_optimization), runs it under the database meta lock,
 % and removes the pending fact. Succeeds when a task was processed; fails when
-% the global queue is empty.
+% both queues are empty.
+%
+% The database queue was previously only drained by collect_pending_optimizations
+% (called from requeue_branch after commit processing). But when there are no
+% pending commits, requeue_branch is never called, and database optimizations
+% scheduled via schedule_database_optimization_with_reply would sit forever.
+% Now idle workers pick them up here.
 try_global_optimization :-
     with_mutex(commit_scheduler_mutex,
         (   (   pending_global_optimization_due(DatabaseKey)
@@ -481,7 +614,26 @@ try_global_optimization :-
             ->  Task = some(DatabaseKey, Descriptor)
             ;   Task = none
             )
-        ;   Task = none
+        ;   (   pending_database_optimization_due(DBKey2),
+                \+ pending_database_optimization(DBKey2, _)
+            ->  retractall(pending_database_optimization_due(DBKey2)),
+                Task = none
+            ;   pending_database_optimization(DBKey2, Descriptor2),
+                database_active_branch_count(DBKey2, ActiveCount),
+                ActiveCount > 0
+            ->  (   pending_database_optimization_due(DBKey2)
+                ->  true
+                ;   assertz(pending_database_optimization_due(DBKey2))
+                ),
+                Task = none
+            ;   pending_database_optimization(DBKey2, Descriptor2)
+            ->  retractall(pending_database_optimization_due(DBKey2)),
+                (   retract(pending_database_optimization(DBKey2, Descriptor2))
+                ->  Task = some(DBKey2, Descriptor2)
+                ;   Task = none
+                )
+            ;   Task = none
+            )
         )
     ),
     Task = some(DatabaseKey, Descriptor),
@@ -1296,6 +1448,7 @@ cleanup_optimization_state :-
             retractall(commit_queue:pending_database_optimization_due(_)),
             retractall(commit_queue:pending_branch_optimization_due(_)),
             retractall(commit_queue:pending_global_optimization_due(_)),
+            retractall(commit_queue:pending_optimization_reply(_, _)),
             retractall(commit_queue:optimization_test_handler(_)),
             retractall(commit_queue:called_optimization(_, _))
         )).

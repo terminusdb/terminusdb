@@ -138,6 +138,10 @@ function start_server() {
     # and indexing. Override with TERMINUSDB_WORKER_POOL_SIZE if needed.
     export TERMINUSDB_WORKER_POOL_SIZE=${TERMINUSDB_WORKER_POOL_SIZE:-30}
 
+    # Commit queue timeout: prevent worker thread leakage when commit queue
+    # workers aren't running (e.g. optimize endpoint on branch descriptors).
+    export TERMINUSDB_COMMIT_QUEUE_TIMEOUT=${TERMINUSDB_COMMIT_QUEUE_TIMEOUT:-5}
+
     # Start the server in a new session so it survives the script exiting.
     python3 -c "
 import os, subprocess, sys

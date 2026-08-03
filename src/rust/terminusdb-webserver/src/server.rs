@@ -2,6 +2,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
+    extract::DefaultBodyLimit,
     Json, Router,
 };
 use axum::middleware::Next;
@@ -11,6 +12,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tower_http::cors::{Any, CorsLayer};
 
+use crate::config::MAX_BODY_SIZE;
 use crate::routes::root_redirect;
 
 /// Global counter for active HTTP connections.
@@ -217,6 +219,7 @@ pub fn start_with_routes(
                 .merge(static_router)
                 .merge(stream_router)
                 .fallback(fallback_not_found)
+                .layer(DefaultBodyLimit::max(*MAX_BODY_SIZE))
                 .layer(axum::middleware::from_fn(method_not_allowed_middleware))
                 .layer(axum::middleware::from_fn(connection_counter_middleware));
             let tokio_listener = match tokio::net::TcpListener::from_std(listener) {
