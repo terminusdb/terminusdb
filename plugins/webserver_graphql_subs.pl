@@ -1667,7 +1667,7 @@ test(streaming_response_has_post_response_goal) :-
     CohortKey = cohort(branch_descriptor{}, 'Product', added, 'hash', sse),
     sse_build_streaming_response(Request, stream1, sse, CohortKey, 'test_channel', 60, Response),
     get_dict(post_response, Response, PostResponse),
-    nonvar(PostResponse).
+    callable(PostResponse).
 
 %% detect_stream_mode detects 3 modes: sse, ndjson, delegate.
 
