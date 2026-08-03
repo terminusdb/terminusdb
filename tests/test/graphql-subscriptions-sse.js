@@ -115,6 +115,18 @@ describe('GraphQL subscriptions over SSE', function () {
     '@key': { '@type': 'Lexical', '@fields': ['name'] },
     name: 'xsd:string',
     description: 'xsd:string',
+  }, {
+    '@id': 'Animal',
+    '@type': 'Class',
+    '@key': { '@type': 'Lexical', '@fields': ['name'] },
+    name: 'xsd:string',
+  }, {
+    '@id': 'Dog',
+    '@type': 'Class',
+    '@inherits': 'Animal',
+    '@key': { '@type': 'Lexical', '@fields': ['name'] },
+    name: 'xsd:string',
+    breed: 'xsd:string',
   }]
 
   before(async function () {
@@ -900,6 +912,51 @@ describe('GraphQL subscriptions over SSE', function () {
       expect(result.errors).to.be.undefined
       expect(result.data).to.exist
       expect(result.data._ChangeSet).to.exist
+    })
+
+    it('should match subclass documents in superclass _ChangeSet fields', async function () {
+      // Subscribe to Animal_added — Dog inherits from Animal, so inserting
+      // a Dog should appear in the Animal_added list.
+      const res = await subscribeSSE('subscription { _ChangeSet { Animal_added { _id name } } }')
+      const eventPromise = waitForSSEEvent(res.body,
+        (e) => e.data?._ChangeSet?.Animal_added, 10000)
+
+      await document.insert(agent, {
+        instance: [{ '@type': 'Dog', name: 'Rex', breed: 'Labrador' }],
+      })
+
+      const event = await eventPromise
+      expect(event.data._ChangeSet.Animal_added).to.exist
+      expect(event.data._ChangeSet.Animal_added.length).to.equal(1)
+      expect(event.data._ChangeSet.Animal_added[0].name).to.equal('Rex')
+      cancelBody(res)
+    })
+
+    it('should deliver _ChangeSet events to two subscribers on the same cohort', async function () {
+      const res1 = await subscribeSSE('subscription { _ChangeSet { Product_added { _id name } } }')
+      const res2 = await subscribeSSE('subscription { _ChangeSet { Product_added { _id name } } }')
+      const event1Promise = waitForSSEEvent(res1.body,
+        (e) => e.data?._ChangeSet?.Product_added, 10000)
+      const event2Promise = waitForSSEEvent(res2.body,
+        (e) => e.data?._ChangeSet?.Product_added, 10000)
+
+      await document.insert(agent, {
+        instance: [{ '@type': 'Product', name: 'CohortShareTest', description: 'test' }],
+      })
+
+      const event1 = await event1Promise
+      const event2 = await event2Promise
+
+      expect(event1.data._ChangeSet.Product_added).to.exist
+      expect(event1.data._ChangeSet.Product_added.length).to.equal(1)
+      expect(event1.data._ChangeSet.Product_added[0].name).to.equal('CohortShareTest')
+
+      expect(event2.data._ChangeSet.Product_added).to.exist
+      expect(event2.data._ChangeSet.Product_added.length).to.equal(1)
+      expect(event2.data._ChangeSet.Product_added[0].name).to.equal('CohortShareTest')
+
+      cancelBody(res1)
+      cancelBody(res2)
     })
   })
 })

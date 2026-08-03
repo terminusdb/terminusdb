@@ -660,9 +660,13 @@ predicates! {
                 None => continue,
             };
 
-            // Build the key: "{Class}_{operation}"
-            let key = format!("{}_{}", graphql_name.0, op_name);
-            change_set_ids.entry(key).or_default().push(doc_iri);
+            // Group under the document's own class and all superclasses.
+            // This ensures a Dog document appears in both Dog_added and
+            // Animal_added when Dog inherits from Animal.
+            for class_name in type_collection.allframes.superclasses_of(&graphql_name) {
+                let key = format!("{}_{}", class_name.0, op_name);
+                change_set_ids.entry(key).or_default().push(doc_iri.clone());
+            }
         }
 
         // Build the SubscriptionResolveContext with change_set_ids and parent layer.

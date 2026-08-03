@@ -1233,6 +1233,31 @@ impl AllFrames {
             .unwrap_or_else(|| vec![class.clone()])
     }
 
+    /// Returns all superclasses of `class` (including `class` itself),
+    /// walking the `@inherits` chain. Used by _ChangeSet to group
+    /// subclass documents under their superclass fields.
+    pub fn superclasses_of<'a>(&'a self, class: &GraphQLName<'a>) -> Vec<GraphQLName<'a>> {
+        let mut result = vec![class.clone()];
+        let mut current = class.clone();
+        loop {
+            let next = self.frames.get(&current);
+            match next {
+                Some(TypeDefinition::Class(cd)) => {
+                    if let Some(inherits) = &cd.inherits {
+                        if let Some(first) = inherits.first() {
+                            result.push(first.clone());
+                            current = first.clone();
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                _ => break,
+            }
+        }
+        result
+    }
+
     pub fn is_foreign<'a>(&'a self, class: &GraphQLName<'a>) -> bool {
         // This will seem a bit strange in isolation, but what we're trying to say here is that any class that is not appearing in the frames must be a foreign.
         !self.frames.contains_key(class)
