@@ -285,9 +285,10 @@ descriptor_repository(Descriptor, RepoDescriptor) :-
 %  All document resolution — including deleted documents — is handled by
 %  resolve_event_through_juniper, which delegates to the Rust FFI
 %  resolve_subscription_event/7 predicate. For deleted documents, the
-%  Validation_Object is passed as the transaction term; its
-%  instance_objects.read layer is the pre-commit state where the document
-%  still exists. Rust resolves all fields including _CommitMetadata.
+%  Validation_Object is passed as the transaction term. Rust obtains the
+%  parent of its instance_objects.read layer to access the pre-commit
+%  state where the document still exists. Rust resolves all fields
+%  including _CommitMetadata.
 broadcast_sse_event(Transaction, GraphqlContext, _Descriptor, CohortKey, RawChannel, Mode, ClassName,
                     Operation, ChangeType, DocIRI, CommitIdKey,
                     Validation_Object, Timestamp, Datetime) :-
@@ -1016,8 +1017,11 @@ do_broadcast_single_ChangeSet(Transaction, GraphqlContext, CohortKey, RawChannel
             ->  json_log:json_log_error_formatted(
                     "[graphql-sse] _ChangeSet Juniper errors: ~w", [Errors])
             ;   get_dict(data, ResponseData, Data),
-                (   get_dict('_ChangeSet', Data, ChangeSetData)
-                ->  true
+                (   is_dict(Data)
+                ->  (   get_dict('_ChangeSet', Data, ChangeSetData)
+                    ->  true
+                    ;   ChangeSetData = _{}
+                    )
                 ;   ChangeSetData = _{}
                 ),
                 cohort_mode(CohortKey, Mode),

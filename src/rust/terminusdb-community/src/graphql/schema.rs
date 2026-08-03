@@ -1030,7 +1030,25 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                 ))));
             }
             if field_name.as_str() == "_json" {
-                let document_context = executor.context().document_context();
+                // For deleted documents in _ChangeSet, the document may only
+                // exist in the parent layer. Use a DocumentContext built from
+                // the parent instance if the current instance doesn't have
+                // this subject.
+                let parent_doc_context;
+                let document_context = if let Some(sub_ctx) = executor.context().as_subscription_context() {
+                    if let Some(parent) = sub_ctx.parent_instance() {
+                        if !instance.triples_s(self.id).next().is_some() {
+                            parent_doc_context = DocumentContext::new(sub_ctx.schema.clone(), Some(parent.clone()));
+                            &parent_doc_context
+                        } else {
+                            executor.context().document_context()
+                        }
+                    } else {
+                        executor.context().document_context()
+                    }
+                } else {
+                    executor.context().document_context()
+                };
                 let doc = document_context.get_id_document(self.id, true, true);
                 match doc {
                     Ok(Some(doc)) => {
