@@ -366,7 +366,7 @@ predicates! {
     /// If parsing fails or the operation type cannot be determined, defaults
     /// to `mutation` for safety (write access required).
     #[module("$graphql")]
-    semidet fn get_operation_type(context, graphql_context_term, query_string_term, operation_type_term) {
+    semidet fn get_operation_type(_context, graphql_context_term, query_string_term, operation_type_term) {
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
         let query: String = query_string_term.get_ex()?;
 
@@ -405,7 +405,7 @@ predicates! {
     /// atom. If JSON parsing fails, the query field is missing, or operation
     /// type cannot be determined, defaults to `mutation` for safety.
     #[module("$graphql")]
-    semidet fn get_operation_type_from_body(context, graphql_context_term, body_string_term, operation_type_term) {
+    semidet fn get_operation_type_from_body(_context, graphql_context_term, body_string_term, operation_type_term) {
         let type_collection: TerminusTypeCollectionInfo = graphql_context_term.get_ex()?;
         let body: String = body_string_term.get_ex()?;
 
