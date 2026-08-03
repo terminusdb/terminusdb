@@ -149,6 +149,7 @@ COPY plugins/legacy_vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/webserver_spa.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/webserver_commits.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/webserver_events.pl ${TERMINUSDB_PLUGINS_PATH}/
+COPY plugins/webserver_graphql_subs.pl ${TERMINUSDB_PLUGINS_PATH}/
 COPY plugins/webserver_debugger_log.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/src/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/src/
