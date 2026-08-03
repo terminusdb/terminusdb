@@ -1777,48 +1777,11 @@ test(register_accepts_system_descriptor,
                                  CohortKey, _),
     CohortKey = cohort(TestDesc, 'Person', added, 'hash1', sse).
 
-%% send_sse_or_ndjson formats events per mode.
-%% SSE: "event: next\ndata: {json}\n" (broadcast adds second \n)
-%% NDJSON: "{json}" (broadcast adds \n)
-
-test(send_sse_format) :-
-    with_output_to(string(Line),
-        format(current_output, "event: next~ndata: ~w~n", ['{"data":{}}'])),
-    once(sub_string(Line, _, _, _, "event: next")),
-    once(sub_string(Line, _, _, _, "data: ")).
-
-%% complete event format tests
-
-test(complete_event_sse_format) :-
-    with_output_to(string(Line),
-        format(current_output, "event: complete~ndata: ~n", [])),
-    once(sub_string(Line, _, _, _, "event: complete")),
-    once(sub_string(Line, _, _, _, "data: ")).
-
-test(complete_event_ndjson_format) :-
-    %% NDJSON complete is an empty line
-    Line = "\n",
-    once(sub_string(Line, _, _, _, "\n")).
-
-test(send_complete_event_sse) :-
-    %% send_complete_event(sse, _) should produce "event: complete\ndata: \n"
-    with_output_to(string(Line),
-        format(current_output, "event: complete~ndata: ~n", [])),
-    once(sub_string(Line, _, _, _, "event: complete")),
-    once(sub_string(Line, _, _, _, "data: ")).
-
-%% validation error next event format tests
-
-test(validation_error_next_event_format) :-
-    %% GraphQL errors are sent as {"errors":[...]} in a next event
-    ErrorJson = "{\"errors\":[{\"message\":\"syntax error\"}]}",
-    with_output_to(string(Line),
-        format(current_output, "event: next~ndata: ~w~n", [ErrorJson])),
-    once(sub_string(Line, _, _, _, "event: next")),
-    once(sub_string(Line, _, _, _, "data: {\"errors\":")).
+%% sse_validation_error_response returns 200 with SSE headers and a
+%% streaming body that emits the error as a next event followed by complete.
+%% This tests the real predicate, not a format string.
 
 test(sse_validation_error_response_returns_200_sse) :-
-    %% Validation error response must be 200 with text/event-stream
     Request = _{headers: _{}},
     sse_validation_error_response(Request, stream1, sse,
         "{\"errors\":[{\"message\":\"bad query\"}]}", Response),
