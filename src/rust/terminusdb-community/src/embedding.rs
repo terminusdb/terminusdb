@@ -132,6 +132,8 @@ impl EmbeddingContext {
         let mut queries = HashMap::new();
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
+        let true_term = context.new_term_ref();
+        true_term.unify(atom!("true"))?;
         let execution_context =
             GraphQLExecutionContext::new_from_context_terms(
                 types.clone(),
@@ -143,6 +145,7 @@ impl EmbeddingContext {
                 &transaction_term,
                 &none_term,
                 &none_term,
+                &true_term,
             )?;
         let inner_context = execution_context.prolog_context();
 
@@ -204,6 +207,8 @@ impl EmbeddingContext {
     ) -> Result<Value<DefaultScalarValue>, EmbeddingError> {
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
+        let true_term = context.new_term_ref();
+        true_term.unify(atom!("true"))?;
         let execution_context =
             GraphQLExecutionContext::new_from_context_terms(
                 self.types.clone(),
@@ -215,6 +220,7 @@ impl EmbeddingContext {
                 transaction_term,
                 &none_term,
                 &none_term,
+                &true_term,
             )?;
         let document = self.get_query_document(&type_name);
         if document.is_none() {

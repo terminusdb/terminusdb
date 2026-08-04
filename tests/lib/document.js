@@ -110,6 +110,7 @@ function insert (agent, params) {
   const requireMigration = params.boolean('require_migration')
   const mergeRepeats = params.boolean('merge_repeats')
   const allowDestructiveMigration = params.boolean('allow_destructive_migration')
+  const compressIds = params.boolean('compress_ids', false)
   params.assertEmpty()
 
   const request = agent.post(path)
@@ -125,6 +126,7 @@ function insert (agent, params) {
       require_migration: requireMigration,
       merge_repeats: util.isDefined(mergeRepeats) ? mergeRepeats : false,
       allow_destructive_migration: allowDestructiveMigration,
+      compress_ids: compressIds,
     })
   }
 
@@ -139,8 +141,10 @@ function insert (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.doc.insertSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.doc.insertSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.doc.insertFailure(error)))
@@ -177,6 +181,7 @@ function replace (agent, params) {
   const allowDestructiveMigration = params.boolean('allow_destructive_migration')
   const rawJson = params.boolean('raw_json')
   const mergeRepeats = params.boolean('merge_repeats')
+  const compressIds = params.boolean('compress_ids', false)
   params.assertEmpty()
 
   const request = agent.put(path)
@@ -192,6 +197,7 @@ function replace (agent, params) {
       allow_destructive_migration: allowDestructiveMigration,
       raw_json: rawJson,
       merge_repeats: util.isDefined(mergeRepeats) ? mergeRepeats : false,
+      compress_ids: compressIds,
     })
     if (util.isDefined(create)) {
       request.query({ create })
@@ -205,8 +211,10 @@ function replace (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.doc.replaceSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.doc.replaceSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.doc.replaceFailure(error)))
@@ -260,8 +268,10 @@ function delete_ (agent, params) {
   }
 
   return {
-    then (resolve) {
-      resolve(request.then(api.response.verify(api.response.doc.deleteSuccess)))
+    then (resolve, reject) {
+      return request
+        .then(api.response.verify(api.response.doc.deleteSuccess))
+        .then(resolve, reject)
     },
     fails (error) {
       return request.then(api.response.verify(api.response.doc.deleteFailure(error)))

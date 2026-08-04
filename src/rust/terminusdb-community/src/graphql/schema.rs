@@ -105,6 +105,13 @@ pub trait TerminusResolveContext {
         None
     }
 
+    /// Whether to return compressed document IDs (e.g. `Person/john`
+    /// instead of `terminusdb:///data/Person/john`). Defaults to `true`
+    /// to match the 12.1 default behavior.
+    fn compress_ids(&self) -> bool {
+        true
+    }
+
     /// Downcast to `SubscriptionResolveContext` for _ChangeSet resolution.
     /// Returns `None` for regular `TerminusContext`, `Some(self)` for
     /// `SubscriptionResolveContext`.
@@ -239,6 +246,7 @@ pub struct TerminusContext<'a> {
     pub instance: Option<SyncStoreLayer>,
     pub type_collection: TerminusTypeCollectionInfo,
     pub document_context: Arc<Lazy<DocumentContext<SyncStoreLayer>>>,
+    pub compress_ids: bool,
 }
 
 impl<'a> TerminusContext<'a> {
@@ -252,6 +260,7 @@ impl<'a> TerminusContext<'a> {
         author_term: &'a Term,
         message_term: &'a Term,
         type_collection: TerminusTypeCollectionInfo,
+        compress_ids: bool,
     ) -> PrologResult<TerminusContext<'a>> {
         let user: Atom = auth_term.get_ex()?;
         let system =
@@ -289,6 +298,7 @@ impl<'a> TerminusContext<'a> {
             instance,
             type_collection,
             document_context: Arc::new(Lazy::new()),
+            compress_ids,
         })
     }
 
@@ -330,6 +340,10 @@ impl<'a> TerminusResolveContext for TerminusContext<'a> {
             r
         });
         result_to_execution_result(&self.context, result)
+    }
+
+    fn compress_ids(&self) -> bool {
+        self.compress_ids
     }
 }
 
@@ -1023,9 +1037,16 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                 instance
             };
             if field_name.as_str() == "_id" {
-                return Some(Ok(Value::Scalar(DefaultScalarValue::String(
-                    instance.id_subject(self.id)?,
-                ))));
+                let full_id = instance.id_subject(self.id)?;
+                let id = if executor.context().compress_ids() {
+                    executor
+                        .context()
+                        .document_context()
+                        .compress_instance_id(&full_id)
+                } else {
+                    full_id
+                };
+                return Some(Ok(Value::Scalar(DefaultScalarValue::String(id))));
             }
             if field_name.as_str() == "_json" {
                 // For deleted documents in _ChangeSet, the document may only
@@ -1125,9 +1146,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
-                            None,
-                            false,
+                            ListElementType { doc_type: Some(domain), enum_type: None, is_json: false },
                             executor,
                             info,
                             arguments,
@@ -1162,9 +1181,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                                     .next()
                             });
                         collect_into_graphql_list(
-                            Some(domain),
-                            None,
-                            false,
+                            ListElementType { doc_type: Some(domain), enum_type: None, is_json: false },
                             executor,
                             info,
                             arguments,
@@ -1182,9 +1199,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             })
                             .map(|t| t.subject);
                         collect_into_graphql_list(
-                            Some(domain),
-                            None,
-                            false,
+                            ListElementType { doc_type: Some(domain), enum_type: None, is_json: false },
                             executor,
                             info,
                             arguments,
@@ -1196,9 +1211,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
             } else if let Some(class) = path_field_to_class(&field_name) {
                 let ids = vec![self.id].into_iter();
                 collect_into_graphql_list(
-                    Some(&class),
-                    None,
-                    false,
+                    ListElementType { doc_type: Some(&class), enum_type: None, is_json: false },
                     executor,
                     info,
                     arguments,
@@ -1275,7 +1288,8 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             instance.triples_sp(self.id, field_id).map(|t| t.object),
                         ));
                         collect_into_graphql_list(
-                            doc_type, enum_type, is_json, executor, info, arguments, object_ids,
+                            ListElementType { doc_type, enum_type, is_json },
+                            executor, info, arguments, object_ids,
                             instance,
                         )
                     }
@@ -1285,7 +1299,8 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             instance.triples_sp(self.id, field_id).map(|t| t.object),
                         ));
                         collect_into_graphql_list(
-                            doc_type, enum_type, is_json, executor, info, arguments, object_ids,
+                            ListElementType { doc_type, enum_type, is_json },
+                            executor, info, arguments, object_ids,
                             instance,
                         )
                     }
@@ -1303,7 +1318,8 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                                 rdf_nil_id: instance.subject_id(RDF_NIL),
                             }));
                         collect_into_graphql_list(
-                            doc_type, enum_type, is_json, executor, info, arguments, object_ids,
+                            ListElementType { doc_type, enum_type, is_json },
+                            executor, info, arguments, object_ids,
                             instance,
                         )
                     }
@@ -1327,9 +1343,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
                             elements.into_iter().map(|(_, elt)| elt),
                         ));
                         collect_into_graphql_list(
-                            doc_type,
-                            enum_type,
-                            is_json,
+                            ListElementType { doc_type, enum_type, is_json },
                             executor,
                             info,
                             arguments,
@@ -1571,16 +1585,21 @@ impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
     }
 }
 
-fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
+struct ListElementType<'a> {
     doc_type: Option<&'a GraphQLName<'a>>,
     enum_type: Option<&'a GraphQLName<'a>>,
     is_json: bool,
+}
+
+fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
+    element_type: ListElementType<'a>,
     executor: &'a juniper::Executor<C>,
     info: &'a TerminusTypeInfo,
     arguments: &'a juniper::Arguments,
     object_ids: ClonableIterator<'a, u64>,
     instance: &'a SyncStoreLayer,
 ) -> Option<Result<Value, juniper::FieldError>> {
+    let ListElementType { doc_type, enum_type, is_json } = element_type;
     if let Some(doc_type) = doc_type {
         let object_ids = match executor.context().instance() {
             Some(instance) => run_filter_query(

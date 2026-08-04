@@ -36,6 +36,7 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 */
 
 :- use_module(core(plugin_api)).
+:- use_module(core(util)).
 :- use_module(library(base64)).
 :- use_module(library(json)).
 :- use_module(library(http/http_client)).
@@ -1042,21 +1043,12 @@ compact_response_ids(Response_Body, Descriptor, Compacted_Body) :-
 
 %% compress_flag(+Search, -Compress) is det.
 %
-%  Read the compress query parameter, defaulting to true.
+%  Read the compress_ids query parameter, defaulting to true.
+%  Uses param_value_search_optional for strict boolean validation.
+%  Invalid values throw bad_parameter_type (resulting in HTTP 400).
 
 compress_flag(Search, Compress) :-
-    (   memberchk(compress=Raw, Search)
-    ->  normalize_bool(Raw, Compress)
-    ;   Compress = true
-    ).
-
-normalize_bool(true, true) :- !.
-normalize_bool('true', true) :- !.
-normalize_bool(false, false) :- !.
-normalize_bool('false', false) :- !.
-normalize_bool(1, true) :- !.
-normalize_bool(0, false) :- !.
-normalize_bool(_, true).
+    param_value_search_optional(Search, compress_ids, boolean, true, Compress).
 
 %% maybe_prefixes(+Compress, +Descriptor, -Prefixes) is det.
 %
@@ -1295,14 +1287,17 @@ resolve_search_commit(Descriptor, Search_Ref, Commit_Uri, Ancestors) :-
 
 %% commit_timestamp(+Repository_Descriptor, +Commit_Id, -Timestamp) is det.
 %
-%  Looks up the commit timestamp from the repository. Returns none on failure.
+%  Looks up the commit timestamp from the repository. Throws
+%  search_served_commit_not_found/1 if the commit does not exist in the
+%  TerminusDB commit graph — this indicates a data integrity issue where
+%  vectorlink served results for a commit TerminusDB does not know about.
 commit_timestamp(Repository_Descriptor, Commit_Id, Timestamp) :-
-    catch(
-        (   commit_id_to_metadata(Repository_Descriptor, Commit_Id,
-                                             _Author, _Message, Timestamp)
-        ),
-        _,
-        Timestamp = none
+    (   catch(commit_id_to_metadata(Repository_Descriptor, Commit_Id,
+                                    _Author, _Message, Timestamp),
+              _,
+              fail)
+    ->  true
+    ;   throw(error(search_served_commit_not_found(Commit_Id), _))
     ).
 
 %% reply_search_with_metadata(+Request, +Response_Body, +Data_Version_Header,
@@ -3542,6 +3537,16 @@ test("authz parity: denied caller resolve never reaches engine stub",
            ),
            \+ stub_received(_, _) )).
 
+test("commit_timestamp throws search_served_commit_not_found for non-existent commit",
+     [ setup(setup_temp_store(State)),
+       cleanup(teardown_temp_store(State)),
+       throws(error(search_served_commit_not_found(_), _))
+     ]) :-
+    create_db_without_schema("admin", "timestampdb"),
+    resolve_absolute_string_descriptor("admin/timestampdb", Descriptor),
+    get_dict(repository_descriptor, Descriptor, Repo_Desc),
+    vectorlink:commit_timestamp(Repo_Desc, "nonexistent_commit_id", _Timestamp).
+
 :- end_tests(vectorlink_search_fronting).
 
 % ==========================================================================
@@ -3984,11 +3989,15 @@ test("compress_flag defaults to true when parameter absent",
 
 test("compress_flag reads false from query parameter",
      [true(Compress == false)]) :-
-    compress_flag([compress='false'], Compress).
+    compress_flag([compress_ids='false'], Compress).
 
 test("compress_flag reads true from query parameter",
      [true(Compress == true)]) :-
-    compress_flag([compress='true'], Compress).
+    compress_flag([compress_ids='true'], Compress).
+
+test("compress_flag rejects invalid value with bad_parameter_type",
+     [error(bad_parameter_type(compress_ids, boolean, 'notabool'))]) :-
+    compress_flag([compress_ids='notabool'], _Compress).
 
 :- end_tests(vectorlink_compress_param).
 

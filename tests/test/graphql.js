@@ -298,7 +298,7 @@ describe('GraphQL', function () {
     agent = new Agent().auth()
     const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
     const base = agent.baseUrl
-    const uri = `${base}${path}`
+    const uri = `${base}${path}?compress_ids=false`
 
     const httpLink = new HttpLink({ uri, fetch })
     const authMiddleware = new ApolloLink((operation, forward) => {
@@ -1656,7 +1656,7 @@ query EverythingQuery {
       agent = new Agent().auth()
       const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
       const base = agent.baseUrl
-      const uri = `${base}${path}`
+      const uri = `${base}${path}?compress_ids=false`
 
       const httpLink = new HttpLink({ uri, fetch })
       const authMiddleware = new ApolloLink((operation, forward) => {
@@ -1809,7 +1809,7 @@ query EverythingQuery {
       })
 
       // Meta client
-      const metaHttpLink = new HttpLink({ uri: `${base}${metaPath}`, fetch })
+      const metaHttpLink = new HttpLink({ uri: `${base}${metaPath}?compress_ids=false`, fetch })
       const metaComposedLink = concat(authMiddleware, metaHttpLink)
       metaClient = new ApolloClient({
         cache: new InMemoryCache({ addTypename: false }),
@@ -1817,7 +1817,7 @@ query EverythingQuery {
       })
 
       // Commits client
-      const commitsHttpLink = new HttpLink({ uri: `${base}${commitsPath}`, fetch })
+      const commitsHttpLink = new HttpLink({ uri: `${base}${commitsPath}?compress_ids=false`, fetch })
       const commitsComposedLink = concat(authMiddleware, commitsHttpLink)
       commitsClient = new ApolloClient({
         cache: new InMemoryCache({ addTypename: false }),

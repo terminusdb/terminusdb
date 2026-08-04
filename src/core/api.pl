@@ -202,7 +202,7 @@
               api_db_update/6,
 
               % api_graphql.pl
-              handle_graphql_request/10,
+              handle_graphql_request/11,
 
               % api_history.pl
               api_document_history/6,

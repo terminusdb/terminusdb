@@ -126,6 +126,7 @@ impl<'a> GraphQLValue for TerminusMutationRoot<'a> {
                         &graph_type,
                         raw_json,
                         overwrite,
+                        executor.context().compress_ids,
                     ),
                 )
             }
@@ -145,6 +146,7 @@ impl<'a> GraphQLValue for TerminusMutationRoot<'a> {
                         &executor.context().transaction_term,
                         &ids,
                         &graph_type,
+                        executor.context().compress_ids,
                     ),
                 )
             }
@@ -168,6 +170,7 @@ impl<'a> GraphQLValue for TerminusMutationRoot<'a> {
                         &graph_type,
                         raw_json,
                         create,
+                        executor.context().compress_ids,
                     ),
                 )
             }
@@ -201,23 +204,26 @@ impl<'a> TerminusMutationRoot<'a> {
         graph_type: &str,
         raw_json: bool,
         overwrite: bool,
+        compress_ids: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
-        let [string_term, graph_type_term, raw_json_term, full_replace_term, doc_merge_term, overwrite_term, ids_term] =
+        let [string_term, graph_type_term, raw_json_term, full_replace_term, doc_merge_term, overwrite_term, compress_term, ids_term] =
             frame.new_term_refs();
         let graph_type_atom = if graph_type == "SchemaGraph" {
             atom!("schema")
         } else {
             atom!("instance")
         };
+        let compress_atom = if compress_ids { atom!("true") } else { atom!("false") };
         string_term.put(json)?;
         graph_type_term.put(&graph_type_atom)?;
         raw_json_term.put(&raw_json)?;
         full_replace_term.put(&false)?;
         doc_merge_term.put(&false)?;
         overwrite_term.put(&overwrite)?;
+        compress_term.put(&compress_atom)?;
 
-        let insert_doc = pred!("api_document:api_insert_documents_core_string/8");
+        let insert_doc = pred!("api_document:api_insert_documents_core_string_with_compress/9");
         frame.call_once(
             insert_doc,
             [
@@ -228,6 +234,7 @@ impl<'a> TerminusMutationRoot<'a> {
                 &full_replace_term,
                 &doc_merge_term,
                 &overwrite_term,
+                &compress_term,
                 &ids_term,
             ],
         )?;
@@ -244,25 +251,30 @@ impl<'a> TerminusMutationRoot<'a> {
         transaction_term: &Term,
         ids: &[String],
         graph_type: &str,
+        compress_ids: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
-        let [graph_type_term, ids_term] = frame.new_term_refs();
+        let [graph_type_term, ids_term, compress_term, result_ids_term] =
+            frame.new_term_refs();
 
         let graph_type_atom = if graph_type == "SchemaGraph" {
             atom!("schema")
         } else {
             atom!("instance")
         };
+        let compress_atom = if compress_ids { atom!("true") } else { atom!("false") };
 
         ids_term.unify(ids)?;
         graph_type_term.put(&graph_type_atom)?;
+        compress_term.put(&compress_atom)?;
 
-        let delete_doc = pred!("api_document:api_delete_documents_by_ids/3");
-        frame.call_once(delete_doc, [transaction_term, &graph_type_term, &ids_term])?;
+        let delete_doc = pred!("api_document:api_delete_documents_by_ids_with_compress/5");
+        frame.call_once(delete_doc, [transaction_term, &graph_type_term, &ids_term, &compress_term, &result_ids_term])?;
 
+        let result_ids: Vec<String> = result_ids_term.get_ex()?;
         frame.close();
         Ok(juniper::Value::List(
-            ids.iter().map(|id| id.to_string().into()).collect(),
+            result_ids.into_iter().map(|id| id.to_string().into()).collect(),
         ))
     }
 
@@ -274,9 +286,10 @@ impl<'a> TerminusMutationRoot<'a> {
         graph_type: &str,
         raw_json: bool,
         create: bool,
+        compress_ids: bool,
     ) -> PrologResult<juniper::Value> {
         let frame = context.open_frame();
-        let [string_term, graph_type_term, raw_json_term, ids_term, create_term, merge_repeats_term] =
+        let [string_term, graph_type_term, raw_json_term, ids_term, create_term, merge_repeats_term, compress_term] =
             frame.new_term_refs();
 
         let graph_type_atom = if graph_type == "SchemaGraph" {
@@ -284,14 +297,16 @@ impl<'a> TerminusMutationRoot<'a> {
         } else {
             atom!("instance")
         };
+        let compress_atom = if compress_ids { atom!("true") } else { atom!("false") };
 
         string_term.put(json)?;
         graph_type_term.put(&graph_type_atom)?;
         raw_json_term.put(&raw_json)?;
         create_term.put(&create)?;
         merge_repeats_term.put(&false)?;
+        compress_term.put(&compress_atom)?;
 
-        let replace_doc = pred!("api_document:api_replace_documents_core_string/7");
+        let replace_doc = pred!("api_document:api_replace_documents_core_string_with_compress/8");
         frame.call_once(
             replace_doc,
             [
@@ -301,6 +316,7 @@ impl<'a> TerminusMutationRoot<'a> {
                 &raw_json_term,
                 &create_term,
                 &merge_repeats_term,
+                &compress_term,
                 &ids_term,
             ],
         )?;

@@ -1,5 +1,5 @@
 :- module(api_graphql, [
-              handle_graphql_request/10,
+              handle_graphql_request/11,
               resolve_graphql_dbs/6,
               get_or_create_graphql_context/2
           ]).
@@ -92,7 +92,17 @@ get_or_create_graphql_context(Transaction, Graphql_Context) :-
         '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)
     ).
 
-handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data) :-
+%% handle_graphql_request(+System_DB, +Auth, +Method, +Path_Atom,
+%%                        +Input_Stream, -Response, -Content_Type,
+%%                        -Content_Length, -New_Data_Version,
+%%                        -Transaction_Meta_Data, +Compress_Ids) is det.
+%
+%  Handles a GraphQL request. Compress_Ids is a boolean atom (true/false)
+%  extracted from the compress_ids query parameter by the route handler.
+%  When true (default), document IDs in responses are compact (prefixed).
+%  When false, full IRIs are returned. This affects _id field resolution
+%  and mutation result IDs (_insertDocuments, _replaceDocuments, _deleteDocuments).
+handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids) :-
     atom_string(Path_Atom, Path),
     (   Path == ""
     ->  throw(error(no_graphql_path_given, _))
@@ -127,7 +137,7 @@ handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Respon
                 create_context(Transaction, Commit_Info, C),
                 catch(
                     with_transaction(C,
-                                     (   '$graphql':handle_request(Effective_Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, BodyLength, BodyIn, ResponseRaw, Is_Error, Author, Message),
+                                     (   '$graphql':handle_request(Effective_Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, BodyLength, BodyIn, ResponseRaw, Is_Error, Author, Message, Compress_Ids),
                                          die_if(Is_Error = true,
                                                 response(ResponseRaw)),
                                          (   var(Author)

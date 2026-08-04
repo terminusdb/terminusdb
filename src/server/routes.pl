@@ -600,6 +600,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
             param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
+            param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -613,6 +614,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           allow_destructive_migration: Allow_Destructive_Migration,
                           merge_repeats: Merge_Repeats,
                           overwrite: Overwrite,
+                          compress_ids: Compress_Ids,
                           input_format: InputFormat
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
@@ -688,6 +690,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
+            param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -699,6 +702,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 require_migration: Require_Migration,
                 allow_destructive_migration: Allow_Destructive_Migration,
                 merge_repeats: Merge_Repeats,
+                compress_ids: Compress_Ids,
                 input_format: InputFormat
             },
             api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
@@ -3362,7 +3366,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
 %     above, around line 125). The plugin's handler checks the
 %     Accept header: if text/event-stream, it starts an SSE subscription;
 %     otherwise it calls delegate_to_graphql/2, which calls
-%     handle_graphql_request/10 directly — bypassing graphql_handler
+%     handle_graphql_request/11 directly — bypassing graphql_handler
 %     below entirely.
 %
 %  3. Error handling (src/core/plugin_api/http.pl)
@@ -3389,9 +3393,13 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     memberchk(input(Input), Request),
     memberchk(content_type(Content_Type), Request),
     memberchk(content_length(Content_Length), Request),
+    (   memberchk(search(Search), Request)
+    ->  true
+    ;   Search = []),
 
-    catch((      authenticate(System_DB, Request, Auth),
-                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data),
+    catch((      param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
+                 authenticate(System_DB, Request, Auth),
+                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids),
                  transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                  write_cors_headers(Request),
                  write_data_version_header(New_Data_Version),
@@ -3434,6 +3442,12 @@ handle_graphql_error(error(unresolvable_absolute_descriptor(Desc), _), Request) 
     cors_reply_json(Request,
                     json{'errors': [json{message: Msg}]},
                     [status(403)]).
+handle_graphql_error(error(bad_parameter_type(Param, Type, Value), _), Request) :-
+    format(string(Msg), "Invalid value for parameter ~q (expected ~q): ~q",
+           [Param, Type, Value]),
+    cors_reply_json(Request,
+                    json{'errors': [json{message: Msg}]},
+                    [status(400)]).
 handle_graphql_error(E, Request) :-
     format(string(Msg), "Unexpected error in graphql: ~q",
            [E]),

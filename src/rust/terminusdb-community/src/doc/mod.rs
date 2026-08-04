@@ -241,6 +241,10 @@ impl<L: Layer + Clone> DocumentContext<L> {
         }
     }
 
+    pub fn compress_instance_id(&self, id: &str) -> String {
+        self.prefixes(true).instance_contract(id).to_string()
+    }
+
     fn prefix_map(&self) -> &HashMap<String, String> {
         self.prefix_map.get_or_create(|| {
             prefix::build_prefix_map(self)

@@ -55,6 +55,8 @@ tags:
   description: Schema management and validation
 - name: WOQL
   description: Web Object Query Language
+- name: GraphQL
+  description: GraphQL API for querying and mutating documents
 - name: Collaboration
   description: Remote operations and synchronization
 - name: Account management
@@ -1113,6 +1115,16 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: compress_ids
+          in: query
+          required: false
+          description: |
+            Compress the returned document IDs using prefixes.
+            When true (default), IDs are returned in compressed form (e.g. `Character/Yoda`).
+            When false, IDs are returned as full IRIs (e.g. `terminusdb:///data/Character/Yoda`).
+          schema:
+            type: boolean
+            default: true
       responses:
         200:
           description: Documents added successfully
@@ -1213,6 +1225,16 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: compress_ids
+          in: query
+          required: false
+          description: |
+            Compress the returned document IDs using prefixes.
+            When true (default), IDs are returned in compressed form (e.g. `Character/Yoda`).
+            When false, IDs are returned as full IRIs (e.g. `terminusdb:///data/Character/Yoda`).
+          schema:
+            type: boolean
+            default: true
       responses:
         200:
           description: Documents replaced successfully
@@ -1506,6 +1528,170 @@ paths:
           description: Query result
         400:
           description: Bad Request
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+  /graphql/{path}:
+    get:
+      operationId: executeGraphqlQueryGet
+      summary: Execute a GraphQL query via GET
+      description: |
+        Execute a GraphQL query against a specific database, branch, or commit.
+        The `path` parameter follows the same descriptor format as other endpoints
+        (e.g., `admin/mydb`, `admin/mydb/local/branch/main`, `admin/mydb/_meta`).
+
+        The `compress_ids` query parameter controls whether document IDs in the
+        response are compact (prefixed, e.g., `Article/1`) or full IRIs
+        (e.g., `terminusdb:///data/Article/1`). Defaults to `true` (compact).
+
+        **Example:**
+        ```bash
+        curl -u admin:root 'http://localhost:6363/api/graphql/admin/mydb?compress_ids=false' \
+             -H 'Content-Type: application/json' \
+             -d '{"query":"{ Article { _id title } }"}'
+        ```
+      tags:
+        - GraphQL
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: Database path (e.g., `admin/mydb` or `admin/mydb/local/branch/main`)
+          schema:
+            type: string
+            example: admin/mydb
+        - name: compress_ids
+          in: query
+          required: false
+          description: |
+            When `true` (default), document IDs in responses are compact (prefixed).
+            When `false`, full IRIs are returned. Affects `_id` field resolution
+            and mutation result IDs (`_insertDocuments`, `_replaceDocuments`, `_deleteDocuments`).
+          schema:
+            type: boolean
+            default: true
+      responses:
+        200:
+          description: GraphQL query result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+        400:
+          description: Bad request (invalid compress_ids value or malformed query)
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Database not found
+    post:
+      operationId: executeGraphqlQueryPost
+      summary: Execute a GraphQL query or mutation via POST
+      description: |
+        Execute a GraphQL query or mutation against a specific database, branch,
+        or commit. The `path` parameter follows the same descriptor format as
+        other endpoints.
+
+        The `compress_ids` query parameter controls whether document IDs in the
+        response are compact (prefixed) or full IRIs. Defaults to `true` (compact).
+        This affects `_id` field resolution in queries and the returned IDs in
+        `_insertDocuments`, `_replaceDocuments`, and `_deleteDocuments` mutations.
+
+        **Example — query with compressed IDs (default):**
+        ```bash
+        curl -u admin:root -X POST 'http://localhost:6363/api/graphql/admin/mydb' \
+             -H 'Content-Type: application/json' \
+             -d '{"query":"{ Article { _id title } }"}'
+        # → {"data":{"Article":[{"_id":"Article/1","title":"..."}]}}
+        ```
+
+        **Example — query with full IRIs:**
+        ```bash
+        curl -u admin:root -X POST 'http://localhost:6363/api/graphql/admin/mydb?compress_ids=false' \
+             -H 'Content-Type: application/json' \
+             -d '{"query":"{ Article { _id title } }"}'
+        # → {"data":{"Article":[{"_id":"terminusdb:///data/Article/1","title":"..."}]}}
+        ```
+
+        **Example — insert documents mutation:**
+        ```bash
+        curl -u admin:root -X POST 'http://localhost:6363/api/graphql/admin/mydb' \
+             -H 'Content-Type: application/json' \
+             -d '{"query":"mutation { _insertDocuments(type:\"Article\", documents:[{title:\"Hello\"}]) }"}'
+        # → {"data":{"_insertDocuments":["Article/hello"]}}
+        ```
+      tags:
+        - GraphQL
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: Database path (e.g., `admin/mydb` or `admin/mydb/local/branch/main`)
+          schema:
+            type: string
+            example: admin/mydb
+        - name: compress_ids
+          in: query
+          required: false
+          description: |
+            When `true` (default), document IDs in responses are compact (prefixed).
+            When `false`, full IRIs are returned. Affects `_id` field resolution
+            and mutation result IDs (`_insertDocuments`, `_replaceDocuments`, `_deleteDocuments`).
+          schema:
+            type: boolean
+            default: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: GraphQL query or mutation string
+                  example: '{ Article { _id title } }'
+                variables:
+                  type: object
+                  description: Variables for the GraphQL query
+                operationName:
+                  type: string
+                  description: Name of the operation to execute (for multi-operation documents)
+      responses:
+        200:
+          description: GraphQL query or mutation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+        400:
+          description: Bad request (invalid compress_ids value or malformed query)
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:

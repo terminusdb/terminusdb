@@ -18,8 +18,11 @@
               nonground_captures/2,
 
               api_insert_documents_core_string/8,
+              api_insert_documents_core_string_with_compress/9,
               api_replace_documents_core_string/7,
+              api_replace_documents_core_string_with_compress/8,
               api_delete_documents_by_ids/3,
+              api_delete_documents_by_ids_with_compress/5,
 
               document_input_format/1,
               document_output_format/1,
@@ -298,6 +301,22 @@ embed_document_in_error(Error, Document, New_Error) :-
     append(Error_List, [Document], New_Error_List),
     New_Error =.. New_Error_List.
 
+compress_doc_ids(false, _, Ids, Ids) :- !.
+compress_doc_ids(true, _Transaction, Ids, Compressed) :-
+    \+ is_list(Ids),
+    !,
+    Compressed = Ids.
+compress_doc_ids(true, Transaction, Ids, Compressed) :-
+    catch(
+        (   database_prefixes(Transaction, Prefixes),
+            maplist({Prefixes}/[Id, Compressed_Id]>>compress_dict_uri(Id, Prefixes, Compressed_Id), Ids, Compressed)
+        ),
+        _,
+        Ids = Compressed
+    ),
+    !.
+compress_doc_ids(true, _, Ids, Ids).
+
 known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
@@ -452,6 +471,7 @@ insert_documents_default_options(
         raw_json: false,
         merge_repeats: false,
         overwrite: false,
+        compress_ids: true,
         input_format: json
     }).
 
@@ -465,6 +485,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(raw_json(Raw_JSON), Options),
     option(merge_repeats(Doc_Merge), Options),
     option(overwrite(Overwrite), Options),
+    option(compress_ids(Compress_Ids), Options, true),
     option(input_format(InputFormat), Options),
     die_if(
         (   Graph_Type = schema,
@@ -505,7 +526,8 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                                                  ->  InsertStream = CoreStream
                                                  ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
                                                  ),
-                                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, PreBranchCommitId, Ids)
+                                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, PreBranchCommitId, Raw_Ids),
+                                                 compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                                              ),
                                              cleanup_parallel_stream(Queue, Thread)))
                                  ;   % Non-branch descriptors (e.g. system_descriptor) have no
@@ -518,7 +540,8 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                                      ->  InsertStream = CoreStream
                                      ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
                                      ),
-                                     api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                                     api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Raw_Ids),
+                                     compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                                  )
                              ;   CoreStream = Stream,
                                  CoreRaw_JSON = Raw_JSON,
@@ -526,7 +549,8 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                                  ->  InsertStream = CoreStream
                                  ;   convert_input_to_json_stream(InputFormat, CoreStream, Transaction, InsertStream)
                                  ),
-                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                                 api_insert_documents_core(Transaction, InsertStream, Graph_Type, CoreRaw_JSON, Full_Replace, Doc_Merge, Overwrite, Raw_Ids),
+                                 compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                              )
                          ),
                          Meta_Data,
@@ -900,6 +924,12 @@ api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
+api_insert_documents_core_string_with_compress(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Compress_Ids, Ids) :-
+    open_string(String, Stream),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Raw_Ids),
+    compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Compressed_Ids),
+    maplist(atom_string, Compressed_Ids, Ids).
+
 
 idlists_duplicates_toplevel(Ids, Duplicates, Toplevel) :-
     append(Ids,All_Ids),
@@ -972,6 +1002,12 @@ api_delete_documents_by_ids(Transaction, Graph_Type, Ids) :-
         )
     ).
 
+api_delete_documents_by_ids_with_compress(Transaction, Graph_Type, Ids, Compress_Ids, Result_Ids) :-
+    api_delete_documents_by_ids(Transaction, Graph_Type, Ids),
+    maplist(atom_string, Ids_Atoms, Ids),
+    compress_doc_ids(Compress_Ids, Transaction, Ids_Atoms, Compressed_Atoms),
+    maplist(atom_string, Compressed_Atoms, Result_Ids).
+
 api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options) :-
     option(graph_type(Graph_Type), Options),
     option(author(Author), Options),
@@ -1043,6 +1079,7 @@ replace_document_default_options(
         create: false,
         raw_json: false,
         merge_repeats: false,
+        compress_ids: true,
         input_format: json
     }).
 
@@ -1055,6 +1092,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option(message(Message),Options),
     option(raw_json(Raw_JSON),Options,false),
     option(merge_repeats(Doc_Merge), Options),
+    option(compress_ids(Compress_Ids), Options, true),
     option(input_format(InputFormat), Options),
     (   commit_queue_available,
         Graph_Type = instance,
@@ -1085,9 +1123,13 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                                      Transaction, BranchKey, PreBranchCommitId,
                                      setup_call_cleanup(
                                          parallel_elaborate_stream(Transaction, ReplaceStream, Queue, Thread),
-                                         api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, PreBranchCommitId, Ids),
+                                         (   api_replace_documents_core(Transaction, queue(Queue), Graph_Type, Raw_JSON, Create, Doc_Merge, PreBranchCommitId, Raw_Ids),
+                                             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                                         ),
                                          cleanup_parallel_stream(Queue, Thread)))
-                             ;   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
+                             ;   (   api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Raw_Ids),
+                                    compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+                                 )
                              )
                          ),
                          Meta_Data,
@@ -1147,12 +1189,19 @@ api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Cre
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
+api_replace_documents_core_string_with_compress(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Compress_Ids, Ids) :-
+    open_string(String, Stream),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Raw_Ids),
+    compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Compressed_Ids),
+    maplist(atom_string, Compressed_Ids, Ids).
+
 api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version,
                             New_Data_Version, Transaction_Meta_Data, Ids, Options) :-
     option(graph_type(Graph_Type), Options),
     option_or_die(author(Author), Options),
     option_or_die(message(Message), Options),
     option(overwrite(Overwrite), Options),
+    option(compress_ids(Compress_Ids), Options, true),
     option(input_format(InputFormat), Options),
     option(merge_repeats(Doc_Merge), Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
@@ -1200,10 +1249,11 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
             ),
             catch(message_queue_destroy(ReplyQueue), _, true)
         ),
-        (   Result = success(Meta_Data, Ids)
+        (   Result = success(Meta_Data, Raw_Ids)
         ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
-            Transaction_Meta_Data = Meta_Data
-        ;   handle_commit_result(Result, _Meta_Data, Ids)
+            Transaction_Meta_Data = Meta_Data,
+            compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+        ;   handle_commit_result(Result, _Meta_Data, _Raw_Ids)
         )
     ;   % Non-branch descriptors (e.g. system_descriptor) have no advancing
         % branch commit, so the commit queue cannot serialize them. Fall back
@@ -1216,7 +1266,8 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
                              ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, CoreStream)
                              ),
                              api_insert_documents_core(Transaction, CoreStream, Graph_Type, false, false,
-                                                       Doc_Merge, Overwrite, Ids)
+                                                       Doc_Merge, Overwrite, Raw_Ids),
+                             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                          ),
                          Meta_Data,
                          Options),
@@ -1231,6 +1282,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
     option_or_die(author(Author), Options),
     option_or_die(message(Message), Options),
     option(merge_repeats(Doc_Merge), Options),
+    option(compress_ids(Compress_Ids), Options, true),
     option(input_format(InputFormat), Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
@@ -1277,10 +1329,11 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
             ),
             catch(message_queue_destroy(ReplyQueue), _, true)
         ),
-        (   Result = success(Meta_Data, Ids)
+        (   Result = success(Meta_Data, Raw_Ids)
         ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
-            Transaction_Meta_Data = Meta_Data
-        ;   handle_commit_result(Result, _Meta_Data, Ids)
+            Transaction_Meta_Data = Meta_Data,
+            compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
+        ;   handle_commit_result(Result, _Meta_Data, _Raw_Ids)
         )
     ;   % Non-branch descriptors have no advancing branch commit; fall back to
         % the synchronous path.
@@ -1292,7 +1345,8 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
                              ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, CoreStream)
                              ),
                              api_replace_documents_core(Transaction, CoreStream, Graph_Type, false, Create,
-                                                       Doc_Merge, Ids)
+                                                       Doc_Merge, Raw_Ids),
+                             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                          ),
                          Meta_Data,
                          Options),
@@ -2074,7 +2128,8 @@ test(replace_objects_with_stream,
     Options = [graph_type(instance),
                author("author"),
                message("message"),
-               create(false)],
+               create(false),
+               compress_ids(false)],
     api_replace_documents(System, 'User/admin', 'admin/foo', Stream, no_data_version, _New_Data_Version, _, Ids, Options),
 
     Ids = ['http://example.com/data/world/City/Dublin','http://example.com/data/world/City/Pretoria'].

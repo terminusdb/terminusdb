@@ -391,8 +391,10 @@ impl<'a> GraphQLExecutionContext<'a> {
         transaction_term: &'a Term,
         author_term: &'a Term,
         message_term: &'a Term,
+        compress_ids_term: &Term,
     ) -> PrologResult<GraphQLExecutionContext<'a>> {
         let context: GenericQueryableContext<'a> = context.into_generic();
+        let compress_ids: bool = compress_ids_term.get_ex::<Atom>()? == atom!("true");
         let graphql_context: TerminusContext<'a> = TerminusContext::new(
             context,
             auth_term,
@@ -403,6 +405,7 @@ impl<'a> GraphQLExecutionContext<'a> {
             author_term,
             message_term,
             type_collection.clone(),
+            compress_ids,
         )?;
         Ok(Self::new(type_collection, graphql_context))
     }
@@ -518,7 +521,7 @@ predicates! {
         graphql_context_term.unify(type_collection)
     }
     #[module("$graphql")]
-    semidet fn handle_request(context, method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term, is_error_term, author_term, message_term) {
+    semidet fn handle_request(context, method_term, graphql_context_term, system_term, meta_term, commit_term, transaction_term, auth_term, content_length_term, input_stream_term, response_term, is_error_term, author_term, message_term, compress_ids_term) {
         let mut input: ReadablePrologStream = input_stream_term.get_ex()?;
         let len = content_length_term.get_ex::<u64>()? as usize;
         let mut buf = vec![0;len];
@@ -554,7 +557,7 @@ predicates! {
             }
         }
 
-        let execution_context = GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term)?;
+        let execution_context = GraphQLExecutionContext::new_from_context_terms(type_collection, context, auth_term, system_term, meta_term, commit_term, transaction_term, author_term, message_term, compress_ids_term)?;
         execution_context.execute_query(request,
                                         |response: &GraphQLResponse| {
                                             let errored = response.inner_ref().as_ref()
