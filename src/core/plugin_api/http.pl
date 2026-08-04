@@ -132,6 +132,15 @@ plugin_error_response(error(json_parse_error(_Line, _Col), _), Response) :- !,
         },
         headers: _{'Content-Type': 'application/json'}
     }.
+plugin_error_response(error(bad_parameter_type(Param, Type, Value), _), Response) :- !,
+    format(string(Msg), "Invalid value for parameter ~q (expected ~q): ~q", [Param, Type, Value]),
+    Response = _{
+        status: 400,
+        body: _{
+            errors: [_{message: Msg}]
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
 plugin_error_response(_, Response) :-
     Response = _{
         status: 500,

@@ -1566,7 +1566,7 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.SourceArray).to.have.deep.members([
         {
-          _id: 'SourceArray/2',
+          _id: 'terminusdb:///data/SourceArray/2',
           name: '2',
         },
       ])
@@ -1611,7 +1611,7 @@ query EverythingQuery {
       const result = await client.query({ query: TEST_QUERY })
       expect(result.data.SourceArray).to.have.deep.members([
         {
-          _id: 'SourceArray/all2',
+          _id: 'terminusdb:///data/SourceArray/all2',
           name: 'all2',
         },
       ])
