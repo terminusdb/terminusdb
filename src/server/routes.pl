@@ -3369,15 +3369,16 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
 %     handle_graphql_request/11 directly — bypassing graphql_handler
 %     below entirely.
 %
-%  3. Error handling (src/core/plugin_api/http.pl)
+%  3. Error handling (plugins/webserver_graphql_subs.pl)
 %     Because the plugin bypasses graphql_handler (and its
 %     handle_graphql_error catch block), errors thrown inside
 %     handle_graphql_request are caught by delegate_to_graphql's own
-%     catch and mapped to HTTP responses via plugin_error_response/2.
-%     Any error term not covered by a clause in plugin_error_response/2
-%     falls through to the generic 500 catch-all. If you add new error
+%     catch and mapped to GraphQL error responses via graphql_error_map/4
+%     in the plugin. This is separate from plugin_error_response/2 in
+%     src/core/plugin_api/http.pl (which serves non-GraphQL plugin routes
+%     with TerminusDB api:ErrorResponse format). If you add new error
 %     terms in api_graphql.pl or capabilities.pl, you MUST add matching
-%     clauses in plugin_error_response/2 as well.
+%     clauses in graphql_error_map/4 as well.
 %
 %  The graphql_handler below is only reached when the SWI HTTP server
 %  backend is used directly (not the Rust webserver). It is kept for

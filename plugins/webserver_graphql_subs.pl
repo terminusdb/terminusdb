@@ -28,8 +28,8 @@
 %% catch-all /api/*path fallback in routes.pl. Non-SSE requests are handled
 %% by delegate_to_graphql/2, which calls handle_graphql_request/11 directly
 %% — bypassing graphql_handler and its handle_graphql_error catch block in
-%% routes.pl. Errors are mapped via plugin_error_response/2 in
-%% src/core/plugin_api/http.pl. See the "GraphQL Route Registration Flow"
+%% routes.pl. Errors are mapped via graphql_error_map/4 in this plugin.
+%% See the "GraphQL Route Registration Flow"
 %% comment in routes.pl (near graphql_handler) for the full dispatch diagram.
 %% ---------------------------------------------------------------------------
 :- multifile appserver_hooks:appserver_stream/3.
@@ -700,20 +700,32 @@ execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
         close(BodyIn)
     ).
 
+%% graphql_error_map(+Error, -Status, -Message, -GraphQLCode) is det.
+%%
+%% Maps Prolog error terms to HTTP status, human-readable message, and a
+%% GraphQL-style error code for use in the extensions.code field of GraphQL
+%% error responses. This is the GraphQL-specific equivalent of
+%% plugin_error_response/2 in src/core/plugin_api/http.pl, kept separate so
+%% that non-GraphQL plugin routes continue to use the TerminusDB api:ErrorResponse
+%% format while GraphQL routes produce standards-compliant GraphQL errors.
+graphql_error_map(error(authentication_incorrect(_), _), 401, "Authentication required", "UNAUTHENTICATED") :- !.
+graphql_error_map(error(access_not_authorised(_, _Action, _), _), 403, "Access denied", "FORBIDDEN") :- !.
+graphql_error_map(error(not_a_branch_descriptor(_), _), 400, "Not a branch descriptor", "BAD_REQUEST") :- !.
+graphql_error_map(error(invalid_absolute_path(_), _), 404, "Path not found", "NOT_FOUND") :- !.
+graphql_error_map(error(requires_super_user, _), 403, "Super user access required", "FORBIDDEN") :- !.
+graphql_error_map(error(json_parse_error(_Line, _Col), _), 400, "Malformed JSON in request body", "BAD_REQUEST") :- !.
+graphql_error_map(error(bad_parameter_type(Param, Type, Value), _), 400, Msg, "BAD_REQUEST") :- !,
+    format(string(Msg), "Invalid value for parameter ~q (expected ~q): ~q", [Param, Type, Value]).
+graphql_error_map(_, 500, "An internal server error occurred", "INTERNAL_SERVER_ERROR").
+
 %% sse_plugin_error_to_graphql_json(+Error, -JsonString) is det.
 %%
 %% Converts a Prolog error term to a standards-based GraphQL errors JSON
-%% string. Uses plugin_error_response for status and message mapping, then
-%% wraps the result in the GraphQL spec format:
+%% string using graphql_error_map/4 for status, message, and code mapping:
 %% {"errors":[{"message":"...","extensions":{"code":"..."}}]}
-%% The api:status from plugin_error_response becomes the machine-readable
-%% extension code; the api:message becomes the human-readable message.
 sse_plugin_error_to_graphql_json(Error, JsonString) :-
-    plugin_api:plugin_error_response(Error, ErrResp),
-    get_dict(body, ErrResp, ErrBodyDict),
-    get_dict('api:message', ErrBodyDict, Message),
-    get_dict('api:status', ErrBodyDict, ApiStatus),
-    sse_graphql_error_json(Message, ApiStatus, JsonString).
+    graphql_error_map(Error, _Status, Message, GraphQLCode),
+    sse_graphql_error_json(Message, GraphQLCode, JsonString).
 
 %% register_sse_subscription_authorized(+Request, +StreamId, +Mode, +Descriptor,
 %%   +Graphql_Context, +Transaction, +QueryString, -Response) is det.
@@ -938,14 +950,10 @@ build_graphql_success_response(Request, GraphqlResponse, NewDataVersion, Transac
 %%
 %% Converts a Prolog error term to a GraphQL spec error response with
 %% CORS headers and the appropriate HTTP status code from
-%% plugin_error_response/2.
+%% graphql_error_map/4.
 sse_plugin_error_response(Request, Error, Response) :-
-    plugin_api:plugin_error_response(Error, ErrResp),
-    get_dict(status, ErrResp, Status),
-    get_dict(body, ErrResp, ErrBodyDict),
-    get_dict('api:message', ErrBodyDict, Message),
-    get_dict('api:status', ErrBodyDict, ApiStatus),
-    sse_graphql_error_json(Message, ApiStatus, ErrorBody),
+    graphql_error_map(Error, Status, Message, GraphQLCode),
+    sse_graphql_error_json(Message, GraphQLCode, ErrorBody),
     sse_json_response(Request, Status, ErrorBody, Response).
 
 %% sse_authenticate_or_401(+Request, -System_DB, -Auth, -Response) is semidet.
@@ -1542,7 +1550,7 @@ test(sse_handler_returns_401_on_auth_failure,
 %% graphql_sse_handler returns 400 when the query body is malformed JSON.
 %% Uses setup_temp_store + create_db + valid Basic auth so the request
 %% path resolves and authentication passes, then the malformed body
-%% triggers a 400 via the json_parse_error clause in plugin_error_response.
+%% triggers a 400 via the json_parse_error clause in graphql_error_map.
 test(sse_handler_returns_400_on_malformed_body,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "db"))),

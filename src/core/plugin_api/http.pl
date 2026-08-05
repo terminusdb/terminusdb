@@ -126,7 +126,9 @@ plugin_error_response(error(bad_parameter_type(Param, Type, Value), _), Response
     Response = _{
         status: 400,
         body: _{
-            errors: [_{message: Msg}]
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:bad_request',
+            'api:message': Msg
         },
         headers: _{'Content-Type': 'application/json'}
     }.
