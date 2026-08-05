@@ -13,7 +13,7 @@ swipl = { version = "0.3.16", features = ["serde"] }
 futures = "0.3.31"
 lazy_static = "1.4.0"
 tokio-stream = "0.1.18"
-tower-http = { version = "0.6.2", features = ["cors", "decompression-gzip", "decompression-deflate"] }
+tower-http = { version = "0.6.2", features = ["decompression-gzip", "decompression-deflate"] }
 percent-encoding = "2.3.1"
 nix = { version = "0.31", features = ["fs"] }
 hyper = "1.5.2"

@@ -2589,7 +2589,7 @@ paths:
                   example: { "@id" : "Person/Jane", "@type" : "Person", "name" : "Jane"}
                 "patch":
                   type: object
-                  example: { "name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}
+                  example: { "name" : { "@op" : "SwapValue", "@before" : "Jane", "@after": "Janine" }}
       responses:
         200:
           description: "Successful Patch"
@@ -2608,7 +2608,7 @@ paths:
             application/json:
               schema:
                 type: object
-                example: { "name" : { "@op" : "ValueSwap", "@before" : "Doug", "@after": "Jane" }}
+                example: { "name" : { "@op" : "SwapValue", "@before" : "Doug", "@after": "Jane" }}
   /patch/{path}:
     parameters:
       - $ref: '#/components/parameters/branch_path'
@@ -2617,14 +2617,58 @@ paths:
       summary: Apply a patch object to a resource
       description: |
           Apply a patch object to a resource in the database. Can be used to modify schema elements, documents, or prefixes.
+
+          The `patch` array accepts three types of operations:
+          - **Field-level patch**: `{"@id":"...","field":{"@op":"SwapValue","@before":"...","@after":"..."}}`
+          - **Insert**: `{"@op":"Insert","@insert":{"@id":"...","@type":"...","field":"value"}}`
+          - **Delete**: `{"@op":"Delete","@delete":{"@id":"..."}}` or `{"@op":"Delete","@delete":"Document/ID"}`
+
+          Insert and Delete operations use the same format as the diff endpoint output,
+          enabling a diff→filter→patch workflow. Insert requires either `@id` or `@capture`
+          to be present in the `@insert` document.
+
+          **Captures**: Insert operations support `@capture` and `@ref` for cross-referencing
+          documents within a single patch transaction. A document with `@capture:"name"` can
+          be referenced by another document using `{"@ref":"name"}`. This is useful for
+          creating linked documents in one atomic operation:
+          ```json
+          [
+            {"@op":"Insert","@insert":{"@id":"Person/Alice","@type":"Person","@capture":"A","name":"Alice","friend":{"@ref":"B"}}},
+            {"@op":"Insert","@insert":{"@id":"Person/Bob","@type":"Person","@capture":"B","name":"Bob","friend":{"@ref":"A"}}}
+          ]
+          ```
+          A document may have both `@id` and `@capture` — `@id` assigns the document ID,
+          while `@capture` registers a name for use in `@ref` cross-references.
+
+          **@ref in field-level patches**: The `@ref` mechanism also works in field-level
+          `SwapValue` operations. A `SwapValue` `@before` or `@after` value can use
+          `{"@ref":"name"}` to reference a capture from the same patch transaction. This
+          allows swapping a document's reference field to a newly inserted document:
+          ```json
+          [
+            {"@op":"Insert","@insert":{"@id":"Person/Alice","@type":"Person","@capture":"A","name":"Alice"}},
+            {"@id":"Person/Charlie","friend":{"@op":"SwapValue","@before":null,"@after":{"@ref":"A"}}}
+          ]
+          ```
+          Note that field-level patches operate on documents from the previous committed
+          layer — you cannot patch a document that was inserted in the same patch
+          transaction. However, `@ref` in a field-level patch can reference captures from
+          same-transaction inserts. URI comparisons are performed on fully expanded
+          canonical IRIs, so compressed IDs (e.g. `Person/Bob`) and full IRIs
+          (e.g. `http://example.com/document/Person/Bob`) are treated as equal.
           
           **Example:**
           ```bash
-          curl -u admin:root -X POST "http://localhost:6363/api/patch" \
+          curl -u admin:root -X POST "http://localhost:6363/api/patch/admin/db/local/branch/main" \
                -H "Content-Type: application/json" \
                -d '{
-                 "before": {"@id": "Person/Jane", "@type": "Person", "name": "Jane"},
-                 "patch": {"name": {"@op": "SwapValue", "@before": "Jane", "@after": "Jannet"}}
+                 "patch": [
+                   {"@id": "Person/Jane", "name": {"@op": "SwapValue", "@before": "Jane", "@after": "Jannet"}},
+                   {"@op": "Insert", "@insert": {"@id": "Person/Bob", "@type": "Person", "name": "Bob"}},
+                   {"@op": "Delete", "@delete": {"@id": "Person/Alice"}}
+                 ],
+                 "author": "admin",
+                 "message": "Update people"
                }'
           ```
       x-python-client: Client::patch_resource
@@ -2652,17 +2696,24 @@ paths:
                         '@op': SwapValue
                         '@before': foo
                         '@after': bar
-                    - '@id': Obj/id2
-                      name:
-                        '@op': SwapValue
-                        '@before': foo
-                        '@after': bar
+                    - '@op': Insert
+                      '@insert':
+                        '@id': Obj/id3
+                        '@type': Class
+                        name: baz
+                    - '@op': Delete
+                      '@delete':
+                        '@id': Obj/id2
                 "author": 
                   type: string
                   example: me
                 "message": 
                   type: string
                   example: message
+                "match_final_state":
+                  type: boolean
+                  default: true
+                  description: "Allow conflicting patch to apply if it would yield the same final state"
       responses:
         200:
           description: "Patch applied cleanly"
@@ -2708,19 +2759,27 @@ paths:
                 - "commit_info"
               properties:
                 "before_commit":
-                  type: object
-                  example: { "@id" : "Person/Jane", "@type" : "Person", "name" : "Jane"}
+                  type: string
+                  example: "main"
+                  description: "Commit ID or branch name of the *before* state"
                 "after_commit":
-                  type: object
-                  example: { "name" : { "@op" : "ValueSwap", "@before" : "Jane", "@after": "Janine" }}
+                  type: string
+                  example: "new_feature"
+                  description: "Commit ID or branch name of the *after* state"
                 "commit_info":
                   $ref: "#/components/schemas/CommitInfo"
+                "type":
+                  type: string
+                  default: squash
+                  enum: [squash]
+                  description: "Variety of commit to create (currently only squash)"
                 "match_final_state":
                   type: boolean
-                  default: false
+                  default: true
+                  description: "Allow conflicting patch to apply if it would yield the same final state"
                 "keep":
                   type: object
-                  example: { "@id" : true, "_id" : true }
+                  example: { "@id" : true, "@type" : true }
       responses:
         200:
           description: "Successful Patch Application"

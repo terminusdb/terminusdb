@@ -554,6 +554,89 @@ describe('diff-id', function () {
         }])
     })
 
+    it('apply patch with insert, delete, and swap', async function () {
+      const class1 = util.randomString()
+      const class2 = util.randomString()
+      await document
+        .insert(agent, {
+          schema: [
+            { '@type': 'Class', '@id': class1, a: 'xsd:string' },
+            { '@type': 'Class', '@id': class2, b: 'xsd:string' },
+          ],
+        })
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@type': class1, a: 'pickles and eggs' },
+        })
+
+      const [docId1Long] = r1.body
+      const docId1 = docId1Long.split('terminusdb:///data/')[1]
+
+      const r2 = await document
+        .insert(agent, {
+          instance: { '@type': class2, b: 'frog legs' },
+        })
+
+      const [docId2Long] = r2.body
+      const docId2 = docId2Long.split('terminusdb:///data/')[1]
+
+      const path = api.path.patchDb(agent)
+
+      const docId3 = class1 + '/' + util.randomString()
+
+      const r3 = await agent.post(path)
+        .send({
+          patch: [
+            {
+              '@op': 'Insert',
+              '@insert': {
+                '@id': docId3,
+                '@type': class1,
+                a: 'soup',
+              },
+            },
+            {
+              '@op': 'Delete',
+              '@delete': {
+                '@id': docId1,
+              },
+            },
+            {
+              '@id': docId2,
+              '@type': class2,
+              b: {
+                '@op': 'SwapValue',
+                '@before': 'frog legs',
+                '@after': 'vegan frog legs',
+              },
+            },
+          ],
+          author: 'gavin',
+          message: 'something',
+          match_final_state: true,
+        })
+
+      expect(r3.status).to.equal(200)
+
+      const r4 = await document.get(agent, { query: { type: class1, as_list: true } })
+
+      expect(r4.body).to.deep.equal([
+        {
+          '@id': docId3,
+          '@type': class1,
+          a: 'soup',
+        }])
+
+      const r5 = await document.get(agent, { query: { type: class2, as_list: true } })
+
+      expect(r5.body).to.deep.equal([
+        {
+          '@id': docId2,
+          '@type': class2,
+          b: 'vegan frog legs',
+        }])
+    })
+
     it('apply squash commit to obtain conflict', async function () {
       const class1 = util.randomString()
       const class2 = util.randomString()

@@ -487,6 +487,35 @@ predicates! {
         let count = crate::server::active_connections();
         count_term.unify(count).map_err(|_| PrologError::Failure)
     }
+
+    /// Check if a user can acquire a new SSE subscription slot.
+    ///
+    /// Signature: `appserver_check_subscription_limit(+UserId)`.
+    /// Succeeds if the user is under the per-user subscription limit.
+    /// Fails (semidet) if the limit is exceeded.
+    #[module("$appserver")]
+    pub semidet fn appserver_check_subscription_limit(_context, user_id_term) {
+        let user_id = term_to_string(user_id_term)?;
+        let limiter_arc = crate::dispatch::subscription_limiter();
+        let mut limiter = limiter_arc.lock().unwrap();
+        limiter
+            .try_acquire(&user_id)
+            .map_err(|_| PrologError::Failure)
+    }
+
+    /// Release a subscription slot for a user.
+    ///
+    /// Signature: `appserver_release_subscription(+UserId)`.
+    /// Decrements the per-user subscription count. Called when a
+    /// subscription is cleaned up (stream closed or swept).
+    #[module("$appserver")]
+    pub semidet fn appserver_release_subscription(_context, user_id_term) {
+        let user_id = term_to_string(user_id_term)?;
+        let limiter_arc = crate::dispatch::subscription_limiter();
+        let mut limiter = limiter_arc.lock().unwrap();
+        limiter.release(&user_id);
+        Ok(())
+    }
 }
 
 pub fn register() {
@@ -506,4 +535,6 @@ pub fn register() {
     register_appserver_open_fd_stream();
     register_appserver_close_fd();
     register_appserver_active_connections();
+    register_appserver_check_subscription_limit();
+    register_appserver_release_subscription();
 }

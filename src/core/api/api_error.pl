@@ -1668,6 +1668,8 @@ api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
              'api:error' : _{ '@type' : "api:PatchConflict",
                               'api:conflicts' : Conflicts }
             }.
+api_error_jsonld_(patch, Error, JSON) :-
+    api_document_error_jsonld(patch, Error, JSON).
 api_error_jsonld_(woql, Error, JSON) :-
     api_document_error_jsonld(woql, Error, JSON).
 api_error_jsonld_(access_documents, Error, JSON) :-
@@ -1973,7 +1975,7 @@ document_error_type(delete_documents, 'api:DeleteDocumentErrorResponse').
 document_error_type(diff, 'api:DiffErrorResponse').
 document_error_type(apply, 'api:ApplyErrorResponse').
 document_error_type(woql, 'api:WoqlErrorResponse').
-%document_error_type(patch, 'api:PatchErrorResponse').
+document_error_type(patch, 'api:PatchErrorResponse').
 
 :- multifile api_document_error_jsonld/3.
 

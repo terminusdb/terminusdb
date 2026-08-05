@@ -272,7 +272,7 @@ describe('GraphQL Subscriptions SSE', function () {
     })
     expect(response.status).to.equal(400)
     const body = await response.text()
-    expect(body).to.include('invalid_query_body')
+    expect(body).to.include('Invalid query body')
   })
 
   it('emits validation error as next event for invalid GraphQL subscription query', async function () {

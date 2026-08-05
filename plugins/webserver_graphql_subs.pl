@@ -8,6 +8,7 @@
 :- use_module(core(transaction/descriptor), [open_descriptor/2]).
 :- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2, resolve_relative_descriptor/3]).
 :- use_module(core(api/api_graphql), [get_or_create_graphql_context/2]).
+:- use_module(core(triple/constants), [super_user_authority/1]).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(aggregate)).
@@ -53,19 +54,19 @@ appserver_hooks:appserver_stream(options, '/api/graphql/*path',
 %% Dedup for post_commit_hook firing multiple times for the same commit.
 :- dynamic graphql_broadcast_sent/2.
 
-%% graphql_sse_subscription(StreamId, CohortKey, RawChannel)
+%% graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth)
 %% Asserted on connect, retracted on disconnect.
-:- dynamic graphql_sse_subscription/3.
+:- dynamic graphql_sse_subscription/4.
 
-%% Maximum number of concurrent SSE/NDJSON subscriptions per descriptor.
-%% This caps resource consumption — each subscription holds a broadcast
-%% channel open and consumes memory for cohort tracking. The previous
-%% implicit limit was effectively unbounded (1000+ in practice); 100 is
-%% a safer default that still supports reasonable fan-out.
-:- dynamic max_subscriptions_per_descriptor/1.
-max_subscriptions_per_descriptor(100).
+%% Fixed SSE idle timeout in seconds. Replaces the previous sse_parse_timeout
+%% query parameter with a sane server-side default.
+:- dynamic sse_idle_timeout/1.
+sse_idle_timeout(90).
 
-%% Mutex for cohort registry operations.
+%% Maximum SSE request body size in bytes (1 MB).
+%% Prevents unbounded memory consumption from malicious or accidental
+%% large subscription query payloads.
+sse_max_body_size(1048576).
 %%
 %% Concurrency audit: grep for assertz, retract, retractall in this file.
 %% Each unguarded mutation must be a single atomic op (safe under SWI-Prolog's
@@ -101,17 +102,7 @@ register_subscription_parsed(Descriptor, ClassName, Operation,
             ->  NewCount is Count + 1,
                 retract(graphql_cohort(CohortKey, Descriptor, RawChannel, Count)),
                 assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, NewCount))
-            ;   %% New cohort — check descriptor subscription limit first.
-                %% Count total active subscriptions across all cohorts for this descriptor.
-                aggregate_all(sum(MemberCount),
-                    graphql_cohort(_, Descriptor, _, MemberCount),
-                    TotalSubs),
-                max_subscriptions_per_descriptor(Max),
-                (   TotalSubs >= Max
-                ->  throw(error(subscription_limit_exceeded(Max), _))
-                ;   true
-                ),
-                term_to_atom(CohortKey, CohortKeyAtom),
+            ;   term_to_atom(CohortKey, CohortKeyAtom),
                 atom_concat('graphql_raw_', CohortKeyAtom, RawChannel),
                 assertz(graphql_cohort(CohortKey, Descriptor, RawChannel, 1))
             )
@@ -164,15 +155,17 @@ broadcast_graphql_events(Validation_Objects, Meta_Data) :-
         send_graphql_events(Validation_Object, Descriptor, CommitIdAtom)
     ),
     forall(member(Descriptor-_, UniqueTriples),
-           retractall(graphql_broadcast_sent(Descriptor, _))).
+           with_mutex(graphql_broadcast_dedup,
+               retractall(graphql_broadcast_sent(Descriptor, _)))).
 
 %% send_graphql_events(+Validation_Object, +Descriptor, +CommitIdAtom) is det.
 send_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
-    (   graphql_broadcast_sent(Descriptor, CommitIdAtom)
-    ->  true
-    ;   do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom),
-        assertz(graphql_broadcast_sent(Descriptor, CommitIdAtom))
-    ).
+    with_mutex(graphql_broadcast_dedup,
+        (   graphql_broadcast_sent(Descriptor, CommitIdAtom)
+        ->  true
+        ;   do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom),
+            assertz(graphql_broadcast_sent(Descriptor, CommitIdAtom))
+        )).
 
 %% do_broadcast_graphql_events(+Validation_Object, +Descriptor, +CommitIdAtom) is det.
 do_broadcast_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
@@ -224,7 +217,7 @@ broadcast_graphql_event(Transaction, GraphqlContext, Descriptor, DocIRI, ChangeT
             cohort_class(CohortKey, ClassName),
             class_matches(Class, ClassName, Transaction)
         ),
-        (   graphql_sse_subscription(_, CohortKey, RawChannel)
+        (   graphql_sse_subscription(_, CohortKey, RawChannel, _)
         ->  cohort_mode(CohortKey, Mode),
             broadcast_sse_event(Transaction, GraphqlContext, Descriptor, CohortKey, RawChannel, Mode,
                                 ClassName, Operation, ChangeType,
@@ -314,10 +307,9 @@ broadcast_sse_event(Transaction, GraphqlContext, _Descriptor, CohortKey, RawChan
                   fail
               ))
     ->  true
-    ;   (   ChangeType == deleted
-        ->  ResolvedDoc = _{'_id': DocIRI}
-        ;   ResolvedDoc = _{}
-        )
+    ;   json_log:json_log_error_formatted(
+            "[graphql-sse] resolve_event_through_juniper failed for ~w ~w", [ClassName, DocIRI]),
+        fail
     ),
     FullEvent = _{ data: _{} },
     put_dict(FieldName, FullEvent.data, ResolvedDoc, DataWithField),
@@ -433,7 +425,9 @@ read_request_body(Request, BodyString) :-
     ->  BodyString = BodyString0
     ;   get_dict(input_stream_id, Request, InputStreamId)
     ->  catch(drain_sse_input(InputStreamId, BodyString), Error,
-              (   json_log:json_log_error_formatted("[graphql-sse] drain_sse_input error: ~w", [Error]),
+              (   Error = body_too_large
+              ->  throw(body_too_large)
+              ;   json_log:json_log_error_formatted("[graphql-sse] drain_sse_input error: ~w", [Error]),
                   BodyString = ""))
     ;   BodyString = ""
     ).
@@ -441,15 +435,22 @@ read_request_body(Request, BodyString) :-
 %% drain_sse_input(+InputStreamId, -BodyString) is det.
 %%
 %% Drains all chunks from the input stream into a single string.
+%% Throws body_too_large if the accumulated body exceeds 1MB.
 drain_sse_input(InputStreamId, BodyString) :-
-    drain_sse_input(InputStreamId, "", BodyString).
+    drain_sse_input(InputStreamId, "", 0, BodyString).
 
-drain_sse_input(InputStreamId, Acc, BodyString) :-
+drain_sse_input(InputStreamId, Acc, Size, BodyString) :-
     '$appserver':appserver_stream_recv(InputStreamId, Chunk),
     (   Chunk == end_of_stream
     ->  BodyString = Acc
-    ;   string_concat(Acc, Chunk, NewAcc),
-        drain_sse_input(InputStreamId, NewAcc, BodyString)
+    ;   string_length(Chunk, ChunkLen),
+        NewSize is Size + ChunkLen,
+        sse_max_body_size(MaxBody),
+        (   NewSize > MaxBody
+        ->  throw(body_too_large)
+        ;   string_concat(Acc, Chunk, NewAcc),
+            drain_sse_input(InputStreamId, NewAcc, NewSize, BodyString)
+        )
     ).
 %%
 %% The SSE handler lives on POST /api/graphql/*path. It checks the Accept
@@ -511,7 +512,8 @@ graphql_get_handler(Request, _StreamId, Response) :-
     catch(delegate_get_to_graphql(Request, Response),
           Error,
           (   json_log:json_log_error_formatted("[graphql-get] delegate error: ~w", [Error]),
-              sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"Internal server error\"}]}", Response)
+              sse_graphql_error_json("Internal server error", "INTERNAL_SERVER_ERROR", ErrJson),
+              sse_json_response(Request, 500, ErrJson, Response)
           )).
 
 %% delegate_get_to_graphql(+Request, -Response) is det.
@@ -529,16 +531,23 @@ delegate_get_to_graphql(Request, Response) :-
         ->  uri_query_components(QueryString, QueryPairs),
             (   member(query=GraphQLQuery, QueryPairs), ground(GraphQLQuery)
             ->  true
-            ;   sse_json_response(Request, 400, "{\"errors\":[{\"message\":\"Missing 'query' parameter\"}]}", Response),
+            ;   sse_graphql_error_json("Missing 'query' parameter", "BAD_REQUEST", ErrJson),
+                sse_json_response(Request, 400, ErrJson, Response),
                 !
             ),
             with_output_to(string(RequestBody),
                 json_write_dict(current_output, _{query: GraphQLQuery}, [as(string), width(0)])),
             delegate_graphql_request(Request, System_DB, Auth, get, PathAtom, RequestBody, Response)
-        ;   sse_json_response(Request, 400, "{\"errors\":[{\"message\":\"Missing 'query' parameter\"}]}", Response)
+        ;   sse_graphql_error_json("Missing 'query' parameter", "BAD_REQUEST", ErrJson),
+            sse_json_response(Request, 400, ErrJson, Response)
         )
-    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
+    ;   sse_graphql_error_json("Authentication failed", "UNAUTHENTICATED", AuthErrJson),
+        sse_json_response(Request, 401, AuthErrJson, Response)
     ).
+
+%% is_system_descriptor(+Descriptor) is semidet.
+%% True if Descriptor is a system_descriptor{}.
+is_system_descriptor(system_descriptor{}) :- !.
 
 %% graphql_sse_handler(+Request, +StreamId, -Response) is det.
 %%
@@ -549,12 +558,14 @@ graphql_sse_handler(Request, StreamId, Response) :-
     ->  catch(delegate_to_graphql(Request, Response),
               Error,
               (   json_log:json_log_error_formatted("[graphql-sse] delegate error: ~w", [Error]),
-                  sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"Internal server error\"}]}", Response)
+                  sse_graphql_error_json("Internal server error", "INTERNAL_SERVER_ERROR", ErrJson),
+                  sse_json_response(Request, 500, ErrJson, Response)
               ))
     ;   catch(register_sse_subscription(Request, StreamId, Mode, Response),
               Error,
               (   json_log:json_log_error_formatted("[graphql-sse] handler error: ~w", [Error]),
-                  sse_json_response(Request, 500, "{\"error\":\"internal_server_error\"}", Response)
+                  sse_graphql_error_json("Internal server error", "INTERNAL_SERVER_ERROR", ErrJson),
+                  sse_json_response(Request, 500, ErrJson, Response)
               ))
     ).
 
@@ -562,7 +573,8 @@ graphql_sse_handler(Request, StreamId, Response) :-
 register_sse_subscription(Request, StreamId, Mode, Response) :-
     (   sse_extract_branch_path(Request, BranchPathRaw)
     ->  true
-    ;   sse_json_response(Request, 400, "{\"error\":\"missing_path_params\"}", Response),
+    ;   sse_graphql_error_json("Missing path parameters", "BAD_REQUEST", ErrJson),
+        sse_json_response(Request, 400, ErrJson, Response),
         !
     ),
     (   sse_authenticate_or_401(Request, System_DB, Auth, Response)
@@ -573,15 +585,13 @@ register_sse_subscription(Request, StreamId, Mode, Response) :-
             ;   throw(sse_handler_silent_failure)
             ),
             Error,
-            (   (   Error = error(subscription_limit_exceeded(Max), _)
-                ->  format(string(ErrBody), "{\"errors\":[{\"message\":\"Subscription limit exceeded (max ~w per descriptor)\"}]}", [Max]),
-                    sse_json_response(Request, 429, ErrBody, Response)
-                ;   json_log:json_log_error_formatted("[graphql-sse] authed handler error: ~w", [Error]),
-                    sse_json_response(Request, 500, "{\"error\":\"internal_server_error\"}", Response)
-                )
+            (   json_log:json_log_error_formatted("[graphql-sse] authed handler error: ~w", [Error]),
+                sse_graphql_error_json("Internal server error", "INTERNAL_SERVER_ERROR", ErrJson),
+                sse_json_response(Request, 500, ErrJson, Response)
             )
         )
-    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
+    ;   sse_graphql_error_json("Authentication failed", "UNAUTHENTICATED", AuthErrJson),
+        sse_json_response(Request, 401, AuthErrJson, Response)
     ).
 
 %% register_sse_subscription_authed(+Request, +StreamId, +Mode, +System_DB, +Auth,
@@ -595,31 +605,44 @@ register_sse_subscription(Request, StreamId, Mode, Response) :-
 register_sse_subscription_authed(Request, StreamId, Mode, System_DB, Auth,
                                  BranchPathRaw, Response) :-
     catch(read_request_body(Request, BodyString), Error1,
-          (   json_log:json_log_error_formatted("[graphql-sse] read_request_body error: ~w", [Error1]),
-              BodyString = "")),
-    (   sse_parse_body_query(BodyString, QueryString)
-    ->  atom_string(BranchPathAtom, BranchPathRaw),
-        resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
-        (   catch(assert_read_access(System_DB, Auth, Descriptor,
-                                     type_filter{types:[instance,schema]}), _, fail)
-        ->  do_or_die(open_descriptor(Descriptor, Transaction),
-                      error(unresolvable_absolute_descriptor(Descriptor), _)),
-            api_graphql:get_or_create_graphql_context(Transaction, Graphql_Context),
-            (   catch('$graphql':get_operation_type(Graphql_Context, QueryString, OperationType),
-                      _, fail)
-            ->  true
-            ;   OperationType = mutation
-            ),
-            (   OperationType == subscription
-            ->  register_sse_subscription_authorized(Request, StreamId, Mode, Descriptor,
-                                                     Graphql_Context, Transaction,
-                                                     QueryString, Response)
-            ;   execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
-                                                  BranchPathAtom, QueryString, Response)
+          (   Error1 = body_too_large
+          ->  sse_graphql_error_json("Request body too large", "PAYLOAD_TOO_LARGE", ErrJson),
+              sse_json_response(Request, 413, ErrJson, Response)
+          ;   json_log:json_log_error_formatted("[graphql-sse] read_request_body error: ~w", [Error1]),
+              BodyString = ""
+          )),
+    (   nonvar(Response)
+    ->  true
+    ;   (   sse_parse_body_query(BodyString, QueryString)
+        ->  atom_string(BranchPathAtom, BranchPathRaw),
+            resolve_absolute_string_descriptor(BranchPathAtom, Descriptor),
+            (   is_system_descriptor(Descriptor),
+                \+ super_user_authority(Auth)
+            ->  sse_graphql_error_json("Super user access required", "FORBIDDEN", ErrJson),
+                sse_json_response(Request, 403, ErrJson, Response)
+            ;   catch(assert_read_access(System_DB, Auth, Descriptor,
+                                         type_filter{types:[instance,schema]}), _, fail)
+            ->  do_or_die(open_descriptor(Descriptor, Transaction),
+                          error(unresolvable_absolute_descriptor(Descriptor), _)),
+                api_graphql:get_or_create_graphql_context(Transaction, Graphql_Context),
+                (   catch('$graphql':get_operation_type(Graphql_Context, QueryString, OperationType),
+                          _, fail)
+                ->  true
+                ;   OperationType = mutation
+                ),
+                (   OperationType == subscription
+                ->  register_sse_subscription_authorized(Request, StreamId, Mode, Descriptor,
+                                                         Graphql_Context, Transaction,
+                                                         QueryString, Auth, Response)
+                ;   execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
+                                                      BranchPathAtom, QueryString, Response)
+                )
+            ;   sse_graphql_error_json("Access not authorised", "FORBIDDEN", ErrJson),
+                sse_json_response(Request, 403, ErrJson, Response)
             )
-        ;   sse_json_response(Request, 403, "{\"error\":\"access_not_authorised\"}", Response)
+        ;   sse_graphql_error_json("Invalid query body", "BAD_REQUEST", ErrJson),
+            sse_json_response(Request, 400, ErrJson, Response)
         )
-    ;   sse_json_response(Request, 400, "{\"error\":\"invalid_query_body\"}", Response)
     ).
 
 %% graphql_finite_method(+System_DB, +Auth, +BranchPathAtom, -Method) is det.
@@ -671,20 +694,26 @@ execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
                 )
             )
         ->  sse_validation_error_response(Request, StreamId, Mode, GraphqlResponse, Response)
-        ;   sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"GraphQL request failed\"}]}", Response)
+        ;   sse_graphql_error_json("GraphQL request failed", "INTERNAL_SERVER_ERROR", ErrJson),
+            sse_json_response(Request, 500, ErrJson, Response)
         ),
         close(BodyIn)
     ).
 
 %% sse_plugin_error_to_graphql_json(+Error, -JsonString) is det.
 %%
-%% Converts a Prolog error term to a GraphQL errors JSON string using
-%% plugin_error_response for proper status and message mapping.
+%% Converts a Prolog error term to a standards-based GraphQL errors JSON
+%% string. Uses plugin_error_response for status and message mapping, then
+%% wraps the result in the GraphQL spec format:
+%% {"errors":[{"message":"...","extensions":{"code":"..."}}]}
+%% The api:status from plugin_error_response becomes the machine-readable
+%% extension code; the api:message becomes the human-readable message.
 sse_plugin_error_to_graphql_json(Error, JsonString) :-
     plugin_api:plugin_error_response(Error, ErrResp),
     get_dict(body, ErrResp, ErrBodyDict),
-    with_output_to(string(JsonString),
-        json_write_dict(current_output, ErrBodyDict, [as(string), width(0)])).
+    get_dict('api:message', ErrBodyDict, Message),
+    get_dict('api:status', ErrBodyDict, ApiStatus),
+    sse_graphql_error_json(Message, ApiStatus, JsonString).
 
 %% register_sse_subscription_authorized(+Request, +StreamId, +Mode, +Descriptor,
 %%   +Graphql_Context, +Transaction, +QueryString, -Response) is det.
@@ -694,19 +723,19 @@ sse_plugin_error_to_graphql_json(Error, JsonString) :-
 %% the subscription.
 register_sse_subscription_authorized(Request, StreamId, Mode, Descriptor,
                                       Graphql_Context, Transaction,
-                                      QueryString, Response) :-
+                                      QueryString, Auth, Response) :-
     (   catch('$graphql':parse_subscription_query(Graphql_Context, QueryString, Parsed),
               Error, (json_log:json_log_error_formatted("[graphql-sse] parse error: ~w", [Error]), fail))
     ->  register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
-                                         Graphql_Context, Transaction, Parsed, Response)
-    ;   sse_validation_error_response(Request, StreamId, Mode,
-        "{\"errors\":[{\"message\":\"Failed to parse subscription query\"}]}", Response)
+                                         Graphql_Context, Transaction, Parsed, Auth, Response)
+    ;   sse_graphql_error_json("Failed to parse subscription query", "BAD_REQUEST", ErrJson),
+        sse_validation_error_response(Request, StreamId, Mode, ErrJson, Response)
     ).
 
 %% register_sse_subscription_parsed(+Request, +StreamId, +Mode, +Descriptor,
-%%   +Graphql_Context, +Transaction, +Parsed, -Response) is det.
+%%   +Graphql_Context, +Transaction, +Parsed, +Auth, -Response) is det.
 register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
-                                 _Graphql_Context, _Transaction, Parsed, Response) :-
+                                 _Graphql_Context, _Transaction, Parsed, Auth, Response) :-
     get_dict(class_name, Parsed, ClassName),
     get_dict(operation, Parsed, Operation),
     get_dict(filter_canonical_json, Parsed, FilterJson),
@@ -717,17 +746,34 @@ register_sse_subscription_parsed(Request, StreamId, Mode, Descriptor,
     ->  true
     ;   IncludeChildren = true
     ),
-    register_subscription_parsed(Descriptor, ClassName, Operation,
-                                 FilterJson, SelectionHash, Mode,
-                                 CohortKey, RawChannel),
-    with_mutex(graphql_cohort_registry,
-        (   graphql_cohort_selection(CohortKey, _, _, _)
+    (   validate_graphql_query_parts(ClassName, SelectionSetGraphql)
+    ->  true
+    ;   sse_graphql_error_json("Invalid class or selection set", "BAD_REQUEST", ErrJson),
+        sse_json_response(Request, 400, ErrJson, Response),
+        !
+    ),
+    (   nonvar(Response)
+    ->  true
+    ;   (   catch('$appserver':appserver_check_subscription_limit(Auth), _, fail)
         ->  true
-        ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql, IncludeChildren))
-        )),
-    assertz(graphql_sse_subscription(StreamId, CohortKey, RawChannel)),
-    sse_parse_timeout(Request, Timeout),
-    sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Timeout, Response).
+        ;   sse_graphql_error_json("Subscription limit exceeded", "TOO_MANY_REQUESTS", ErrJson),
+            sse_json_response(Request, 429, ErrJson, Response)
+        )
+    ),
+    (   nonvar(Response)
+    ->  true
+    ;   register_subscription_parsed(Descriptor, ClassName, Operation,
+                                     FilterJson, SelectionHash, Mode,
+                                     CohortKey, RawChannel),
+        with_mutex(graphql_cohort_registry,
+            (   graphql_cohort_selection(CohortKey, _, _, _)
+            ->  true
+            ;   assertz(graphql_cohort_selection(CohortKey, SelectionSet, SelectionSetGraphql, IncludeChildren))
+            )),
+        assertz(graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth)),
+        sse_idle_timeout(Timeout),
+        sse_build_streaming_response(Request, StreamId, Mode, CohortKey, RawChannel, Timeout, Response)
+    ).
 
 %% sse_post_response(+StreamId, +CohortKey, +RawChannel, +Timeout, +Mode) is det.
 %%
@@ -822,7 +868,8 @@ delegate_to_graphql(Request, Response) :-
         get_dict(path, Params, PathRaw),
         atom_string(PathAtom, PathRaw),
         delegate_graphql_request(Request, System_DB, Auth, post, PathAtom, BodyString, Response)
-    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response)
+    ;   sse_graphql_error_json("Authentication failed", "UNAUTHENTICATED", AuthErrJson),
+        sse_json_response(Request, 401, AuthErrJson, Response)
     ).
 
 %% delegate_graphql_request(+Request, +System_DB, +Auth, +Method, +PathAtom,
@@ -855,7 +902,8 @@ delegate_graphql_request(Request, System_DB, Auth, Method, PathAtom, BodyString,
             ;   build_graphql_success_response(Request, GraphqlResponse,
                                                NewDataVersion, TransactionMetaData, Response)
             )
-        ;   sse_json_response(Request, 500, "{\"errors\":[{\"message\":\"GraphQL request failed\"}]}", Response)
+        ;   sse_graphql_error_json("GraphQL request failed", "INTERNAL_SERVER_ERROR", ErrJson),
+            sse_json_response(Request, 500, ErrJson, Response)
         ),
         close(BodyIn)
     ).
@@ -888,13 +936,16 @@ build_graphql_success_response(Request, GraphqlResponse, NewDataVersion, Transac
 
 %% sse_plugin_error_response(+Request, +Error, -Response) is det.
 %%
-%% Bridges plugin_error_response/2 dict body to sse_json_response/4 string body.
+%% Converts a Prolog error term to a GraphQL spec error response with
+%% CORS headers and the appropriate HTTP status code from
+%% plugin_error_response/2.
 sse_plugin_error_response(Request, Error, Response) :-
     plugin_api:plugin_error_response(Error, ErrResp),
     get_dict(status, ErrResp, Status),
     get_dict(body, ErrResp, ErrBodyDict),
-    with_output_to(string(ErrorBody),
-        json_write_dict(current_output, ErrBodyDict, [as(string), width(0)])),
+    get_dict('api:message', ErrBodyDict, Message),
+    get_dict('api:status', ErrBodyDict, ApiStatus),
+    sse_graphql_error_json(Message, ApiStatus, ErrorBody),
     sse_json_response(Request, Status, ErrorBody, Response).
 
 %% sse_authenticate_or_401(+Request, -System_DB, -Auth, -Response) is semidet.
@@ -904,7 +955,8 @@ sse_authenticate_or_401(Request, System_DB, Auth, Response) :-
     open_descriptor(system_descriptor{}, System_DB),
     (   catch(plugin_api:authenticate_from_request(Request, System_DB, Auth), _, fail)
     ->  true
-    ;   sse_json_response(Request, 401, "{\"errors\":[{\"message\":\"Authentication failed\"}]}", Response),
+    ;   sse_graphql_error_json("Authentication failed", "UNAUTHENTICATED", AuthErrJson),
+        sse_json_response(Request, 401, AuthErrJson, Response),
         fail
     ).
 
@@ -929,21 +981,6 @@ sse_parse_body_query(BodyString, QueryString) :-
     get_dict(query, BodyDict, QueryString),
     QueryString \= "".
 
-%% sse_parse_timeout(+Request, -Timeout) is det.
-%%
-%% Extracts timeout from query string. Defaults to 75 (2× heartbeat + margin).
-sse_parse_timeout(Request, Timeout) :-
-    (   get_dict(query, Request, QueryString),
-        QueryString \= ""
-    ->  uri_query_components(QueryString, QueryParams),
-        (   memberchk(timeout=TimeoutAtom, QueryParams),
-            atom_number(TimeoutAtom, Timeout)
-        ->  true
-        ;   Timeout = 75
-        )
-    ;   Timeout = 75
-    ).
-
 %% sse_json_response(+Request, +Status, +Body, -Response) is det.
 %%
 %% JSON response with CORS headers. Works for any status code
@@ -955,6 +992,18 @@ sse_json_response(Request, Status, Body, Response) :-
         headers: CORS.put('Content-Type', "application/json"),
         body: Body
     }.
+
+%% sse_graphql_error_json(+Message, +Code, -JsonString) is det.
+%%
+%% Builds a standards-based GraphQL error JSON string per the GraphQL spec:
+%% {"errors":[{"message":"...","extensions":{"code":"..."}}]}
+%% The message is human-readable; the code is a machine-readable string
+%% suitable for client-side error handling.
+sse_graphql_error_json(Message, Code, JsonString) :-
+    with_output_to(string(JsonString),
+        json_write_dict(current_output,
+            _{errors:[_{message:Message, extensions:_{code:Code}}]},
+            [as(string), width(0)])).
 
 %% sse_build_streaming_response(+Request, +StreamId, +Mode, +CohortKey,
 %%   +RawChannel, +Timeout, -Response) is det.
@@ -1000,7 +1049,7 @@ do_broadcast_ChangeSet_events(Transaction, GraphqlContext, Descriptor,
             cohort_class(CohortKey, '_ChangeSet'),
             cohort_operation(CohortKey, change_set)
         ),
-        (   graphql_sse_subscription(_, CohortKey, RawChannel)
+        (   graphql_sse_subscription(_, CohortKey, RawChannel, _)
         ->  do_broadcast_single_ChangeSet(Transaction, GraphqlContext,
                                           CohortKey, RawChannel,
                                           CommitIdStr, Timestamp, Datetime)
@@ -1061,6 +1110,33 @@ do_broadcast_single_ChangeSet(Transaction, GraphqlContext, CohortKey, RawChannel
 %% Event Resolution via Juniper (post-commit hook)
 %% ===========================================================================
 
+%% validate_graphql_query_parts(+ClassName, +SelectionSetGraphql) is semidet.
+%%
+%% Validates that ClassName and SelectionSetGraphql contain only safe
+%% GraphQL identifier characters, preventing injection via format/3.
+%% ClassName must be a valid GraphQL name (alphanumeric + underscore).
+%% SelectionSetGraphql may contain field names, spaces, and braces for
+%% nesting — but no quotes, backslashes, or other characters that could
+%% break out of the format/3 template.
+validate_graphql_query_parts(ClassName, SelectionSetGraphql) :-
+    atom_string(ClassName, ClassNameStr),
+    graphql_name_safe(ClassNameStr),
+    graphql_selection_safe(SelectionSetGraphql).
+
+%% graphql_name_safe(+Str) is semidet.
+%% True if Str contains only alphanumeric characters and underscores.
+graphql_name_safe(Str) :-
+    re_replace('[A-Za-z0-9_]+'/g, '', Str, Remaining),
+    Remaining == "".
+
+%% graphql_selection_safe(+Str) is semidet.
+%% True if Str contains only alphanumeric, underscores, spaces, braces,
+%% parentheses, colons, commas, and dots — the safe characters for a
+%% GraphQL selection set including argument syntax like include_children: true.
+graphql_selection_safe(Str) :-
+    re_replace('[A-Za-z0-9_ {}.\\n\\t():,]+'/g, '', Str, Remaining),
+    Remaining == "".
+
 %% resolve_event_through_juniper(+Transaction, +GraphqlContext, +ClassName,
 %%                                +Operation, +DocIRI, +SelectionSetGraphql,
 %%                                +ChangeType, +CommitId, -Result) is semidet.
@@ -1068,9 +1144,15 @@ do_broadcast_single_ChangeSet(Transaction, GraphqlContext, CohortKey, RawChannel
 %% Resolves a document via Juniper Query root field. Operation suffix is
 %% used only for the event envelope, not the query field name.
 resolve_event_through_juniper(Transaction, GraphqlContext, ClassName,
-                              Operation, DocIRI, SelectionSetGraphql,
+                              _Operation, DocIRI, SelectionSetGraphql,
                               ChangeType, CommitId, Timestamp, Datetime,
                               Result) :-
+    (   validate_graphql_query_parts(ClassName, SelectionSetGraphql)
+    ->  true
+    ;   json_log:json_log_error_formatted(
+            "[graphql-sse] validation failed for class ~w, selection ~w", [ClassName, SelectionSetGraphql]),
+        !, fail
+    ),
     graphql_escape_string(DocIRI, EscapedIRI),
     format(string(GraphqlQuery), "{ ~w(id: \"~w\") { ~w } }",
            [ClassName, EscapedIRI, SelectionSetGraphql]),
@@ -1098,23 +1180,18 @@ resolve_event_through_juniper(Transaction, GraphqlContext, ClassName,
     (   get_dict(errors, ResponseData, Errors)
     ->  json_log:json_log_error_formatted(
             "[graphql-sse] Juniper returned errors: ~w", [Errors]),
-        (   Operation == deleted
-        ->  Result = _{'_id': DocIRI}
-        ;   Result = _{}
-        )
+        fail
     ;   get_dict(data, ResponseData, Data),
         (   is_dict(Data)
         ->  (   get_dict(ClassName, Data, [Doc|_])
             ->  Result = Doc
-            ;   (   Operation == deleted
-                ->  Result = _{'_id': DocIRI}
-                ;   Result = _{}
-                )
+            ;   json_log:json_log_error_formatted(
+                    "[graphql-sse] no data for class ~w in response", [ClassName]),
+                fail
             )
-        ;   (   Operation == deleted
-            ->  Result = _{'_id': DocIRI}
-            ;   Result = _{}
-            )
+        ;   json_log:json_log_error_formatted(
+                "[graphql-sse] unexpected data format in response: ~w", [Data]),
+            fail
         )
     ).
 
@@ -1132,7 +1209,11 @@ graphql_escape_string(Raw, Escaped) :-
     re_replace('\n'/g, '\\n', S2, S3),
     re_replace('\r'/g, '\\r', S3, S4),
     re_replace('\t'/g, '\\t', S4, S5),
-    atom_string(Escaped, S5).
+    char_code(LS, 0x2028),
+    char_code(PS, 0x2029),
+    re_replace(LS/g, '\\u2028', S5, S6),
+    re_replace(PS/g, '\\u2029', S6, S7),
+    atom_string(Escaped, S7).
 
 %% ===========================================================================
 %% SSE Cleanup
@@ -1140,13 +1221,13 @@ graphql_escape_string(Raw, Escaped) :-
 
 %% sweep_stale_sse_streams is det.
 %%
-%% Retract graphql_sse_subscription/3 entries whose Rust stream no longer
+%% Retract graphql_sse_subscription/4 entries whose Rust stream no longer
 %% exists. Mirrors webserver_commits:sweep_stale_streams/0. Called at
 %% the start of do_broadcast_graphql_events.
 sweep_stale_sse_streams :-
-    (   \+ graphql_sse_subscription(_, _, _)
+    (   \+ graphql_sse_subscription(_, _, _, _)
     ->  true
-    ;   findall(StreamId, graphql_sse_subscription(StreamId, _, _), StreamIds),
+    ;   findall(StreamId, graphql_sse_subscription(StreamId, _, _, _), StreamIds),
         forall(
             (   member(StreamId, StreamIds),
                 \+ catch('$appserver':appserver_stream_exists(StreamId), _, fail)
@@ -1161,11 +1242,12 @@ sweep_stale_sse_streams :-
 %% subscription, unregisters the cohort, and unsubscribes from the
 %% broadcast channel. Idempotent.
 cleanup_sse_stream(StreamId) :-
-    (   retract(graphql_sse_subscription(StreamId, CohortKey, RawChannel))
+    (   retract(graphql_sse_subscription(StreamId, CohortKey, RawChannel, Auth))
     ->  cohort_mode(CohortKey, Mode),
         send_complete_event(Mode, RawChannel),
         unregister_subscription(CohortKey, StreamId),
-        catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId), _, true)
+        catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId), _, true),
+        catch('$appserver':appserver_release_subscription(Auth), _, true)
     ;   true
     ).
 
@@ -1313,73 +1395,6 @@ test(cohort_selection_survives_partial_unregister,
     unregister_subscription(CohortKey, stream1),
     webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name", true).
 
-%% Subscription limit tests — verify that max_subscriptions_per_descriptor
-%% is enforced when creating new cohorts for a descriptor.
-
-test(subscription_limit_rejects_new_cohort_when_exceeded,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    TestDesc = branch_descriptor{},
-    %% Temporarily set limit to 1
-    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
-    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(1)),
-    %% First subscription succeeds (creates cohort with count 1)
-    register_subscription_parsed(TestDesc, 'Person', added,
-                                 '{}', 'hash1', sse, _, _),
-    %% Second subscription for a *different* cohort on same descriptor should fail
-    catch(
-        register_subscription_parsed(TestDesc, 'Person', changed,
-                                      '{}', 'hash2', sse, _, _),
-        Error,
-        Error = error(subscription_limit_exceeded(1), _)
-    ),
-    %% Restore default
-    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
-    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(100)).
-
-test(subscription_limit_allows_increment_of_existing_cohort,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    TestDesc = branch_descriptor{},
-    %% Set limit to 1 — one subscription total
-    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
-    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(1)),
-    %% First subscription creates cohort
-    register_subscription_parsed(TestDesc, 'Person', added,
-                                 '{}', 'hash1', sse, CohortKey, _),
-    %% Second subscription to SAME cohort should succeed (increment, not new)
-    register_subscription_parsed(TestDesc, 'Person', added,
-                                 '{}', 'hash1', sse, _, _),
-    graphql_cohort(CohortKey, _, _, 2),
-    %% Restore default
-    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
-    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(100)).
-
-test(subscription_limit_default_is_100,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    max_subscriptions_per_descriptor(Max),
-    Max == 100.
-
-test(subscription_limit_counts_across_all_cohorts_for_descriptor,
-     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
-    TestDesc = branch_descriptor{},
-    %% Set limit to 2
-    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
-    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(2)),
-    %% Two different cohorts, each with 1 member = 2 total
-    register_subscription_parsed(TestDesc, 'Person', added,
-                                 '{}', 'hash1', sse, _, _),
-    register_subscription_parsed(TestDesc, 'Product', added,
-                                 '{}', 'hash2', sse, _, _),
-    %% Third cohort should be rejected (total would be 3 > 2)
-    catch(
-        register_subscription_parsed(TestDesc, 'Order', added,
-                                      '{}', 'hash3', sse, _, _),
-        Error,
-        Error = error(subscription_limit_exceeded(2), _)
-    ),
-    %% Restore default
-    retractall(webserver_graphql_subs:max_subscriptions_per_descriptor(_)),
-    assertz(webserver_graphql_subs:max_subscriptions_per_descriptor(100)).
-
 :- end_tests(webserver_graphql_subs).
 
 %% ---------------------------------------------------------------------------
@@ -1496,16 +1511,16 @@ test(sweep_stale_sse_streams_removes_dead,
     %% test context (no running server), so both will be swept.
     sweep_stale_sse_streams,
     %% After sweeping, no graphql_sse_subscription entries remain.
-    \+ webserver_graphql_subs:graphql_sse_subscription(_, _, _).
+    \+ webserver_graphql_subs:graphql_sse_subscription(_, _, _, _).
 
 %% cleanup_sse_stream retracts a single SSE subscription and
 %% unregisters the cohort.
 test(cleanup_sse_stream_retracts_subscription,
      [setup(setup_sse_test_streams), cleanup(cleanup_cohorts)]) :-
     cleanup_sse_stream(alive_stream),
-    \+ webserver_graphql_subs:graphql_sse_subscription(alive_stream, _, _),
+    \+ webserver_graphql_subs:graphql_sse_subscription(alive_stream, _, _, _),
     %% The other stream should still be present.
-    webserver_graphql_subs:graphql_sse_subscription(dead_stream, _, _).
+    webserver_graphql_subs:graphql_sse_subscription(dead_stream, _, _, _).
 
 %% graphql_sse_handler returns 401 when authentication fails
 %% (no Authorization header and no anonymous fallback in test context).
@@ -1552,6 +1567,42 @@ test(sse_options_handler_returns_204_with_cors) :-
     get_dict('Access-Control-Allow-Origin', Headers, "https://example.com").
 
 :- end_tests(webserver_graphql_subs_sse).
+
+%% ---------------------------------------------------------------------------
+%% PLUnit tests for GraphQL query part validation (HIGH-1 security fix)
+%% ---------------------------------------------------------------------------
+
+:- begin_tests(webserver_graphql_subs_validation, []).
+
+%% validate_graphql_query_parts accepts a valid class name and selection set.
+test(validate_accepts_valid_class_and_fields) :-
+    validate_graphql_query_parts('Product', "name price").
+
+%% validate_graphql_query_parts accepts nested selection sets with braces.
+test(validate_accepts_nested_selection) :-
+    validate_graphql_query_parts('Product', "name price { nested }").
+
+%% validate_graphql_query_parts rejects an unknown class name with injection chars.
+test(validate_rejects_injection_in_class_name) :-
+    \+ validate_graphql_query_parts('Product} evil {', "name").
+
+%% validate_graphql_query_parts rejects a class name with quotes.
+test(validate_rejects_quotes_in_class_name) :-
+    \+ validate_graphql_query_parts('Product"', "name").
+
+%% validate_graphql_query_parts rejects a selection set with injection chars.
+test(validate_rejects_injection_in_selection_set) :-
+    \+ validate_graphql_query_parts('Product', "name } evil { \"id\"").
+
+%% validate_graphql_query_parts rejects a selection set with backslash injection.
+test(validate_rejects_backslash_in_selection_set) :-
+    \+ validate_graphql_query_parts('Product', "name \\} evil").
+
+%% validate_graphql_query_parts rejects a class name with semicolon injection.
+test(validate_rejects_semicolon_in_class_name) :-
+    \+ validate_graphql_query_parts('Product; evil', "name").
+
+:- end_tests(webserver_graphql_subs_validation).
 
 %% ---------------------------------------------------------------------------
 %% PLUnit tests for extracted SSE pure predicates
@@ -1602,32 +1653,6 @@ test(parse_body_query_invalid_json_fails) :-
 
 test(parse_body_query_empty_string_fails) :-
     \+ sse_parse_body_query('', _).
-
-%% sse_parse_timeout extracts the timeout query parameter, defaulting to 75.
-
-test(parse_timeout_default_no_query) :-
-    sse_parse_timeout(_{}, Timeout),
-    Timeout == 75.
-
-test(parse_timeout_default_empty_query) :-
-    sse_parse_timeout(_{query: ""}, Timeout),
-    Timeout == 75.
-
-test(parse_timeout_explicit) :-
-    sse_parse_timeout(_{query: "timeout=60"}, Timeout),
-    Timeout == 60.
-
-test(parse_timeout_with_other_params) :-
-    sse_parse_timeout(_{query: "foo=bar&timeout=120&baz=qux"}, Timeout),
-    Timeout == 120.
-
-test(parse_timeout_invalid_falls_back_to_default) :-
-    sse_parse_timeout(_{query: "timeout=abc"}, Timeout),
-    Timeout == 75.
-
-test(parse_timeout_zero_allowed) :-
-    sse_parse_timeout(_{query: "timeout=0"}, Timeout),
-    Timeout == 0.
 
 %% sse_json_response builds a JSON response dict with CORS headers.
 
@@ -1866,14 +1891,14 @@ setup_sse_test_streams :-
     assertz(webserver_graphql_subs:graphql_cohort(CohortKey,
                 TestDesc, 'test_channel', 2)),
     assertz(webserver_graphql_subs:graphql_sse_subscription(alive_stream,
-                CohortKey, 'test_channel')),
+                CohortKey, 'test_channel', 'test_auth')),
     assertz(webserver_graphql_subs:graphql_sse_subscription(dead_stream,
-                CohortKey, 'test_channel')).
+                CohortKey, 'test_channel', 'test_auth')).
 
 %% Cleanup helper for tests
 cleanup_cohorts :-
     retractall(webserver_graphql_subs:graphql_cohort(_, _, _, _)),
     retractall(webserver_graphql_subs:graphql_cohort_selection(_, _, _, _)),
     retractall(webserver_graphql_subs:graphql_broadcast_sent(_, _)),
-    retractall(webserver_graphql_subs:graphql_sse_subscription(_, _, _)).
+    retractall(webserver_graphql_subs:graphql_sse_subscription(_, _, _, _)).
 
