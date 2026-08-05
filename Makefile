@@ -1,6 +1,6 @@
 DIST ?= community
 # Default was 9.2.9
-SWIPL_VERSION ?= 10.0.1
+SWIPL_VERSION ?= 10.0.2
 
 # Version-tagged release of tdb-admin to download for the embedded admin panel.
 # Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
