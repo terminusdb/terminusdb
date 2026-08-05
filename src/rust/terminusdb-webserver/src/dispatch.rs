@@ -185,6 +185,75 @@ pub fn stream_registry() -> Arc<Mutex<StreamRegistry>> {
     STREAM_REGISTRY.clone()
 }
 
+/// Per-user SSE subscription limiter. Tracks the count of active
+/// subscriptions per user ID and rejects new subscriptions over the
+/// configured limit. The limit is read once at startup from the
+/// `TERMINUSDB_SSE_MAX_SUBSCRIPTIONS_PER_USER` env var (default: 20).
+pub struct SubscriptionLimiter {
+    counts: HashMap<String, u64>,
+    max_per_user: u64,
+}
+
+impl Default for SubscriptionLimiter {
+    fn default() -> Self {
+        let max_per_user = std::env::var("TERMINUSDB_SSE_MAX_SUBSCRIPTIONS_PER_USER")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(20);
+        Self {
+            counts: HashMap::new(),
+            max_per_user,
+        }
+    }
+}
+
+impl SubscriptionLimiter {
+    /// Try to acquire a subscription slot for the given user.
+    /// Returns `Ok(())` if under the limit, `Err(())` if over.
+    pub fn try_acquire(&mut self, user_id: &str) -> Result<(), ()> {
+        let count = self.counts.entry(user_id.to_string()).or_insert(0);
+        if *count >= self.max_per_user {
+            return Err(());
+        }
+        *count += 1;
+        Ok(())
+    }
+
+    /// Release a subscription slot for the given user.
+    /// Decrements the count, removing the entry if it reaches zero.
+    pub fn release(&mut self, user_id: &str) {
+        if let Some(count) = self.counts.get_mut(user_id) {
+            if *count > 0 {
+                *count -= 1;
+            }
+            if *count == 0 {
+                self.counts.remove(user_id);
+            }
+        }
+    }
+
+    /// Get the current count for a user (for testing).
+    #[cfg(test)]
+    pub fn count_for(&self, user_id: &str) -> u64 {
+        self.counts.get(user_id).copied().unwrap_or(0)
+    }
+
+    /// Get the configured max per user (for testing).
+    #[cfg(test)]
+    pub fn max_per_user(&self) -> u64 {
+        self.max_per_user
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref SUBSCRIPTION_LIMITER: Arc<Mutex<SubscriptionLimiter>> = Arc::new(Mutex::new(SubscriptionLimiter::default()));
+}
+
+/// Return a handle to the global subscription limiter.
+pub fn subscription_limiter() -> Arc<Mutex<SubscriptionLimiter>> {
+    SUBSCRIPTION_LIMITER.clone()
+}
+
 /// Commands sent to the broadcast forwarder task.
 /// See PLAN_BROADCAST_QUEUE.md for the full architecture.
 enum BroadcastCommand {
@@ -2869,5 +2938,59 @@ mod path_tests {
         assert!(is_catchall_pattern("/api/db/*path"));
         assert!(!is_catchall_pattern("/api/organizations/:seg1"));
         assert!(!is_catchall_pattern("/api"));
+    }
+}
+
+#[cfg(test)]
+mod subscription_limiter_tests {
+    use super::SubscriptionLimiter;
+
+    #[test]
+    fn allows_under_limit() {
+        let mut limiter = SubscriptionLimiter::default();
+        let max = limiter.max_per_user();
+        for _ in 0..max {
+            assert!(limiter.try_acquire("user_a").is_ok());
+        }
+    }
+
+    #[test]
+    fn rejects_over_limit() {
+        let mut limiter = SubscriptionLimiter::default();
+        let max = limiter.max_per_user();
+        for _ in 0..max {
+            limiter.try_acquire("user_a").unwrap();
+        }
+        assert!(limiter.try_acquire("user_a").is_err());
+    }
+
+    #[test]
+    fn release_frees_slot() {
+        let mut limiter = SubscriptionLimiter::default();
+        let max = limiter.max_per_user();
+        for _ in 0..max {
+            limiter.try_acquire("user_a").unwrap();
+        }
+        assert!(limiter.try_acquire("user_a").is_err());
+        limiter.release("user_a");
+        assert!(limiter.try_acquire("user_a").is_ok());
+    }
+
+    #[test]
+    fn independent_users_have_independent_limits() {
+        let mut limiter = SubscriptionLimiter::default();
+        let max = limiter.max_per_user();
+        for _ in 0..max {
+            limiter.try_acquire("user_a").unwrap();
+        }
+        assert!(limiter.try_acquire("user_a").is_err());
+        assert!(limiter.try_acquire("user_b").is_ok());
+    }
+
+    #[test]
+    fn release_unknown_user_is_noop() {
+        let mut limiter = SubscriptionLimiter::default();
+        limiter.release("nonexistent");
+        assert_eq!(limiter.count_for("nonexistent"), 0);
     }
 }

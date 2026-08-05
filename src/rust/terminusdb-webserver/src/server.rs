@@ -10,7 +10,6 @@ use axum::extract::Request;
 use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::MAX_BODY_SIZE;
 use crate::routes::root_redirect;
@@ -72,12 +71,6 @@ pub fn app() -> Router {
     Router::new()
         .route("/", get(root_redirect))
         .route("/api/v1/health", get(health_handler))
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        )
 }
 
 /// Health-check handler.
