@@ -51,7 +51,7 @@
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
-:- use_module(library(http/json), [atom_json_dict/3]).
+:- use_module(library(json), [atom_json_dict/3]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).

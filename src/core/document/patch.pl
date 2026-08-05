@@ -842,7 +842,7 @@ test(deep_list_patch_conflict, []) :-
 		                       ]
                    }.
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(read_state, []) :-
 
@@ -1150,6 +1150,21 @@ test(swap_decimal_value, []) :-
                 '@type' : "Test",
                 weight : 1.2 },
     simple_patch(Patch, Before, success(After), []).
+
+test(swap_decimal_value_json_preserve, []) :-
+    %% Verify the Rust parser path: wire decimals become rationals, so
+    %% a patch parsed from JSON matches the stored rational exactly.
+    JSON = '{ "patch": { "weight": { "@op": "SwapValue",
+                                      "@before": 1.1,
+                                      "@after": 1.2 } } }',
+    json_preserve:json_read_dict(JSON, Document, []),
+    Patch = Document.patch,
+    Before = _{ '@id' : "Test/1",
+                '@type' : "Test",
+                weight : 11r10 },
+    simple_patch(Patch, Before, success(_{ '@id' : "Test/1",
+                                             '@type' : "Test",
+                                             weight : 6r5 }), []).
 
 :- end_tests(simple_patch).
 

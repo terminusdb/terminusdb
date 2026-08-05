@@ -86,6 +86,12 @@ For rapid iteration during development, use the test server script:
 ./tests/terminusdb-test-server.sh clean
 ```
 
+For a **release build** (production-quality binary) with one command:
+```bash
+make build-restart
+```
+See [Release Build and Restart](#release-build-and-restart) for details.
+
 **Benefits:**
 - **Fast rebuild cycle**: Only rebuilds Rust if sources changed with `make dev`
 - **Safe by default**: Preserves storage unless `--clean` flag is used
@@ -99,6 +105,133 @@ For rapid iteration during development, use the test server script:
 - URL: `http://127.0.0.1:6363`
 - User: `admin`
 - Pass: `root`
+
+### Paired Development with tdb-search (Indexing + Search)
+
+When working on the indexer or search functionality, you need both TerminusDB and
+[tdb-search](https://github.com/dfrnt-com/tdb-search) running simultaneously.
+The tdb-search repository includes a paired server script that manages both servers
+together — use it instead of the standalone TerminusDB test server script.
+
+**Prerequisites:**
+- tdb-search repo cloned as a sibling of the terminusdb repo
+- [Ollama](https://ollama.ai) running locally with an embedding model (e.g. `nomic-embed-text-v2-moe`)
+- tdb-search binary built: `cd ../tdb-search && cargo build`
+
+**Starting both servers:**
+
+```bash
+# Set the indexer backend and tdb-search endpoint before starting
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
+
+# Start both tdb-search (port 7372) and TerminusDB (port 7373)
+../tdb-search/tests/tdb-search-server.sh start
+
+# Restart both servers (keeps storage)
+../tdb-search/tests/tdb-search-server.sh restart
+
+# Check status of both servers
+../tdb-search/tests/tdb-search-server.sh status
+
+# View tdb-search logs
+../tdb-search/tests/tdb-search-server.sh logs
+
+# Stop both servers
+../tdb-search/tests/tdb-search-server.sh stop
+```
+
+**Important:** The `TERMINUSDB_INDEXER_BACKEND` and `TERMINUSDB_VECTORLINK_ENDPOINT`
+environment variables must be exported before calling the tdb-search restart script,
+because it internally calls the TerminusDB test server script and passes the
+environment through. Without these variables, the indexer backend defaults to `none`
+and indexing requests will fail with `vectorlink endpoint is not configured`.
+
+**Server Details:**
+- TerminusDB URL: `http://127.0.0.1:7373`
+- tdb-search URL: `http://127.0.0.1:7372`
+- User: `admin`
+- Pass: `root`
+
+**Quick restart after code changes (both servers):**
+
+```bash
+# 1. Rebuild TerminusDB (from terminusdb repo root)
+rm src/rust/librust.{dylib,so}; make dev
+
+# 2. Restart both servers with indexer enabled
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
+../tdb-search/tests/tdb-search-server.sh restart
+```
+
+For a **release build** instead of dev, use the one-liner:
+```bash
+make build-restart-search
+```
+See [Release Build and Restart](#release-build-and-restart) for details.
+
+**Cleaning all data (both servers):**
+
+```bash
+# Stop both servers
+../tdb-search/tests/tdb-search-server.sh stop
+
+# Wipe TerminusDB storage
+./tests/terminusdb-test-server.sh clean
+
+# Wipe tdb-search data
+rm -rf /tmp/tdb-search-data/*
+
+# Restart both
+export TERMINUSDB_INDEXER_BACKEND=http_vectorlink
+export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
+../tdb-search/tests/tdb-search-server.sh start
+```
+
+### Release Build and Restart
+
+The development sections above use `make dev` which produces a development
+binary (no stripping, dynamic linking, and 10x larger and 10x slower than the release build). For testing with a **release build**
+— the same build used in production — use the combined build-and-restart
+targets:
+
+**Standalone (port 6363):**
+
+```bash
+make build-restart
+```
+
+This runs `make` (release build) and then `tests/terminusdb-test-server.sh restart`,
+giving you a production-quality binary on the default test port 6363.
+See [Local Development Server](#local-development-server-fastest---recommended)
+for details on the test server script.
+
+**Paired with tdb-search (TerminusDB on port 7373, tdb-search on port 7372):**
+
+```bash
+make build-restart-search
+```
+
+This runs `make` (release build) and then `../tdb-search/tests/tdb-search-server.sh restart`,
+which restarts both tdb-search (port 7372) and TerminusDB (port 7373) with the
+indexer backend enabled. The tdb-search server script also builds tdb-search
+in release mode if the binary is missing or stale.
+See [Paired Development with tdb-search](#paired-development-with-tdb-search-indexing--search)
+for prerequisites and environment variable details.
+
+> **Note:** The `make build-restart-search` target requires the tdb-search repo
+> cloned as a sibling of the terminusdb repo, and
+> [Ollama](https://ollama.ai) running locally with an embedding model.
+
+**Cross-reference summary:**
+
+| Mode | Port(s) | Build target | Restart script |
+|------|---------|-------------|----------------|
+| Standalone (dev) | 6363 | `make dev` | `./tests/terminusdb-test-server.sh restart` |
+| Standalone (release) | 6363 | `make build-restart` | (included) |
+| Paired (dev) | 7373 + 7372 | `make dev` | `../tdb-search/tests/tdb-search-server.sh restart` |
+| Paired (release) | 7373 + 7372 | `make build-restart-search` | (included) |
 
 ### Manual Development Workflow
 
@@ -253,6 +386,19 @@ swipl -g "run_tests(graphql_numeric_serialization)" -t halt src/interactive.pl
 swipl -g "run_tests(woql:group_by_single_element_list_template)" -t halt src/interactive.pl
 ```
 
+> **Important:** Always terminate `swipl` properly. Use `-t halt` or include
+> `halt(0)` in your `-g` goal. If the goal fails or throws an exception before
+> reaching `halt(0)`, the process will hang. Do **not** pipe `swipl` output
+> through `tail` or `head`—it hides errors and can mask hanging processes.
+>
+> ```bash
+> # Good: explicit halt
+> swipl -g "run_tests(json), halt(0)" -t halt src/interactive.pl
+>
+> # Bad: no halt, will hang on failure or if the goal is not fully deterministic
+> swipl -g "run_tests(json)" -f src/interactive.pl | tail -n 20
+> ```
+
 ### Test Server Management
 
 Before running JavaScript tests, ensure the test server is running:
@@ -339,7 +485,14 @@ TerminusDB provides built-in logging functions in Rust that integrate with the s
 
 **Built-in Logging Functions:**
 
-The logging module (`src/rust/terminusdb-community/src/log.rs`) provides five severity levels:
+TerminusDB has two Rust logging modules:
+
+- `src/rust/terminusdb-community/src/log.rs` — used from predicates that have a `Context` parameter. It provides the `log_debug!`, `log_info!`, `log_notice!`, `log_warning!`, and `log_error!` macros.
+- `src/rust/terminusdb-webserver/src/log.rs` — used from Rust code that does not have a Prolog context (e.g., background threads in the webserver). It provides the `log_debug`, `log_info`, `log_warning`, and `log_error` functions.
+
+Both modules route messages through Prolog's `json_log:json_log/2` predicate, so they appear in the server log with timestamps, severity, and metadata.
+
+**Logging from a predicate context:**
 
 ```rust
 use crate::log::{log_debug, log_info, log_notice, log_warning, log_error};
@@ -364,6 +517,18 @@ predicates! {
         output_term.unify("result")
     }
 }
+```
+
+**Logging from Rust code without a context (e.g., webserver background threads):**
+
+```rust
+use crate::log;
+
+// In a background thread where no Prolog context is available
+log::log_error(format!("[terminusdb-webserver] server error on port {}: {}", port, e));
+log::log_warning(format!("[terminusdb-webserver] suspicious request: {}", request));
+log::log_info(format!("[terminusdb-webserver] listening on port {}", port));
+log::log_debug(format!("[terminusdb-webserver] resolved path: {:?}", path));
 ```
 
 **How It Works:**
@@ -425,32 +590,15 @@ predicates! {
 }
 ```
 
-**Alternative: File-Based Logging (When Built-in Logging Isn't Available):**
-
-For Rust code that doesn't have access to a Prolog context (e.g., standalone functions), use temporary file logging:
-
-```rust
-use std::io::Write;
-
-if let Ok(mut f) = std::fs::OpenOptions::new()
-    .create(true)
-    .append(true)
-    .open("/tmp/debug_output.log")
-{
-    let _ = writeln!(f, "Debug message: {:?}", some_value);
-}
-
-// View output
-// tail -f /tmp/debug_output.log
-```
-
 **Best Practices:**
 
 - **Always use built-in logging** when you have a `context` parameter
+- **Use the webserver logging module** (`crate::log` in `terminusdb-webserver`) for background threads and code without a context
+- **Never use `eprintln!` or `println!` for production diagnostics** in Rust code; they bypass the structured logging pipeline
 - **Use appropriate severity levels** - avoid `log_error!` for non-errors
 - **Include context in messages** - function name, key identifiers
 - **Remove debug logging** before committing (or use INFO+ level for permanent logs)
-- **File-based logging** should only be used when context isn't available
+- **File-based logging** should only be used when the built-in modules are unavailable
 
 ### Debugging GraphQL Queries
 
@@ -528,6 +676,19 @@ fn helper_function(input: &Data) -> Result<Output> {
 ⚠️ **Performance:** Excessive logging in hot paths can impact performance. Use INFO+ levels for production code.
 
 ## Submitting Changes
+
+### GraphQL SSE Protocol Extensions
+
+The TerminusDB GraphQL SSE implementation follows the [graphql-sse protocol](https://github.com/enisdenjo/graphql-sse/blob/master/PROTOCOL.md) distinct connections mode. One non-standard extension is implemented:
+
+**`connected` event**
+
+After a subscription is accepted, the server sends a `connected` event before any `next` events. This is not part of the graphql-sse protocol. Strict clients ignore unknown event types per the SSE specification.
+
+- SSE format: `event: connected\ndata: null\n\n`
+- NDJSON format: `null\n`
+
+The purpose is to signal subscription readiness. Without it, clients cannot know when it is safe to trigger data operations that should produce subscription events, creating a race condition between subscribe and the first mutation.
 
 Before submitting a change, please run `make && ./terminusdb test` to make sure that all tests pass. Failure should result in a big fail message, and success with a final `true`. API tests will require that the admin password is `root` or that the environment variable `TERMINUSDB_ADMIN_PASS` is set prior to invocation of `terminusdb`.
 

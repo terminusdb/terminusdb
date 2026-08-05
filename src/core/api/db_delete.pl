@@ -14,7 +14,9 @@
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
+:- use_module(core(document/meta_commit_queue)).
 :- use_module(core(account)).
+:- use_module(core(plugins)).
 
 :- use_module(library(terminus_store)).
 :- use_module(library(lists)).
@@ -78,7 +80,9 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
     ->  force_delete_db(Organization, DB_Name)
     ;   do_or_die(delete_database_label(Organization, DB_Name),
                   error(database_files_do_not_exist(Organization, DB_Name), _)),
-        delete_db_from_system(Organization, DB_Name)).
+        delete_db_from_system(Organization, DB_Name),
+        ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true))
+    ).
 
 /**
 * Deletes the database label for the global store. Fails if the label does not
@@ -87,7 +91,15 @@ delete_db(System, Auth, Organization,DB_Name, Force) :-
 delete_database_label(Organization, DB_Name) :-
     triple_store(Store),
     organization_database_name(Organization, DB_Name, Named_Graph_Name),
-    safe_delete_named_graph(Store, Named_Graph_Name).
+    with_meta_commit_lock(
+        Named_Graph_Name,
+        safe_delete_named_graph(Store, Named_Graph_Name)
+    ),
+    % Purge dead layer cache entries left behind by the deleted database.
+    % Without this, stale Weak references accumulate until the cache's
+    % 20% dead-entry threshold triggers an inline cleanup, which may
+    % never happen if live entries keep being added.
+    terminus_store:cleanup_layer_cache(Store, _Removed).
 
 /**
  * force_delete_db(+Organization, +DB_Name) is semidet.
@@ -97,4 +109,5 @@ delete_database_label(Organization, DB_Name) :-
  */
 force_delete_db(Organization, DB_Name) :-
     ignore(delete_database_label(Organization, DB_Name)),
-    ignore(delete_db_from_system(Organization, DB_Name)).
+    ignore(delete_db_from_system(Organization, DB_Name)),
+    ignore(forall(plugins:post_delete_db_hook(Organization, DB_Name), true)).

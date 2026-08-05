@@ -9,7 +9,7 @@ node_modules
 \#*\#
 .\#*
 .deps
-config.pl
+/src/config/terminus_config.pl
 *.index.v1-1
 prefix.db
 tmp/*
@@ -32,3 +32,8 @@ tests/.terminusdb-test-storage
 admin?2fdb-*.bundle
 .terminusdb-test.log
 .terminusdb-test.pid
+tests/.terminusdb-test-7373.log
+tests/.terminusdb-test-7373.pid
+tests/.terminusdb-test-*.log
+tests/.terminusdb-test-*.pid
+dashboard/src/assets/openapi.json

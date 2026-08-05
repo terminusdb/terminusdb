@@ -1,4 +1,8 @@
-:- module(api_graphql, [handle_graphql_request/8]).
+:- module(api_graphql, [
+              handle_graphql_request/11,
+              resolve_graphql_dbs/6,
+              get_or_create_graphql_context/2
+          ]).
 
 :- use_module(core(util)).
 :- use_module(core(transaction)).
@@ -37,69 +41,128 @@ post_process_graphql_decimals(ResponseIn, ResponseOut) :-
     % Continue with any other decimal-like fields
     re_replace('"([a-zA-Z_][a-zA-Z0-9_]*)":"([0-9]+\\.[0-9]+)"'/g, '"\\1":\\2', Temp, ResponseOut).
 
-handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length) :-
+%% resolve_graphql_dbs(+System_DB, +Auth, +Desc, +Transaction,
+%%                     -Commit_DB, -Meta_DB) is det.
+%%
+%% Dispatches on descriptor type to wire up Commit_DB and Meta_DB
+%% for access control. Shared between the HTTP GraphQL handler and
+%% the SSE subscription handler.
+resolve_graphql_dbs(System_DB, Auth, Desc, Transaction, Commit_DB, Meta_DB) :-
+    (   branch_descriptor{} :< Desc
+    ->  maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/commit_read_access',
+                            (Transaction.parent),
+                            Commit_DB),
+        maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/meta_read_access',
+                            (Transaction.parent.parent),
+                            Meta_DB)
+    ;   repository_descriptor{} :< Desc
+    ->  maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/commit_read_access',
+                            Transaction,
+                            Commit_DB),
+        maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/meta_read_access',
+                            (Transaction.parent),
+                            Meta_DB)
+    ;   database_descriptor{} :< Desc
+    ->  Commit_DB = none,
+        maybe_show_database(System_DB, Auth, Desc,
+                            '@schema':'Action/meta_read_access',
+                            Transaction,
+                            Meta_DB)
+    ;   system_descriptor{} :< Desc
+    ->  Commit_DB = none,
+        Meta_DB = none
+    ;   Commit_DB = none,
+        Meta_DB = none
+    ).
+
+%% get_or_create_graphql_context(+Transaction, -Graphql_Context) is det.
+%%
+%% Returns a cached GraphQL context if available, otherwise builds one
+%% from class frames. Shared between the HTTP GraphQL handler and the
+%% SSE subscription handler.
+get_or_create_graphql_context(Transaction, Graphql_Context) :-
+    (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
+    ->  true
+    ;   all_class_frames(Transaction, Frames,
+            [compress_ids(true), expand_abstract(true), simple(true)]),
+        '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)
+    ).
+
+%% handle_graphql_request(+System_DB, +Auth, +Method, +Path_Atom,
+%%                        +Input_Stream, -Response, -Content_Type,
+%%                        -Content_Length, -New_Data_Version,
+%%                        -Transaction_Meta_Data, +Compress_Ids) is det.
+%
+%  Handles a GraphQL request. Compress_Ids is a boolean atom (true/false)
+%  extracted from the compress_ids query parameter by the route handler.
+%  When true (default), document IDs in responses are compact (prefixed).
+%  When false, full IRIs are returned. This affects _id field resolution
+%  and mutation result IDs (_insertDocuments, _replaceDocuments, _deleteDocuments).
+handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Response, _Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids) :-
     atom_string(Path_Atom, Path),
     (   Path == ""
-    %->  '$graphql':handle_system_request(Method, System_DB, Auth, Content_Length, Input_Stream, Response)
     ->  throw(error(no_graphql_path_given, _))
     ;   (   resolve_absolute_string_descriptor(Path, Desc)
         ->  do_or_die(open_descriptor(Desc, Transaction),
                       error(unresolvable_absolute_descriptor(Desc), _))
         ;   throw(error(invalid_absolute_path(Path), _))
         ),
-        (   branch_descriptor{} :< Desc
-        ->  maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/commit_read_access',
-                                (Transaction.parent),
-                                Commit_DB),
-            maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/meta_read_access',
-                                (Transaction.parent.parent),
-                                Meta_DB)
-        ;   repository_descriptor{} :< Desc
-        ->  maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/commit_read_access',
-                                Transaction,
-                                Commit_DB),
-            maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/meta_read_access',
-                                (Transaction.parent),
-                                Meta_DB)
-        ;   database_descriptor{} :< Desc
-        ->  Commit_DB = none,
-            maybe_show_database(System_DB, Auth, Desc,
-                                '@schema':'Action/meta_read_access',
-                                (Transaction),
-                                Meta_DB)
-        ;   Commit_DB = none,
-            Meta_DB = none
-        ),
+        resolve_graphql_dbs(System_DB, Auth, Desc, Transaction, Commit_DB, Meta_DB),
         assert_read_access(System_DB, Auth, Desc, type_filter{types:[instance,schema]}),
-        (   '$graphql':get_cached_graphql_context(Transaction, Graphql_Context)
-        ->  true
-        ;   all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
-            '$graphql':get_graphql_context(Transaction, Frames, Graphql_Context)),
+        get_or_create_graphql_context(Transaction, Graphql_Context),
 
-        Commit_Info0 = commit_info{author: Author, message: Message},
-        maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
-        create_context(Transaction, Commit_Info, C),
-        catch(
-            with_transaction(C,
-                             (   '$graphql':handle_request(Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, Content_Length, Input_Stream, ResponseRaw, Is_Error, Author, Message),
-                                 die_if(Is_Error = true,
-                                        response(ResponseRaw)),
-                                 (   var(Author)
-                                 ->  user_name_uri(System_DB, Author, Auth)
-                                 ;   true),
-                                 (   var(Message)
-                                 ->  Message = "Mutation through GraphQL"
-                                 ;   true)
-                             ),
+        %% Read the body to determine operation type and for execution.
+        %% The body is a JSON object with a "query" field.
+        read_body_string(Input_Stream, Content_Length, BodyString),
+        (   catch('$graphql':get_operation_type_from_body(Graphql_Context, BodyString, OperationType), _, fail)
+        ->  (   OperationType == mutation
+            ->  assert_write_access(System_DB, Auth, Desc, filter{type: instance}),
+                Effective_Method = post
+            ;   Effective_Method = get
+            )
+        ;   assert_write_access(System_DB, Auth, Desc, filter{type: instance}),
+            Effective_Method = post
+        ),
 
-                             _),
-            response(ResponseRaw),
-            json_log_info_formatted("intercepted a failing graphql, not committing", [])),
-        % Post-process: convert decimal strings to JSON numbers
-        post_process_graphql_decimals(ResponseRaw, Response)
+        %% Re-open the body as a stream for handle_request to consume.
+        string_length(BodyString, BodyLength),
+        setup_call_cleanup(
+            open_string(BodyString, BodyIn),
+            (   Commit_Info0 = commit_info{author: Author, message: Message},
+                maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
+                create_context(Transaction, Commit_Info, C),
+                catch(
+                    with_transaction(C,
+                                     (   '$graphql':handle_request(Effective_Method, Graphql_Context, System_DB, Meta_DB, Commit_DB, Transaction, Auth, BodyLength, BodyIn, ResponseRaw, Is_Error, Author, Message, Compress_Ids),
+                                         die_if(Is_Error = true,
+                                                response(ResponseRaw)),
+                                         (   var(Author)
+                                         ->  user_name_uri(System_DB, Author, Auth)
+                                         ;   true),
+                                         (   var(Message)
+                                         ->  Message = "Mutation through GraphQL"
+                                         ;   true)
+                                     ),
+
+                                     Meta_Data),
+                    response(ResponseRaw),
+                    json_log_info_formatted("intercepted a failing graphql, not committing", [])),
+                Transaction_Meta_Data = Meta_Data,
+                meta_data_version(Transaction, Meta_Data, New_Data_Version),
+                % Post-process: convert decimal strings to JSON numbers
+                post_process_graphql_decimals(ResponseRaw, Response)
+            ),
+            close(BodyIn)
+        )
     ).
+
+%% read_body_string(+Stream, +Length, -String) is det.
+%%
+%% Reads exactly Length bytes from Stream into a string.
+read_body_string(Stream, Length, String) :-
+    read_string(Stream, Length, String).
 

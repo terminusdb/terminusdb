@@ -1,0 +1,212 @@
+const { expect } = require('chai')
+const { Agent, db } = require('../lib')
+
+describe('plugin-endpoints', function () {
+  let agent
+
+  before(async function () {
+    agent = new Agent().auth()
+    await db.create(agent)
+  })
+
+  after(async function () {
+    await db.delete(agent)
+  })
+
+  describe('vectorlink plugin routes', function () {
+    it('GET /api/search/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .query({ query: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+    })
+
+    it('POST /api/search/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .send({ query: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+    })
+
+    it('POST /api/similar/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post(`/api/similar/${agent.orgName}/${agent.dbName}`)
+        .send({ id: 'test', query: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+    })
+
+    it('GET /api/duplicates/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/duplicates/${agent.orgName}/${agent.dbName}`)
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+    })
+
+    it('POST /api/plugin/search-resolve/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post(`/api/plugin/search-resolve/${agent.orgName}/${agent.dbName}`)
+        .send({ source: 'test', target: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+    })
+
+    it('GET /api/index/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/index/${agent.orgName}/${agent.dbName}`)
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type').that.matches(/api:(Vectorlink|SemanticIndexer)EndpointNotConfigured/)
+    })
+
+    it('POST /api/compare returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .post('/api/compare')
+        .send({ method: 'cosine', source: 'test', target: 'test' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type').that.matches(/api:(Vectorlink|SemanticIndexer)EndpointNotConfigured/)
+    })
+  })
+
+  describe('index endpoint response format', function () {
+    it('GET /api/index/{path} returns 400 when endpoint is not configured', async function () {
+      const r = await agent
+        .get(`/api/index/${agent.orgName}/${agent.dbName}`)
+        .query({ commit_id: 'placeholder' })
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']).to.have.property('@type').that.matches(/api:(Vectorlink|SemanticIndexer)EndpointNotConfigured/)
+    })
+
+    it('POST /api/index/{path} returns valid JSON (not Prolog json{} term)', async function () {
+      const r = await agent
+        .post(`/api/index/${agent.orgName}/${agent.dbName}/local/branch/main`)
+      // Regression: handler used write(json{...}) which produced invalid JSON
+      // like "json{@type:api:IndexResponse,api:status:api:success}" instead of
+      // proper JSON. The response must be parseable JSON in all cases
+      // (success, error, or endpoint-not-configured).
+      expect(r.text).to.not.match(/^json\{/)
+      expect(r.body).to.be.an('object')
+      expect(r.body).to.have.property('@type')
+      expect(r.body).to.have.property('api:status')
+    })
+
+    it('DELETE /api/index/{path} returns valid JSON (not Prolog json{} term)', async function () {
+      const r = await agent
+        .delete(`/api/index/${agent.orgName}/${agent.dbName}/local/branch/main`)
+      // Regression: handler used write(json{...}) which produced invalid JSON.
+      // The response must be parseable JSON in all cases.
+      expect(r.text).to.not.match(/^json\{/)
+      expect(r.body).to.be.an('object')
+      expect(r.body).to.have.property('@type')
+      expect(r.body).to.have.property('api:status')
+    })
+  })
+
+  describe('compress_ids parameter validation', function () {
+    // Detect whether vectorlink endpoint is configured by probing a search request
+    let endpointConfigured = false
+
+    before(async function () {
+      const probe = await agent
+        .get(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .query({ query: 'test' })
+      endpointConfigured = probe.body['api:error'] &&
+        probe.body['api:error']['@type'] !== 'api:VectorlinkEndpointNotConfigured'
+    })
+
+    it('GET /api/search accepts compress_ids=true without parameter error', async function () {
+      const r = await agent
+        .get(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .query({ query: 'test', compress_ids: 'true' })
+      // Should not get a BadParameterType error for compress_ids
+      const errType = r.body['api:error'] && r.body['api:error']['@type']
+      if (endpointConfigured) {
+        expect(errType).to.not.equal('api:BadParameterType')
+      } else {
+        expect(r.status).to.equal(400)
+        expect(errType).to.equal('api:VectorlinkEndpointNotConfigured')
+      }
+    })
+
+    it('GET /api/search accepts compress_ids=false without parameter error', async function () {
+      const r = await agent
+        .get(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .query({ query: 'test', compress_ids: 'false' })
+      const errType = r.body['api:error'] && r.body['api:error']['@type']
+      if (endpointConfigured) {
+        expect(errType).to.not.equal('api:BadParameterType')
+      } else {
+        expect(r.status).to.equal(400)
+        expect(errType).to.equal('api:VectorlinkEndpointNotConfigured')
+      }
+    })
+
+    it('GET /api/search rejects invalid compress_ids with 400 BadParameterType when endpoint is configured', async function () {
+      const r = await agent
+        .get(`/api/search/${agent.orgName}/${agent.dbName}`)
+        .query({ query: 'test', compress_ids: 'notabool' })
+      expect(r.status).to.equal(400)
+      if (endpointConfigured) {
+        expect(r.body['api:error']).to.have.property('@type', 'api:BadParameterType')
+      } else {
+        // compress_flag is called after endpoint check, so invalid value
+        // is only rejected when endpoint is configured
+        expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+      }
+    })
+
+    it('POST /api/similar accepts compress_ids=true without parameter error', async function () {
+      const r = await agent
+        .post(`/api/similar/${agent.orgName}/${agent.dbName}`)
+        .query({ compress_ids: 'true' })
+        .send({ id: 'test', query: 'test' })
+      if (endpointConfigured) {
+        // May get 404 or other non-parameter error, but not BadParameterType for compress_ids
+        const errType = r.body['api:error'] && r.body['api:error']['@type']
+        expect(errType).to.not.equal('api:BadParameterType')
+      } else {
+        expect(r.status).to.equal(400)
+        expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+      }
+    })
+
+    it('POST /api/similar rejects invalid compress_ids with 400 BadParameterType when endpoint is configured', async function () {
+      const r = await agent
+        .post(`/api/similar/${agent.orgName}/${agent.dbName}`)
+        .query({ compress_ids: 'notabool' })
+        .send({ id: 'test', query: 'test' })
+      expect(r.status).to.equal(400)
+      if (endpointConfigured) {
+        expect(r.body['api:error']).to.have.property('@type', 'api:BadParameterType')
+      } else {
+        expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+      }
+    })
+
+    it('GET /api/duplicates accepts compress_ids=true without parameter error', async function () {
+      const r = await agent
+        .get(`/api/duplicates/${agent.orgName}/${agent.dbName}`)
+        .query({ compress_ids: 'true' })
+      const errType = r.body['api:error'] && r.body['api:error']['@type']
+      if (endpointConfigured) {
+        expect(errType).to.not.equal('api:BadParameterType')
+      } else {
+        expect(r.status).to.equal(400)
+        expect(errType).to.equal('api:VectorlinkEndpointNotConfigured')
+      }
+    })
+
+    it('GET /api/duplicates rejects invalid compress_ids with 400 BadParameterType when endpoint is configured', async function () {
+      const r = await agent
+        .get(`/api/duplicates/${agent.orgName}/${agent.dbName}`)
+        .query({ compress_ids: 'notabool' })
+      expect(r.status).to.equal(400)
+      if (endpointConfigured) {
+        expect(r.body['api:error']).to.have.property('@type', 'api:BadParameterType')
+      } else {
+        expect(r.body['api:error']).to.have.property('@type', 'api:VectorlinkEndpointNotConfigured')
+      }
+    })
+  })
+})

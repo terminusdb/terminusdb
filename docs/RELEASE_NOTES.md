@@ -1,3 +1,15 @@
+# TerminusDB Server v12.1-rc1 Release Notes
+
+This is a major release that also builds the core foundation for a reactive future by moving to a scalable webserver foundation in Rust and a streaming commit pipeline.
+
+## Major changes
+* Subscriptions made possible by replacing streaming swipl http server with rust based streaming http server
+* Significantly improve performance and scalability with parallel write document elaboration and processing
+* Standards-compliant fully qualified intervals support
+
+## Bugfixes
+* Fix rebase race condition on throttled cpu 
+
 # TerminusDB Server v12.0.6 Release Notes
 
 ## New functionality

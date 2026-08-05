@@ -1455,7 +1455,7 @@ describe('decimal-precision', function () {
       // Setup GraphQL client (matching pattern from graphql.js test)
       const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
       const base = agent.baseUrl
-      const uri = `${base}${path}`
+      const uri = `${base}${path}?compress_ids=false`
 
       const httpLink = new HttpLink({ uri, fetch })
       const authMiddleware = new ApolloLink((operation, forward) => {
@@ -2149,6 +2149,218 @@ describe('decimal-precision', function () {
 
       const woqlDecimal = new Decimal(match[1])
       expect(woqlDecimal.equals(expectedDecimal)).to.be.true
+    })
+
+    it('should insert with native JSON object variable preserving 20-digit decimal', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: {
+          '@type': 'NumericTest',
+          '@id': 'NumericTest/native_json_var_precision',
+          decimalValue: '0.98765432109876543219',
+          doubleValue: 1.0,
+          integerValue: 1,
+          bigIntValue: '1',
+        },
+      }
+
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericTest/native_json_var_precision', type: 'NumericTest', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
+      const expectedDecimal = new Decimal('0.98765432109876543219')
+      expect(docDecimal.equals(expectedDecimal)).to.be.true
+    })
+
+    it('should insert with native JSON object variable with numeric decimal (not string)', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: {
+          '@type': 'NumericTest',
+          '@id': 'NumericTest/native_json_var_numeric',
+          decimalValue: '0.11234567890123456789',
+          doubleValue: 1.0,
+          integerValue: 1,
+          bigIntValue: '1',
+        },
+      }
+
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericTest/native_json_var_numeric', type: 'NumericTest', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
+      const expectedDecimal = new Decimal('0.11234567890123456789')
+      expect(docDecimal.equals(expectedDecimal)).to.be.true
+    })
+
+    it('should maintain backward compatibility with stringified JSON variable', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: '{"@type":"NumericTest","@id":"NumericTest/string_var_compat","decimalValue":"0.11111111111111111111","doubleValue":1.0,"integerValue":1,"bigIntValue":"1"}',
+      }
+
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericTest/string_var_compat', type: 'NumericTest', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
+      const expectedDecimal = new Decimal('0.11111111111111111111')
+      expect(docDecimal.equals(expectedDecimal)).to.be.true
+    })
+
+    it('should replace with native JSON object variable preserving precision', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+
+      await document.insert(agent, {
+        instance: {
+          '@type': 'NumericTest',
+          '@id': 'NumericTest/native_json_replace',
+          decimalValue: '0.11111111111111111111',
+          doubleValue: 1.0,
+          integerValue: 1,
+          bigIntValue: '1',
+        },
+      })
+
+      const replaceMutation = `mutation($input: JSON!) {
+        _replaceDocuments(json: $input, create: true)
+      }`
+      const replaceVariables = {
+        input: {
+          '@type': 'NumericTest',
+          '@id': 'NumericTest/native_json_replace',
+          decimalValue: '0.55445544554455445544',
+          doubleValue: 1.0,
+          integerValue: 1,
+          bigIntValue: '1',
+        },
+      }
+
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: replaceMutation, variables: replaceVariables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericTest/native_json_replace', type: 'NumericTest', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
+      const expectedDecimal = new Decimal('0.55445544554455445544')
+      expect(docDecimal.equals(expectedDecimal)).to.be.true
+    })
+
+    it('should handle native JSON object with nested structure and decimals', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const mutation = `mutation($input: JSON!) {
+        _insertDocuments(json: $input)
+      }`
+      const variables = {
+        input: {
+          '@type': 'NumericTest',
+          '@id': 'NumericTest/native_nested',
+          decimalValue: '0.22334455667788990011',
+          doubleValue: 1.5,
+          integerValue: 99,
+          bigIntValue: '123456789012345678901',
+        },
+      }
+
+      const rawGqlResponse = await agent.post(graphqlPath).send({ query: mutation, variables })
+      expect(rawGqlResponse.status).to.equal(200)
+      expect(rawGqlResponse.body.errors, JSON.stringify(rawGqlResponse.body.errors)).to.be.undefined
+
+      const docResult = await document.get(agent, {
+        query: { id: 'NumericTest/native_nested', type: 'NumericTest', as_list: true },
+      })
+      const docDecimalRaw = docResult.text.match(/"decimalValue"\s*:\s*([0-9.eE+-]+)/)[1]
+      const docDecimal = new Decimal(docDecimalRaw)
+      const expectedDecimal = new Decimal('0.22334455667788990011')
+      expect(docDecimal.equals(expectedDecimal)).to.be.true
+    })
+  })
+
+  describe('Patch and Diff Precision', function () {
+    it('should preserve high precision decimals through diff and patch', async function () {
+      const id = 'HighPrecision/patch-diff'
+
+      const beforeDoc = {
+        '@type': 'HighPrecision',
+        '@id': id,
+        value20digits: '1.23456789012345678901',
+        value15digits: '3.141592653589793',
+        calculation: '0.33333333333333',
+      }
+
+      const afterDoc = {
+        '@type': 'HighPrecision',
+        '@id': id,
+        value20digits: '9.87654321098765432109',
+        value15digits: '2.718281828459045',
+        calculation: '0.66666666666666',
+      }
+
+      // Add the first document
+      const r1 = await document.insert(agent, { instance: beforeDoc })
+      expect(r1.status).to.equal(200)
+      const docId = r1.body[0]
+      const dv1 = r1.header['terminusdb-data-version']
+
+      // Compute the diff between the stored first document and the second target document
+      const diffRes = await agent.post(api.path.versionDiff(agent)).send({
+        before_data_version: dv1,
+        document_id: docId,
+        after: afterDoc,
+      })
+      expect(diffRes.status).to.equal(200)
+
+      // Verify the raw diff JSON preserves the full 20-digit precision (superagent
+      // parsing would lose digits beyond double precision, so use the raw text).
+      const diffValue20Before = diffRes.text.match(/"value20digits"\s*:\s*\{[^}]*"@before"\s*:\s*([0-9.eE+-]+)/)[1]
+      const diffValue20After = diffRes.text.match(/"value20digits"\s*:\s*\{[^}]*"@after"\s*:\s*([0-9.eE+-]+)/)[1]
+      expect(new Decimal(diffValue20Before).equals(new Decimal('1.23456789012345678901'))).to.be.true
+      expect(new Decimal(diffValue20After).equals(new Decimal('9.87654321098765432109'))).to.be.true
+
+      // Wrap the raw diff JSON so the patch endpoint sees the exact wire-level decimals.
+      const patchBody = `{"patch":${diffRes.text},"author":"decimal-patch-test","message":"apply high precision patch"}`
+
+      // Apply the patch to the stored document
+      const patchRes = await agent.post(api.path.patchDb(agent))
+        .type('json')
+        .send(patchBody)
+      expect(patchRes.status).to.equal(200)
+
+      // Retrieve the patched document and verify exact decimal values
+      const response = await document.get(agent, { body: { id } })
+      const value20Raw = response.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]
+      const value15Raw = response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]
+      const calculationRaw = response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]
+
+      expect(new Decimal(value20Raw).equals(new Decimal('9.87654321098765432109'))).to.be.true
+      expect(new Decimal(value15Raw).equals(new Decimal('2.718281828459045'))).to.be.true
+      expect(new Decimal(calculationRaw).equals(new Decimal('0.66666666666666'))).to.be.true
     })
   })
 })

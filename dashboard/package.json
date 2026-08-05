@@ -1,6 +1,13 @@
 {
+  "name": "terminusdb-dashboard",
+  "version": "1.0.0",
+  "description": "Static Scalar OpenAPI API navigator for TerminusDB",
+  "scripts": {
+    "build": "node build.js"
+  },
   "dependencies": {
     "@tailwindcss/cli": "^4.1.16",
+    "js-yaml": "^4.1.0",
     "tailwindcss": "^4.1.16"
   }
 }

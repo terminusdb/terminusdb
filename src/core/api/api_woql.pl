@@ -1,4 +1,4 @@
-:- module(api_woql, [woql_query_json/8, woql_query_streaming_json/5]).
+:- module(api_woql, [woql_query_json/9, woql_query_streaming_json/5]).
 :- use_module(core(util)).
 :- use_module(core(query)).
 :- use_module(core(transaction)).
@@ -6,7 +6,7 @@
 :- use_module(core(api/api_error)).
 
 :- use_module(library(option)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_Data_Version, Options) :-
     option(commit_info(Commit_Info0), Options),
@@ -71,9 +71,11 @@ woql_query_streaming_json(System_DB, Auth, Path_Option, Query, Options) :-
         write_streaming_error_response(Exception)
     ).
 
-woql_query_json(System_DB, Auth, Path_Option, Query, Context, New_Data_Version, JSON, Options) :-
+woql_query_json(System_DB, Auth, Path_Option, Query, Context, New_Data_Version, Transaction_Meta_Data, JSON, Options) :-
     prepare_woql_query(System_DB, Auth, Path_Option, Query, AST, Context, Requested_Data_Version, Options),
-    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, New_Data_Version, JSON, Options).
+    run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transaction_Meta_Data, JSON, Options),
+    query_default_collection(Context, Transaction),
+    meta_data_version(Transaction, Transaction_Meta_Data, New_Data_Version).
 
 bind_vars([],_).
 bind_vars([Name=Var|Tail],AST) :-

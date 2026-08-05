@@ -15,6 +15,7 @@ use-system-gmp = ["gmp-mpfr-sys/use-system-libs"]
 lcs = "0.2.0"
 swipl = {version="0.3.16", features=["serde"]}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+terminusdb-webserver = {path="../terminusdb-webserver"}
 itertools = "0.10.3"
 serde_json = {version="1", features=["preserve_order", "arbitrary_precision"]}
 lazy_static = "1.4"
@@ -27,6 +28,7 @@ juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-
 serde = {version="1.0", features=["derive"]}
 float-ord = "0.3"
 regex = "1"
+sha2 = "0.10"
 aho-corasick = "0.7"
 bimap = "0.6.2"
 ordered-float = "3.0"
@@ -36,6 +38,7 @@ chrono = { version="0.4", features=["serde"]}
 handlebars = "4.3"
 thiserror = "1.0"
 lru = "0.16"
+smallvec = "1"
 tdb-succinct = "0.1.2"
 # Security fix: Force upgrade of transitive dependencies to fix CVE in idna 0.5.0
 # Punycode domain masking vulnerability - upgrade to idna 1.0.3+

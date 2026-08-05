@@ -81,7 +81,7 @@
 
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
@@ -466,7 +466,9 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'SystemRoot', % Windows specific stuff...
                          'TMP', % Windows sadness
                          'TEMP', % Again...
+                         'TERMINUSDB_ADDON_PATH',
                          'TERMINUSDB_ADMIN_PASSWD',
+                         'TERMINUSDB_PLUGINS_PATH',
                          'TERMINUSDB_SERVER_PACK_DIR',
 %                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH',
@@ -643,10 +645,10 @@ test_woql_label_descriptor(Name, Descriptor) :-
                      instance: Instance_Name
                  }.
 
+:- meta_predicate with_test_transaction(+, -, :, -).
 :- meta_predicate with_test_transaction(+, -, :).
 with_test_transaction(Descriptor, Context, Goal) :-
     with_test_transaction(Descriptor, Context, Goal, _).
-:- meta_predicate with_test_transaction(+, -, :, -).
 with_test_transaction(Descriptor, Context, Goal, Result) :-
     do_or_die(var(Context),
               error(test_transaction_initiated_with_bound_context, _)),
