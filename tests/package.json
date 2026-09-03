@@ -28,7 +28,7 @@
     "jsonwebtoken": "^9.0.0",
     "mocha": "^10.8.2",
     "optionator": "^0.9.1",
-    "stream-json": "^1.7.4",
+    "stream-json": "^3.5.0",
     "superagent": "^7.1.1"
   },
   "devDependencies": {
