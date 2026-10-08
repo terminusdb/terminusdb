@@ -194,8 +194,8 @@ do_rebase_with_retry(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
     ->  throw(error(rebase_target_branch_changed(Our_Branch_Path), _))
     ;   Result = error(Error)
     ->  throw(error(Error, _))
-    ;   Result = timeout
-    ->  throw(error(commit_queue_timeout, _))
+    ;   Result = timeout(RequestId)
+    ->  throw(error(commit_queue_timeout(RequestId), _))
     ).
 
 rebase_on_branch_inner(System_DB, Auth, Our_Branch_Path, Their_Branch_Path,
@@ -350,7 +350,7 @@ submit_rebase_contract_queued(Contract, Result) :-
     producer_timeout(ProducerTimeout),
     (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
     ->  true
-    ;   Result = timeout
+    ;   Result = timeout(RequestId)
     ),
     catch(message_queue_destroy(ReplyQueue), _, true).
 

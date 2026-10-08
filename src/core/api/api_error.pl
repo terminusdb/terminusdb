@@ -117,11 +117,20 @@ api_global_error_jsonld(error(commit_rejected(Reason), _), Type, JSON) :-
                               'api:reason' : Reason },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueTimeout',
+                              'api:request_id' : RequestId },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Timed out waiting for the commit queue to process the request", []),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
     JSON = _{'@type' : Type_Displayed,
-             'api:status' : "api:service_unavailable",
+             'api:status' : "api:server_error",
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
              'api:message' : Msg
             }.
@@ -3220,6 +3229,37 @@ test(parallel_elaboration_failed_is_typed_error, []) :-
     get_dict('api:error', JSON, Error),
     get_dict('@type', Error, 'api:ElaborationFailed'),
     get_dict('api:chunk', Error, 2),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500).
+
+test(commit_queue_timeout_is_indeterminate_server_error, []) :-
+    % When the commit-queue acknowledgement does not arrive within the
+    % producer timeout, the commit package is already enqueued. The
+    % server cannot say whether the commit will be applied, so the
+    % response must be an honest 500 asserting neither success nor
+    % failure - never a retryable 503, which would invite a duplicate
+    % submission.
+    api_error_jsonld(insert_documents,
+                     error(commit_queue_timeout(request42), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueTimeout'),
+    get_dict('api:request_id', Error, request42),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500),
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "may or may not have been applied")).
+
+test(commit_queue_timeout_without_request_id_is_indeterminate_error, []) :-
+    % Producers that cannot identify the request must still get the
+    % honest indeterminate-outcome response.
+    api_error_jsonld(insert_documents,
+                     error(commit_queue_timeout, _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueTimeout'),
     get_dict('api:status', JSON, "api:server_error"),
     json_http_code(JSON, 500).
 
