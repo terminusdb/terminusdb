@@ -263,10 +263,29 @@ class_super(Validation_Object,Class,Super) :-
     schema_class_super(Schema,Class,Super).
 
 schema_class_super(Schema,Class,Super) :-
+    (   schema_read_layer(Schema, Layer),
+        nonvar(Class)
+    ->  schema_class_supers_sorted_tabled(Layer, Class, Supers),
+        member(Super, Supers)
+    ;   schema_class_super_transitive(Schema, Class, Super)
+    ).
+
+% Memoize the transitive superclass closure as a sorted list so that
+% enumeration order is deterministic regardless of table population order
+% (concrete-subclass expansion order is observable in frames).
+:- table schema_class_supers_sorted_tabled/3 as private.
+schema_class_supers_sorted_tabled(Layer, Class, Supers) :-
+    Schema = [_{read: Layer}],
+    findall(Super,
+            schema_class_super_transitive(Schema, Class, Super),
+            Unsorted),
+    sort(Unsorted, Supers).
+
+schema_class_super_transitive(Schema, Class, Super) :-
     schema_subclass_of(Schema, Class, Super).
-schema_class_super(Schema,Class,Super) :-
+schema_class_super_transitive(Schema, Class, Super) :-
     schema_subclass_of(Schema, Class, Intermediate),
-    schema_class_super(Schema,Intermediate,Super).
+    schema_class_super_transitive(Schema, Intermediate, Super).
 
 schema_all_class_supers(Schema,Class,Prefixes,Supers,Options) :-
     findall(
