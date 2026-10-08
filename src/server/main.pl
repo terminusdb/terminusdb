@@ -14,12 +14,17 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
+:- use_module(core(util), [json_log_error_formatted/2]).
 :- use_module(core(api)).
 :- use_module(core(plugins)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,
+                                       oidc_issuer_url/1,
+                                       check_jwt_scopes_claim_safety/0,
+                                       check_jwt_subject_claim_safety/0,
+                                       check_jwt_config_safety/0,
                                        server/1,
                                        server_port/1,
                                        log_format/1,
@@ -41,17 +46,23 @@
 
 :- use_module(library(option)).
 
-% JWT IO library
+% JWT setup using Rust foreign predicates (registered in $rustnative module)
 :- if(jwt_enabled).
 
-% Load the library only if JWT is enabled
-:- use_module(library(jwt_io)).
-
-% Set up JWKS only if we have an endpoint
 load_jwt_conditionally :-
     (   jwt_jwks_endpoint(Endpoint)
-    ->  jwt_io:setup_jwks(Endpoint)
-    ;   true).
+    ->  ignore(catch('$rustnative':jwt_setup_jwks(Endpoint), E,
+              (   json_log_error_formatted('JWT JWKS setup failed: ~w', [E]),
+                  true)))
+    ;   oidc_issuer_url(IssuerUrl)
+    ->  ignore(catch('$rustnative':jwt_setup_oidc(IssuerUrl), E,
+              (   json_log_error_formatted('JWT OIDC setup failed: ~w', [E]),
+                  true)))
+    ;   true  % No JWKS or OIDC configured — JWT auth will fail at decode time
+    ),
+    check_jwt_scopes_claim_safety,
+    check_jwt_subject_claim_safety,
+    check_jwt_config_safety.
 
 :- else.
 
@@ -66,7 +77,6 @@ terminus_server(Argv,Wait) :-
     server(Server),
     server_port(Port),
     worker_amount(Workers),
-    load_jwt_conditionally,
     HTTPOptions = [port(Port), workers(Workers), silent(true)],
     foreach(pre_server_startup_hook(Port),true),
     catch(http_server(http_dispatch, HTTPOptions),
@@ -97,6 +107,7 @@ terminus_server(Argv,Wait) :-
 
     (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
         http_delete_handler(id(busy_loading)),
+        load_jwt_conditionally,
         welcome_banner(Server,Argv),
         foreach(post_server_startup_hook(Port),true),
         (   Wait = true

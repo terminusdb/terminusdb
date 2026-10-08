@@ -16,6 +16,9 @@ LOG_FILE="$SCRIPT_DIR/.terminusdb-test.log"
 # Default admin password (terminusdb default)
 ADMIN_PASS="${TERMINUSDB_ADMIN_PASS:-root}"
 
+# Server port — overridable via TERMINUSDB_SERVER_PORT env var
+SERVER_PORT="${TERMINUSDB_SERVER_PORT:-6363}"
+
 function start_server() {
     local clean_storage=false
     if [ "$1" = "--clean" ]; then
@@ -34,13 +37,13 @@ function start_server() {
         fi
     fi
     
-    # Check if another process is using port 6363
-    if lsof -Pi :6363 -sTCP:LISTEN -t >/dev/null 2>&1; then
-        echo "ERROR: Port 6363 is already in use by another process:"
-        lsof -Pi :6363 -sTCP:LISTEN
+    # Check if another process is using the port
+    if lsof -Pi :${SERVER_PORT} -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo "ERROR: Port ${SERVER_PORT} is already in use by another process:"
+        lsof -Pi :${SERVER_PORT} -sTCP:LISTEN
         echo ""
         echo "Stop the conflicting process with:"
-        echo "  kill \$(lsof -t -i:6363)"
+        echo "  kill \$(lsof -t -i:${SERVER_PORT})"
         echo ""
         echo "Or if it's a TerminusDB instance:"
         echo "  pkill -f terminusdb"
@@ -91,7 +94,7 @@ function start_server() {
     # Start server in background
     cd "$PROJECT_ROOT"
     export TERMINUSDB_SERVER_NAME=127.0.0.1
-    export TERMINUSDB_SERVER_PORT=6363
+    export TERMINUSDB_SERVER_PORT="$SERVER_PORT"
     export TERMINUSDB_ADMIN_PASS="$ADMIN_PASS"
     export TERMINUSDB_SERVER_DB_PATH="$STORAGE_DIR"
     # NOTE: Do NOT enable auto-optimize plugin for tests!
@@ -123,10 +126,10 @@ function start_server() {
             return 1
         fi
         
-        if curl -s -f --max-time 2 http://127.0.0.1:6363/api/ok > /dev/null 2>&1; then
+        if curl -s -f --max-time 2 http://127.0.0.1:${SERVER_PORT}/api/ok > /dev/null 2>&1; then
             echo " ✓"
             echo "TerminusDB test server is ready!"
-            echo "  URL: http://127.0.0.1:6363"
+            echo "  URL: http://127.0.0.1:${SERVER_PORT}"
             echo "  User: admin"
             echo "  Pass: $ADMIN_PASS"
             return 0
@@ -188,7 +191,7 @@ function status() {
         local pid=$(cat "$PID_FILE")
         if ps -p "$pid" > /dev/null 2>&1; then
             echo "TerminusDB test server is running (PID: $pid)"
-            echo "  URL: http://127.0.0.1:6363"
+            echo "  URL: http://127.0.0.1:${SERVER_PORT}"
             echo "  Logs: $LOG_FILE"
             echo "  Storage: $STORAGE_DIR"
             return 0

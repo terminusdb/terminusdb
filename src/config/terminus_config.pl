@@ -10,6 +10,15 @@
               jwt_jwks_endpoint/1,
               jwt_enabled/0,
               jwt_subject_claim_name/1,
+              jwt_issuer/1,
+              jwt_audience/1,
+              jwt_clock_tolerance/1,
+              oidc_issuer_url/1,
+              jwt_scopes_enabled/0,
+              jwt_scopes_claim/1,
+              check_jwt_scopes_claim_safety/0,
+              check_jwt_subject_claim_safety/0,
+              check_jwt_config_safety/0,
               registry_path/1,
               tmp_path/1,
               server_worker_options/1,
@@ -53,7 +62,7 @@
 
 
 /* [[[cog import cog; cog.out(f"terminusdb_version('{CURRENT_REPO_VERSION}').") ]]] */
-terminusdb_version('12.0.6').
+terminusdb_version('12.0.7').
 /* [[[end]]] */
 
 bootstrap_config_files :-
@@ -136,10 +145,122 @@ jwt_jwks_endpoint(Endpoint) :-
     % Ignore an empty value in the environment variable.
     (   Value = ''
     ->  false
-    ;   Endpoint = Value).
+    ;   atom_string(Value, Str),
+        (   string_concat("https://", _, Str)
+        ->  true
+        ;   string_concat("http://localhost", _, Str)
+        ->  true
+        ;   string_concat("http://127.0.0.1", _, Str)
+        ),
+        Endpoint = Value).
 
 jwt_subject_claim_name(Name) :-
-    getenv_default('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', 'preferred_username', Name).
+    getenv_default('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', 'sub', Name).
+
+jwt_issuer(Issuer) :-
+    getenv('TERMINUSDB_JWT_ISSUER', Value),
+    (   Value = '' -> false ; Issuer = Value ).
+
+jwt_audience(Audience) :-
+    getenv('TERMINUSDB_JWT_AUDIENCE', Value),
+    (   Value = '' -> false ; Audience = Value ).
+
+jwt_clock_tolerance(Seconds) :-
+    getenv_default_number('TERMINUSDB_JWT_CLOCK_TOLERANCE', 60, Seconds).
+
+oidc_issuer_url(Url) :-
+    getenv('TERMINUSDB_OIDC_ISSUER_URL', Value),
+    (   Value = ''
+    ->  false
+    ;   atom_string(Value, Str),
+        (   string_concat("https://", _, Str)
+        ->  true
+        ;   string_concat("http://localhost", _, Str)
+        ->  true
+        ;   string_concat("http://127.0.0.1", _, Str)
+        ),
+        Url = Value ).
+
+jwt_scopes_enabled :-
+    getenv_default('TERMINUSDB_JWT_SCOPES_ENABLED', false, Value),
+    Value = true.
+
+jwt_scopes_claim(ClaimName) :-
+    getenv_default('TERMINUSDB_JWT_SCOPES_CLAIM', 'scope', ClaimName).
+
+check_jwt_scopes_claim_safety :-
+    jwt_scopes_enabled,
+    (   \+ getenv('TERMINUSDB_JWT_SCOPES_CLAIM', _)
+    ;   getenv('TERMINUSDB_JWT_SCOPES_CLAIM', '')
+    ),
+    !,
+    json_log_error_formatted(
+        'FATAL: JWT scopes are enabled (TERMINUSDB_JWT_SCOPES_ENABLED=true) but no scope claim is configured (TERMINUSDB_JWT_SCOPES_CLAIM is unset or empty). Set TERMINUSDB_JWT_SCOPES_CLAIM explicitly to the JWT claim your IdP uses for authorization scopes.',
+        []),
+    halt(1).
+check_jwt_scopes_claim_safety :-
+    jwt_scopes_enabled,
+    jwt_scopes_claim(ClaimName),
+    !,
+    json_log_warning_formatted(
+        'JWT scopes are enabled. Ensure your IdP controls the "~w" claim and users cannot self-set it.',
+        [ClaimName]).
+check_jwt_scopes_claim_safety.
+
+check_jwt_subject_claim_safety :-
+    jwt_enabled,
+    \+ getenv('TERMINUSDB_JWT_AGENT_NAME_PROPERTY', _),
+    !,
+    json_log_warning_formatted(
+        'JWT enabled with default subject claim "sub". If your IdP uses a different claim for usernames, set TERMINUSDB_JWT_AGENT_NAME_PROPERTY explicitly.',
+        []).
+check_jwt_subject_claim_safety.
+
+check_jwt_config_safety :-
+    check_jwt_key_source_safety,
+    check_jwt_issuer_safety,
+    check_jwt_audience_safety.
+
+check_jwt_key_source_safety :-
+    getenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', JwksVal),
+    JwksVal \= '',
+    \+ jwt_jwks_endpoint(_),
+    !,
+    json_log_warning_formatted(
+        'JWT JWKS endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) is set but does not use HTTPS or http://localhost. Only https:// URLs (or http://localhost for testing) are accepted. JWT authentication will fail until a valid endpoint is provided.',
+        []).
+check_jwt_key_source_safety :-
+    getenv('TERMINUSDB_OIDC_ISSUER_URL', OidcVal),
+    OidcVal \= '',
+    \+ oidc_issuer_url(_),
+    !,
+    json_log_warning_formatted(
+        'OIDC issuer URL (TERMINUSDB_OIDC_ISSUER_URL) is set but does not use HTTPS or http://localhost. Only https:// URLs (or http://localhost for testing) are accepted. JWT authentication will fail until a valid issuer URL is provided.',
+        []).
+check_jwt_key_source_safety :-
+    \+ jwt_jwks_endpoint(_),
+    \+ oidc_issuer_url(_),
+    !,
+    json_log_warning_formatted(
+        'JWT is enabled but no JWKS endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) or OIDC issuer URL (TERMINUSDB_OIDC_ISSUER_URL) is configured. JWT authentication will fail for all tokens until a key source is provided.',
+        []).
+check_jwt_key_source_safety.
+
+check_jwt_issuer_safety :-
+    \+ jwt_issuer(_),
+    !,
+    json_log_warning_formatted(
+        'JWT is enabled but no issuer (TERMINUSDB_JWT_ISSUER) is configured. Tokens from any issuer will be accepted. Set TERMINUSDB_JWT_ISSUER to restrict accepted issuers.',
+        []).
+check_jwt_issuer_safety.
+
+check_jwt_audience_safety :-
+    \+ jwt_audience(_),
+    !,
+    json_log_warning_formatted(
+        'JWT is enabled but no audience (TERMINUSDB_JWT_AUDIENCE) is configured. Tokens with any audience will be accepted. Set TERMINUSDB_JWT_AUDIENCE to restrict accepted audiences.',
+        []).
+check_jwt_audience_safety.
 
 registry_path(Value) :-
     once(expand_file_search_path(plugins('registry.pl'), Path)),
