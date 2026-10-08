@@ -3820,6 +3820,16 @@ class_frame(Desc, Class, Frame, Options) :-
     class_frame(Trans, Class, Frame, Options).
 
 schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options)
+    ;   schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options)
+    ).
+
+:- table schema_class_frame_tabled/5 as private.
+schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options) :-
+    schema_class_frame_compute([_{read: Layer}], Prefixes, Class_Ex, Frame, Options).
+
+schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
         Predicate_Comp-Subframe,
         (   schema_class_predicate_conjunctive_type(Schema, Class_Ex, Predicate, Type_Desc),
