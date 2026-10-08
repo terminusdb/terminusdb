@@ -125,6 +125,33 @@ api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(parallel_elaboration_timeout(_RequestId, Outstanding, Timeout), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out after ~w seconds waiting for ~w outstanding elaboration chunks; the request was not committed and is safe to retry. If this happens under sustained write load, raise the worker message timeout via TERMINUSDB_ELABORATION_TIMEOUT.", [Timeout, Outstanding]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:service_unavailable",
+             'api:error' : _{ '@type' : 'api:ElaborationTimeout',
+                              'api:timeout_seconds' : Timeout,
+                              'api:outstanding_chunks' : Outstanding },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_failed, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document elaboration failed without a detailed error", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:ElaborationFailed' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_failed(chunk(Index, _Docs)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document elaboration failed for chunk ~w without a detailed error", [Index]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:ElaborationFailed',
+                              'api:chunk' : Index },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(data_version_mismatch(
                                   data_version(Requested_Label, Requested_Value),
                                   data_version(Actual_Label, Actual_Value)), _), Type, JSON) :-
@@ -3162,5 +3189,38 @@ test(document_id_already_exists_without_document, []) :-
     get_dict('api:document_id', Error, 'terminusdb:///data/Doc/test1'),
     \+ get_dict('api:document', Error, _),
     get_dict('api:status', JSON, "api:failure").
+
+test(parallel_elaboration_timeout_is_retryable_error, []) :-
+    % A worker that takes an elaboration chunk but never reports back makes
+    % the request handler throw parallel_elaboration_timeout/3 after the
+    % configured message timeout. Nothing is committed at that point, so the
+    % client must get a typed, retryable response - not an unhandled 500.
+    api_error_jsonld(insert_documents,
+                     error(parallel_elaboration_timeout(request42, 3, 120.0), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ElaborationTimeout'),
+    get_dict('api:timeout_seconds', Error, 120.0),
+    get_dict('api:outstanding_chunks', Error, 3),
+    get_dict('api:status', JSON, "api:service_unavailable"),
+    json_http_code(JSON, 503),
+    % The response must name the tuning knob so operators can act on it.
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "TERMINUSDB_ELABORATION_TIMEOUT")).
+
+test(parallel_elaboration_failed_is_typed_error, []) :-
+    % A chunk that fails to elaborate without throwing a detailed error
+    % surfaces as parallel_elaboration_failed. It must not escape error
+    % mapping as a generic unhandled 500.
+    api_error_jsonld(insert_documents,
+                     error(parallel_elaboration_failed(chunk(2, [doc])), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ElaborationFailed'),
+    get_dict('api:chunk', Error, 2),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500).
 
 :- end_tests(error_reporting).
