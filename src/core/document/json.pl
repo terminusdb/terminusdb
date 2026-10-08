@@ -3820,6 +3820,20 @@ class_frame(Desc, Class, Frame, Options) :-
     class_frame(Trans, Class, Frame, Options).
 
 schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options)
+    ;   schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options)
+    ).
+
+% The class frame is a pure function of the schema read layer, and computing
+% it rebuilds the whole-schema supermap. It runs once per elaborated document,
+% so it must be cached per (layer, class, options) or elaboration pays for a
+% full schema walk per document.
+:- table schema_class_frame_tabled/5 as private.
+schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options) :-
+    schema_class_frame_compute([_{read: Layer}], Prefixes, Class_Ex, Frame, Options).
+
+schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
         Predicate_Comp-Subframe,
         (   schema_class_predicate_conjunctive_type(Schema, Class_Ex, Predicate, Type_Desc),
@@ -15444,6 +15458,89 @@ test(class_frame,
                      '@type':'Enum',
                      '@values':[yes,no]},
          name:'xsd:string'}.
+
+memo_example_schema_v1('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}
+{ "@id" : "MemoExample",
+  "@type" : "Class",
+  "@key" : {"@type" : "Random"},
+  "name" : "xsd:string" }
+').
+
+memo_example_schema_v2('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}
+{ "@id" : "MemoExample",
+  "@type" : "Class",
+  "@key" : {"@type" : "Random"},
+  "name" : "xsd:string",
+  "nickname" : "xsd:string" }
+').
+
+test(class_frame_memoized_per_schema_layer,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % The class frame is a pure function of the schema read layer, but
+    % computing it rebuilds the whole-schema supermap. It runs once per
+    % elaborated document, so it is memoized per (layer, class, options);
+    % repeat calls return the memoized answer.
+    class_frame(Desc, 'Example', Frame1),
+    class_frame(Desc, 'Example', Frame2),
+    assertion(Frame1 =@= Frame2),
+    assertion(predicate_property('document/json':schema_class_frame_tabled(_,_,_,_,_), tabled)),
+    assertion(predicate_property('document/schema':schema_supermap_tabled(_,_,_,_), tabled)).
+
+test(class_frame_not_stale_after_schema_update,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             memo_example_schema_v1(V1),
+             write_schema_string(V1, Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % Memoization is keyed on the schema read layer, so a schema commit
+    % (new layer) must not see a stale frame.
+    class_frame(Desc, 'MemoExample', Frame1),
+    assertion(\+ get_dict(nickname, Frame1, _)),
+    memo_example_schema_v2(V2),
+    write_schema_string(V2, Desc),
+    class_frame(Desc, 'MemoExample', Frame2),
+    get_dict(nickname, Frame2, _).
+
+test(schema_supermap_memoized_per_schema_layer,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_schema(DB, Schema),
+    database_prefixes(DB, Prefixes),
+    'document/schema':schema_supermap(Schema, Prefixes, First, [compress_ids(true)]),
+    'document/schema':schema_supermap(Schema, Prefixes, Second, [compress_ids(true)]),
+    assertion(Second == First),
+    % The memoized answer is identical to a fresh computation.
+    'document/schema':schema_supermap_compute(Schema, Prefixes, Expected, [compress_ids(true)]),
+    assertion(First == Expected).
+
+test(schema_supermap_falls_back_without_read_layer, []) :-
+    % Without a schema read layer there is nothing stable to key a table on;
+    % the untabled computation is used directly.
+    'document/schema':schema_supermap_compute([], _P1, SM_Computed, [compress_ids(true)]),
+    'document/schema':schema_supermap([], _P2, SM_Direct, [compress_ids(true)]),
+    assertion(SM_Direct == SM_Computed).
 
 test(bogus_schema_write,
      [setup((setup_temp_store(State),
