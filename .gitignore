@@ -1,6 +1,7 @@
 # TerminusDB gitignore defaults
 tus
 .DS_Store
+tests/.terminusdb-test-*
 tests/.terminusdb-test-storage*
 tests/benchmark/benchmark_results
 tests/benchmark_results
@@ -32,3 +33,5 @@ tests/.terminusdb-test-storage
 admin?2fdb-*.bundle
 .terminusdb-test.log
 .terminusdb-test.pid
+
+assets/

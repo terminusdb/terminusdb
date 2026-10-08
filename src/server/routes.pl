@@ -80,10 +80,8 @@
 % Results should be cached!
 :- use_module(library(http/http_authenticate)).
 
-% Conditional loading of the JWT IO library...
-:- if(config:jwt_enabled).
-:- use_module(library(jwt_io)).
-:- endif.
+% JWT decode is now handled by Rust foreign predicates in $rustnative module
+% No Prolog library import needed
 
 :- listen(http(Term), http_request_logger(Term)).
 
@@ -3667,29 +3665,58 @@ fetch_authorization_data(Request, Username, KS) :-
 
 :- if(config:jwt_enabled).
 /*
- *  fetch_jwt_data(+Request, -Username) is semi-determinate.
+ *  fetch_jwt_data(+Token, -Username, -PayloadDict) is semi-determinate.
  *
- *  Fetches the HTTP JWT data
+ *  Fetches the HTTP JWT data and returns both the username and the full
+ *  payload dict (for scope extraction).
  */
-fetch_jwt_data(Token, Username) :-
+fetch_jwt_data(Token, Username, PayloadDict) :-
     atom_string(TokenAtom, Token),
-
-    % SECURITY: Don't include token in error (will be sanitized in logs)
-    do_or_die(jwt_decode(TokenAtom, Payload, []),
+    % Build JWT decode options dict from config predicates
+    findall(K-V,
+            (   jwt_issuer(Issuer),       K = iss,             V = Issuer
+            ;   jwt_audience(Audience),   K = aud,             V = Audience
+            ;   jwt_clock_tolerance(Sec), K = clock_tolerance, V = Sec
+            ),
+            Pairs),
+    dict_pairs(OptionsDict, json, Pairs),
+    atom_json_dict(OptionsJSON, OptionsDict, []),
+    do_or_die('$rustnative':jwt_decode(TokenAtom, Payload, OptionsJSON),
               error(authentication_incorrect(jwt_decode_failed), _)),
-
-    % SECURITY: Wrap in authentication_incorrect to ensure sanitization
     do_or_die(
         (   atom_json_dict(Payload, PayloadDict, [default_tag(json)]),
             jwt_subject_claim_name(ClaimName),
-            % replace with dict key get (or whatever it is called)
             get_dict(ClaimName, PayloadDict, UsernameString),
             atom_string(Username, UsernameString)),
         error(authentication_incorrect(malformed_jwt_payload), _)).
 :- else.
-fetch_jwt_data(_Token, _Username) :-
+fetch_jwt_data(_Token, _Username, _PayloadDict) :-
     throw(error(authentication_incorrect(jwt_authentication_requested_but_no_key_configured),_)).
 :- endif.
+
+% JWT scope parsing
+% Parse space-delimited scope strings from the configured claim into structured terms.
+% "dfrnt#admin dfrnt/mydb#write" → [scope_org(dfrnt, admin), scope_db(dfrnt, mydb, write)]
+% Malformed scope strings are silently skipped (fail, not return []).
+jwt_scopes_from_payload(PayloadDict, Scopes) :-
+    once(jwt_scopes_claim(ClaimName)),
+    (   get_dict(ClaimName, PayloadDict, ScopeValue),
+        string(ScopeValue)
+    ->  atom_string(ScopeAtom, ScopeValue),
+        split_string(ScopeAtom, " ", "", ScopeStrs),
+        exclude(=(""), ScopeStrs, NonEmpty),
+        findall(Scope, (member(Str, NonEmpty), parse_scope_string(Str, Scope)), Scopes)
+    ;   Scopes = []
+    ).
+
+parse_scope_string(Str, Scope) :-
+    split_string(Str, "#", "", [GraphSpec, RoleStr]),
+    atom_string(Role, RoleStr),
+    split_string(GraphSpec, "/", "", Parts),
+    parse_scope_parts(Parts, Role, Scope).
+
+parse_scope_parts([Org], Role, scope_org(Org, Role)) :- !.
+parse_scope_parts([Org, DB], Role, scope_db(Org, DB, Role)) :- !.
 
 /*
  * sanitize_auth_reason(+Reason, -SafeReason) is det.
@@ -3739,10 +3766,26 @@ authenticate(System_Askable, Request, Auth) :-
     memberchk(authorization(Text), Request),
     pattern_string_split(" ", Text, ["Bearer", Token]),
     !,
-    % Try JWT if no http keys
-    fetch_jwt_data(Token, Username),
-    (   username_auth(System_Askable, Username, Auth)
-    ->  true
+    fetch_jwt_data(Token, Username, PayloadDict),
+    (   jwt_scopes_enabled,
+        jwt_scopes_from_payload(PayloadDict, Scopes),
+        Scopes \= []
+    ->  Auth = jwt_scopes(Scopes),
+        format(string(Message), "User '~w' authenticated through JWT scopes", Username),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: jwt_scopes,
+                           authResult: success,
+                           user: Username
+                       })
+    ;   username_auth(System_Askable, Username, Auth)
+    ->  format(string(Message), "User '~w' authenticated through JWT", Username),
+        json_log_debug(_{
+                           message: Message,
+                           authMethod: jwt,
+                           authResult: success,
+                           user: Username
+                       })
     ;   format(string(Message), "User '~w' failed to authenticate through JWT", Username),
         json_log_debug(_{
                            message: Message,
@@ -3750,15 +3793,8 @@ authenticate(System_Askable, Request, Auth) :-
                            authResult: failure,
                            user: Username
                        }),
-        throw(error(authentication_incorrect(jwt_no_user_with_name(Username)),_))),
-
-    format(string(Message), "User '~w' authenticated through JWT", Username),
-    json_log_debug(_{
-                       message: Message,
-                       authMethod: jwt,
-                       authResult: success,
-                       user: Username
-                   }).
+        throw(error(authentication_incorrect(jwt_no_user_with_name(Username)),_))
+    ).
 authenticate(System_Askable, Request, Auth) :-
     insecure_user_header_key(Header_Key),
     Header =.. [Header_Key, Username],
@@ -4402,3 +4438,71 @@ http_request_logger(request_finished(Local_Id, Code, _Status, _Cpu, Bytes)) :-
                       httpRequest: Http,
                       message: Message
                   }).
+
+:- if(jwt_enabled).
+
+:- begin_tests(jwt_scope_parsing).
+
+test(parse_scope_org) :-
+    parse_scope_string("dfrnt#admin", scope_org("dfrnt", admin)).
+
+test(parse_scope_db) :-
+    parse_scope_string("dfrnt/mydb#write", scope_db("dfrnt", "mydb", write)).
+
+test(parse_scope_parts_org) :-
+    parse_scope_parts(["dfrnt"], admin, scope_org("dfrnt", admin)).
+
+test(parse_scope_parts_db) :-
+    parse_scope_parts(["dfrnt", "mydb"], read, scope_db("dfrnt", "mydb", read)).
+
+test(jwt_scopes_from_payload_with_scopes) :-
+    Payload = _{scope: "dfrnt#admin dfrnt/mydb#write"},
+    jwt_scopes_from_payload(Payload, Scopes),
+    memberchk(scope_org("dfrnt", admin), Scopes),
+    memberchk(scope_db("dfrnt", "mydb", write), Scopes).
+
+test(jwt_scopes_from_payload_empty_claim) :-
+    Payload = _{scope: ""},
+    jwt_scopes_from_payload(Payload, Scopes),
+    Scopes = [].
+
+test(jwt_scopes_from_payload_no_claim) :-
+    Payload = _{sub: "admin"},
+    jwt_scopes_from_payload(Payload, Scopes),
+    Scopes = [].
+
+test(jwt_scopes_from_payload_single_org_scope) :-
+    Payload = _{scope: "dfrnt#admin"},
+    jwt_scopes_from_payload(Payload, Scopes),
+    Scopes = [scope_org("dfrnt", admin)].
+
+test(jwt_scopes_from_payload_single_db_scope) :-
+    Payload = _{scope: "dfrnt/mydb#read"},
+    jwt_scopes_from_payload(Payload, Scopes),
+    Scopes = [scope_db("dfrnt", "mydb", read)].
+
+test(jwt_scopes_from_payload_multiple_spaces) :-
+    Payload = _{scope: "dfrnt#admin   dfrnt/mydb#write"},
+    jwt_scopes_from_payload(Payload, Scopes),
+    memberchk(scope_org("dfrnt", admin), Scopes),
+    memberchk(scope_db("dfrnt", "mydb", write), Scopes).
+
+test(parse_scope_malformed_no_hash) :-
+    \+ parse_scope_string("dfrnt/admin", _).
+
+test(parse_scope_malformed_empty) :-
+    \+ parse_scope_string("", _).
+
+test(jwt_scopes_from_payload_non_string_claim) :-
+    Payload = _{scope: 123},
+    jwt_scopes_from_payload(Payload, Scopes),
+    Scopes = [].
+
+test(jwt_scopes_from_payload_array_claim) :-
+    Payload = _{scope: ["admin#admin"]},
+    jwt_scopes_from_payload(Payload, Scopes),
+    Scopes = [].
+
+:- end_tests(jwt_scope_parsing).
+
+:- endif.

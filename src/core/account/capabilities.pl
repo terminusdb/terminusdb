@@ -115,8 +115,18 @@ username_auth(DB, Username, User_ID) :-
  * This needs to implement some of the logical character of scope subsumption.
  */
 auth_action_scope(_, Auth, _, _) :-
+    atomic(Auth),
     is_super_user(Auth),
     !.
+% JWT-scoped auth: Auth is jwt_scopes(ScopeList) carrying parsed scopes from JWT token.
+% jwt_scopes(...) does NOT match is_super_user/1 (compound term vs URI atom).
+auth_action_scope(DB, jwt_scopes(Scopes), Action, Scope_Iri) :-
+    member(Scope, Scopes),
+    scope_matches(DB, Scope, Scope_Iri),
+    scope_role(Scope, RoleName),
+    role_name_allows_action(DB, RoleName, Action),
+    !.
+
 auth_action_scope(DB, Auth, Action, Scope_Iri) :-
     ground(Auth),
     ask(DB,
@@ -139,6 +149,31 @@ auth_action_scope(DB, _Auth, Action, Scope_Iri) :-
             t(Role, action, Action)
         )
        ).
+
+% JWT scope matching helpers
+
+% Organization-level scope matches any resource under the org.
+% Uses same path grouping as existing auth_action_scope/4: star((p(child);p(database)))
+scope_matches(DB, scope_org(Org, _), Scope_Iri) :-
+    organization_name_uri(DB, Org, OrgUri),
+    once((   Scope_Iri = OrgUri
+    ;   ask(DB, path(OrgUri, (star((p(child);p(database)))), Scope_Iri, _)))).
+
+% Data product-level scope matches the database
+scope_matches(DB, scope_db(Org, DBName, _), Scope_Iri) :-
+    organization_database_name_uri(DB, Org, DBName, Scope_Iri).
+
+scope_role(scope_org(_, Role), Role).
+scope_role(scope_db(_, _, Role), Role).
+
+% Check if a role name grants an action.
+% Reuses the same ask/2 query pattern as existing auth_action_scope/4
+% which does: t(Role, action, Action). We add the name lookup prefix.
+% Fails silently (semidet) if role name doesn't exist — deny all for unknown roles.
+role_name_allows_action(DB, RoleName, Action) :-
+    ask(DB, (t(Role, name, RoleName^^xsd:string),
+             t(Role, rdf:type, '@schema':'Role'),
+             t(Role, action, Action))).
 
 /*
  * resource_user_path(Askable,Resource,User,Path) is nondet.
@@ -649,5 +684,159 @@ test(admin_has_access_to_all_dbs, [
     resolve_absolute_string_descriptor("Gavin/test1", GavinTestDB),
     check_descriptor_auth(system_descriptor{}, GavinTestDB, system:meta_write_access, Auth),
     check_descriptor_auth(system_descriptor{}, GavinTestDB, system:commit_write_access, Auth).
+
+% JWT scope parsing tests — these test the pure parsing logic without requiring a JWT server
+
+test(jwt_scope_role_extraction_org, []) :-
+    scope_role(scope_org(dfrnt, admin), admin).
+
+test(jwt_scope_role_extraction_db, []) :-
+    scope_role(scope_db(dfrnt, mydb, read), read).
+
+test(jwt_scopes_not_super_user, []) :-
+    % is_super_user/1 throws on non-atomic terms (compound jwt_scopes),
+    % which means jwt_scopes is never treated as super user.
+    \+ catch(is_super_user(jwt_scopes([scope_org(dfrnt, admin)])), _, false).
+
+% auth_action_scope with JWT scopes — requires system DB with roles
+test(jwt_scope_grants_action_on_matching_database, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    % Admin Role should exist in system DB and grant meta_write_access
+    auth_action_scope(SystemDB, jwt_scopes([scope_db("Gavin", "test1", 'Admin Role')]), '@schema':'Action/meta_write_access', DB_Uri).
+
+test(jwt_scope_denies_action_when_role_lacks_it, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    % Consumer Role should not grant meta_write_access
+    \+ catch(auth_action_scope(SystemDB, jwt_scopes([scope_db("Gavin", "test1", 'Consumer Role')]), '@schema':'Action/meta_write_access', DB_Uri), _, fail).
+
+test(jwt_scope_unknown_role_denies_all, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    \+ catch(auth_action_scope(SystemDB, jwt_scopes([scope_db("Gavin", "test1", "nonexistent_role")]), '@schema':'Action/meta_write_access', DB_Uri), _, fail).
+
+% scope_matches/3 tests — test the pure matching logic
+
+test(scope_matches_org_level, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_name_uri(SystemDB, "Gavin", OrgUri),
+    scope_matches(SystemDB, scope_org("Gavin", admin), OrgUri).
+
+test(scope_matches_org_subsumes_database, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    scope_matches(SystemDB, scope_org("Gavin", admin), DB_Uri).
+
+test(scope_matches_database_level, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    scope_matches(SystemDB, scope_db("Gavin", "test1", admin), DB_Uri).
+
+test(scope_matches_database_level_does_not_match_org, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_name_uri(SystemDB, "Gavin", OrgUri),
+    \+ scope_matches(SystemDB, scope_db("Gavin", "test1", admin), OrgUri).
+
+% role_name_allows_action/3 tests
+
+test(role_name_allows_action_for_admin_role, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    role_name_allows_action(SystemDB, 'Admin Role', '@schema':'Action/meta_write_access').
+
+test(role_name_allows_action_denies_for_unknown_role, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    \+ role_name_allows_action(SystemDB, "nonexistent_role", '@schema':'Action/meta_write_access').
+
+% auth_action_scope with org-level JWT scopes
+
+test(jwt_scope_org_grants_access_to_database, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    auth_action_scope(SystemDB, jwt_scopes([scope_org("Gavin", 'Admin Role')]), '@schema':'Action/meta_write_access', DB_Uri).
+
+test(jwt_scope_org_denies_when_role_lacks_action, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    \+ catch(auth_action_scope(SystemDB, jwt_scopes([scope_org("Gavin", 'Consumer Role')]), '@schema':'Action/meta_write_access', DB_Uri), _, fail).
+
+% Scope subsumption: org scope with admin should also work on databases under that org
+
+test(jwt_scope_org_admin_subsumes_all_databases, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
+    auth_action_scope(SystemDB, jwt_scopes([scope_org("Gavin", 'Admin Role')]), '@schema':'Action/commit_write_access', DB_Uri).
 
 :- end_tests(capabilities).

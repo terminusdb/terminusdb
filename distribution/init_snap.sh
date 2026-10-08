@@ -28,8 +28,5 @@ fi
 if [ ! -d "$SNAP/tus" ] || [ ! -f "$SNAP/tus/pack.pl" ]; then
     echo "ERROR: TUS pack not found or incomplete at $SNAP/tus" >&2
 fi
-if [ ! -d "$SNAP/jwt_io" ] || [ ! -f "$SNAP/jwt_io/pack.pl" ]; then
-    echo "ERROR: JWT pack not found or incomplete at $SNAP/jwt_io" >&2
-fi
 
 exec "$SNAP/terminusdb" "$@"

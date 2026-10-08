@@ -1,3 +1,25 @@
+# TerminusDB Server v12.0.7 Release Notes
+
+## New clients
+* Add Elixir Client link to README by @thanos in [#2455](https://github.com/terminusdb/terminusdb/pull/2455) (Wow 🚀)
+
+## New functionality
+* Apply explicit diffs by @Kidnix101 in [#2486](https://github.com/terminusdb/terminusdb/pull/2486)
+* Add `unfold` parameter to the diff API endpoint by @hoijnet in [#2464](https://github.com/terminusdb/terminusdb/pull/2464)
+
+## Maintenance and Bugfixes
+* Fix RFC 3986 scheme detection in `uri_has_protocol/1` by @hoijnet in [#2458](https://github.com/terminusdb/terminusdb/pull/2458)
+* Fix false patch conflict on xsd:decimal properties by @hoijnet in [#2462](https://github.com/terminusdb/terminusdb/pull/2462)
+* Add `@shared` to rust change detection algorithm by @hoijnet in [#2478](https://github.com/terminusdb/terminusdb/pull/2478)
+* docs: document protoc and make install-deps prerequisites for macOS build by @drernie in [#2502](https://github.com/terminusdb/terminusdb/pull/2502)
+
+## New Contributors
+* @Kidnix101 made their first contribution in [#2486](https://github.com/terminusdb/terminusdb/pull/2486)
+* @drernie made their first contribution in [#2502](https://github.com/terminusdb/terminusdb/pull/2502)
+* @thanos made their first contribution in [#2455](https://github.com/terminusdb/terminusdb/pull/2455)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.6...v12.0.7
+
 # TerminusDB Server v12.0.6 Release Notes
 
 ## New functionality

@@ -21,7 +21,7 @@ lazy_static = "1.4"
 urlencoding = "2.1"
 rayon = "1.5"
 lazy-init = "0.5"
-rand = "0.8.6"
+rand = "0.9"
 #juniper = "0.15.11"
 juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-v0.15.11-p1"}
 serde = {version="1.0", features=["derive"]}
@@ -41,6 +41,10 @@ tdb-succinct = "0.1.2"
 # Punycode domain masking vulnerability - upgrade to idna 1.0.3+
 url = "2.5.4"
 gmp-mpfr-sys = { version = "~1.5", default-features = false, optional = true }
+jsonwebtoken = "9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["rt", "time"] }
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rug = { version = "1.17", default-features = false, features = [] }

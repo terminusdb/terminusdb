@@ -2,18 +2,18 @@
 
 # Community-only Docker build.
 # Set the swipl version by argument (see Makefile for the default!)
-ARG SWIPL_VERSION=10.0.1
+ARG SWIPL_VERSION=10.0.2
 ARG SKIP_TESTS=false
 
 # Minimal SWI-Prolog
 FROM swipl:${SWIPL_VERSION} AS swipl_minimal
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libjwt0
+    apt-get install -y --no-install-recommends ca-certificates
 
 # Install the SWI-Prolog pack dependencies.
 FROM swipl_minimal AS pack_installer
 RUN set -eux; \
-    BUILD_DEPS="git curl build-essential make libjwt-dev libssl-dev \
+    BUILD_DEPS="git curl build-essential make libssl-dev \
     pkg-config clang ca-certificates m4 libgmp-dev \
     protobuf-compiler libprotobuf-dev"; \
     apt-get update; \
@@ -48,7 +48,7 @@ RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo 
 # Copy the packs and dylib. Prepare to build the Prolog code.
 FROM pack_installer AS base
 RUN set -eux; \
-    RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \
+    RUNTIME_DEPS="make openssl binutils ca-certificates"; \
     apt-get update; \
     apt-get upgrade -y; \
     apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
@@ -81,13 +81,12 @@ COPY --from=base_community /app/terminusdb/src/terminus-schema /app/terminusdb/s
 COPY --from=base_community /app/terminusdb/distribution/init_docker.sh /app/terminusdb/init_docker.sh
 
 RUN set -eux; \
-    RUNTIME_DEPS="libjwt0 make openssl binutils ca-certificates"; \
+    RUNTIME_DEPS="make openssl binutils ca-certificates"; \
     apt-get update; \
     apt-get upgrade -y; \
     apt-get install -y --no-install-recommends ${RUNTIME_DEPS}; \
     rm -rf /var/cache/apt/*; \
     rm -rf /var/lib/apt/lists/*
-COPY --from=pack_installer /usr/share/swi-prolog/pack/jwt_io /usr/share/swi-prolog/pack/jwt_io
 COPY --from=pack_installer /usr/share/swi-prolog/pack/tus /usr/share/swi-prolog/pack/tus
 
 WORKDIR /app/terminusdb

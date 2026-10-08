@@ -25,6 +25,7 @@
     "cross-fetch": "^3.1.5",
     "decimal.js": "^10.6.0",
     "fast-glob": "^3.2.11",
+    "jsonwebtoken": "^9.0.0",
     "mocha": "^10.8.2",
     "optionator": "^0.9.1",
     "stream-json": "^1.7.4",
@@ -40,5 +41,8 @@
     "eslint-plugin-promise": "^6.0.0",
     "http-server": "^14.1.0",
     "start-server-and-test": "^2.0.3"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.7"
   }
 }
