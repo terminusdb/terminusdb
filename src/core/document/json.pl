@@ -104,6 +104,7 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(json)).
 :- use_module(library(lists)).
+:- use_module(library(pairs)).
 :- use_module(library(dicts)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(random)).
@@ -3687,12 +3688,14 @@ type_descriptor_sub_frame(class(C), Schema, Prefixes, Frame, Options) :-
         Frame = Class_Comp
     ;   (   schema_is_abstract(Schema, C),
             option(expand_abstract(true), Options)
-        ->  findall(F,
+        ->  findall(Class-F,
                     (   schema_concrete_subclass(Schema,C,Class),
                         schema_type_descriptor(Schema, Class, Desc),
                         type_descriptor_sub_frame(Desc,Schema,Prefixes,F,Options)
                     ),
-                    Frame)
+                    Pairs),
+            keysort(Pairs, Sorted),
+            pairs_values(Sorted, Frame)
         ;   schema_is_subdocument(Schema,C)
         ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
             Frame = json{ '@class' : Class_Comp,
