@@ -489,9 +489,9 @@ worker_loop(Queue) :-
         signal_worker_ready(Queue),
         worker_loop(Queue)
     ;   Message = work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId))
-    ->  log_worker_memory(before, HandlerModule, HandlerName),
-        catch(
-            (   handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId)
+    ->  catch(
+            (   log_worker_memory(before, HandlerModule, HandlerName),
+                handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId)
             ->  true
             ;   json_log_error_formatted("Worker goal failed for ~w ~w", [HandlerModule, HandlerName]),
                 safe_write_cgi_error(OutputWriteFd, "Worker goal failed")
@@ -1940,11 +1940,14 @@ test(closed_registered_fd_is_seen_as_disconnect) :-
     tmp_file_stream(Tmp, S, [encoding(utf8)]),
     stream_property(S, file_no(Fd)),
     thread_create(
-        catch(sleep(5),
+        catch((   thread_send_message(Sig, ready),
+                  sleep(5)
+              ),
               error(client_disconnected, _),
               thread_send_message(Sig, signaled)),
         Worker, [detached(false)]),
-    sleep(0.1),
+    thread_get_message(Sig, Ready, [timeout(5)]),
+    assertion(Ready == ready),
     request_worker_pool:register_active_pipe(Fd, Worker),
     close(S),
     delete_file(Tmp),
@@ -2034,13 +2037,17 @@ test(cancel_pipe_request_matching_id_signals) :-
     tmp_file_stream(Tmp, S, [encoding(utf8)]),
     stream_property(S, file_no(Fd)),
     thread_create(
-        catch(thread_get_message(Ctl, _),
+        catch((   thread_send_message(Sig, ready),
+                  thread_get_message(Ctl, _)
+              ),
               error(client_disconnected, _),
               thread_send_message(Sig, signaled)),
         Worker, [detached(false)]),
     request_worker_pool:register_active_pipe(Fd, Worker, 'req-A'),
     close(S),
     delete_file(Tmp),
+    thread_get_message(Sig, Ready, [timeout(5)]),
+    assertion(Ready == ready),
     with_quiet_user_error(request_worker_pool:cancel_pipe_request(Fd, 'req-A')),
     thread_get_message(Sig, Result, [timeout(5)]),
     assertion(Result == signaled),
@@ -2058,13 +2065,17 @@ test(cancel_pipe_request_mismatched_id_no_signal) :-
     tmp_file_stream(Tmp, S, [encoding(utf8)]),
     stream_property(S, file_no(Fd)),
     thread_create(
-        catch(thread_get_message(Ctl, _),
+        catch((   thread_send_message(Sig, ready),
+                  thread_get_message(Ctl, _)
+              ),
               error(client_disconnected, _),
               thread_send_message(Sig, signaled)),
         Worker, [detached(false)]),
     request_worker_pool:register_active_pipe(Fd, Worker, 'req-A'),
     close(S),
     delete_file(Tmp),
+    thread_get_message(Sig, Ready, [timeout(5)]),
+    assertion(Ready == ready),
     with_quiet_user_error(request_worker_pool:cancel_pipe_request(Fd, 'req-B')),
     sleep(0.2),
     thread_send_message(Ctl, done),
@@ -2083,7 +2094,9 @@ test(fd_reuse_cancel_hits_only_owning_request) :-
     tmp_file_stream(Tmp, S, [encoding(utf8)]),
     stream_property(S, file_no(Fd)),
     thread_create(
-        catch(thread_get_message(Ctl, _),
+        catch((   thread_send_message(Sig, ready),
+                  thread_get_message(Ctl, _)
+              ),
               error(client_disconnected, _),
               thread_send_message(Sig, signaled)),
         Worker, [detached(false)]),
@@ -2092,6 +2105,8 @@ test(fd_reuse_cancel_hits_only_owning_request) :-
     request_worker_pool:register_active_pipe(Fd, Worker, 'req-B'),
     close(S),
     delete_file(Tmp),
+    thread_get_message(Sig, Ready, [timeout(5)]),
+    assertion(Ready == ready),
     with_quiet_user_error(request_worker_pool:cancel_pipe_request(Fd, 'req-A')),
     sleep(0.2),
     assertion(\+ thread_get_message(Sig, _, [timeout(0)])),
