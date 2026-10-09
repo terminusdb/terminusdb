@@ -62,6 +62,7 @@ create_fake_repo_head(Branch_Descriptor, Remote_Name) :-
 :- use_module(core(util/test_utils)).
 :- use_module(core(api/api_unbundle)).
 :- use_module(db_pack).
+:- use_module(library(lists)).
 
 
 test(bundle,
