@@ -145,7 +145,7 @@ pub fn install() {
 
 #[cfg(test)]
 mod tests {
-    use super::UUID_V7_CONTEXT;
+    use super::{base64char, UUID_V7_CONTEXT};
     use std::hint::black_box;
     use std::time::Instant;
     use uuid::{Timestamp, Uuid};
@@ -170,6 +170,32 @@ mod tests {
         let elapsed = start.elapsed();
         println!(
             "{N} uuid_v7 (lock+gen+to_string) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+
+    /// The work utils:random_base64/2 does per call (16 chars, thread RNG,
+    /// no lock) — the Random key's generation cost.
+    #[test]
+    #[ignore]
+    fn bench_random_base64() {
+        use rand::Rng;
+        const N: usize = 10_000_000;
+        let mut rng = rand::rng();
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let mut buf = Vec::with_capacity(16);
+            for _ in 0..16 {
+                buf.push(base64char(rng.random_range(0..64)));
+            }
+            let s = unsafe { std::str::from_utf8_unchecked(&buf) };
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} random_base64(16) in {elapsed:?}: {:.1} ns/call",
             elapsed.as_nanos() as f64 / N as f64
         );
         black_box(acc);

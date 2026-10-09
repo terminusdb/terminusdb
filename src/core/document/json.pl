@@ -458,17 +458,17 @@ idgen_suffix(Values, Suffix) :-
 
 idgen_lexical(Base,Values,ID) :-
     idgen_suffix(Values, Suffix),
-    format(string(ID), '~w~w', [Base,Suffix]).
+    string_concat(Base, Suffix, ID).
 
 idgen_hash(Base,Values,ID) :-
     idgen_suffix(Values, Suffix),
     crypto_data_hash(Suffix, Hash, [algorithm(sha256)]),
-    format(string(ID), "~w~w", [Base,Hash]).
+    string_concat(Base, Hash, ID).
 
 idgen_path_values_hash(Base,Path,ID) :-
     format(string(A), '~q', [Path]),
     crypto_data_hash(A, Hash, [algorithm(sha256)]),
-    format(string(ID), "~w~w", [Base,Hash]).
+    string_concat(Base, Hash, ID).
 
 idgen_random(Base,ID) :-
     % Make configurable as part of random key generation strategy later.
@@ -483,11 +483,11 @@ idgen_random(Base,[],ID) :-
 idgen_random(Base,Length, ID) :-
     integer(Length),
     utils:random_base64(Length, Hash),
-    format(string(ID),'~w~w',[Base,Hash]).
+    string_concat(Base, Hash, ID).
 
 idgen_uuid_v7(Base,ID) :-
     utils:uuid_v7(UUID),
-    format(string(ID),'~w~w',[Base,UUID]).
+    string_concat(Base, UUID, ID).
 
 idgen_uuid_v7(Base,[],ID) :-
     % Empty list signature matches idgen_lexical/3 and idgen_hash/3 calling convention
