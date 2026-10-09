@@ -1,4 +1,4 @@
-q:- module(test_utils,[
+:- module(test_utils,[
               try/1,
               status_200/1,
               admin_pass/1,
