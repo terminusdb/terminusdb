@@ -661,6 +661,7 @@ impl FieldDefinition {
 #[serde(tag = "@type")]
 pub enum UncleanKeyDefinition {
     Random,
+    UuidV7,
     Lexical {
         #[serde(rename = "@fields")]
         fields: Vec<ShortName>,
@@ -676,6 +677,7 @@ pub enum UncleanKeyDefinition {
 #[serde(tag = "@type")]
 pub enum KeyDefinition {
     Random,
+    UuidV7,
     Lexical {
         #[serde(rename = "@fields")]
         fields: Vec<GraphQLName<'static>>,
@@ -691,6 +693,7 @@ impl UncleanKeyDefinition {
     pub fn sanitize(self) -> KeyDefinition {
         match self {
             UncleanKeyDefinition::Random => KeyDefinition::Random,
+            UncleanKeyDefinition::UuidV7 => KeyDefinition::UuidV7,
             UncleanKeyDefinition::Lexical { fields } => {
                 let fields = fields.iter().map(|f| f.sanitize()).collect();
                 KeyDefinition::Lexical { fields }

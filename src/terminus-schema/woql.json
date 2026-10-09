@@ -1605,6 +1605,28 @@
 }
 {
   "@documentation": {
+    "@comment":"Generates a key identical to those generated automatically by 'UuidV7' specifications.",
+    "@properties": {
+      "base":"The URI base to the left of the key.",
+      "uri":"The resulting URI."
+    }
+  },
+  "@id":"UuidV7",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["base", "uri" ],
+      "mode": ["+", "?" ],
+      "types": ["string", "node" ]
+    }
+  },
+  "@type":"Class",
+  "base":"DataValue",
+  "uri":"NodeValue"
+}
+{
+  "@documentation": {
     "@comment":"Generates a key identical to those generated automatically by 'HashKey' specifications.",
     "@properties": {
       "base":"The URI base to the left of the key.",

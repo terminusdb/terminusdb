@@ -688,6 +688,13 @@ definition(
         mode: [+, +, ?],
         types: [string, list(string), node]
     }).
+definition(
+    idgen_uuid_v7{
+        name: 'UuidV7',
+        fields: [base, key_list, uri],
+        mode: [+, +, ?],
+        types: [string, list(string), node]
+    }).
 
 /* types */
 definition(
@@ -829,6 +836,7 @@ operator(timestamp_now(_)).
 operator(idgen(_,_,_)).
 operator(hash(_,_,_)).
 operator(idgen_random(_,_,_)).
+operator(idgen_uuid_v7(_,_,_)).
 operator(triple_count(_,_)).
 operator(size(_,_)).
 

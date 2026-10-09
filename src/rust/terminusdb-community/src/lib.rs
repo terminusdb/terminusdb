@@ -94,6 +94,12 @@ predicates! {
         s_term.unify(s)
     }
 
+    #[module("utils")]
+    semidet fn uuid_v7(_context, s_term) {
+        let id = uuid::Uuid::now_v7();
+        s_term.unify(id.to_string().as_str())
+    }
+
 }
 
 // implements RFC4648 encoding
@@ -116,6 +122,7 @@ pub fn install() {
     register_list_diff();
     register_random_string();
     register_random_base64();
+    register_uuid_v7();
     doc::register();
     graphql::register();
     json_preserve::register();

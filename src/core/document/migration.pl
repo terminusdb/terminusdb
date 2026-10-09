@@ -159,7 +159,7 @@ change_key(Class, Key_Type, Properties, Before, After) :-
         get_dict(Class_Key, Before, Before_Class_Document),
         error(class_does_not_exist(Class), _)
     ),
-    (   memberchk(Key_Type_Key, ['Random', 'ValueHash'])
+    (   memberchk(Key_Type_Key, ['Random', 'ValueHash', 'UuidV7'])
     ->  put_dict('@key', Before_Class_Document,
                  _{ '@type' : Key_Type }, After_Class_Document)
     ;   memberchk(Key_Type_Key, ['Lexical', 'Hash'])

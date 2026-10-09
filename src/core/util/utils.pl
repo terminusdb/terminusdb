@@ -94,7 +94,8 @@
               local_memoize/3,
 
               %%% From the rust module
-              random_string/1
+              random_string/1,
+              uuid_v7/1
           ]).
 
 /** <module> Utils
