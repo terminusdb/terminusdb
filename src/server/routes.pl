@@ -759,7 +759,7 @@ history_handler(get, Path, Request, System_DB, Auth) :-
             (   Streaming = true
             ->  write_cors_headers(Request),
                 format('Status: 200~n'),
-                format('Content-Type: application/x-ndjson~n'),
+                format('Content-Type: application/x-ndjson; charset=UTF-8~n'),
                 format('Cache-Control: no-cache~n'),
                 format('X-Accel-Buffering: no~n'),
                 format('Connection: close~n'),
