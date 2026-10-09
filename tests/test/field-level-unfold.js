@@ -207,6 +207,135 @@ describe('Field-Level Unfold', function () {
     })
   })
 
+  describe('List Property Retrieval with @unfold', function () {
+    before(async function () {
+      agent.dbName = 'field_unfold_list_retrieval_test'
+      await db.create(agent, { label: 'Field Unfold List Retrieval Test' })
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Element',
+          data: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Sequence',
+          elements: {
+            '@type': 'List',
+            '@class': 'Element',
+            '@unfold': true,
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+
+      const instances = [
+        { '@type': 'Element', '@id': 'Element/e1', data: 'first' },
+        { '@type': 'Element', '@id': 'Element/e2', data: 'second' },
+        {
+          '@type': 'Sequence',
+          '@id': 'Sequence/s1',
+          elements: ['Element/e1', 'Element/e2'],
+        },
+      ]
+
+      await document.insert(agent, { instance: instances })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('should unfold List property with @unfold: true when unfold=true', async function () {
+      const r = await document.get(agent, { queryString: 'id=Sequence/s1&unfold=true' })
+      expect(r.status).to.equal(200)
+      expect(r.body.elements).to.be.an('array').with.lengthOf(2)
+      expect(r.body.elements[0]).to.be.an('object')
+      expect(r.body.elements[0]['@id']).to.equal('Element/e1')
+      expect(r.body.elements[0].data).to.equal('first')
+      expect(r.body.elements[1]['@id']).to.equal('Element/e2')
+      expect(r.body.elements[1].data).to.equal('second')
+    })
+
+    it('should NOT unfold List property when unfold=false', async function () {
+      const r = await document.get(agent, { queryString: 'id=Sequence/s1&unfold=false' })
+      expect(r.status).to.equal(200)
+      expect(r.body.elements).to.deep.equal(['Element/e1', 'Element/e2'])
+    })
+  })
+
+  describe('2D Array Property Retrieval with @unfold', function () {
+    before(async function () {
+      agent.dbName = 'field_unfold_array2d_retrieval_test'
+      await db.create(agent, { label: 'Field Unfold 2D Array Retrieval Test' })
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'Cell',
+          data: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Grid',
+          cells: {
+            '@type': 'Array',
+            '@dimensions': 2,
+            '@class': 'Cell',
+            '@unfold': true,
+          },
+        },
+      ]
+
+      await document.insert(agent, { schema })
+
+      const instances = [
+        { '@type': 'Cell', '@id': 'Cell/c00', data: '00' },
+        { '@type': 'Cell', '@id': 'Cell/c01', data: '01' },
+        { '@type': 'Cell', '@id': 'Cell/c10', data: '10' },
+        { '@type': 'Cell', '@id': 'Cell/c11', data: '11' },
+        {
+          '@type': 'Grid',
+          '@id': 'Grid/g1',
+          cells: [
+            ['Cell/c00', 'Cell/c01'],
+            ['Cell/c10', 'Cell/c11'],
+          ],
+        },
+      ]
+
+      await document.insert(agent, { instance: instances })
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('should unfold 2D Array property with @unfold: true when unfold=true', async function () {
+      const r = await document.get(agent, { queryString: 'id=Grid/g1&unfold=true' })
+      expect(r.status).to.equal(200)
+      expect(r.body.cells).to.be.an('array').with.lengthOf(2)
+      expect(r.body.cells[0][0]).to.be.an('object')
+      expect(r.body.cells[0][0]['@id']).to.equal('Cell/c00')
+      expect(r.body.cells[0][0].data).to.equal('00')
+      expect(r.body.cells[0][1]['@id']).to.equal('Cell/c01')
+      expect(r.body.cells[1][0]['@id']).to.equal('Cell/c10')
+      expect(r.body.cells[1][1]['@id']).to.equal('Cell/c11')
+      expect(r.body.cells[1][1].data).to.equal('11')
+    })
+
+    it('should NOT unfold 2D Array property when unfold=false', async function () {
+      const r = await document.get(agent, { queryString: 'id=Grid/g1&unfold=false' })
+      expect(r.status).to.equal(200)
+      expect(r.body.cells).to.deep.equal([
+        ['Cell/c00', 'Cell/c01'],
+        ['Cell/c10', 'Cell/c11'],
+      ])
+    })
+  })
+
   describe('Interaction with class-level @unfoldable', function () {
     before(async function () {
       agent.dbName = 'field_unfold_interaction_test'
