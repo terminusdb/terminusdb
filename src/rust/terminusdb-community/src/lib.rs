@@ -111,6 +111,14 @@ predicates! {
         s_term.unify(id.to_string().as_str())
     }
 
+    #[module("utils")]
+    semidet fn sha1_hex(_context, data_term, s_term) {
+        use sha1::{Digest, Sha1};
+        let data: String = data_term.get()?;
+        let digest = Sha1::digest(data.as_bytes());
+        s_term.unify(format!("{:x}", digest).as_str())
+    }
+
 }
 
 // implements RFC4648 encoding
@@ -134,6 +142,7 @@ pub fn install() {
     register_random_string();
     register_random_base64();
     register_uuid_v7();
+    register_sha1_hex();
     doc::register();
     graphql::register();
     json_preserve::register();
@@ -218,6 +227,34 @@ mod tests {
         let elapsed = start.elapsed();
         println!(
             "{N} uuid_v7 (gen+to_string, single lock) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+
+    /// The work utils:sha1_hex/2 does per foreign call.
+    /// Run: cargo test --release -p terminusdb-community bench_sha1_hex -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_sha1_hex() {
+        use sha1::{Digest, Sha1};
+        // known-answer: sha1("abc")
+        assert_eq!(
+            format!("{:x}", Sha1::digest(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
+        let input = "Dict(\"name\"-e3b0c44298fc1c149afbf4c8996fb92427ae41e4-\"value\"-da39a3ee5e6b4b0d3255bfef95601890afd80709)";
+        const N: usize = 10_000_000;
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let digest = Sha1::digest(input.as_bytes());
+            let s = format!("{:x}", digest);
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} sha1_hex(~100B) in {elapsed:?}: {:.1} ns/call",
             elapsed.as_nanos() as f64 / N as f64
         );
         black_box(acc);

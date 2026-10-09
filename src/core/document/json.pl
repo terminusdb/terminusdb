@@ -3302,6 +3302,7 @@ expand_json_document_id(Id_Short, Prefixes, UseJSONDocumentPrefix, Id) :-
     ;   atom_string(Id_Short_Atom, Id_Short)
     ),
     (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+        % '://' is redundant (subsumed by ':'), kept to read as "URI scheme"
         (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
     ->  prefix_expand(Id_Short, Prefixes, Id)
     ;   % Plain string without scheme/prefix - prepend @base
