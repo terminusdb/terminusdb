@@ -3696,7 +3696,9 @@ fetch_jwt_data(_Token, _Username, _PayloadDict) :-
 
 % JWT scope parsing
 % Parse space-delimited scope strings from the configured claim into structured terms.
-% "dfrnt#admin dfrnt/mydb#write" → [scope_org(dfrnt, admin), scope_db(dfrnt, mydb, write)]
+% "dfrnt#admin dfrnt/mydb#consumer" → [scope_org(dfrnt, admin), scope_db(dfrnt, mydb, consumer)]
+% The role segment is the role's short id (admin for Role/admin), not its
+% display name
 % Malformed scope strings are silently skipped (fail, not return []).
 jwt_scopes_from_payload(PayloadDict, Scopes) :-
     once(jwt_scopes_claim(ClaimName)),
