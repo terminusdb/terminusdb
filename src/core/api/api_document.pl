@@ -1253,7 +1253,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
         ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
             Transaction_Meta_Data = Meta_Data,
             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
-        ;   handle_commit_result(Result, _Meta_Data, _Raw_Ids)
+        ;   handle_commit_result(Result, RequestId, _Meta_Data, _Raw_Ids)
         )
     ;   % Non-branch descriptors (e.g. system_descriptor) have no advancing
         % branch commit, so the commit queue cannot serialize them. Fall back
@@ -1333,7 +1333,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
         ->  meta_data_version(Transaction, Meta_Data, New_Data_Version),
             Transaction_Meta_Data = Meta_Data,
             compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
-        ;   handle_commit_result(Result, _Meta_Data, _Raw_Ids)
+        ;   handle_commit_result(Result, RequestId, _Meta_Data, _Raw_Ids)
         )
     ;   % Non-branch descriptors have no advancing branch commit; fall back to
         % the synchronous path.
@@ -1354,6 +1354,14 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
         Transaction_Meta_Data = Meta_Data
     ).
 
+% The commit-queue acknowledgement timeout must be infinite in production:
+% once a package is enqueued the outcome is indeterminate if the producer
+% stops waiting, so a fired timeout can only report a 500 "may or may not
+% have been applied" (see api:CommitQueueTimeout). A finite value is a test
+% instrument only - it exists so tests and benchmarks can exercise the
+% timeout path (e.g. the test server sets it to 5 seconds). Worker health
+% is an operational concern, not something a client-facing timeout can
+% diagnose correctly.
 producer_timeout(Timeout) :-
     (   getenv('TERMINUSDB_COMMIT_QUEUE_TIMEOUT', Value),
         catch(atom_number(Value, Parsed), _, fail)
@@ -1380,16 +1388,16 @@ get_commit_result(ReplyQueue, RequestId, Timeout, Result) :-
           error(existence_error(message_queue, _), _),
           (Result = timeout)).
 
-handle_commit_result(success(Meta_Data, Ids), Meta_Data, Ids).
-handle_commit_result(reject(Reason), _Meta_Data, _Ids) :-
+handle_commit_result(success(Meta_Data, Ids), _RequestId, Meta_Data, Ids).
+handle_commit_result(reject(Reason), _RequestId, _Meta_Data, _Ids) :-
     throw(error(commit_rejected(Reason), _)).
-handle_commit_result(error(Exception), _Meta_Data, _Ids) :-
+handle_commit_result(error(Exception), _RequestId, _Meta_Data, _Ids) :-
     (   Exception = error(_, _)
     ->  throw(Exception)
     ;   throw(error(Exception, _))
     ).
-handle_commit_result(timeout, _Meta_Data, _Ids) :-
-    throw(error(commit_queue_timeout, _)).
+handle_commit_result(timeout, RequestId, _Meta_Data, _Ids) :-
+    throw(error(commit_queue_timeout(RequestId), _)).
 
 collect_stream_docs(LazyDocs, Docs) :-
     (   get_attr(LazyDocs, 'util/lazy_docs', lazy_input(Stream, _))
@@ -3655,6 +3663,13 @@ test(deliver_commit_result_ignores_missing_reply_queue) :-
         request_id: req_missing
     },
     deliver_commit_result(Package, success(test_meta, [test_id])).
+
+test(handle_commit_result_timeout_carries_request_id,
+     [throws(error(commit_queue_timeout(req_abc), _))]) :-
+    % A producer that gives up waiting for the commit-queue ack throws a
+    % timeout that identifies the exact request, so the API error
+    % response can correlate it.
+    handle_commit_result(timeout, req_abc, _Meta_Data, _Ids).
 
 :- end_tests(commit_queue_helpers).
 
