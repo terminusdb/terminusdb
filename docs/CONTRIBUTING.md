@@ -54,6 +54,24 @@ npx mocha tests/test/*.js
 
 **Note:** Some tests verify that the git hash of the repository matches the git hash of the binary. If you get info_ok or , rebuild with `make dev` first.
 
+### Suppressing expected diagnostic output in tests
+
+Tests that deliberately exercise error paths (disconnects, watchdog probes, stale cancellations) emit `[ERROR]` lines via `json_log`. Keep the suite output clean by wrapping only the emitting call:
+
+```prolog
+with_quiet_user_error(request_worker_pool:cancel_pipe_request(Fd, 'req-A')),
+```
+
+`with_quiet_user_error/1` (exported from `core(util/test_utils)`) redirects the `user_error` stream alias to a memory file for the duration of the goal — the same technique `plunit_json_reporter.pl` uses for whole-suite capture — and restores it on success, failure or exception. A memory file is used rather than `tmp_file_stream` so no OS fd is allocated: a real file could reuse an fd the test just closed and change what the code under test observes.
+
+For `print_message`-routed output instead (e.g. expected thread-death warnings), add a scoped `user:message_hook/3` clause — see the `abnormal_thread_completion` hook in `request_worker_pool.pl` and the handlers in `bootstrap_hooks.pl`.
+
+Rules of thumb:
+
+- Wrap the smallest goal that emits the noise, not the whole test.
+- Suppression must never swallow test exceptions — the helper only redirects the stream.
+- Signals pending for the *calling* thread may be delivered inside a wrapped goal's wildcard catches and be lost. Signal a spawned, blocked worker thread instead (see `cancel_pipe_request_signals_worker_thread`); redirection of the caller's `user_error` is then harmless.
+
 ## Quick Start for Development
 
 ### Local Development Server (Fastest - Recommended)

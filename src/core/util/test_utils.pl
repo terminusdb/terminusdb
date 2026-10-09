@@ -1,4 +1,4 @@
-:- module(test_utils,[
+q:- module(test_utils,[
               try/1,
               status_200/1,
               admin_pass/1,
@@ -42,6 +42,7 @@
 
               with_test_transaction/3,
               with_test_transaction/4,
+              with_quiet_user_error/1,
 
               write_schema_string/2,
               write_schema/2
@@ -88,6 +89,7 @@
 :- use_module(library(filesex)).
 
 :- use_module(library(debug)).
+:- use_module(library(memfile)).
 :- use_module(library(process)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
@@ -111,6 +113,32 @@
 %
 test_format(Goal, Format, Args) :-
     print_message(testing, test_format(Goal, Format, Args)).
+
+:- meta_predicate with_quiet_user_error(0).
+
+%!  with_quiet_user_error(:Goal) is det
+%
+%   Run Goal with `user_error` redirected to a memory file.
+%   Suppresses expected json_log/format output from tests that
+%   deliberately trigger error paths. The alias is restored on
+%   completion, failure or exception.
+%
+%   A memory file is used so no OS fd is allocated — real files can
+%   reuse an fd the test just closed, changing what code under test
+%   observes.
+%
+with_quiet_user_error(Goal) :-
+    stream_property(OldErr, alias(user_error)),
+    new_memory_file(MemFile),
+    open_memory_file(MemFile, write, NullStream),
+    setup_call_cleanup(
+        set_stream(NullStream, alias(user_error)),
+        Goal,
+        (   close(NullStream),
+            set_stream(OldErr, alias(user_error)),
+            free_memory_file(MemFile)
+        )
+    ).
 
 :- multifile prolog:message//1.
 

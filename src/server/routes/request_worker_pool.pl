@@ -24,6 +24,7 @@
 :- use_module(core(plugin_api), [plugin_error_response/2]).
 :- use_module(core(util), [saved_request/5]).
 :- use_module(core(util/json_log)).
+:- use_module(core(util/test_utils), [with_quiet_user_error/1]).
 :- use_module(server(routes/srv_http)).
 :- use_module(server(routes/tdb_http_handler)).
 
@@ -1825,7 +1826,7 @@ test(cancel_pipe_request_signals_worker_thread) :-
     sleep(0.1),
     assertion(request_worker_pool:active_pipe(777, ThreadId, _)),
     %% Cancel the pipe — this signals the thread
-    request_worker_pool:cancel_pipe_request(777),
+    with_quiet_user_error(request_worker_pool:cancel_pipe_request(777)),
     %% The thread should receive the signal and eventually exit
     %% (the signal throws in the thread)
     thread_join(ThreadId, _),
