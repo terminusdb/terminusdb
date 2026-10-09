@@ -106,24 +106,52 @@ is_choice(Validation_Object, Class) :-
     is_schema_choice(Schema, Class).
 
 is_schema_enum(Schema, Class) :-
-    xrdf(Schema, Class, rdf:type, sys:'Enum').
+    (   schema_read_layer(Schema, Layer)
+    ->  is_schema_enum_tabled(Layer, Class)
+    ;   xrdf(Schema, Class, rdf:type, sys:'Enum')
+    ).
+
+:- table is_schema_enum_tabled/2 as private.
+is_schema_enum_tabled(Layer, Class) :-
+    xrdf([_{read: Layer}], Class, rdf:type, sys:'Enum').
 
 is_schema_choice(Schema, Class) :-
-    xrdf(Schema, Class, rdf:type, sys:'Choice').
+    (   schema_read_layer(Schema, Layer)
+    ->  is_schema_choice_tabled(Layer, Class)
+    ;   xrdf(Schema, Class, rdf:type, sys:'Choice')
+    ).
+
+:- table is_schema_choice_tabled/2 as private.
+is_schema_choice_tabled(Layer, Class) :-
+    xrdf([_{read: Layer}], Class, rdf:type, sys:'Choice').
 
 is_foreign(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_foreign(Schema, Class).
 
 is_schema_foreign(Schema, Class) :-
-    xrdf(Schema, Class, rdf:type, sys:'Foreign').
+    (   schema_read_layer(Schema, Layer)
+    ->  is_schema_foreign_tabled(Layer, Class)
+    ;   xrdf(Schema, Class, rdf:type, sys:'Foreign')
+    ).
+
+:- table is_schema_foreign_tabled/2 as private.
+is_schema_foreign_tabled(Layer, Class) :-
+    xrdf([_{read: Layer}], Class, rdf:type, sys:'Foreign').
 
 is_tagged_union(Validation_Object,Class) :-
     database_schema(Validation_Object,Schema),
     is_schema_tagged_union(Schema, Class).
 
 is_schema_tagged_union(Schema, Class) :-
-    xrdf(Schema, Class, rdf:type, sys:'TaggedUnion').
+    (   schema_read_layer(Schema, Layer)
+    ->  is_schema_tagged_union_tabled(Layer, Class)
+    ;   xrdf(Schema, Class, rdf:type, sys:'TaggedUnion')
+    ).
+
+:- table is_schema_tagged_union_tabled/2 as private.
+is_schema_tagged_union_tabled(Layer, Class) :-
+    xrdf([_{read: Layer}], Class, rdf:type, sys:'TaggedUnion').
 
 is_system_class(Class) :-
     prefix_list(
@@ -186,8 +214,16 @@ is_frame_class(Validation_Object,Class) :-
     is_schema_frame_class(Schema, Class).
 
 is_schema_frame_class(Schema, Class) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  is_schema_frame_class_tabled(Layer, Class)
+    ;   system_frame_class(C),
+        xrdf(Schema,Class, rdf:type, C)
+    ).
+
+:- table is_schema_frame_class_tabled/2 as private.
+is_schema_frame_class_tabled(Layer, Class) :-
     system_frame_class(C),
-    xrdf(Schema,Class, rdf:type, C).
+    xrdf([_{read: Layer}], Class, rdf:type, C).
 
 % NOTE
 % This generator is no longer stable under ordering!
@@ -227,10 +263,29 @@ class_super(Validation_Object,Class,Super) :-
     schema_class_super(Schema,Class,Super).
 
 schema_class_super(Schema,Class,Super) :-
+    (   schema_read_layer(Schema, Layer),
+        nonvar(Class)
+    ->  schema_class_supers_sorted_tabled(Layer, Class, Supers),
+        member(Super, Supers)
+    ;   schema_class_super_transitive(Schema, Class, Super)
+    ).
+
+% Memoize the transitive superclass closure as a sorted list so that
+% enumeration order is deterministic regardless of table population order
+% (concrete-subclass expansion order is observable in frames).
+:- table schema_class_supers_sorted_tabled/3 as private.
+schema_class_supers_sorted_tabled(Layer, Class, Supers) :-
+    Schema = [_{read: Layer}],
+    findall(Super,
+            schema_class_super_transitive(Schema, Class, Super),
+            Unsorted),
+    sort(Unsorted, Supers).
+
+schema_class_super_transitive(Schema, Class, Super) :-
     schema_subclass_of(Schema, Class, Super).
-schema_class_super(Schema,Class,Super) :-
+schema_class_super_transitive(Schema, Class, Super) :-
     schema_subclass_of(Schema, Class, Intermediate),
-    schema_class_super(Schema,Intermediate,Super).
+    schema_class_super_transitive(Schema, Intermediate, Super).
 
 schema_all_class_supers(Schema,Class,Prefixes,Supers,Options) :-
     findall(
@@ -246,6 +301,16 @@ supermap(Transaction, Supermap, Options) :-
     schema_supermap(Schema, Prefixes, Supermap, Options).
 
 schema_supermap(Schema, Prefixes, Supermap, Options) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_supermap_tabled(Layer, Prefixes, Supermap, Options)
+    ;   schema_supermap_compute(Schema, Prefixes, Supermap, Options)
+    ).
+
+:- table schema_supermap_tabled/4 as private.
+schema_supermap_tabled(Layer, Prefixes, Supermap, Options) :-
+    schema_supermap_compute([_{read: Layer}], Prefixes, Supermap, Options).
+
+schema_supermap_compute(Schema, Prefixes, Supermap, Options) :-
     findall(C-Supers,
             (   is_schema_simple_class(Schema,Class),
                 compress_schema_uri(Class,Prefixes,C,Options),
@@ -1234,10 +1299,20 @@ key_descriptor(Validation_Object, Prefixes, Type, Descriptor) :-
     schema_key_descriptor(Schema, Prefixes, Type, Descriptor).
 
 schema_key_descriptor(Schema, Prefixes, Type, Descriptor) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_key_descriptor_tabled(Layer, Prefixes, Type, Descriptor)
+    ;   schema_key_descriptor_compute(Schema, Prefixes, Type, Descriptor)
+    ).
+
+:- table schema_key_descriptor_tabled/4 as private.
+schema_key_descriptor_tabled(Layer, Prefixes, Type, Descriptor) :-
+    schema_key_descriptor_compute([_{read: Layer}], Prefixes, Type, Descriptor).
+
+schema_key_descriptor_compute(Schema, Prefixes, Type, Descriptor) :-
     xrdf(Schema, Type, sys:key, Obj),
     schema_key_descriptor_(Schema,Prefixes,Type,Obj,Descriptor),
     !.
-schema_key_descriptor(Schema, Prefixes, Type, base(Base)) :-
+schema_key_descriptor_compute(Schema, Prefixes, Type, base(Base)) :-
     schema_key_base(Schema,Prefixes,Type,Base).
 
 schema_key_descriptor_(Schema, Prefixes, Type, Obj, lexical(Base,Fields)) :-
