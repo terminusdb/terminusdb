@@ -23,6 +23,14 @@ use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
 
 use rand::Rng;
+use std::sync::{LazyLock, Mutex};
+use uuid::{ContextV7, Timestamp, Uuid};
+
+/// Shared v7 counter context: UUIDs stay monotonically ordered across
+/// Prolog threads (12-bit counter per millisecond before the timestamp
+/// is bumped ahead).
+static UUID_V7_CONTEXT: LazyLock<Mutex<ContextV7>> =
+    LazyLock::new(|| Mutex::new(ContextV7::new()));
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -94,6 +102,23 @@ predicates! {
         s_term.unify(s)
     }
 
+    #[module("utils")]
+    semidet fn uuid_v7(_context, s_term) {
+        let id = {
+            let context = UUID_V7_CONTEXT.lock().unwrap();
+            Uuid::new_v7(Timestamp::now(&*context))
+        };
+        s_term.unify(id.to_string().as_str())
+    }
+
+    #[module("utils")]
+    semidet fn sha1_hex(_context, data_term, s_term) {
+        use sha1::{Digest, Sha1};
+        let data: String = data_term.get()?;
+        let digest = Sha1::digest(data.as_bytes());
+        s_term.unify(format!("{:x}", digest).as_str())
+    }
+
 }
 
 // implements RFC4648 encoding
@@ -116,6 +141,8 @@ pub fn install() {
     register_list_diff();
     register_random_string();
     register_random_base64();
+    register_uuid_v7();
+    register_sha1_hex();
     doc::register();
     graphql::register();
     json_preserve::register();
@@ -123,4 +150,113 @@ pub fn install() {
     changes::register();
     embedding::register();
     jwt::register();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{base64char, UUID_V7_CONTEXT};
+    use std::hint::black_box;
+    use std::time::Instant;
+    use uuid::{Timestamp, Uuid};
+
+    /// Per-iteration lock + generate + format: the same work the
+    /// utils:uuid_v7/1 predicate does per foreign call.
+    /// Run: cargo test --release -p terminusdb-community bench_uuid_v7 -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_uuid_v7() {
+        const N: usize = 10_000_000;
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let id = {
+                let context = UUID_V7_CONTEXT.lock().unwrap();
+                Uuid::new_v7(Timestamp::now(&*context))
+            };
+            let s = id.to_string();
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} uuid_v7 (lock+gen+to_string) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+
+    /// The work utils:random_base64/2 does per call (16 chars, thread RNG,
+    /// no lock) — the Random key's generation cost.
+    #[test]
+    #[ignore]
+    fn bench_random_base64() {
+        use rand::Rng;
+        const N: usize = 10_000_000;
+        let mut rng = rand::rng();
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let mut buf = Vec::with_capacity(16);
+            for _ in 0..16 {
+                buf.push(base64char(rng.random_range(0..64)));
+            }
+            let s = unsafe { std::str::from_utf8_unchecked(&buf) };
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} random_base64(16) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+
+    /// Same work but the mutex is taken once for the whole loop:
+    /// bench_uuid_v7 minus this = per-call lock overhead.
+    #[test]
+    #[ignore]
+    fn bench_uuid_v7_single_lock() {
+        const N: usize = 10_000_000;
+        let context = UUID_V7_CONTEXT.lock().unwrap();
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let id = Uuid::new_v7(Timestamp::now(&*context));
+            let s = id.to_string();
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} uuid_v7 (gen+to_string, single lock) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+
+    /// The work utils:sha1_hex/2 does per foreign call.
+    /// Run: cargo test --release -p terminusdb-community bench_sha1_hex -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_sha1_hex() {
+        use sha1::{Digest, Sha1};
+        // known-answer: sha1("abc")
+        assert_eq!(
+            format!("{:x}", Sha1::digest(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
+        let input = "Dict(\"name\"-e3b0c44298fc1c149afbf4c8996fb92427ae41e4-\"value\"-da39a3ee5e6b4b0d3255bfef95601890afd80709)";
+        const N: usize = 10_000_000;
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let digest = Sha1::digest(input.as_bytes());
+            let s = format!("{:x}", digest);
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} sha1_hex(~100B) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
 }
