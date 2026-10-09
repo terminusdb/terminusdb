@@ -2135,6 +2135,7 @@ find_resources(get(_,_,_), _, _, _, [], []).
 find_resources(typecast(_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
 find_resources(idgen_random(_,_,_), _, _, _, [], []).
+find_resources(idgen_uuid_v7(_,_,_), _, _, _, [], []).
 find_resources(idgen(_,_,_), _, _, _, [], []).
 find_resources(asc(_), _, _, _, [], []).
 find_resources(desc(_), _, _, _, [], []).
@@ -2750,6 +2751,17 @@ compile_wf(idgen_random(Base,Args,Id),(
                literally(BaseE,BaseL),
                literally(ArgsE,ArgsL),
                idgen_random(BaseL,ArgsL,IdS),
+               atom_string(IdE,IdS),
+               unliterally(BaseL,BaseE),
+               unliterally(ArgsL,ArgsE)
+           )) -->
+    resolve(Base, BaseE),
+    mapm(resolve,Args,ArgsE),
+    resolve(Id,IdE).
+compile_wf(idgen_uuid_v7(Base,Args,Id),(
+               literally(BaseE,BaseL),
+               literally(ArgsE,ArgsL),
+               idgen_uuid_v7(BaseL,ArgsL,IdS),
                atom_string(IdE,IdS),
                unliterally(BaseL,BaseE),
                unliterally(ArgsL,ArgsE)

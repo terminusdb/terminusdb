@@ -19,7 +19,7 @@ nix = { version = "0.31", features = ["fs"] }
 hyper = "1.5.2"
 hyper-util = { version = "0.1.10", features = ["full"] }
 flate2 = "1.0"
-uuid = { version = "1.11.0", features = ["v4"] }
+uuid = { version = "~1.10", features = ["v4"] }
 libc = "0.2"
 socket2 = "0.6"
 terminusdb-store-prolog = { path = "../terminusdb-store-prolog" }

@@ -45,7 +45,10 @@
               with_quiet_user_error/1,
 
               write_schema_string/2,
-              write_schema/2
+              write_schema/2,
+
+              is_uuid_v7_string/1,
+              ends_with_uuid_v7/1
           ]).
 
 /** <module> Test Utilities
@@ -692,3 +695,16 @@ write_schema_string(Schema, Desc) :-
 write_schema(P,Desc) :-
     call(P,Schema),
     write_schema_string(Schema, Desc).
+
+/* RFC 9562 UUID v7 shape: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx */
+is_uuid_v7_string(S) :-
+    string_length(S, 36),
+    split_string(S, "-", "", [_G1, _G2, G3, G4, _G5]),
+    sub_string(G3, 0, 1, _, "7"),
+    sub_string(G4, 0, 1, _, Variant),
+    memberchk(Variant, ["8", "9", "a", "b"]).
+
+ends_with_uuid_v7(Id) :-
+    atom_string(Id, S),
+    sub_string(S, _, 36, 0, UUID),
+    is_uuid_v7_string(UUID).

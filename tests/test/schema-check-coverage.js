@@ -484,6 +484,48 @@ describe('schema-check-coverage', function () {
       await document.insert(agent, { schema })
     })
 
+    it('creates class with UuidV7 key', async function () {
+      const schema = {
+        '@type': 'Class',
+        '@id': 'UuidV7Keyed',
+        '@key': { '@type': 'UuidV7' },
+        data: 'xsd:string',
+      }
+      await document.insert(agent, { schema })
+    })
+
+    it('generates UUID v7 document id for UuidV7 key', async function () {
+      const instance = {
+        '@type': 'UuidV7Keyed',
+        data: 'generated',
+      }
+      const result = await document.insert(agent, { instance })
+      const id = result.body[0]
+      expect(id).to.match(/\/UuidV7Keyed\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    })
+
+    it('accepts arbitrary IRI as @id for UuidV7 key', async function () {
+      const instance = {
+        '@type': 'UuidV7Keyed',
+        '@id': 'https://linked.art/example/object/47',
+        data: 'external',
+      }
+      const result = await document.insert(agent, { instance })
+      expect(result.body[0]).to.equal('https://linked.art/example/object/47')
+      const retrieved = await document.get(agent, { query: { id: 'https://linked.art/example/object/47' } })
+      expect(retrieved.body.data).to.equal('external')
+    })
+
+    it('accepts @id off the class base for UuidV7 key', async function () {
+      const instance = {
+        '@type': 'UuidV7Keyed',
+        '@id': 'OtherPrefix/not-under-class-base',
+        data: 'off-base',
+      }
+      const result = await document.insert(agent, { instance })
+      expect(result.body[0]).to.equal('terminusdb:///data/OtherPrefix/not-under-class-base')
+    })
+
     it('fails with unknown key type', async function () {
       const schema = {
         '@type': 'Class',

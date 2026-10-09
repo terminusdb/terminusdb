@@ -118,6 +118,7 @@
               die_if/2,
               whole_arg/2,
               random_string/1,
+              uuid_v7/1,
               uri_has_prefix/1,
               uri_has_prefix/2,
               uri_has_prefix_unsafe/2,
