@@ -142,3 +142,58 @@ pub fn install() {
     embedding::register();
     jwt::register();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::UUID_V7_CONTEXT;
+    use std::hint::black_box;
+    use std::time::Instant;
+    use uuid::{Timestamp, Uuid};
+
+    /// Per-iteration lock + generate + format: the same work the
+    /// utils:uuid_v7/1 predicate does per foreign call.
+    /// Run: cargo test --release -p terminusdb-community bench_uuid_v7 -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_uuid_v7() {
+        const N: usize = 10_000_000;
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let id = {
+                let context = UUID_V7_CONTEXT.lock().unwrap();
+                Uuid::new_v7(Timestamp::now(&*context))
+            };
+            let s = id.to_string();
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} uuid_v7 (lock+gen+to_string) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+
+    /// Same work but the mutex is taken once for the whole loop:
+    /// bench_uuid_v7 minus this = per-call lock overhead.
+    #[test]
+    #[ignore]
+    fn bench_uuid_v7_single_lock() {
+        const N: usize = 10_000_000;
+        let context = UUID_V7_CONTEXT.lock().unwrap();
+        let mut acc = 0u64;
+        let start = Instant::now();
+        for _ in 0..N {
+            let id = Uuid::new_v7(Timestamp::now(&*context));
+            let s = id.to_string();
+            acc ^= black_box(s.as_bytes()[0]) as u64;
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "{N} uuid_v7 (gen+to_string, single lock) in {elapsed:?}: {:.1} ns/call",
+            elapsed.as_nanos() as f64 / N as f64
+        );
+        black_box(acc);
+    }
+}
