@@ -285,7 +285,9 @@ resolve_dictionary_(Dict, Dict_Resolved, C1, C2) :-
     mapm({Dict}/[Key,Key-Value,CA,CB]>>(
              get_dict(Key,Dict,V),
              (   Key = '@type'
-             ->  resolve_predicate(V,Value,CA,CB)
+             ->  (   V = Scalar^^_
+                 ->  resolve_predicate(Scalar,Value,CA,CB)
+                 ;   resolve_predicate(V,Value,CA,CB))
              ;   resolve_dictionary_(V,Value,CA,CB)
              )
          ), Keys, Pairs, C1, C2),
@@ -301,9 +303,7 @@ resolve_dictionary_(Val, Dict_Val, C1, C2) :-
     (   ground(Res_Val)
     ;   ground(Dict_Val)),
     !,
-    (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
-    ->  true
-    ;   Res_Val = Dict_Val).
+    resolve_dictionary_value(Res_Val, Dict_Val).
 resolve_dictionary_(Val, Dict_Val, C1, C2) :-
     resolve(Val, Res_Val, C1, C2),
     when((   nonvar(Res_Val)
@@ -317,10 +317,29 @@ resolve_dictionary_(Val, Dict_Val, C1, C2) :-
          ;   true)),
     when((   ground(Res_Val)
          ;   ground(Dict_Val)),
-         (   value_jsonld(Res_Val, Dict_Val) % this should fail for non-typed literals
-         ->  true
-         ;   Res_Val = Dict_Val)
-        ).
+         resolve_dictionary_value(Res_Val, Dict_Val)).
+
+/*
+ * resolve_dictionary_value(+Resolved,-Value) is det.
+ *
+ * Typed literals X^^T contribute their scalar value X to document
+ * content - a JSON-LD value object is binding syntax, not a document
+ * value. Anything else keeps its JSON-LD expansion or passes through.
+ */
+resolve_dictionary_value(Value, Result) :-
+    var(Value),
+    !,
+    Result = Value.
+resolve_dictionary_value(List, Values) :-
+    is_list(List),
+    !,
+    maplist(resolve_dictionary_value, List, Values).
+resolve_dictionary_value(Scalar^^_, Scalar) :-
+    !.
+resolve_dictionary_value(Val, Dict_Val) :-
+    (   value_jsonld(Val, Dict_Val) % this should fail for non-typed literals
+    ->  true
+    ;   Val = Dict_Val).
 
 /*
  * resolve(ID,Resolution, S0, S1) is det.
@@ -7477,6 +7496,228 @@ test(insert_document_forget_uri, [
     [Res2] = (Response.bindings),
     Doc = Res2.'Doc',
     Doc = json{'@id':'City/Dublin', '@type':'City', name:"Dublin"}.
+
+
+woql_json_document_schema('
+{ "@type" : "@context",
+  "@base" : "terminusdb:///data/",
+  "@schema" : "terminusdb:///schema#" }
+
+{ "@type" : "Class",
+  "@id" : "Doc",
+  "@key" : {"@type" : "Lexical", "@fields" : ["name"]},
+  "name" : "xsd:string",
+  "payload" : "sys:JSON" }
+
+{ "@type" : "Class",
+  "@id" : "FlagDoc",
+  "@key" : {"@type" : "Lexical", "@fields" : ["name"]},
+  "name" : "xsd:string",
+  "flag" : "xsd:boolean" }
+').
+
+setup_woql_json_document_db :-
+    create_db_without_schema("admin", "test"),
+    woql_json_document_schema(Schema),
+    open_string(Schema, Stream),
+    resolve_absolute_string_descriptor('admin/test', Desc),
+    create_context(Desc, commit_info{author: "test", message: "schema"}, Context),
+    with_transaction(
+        Context,
+        replace_json_schema(Context, Stream),
+        _).
+
+test(insert_document_json_boolean, [
+         setup((setup_temp_store(State),
+                setup_woql_json_document_db)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Insert_Atom =
+    '{ "@type" : "InsertDocument",
+       "document" : { "@type" : "Value",
+                      "dictionary" : {"@type": "DictionaryTemplate",
+                                      "data": [ { "@type" : "FieldValuePair",
+                                                  "field" : "@type",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "Doc" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "name",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : {"@type": "xsd:string",
+                                                                        "@value": "b1"} }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "payload",
+                                                  "value" : { "@type" : "Value",
+                                                              "dictionary" : {"@type": "DictionaryTemplate",
+                                                                              "data": [ { "@type" : "FieldValuePair",
+                                                                                          "field" : "v",
+                                                                                          "value" : { "@type" : "Value",
+                                                                                                      "data" : {"@type": "xsd:boolean",
+                                                                                                                "@value": true} }},
+                                                                                        { "@type" : "FieldValuePair",
+                                                                                          "field" : "inner",
+                                                                                          "value" : { "@type" : "Value",
+                                                                                                      "dictionary" : {"@type": "DictionaryTemplate",
+                                                                                                                      "data": [ { "@type" : "FieldValuePair",
+                                                                                                                                  "field" : "flag",
+                                                                                                                                  "value" : { "@type" : "Value",
+                                                                                                                                              "data" : {"@type": "xsd:boolean",
+                                                                                                                                                        "@value": false} }} ]}}}]}}}]}}
+     }',
+    atom_json_dict(Insert_Atom, Query, [default_tag(json)]),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+
+    JSON.'api:status' = 'api:success',
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    Read_AST = get_document('Doc/b1',v('Doc')),
+    run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    [Res2] = (Response.bindings),
+    Doc = Res2.'Doc',
+    json{v: true, inner: json{flag: false}} = (Doc.payload).
+
+
+test(insert_document_json_untyped_value, [
+         setup((setup_temp_store(State),
+                setup_woql_json_document_db)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Insert_Atom =
+    '{ "@type" : "InsertDocument",
+       "document" : { "@type" : "Value",
+                      "dictionary" : {"@type": "DictionaryTemplate",
+                                      "data": [ { "@type" : "FieldValuePair",
+                                                  "field" : "@type",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "Doc" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "name",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "u1" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "payload",
+                                                  "value" : { "@type" : "Value",
+                                                              "dictionary" : {"@type": "DictionaryTemplate",
+                                                                              "data": [ { "@type" : "FieldValuePair",
+                                                                                          "field" : "v",
+                                                                                          "value" : { "@type" : "Value",
+                                                                                                      "data" : {"@value": true} }},
+                                                                                        { "@type" : "FieldValuePair",
+                                                                                          "field" : "s",
+                                                                                          "value" : { "@type" : "Value",
+                                                                                                      "data" : {"@value": "hello"} }} ]}}}]}}
+     }',
+    atom_json_dict(Insert_Atom, Query, [default_tag(json)]),
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    query_test_response(Descriptor, Query, JSON),
+
+    JSON.'api:status' = 'api:success',
+
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    Read_AST = get_document('Doc/u1',v('Doc')),
+    run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    [Res2] = (Response.bindings),
+    Doc = Res2.'Doc',
+    json{v: true, s: "hello"} = (Doc.payload).
+
+
+test(insert_document_json_list_scalars, [
+         setup((setup_temp_store(State),
+                setup_woql_json_document_db)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Insert_Atom =
+    '{ "@type" : "InsertDocument",
+       "document" : { "@type" : "Value",
+                      "dictionary" : {"@type": "DictionaryTemplate",
+                                      "data": [ { "@type" : "FieldValuePair",
+                                                  "field" : "@type",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "Doc" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "name",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : {"@type": "xsd:string",
+                                                                        "@value": "l1"} }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "payload",
+                                                  "value" : { "@type" : "Value",
+                                                              "dictionary" : {"@type": "DictionaryTemplate",
+                                                                              "data": [ { "@type" : "FieldValuePair",
+                                                                                          "field" : "v",
+                                                                                          "value" : { "@type" : "Value",
+                                                                                                      "list" : [ { "@type" : "Value",
+                                                                                                                   "data" : {"@type": "xsd:string",
+                                                                                                                             "@value": "hello"} },
+                                                                                                                 { "@type" : "Value",
+                                                                                                                   "data" : {"@type": "xsd:integer",
+                                                                                                                             "@value": 42} },
+                                                                                                                 { "@type" : "Value",
+                                                                                                                   "data" : {"@type": "xsd:boolean",
+                                                                                                                             "@value": true} },
+                                                                                                                 { "@type" : "Value",
+                                                                                                                   "list" : [ { "@type" : "Value",
+                                                                                                                                "data" : {"@type": "xsd:string",
+                                                                                                                                          "@value": "nested"} } ] } ]}}]}}}]}}
+     }',
+    atom_json_dict(Insert_Atom, Query, [default_tag(json)]),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+
+    JSON.'api:status' = 'api:success',
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    Read_AST = get_document('Doc/l1',v('Doc')),
+    run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    [Res2] = (Response.bindings),
+    Doc = Res2.'Doc',
+    json{v: ["hello", 42, true, ["nested"]]} = (Doc.payload).
+
+
+test(insert_document_boolean_property, [
+         setup((setup_temp_store(State),
+                setup_woql_json_document_db)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Insert_Atom =
+    '{ "@type" : "InsertDocument",
+       "document" : { "@type" : "Value",
+                      "dictionary" : {"@type": "DictionaryTemplate",
+                                      "data": [ { "@type" : "FieldValuePair",
+                                                  "field" : "@type",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : "FlagDoc" }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "name",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : {"@type": "xsd:string",
+                                                                        "@value": "f1"} }},
+                                                { "@type" : "FieldValuePair",
+                                                  "field" : "flag",
+                                                  "value" : { "@type" : "Value",
+                                                              "data" : {"@type": "xsd:boolean",
+                                                                        "@value": true} }} ]}}
+     }',
+    atom_json_dict(Insert_Atom, Query, [default_tag(json)]),
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response_test_branch(Query_Out, JSON),
+
+    JSON.'api:status' = 'api:success',
+
+    resolve_absolute_string_descriptor('admin/test', Descriptor),
+    create_context(Descriptor, commit_info{ author : "test", message: "message"}, Context2),
+    Read_AST = get_document('FlagDoc/f1',v('Doc')),
+    run_context_ast_jsonld_response(Context2, Read_AST, no_data_version, _, Response),
+    [Res2] = (Response.bindings),
+    Doc = Res2.'Doc',
+    json{flag: true} :< Doc.
 
 
 test(operator_clash, [
