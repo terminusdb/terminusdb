@@ -500,18 +500,32 @@ impl<L: Layer + Clone> DocumentContext<L> {
                     if let Some(rdf_type_id) = self.rdf.type_() {
                         if let Some(t) = self.layer().single_triple_sp(next_obj, rdf_type_id) {
                             if Some(t.object) == self.sys.array() {
+                                // capture the parent document's type/predicate before get_array_iter
+                                // clears out cur's fields, so field-level @unfold still applies to
+                                // the array's elements.
+                                let parent_type_id = cur.document_type_id();
+                                let predicate_id = cur.current_predicate();
                                 let array_iter = self.get_array_iter(cur);
                                 stack.push(StackEntry::Array(ArrayStackEntry {
                                     collect: Vec::new(),
                                     entries: array_iter,
+                                    parent_type_id,
+                                    predicate_id,
                                 }));
                                 continue;
                             } else if Some(t.object) == self.rdf.list() {
+                                // same as above: capture before pushing, so field-level @unfold
+                                // still applies to the list's elements (they sit behind the
+                                // rdf:first/rdf:rest Cons chain, not a direct edge from the parent).
+                                let parent_type_id = cur.document_type_id();
+                                let predicate_id = cur.current_predicate();
                                 let list_iter = self.get_list_iter(next_obj);
                                 stack.push(StackEntry::List {
                                     collect: Vec::new(),
                                     entries: list_iter,
                                     json: is_json,
+                                    parent_type_id,
+                                    predicate_id,
                                 });
                                 continue;
                             }
@@ -657,6 +671,8 @@ enum StackEntry<'a, L: Layer> {
         collect: Vec<Value>,
         entries: Peekable<RdfListIterator<'a, L>>,
         json: bool,
+        parent_type_id: Option<u64>,
+        predicate_id: Option<u64>,
     },
     Array(ArrayStackEntry<'a, L>),
 }
@@ -690,7 +706,8 @@ impl<'a, L: Layer> StackEntry<'a, L> {
     fn document_type_id(&self) -> Option<u64> {
         match self {
             Self::Document { type_id, .. } => *type_id,
-            _ => None,
+            Self::List { parent_type_id, .. } => *parent_type_id,
+            Self::Array(a) => a.parent_type_id,
         }
     }
 
@@ -699,7 +716,8 @@ impl<'a, L: Layer> StackEntry<'a, L> {
             Self::Document { fields, .. } => {
                 fields.as_mut().and_then(|f| f.peek().map(|t| t.predicate))
             }
-            _ => None,
+            Self::List { predicate_id, .. } => *predicate_id,
+            Self::Array(a) => a.predicate_id,
         }
     }
 }
@@ -707,6 +725,8 @@ impl<'a, L: Layer> StackEntry<'a, L> {
 struct ArrayStackEntry<'a, L: Layer> {
     collect: Vec<(Vec<usize>, Value)>,
     entries: ArrayIterator<'a, L>,
+    parent_type_id: Option<u64>,
+    predicate_id: Option<u64>,
 }
 
 pub struct ArrayIterator<'a, L: Layer> {

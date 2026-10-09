@@ -1518,19 +1518,8 @@ where
     S: juniper::ScalarValue,
 {
     fn resolve(&self) -> juniper::Value {
-        // Debug: Write to file to confirm this code runs
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/bigfloat_resolve.log") {
-            let _ = writeln!(f, "BigFloat::resolve called with value: {}", self.0);
-        }
-        
         // Use marker for post-processing to JSON number with 20-digit precision
         let marker = format!("__TERMINUS_NUM__{}", self.0);
-        
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/bigfloat_resolve.log") {
-            let _ = writeln!(f, "Created marker: {}", marker);
-        }
-        
         juniper::Value::scalar(marker)
     }
 
