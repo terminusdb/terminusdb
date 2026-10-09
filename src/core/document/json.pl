@@ -12204,6 +12204,54 @@ test(document_uuid_v7_schema_roundtrip,
     get_schema_document(DB, 'Artwork', Doc),
     get_dict('@key', Doc, json{'@type': "UuidV7"}).
 
+test(document_uuid_v7_tagged_union,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "TaggedUnion",
+           '@id': "Either",
+           '@key': _{'@type': "UuidV7"},
+           left: "xsd:string",
+           right: "xsd:integer"},
+
+        _{ '@type': "Either",
+           left: "yes"},
+
+        ID),
+
+    atom_concat('Either/', _, ID),
+    ends_with_uuid_v7(ID).
+
+test(document_uuid_v7_prefixed_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "owl:example/object/47",
+           title: "Prefixed"},
+
+        'http://www.w3.org/2002/07/owl#example/object/47'),
+
+    % Fetching by the fully expanded IRI proves the prefix was
+    % expanded at insert time, not stored as the literal compact form
+    get_document(Desc, 'http://www.w3.org/2002/07/owl#example/object/47', Doc),
+    get_dict(title, Doc, "Prefixed").
+
 test(document_valuehash_with_subdocument_list,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin","foo"),
