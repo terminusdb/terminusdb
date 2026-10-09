@@ -253,8 +253,11 @@ register_active_pipe(OutputWriteFd, ThreadId, RequestId) :-
     ),
     retractall(active_pipe(OutputWriteFd, _, _)),
     retractall(active_pipe_request(OutputWriteFd, _)),
-    assertz(active_pipe(OutputWriteFd, ThreadId, Alias)),
-    assertz(active_pipe_request(OutputWriteFd, RequestId)).
+    %% request entry first: active_pipe(Fd,_,_) must imply
+    %% active_pipe_request(Fd,_) so a matching-id cancel is never
+    %% misclassified as stale in the gap between the two asserts
+    assertz(active_pipe_request(OutputWriteFd, RequestId)),
+    assertz(active_pipe(OutputWriteFd, ThreadId, Alias)).
 
 %% unregister_active_pipe(+OutputWriteFd) is det.
 %%
