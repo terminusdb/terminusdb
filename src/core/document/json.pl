@@ -96,6 +96,7 @@
 :- use_module(library(terminus_store)).
 :- use_module(library(http/json)).
 :- use_module(library(lists)).
+:- use_module(library(pairs)).
 :- use_module(library(dicts)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(random)).
@@ -3512,12 +3513,14 @@ type_descriptor_sub_frame(class(C), Schema, Prefixes, Frame, Options) :-
         Frame = Class_Comp
     ;   (   schema_is_abstract(Schema, C),
             option(expand_abstract(true), Options)
-        ->  findall(F,
+        ->  findall(Class-F,
                     (   schema_concrete_subclass(Schema,C,Class),
                         schema_type_descriptor(Schema, Class, Desc),
                         type_descriptor_sub_frame(Desc,Schema,Prefixes,F,Options)
                     ),
-                    Frame)
+                    Pairs),
+            keysort(Pairs, Sorted),
+            pairs_values(Sorted, Frame)
         ;   schema_is_subdocument(Schema,C)
         ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
             Frame = json{ '@class' : Class_Comp,
@@ -3645,6 +3648,16 @@ class_frame(Desc, Class, Frame, Options) :-
     class_frame(Trans, Class, Frame, Options).
 
 schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
+    (   schema_read_layer(Schema, Layer)
+    ->  schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options)
+    ;   schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options)
+    ).
+
+:- table schema_class_frame_tabled/5 as private.
+schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options) :-
+    schema_class_frame_compute([_{read: Layer}], Prefixes, Class_Ex, Frame, Options).
+
+schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
         Predicate_Comp-Subframe,
         (   schema_class_predicate_conjunctive_type(Schema, Class_Ex, Predicate, Type_Desc),
