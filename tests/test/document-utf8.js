@@ -71,6 +71,40 @@ describe('document-utf8', function () {
     expect(doc).to.have.property('note', noteValue)
   })
 
+  it('creates a document via PUT replace with raw UTF-8 bytes and Content-Type charset=utf-8', async function () {
+    // Same trigger on the replace path: PUT shares http_read_document_stream
+    // with POST, but this is the endpoint the original bug report exercised.
+    const noteValue = 'Münchener Rück: ü ö ä ß'
+    const rawBody = Buffer.from(
+      JSON.stringify([{ '@type': 'Utf8Item', note: noteValue }]),
+      'utf8',
+    )
+
+    const replaceResponse = await agent
+      .put(api.path.document(agent))
+      .query({ graph_type: 'instance', create: true, author: 'test', message: 'utf8-replace' })
+      .set('Content-Type', 'application/json; charset=utf-8')
+      .serialize((data) => data)
+      .send(rawBody)
+
+    expect(replaceResponse.status, 'replace should succeed').to.equal(200)
+    expect(
+      replaceResponse.body,
+      'expected one ID returned — [] means the document was silently dropped (UTF-8 bug)',
+    ).to.be.an('array').with.lengthOf(1)
+
+    const replacedId = replaceResponse.body[0]
+    expect(replacedId).to.be.a('string').and.not.empty
+
+    const getResponse = await agent
+      .get(api.path.document(agent))
+      .query({ id: replacedId })
+
+    expect(getResponse.status).to.equal(200)
+    const doc = Array.isArray(getResponse.body) ? getResponse.body[0] : getResponse.body
+    expect(doc).to.have.property('note', noteValue)
+  })
+
   it('inserts a document with raw UTF-8 bytes and no charset declaration (control — must also pass)', async function () {
     // Without charset=utf-8, http_read_data takes a different path and succeeds.
     // This test confirms the control case and will catch any regression that
