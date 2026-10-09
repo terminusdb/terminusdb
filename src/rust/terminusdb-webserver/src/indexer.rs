@@ -1011,11 +1011,11 @@ async fn run_commit_task(
         }
     };
 
-    let output_write_fd = output_write.into_raw_fd();
+    let output_worker_write_fd = output_write.into_raw_fd();
 
     #[cfg(target_os = "linux")]
     unsafe {
-        libc::fcntl(output_write_fd, libc::F_SETPIPE_SZ, 1_048_576);
+        libc::fcntl(output_worker_write_fd, libc::F_SETPIPE_SZ, 1_048_576);
     }
 
     // 3. Build the PipeDispatchRequest for the indexer_worker handler.
@@ -1033,8 +1033,9 @@ async fn run_commit_task(
         handler_module: "indexer_worker".to_string(),
         handler_name: "indexer_process_commit_handler".to_string(),
         input_read_fd: None,
-        output_write_fd,
+        output_worker_write_fd,
         binary: false,
+        request_id: crate::dispatch::next_request_id("POST", &key.path),
     };
 
     // 4. Send to the dispatch queue (DispatchMessage::Pipe).

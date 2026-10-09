@@ -723,7 +723,7 @@ lazy_static::lazy_static! {
 
 static REQUEST_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-fn next_request_id(method: &str, path: &str) -> String {
+pub(crate) fn next_request_id(method: &str, path: &str) -> String {
     let n = REQUEST_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{}-{}-{}", method, path, n)
 }
@@ -756,8 +756,9 @@ pub struct PipeDispatchRequest {
     pub(crate) handler_module: String,
     pub(crate) handler_name: String,
     pub(crate) input_read_fd: Option<i32>,
-    pub(crate) output_write_fd: i32,
+    pub(crate) output_worker_write_fd: i32,
     pub(crate) binary: bool,
+    pub(crate) request_id: String,
 }
 
 /// Message sent to the single-engine dispatcher queue.
@@ -765,8 +766,10 @@ pub enum DispatchMessage {
     Pipe(PipeDispatchRequest),
     Stream(DispatchRequest),
     /// Cancel an in-flight pipe request by signalling the Prolog worker.
-    /// The argument is the output write FD passed to the worker.
-    CancelPipe(i32),
+    CancelPipe {
+        output_worker_write_fd: i32,
+        request_id: String,
+    },
 }
 
 /// Sender for the single-engine dispatcher queue.
@@ -855,16 +858,19 @@ pub fn init_dispatcher() {
                             req.handler_module, req.handler_name, e
                         ));
                         let _ = write_cgi_error_to_pipe(
-                            req.output_write_fd,
+                            req.output_worker_write_fd,
                             "Internal server error",
                         );
                     }
                 }
-                DispatchMessage::CancelPipe(output_write_fd) => {
-                    if let Err(e) = cancel_pipe_to_prolog(&context, output_write_fd) {
+                DispatchMessage::CancelPipe {
+                    output_worker_write_fd,
+                    request_id,
+                } => {
+                    if let Err(e) = cancel_pipe_to_prolog(&context, output_worker_write_fd, &request_id) {
                         crate::log::log_error(format!(
                             "[terminusdb-webserver] cancel_pipe_request failed for FD {}: {}",
-                            output_write_fd, e
+                            output_worker_write_fd, e
                         ));
                     }
                 }
@@ -922,7 +928,7 @@ fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> Prol
 }
 
 /// Write a CGI-style 500 error response directly to the output pipe.
-fn write_cgi_error_to_pipe(output_write_fd: i32, message: &str) -> std::io::Result<()> {
+fn write_cgi_error_to_pipe(output_worker_write_fd: i32, message: &str) -> std::io::Result<()> {
     let error_body = json!({
         "@type": "api:ErrorResponse",
         "api:status": "api:failure",
@@ -936,7 +942,7 @@ fn write_cgi_error_to_pipe(output_write_fd: i32, message: &str) -> std::io::Resu
     );
     // SAFETY: the FD was given to Prolog but was never opened as a stream,
     // so Rust can still write to it and close it.
-    let mut file = unsafe { std::fs::File::from_raw_fd(output_write_fd) };
+    let mut file = unsafe { std::fs::File::from_raw_fd(output_worker_write_fd) };
     file.write_all(cgi_response.as_bytes())
 }
 
@@ -966,7 +972,7 @@ fn dispatch_pipe_to_prolog(
 
     let output_fd_term = context.new_term_ref();
     output_fd_term
-        .put(&(req.output_write_fd as i64))
+        .put(&(req.output_worker_write_fd as i64))
         .map_err(|_| PrologError::Failure)?;
 
     let binary_term = context.new_term_ref();
@@ -974,8 +980,13 @@ fn dispatch_pipe_to_prolog(
         .put(&Atom::new(if req.binary { "true" } else { "false" }))
         .map_err(|_| PrologError::Failure)?;
 
+    let request_id_term = context.new_term_ref();
+    request_id_term
+        .put(&Atom::new(&req.request_id))
+        .map_err(|_| PrologError::Failure)?;
+
     let callable = CallablePredicate::new(Predicate::new(
-        Functor::new(Atom::new("dispatch_request"), 6),
+        Functor::new(Atom::new("dispatch_request"), 7),
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
@@ -986,29 +997,36 @@ fn dispatch_pipe_to_prolog(
         &input_fd_term,
         &output_fd_term,
         &binary_term,
+        &request_id_term,
     ])
 }
 
-/// Call the Prolog predicate `cancel_pipe_request/1` to signal the worker
+/// Call the Prolog predicate `cancel_pipe_request/2` to signal the worker
 /// thread handling the given output pipe FD that the client has disconnected.
 /// The worker receives `error(client_disconnected, _)` via `thread_signal/2`,
 /// which is delivered at the next goal boundary (e.g. between `id_triple`
 /// calls in a WOQL query loop).
 fn cancel_pipe_to_prolog(
     context: &Context<impl QueryableContextType>,
-    output_write_fd: i32,
+    output_worker_write_fd: i32,
+    request_id: &str,
 ) -> PrologResult<()> {
     let fd_term = context.new_term_ref();
     fd_term
-        .put(&(output_write_fd as i64))
+        .put(&(output_worker_write_fd as i64))
+        .map_err(|_| PrologError::Failure)?;
+
+    let request_id_term = context.new_term_ref();
+    request_id_term
+        .put(&Atom::new(request_id))
         .map_err(|_| PrologError::Failure)?;
 
     let callable = CallablePredicate::new(Predicate::new(
-        Functor::new(Atom::new("cancel_pipe_request"), 1),
+        Functor::new(Atom::new("cancel_pipe_request"), 2),
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
-    context.call_once(callable, [&fd_term])
+    context.call_once(callable, [&fd_term, &request_id_term])
 }
 
 fn dispatch_stream_to_prolog(
@@ -2231,7 +2249,7 @@ async fn dispatch_request_via_pipe(
         }
     };
 
-    let output_write_fd = output_write.into_raw_fd();
+    let output_worker_write_fd = output_write.into_raw_fd();
 
     let (input_read_fd, input_write) = if body_bytes.is_empty() {
         (None, None)
@@ -2244,27 +2262,9 @@ async fn dispatch_request_via_pipe(
             }
             Err(e) => {
                 crate::log::log_error(format!("input pipe creation failed: {}", e));
-                let _ = write_cgi_error_to_pipe(output_write_fd, "input pipe creation failed");
+                let _ = write_cgi_error_to_pipe(output_worker_write_fd, "input pipe creation failed");
                 return plugin_error_response("pipe creation failed").into_response();
             }
-        }
-    };
-
-    let dispatch_req = PipeDispatchRequest {
-        request_json,
-        handler_module: module,
-        handler_name: handler,
-        input_read_fd,
-        output_write_fd,
-        binary,
-    };
-
-    let mut output_receiver = match Receiver::from_owned_fd(output_read) {
-        Ok(rx) => rx,
-        Err(e) => {
-            crate::log::log_error(format!("failed to create pipe receiver: {}", e));
-            let _ = write_cgi_error_to_pipe(output_write_fd, "failed to create pipe receiver");
-            return plugin_error_response("pipe creation failed").into_response();
         }
     };
 
@@ -2279,13 +2279,32 @@ async fn dispatch_request_via_pipe(
         set.insert(request_id.clone());
     }
     let _guard = InFlightRequestGuard {
-        id: request_id,
+        id: request_id.clone(),
         in_flight,
+    };
+
+    let dispatch_req = PipeDispatchRequest {
+        request_json,
+        handler_module: module,
+        handler_name: handler,
+        input_read_fd,
+        output_worker_write_fd,
+        binary,
+        request_id: request_id.clone(),
+    };
+
+    let mut output_receiver = match Receiver::from_owned_fd(output_read) {
+        Ok(rx) => rx,
+        Err(e) => {
+            crate::log::log_error(format!("failed to create pipe receiver: {}", e));
+            let _ = write_cgi_error_to_pipe(output_worker_write_fd, "failed to create pipe receiver");
+            return plugin_error_response("pipe creation failed").into_response();
+        }
     };
 
     if let Err(e) = queue.send(DispatchMessage::Pipe(dispatch_req)).await {
         crate::log::log_error(format!("dispatch queue send failed: {}", e));
-        let _ = write_cgi_error_to_pipe(output_write_fd, "dispatch queue send failed");
+        let _ = write_cgi_error_to_pipe(output_worker_write_fd, "dispatch queue send failed");
         return plugin_error_response("Plugin handler failed").into_response();
     }
 
@@ -2294,7 +2313,8 @@ async fn dispatch_request_via_pipe(
     // at any point (client disconnect during header reading or body
     // streaming), this guard sends a CancelPipe message to the dispatch
     // queue, which signals the Prolog worker to abort via thread_signal/2.
-    let mut cancel_guard = PipeCancelGuard::new(output_write_fd, dispatch_queue());
+    let mut cancel_guard =
+        PipeCancelGuard::new(output_worker_write_fd, request_id, dispatch_queue());
 
     if let Some(input_file) = input_write {
         tokio::task::spawn_blocking(move || {
@@ -2436,15 +2456,21 @@ fn find_header_separator(buf: &[u8]) -> Option<usize> {
 /// dropped (client disconnect), the Prolog worker handling this pipe FD is
 /// signalled to abort its work via `thread_signal/2`.
 struct PipeCancelGuard {
-    output_write_fd: i32,
+    output_worker_write_fd: i32,
+    request_id: String,
     queue: mpsc::Sender<DispatchMessage>,
     cancelled: bool,
 }
 
 impl PipeCancelGuard {
-    fn new(output_write_fd: i32, queue: mpsc::Sender<DispatchMessage>) -> Self {
+    fn new(
+        output_worker_write_fd: i32,
+        request_id: String,
+        queue: mpsc::Sender<DispatchMessage>,
+    ) -> Self {
         Self {
-            output_write_fd,
+            output_worker_write_fd,
+            request_id,
             queue,
             cancelled: false,
         }
@@ -2460,13 +2486,19 @@ impl PipeCancelGuard {
 impl Drop for PipeCancelGuard {
     fn drop(&mut self) {
         if !self.cancelled {
-            let fd = self.output_write_fd;
+            let output_worker_write_fd = self.output_worker_write_fd;
+            let request_id = self.request_id.clone();
             let queue = self.queue.clone();
             // Send the cancel message asynchronously. If the queue is full
             // or closed, there's nothing we can do — the watchdog will
             // catch it as a safety net.
             tokio::spawn(async move {
-                let _ = queue.send(DispatchMessage::CancelPipe(fd)).await;
+                let _ = queue
+                    .send(DispatchMessage::CancelPipe {
+                        output_worker_write_fd,
+                        request_id,
+                    })
+                    .await;
             });
         }
     }
