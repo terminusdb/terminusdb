@@ -1,6 +1,6 @@
 DIST ?= community
 # Default was 9.2.9
-SWIPL_VERSION ?= 10.0.1
+SWIPL_VERSION ?= 10.0.2
 
 # Version-tagged release of tdb-admin to download for the embedded admin panel.
 # Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
@@ -22,12 +22,18 @@ default:
 	@$(MAKE) -f distribution/Makefile.prolog
 
 # Build the development binary (macOS-friendly, no library stripping).
+# JWT is enabled by default in dev builds so integration tests work out of the box.
 .PHONY: dev
-dev:
+dev: clean-rust generate-dev-jwks
 	rm src/rust/target/release/libterminusdb_dylib.dylib || true
 	rm src/rust/librust.* || true
-	rm src/rust/librust.* || true
-	@$(MAKE) -f distribution/Makefile.prolog $@
+	@TERMINUSDB_JWT_ENABLED=true $(MAKE) -f distribution/Makefile.prolog $@
+
+# Generate the dev RSA key pair used by JWT integration tests.
+# Writes dashboard/assets/test-jwks.json and /tmp/test-jwt-keypair.json.
+.PHONY: generate-dev-jwks
+generate-dev-jwks:
+	node tests/generate-dev-jwks.js
 
 .PHONY: start
 start:
@@ -99,11 +105,6 @@ install-deps: install-tus
 # Install the tus pack.
 .PHONY: install-tus
 install-tus:
-	@$(MAKE) -f distribution/Makefile.deps $@
-
-# Install the jwt_io pack.
-.PHONY: install-jwt
-install-jwt:
 	@$(MAKE) -f distribution/Makefile.deps $@
 
 # Download the lint tool.

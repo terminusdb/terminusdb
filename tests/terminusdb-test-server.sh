@@ -26,6 +26,9 @@ fi
 # Default admin password (terminusdb default)
 ADMIN_PASS="${TERMINUSDB_ADMIN_PASS:-root}"
 
+# Server port — overridable via TERMINUSDB_SERVER_PORT env var
+SERVER_PORT="${TERMINUSDB_SERVER_PORT:-6363}"
+
 function start_server() {
     local clean_storage=false
     while [ "$1" != "" ]; do

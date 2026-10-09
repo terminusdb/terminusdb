@@ -9,6 +9,7 @@ pub mod changes;
 pub mod consts;
 mod doc;
 mod embedding;
+mod jwt;
 mod graphql;
 mod json_preserve;
 mod path;
@@ -22,7 +23,7 @@ pub use swipl;
 use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
 
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -60,10 +61,10 @@ predicates! {
     #[module("utils")]
     semidet fn random_string(_context, s_term) {
         let mut buf = [0_u8;31];
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
 
         for item in &mut buf {
-            let r = rng.gen_range(0..36);
+            let r = rng.random_range(0..36);
             if r < 10 {
                 *item = b'0' + r;
             }
@@ -81,10 +82,10 @@ predicates! {
     semidet fn random_base64(_context, size_term, s_term) {
         let size: u64 = size_term.get()?;
         let mut buf = Vec::with_capacity(size as usize);
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
 
         for _ in 0..size {
-            let r = rng.gen_range(0..64);
+            let r = rng.random_range(0..64);
             let item = base64char(r);
             buf.push(item)
         }
@@ -123,5 +124,6 @@ pub fn install() {
     changes::register();
     change_window::register();
     embedding::register();
+    jwt::register();
     terminusdb_webserver::install();
 }

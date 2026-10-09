@@ -197,7 +197,12 @@ predicates! {
         layer_parents_term.unify(result_terms.as_slice())
     }
 
-    pub semidet fn pack_import(context, store_term, layer_ids_term, pack_term) {
+    /// Import the given layers from the pack into the store.
+    ///
+    /// Layers that already exist are not overwritten; their contents
+    /// are verified against the pack instead, and the list of
+    /// mismatched layer ids is unified with the last argument.
+    pub semidet fn pack_import(context, store_term, layer_ids_term, pack_term, mismatched_term) {
         let store: WrappedStore = store_term.get_ex()?;
 
         let layer_id_strings: Vec<String> = layer_ids_term.get_ex()?;
@@ -209,7 +214,21 @@ predicates! {
 
         let pack: Vec<u8> = pack_term.get_ex()?;
 
-        context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))
+        let mismatched = context.try_or_die(store.import_layers(pack.as_slice(), Box::new(layer_ids.into_iter())))?;
+        let mismatched_strings: Vec<String> = mismatched.into_iter().map(name_to_string).collect();
+
+        mismatched_term.unify(mismatched_strings.as_slice())
+    }
+
+    /// Create an empty base layer with the given name in this store.
+    ///
+    /// Fails if a layer with this name already exists.
+    pub semidet fn create_empty_base_layer(context, store_term, layer_id_term) {
+        let store: WrappedStore = store_term.get_ex()?;
+        let layer_id_string: String = layer_id_term.get_ex()?;
+        let name = context.try_or_die(string_to_name(&layer_id_string))?;
+
+        context.try_or_die(store.create_named_base_layer(name))
     }
 
     pub semidet fn merge_base_layers(context, store_term, temp_dir_term, layer_ids_term, output_id_term) {

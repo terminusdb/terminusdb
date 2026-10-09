@@ -1104,6 +1104,13 @@ api_error_jsonld_(unpack,error(unknown_layer_reference(Layer_Id),_), JSON) :-
              'api:error' : _{ '@type' : "api:UnknownLayerReference",
                               'api:layer_reference' : Layer_Id}
             }.
+api_error_jsonld_(unpack,error(pack_layer_mismatch(Layer_Ids),_), JSON) :-
+    JSON = _{'@type' : "api:UnpackErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : "Layers in the pack differ from the layers with the same name in the store",
+             'api:error' : _{ '@type' : "api:PackLayerMismatch",
+                              'api:layer_references' : Layer_Ids}
+            }.
 api_error_jsonld_(unpack,error(unresolvable_absolute_descriptor(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
     format(string(Msg), "The database to unpack to has not been found at absolute path ~q", [Path]),

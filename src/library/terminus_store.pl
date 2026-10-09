@@ -70,7 +70,9 @@
 
               pack_export/3,
               pack_layerids_and_parents/2,
-              pack_import/3,
+              pack_import/4,
+
+              create_empty_base_layer/2,
 
               count_layer_stack_size/2,
 

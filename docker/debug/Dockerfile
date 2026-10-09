@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 
-ARG SWIPL_VERSION=10.0.1
+ARG SWIPL_VERSION=10.0.2
 ARG DIST=community
 ARG SKIP_TESTS=false
 ARG TDB_ADMIN_VERSION=v0.1.1-rc3
