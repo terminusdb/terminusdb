@@ -197,7 +197,7 @@ ifdef SUITE
 else ifdef MOCHA_IGNORE
 	sh -c "cd tests ; npx mocha $(shell echo '$(MOCHA_IGNORE)' | sed 's/,/ --ignore /g' | sed 's/^/--ignore /')"
 else
-	sh -c "cd tests ; npx mocha"
+	sh -c "cd tests ; rc=0 ; npx mocha --exclude 'test/cli-*.js' || rc=1 ; MOCHA_PARALLEL=true npx mocha 'test/cli-*.js' || rc=1 ; exit \$$rc"
 endif
 
 # Start Docker container for integration testing (no plugins).
