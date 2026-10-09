@@ -199,6 +199,42 @@ describe('history', function () {
       }
     })
 
+    it('streaming=true emits non-ASCII strings as UTF-8', async function () {
+      // Regression test: the streaming history endpoint declared
+      // "Content-Type: application/x-ndjson" without a charset, so SWI's
+      // CGI machinery (http_update_encoding/3) fell back to octet encoding.
+      // Latin-1 range characters (U+0080-U+00FF) were emitted as raw single
+      // bytes, and characters above U+00FF raised a representation_error that
+      // api_report_errors wrote into the NDJSON stream as a raw 500 response.
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
+      await document.insert(agent, { schema })
+      const value = 'München – ☃'
+      const instance = { '@type': id, '@id': `terminusdb:///data/${id}/0`, a: value }
+      await document.insert(agent, { instance })
+
+      const historyRequest = await agent
+        .get(`/api/history/admin/${dbName}?id=${id}%2F0&diff=true&complete=true&streaming=true`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks = []
+          res.on('data', (chunk) => { chunks.push(chunk) })
+          res.on('end', () => { callback(null, Buffer.concat(chunks)) })
+        })
+
+      // Every line must be parseable NDJSON — an injected error body with raw
+      // newlines breaks the format and makes JSON.parse throw here.
+      const text = historyRequest.body.toString('utf8')
+      const lines = text.trim().split('\n').filter(l => l.length > 0)
+      expect(lines).to.have.lengthOf(1)
+      for (const line of lines) {
+        JSON.parse(line)
+      }
+      // Decoding the raw bytes as UTF-8 must reproduce the stored value.
+      // Raw Latin-1 bytes decode to U+FFFD and this assertion fails.
+      expect(text).to.contain(value)
+    })
+
     it('pages history', async function () {
       const id = util.randomString()
       const schema = { '@type': 'Class', '@id': id, a: 'xsd:string' }
