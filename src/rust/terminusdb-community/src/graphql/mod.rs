@@ -221,26 +221,8 @@ predicates! {
                                             is_error_term.unify(errored)?;
                                             match serde_json::to_string(&response){
                                                 Ok(r) => {
-                                                    use std::io::Write;
-                                                    use chrono::Utc;
-                                                    
-                                                    // Debug: Log to single file with timestamp per entry
-                                                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/graphql_debug.log") {
-                                                        let timestamp = Utc::now().to_rfc3339();
-                                                        let _ = writeln!(f, "\n=== {} BEFORE POST-PROCESS ===", timestamp);
-                                                        let _ = writeln!(f, "{}", &r[..1000.min(r.len())]);
-                                                        let _ = writeln!(f, "Contains marker: {}", r.contains("__TERMINUS_NUM__"));
-                                                    }
-                                                    
                                                     // Post-process to convert high-precision markers to JSON numbers
-                                                    let processed = post_process_graphql_numbers(r.clone());
-                                                    
-                                                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/graphql_debug.log") {
-                                                        let _ = writeln!(f, "=== AFTER POST-PROCESS ===");
-                                                        let _ = writeln!(f, "{}", &processed[..1000.min(processed.len())]);
-                                                        let _ = writeln!(f, "Changed: {}", processed != r);
-                                                    }
-                                                    
+                                                    let processed = post_process_graphql_numbers(r);
                                                     response_term.unify(processed)
                                                 },
                                                 Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),

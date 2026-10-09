@@ -1,4 +1,4 @@
-const JsonlParser = require('stream-json/jsonl/Parser')
+const { parser: JsonlParser } = require('stream-json/jsonl/parser.js')
 const { expect } = require('chai')
 const { Agent, api, db, document, Params, util } = require('../lib')
 
@@ -94,7 +94,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document.get(agent, option).unverified().pipe(new JsonlParser())
+        const r = await document.get(agent, option).unverified().pipe(JsonlParser.asStream())
         expectSchemaJsonl(r)
       })
     }
@@ -159,7 +159,7 @@ describe('document-get', function () {
     ]
     for (const option of options) {
       it(JSON.stringify(option), async function () {
-        const r = await document.get(agent, option).unverified().pipe(new JsonlParser())
+        const r = await document.get(agent, option).unverified().pipe(JsonlParser.asStream())
         const objects = []
         r.on('data', (data) => {
           objects.push(data.value)
