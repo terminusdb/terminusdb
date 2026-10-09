@@ -117,12 +117,48 @@ api_global_error_jsonld(error(commit_rejected(Reason), _), Type, JSON) :-
                               'api:reason' : Reason },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueTimeout',
+                              'api:request_id' : RequestId },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Timed out waiting for the commit queue to process the request", []),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_timeout(_RequestId, Outstanding, Timeout), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out after ~w seconds waiting for ~w outstanding elaboration chunks; the request was not committed and is safe to retry. If this happens under sustained write load, raise the worker message timeout via TERMINUSDB_ELABORATION_TIMEOUT.", [Timeout, Outstanding]),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:service_unavailable",
-             'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
+             'api:error' : _{ '@type' : 'api:ElaborationTimeout',
+                              'api:timeout_seconds' : Timeout,
+                              'api:outstanding_chunks' : Outstanding },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_failed, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document elaboration failed without a detailed error", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:ElaborationFailed' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_failed(chunk(Index, _Docs)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document elaboration failed for chunk ~w without a detailed error", [Index]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:ElaborationFailed',
+                              'api:chunk' : Index },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(data_version_mismatch(
@@ -1067,6 +1103,13 @@ api_error_jsonld_(unpack,error(unknown_layer_reference(Layer_Id),_), JSON) :-
              'api:message' : "A layer in the pack has an unknown parent",
              'api:error' : _{ '@type' : "api:UnknownLayerReference",
                               'api:layer_reference' : Layer_Id}
+            }.
+api_error_jsonld_(unpack,error(pack_layer_mismatch(Layer_Ids),_), JSON) :-
+    JSON = _{'@type' : "api:UnpackErrorResponse",
+             'api:status' : "api:failure",
+             'api:message' : "Layers in the pack differ from the layers with the same name in the store",
+             'api:error' : _{ '@type' : "api:PackLayerMismatch",
+                              'api:layer_references' : Layer_Ids}
             }.
 api_error_jsonld_(unpack,error(unresolvable_absolute_descriptor(Descriptor), _), JSON) :-
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -3162,5 +3205,69 @@ test(document_id_already_exists_without_document, []) :-
     get_dict('api:document_id', Error, 'terminusdb:///data/Doc/test1'),
     \+ get_dict('api:document', Error, _),
     get_dict('api:status', JSON, "api:failure").
+
+test(parallel_elaboration_timeout_is_retryable_error, []) :-
+    % A worker that takes an elaboration chunk but never reports back makes
+    % the request handler throw parallel_elaboration_timeout/3 after the
+    % configured message timeout. Nothing is committed at that point, so the
+    % client must get a typed, retryable response - not an unhandled 500.
+    api_error_jsonld(insert_documents,
+                     error(parallel_elaboration_timeout(request42, 3, 120.0), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ElaborationTimeout'),
+    get_dict('api:timeout_seconds', Error, 120.0),
+    get_dict('api:outstanding_chunks', Error, 3),
+    get_dict('api:status', JSON, "api:service_unavailable"),
+    json_http_code(JSON, 503),
+    % The response must name the tuning knob so operators can act on it.
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "TERMINUSDB_ELABORATION_TIMEOUT")).
+
+test(parallel_elaboration_failed_is_typed_error, []) :-
+    % A chunk that fails to elaborate without throwing a detailed error
+    % surfaces as parallel_elaboration_failed. It must not escape error
+    % mapping as a generic unhandled 500.
+    api_error_jsonld(insert_documents,
+                     error(parallel_elaboration_failed(chunk(2, [doc])), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ElaborationFailed'),
+    get_dict('api:chunk', Error, 2),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500).
+
+test(commit_queue_timeout_is_indeterminate_server_error, []) :-
+    % When the commit-queue acknowledgement does not arrive within the
+    % producer timeout, the commit package is already enqueued. The
+    % server cannot say whether the commit will be applied, so the
+    % response must be an honest 500 asserting neither success nor
+    % failure - never a retryable 503, which would invite a duplicate
+    % submission.
+    api_error_jsonld(insert_documents,
+                     error(commit_queue_timeout(request42), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueTimeout'),
+    get_dict('api:request_id', Error, request42),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500),
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "may or may not have been applied")).
+
+test(commit_queue_timeout_without_request_id_is_indeterminate_error, []) :-
+    % Producers that cannot identify the request must still get the
+    % honest indeterminate-outcome response.
+    api_error_jsonld(insert_documents,
+                     error(commit_queue_timeout, _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueTimeout'),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500).
 
 :- end_tests(error_reporting).

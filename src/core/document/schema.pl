@@ -308,6 +308,11 @@ schema_supermap(Schema, Prefixes, Supermap, Options) :-
     ;   schema_supermap_compute(Schema, Prefixes, Supermap, Options)
     ).
 
+% The supermap is a pure function of the schema read layer, and building it
+% walks the transitive superclass closure of every schema class. It is invoked
+% once per elaborated document via schema_class_frame/5, so it must be cached
+% or elaboration pays O(schema classes * hierarchy depth) triple reads per
+% document.
 :- table schema_supermap_tabled/4 as private.
 schema_supermap_tabled(Layer, Prefixes, Supermap, Options) :-
     schema_supermap_compute([_{read: Layer}], Prefixes, Supermap, Options).

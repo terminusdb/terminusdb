@@ -133,7 +133,7 @@ submit_queued_optimize(Descriptor, Path, Result) :-
     producer_timeout(ProducerTimeout),
     (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
     ->  true
-    ;   Result = timeout
+    ;   Result = timeout(RequestId)
     ),
     catch(message_queue_destroy(ReplyQueue), _, true).
 
@@ -161,7 +161,7 @@ submit_scheduled_optimize(Descriptor, Result) :-
         producer_timeout(ProducerTimeout),
         (   get_commit_result(ReplyQueue, RequestId, ProducerTimeout, Result)
         ->  true
-        ;   Result = timeout
+        ;   Result = timeout(RequestId)
         ),
         catch(message_queue_destroy(ReplyQueue), _, true)
     ;   commit_queue:increment_database_active_count(DatabaseKey),
@@ -179,6 +179,7 @@ submit_scheduled_optimize(Descriptor, Result) :-
 
 handle_optimize_result(optimize_success) :- !.
 handle_optimize_result(error(Error)) :- throw(error(Error, _)).
+handle_optimize_result(timeout(RequestId)) :- throw(error(commit_queue_timeout(RequestId), _)).
 handle_optimize_result(timeout) :- throw(error(commit_queue_timeout, _)).
 
 % run_queued_optimize(+Package) is det.

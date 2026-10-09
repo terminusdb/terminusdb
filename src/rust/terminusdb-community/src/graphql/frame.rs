@@ -728,6 +728,8 @@ pub struct UncleanClassDefinition {
     pub is_subdocument: Option<Vec<()>>,
     #[serde(rename = "@unfoldable")]
     pub is_unfoldable: Option<Vec<()>>,
+    #[serde(rename = "@shared")]
+    pub is_shared: Option<Vec<()>>,
     #[serde(rename = "@abstract")]
     pub is_abstract: Option<Vec<()>>,
     #[serde(rename = "@oneOf")]
@@ -745,6 +747,7 @@ pub struct ClassDefinition {
     pub key: Option<KeyDefinition>,
     pub is_subdocument: Option<Vec<()>>,
     pub is_unfoldable: Option<Vec<()>>,
+    pub is_shared: Option<Vec<()>>,
     pub is_abstract: Option<Vec<()>>,
     pub one_of: Option<Vec<OneOf>>,
     pub inherits: Option<Vec<GraphQLName<'static>>>,
@@ -815,6 +818,7 @@ impl UncleanClassDefinition {
             key,
             is_subdocument: self.is_subdocument.clone(),
             is_unfoldable: self.is_unfoldable.clone(),
+            is_shared: self.is_shared,
             is_abstract: self.is_abstract,
             inherits,
             one_of,
@@ -1460,6 +1464,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                 key: None,
                 is_subdocument: None,
                 is_unfoldable: None,
+                is_shared: None,
                 is_abstract: None,
                 inherits: None,
                 one_of: Some(vec![
@@ -1518,6 +1523,41 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
         let _frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
 
         // TODO actually test something here
+    }
+
+    #[test]
+    fn deserialize_shared_class() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"json{'@key':json{'@type':"Random"},
+                           '@shared':[],
+                           '@type':'Class',
+                           destination:'City',
+                           name:'xsd:string'}"#;
+
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanTypeDefinition = context.deserialize_from_term(&term).unwrap();
+        let UncleanTypeDefinition::Class(class) = typedef else {
+            panic!("expected a class definition");
+        };
+        // '@shared' is a class annotation and must not be parsed as a field
+        assert_eq!(
+            BTreeMap::from([
+                (
+                    ShortName("destination".to_string()),
+                    UncleanFieldDefinition::Required(BaseOrDerived::Derived(ShortName(
+                        "City".to_string()
+                    )))
+                ),
+                (
+                    ShortName("name".to_string()),
+                    UncleanFieldDefinition::Required(BaseOrDerived::Base("string".to_string()))
+                ),
+            ]),
+            class.fields
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -142,10 +142,10 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(
 
 /// Generate a random id suffix for a Random key.
 fn random_id_suffix(length: usize) -> String {
-    let mut rng = thread_rng();
+    let mut rng = rng();
     let mut buf = Vec::with_capacity(length);
     for _ in 0..length {
-        let r = rng.gen_range(0..64);
+        let r = rng.random_range(0..64);
         let c = if r < 26 {
             b'A' + r
         } else if r < 52 {

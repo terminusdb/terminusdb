@@ -299,9 +299,21 @@ This significantly reduces build time but should **only be used for development*
 
 ### Development Build (Recommended)
 
-For local development on macOS, use the development build target which avoids code signing issues:
+For local development on macOS, use the development build target which avoids code signing issues.
+
+**Prerequisites for a fresh clone:**
+
+- `protoc` (the Protocol Buffers compiler), e.g. `brew install protobuf`. Without it, `cargo
+  build` fails inside a transitive dependency with `Could not find protoc installation`.
+- `make install-deps` must be run once, **before** the first `make dev`, to fetch the SWI-Prolog
+  `tus` pack. Without it, the Prolog bootstrap fails with
+  `` source_sink `library(tus)' does not exist ``.
 
 ```bash
+# For first time setup
+brew install protobuf
+make install-deps
+# Produce the dev build
 make dev
 ```
 
@@ -319,6 +331,7 @@ This creates a `terminusdb` binary that:
 - Dynamically links to SWI-Prolog libraries (no stripping)
 - Faster to rebuild during development
 - Requires SWI-Prolog to be installed (via Homebrew recommended)
+- Requires `protoc` to be installed (via Homebrew recommended: `brew install protobuf`)
 
 Run the development binary:
 

@@ -1,6 +1,7 @@
 # TerminusDB gitignore defaults
 tus
 .DS_Store
+tests/.terminusdb-test-*
 tests/.terminusdb-test-storage*
 tests/benchmark/benchmark_results
 tests/benchmark_results
@@ -37,3 +38,5 @@ tests/.terminusdb-test-7373.pid
 tests/.terminusdb-test-*.log
 tests/.terminusdb-test-*.pid
 dashboard/src/assets/openapi.json
+
+assets/

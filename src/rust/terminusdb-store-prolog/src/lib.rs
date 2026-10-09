@@ -58,6 +58,7 @@ pub fn install(module: Option<&str>) {
     store::register_pack_export_in_module(module);
     store::register_pack_layerids_and_parents_in_module(module);
     store::register_pack_import_in_module(module);
+    store::register_create_empty_base_layer_in_module(module);
     layer::register_id_triple_in_module(module);
     layer::register_id_triple_addition_in_module(module);
     layer::register_id_triple_removal_in_module(module);
