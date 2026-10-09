@@ -5399,6 +5399,11 @@ test(idgen_uuid_v7, []) :-
     idgen_uuid_v7('terminusdb:///data/Person/', ID2),
     ID \= ID2,
 
+    % Shared counter context guarantees strict ordering
+    atom_string(ID_Atom, ID),
+    atom_string(ID2_Atom, ID2),
+    ID_Atom @< ID2_Atom,
+
     % Empty list signature matches idgen_lexical/3 and idgen_hash/3
     % calling convention; used by the UuidV7 WOQL predicate
     idgen_uuid_v7('terminusdb:///data/Person/', [], ID3),

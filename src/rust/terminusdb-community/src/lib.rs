@@ -23,6 +23,14 @@ use swipl::prelude::*;
 pub use terminusdb_store_prolog::terminus_store;
 
 use rand::Rng;
+use std::sync::{LazyLock, Mutex};
+use uuid::{ContextV7, Timestamp, Uuid};
+
+/// Shared v7 counter context: UUIDs stay monotonically ordered across
+/// Prolog threads (12-bit counter per millisecond before the timestamp
+/// is bumped ahead).
+static UUID_V7_CONTEXT: LazyLock<Mutex<ContextV7>> =
+    LazyLock::new(|| Mutex::new(ContextV7::new()));
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -96,7 +104,10 @@ predicates! {
 
     #[module("utils")]
     semidet fn uuid_v7(_context, s_term) {
-        let id = uuid::Uuid::now_v7();
+        let id = {
+            let context = UUID_V7_CONTEXT.lock().unwrap();
+            Uuid::new_v7(Timestamp::now(&*context))
+        };
         s_term.unify(id.to_string().as_str())
     }
 
