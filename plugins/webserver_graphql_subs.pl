@@ -154,12 +154,15 @@ broadcast_graphql_events(Validation_Objects, Meta_Data) :-
         member(Descriptor-Validation_Object-CommitIdAtom, UniqueTriples),
         send_graphql_events(Validation_Object, Descriptor, CommitIdAtom)
     ),
-    forall(member(Descriptor-_, UniqueTriples),
+    forall(member(Descriptor-_-CommitId, UniqueTriples),
            with_mutex(graphql_broadcast_dedup,
-               retractall(graphql_broadcast_sent(Descriptor, _)))).
+               retractall(graphql_broadcast_sent(Descriptor, CommitId)))).
 
 %% send_graphql_events(+Validation_Object, +Descriptor, +CommitIdAtom) is det.
 send_graphql_events(Validation_Object, Descriptor, CommitIdAtom) :-
+    % Rows live only for the duration of one broadcast_graphql_events call —
+    % this dedups overlapping broadcasts of the same commit, not repeat sends
+    % across calls.
     with_mutex(graphql_broadcast_dedup,
         (   graphql_broadcast_sent(Descriptor, CommitIdAtom)
         ->  true
@@ -1402,6 +1405,16 @@ test(cohort_selection_survives_partial_unregister,
     graphql_cohort(CohortKey, _, _, 2),
     unregister_subscription(CohortKey, stream1),
     webserver_graphql_subs:graphql_cohort_selection(CohortKey, "_id{name{}}", "_id name", true).
+
+%% Dedup rows asserted during a broadcast must be retracted when the
+%% broadcast completes — a missing cleanup leaks one row per
+%% descriptor per commit forever.
+test(broadcast_retracts_dedup_rows,
+     [setup(cleanup_cohorts), cleanup(cleanup_cohorts)]) :-
+    Descriptor = system_descriptor{},
+    Meta = meta_data{data_versions:[Descriptor-data_version(_, commit_id_1)]},
+    broadcast_graphql_events([_{descriptor:Descriptor}], Meta),
+    \+ webserver_graphql_subs:graphql_broadcast_sent(Descriptor, _).
 
 :- end_tests(webserver_graphql_subs).
 
