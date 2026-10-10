@@ -3,11 +3,16 @@ name: ARM64 Image
 
 on:
   workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run image test suite after building"
+        type: boolean
+        default: true
   workflow_call:
-  pull_request:
-    paths: 
-      - ".github/workflows/docker-arm64-build.yml"
-      - ".github/workflows/docker-image-test.yml"
+    inputs:
+      run_tests:
+        type: boolean
+        default: true
 #  schedule:
 #    - cron:  '45 2 * * *'
 
@@ -20,15 +25,31 @@ jobs:
       - name: Checkout repository      
         uses: actions/checkout@v4
 
-      - name: Docker Build
-        run: |
-          docker build \
-            --build-arg TERMINUSDB_GIT_HASH=${{ github.sha }} \
-            -t terminusdb/terminusdb-server:local \
-            .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      - name: Save and compress image
-        run: docker save terminusdb/terminusdb-server:local | gzip > terminusdb-server-snapshot-arm64.tar.gz
+      - name: Build and export
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          tags: terminusdb/terminusdb-server:local
+          outputs: type=docker,dest=terminusdb-server-snapshot-arm64.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          input: terminusdb-server-snapshot-arm64.tar
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Compress image
+        run: gzip terminusdb-server-snapshot-arm64.tar
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
@@ -39,6 +60,7 @@ jobs:
   arm64_tests:
     name: Tests
     needs: arm64_build
+    if: ${{ inputs.run_tests }}
     uses: ./.github/workflows/docker-image-test.yml
     with:
       test_repository: ${{ github.repository }}
