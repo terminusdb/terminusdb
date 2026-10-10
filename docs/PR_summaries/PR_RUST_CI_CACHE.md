@@ -16,6 +16,8 @@ Faster CI feedback and fewer wasted build minutes, with no change to what gets b
 
 `native-build.yml` now has a dedicated `build` job (ubuntu + macOS matrix) that runs `make` once and uploads the result as a `terminusdb-build-<os>` artifact containing the `terminusdb` binary, `src/rust/librust.*`, and `src/rust/.last-dist`. The stamp file matters: without it, `distribution/Makefile.prolog` would delete the dylib at parse time in the consuming job and trigger a hidden rebuild. `unit-tests` and `inter-tests` now declare `needs: build`, download the matching per-OS artifact, and go straight to testing — no protobuf, no cargo, no `make`.
 
+The workflow now renders as one dependency chart: `Build` fans out to `Unit Tests` and `Integration Tests` in parallel, and the integration matrix fans out to the two Docker image builds. `docker-amd64` and `docker-arm64` call the existing `docker-*-build.yml` reusable workflows with `needs: inter-tests`, so images build only after both the ubuntu and macOS integration legs are green — and only on non-draft PRs (`github.event.pull_request.draft == false`). Draft PRs still get the full native test suite, just not the image compiles. The `pull_request` triggers were removed from the docker workflows to avoid double runs; `workflow_dispatch` remains for manual image builds, and `workflow_call` keeps the release pipeline (`docker-images-publish.yml`) working unchanged.
+
 Added `Swatinem/rust-cache@v2` — the most widely adopted Rust caching action — in front of every cargo invocation on the runner:
 
 - `native-build.yml` `build` job (ubuntu + macOS matrix)
@@ -33,6 +35,7 @@ Docker image builds (`docker-*.yml`) compile Rust inside the image build — the
 
 - The `src/rust` cargo workspace is cached and restored across CI runs on ubuntu and macOS
 - The release build runs once per OS and is reused by both the unit test and integration test jobs
+- Docker amd64 and arm64 images build only on non-draft PRs, after the integration test matrix passes
 - Clippy lint job benefits from the same cache
 - No change to build outputs, test behaviour, or release artifacts
 - Dependency changes (Cargo.lock diffs) invalidate the cache correctly

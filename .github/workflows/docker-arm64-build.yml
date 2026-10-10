@@ -4,10 +4,6 @@ name: ARM64 Image
 on:
   workflow_dispatch:
   workflow_call:
-  pull_request:
-    paths: 
-      - ".github/workflows/docker-arm64-build.yml"
-      - ".github/workflows/docker-image-test.yml"
 #  schedule:
 #    - cron:  '45 2 * * *'
 
