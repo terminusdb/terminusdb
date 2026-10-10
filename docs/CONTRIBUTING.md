@@ -371,6 +371,33 @@ Alternatively, use the shell wrapper for development:
 
 This bypasses binary compilation entirely and runs via `swipl` directly.
 
+### The `Killed: 9` dylib trap on macOS
+
+When `src/rust/librust.dylib` is replaced **in place** (e.g. `cp terminusdb-enterprise/rust/target/release/libterminusdb_dylib.dylib src/rust/librust.dylib`, which is what `make rust` does), the next `swipl` start can die instantly with:
+
+```text
+bash: line 1: <pid> Killed: 9               swipl src/interactive.pl
+```
+
+No error output, exit code 137 — the process is SIGKILLed before Prolog prints anything.
+
+**Why?** The dylib is linker-signed (ad-hoc signature embedded at build time). macOS caches code signatures keyed by inode + mtime. `cp` overwrites the file but keeps the inode, so the cached signature metadata no longer matches the file's mtime. When dyld maps the first page, the kernel finds `cs_mtime != mtime`, rejects the page (`cs_invalid_page`), and kills the process. Check `log show --last 3m | grep cs_invalid_page` to confirm.
+
+**Fix — re-sign the dylib ad hoc:**
+
+```bash
+codesign --remove-signature src/rust/librust.dylib
+codesign -s - --force src/rust/librust.dylib
+```
+
+Verify the next load works:
+
+```bash
+swipl -g "halt" -t halt src/interactive.pl
+```
+
+**Avoidance:** replace the dylib with a fresh inode instead of overwriting in place — `rm src/rust/librust.dylib` before `make rust`/`cp`, or `install -m755 new.dylib src/rust/librust.dylib`. A new inode gets a fresh signature-cache entry, so no stale `cs_mtime` comparison ever happens. (This is also why `rm src/rust/librust.{dylib,so}; make dev` from the workflow above is the robust path after Rust changes.)
+
 ## Suggested development workflow for altering existing code
 
 1. Understand in detail what the issue or enhancement is about
@@ -744,6 +771,54 @@ One of the easier ways to set up a development environment is by forking the git
 3. Go to the directory `cd terminusdb`.
 4. Run `docker run -it --mount type=bind,source="$(pwd)",target=/app/terminusdb -p 6363:6363 --rm terminusdb/terminusdb:dev` inside the terminusdb directory. It will mount the current sources to the Docker container.
 5. Run `make.` inside the swipl console after you changed the code.
+
+### Reloading code without restarting the server
+
+`make.` is SWI-Prolog's source reloader: it reloads every Prolog file that changed since it was loaded, and the change takes effect immediately — no rebuild, no restart. This works in any interactive session that loaded the sources, not just Docker:
+
+- `swipl src/interactive.pl` followed by `server:terminus_server([serve], false)` — edit a `.pl` file, then run `make.` at the `?-` prompt and the running server picks it up on the next request. Handy for iterating on routes, handlers, or `/api/metrics` output.
+- Already-running worker threads pick up reloaded code on their next call (worker loops re-resolve their goal each iteration), so loop-body changes activate without restarting the pool.
+- Rust changes are not covered — they still need `make dev` and a server restart.
+
+### REPL-driven server for iterative work
+
+For probing and iterating against a live server, run it inside the interpreter instead of the saved-state binary — that gives you a toplevel in the same process, so you can inspect and poke the running system directly:
+
+```bash
+swipl src/interactive.pl
+?- server:terminus_server([serve], false).
+```
+
+(`serve` is an argv verb of `library(main)`, not a toplevel predicate — `terminus_server(Argv, Wait)` is the callable entry point; `Wait=false` returns the prompt instead of blocking on it.)
+
+The REPL needs a bootstrapped storage first — `./terminusdb store init --key root` (or point `TERMINUSDB_SERVER_DB_PATH` at an initialized directory). Pick a different port and storage (`TERMINUSDB_SERVER_PORT=6365 TERMINUSDB_SERVER_DB_PATH=/tmp/probe-storage`) so the probe server can live alongside the test battery on 6363 — never poke a server that tests are running against.
+
+Two ways to drive the console:
+
+- Type at `?-` interactively.
+- Or attach a FIFO and script it from the shell — handy for repeatable probes, and output lands in a log you can grep:
+
+```bash
+mkfifo /tmp/repl-in
+tail -f /tmp/repl-in | swipl src/interactive.pl > /tmp/repl-out.log 2>&1 &
+echo 'server:terminus_server([serve], false).' > /tmp/repl-in
+echo 'thread_property(T, alias(A)), format("~w = ~w~n", [A, T]), fail; true.' > /tmp/repl-in
+```
+
+What a REPL session is good for, once the server is up:
+
+- `make.` — reload edited `.pl` files; the next request runs the new code (see above).
+- `config:set_log_level('DEBUG').` — raise logging without a restart.
+- `garbage_collect_atoms.` — force atom GC and compare `statistics`/`current_blob` counts before and after; the difference is real retention versus collectible garbage.
+- `abolish_private_tables.` and friends to inspect tabled/trie state, e.g. broadcast to every worker: `forall(thread_property(T, alias(_)), thread_signal(T, abolish_private_tables)).`
+- Dynamic-registry censuses: `predicate_property(M:P, dynamic)`, `predicate_property(M:P, number_of_clauses(N))` per predicate, diffed across a soak, is how the clause-leak suspects get named.
+- `request_worker_pool:recycle_worker(worker_5).` — retire one HTTP worker by alias on demand (a fresh successor is spawned on the same queue and reaps the old thread). Bypasses the `TERMINUSDB_WORKER_RECYCLE` env gate deliberately; aborts an in-flight request when the worker is busy, so check `worker_busy_stats/1` first.
+
+Two traps worth knowing:
+
+- `make.` cannot reach a saved-state server. `swipl -x ./terminusdb -- serve` has no toplevel and its stdin is `/dev/null` — the binary only reflects code present at `make dev` time. Iterating on code for a running binary means rebuild + restart.
+- Toplevel answers can stay invisible in a FIFO log for a long time: stdout to a file is block-buffered. Force visibility with `flush_output.` after the goal, or write results to a scratch file (`open('/tmp/probe.txt',write,S),writeln(S,Result),close(S).`) and read that — it also avoids toplevel output being drowned by request logging.
+- A REPL server started with `serve` runs with `Wait=false`, which skips `start_elaboration_workers` — no `multi_purpose_worker_*` pool exists, `commit_queue_available/0` fails, and commits take the synchronous path (with different cleanup behaviour). For realistic commit traffic, start the pool yourself: `commit_queue:start_workers(10).`
 
 ## To establish a testable clean baseline one most platforms
 

@@ -99,7 +99,10 @@ delete_database_label(Organization, DB_Name) :-
     % Without this, stale Weak references accumulate until the cache's
     % 20% dead-entry threshold triggers an inline cleanup, which may
     % never happen if live entries keep being added.
-    terminus_store:cleanup_layer_cache(Store, _Removed).
+    terminus_store:cleanup_layer_cache(Store, _Removed),
+    % The database is gone — retire its meta-commit lock now rather than
+    % letting it wait for the idle TTL sweep.
+    meta_commit_queue:expire_meta_commit_lock(Named_Graph_Name).
 
 /**
  * force_delete_db(+Organization, +DB_Name) is semidet.

@@ -44,7 +44,7 @@ describe('sys:JSON Typecast', function () {
     }`
 
     const insertResponse = await fetch(
-      `http://localhost:6363/api/document/${agent.orgName}/${agent.dbName}?author=test&message=highprecision`,
+      `${agent.baseUrl}/api/document/${agent.orgName}/${agent.dbName}?author=test&message=highprecision`,
       {
         method: 'POST',
         headers: {

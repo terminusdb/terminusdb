@@ -532,8 +532,9 @@ worker_loop(Queue) :-
 %%  operation that requires ALL threads to reach a safe point — if
 %%  another worker is running a long query, garbage_collect_atoms blocks
 %%  until that worker yields. To avoid this, we only call
-%%  garbage_collect_atoms when the atom count exceeds a threshold,
-%%  rather than on every request.
+%%  garbage_collect_atoms when the atom count exceeds a threshold —
+%%  a suite mints ~16M atoms per run, so a low floor fires constantly
+%%  for little benefit.
 cleanup_worker_state :-
     get_time(T0),
     garbage_collect,
@@ -541,20 +542,20 @@ cleanup_worker_state :-
     trim_stacks,
     get_time(T2),
     (   statistics(atoms, AtomCount),
-        AtomCount > 50000
+        AtomCount > 75000
     ->  garbage_collect_atoms,
         get_time(T3),
         GCAtomTime is T3 - T2
     ;   T3 = T2,
         GCAtomTime = 0
     ),
-    (   statistics(atoms, AtomCount2),
-        AtomCount2 > 100000
-    ->  abolish_private_tables,
-        get_time(T4),
-        TableGCTime is T4 - T3
-    ;   TableGCTime = 0
-    ),
+    statistics(atoms, AtomCount2),
+    % Private tables keyed by layer blobs pin Rust layer Arcs until
+    % abolished, so this must run unconditionally — not only above an atom
+    % threshold — or cached layers can never transition live -> dead.
+    abolish_private_tables,
+    get_time(T4),
+    TableGCTime is T4 - T3,
     GCTime is T1 - T0,
     TrimTime is T2 - T1,
     (   GCTime > 0.05
@@ -1696,7 +1697,7 @@ test(cleanup_worker_state_runs_gc_and_trim) :-
     %% trim_stacks/0 without errors. It must always succeed
     %% (it is called between every request in the worker loop).
     %% garbage_collect_atoms/0 is only called when atom count
-    %% exceeds 50000 to avoid blocking other threads on every request.
+    %% exceeds 75000 to avoid blocking other threads on every request.
     cleanup_worker_state.
 
 test(cleanup_worker_state_is_det) :-
@@ -1720,6 +1721,21 @@ test(cleanup_worker_state_reduces_atom_count) :-
     assertion(After =< Before + 500),
     %% Clean up the nb_setval references
     nb_delete(temp).
+
+% Private-tabled probe for cleanup_worker_state_abolishes_private_tables.
+:- table rwp_table_probe/1 as private.
+rwp_table_probe(marker).
+
+test(cleanup_worker_state_abolishes_private_tables) :-
+    %% Private tables keyed by layer blobs pin the underlying Rust layer
+    %% Arc until the table is abolished. Worker threads must therefore
+    %% clear private tables after every request, not only when the atom
+    %% count crosses a threshold — otherwise cached layers can never
+    %% transition live -> dead and the cache grows without bound.
+    rwp_table_probe(_),
+    assertion(current_table(rwp_table_probe(_), _)),
+    cleanup_worker_state,
+    assertion(\+ current_table(rwp_table_probe(_), _)).
 
 %% --- Watchdog mechanism ---
 

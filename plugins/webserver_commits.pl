@@ -38,6 +38,11 @@
 %% The mutex serializes catch-up+registration vs broadcast fan-out
 %% to guarantee no gaps and no duplicates during concurrent connections.
 :- dynamic branch_broadcast_mutex/2.
+%% branch_broadcast_touch(BranchPath, Time) — last activity stamp per
+%% branch; drives the idle-TTL sweep. branch_broadcast_last_sweep/1
+%% rate-limits the sweep itself.
+:- dynamic branch_broadcast_touch/2.
+:- dynamic branch_broadcast_last_sweep/1.
 :- mutex_create(branch_broadcast_registry, [alias(branch_broadcast_registry)]).
 
 %%%%%%%%%%%%%%%%%%%% Commit Broadcast Stream %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -623,18 +628,132 @@ build_commit_event(Validation_Object, BranchPath, CommitIdAtom, JsonStr) :-
 %  duplicates. See PLAN_COMMIT_STREAM_SYNC.md for the full design.
 ensure_branch_broadcast_mutex(BranchPath, Mutex) :-
     (   branch_broadcast_mutex(BranchPath, Mutex)
-    ->  true
+    ->  touch_branch_broadcast(BranchPath)
     ;   with_mutex(branch_broadcast_registry,
-            (   branch_broadcast_mutex(BranchPath, Mutex)
-            ->  true
-            ;   atom_string(BranchPathAtom, BranchPath),
-                atom_concat('commit_broadcast_', BranchPathAtom, Alias),
-                catch(mutex_create(Mutex, [alias(Alias)]),
-                      error(permission_error(create, mutex, _), _),
-                      mutex_property(Mutex, alias(Alias))),
-                assertz(branch_broadcast_mutex(BranchPath, Mutex))
+            (   maybe_sweep_branch_broadcasts,
+                (   branch_broadcast_mutex(BranchPath, Mutex)
+                ->  true
+                ;   atom_string(BranchPathAtom, BranchPath),
+                    atom_concat('commit_broadcast_', BranchPathAtom, Alias),
+                    catch(mutex_create(Mutex, [alias(Alias)]),
+                          error(permission_error(create, mutex, _), _),
+                          mutex_property(Mutex, alias(Alias))),
+                    assertz(branch_broadcast_mutex(BranchPath, Mutex))
+                ),
+                touch_branch_broadcast(BranchPath)
             )
         )
+    ).
+
+%% Expiry: a per-branch mutex + its broadcast_sent dedup rows are
+%% retained for process lifetime unless removed. They expire two ways:
+%% delete-driven (plugins:post_delete_db_hook/2 drops every branch of a
+%% deleted database) and TTL-driven (the lazy sweep below evicts
+%% branches idle longer than broadcast_registry_ttl — a streamed-then-
+%% abandoned branch does not pin its entries forever). A branch with a
+%% live commit_stream is always kept: its subscribers still need dedup.
+
+broadcast_registry_ttl(Secs) :-
+    (   getenv('TERMINUSDB_REGISTRY_TTL', V),
+        atom_number(V, N)
+    ->  Secs = N
+    ;   Secs = 600
+    ).
+
+touch_branch_broadcast(BranchPath) :-
+    get_time(Now),
+    retractall(branch_broadcast_touch(BranchPath, _)),
+    assertz(branch_broadcast_touch(BranchPath, Now)).
+
+maybe_sweep_branch_broadcasts :-
+    get_time(Now),
+    (   branch_broadcast_last_sweep(Last),
+        Now - Last < 60
+    ->  true
+    ;   retractall(branch_broadcast_last_sweep(_)),
+        assertz(branch_broadcast_last_sweep(Now)),
+        sweep_branch_broadcasts_at(Now)
+    ).
+
+sweep_branch_broadcasts :-
+    get_time(Now),
+    with_mutex(branch_broadcast_registry, sweep_branch_broadcasts_at(Now)).
+
+sweep_branch_broadcasts_at(Now) :-
+    broadcast_registry_ttl(TTL),
+    forall(
+        (   branch_broadcast_mutex(BranchPath, Mutex),
+            branch_broadcast_expired(BranchPath, Now, TTL)
+        ),
+        evict_branch_broadcast(BranchPath, Mutex)
+    ),
+    forall(
+        (   branch_broadcast_touch(BranchPath, _),
+            \+ branch_broadcast_mutex(BranchPath, _)
+        ),
+        retractall(branch_broadcast_touch(BranchPath, _))
+    ).
+
+branch_broadcast_expired(BranchPath, Now, TTL) :-
+    (   branch_broadcast_touch(BranchPath, Touched)
+    ->  Now - Touched > TTL
+    ;   true  % untracked entry — treat as stale
+    ),
+    \+ commit_stream(_, BranchPath, _).
+
+%% trylock first: a mutex mid-broadcast survives the round. Retracting
+%% the mutex row also frees its broadcast_sent dedup rows for the branch.
+evict_branch_broadcast(BranchPath, Mutex) :-
+    (   mutex_trylock(Mutex)
+    ->  retractall(branch_broadcast_mutex(BranchPath, Mutex)),
+        retractall(broadcast_sent(BranchPath, _)),
+        retractall(branch_broadcast_touch(BranchPath, _)),
+        mutex_unlock(Mutex),
+        catch(mutex_destroy(Mutex), _, true)
+    ;   true
+    ).
+
+%% expire_branch_broadcast(+BranchPath) is det — delete-driven expiry.
+%%
+%% A branch with an open commit_stream is skipped: the TTL sweep reclaims
+%% it once the stream dies (the database is deleted, so the stream will
+%% close). Residual race: a thread that read the mutex row just before the
+%% retract can still call mutex_lock on a destroyed mutex and get an
+%% existence_error — the request is on a deleted database and fails anyway.
+expire_branch_broadcast(BranchPath) :-
+    commit_stream(_, BranchPath, _),
+    !.
+expire_branch_broadcast(BranchPath) :-
+    with_mutex(branch_broadcast_registry,
+        (   branch_broadcast_mutex(BranchPath, Mutex)
+        ->  retractall(branch_broadcast_mutex(BranchPath, _)),
+            retractall(broadcast_sent(BranchPath, _)),
+            retractall(branch_broadcast_touch(BranchPath, _)),
+            (   mutex_trylock(Mutex)
+            ->  mutex_unlock(Mutex),
+                catch(mutex_destroy(Mutex), _, true)
+            ;   true )
+        ;   retractall(broadcast_sent(BranchPath, _)),
+            retractall(branch_broadcast_touch(BranchPath, _))
+        )).
+
+:- multifile plugins:post_delete_db_hook/2.
+plugins:post_delete_db_hook(Organization, DB_Name) :-
+    atomic_list_concat([Organization, '/', DB_Name, '/'], '', PrefixAtom),
+    atom_string(PrefixAtom, Prefix),
+    once(
+        forall(
+            (   branch_broadcast_mutex(BranchPath, _),
+                sub_string(BranchPath, 0, _, _, Prefix)
+            ),
+            expire_branch_broadcast(BranchPath)
+        )),
+    forall(
+        (   broadcast_sent(BranchPath, _),
+            \+ branch_broadcast_mutex(BranchPath, _),
+            sub_string(BranchPath, 0, _, _, Prefix)
+        ),
+        retractall(broadcast_sent(BranchPath, _))
     ).
 
 %% normalize_branch_path(+Raw, -Normalized) is det.
@@ -915,5 +1034,82 @@ test(build_commit_event_user_is_null_when_missing) :-
         %% logic by checking the fallback path.
         true
     ).
+
+%%%%%%%%%%%%%%%%%%%% Registry expiry tests %%%%%%%%%%%%%%%%%%%%%%%%%
+
+backdate_branch_broadcast_touch(Path, Seconds) :-
+    get_time(Now),
+    Past is Now - Seconds,
+    retractall(webserver_commits:branch_broadcast_touch(Path, _)),
+    assertz(webserver_commits:branch_broadcast_touch(Path, Past)).
+
+test(sweep_evicts_stale_branch_entries,
+     [cleanup((retractall(webserver_commits:branch_broadcast_mutex("admin/sweepdb/local/branch/main", _)),
+               retractall(webserver_commits:broadcast_sent("admin/sweepdb/local/branch/main", _)),
+               retractall(webserver_commits:branch_broadcast_touch("admin/sweepdb/local/branch/main", _))))]) :-
+    Path = "admin/sweepdb/local/branch/main",
+    webserver_commits:ensure_branch_broadcast_mutex(Path, _M),
+    assertz(webserver_commits:broadcast_sent(Path, "commit1")),
+    backdate_branch_broadcast_touch(Path, 10_000),
+    webserver_commits:sweep_branch_broadcasts,
+    \+ webserver_commits:branch_broadcast_mutex(Path, _),
+    \+ webserver_commits:broadcast_sent(Path, _).
+
+test(sweep_keeps_fresh_branch_entries,
+     [cleanup((retractall(webserver_commits:branch_broadcast_mutex("admin/freshdb/local/branch/main", _)),
+               retractall(webserver_commits:branch_broadcast_touch("admin/freshdb/local/branch/main", _))))]) :-
+    Path = "admin/freshdb/local/branch/main",
+    webserver_commits:ensure_branch_broadcast_mutex(Path, _M),
+    webserver_commits:sweep_branch_broadcasts,
+    webserver_commits:branch_broadcast_mutex(Path, _).
+
+test(sweep_keeps_branch_with_live_stream,
+     [cleanup((retractall(webserver_commits:branch_broadcast_mutex("admin/streamdb/local/branch/main", _)),
+               retractall(webserver_commits:commit_stream("s1", _, _)),
+               retractall(webserver_commits:branch_broadcast_touch("admin/streamdb/local/branch/main", _))))]) :-
+    Path = "admin/streamdb/local/branch/main",
+    webserver_commits:ensure_branch_broadcast_mutex(Path, _M),
+    assertz(webserver_commits:commit_stream("s1", Path, none)),
+    backdate_branch_broadcast_touch(Path, 10_000),
+    webserver_commits:sweep_branch_broadcasts,
+    webserver_commits:branch_broadcast_mutex(Path, _).  % open stream pins the branch
+
+test(post_delete_db_hook_clears_branch_entries,
+     [cleanup((retractall(webserver_commits:branch_broadcast_mutex(_, _)),
+               retractall(webserver_commits:broadcast_sent(_, _)),
+               retractall(webserver_commits:branch_broadcast_touch(_, _))))]) :-
+    webserver_commits:ensure_branch_broadcast_mutex("admin/dead/local/branch/main", _),
+    webserver_commits:ensure_branch_broadcast_mutex("admin/dead/local/branch/dev", _),
+    webserver_commits:ensure_branch_broadcast_mutex("other/kept/local/branch/main", _),
+    assertz(webserver_commits:broadcast_sent("admin/dead/local/branch/main", "c1")),
+    assertz(webserver_commits:broadcast_sent("other/kept/local/branch/main", "c2")),
+    ignore(forall(plugins:post_delete_db_hook(admin, dead), true)),
+    \+ webserver_commits:branch_broadcast_mutex("admin/dead/local/branch/main", _),
+    \+ webserver_commits:branch_broadcast_mutex("admin/dead/local/branch/dev", _),
+    \+ webserver_commits:broadcast_sent("admin/dead/local/branch/main", _),
+    webserver_commits:branch_broadcast_mutex("other/kept/local/branch/main", _),
+    webserver_commits:broadcast_sent("other/kept/local/branch/main", "c2").
+
+test(post_delete_db_hook_destroys_broadcast_mutex,
+     [cleanup((retractall(webserver_commits:branch_broadcast_mutex(_, _)),
+               retractall(webserver_commits:broadcast_sent(_, _)),
+               retractall(webserver_commits:branch_broadcast_touch(_, _))))]) :-
+    Path = "admin/mgone/local/branch/main",
+    webserver_commits:ensure_branch_broadcast_mutex(Path, _Mutex),
+    once(mutex_property(_, alias('commit_broadcast_admin/mgone/local/branch/main'))),
+    ignore(forall(plugins:post_delete_db_hook(admin, mgone), true)),
+    \+ webserver_commits:branch_broadcast_mutex(Path, _),
+    assertion(\+ mutex_property(_, alias('commit_broadcast_admin/mgone/local/branch/main'))).
+
+test(swept_broadcast_mutex_is_destroyed,
+     [cleanup((retractall(webserver_commits:branch_broadcast_mutex(_, _)),
+               retractall(webserver_commits:broadcast_sent(_, _)),
+               retractall(webserver_commits:branch_broadcast_touch(_, _))))]) :-
+    Path = "admin/swept/local/branch/main",
+    webserver_commits:ensure_branch_broadcast_mutex(Path, _Mutex),
+    backdate_branch_broadcast_touch(Path, 10_000),
+    webserver_commits:sweep_branch_broadcasts,
+    \+ webserver_commits:branch_broadcast_mutex(Path, _),
+    assertion(\+ mutex_property(_, alias('commit_broadcast_admin/swept/local/branch/main'))).
 
 :- end_tests(webserver_commits_utils).

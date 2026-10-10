@@ -950,37 +950,44 @@ fn dispatch_pipe_to_prolog(
     context: &Context<impl QueryableContextType>,
     req: &PipeDispatchRequest,
 ) -> PrologResult<()> {
-    let request_term = context.new_term_ref();
-    context
+    // Term refs allocated on the engine's root context are never released —
+    // the dispatcher's engine activation stays open for the server's whole
+    // lifetime, so every request would permanently pin its serialized
+    // request dict, request id, and path atoms. Open a foreign frame per
+    // dispatch so all term refs are freed when it closes.
+    let frame = context.open_frame();
+
+    let request_term = frame.new_term_ref();
+    frame
         .serialize_to_term(&request_term, &req.request_json)
         .map_err(|_| PrologError::Failure)?;
 
-    let module_term = context.new_term_ref();
+    let module_term = frame.new_term_ref();
     module_term
         .put(&Atom::new(&req.handler_module))
         .map_err(|_| PrologError::Failure)?;
 
-    let handler_term = context.new_term_ref();
+    let handler_term = frame.new_term_ref();
     handler_term
         .put(&Atom::new(&req.handler_name))
         .map_err(|_| PrologError::Failure)?;
 
-    let input_fd_term = context.new_term_ref();
+    let input_fd_term = frame.new_term_ref();
     input_fd_term
         .put(&(req.input_read_fd.unwrap_or(-1) as i64))
         .map_err(|_| PrologError::Failure)?;
 
-    let output_fd_term = context.new_term_ref();
+    let output_fd_term = frame.new_term_ref();
     output_fd_term
         .put(&(req.output_worker_write_fd as i64))
         .map_err(|_| PrologError::Failure)?;
 
-    let binary_term = context.new_term_ref();
+    let binary_term = frame.new_term_ref();
     binary_term
         .put(&Atom::new(if req.binary { "true" } else { "false" }))
         .map_err(|_| PrologError::Failure)?;
 
-    let request_id_term = context.new_term_ref();
+    let request_id_term = frame.new_term_ref();
     request_id_term
         .put(&Atom::new(&req.request_id))
         .map_err(|_| PrologError::Failure)?;
@@ -990,7 +997,7 @@ fn dispatch_pipe_to_prolog(
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
-    context.call_once(callable, [
+    let result = frame.call_once(callable, [
         &request_term,
         &module_term,
         &handler_term,
@@ -998,7 +1005,12 @@ fn dispatch_pipe_to_prolog(
         &output_fd_term,
         &binary_term,
         &request_id_term,
-    ])
+    ]);
+    // discard (not close) so the global stack is rewound and all term
+    // refs + serialized request atoms are freed immediately. close()
+    // leaves term data on the global stack, pinning request atoms.
+    frame.discard();
+    result
 }
 
 /// Call the Prolog predicate `cancel_pipe_request/2` to signal the worker
@@ -1011,12 +1023,15 @@ fn cancel_pipe_to_prolog(
     output_worker_write_fd: i32,
     request_id: &str,
 ) -> PrologResult<()> {
-    let fd_term = context.new_term_ref();
+    // Per-request foreign frame — see dispatch_pipe_to_prolog.
+    let frame = context.open_frame();
+
+    let fd_term = frame.new_term_ref();
     fd_term
         .put(&(output_worker_write_fd as i64))
         .map_err(|_| PrologError::Failure)?;
 
-    let request_id_term = context.new_term_ref();
+    let request_id_term = frame.new_term_ref();
     request_id_term
         .put(&Atom::new(request_id))
         .map_err(|_| PrologError::Failure)?;
@@ -1026,34 +1041,41 @@ fn cancel_pipe_to_prolog(
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
-    context.call_once(callable, [&fd_term, &request_id_term])
+    let result = frame.call_once(callable, [&fd_term, &request_id_term]);
+    frame.discard();
+    result
 }
 
 fn dispatch_stream_to_prolog(
     context: &Context<impl QueryableContextType>,
     req: &DispatchRequest,
 ) -> PrologResult<()> {
-    let request_term = context.new_term_ref();
-    context
+    // See dispatch_pipe_to_prolog: term refs must live on a per-request
+    // foreign frame, not the engine's root context, or every stream
+    // dispatch permanently pins its serialized request dict atoms.
+    let frame = context.open_frame();
+
+    let request_term = frame.new_term_ref();
+    frame
         .serialize_to_term(&request_term, &req.request_json)
         .map_err(|_| PrologError::Failure)?;
 
-    let module_term = context.new_term_ref();
+    let module_term = frame.new_term_ref();
     module_term
         .put(&Atom::new(&req.handler_module))
         .map_err(|_| PrologError::Failure)?;
 
-    let handler_term = context.new_term_ref();
+    let handler_term = frame.new_term_ref();
     handler_term
         .put(&Atom::new(&req.handler_name))
         .map_err(|_| PrologError::Failure)?;
 
-    let input_stream_id_term = context.new_term_ref();
+    let input_stream_id_term = frame.new_term_ref();
     input_stream_id_term
         .put(&req.input_stream_id)
         .map_err(|_| PrologError::Failure)?;
 
-    let response_stream_id_term = context.new_term_ref();
+    let response_stream_id_term = frame.new_term_ref();
     response_stream_id_term
         .put(&req.response_stream_id)
         .map_err(|_| PrologError::Failure)?;
@@ -1063,13 +1085,15 @@ fn dispatch_stream_to_prolog(
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
-    context.call_once(callable, [
+    let result = frame.call_once(callable, [
         &request_term,
         &module_term,
         &handler_term,
         &input_stream_id_term,
         &response_stream_id_term,
-    ])
+    ]);
+    frame.discard();
+    result
 }
 
 /// Write a string to a file descriptor.

@@ -1,9 +1,11 @@
 /**
  * Optimize a complete database including all components.
  * Order based on auto-optimize.pl: branch (1), repository/_commits (2),
- * database/_meta (4). Also optimizes the system graph (_system) which
- * accumulates commits from database create/delete operations and is
- * never touched by the auto-optimize plugin's all_descriptor traversal.
+ * database/_meta (4). The system graph (_system) accumulates commits from
+ * database create/delete operations and is never touched by the
+ * auto-optimize plugin's all_descriptor traversal, so it is squashed
+ * probabilistically (~10% of calls, matching optimize_chance in
+ * auto-optimize.pl) to bound its growth without slowing every create.
  * Called deterministically from db.create() to keep the commit graph
  * squashed for fast subsequent operations.
  * @param {Object} agent - Authenticated agent instance
@@ -21,6 +23,9 @@ async function optimizeDatabase (agent, path, branch) {
     `${path}/local/_commits`,
     `${path}/_meta`,
   ]
+  if (Math.random() < 0.1) {
+    steps.push('_system')
+  }
   for (const descPath of steps) {
     await optimizeDescriptor(agent, descPath)
   }
