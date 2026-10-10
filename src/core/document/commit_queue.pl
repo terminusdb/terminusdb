@@ -48,6 +48,11 @@
 % Branch-specific commit queue and lock registry.
 :- dynamic branch_commit_queue/2.
 :- dynamic branch_commit_lock/2.
+% branch_registry_touch(BranchKey, Time) — last activity stamp per branch
+% queue/lock pair; drives the idle-TTL sweep. branch_registry_last_sweep/1
+% rate-limits the sweep itself.
+:- dynamic branch_registry_touch/2.
+:- dynamic branch_registry_last_sweep/1.
 
 % Round-robin scheduler state.
 :- dynamic pending_branches/1.
@@ -113,8 +118,12 @@ wake_workers :-
 
 ensure_branch_queue(BranchKey, Queue) :-
     (   branch_commit_queue(BranchKey, Queue)
-    ->  true
-    ;   with_mutex(branch_registry_mutex,
+    ->  touch_branch_registry(BranchKey)
+    ;   % The sweep must run before taking the registry mutex: it evicts by
+        % re-acquiring that mutex per candidate, and SWI mutexes are not
+        % recursive.
+        maybe_sweep_branch_registry,
+        with_mutex(branch_registry_mutex,
             (   branch_commit_queue(BranchKey, Queue)
             ->  true
             ;   atom_string(BranchKeyAtom, BranchKey),
@@ -134,26 +143,122 @@ ensure_branch_queue(BranchKey, Queue) :-
                     throw(error(unable_to_create_branch_lock(BranchKey), _))
                 ),
                 assertz(branch_commit_queue(BranchKey, Queue)),
-                assertz(branch_commit_lock(BranchKey, Mutex))
+                assertz(branch_commit_lock(BranchKey, Mutex)),
+                touch_branch_registry(BranchKey)
             ))
     ).
 
-destroy_branch_queue(BranchKey) :-
+%% Expiry: a created branch queue + lock pair lives for the process
+%% lifetime unless removed. Entries expire two ways: delete-driven
+%% (plugins:post_delete_db_hook/2 destroys every branch queue of a
+%% deleted database) and TTL-driven (the lazy sweep evicts branches idle
+%% longer than branch_registry_ttl). A branch is only evicted when it has
+%% no queued work, is not on the pending list, and is not active — the
+%% sweep never drops an undrained commit.
+
+branch_registry_ttl(Secs) :-
+    (   getenv('TERMINUSDB_REGISTRY_TTL', V),
+        atom_number(V, N)
+    ->  Secs = N
+    ;   Secs = 600
+    ).
+
+touch_branch_registry(BranchKey) :-
+    get_time(Now),
+    retractall(branch_registry_touch(BranchKey, _)),
+    assertz(branch_registry_touch(BranchKey, Now)).
+
+maybe_sweep_branch_registry :-
+    get_time(Now),
+    (   branch_registry_last_sweep(Last),
+        Now - Last < 60
+    ->  true
+    ;   retractall(branch_registry_last_sweep(_)),
+        assertz(branch_registry_last_sweep(Now)),
+        sweep_branch_registry_at(Now)
+    ).
+
+sweep_branch_registry :-
+    get_time(Now),
+    sweep_branch_registry_at(Now).
+
+sweep_branch_registry_at(Now) :-
+    branch_registry_ttl(TTL),
+    forall(
+        (   branch_commit_queue(BranchKey, _),
+            (   branch_registry_touch(BranchKey, Touched)
+            ->  Now - Touched > TTL
+            ;   true  % untracked entry — treat as stale
+            )
+        ),
+        expire_branch_queue_if_idle(BranchKey, Now, TTL)
+    ),
+    forall(
+        (   branch_registry_touch(BranchKey, _),
+            \+ branch_commit_queue(BranchKey, _)
+        ),
+        retractall(branch_registry_touch(BranchKey, _))
+    ).
+
+%% expire_branch_queue_if_idle(+BranchKey, +Now, +TTL) is det.
+%%
+%% Re-checks idleness inside the registry mutex so a commit that lands
+%% between the sweep's candidate scan and eviction is not dropped. The
+%% scheduler-state check nests scheduler inside registry — safe because
+%% no commit_scheduler_mutex scope ever acquires branch_registry_mutex.
+expire_branch_queue_if_idle(BranchKey, Now, TTL) :-
     with_mutex(branch_registry_mutex,
-        (   (   branch_commit_queue(BranchKey, Queue)
-            ->  drain_message_queue(Queue),
-                catch(message_queue_destroy(Queue), _, true),
-                retractall(branch_commit_queue(BranchKey, _))
+        (   branch_commit_queue(BranchKey, Queue),
+            queue_empty(Queue),
+            (   branch_registry_touch(BranchKey, Touched)
+            ->  Now - Touched > TTL
             ;   true
             ),
-            (   branch_commit_lock(BranchKey, Mutex)
-            ->  catch(mutex_unlock(Mutex), _, true),
-                catch(mutex_destroy(Mutex), _, true),
-                retractall(branch_commit_lock(BranchKey, _))
+            branch_registry_not_busy(BranchKey)
+        ->  destroy_branch_registry_state(BranchKey),
+            Expired = true
+        ;   Expired = false
+        )),
+    (   Expired = true
+    ->  cleanup_scheduler_state_for_branch(BranchKey)
+    ;   true
+    ).
+
+branch_registry_not_busy(BranchKey) :-
+    with_mutex(commit_scheduler_mutex,
+        (   \+ active_branch(BranchKey, _),
+            (   pending_branches(Branches)
+            ->  \+ member(BranchKey, Branches)
             ;   true
             )
-        )),
-    cleanup_scheduler_state_for_branch(BranchKey).
+        )).
+
+destroy_branch_queue(BranchKey) :-
+    with_mutex(branch_registry_mutex,
+        destroy_branch_registry_state(BranchKey)),
+    cleanup_scheduler_state_for_branch(BranchKey),
+    retractall(branch_registry_touch(BranchKey, _)).
+
+% destroy_branch_registry_state(+BranchKey) is det.
+%
+% Tears down the queue/lock pair and their registry rows. Caller must hold
+% branch_registry_mutex. Residual race: a thread that read the lock row
+% just before the retract can still call mutex_lock on a destroyed mutex
+% and get an existence_error — such work targets a deleted/expired branch
+% and fails anyway.
+destroy_branch_registry_state(BranchKey) :-
+    (   branch_commit_queue(BranchKey, Queue)
+    ->  drain_message_queue(Queue),
+        catch(message_queue_destroy(Queue), _, true),
+        retractall(branch_commit_queue(BranchKey, _))
+    ;   true
+    ),
+    (   branch_commit_lock(BranchKey, Mutex)
+    ->  catch(mutex_unlock(Mutex), _, true),
+        catch(mutex_destroy(Mutex), _, true),
+        retractall(branch_commit_lock(BranchKey, _))
+    ;   true
+    ).
 
 drain_message_queue(Queue) :-
     catch(thread_get_message(Queue, _, [timeout(0)]), _, fail),
@@ -345,10 +450,16 @@ decrement_database_active_branch_count(BranchKey, NewCount) :-
     ->  NewCount is Count - 1,
         (   NewCount < 0
         ->  throw(error(active_branch_count_negative(DatabaseKey), _))
-        ;   assertz(database_active_branch_count(DatabaseKey, NewCount))
+        ;   NewCount > 0
+        ->  assertz(database_active_branch_count(DatabaseKey, NewCount))
+        ;   true  % count reached zero — keep the row retracted
         )
-    ;   NewCount = 0,
-        assertz(database_active_branch_count(DatabaseKey, 0))
+    ;   % Decrement without a matching increment is unbalanced bookkeeping.
+        % Warn rather than minting a permanent zero row.
+        NewCount = 0,
+        json_log_warning_formatted(
+            "Active branch count decrement for ~w with no registered count",
+            [DatabaseKey])
     ).
 
 % increment_database_active_count(+DatabaseKey) is det.
@@ -374,10 +485,33 @@ decrement_database_active_count(DatabaseKey) :-
         ->  NewCount is Count - 1,
             (   NewCount < 0
             ->  throw(error(active_branch_count_negative(DatabaseKey), _))
-            ;   assertz(database_active_branch_count(DatabaseKey, NewCount))
+            ;   NewCount > 0
+            ->  assertz(database_active_branch_count(DatabaseKey, NewCount))
+            ;   true  % count reached zero — keep the row retracted
             )
-        ;   true
+        ;   json_log_warning_formatted(
+                "Active count decrement for ~w with no registered count",
+                [DatabaseKey])
         )).
+
+% Delete-driven expiry: a database deleted while it still has an active
+% branch count row, branch queues, or branch locks (delete raced in-flight
+% work) would otherwise leak them forever — no decrement is coming for a
+% dead database. Branch queues are destroyed first so their cleanup can
+% still decrement the count normally; the remaining row is then retracted.
+:- multifile plugins:post_delete_db_hook/2.
+plugins:post_delete_db_hook(Organization, DB_Name) :-
+    atomic_list_concat([Organization, '/', DB_Name, '/'], '', PrefixAtom),
+    forall(
+        (   branch_commit_queue(BranchKey, _),
+            atom_string(BranchAtom, BranchKey),
+            sub_atom(BranchAtom, 0, _, _, PrefixAtom)
+        ),
+        destroy_branch_queue(BranchKey)
+    ),
+    organization_database_name(Organization, DB_Name, DatabaseKey),
+    with_mutex(commit_scheduler_mutex,
+        retractall(database_active_branch_count(DatabaseKey, _))).
 
 % Optimization scheduling.
 %
@@ -903,8 +1037,8 @@ test(cleanup_active_branches_for_worker) :-
     assertion(\+ commit_queue:active_branch('b1', worker_1)),
     assertion(\+ commit_queue:active_branch('b2', worker_1)),
     assertion(commit_queue:active_branch('b3', worker_2)),
-    assertion(commit_queue:database_active_branch_count('b1', 0)),
-    assertion(commit_queue:database_active_branch_count('b2', 0)),
+    assertion(\+ commit_queue:database_active_branch_count('b1', _)),
+    assertion(\+ commit_queue:database_active_branch_count('b2', _)),
     assertion(commit_queue:database_active_branch_count('b3', 1)),
     with_mutex(commit_scheduler_mutex,
         (   retractall(commit_queue:pending_branches(_)),
@@ -927,7 +1061,7 @@ test(cleanup_active_branches_for_worker_requeues_pending_commits) :-
     assertz(commit_queue:database_active_branch_count(DBKey, 1)),
     cleanup_active_branches_for_worker(worker_1),
     assertion(\+ commit_queue:active_branch(BranchKey, worker_1)),
-    assertion(commit_queue:database_active_branch_count(DBKey, 0)),
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)),
     assertion(commit_queue:pending_branches([BranchKey])),
     assertion(commit_queue:pending_branch_age(BranchKey, _)),
     with_mutex(commit_scheduler_mutex,
@@ -961,6 +1095,7 @@ test(requeue_branch_preserves_age_when_not_empty) :-
     commit_queue:pending_branch_age('age_b1', OriginalAge),
     thread_self(Self),
     assertz(commit_queue:active_branch('age_b1', Self)),
+    assertz(commit_queue:database_active_branch_count('age_b1', 1)),
     thread_send_message(Queue, dummy),
     requeue_branch('age_b1'),
     commit_queue:pending_branch_age('age_b1', NewAge),
@@ -1014,7 +1149,7 @@ test(destroy_branch_queue_cleans_scheduler_state) :-
     assertion(\+ commit_queue:pending_branch_age(BranchKey, _)),
     assertion(\+ commit_queue:active_branch(BranchKey, _)),
     assertion(\+ commit_queue:pending_branches([BranchKey])),
-    assertion(commit_queue:database_active_branch_count(DBKey, 0)),
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)),
     with_mutex(commit_scheduler_mutex,
         (   retractall(commit_queue:pending_branches(_)),
             retractall(commit_queue:active_branch(_, _)),
@@ -1326,13 +1461,44 @@ test(active_branch_count_tracks_increments_and_decrements) :-
     assertion(commit_queue:database_active_branch_count(DBKey, 1)),
     decrement_database_active_branch_count("admin/db/local/branch/other", Count2),
     assertion(Count2 == 0),
-    assertion(commit_queue:database_active_branch_count(DBKey, 0)).
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)).
 
 test(active_branch_count_negative_throws, [throws(error(active_branch_count_negative(DBKey), _))]) :-
     cleanup_active_branch_counts,
     organization_database_name(admin, db, DBKey),
     assertz(commit_queue:database_active_branch_count(DBKey, 0)),
     decrement_database_active_branch_count("admin/db/local/branch/main", _).
+
+test(active_branch_count_retracts_row_at_zero) :-
+    cleanup_active_branch_counts,
+    organization_database_name(admin, db, DBKey),
+    increment_database_active_branch_count("admin/db/local/branch/main"),
+    decrement_database_active_branch_count("admin/db/local/branch/main", Count),
+    assertion(Count == 0),
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)).
+
+test(active_branch_count_decrement_without_increment_warns_and_stays_empty) :-
+    cleanup_active_branch_counts,
+    organization_database_name(admin, db2, DBKey),
+    test_utils:with_quiet_user_error(
+        commit_queue:decrement_database_active_branch_count("admin/db2/local/branch/main", Count)),
+    assertion(Count == 0),
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)).
+
+test(database_active_count_retracts_row_at_zero) :-
+    cleanup_active_branch_counts,
+    organization_database_name(admin, db3, DBKey),
+    increment_database_active_count(DBKey),
+    decrement_database_active_count(DBKey),
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)).
+
+test(post_delete_db_hook_clears_active_branch_count) :-
+    cleanup_active_branch_counts,
+    organization_database_name(admin, hookdb, DBKey),
+    assertz(commit_queue:database_active_branch_count(DBKey, 3)),
+    ignore(forall(plugins:post_delete_db_hook(admin, hookdb), true)),
+    assertion(\+ commit_queue:database_active_branch_count(DBKey, _)),
+    cleanup_active_branch_counts.
 
 test(schedule_database_optimization_records_pending_and_due) :-
     cleanup_optimization_state,
@@ -1414,6 +1580,7 @@ test(branch_optimization_runs_when_queue_empties) :-
     assertz(commit_queue:pending_branch_optimization('opt_branch', branch_descriptor{})),
     thread_self(Self),
     assertz(commit_queue:active_branch('opt_branch', Self)),
+    assertz(commit_queue:database_active_branch_count('opt_branch', 1)),
     requeue_branch('opt_branch'),
     assertion(commit_queue:called_optimization(branch, branch_descriptor{})),
     assertion(\+ commit_queue:pending_branch_optimization('opt_branch', _)),
@@ -1433,6 +1600,7 @@ test(second_branch_optimization_runs_as_soon_as_branch_drains) :-
     assertz(commit_queue:pending_branch_optimization_due('opt_branch2')),
     thread_self(Self),
     assertz(commit_queue:active_branch('opt_branch2', Self)),
+    assertz(commit_queue:database_active_branch_count('opt_branch2', 1)),
     requeue_branch('opt_branch2'),
     % The queue still has a message, so the branch is requeued and the
     % optimization must not run yet.
@@ -1453,6 +1621,91 @@ test(second_branch_optimization_runs_as_soon_as_branch_drains) :-
     cleanup_optimization_state,
     cleanup_workers_and_branches,
     destroy_branch_queue('opt_branch2').
+
+%%%%%%%%%%%%%%%%%%%% Branch registry expiry tests %%%%%%%%%%%%%%%%%%%%%%%%%
+
+backdate_branch_registry_touch(BranchKey, Seconds) :-
+    get_time(Now),
+    Past is Now - Seconds,
+    retractall(commit_queue:branch_registry_touch(BranchKey, _)),
+    assertz(commit_queue:branch_registry_touch(BranchKey, Past)).
+
+cleanup_branch_registry_entry(BranchKey) :-
+    destroy_branch_queue(BranchKey),
+    retractall(commit_queue:branch_registry_touch(BranchKey, _)).
+
+test(sweep_evicts_idle_empty_branch_queue) :-
+    cleanup_branch_registry_entry('sweep_b1'),
+    ensure_branch_queue('sweep_b1', _),
+    backdate_branch_registry_touch('sweep_b1', 10_000),
+    sweep_branch_registry,
+    assertion(\+ commit_queue:branch_commit_queue('sweep_b1', _)),
+    assertion(\+ commit_queue:branch_commit_lock('sweep_b1', _)),
+    assertion(\+ commit_queue:branch_registry_touch('sweep_b1', _)).
+
+test(sweep_keeps_branch_with_queued_work) :-
+    cleanup_branch_registry_entry('sweep_b2'),
+    ensure_branch_queue('sweep_b2', Queue),
+    thread_send_message(Queue, dummy),
+    backdate_branch_registry_touch('sweep_b2', 10_000),
+    sweep_branch_registry,
+    assertion(commit_queue:branch_commit_queue('sweep_b2', _)),
+    cleanup_branch_registry_entry('sweep_b2').
+
+test(sweep_keeps_active_branch_registry_entry) :-
+    cleanup_branch_registry_entry('sweep_b3'),
+    ensure_branch_queue('sweep_b3', _),
+    thread_self(Self),
+    assertz(commit_queue:active_branch('sweep_b3', Self)),
+    backdate_branch_registry_touch('sweep_b3', 10_000),
+    sweep_branch_registry,
+    assertion(commit_queue:branch_commit_queue('sweep_b3', _)),
+    retractall(commit_queue:active_branch('sweep_b3', _)),
+    cleanup_branch_registry_entry('sweep_b3').
+
+test(sweep_keeps_pending_branch_registry_entry) :-
+    cleanup_branch_registry_entry('sweep_b4'),
+    ensure_branch_queue('sweep_b4', _),
+    register_pending_branch('sweep_b4'),
+    backdate_branch_registry_touch('sweep_b4', 10_000),
+    sweep_branch_registry,
+    assertion(commit_queue:branch_commit_queue('sweep_b4', _)),
+    with_mutex(commit_scheduler_mutex,
+        (   retractall(commit_queue:pending_branches(_)),
+            retractall(commit_queue:pending_branch_age('sweep_b4', _))
+        )),
+    cleanup_branch_registry_entry('sweep_b4').
+
+test(sweep_keeps_fresh_branch_registry_entry) :-
+    cleanup_branch_registry_entry('sweep_b5'),
+    ensure_branch_queue('sweep_b5', _),
+    sweep_branch_registry,
+    assertion(commit_queue:branch_commit_queue('sweep_b5', _)),
+    cleanup_branch_registry_entry('sweep_b5').
+
+test(ensure_branch_queue_refreshes_touch) :-
+    cleanup_branch_registry_entry('sweep_b6'),
+    ensure_branch_queue('sweep_b6', _),
+    backdate_branch_registry_touch('sweep_b6', 10_000),
+    ensure_branch_queue('sweep_b6', _),
+    commit_queue:branch_registry_touch('sweep_b6', Touched),
+    get_time(Now),
+    assertion(Now - Touched < 60),
+    cleanup_branch_registry_entry('sweep_b6').
+
+test(post_delete_db_hook_destroys_branch_queues) :-
+    cleanup_branch_registry_entry('admin/deadq/local/branch/main'),
+    cleanup_branch_registry_entry('admin/deadq/local/branch/dev'),
+    cleanup_branch_registry_entry('other/keptq/local/branch/main'),
+    ensure_branch_queue('admin/deadq/local/branch/main', _),
+    ensure_branch_queue('admin/deadq/local/branch/dev', _),
+    ensure_branch_queue('other/keptq/local/branch/main', _),
+    ignore(forall(plugins:post_delete_db_hook(admin, deadq), true)),
+    assertion(\+ commit_queue:branch_commit_queue('admin/deadq/local/branch/main', _)),
+    assertion(\+ commit_queue:branch_commit_queue('admin/deadq/local/branch/dev', _)),
+    assertion(\+ commit_queue:branch_commit_lock('admin/deadq/local/branch/main', _)),
+    assertion(commit_queue:branch_commit_queue('other/keptq/local/branch/main', _)),
+    cleanup_branch_registry_entry('other/keptq/local/branch/main').
 
 :- end_tests(commit_queue).
 
