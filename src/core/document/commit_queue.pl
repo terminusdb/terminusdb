@@ -1234,6 +1234,36 @@ test(wake_workers_wakes_idle_worker, [setup(setup_temp_store(State)), cleanup(te
     wake_workers,
     stop_workers.
 
+% Regression test: private tables created during commit work must not
+% survive on the worker thread. Tabled predicates keyed by layer blobs
+% (e.g. terminus_store:predicate_id/3) pin the Rust layer Arc for as long
+% as the table entry lives; without per-task cleanup the layer cache can
+% never observe the entry going dead.
+test(worker_abolishes_private_tables_after_commit,
+     [setup((setup_temp_store(State),
+             asserta(api_document:commit_package_test_handler(commit_queue:table_probe_handler)))),
+      cleanup((retractall(api_document:commit_package_test_handler(_)),
+               teardown_temp_store(State)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_tabrel'),
+    ensure_branch_queue('test_tabrel', _Queue),
+    message_queue_create(ReplyQueue, []),
+    start_workers(1),
+    multi_purpose_worker_thread(Worker),
+    Package = commit_package{
+        branch_key: 'test_tabrel',
+        all_branches: ['test_tabrel'],
+        reply_queue: ReplyQueue,
+        request_id: req_tabrel,
+        test_marker: true
+    },
+    enqueue_commit('test_tabrel', Package),
+    thread_get_message(ReplyQueue, commit_result(_, req_tabrel), [timeout(5)]),
+    assertion(worker_tables_drain(Worker)),
+    stop_workers,
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_tabrel').
+
 % Test that the SWI-Prolog thread communication primitives used by the
 % queue design continue to work: a thread can wait on its own message
 % queue and be woken by thread_send_message to its thread id.
@@ -1465,6 +1495,67 @@ success_handler(P, success(test_meta, [test_id])) :-
 
 error_handler(P, error(test_error)) :-
     get_dict(test_marker_error, P, true).
+
+% Private-tabled probe used by worker_abolishes_private_tables_after_commit.
+% Calling it leaves a table entry on the calling thread, mimicking the
+% layer-keyed private tables (e.g. predicate_id/3) created by real commit work.
+:- table worker_table_probe/1 as private.
+worker_table_probe(marker).
+
+table_probe_handler(Package, Result) :-
+    get_dict(test_marker, Package, true),
+    worker_table_probe(_),
+    Result = success(test_meta, [test_id]).
+
+% worker_probe_table_count(+Worker, -Count) is det.
+%
+%  Asks Worker how many private table variants of worker_table_probe/1 it
+%  currently holds. Runs inside the worker via thread_signal/2 because
+%  private tables are only visible on their owning thread. Count is -1 if
+%  the worker does not answer in time.
+worker_probe_table_count(Worker, Count) :-
+    message_queue_create(ReportQueue, []),
+    catch(thread_signal(Worker,
+              (   findall(T,
+                          (   current_table(Head, T),
+                              worker_probe_head(Head)
+                          ),
+                          Tables),
+                  length(Tables, N),
+                  thread_send_message(ReportQueue, count(N))
+              )),
+          _SignalError,
+          true),
+    (   thread_get_message(ReportQueue, count(N0), [timeout(10)])
+    ->  Count = N0
+    ;   Count = -1
+    ),
+    catch(message_queue_destroy(ReportQueue), _, true).
+
+worker_probe_head(Head) :-
+    (   Head = _:Head1
+    ->  true
+    ;   Head1 = Head
+    ),
+    functor(Head1, worker_table_probe, 1).
+
+% worker_tables_drain(+Worker) is semidet.
+%
+%  Succeeds when the worker's worker_table_probe/1 table count reaches
+%  zero, giving the worker loop a bounded window to finish its per-task
+%  cleanup after the commit result has been delivered.
+worker_tables_drain(Worker) :-
+    worker_tables_drain(Worker, 40).
+worker_tables_drain(_Worker, 0) :-
+    !,
+    fail.
+worker_tables_drain(Worker, Tries) :-
+    (   worker_probe_table_count(Worker, 0)
+    ->  true
+    ;   sleep(0.05),
+        Tries1 is Tries - 1,
+        worker_tables_drain(Worker, Tries1)
+    ).
 
 test_receive_thread(Barrier, Expected) :-
     thread_self(Me),

@@ -548,13 +548,13 @@ cleanup_worker_state :-
     ;   T3 = T2,
         GCAtomTime = 0
     ),
-    (   statistics(atoms, AtomCount2),
-        AtomCount2 > 100000
-    ->  abolish_private_tables,
-        get_time(T4),
-        TableGCTime is T4 - T3
-    ;   TableGCTime = 0
-    ),
+    statistics(atoms, AtomCount2),
+    % Private tables keyed by layer blobs pin Rust layer Arcs until
+    % abolished, so this must run unconditionally — not only above an atom
+    % threshold — or cached layers can never transition live -> dead.
+    abolish_private_tables,
+    get_time(T4),
+    TableGCTime is T4 - T3,
     GCTime is T1 - T0,
     TrimTime is T2 - T1,
     (   GCTime > 0.05
@@ -1720,6 +1720,21 @@ test(cleanup_worker_state_reduces_atom_count) :-
     assertion(After =< Before + 500),
     %% Clean up the nb_setval references
     nb_delete(temp).
+
+% Private-tabled probe for cleanup_worker_state_abolishes_private_tables.
+:- table rwp_table_probe/1 as private.
+rwp_table_probe(marker).
+
+test(cleanup_worker_state_abolishes_private_tables) :-
+    %% Private tables keyed by layer blobs pin the underlying Rust layer
+    %% Arc until the table is abolished. Worker threads must therefore
+    %% clear private tables after every request, not only when the atom
+    %% count crosses a threshold — otherwise cached layers can never
+    %% transition live -> dead and the cache grows without bound.
+    rwp_table_probe(_),
+    assertion(current_table(rwp_table_probe(_), _)),
+    cleanup_worker_state,
+    assertion(\+ current_table(rwp_table_probe(_), _)).
 
 %% --- Watchdog mechanism ---
 

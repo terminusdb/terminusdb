@@ -423,6 +423,11 @@ multi_purpose_worker_loop_body :-
             ;   idle_worker_wait
             )
         ),
+        % Commit and elaboration work runs outside with_transaction/4, so
+        % post_transaction_tabling/0 never runs here. Private tables keyed
+        % by layer blobs (e.g. predicate_id/3) would otherwise pin the Rust
+        % layer Arcs for the lifetime of this worker thread.
+        abolish_private_tables,
         multi_purpose_worker_loop_body
     ).
 
