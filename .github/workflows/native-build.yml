@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    # ready_for_review is not a default type; without it, marking a draft
+    # ready would not re-run the pipeline and the image tests never fire.
+    types: [ opened, synchronize, reopened, ready_for_review ]
   workflow_dispatch:
 
 jobs:
@@ -288,17 +291,23 @@ jobs:
         run: |
             kill $(cat terminusdb.pid)
 
-  # Docker images build only on non-draft PRs, once the integration test
-  # matrix (ubuntu + macOS) is green. Manual runs stay available via
-  # workflow_dispatch on the docker-* workflows themselves.
+  # Docker images build on every PR, kicked off right after the native
+  # build (parallel to the test jobs — the image compiles its own Rust).
+  # On draft PRs the image test suite is skipped (build only); on ready
+  # PRs images are built and tested. Manual runs stay available via
+  # workflow_dispatch on the docker-* workflows.
   docker-amd64:
     name: "AMD64 Image"
-    needs: inter-tests
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    needs: build
+    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/docker-amd64-build.yml
+    with:
+      run_tests: ${{ github.event.pull_request.draft == false }}
 
   docker-arm64:
     name: "ARM64 Image"
-    needs: inter-tests
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    needs: build
+    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/docker-arm64-build.yml
+    with:
+      run_tests: ${{ github.event.pull_request.draft == false }}
