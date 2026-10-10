@@ -1018,8 +1018,7 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
 
     fn concrete_type_name(&self, context: &Self::Context, info: &Self::TypeInfo) -> String {
         let instance = context
-            .instance
-            .as_ref()
+            .instance()
             .expect("documents are only resolved when an instance layer exists");
         let type_iri = self
             .type_iri(instance)
