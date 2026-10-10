@@ -62,8 +62,14 @@ build-restart-search:
 	../vectorlink/tests/vectorlink-server.sh restart
 
 .PHONY: server-clean
+# Set REUSE_SERVER=1 to skip (re)starting the server — e.g. when running the
+# tests against an already-running instrumented session.
 server-clean:
-	tests/terminusdb-test-server.sh start --clean
+	@if [ "$$REUSE_SERVER" = "1" ]; then \
+		echo "Reusing existing server (REUSE_SERVER=1)"; \
+	else \
+		tests/terminusdb-test-server.sh start --clean; \
+	fi
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap

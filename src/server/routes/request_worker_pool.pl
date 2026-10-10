@@ -532,8 +532,9 @@ worker_loop(Queue) :-
 %%  operation that requires ALL threads to reach a safe point — if
 %%  another worker is running a long query, garbage_collect_atoms blocks
 %%  until that worker yields. To avoid this, we only call
-%%  garbage_collect_atoms when the atom count exceeds a threshold,
-%%  rather than on every request.
+%%  garbage_collect_atoms when the atom count exceeds a threshold —
+%%  a suite mints ~16M atoms per run, so a low floor fires constantly
+%%  for little benefit.
 cleanup_worker_state :-
     get_time(T0),
     garbage_collect,
@@ -541,7 +542,7 @@ cleanup_worker_state :-
     trim_stacks,
     get_time(T2),
     (   statistics(atoms, AtomCount),
-        AtomCount > 50000
+        AtomCount > 75000
     ->  garbage_collect_atoms,
         get_time(T3),
         GCAtomTime is T3 - T2
@@ -1696,7 +1697,7 @@ test(cleanup_worker_state_runs_gc_and_trim) :-
     %% trim_stacks/0 without errors. It must always succeed
     %% (it is called between every request in the worker loop).
     %% garbage_collect_atoms/0 is only called when atom count
-    %% exceeds 50000 to avoid blocking other threads on every request.
+    %% exceeds 75000 to avoid blocking other threads on every request.
     cleanup_worker_state.
 
 test(cleanup_worker_state_is_det) :-
