@@ -1,11 +1,15 @@
 :- module('document/json', [
               idgen_random/2,
               idgen_random/3,
+              idgen_uuid_v7/2,
+              idgen_uuid_v7/3,
               idgen_hash/3,
               idgen_lexical/3,
+              extract_return_ids/2,
               context_triple/2,
               json_elaborate/3,
               json_elaborate/8,
+              json_elaborate_with_contract/4,
               json_schema_triple/3,
               json_schema_elaborate/3,
               database_context_object/2,
@@ -26,7 +30,12 @@
               insert_document/3,
               insert_document/7,
               insert_document/8,
+              insert_document_expanded/3,
+              insert_document_expanded/4,
+              insert_document_expanded/5,
               insert_document_unsafe/8,
+              replace_document_expanded/5,
+              insert_backlinks/2,
               replace_document/2,
               replace_document/3,
               replace_document/5,
@@ -70,6 +79,7 @@
               schema_document_exists/2,
               document_exists/2,
               compress_schema_uri/4,
+              compress_schema_uri/3,
               compress_dict_uri/4,
               pairs_satisfying_diamond_property/4,
               tabled_get_document_context/2,
@@ -94,7 +104,7 @@
 :- use_module(library(apply_macros)).
 % assorted libs
 :- use_module(library(terminus_store)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(lists)).
 :- use_module(library(pairs)).
 :- use_module(library(dicts)).
@@ -382,16 +392,16 @@ get_field_values(JSON,DB,Context,Fields,Values) :-
         ),
         Values).
 
-get_field_values_(JSON,Schema,Context,Fields,Values) :-
+get_field_values_(JSON,Schema,_Context,Fields,Values) :-
     findall(
         Value,
         (   member(Field,Fields),
-            prefix_expand_schema(Field,Context,Field_Ex),
+            prefix_expand_schema(Field,Schema,Field_Ex),
             (   get_dict(Field_Ex,JSON,Value)
             ->  true
             ;   get_dict('@type',JSON,Type),
-                prefix_expand_schema(Type, Context, Type_Ex),
-                prefix_expand_schema(Field, Context, Field_Ex),
+                prefix_expand_schema(Type, Schema, Type_Ex),
+                prefix_expand_schema(Field, Schema, Field_Ex),
                 schema_class_predicate_type(Schema, Type_Ex, Field_Ex, Field_Type),
                 memberchk(Field_Type, [optional(_), set(_), array(_,_)])
             ->  Value = optional(none)
@@ -456,17 +466,17 @@ idgen_suffix(Values, Suffix) :-
 
 idgen_lexical(Base,Values,ID) :-
     idgen_suffix(Values, Suffix),
-    format(string(ID), '~w~w', [Base,Suffix]).
+    atom_concat(Base, Suffix, ID).
 
 idgen_hash(Base,Values,ID) :-
     idgen_suffix(Values, Suffix),
     crypto_data_hash(Suffix, Hash, [algorithm(sha256)]),
-    format(string(ID), "~w~w", [Base,Hash]).
+    atom_concat(Base, Hash, ID).
 
 idgen_path_values_hash(Base,Path,ID) :-
     format(string(A), '~q', [Path]),
     crypto_data_hash(A, Hash, [algorithm(sha256)]),
-    format(string(ID), "~w~w", [Base,Hash]).
+    atom_concat(Base, Hash, ID).
 
 idgen_random(Base,ID) :-
     % Make configurable as part of random key generation strategy later.
@@ -481,7 +491,16 @@ idgen_random(Base,[],ID) :-
 idgen_random(Base,Length, ID) :-
     integer(Length),
     utils:random_base64(Length, Hash),
-    format(string(ID),'~w~w',[Base,Hash]).
+    atom_concat(Base, Hash, ID).
+
+idgen_uuid_v7(Base,ID) :-
+    utils:uuid_v7(UUID),
+    atom_concat(Base, UUID, ID).
+
+idgen_uuid_v7(Base,[],ID) :-
+    % Empty list signature matches idgen_lexical/3 and idgen_hash/3 calling convention
+    % Used by UuidV7 WOQL predicate
+    idgen_uuid_v7(Base,ID).
 
 path_strings_([], _Prefixes, []).
 path_strings_([index(N)|Path], Prefixes, [N_String|Strings]) :-
@@ -543,6 +562,8 @@ json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_(uuid_v7(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_uuid_v7(Base, JSON, Context, Path, Id).
 json_idgen_(base(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 
@@ -565,6 +586,8 @@ json_idgen_schema_(value_hash(Base), JSON, _Schema, _Context, _Path, Id) :-
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_schema_(random(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_schema_(uuid_v7(Base), JSON, _Schema, Context, Path, Id) :-
+    json_idgen_uuid_v7(Base, JSON, Context, Path, Id).
 json_idgen_schema_(base(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 
@@ -577,6 +600,17 @@ json_idgen_base(Base, JSON, Context, Path, Id) :-
     ;   path_component([type(Base)|Path], Context, [Path_Base]),
         idgen_random(Path_Base, Id)
     ).
+
+% UuidV7: a submitted @id can be any IRI (prefix notation is expanded),
+% no base prefix enforcement. Without @id, mint a UUID v7 under the base.
+json_idgen_uuid_v7(_Base, JSON, Context, _Path, Id) :-
+    get_dict('@id', JSON, Submitted_Id),
+    ground(Submitted_Id),
+    !,
+    prefix_expand(Submitted_Id, Context, Id).
+json_idgen_uuid_v7(Base, _JSON, Context, Path, Id) :-
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_uuid_v7(Path_Base, Id).
 
 idgen_check_base(Submitted_ID, Base, Context) :-
     prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
@@ -830,11 +864,18 @@ type_context(DB,Type,Prefixes,Context) :-
     ).
 
 prefix_expand_schema(Node,Context,NodeEx) :-
-    (   get_dict('@schema', Context, Schema),
-        put_dict(_{'@base' : Schema}, Context, New_Context)
-    ->  true
-    ;   Context = New_Context),
-    prefix_expand(Node, New_Context, NodeEx).
+    is_dict(Context),
+    !,
+    '$doc':rust_expand_prefix_schema(Context, Node, NodeEx).
+prefix_expand_schema(Node,Layer,NodeEx) :-
+    blob(Layer, layer),
+    !,
+    '$doc':rust_expand_prefix_schema_layer(Layer, Node, NodeEx).
+prefix_expand_schema(Node,Schema,NodeEx) :-
+    is_list(Schema),
+    schema_read_layer(Schema, Layer),
+    !,
+    '$doc':rust_expand_prefix_schema_layer(Layer, Node, NodeEx).
 
 property_expand_key_value(Prop,Value,DB,Context,Captures_In,P,V,Dependencies,Captures_Out) :-
     get_dict(Prop, Context, Full_Expansion),
@@ -854,6 +895,40 @@ json_elaborate(DB,JSON,Elaborated) :-
 json_elaborate(DB,JSON,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
     database_prefixes(DB,Context),
     json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out).
+
+/**
+ * json_elaborate_with_contract(+DB, +JSON, -Elaborated, -Contract) is semidet.
+ *
+ * Elaborate a JSON document and produce a verification contract that the
+ * transaction layer can use to enforce the same checks as the synchronous
+ * insert/replace paths.  This contract is independent of the elaboration
+ * implementation, so a future Rust elaboration path can emit the same shape.
+ *
+ * Contract fields:
+ *   - submitted_id: the @id from the raw input (or none)
+ *   - generated_id: the @id in the elaborated document
+ *   - id_pairs: list of Id-Variety pairs produced by elaboration
+ *   - dependencies: list of terms that must be ground before insertion
+ *   - backlinks: list of backlink triples to insert
+ *   - captures_out: final capture association after elaboration
+ */
+json_elaborate_with_contract(DB, JSON, Elaborated, Contract) :-
+    (   get_dict('@id', JSON, SubmittedId)
+    ->  true
+    ;   SubmittedId = none
+    ),
+    empty_assoc(Captures_In),
+    json_elaborate(DB, JSON, Captures_In, Elaborated, Id_Pairs, Dependencies,
+                   Backlinks-[], Captures_Out),
+    get_dict('@id', Elaborated, GeneratedId),
+    Contract = verification_contract{
+        submitted_id: SubmittedId,
+        generated_id: GeneratedId,
+        id_pairs: Id_Pairs,
+        dependencies: Dependencies,
+        backlinks: Backlinks,
+        captures_out: Captures_Out
+    }.
 
 :- use_module(core(document/inference)).
 json_elaborate(DB,JSON,Context,Captures_In,Elaborated,Ids,Dependencies,SH-ST,Captures_Out) :-
@@ -1475,6 +1550,10 @@ json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     get_dict('@type', V, Random),
     expand_match_system(Random, 'Random', Type),
     !.
+json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
+    get_dict('@type', V, UuidV7),
+    expand_match_system(UuidV7, 'UuidV7', Type),
+    !.
 json_schema_elaborate_key(V,_,_) :-
     get_dict('@type', V, Type),
     !,
@@ -1899,7 +1978,8 @@ check_schema_document_restrictions(Elaborated) :-
         (   global_prefix_expand(sys:'ValueHash',Key_Type)
         ;   global_prefix_expand(sys:'Hash',Key_Type)
         ;   global_prefix_expand(sys:'Lexical',Key_Type)
-        ;   global_prefix_expand(sys:'Random',Key_Type)),
+        ;   global_prefix_expand(sys:'Random',Key_Type)
+        ;   global_prefix_expand(sys:'UuidV7',Key_Type)),
         error(subdocument_key_type_unknown(Key_Type_String),_)).
 
 json_schema_elaborate(JSON,Context,JSON_Schema) :-
@@ -2646,6 +2726,7 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
     ).
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" },_).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" },_).
+key_descriptor_json(uuid_v7(_), _, json{ '@type' : "UuidV7" },_).
 
 documentation_descriptor_json(Descriptor, Prefixes, Result) :-
     documentation_descriptor_json(Descriptor,Prefixes, Result, [compress_ids(true)]).
@@ -2881,7 +2962,7 @@ get_schema_document(DB, '@context', Document) :-
     !,
     database_context_object(DB, Context_Object),
     % TODO: should database_prefixes even return an object where type is Context instead of @context?
-    Document = (Context_Object.put('@type', '@context')).
+    Document = (Context_Object.put('@type', "@context")).
 get_schema_document(DB, Id, Document) :-
     database_prefixes(DB, DB_Prefixes),
     default_prefixes(Defaults),
@@ -3270,6 +3351,7 @@ expand_json_document_id(Id_Short, Prefixes, UseJSONDocumentPrefix, Id) :-
     ;   atom_string(Id_Short_Atom, Id_Short)
     ),
     (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+        % '://' is redundant (subsumed by ':'), kept to read as "URI scheme"
         (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
     ->  prefix_expand(Id_Short, Prefixes, Id)
     ;   % Plain string without scheme/prefix - prepend @base
@@ -3402,7 +3484,13 @@ insert_document_unsafe(Transaction, Prefixes, Document, false, Captures_In, Ids,
          insert_document_expanded(Transaction, Elaborated, Id)).
 
 insert_document_expanded(Transaction, Elaborated, ID) :-
-    get_dict('@id', Elaborated, ID),
+    get_dict('@id', Elaborated, ID0),
+    (   atom(ID0)
+    ->  ID = ID0
+    ;   string(ID0)
+    ->  atom_string(ID, ID0)
+    ;   throw(error(type_error(atom_or_string, ID0), _))
+    ),
     database_instance(Transaction, [Instance]),
     database_prefixes(Transaction, Prefixes),
     % insert
@@ -3411,6 +3499,126 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
         (   json_to_database_type(O,OC),
             insert(Instance, S, P, OC, _))
     ).
+
+/**
+ * insert_document_expanded(+Transaction, +Elaborated, +Contract, +Overwrite, -ID) is semidet.
+ *
+ * Same as insert_document_expanded/4 but accepts the Overwrite flag used by the
+ * API queue consumer.
+ */
+insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
+    get_dict('@id', Elaborated, ID0),
+    (   atom(ID0)
+    ->  ID = ID0
+    ;   atom_string(ID, ID0)
+    ),
+    is_dict(Contract, verification_contract),
+    get_dict(id_pairs, Contract, Id_Pairs),
+    get_dict(dependencies, Contract, Dependencies),
+    get_dict(backlinks, Contract, Backlinks),
+    do_or_die(
+        get_dict('@type', Elaborated, Type),
+        error(missing_field('@type', Elaborated), _)),
+    die_if(
+        (   is_subdocument(Transaction, Type),
+            \+ get_dict('@linked-by', Elaborated, _)),
+        error(inserted_subdocument_as_document, _)),
+    database_instance(Transaction, [Instance]),
+    (   ground(Dependencies)
+    ->  forall(
+            member(ExistingId-Variety, Id_Pairs),
+            (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
+                (   Overwrite = false
+                ->  die_if(Status = present,
+                           error(can_not_insert_existing_object_with_id(ExistingId), _))
+                ;   true
+                )
+            )
+        ),
+        insert_document_expanded(Transaction, Elaborated, ID),
+        insert_backlinks(Backlinks, Instance)
+    ;   when(ground(Dependencies),
+             (
+                 forall(
+                     member(ExistingId-Variety, Id_Pairs),
+                     (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
+                         (   Overwrite = false
+                         ->  die_if(Status = present,
+                                    error(can_not_insert_existing_object_with_id(ExistingId), _))
+                         ;   true
+                         )
+                     )
+                 ),
+                 insert_document_expanded(Transaction, Elaborated, ID),
+                 insert_backlinks(Backlinks, Instance)
+             ))
+    ).
+
+/**
+ * insert_document_expanded(+Transaction, +Elaborated, +Contract, -ID) is semidet.
+ *
+ * Insert an elaborated document using the verification contract produced by
+ * json_elaborate_with_contract.  This delegates to insert_document_expanded/5 with
+ * Overwrite = false, so the contract checks are applied without allowing
+ * existing documents to be overwritten.
+ */
+insert_document_expanded(Transaction, Elaborated, Contract, ID) :-
+    insert_document_expanded(Transaction, Elaborated, Contract, false, ID).
+
+/**
+ * replace_document_expanded(+Transaction, +Elaborated, +Contract, +Create, -ID) is semidet.
+ *
+ * Replace an elaborated document using the verification contract.  Performs the
+ * same checks as the synchronous replace_document/7 path: submitted/generated ID
+ * match, backlink rejection, deletion of old documents, and dependency deferral.
+ */
+replace_document_expanded(Transaction, Elaborated, Contract, Create, ID) :-
+    get_dict('@id', Elaborated, ID0),
+    (   atom(ID0)
+    ->  ID = ID0
+    ;   string(ID0)
+    ->  atom_string(ID, ID0)
+    ;   throw(error(type_error(atom_or_string, ID0), _))
+    ),
+    is_dict(Contract, verification_contract),
+    get_dict(submitted_id, Contract, SubmittedId),
+    get_dict(generated_id, Contract, GeneratedId),
+    get_dict(id_pairs, Contract, Id_Pairs),
+    get_dict(dependencies, Contract, Dependencies),
+    get_dict(backlinks, Contract, Backlinks),
+    database_prefixes(Transaction, Context),
+    (   SubmittedId \= none
+    ->  check_submitted_id_against_generated_id(Context, GeneratedId, SubmittedId)
+    ;   true
+    ),
+    die_if(Backlinks \= [],
+           error(back_links_not_supported_in_replace, _)),
+    include([_-normal]>>true, Id_Pairs, Deletions),
+    forall(
+        member(DeletionId-_, Deletions),
+        catch(
+            delete_document(Transaction, false, DeletionId),
+            error(document_not_found(_), _),
+            (   Create = true
+            ->  true
+            ;   throw(error(document_not_found(DeletionId, Elaborated), _))
+            )
+        )
+    ),
+    (   ground(Dependencies)
+    ->  insert_document_expanded(Transaction, Elaborated, ID)
+    ;   when(ground(Dependencies),
+             insert_document_expanded(Transaction, Elaborated, ID))
+    ).
+
+insert_backlinks(Links, Graph) :-
+    nb_link_dict(backlinks, Graph, Links),
+    insert_backlinks_(Links, Graph).
+
+insert_backlinks_([], _).
+insert_backlinks_([link(S,P,O)|T], Instance) :-
+    insert(Instance, S, P, O, _),
+    insert_backlinks_(T, Instance).
 
 run_insert_document(Desc, Commit, Document, Id) :-
     create_context(Desc,Commit,Context),
@@ -3653,6 +3861,10 @@ schema_class_frame(Schema, Prefixes, Class_Ex, Frame, Options) :-
     ;   schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options)
     ).
 
+% The class frame is a pure function of the schema read layer, and computing
+% it rebuilds the whole-schema supermap. It runs once per elaborated document,
+% so it must be cached per (layer, class, options) or elaboration pays for a
+% full schema walk per document.
 :- table schema_class_frame_tabled/5 as private.
 schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options) :-
     schema_class_frame_compute([_{read: Layer}], Prefixes, Class_Ex, Frame, Options).
@@ -3864,7 +4076,7 @@ insert_schema_document(Transaction, Document) :-
     check_json_string('@id', Id),
     database_prefixes(Transaction, Prefixes),
     database_schema(Transaction, Schema),
-    prefix_expand_schema(Id,Prefixes,Id_Ex),
+    prefix_expand_schema(Id,Schema,Id_Ex),
     do_or_die(
         valid_schema_name(Prefixes,Id_Ex),
         error(can_not_insert_class_with_reserve_name(Id), _)),
@@ -4940,6 +5152,22 @@ test(schema_key_elaboration1, []) :-
                '@type':"@id"}
         }.
 
+test(schema_uuid_v7_key_elaboration, []) :-
+    Doc = json{'@id':"Artwork",
+               '@key':json{'@type':"UuidV7"},
+               '@type':"Class",
+               title:"xsd:string"},
+
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+
+    json_schema_elaborate(Doc, Context, Elaborate),
+
+    get_dict('http://terminusdb.com/schema/sys#key', Elaborate, Key),
+    Key = json{ '@id':'https://s/Artwork/key/UuidV7',
+                '@type':'http://terminusdb.com/schema/sys#UuidV7'
+              }.
+
 test(schema_lexical_key_elaboration, []) :-
     Doc = json{ '@id' : "Person",
                 '@type' : "Class",
@@ -5341,6 +5569,27 @@ test(idgen_random,
         },
 
     atom_concat('http://i/Event/',_,Id).
+
+test(idgen_uuid_v7, []) :-
+    idgen_uuid_v7('terminusdb:///data/Person/', ID),
+    atom_concat('terminusdb:///data/Person/', UUID, ID),
+    atom_string(UUID, UUID_String),
+    is_uuid_v7_string(UUID_String),
+
+    idgen_uuid_v7('terminusdb:///data/Person/', ID2),
+    ID \= ID2,
+
+    % Shared counter context guarantees strict ordering
+    atom_string(ID_Atom, ID),
+    atom_string(ID2_Atom, ID2),
+    ID_Atom @< ID2_Atom,
+
+    % Empty list signature matches idgen_lexical/3 and idgen_hash/3
+    % calling convention; used by the UuidV7 WOQL predicate
+    idgen_uuid_v7('terminusdb:///data/Person/', [], ID3),
+    atom_concat('terminusdb:///data/Person/', UUID3, ID3),
+    atom_string(UUID3, UUID3_String),
+    is_uuid_v7_string(UUID3_String).
 
 test(type_family_id, []) :-
 
@@ -7788,6 +8037,68 @@ test(subdocument_lexical_key_with_odd_chars,
                          '@type':'Not_A_Squash',
                          genus:"Malus / Mill"}}.
 
+
+test(subdocument_uuid_v7_key,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Has_Uuid_Sub =
+    _{ '@id' : "Has_Uuid_Sub",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "UuidV7"},
+       me : "xsd:string",
+       uuid_sub : "Uuid_Sub"
+     },
+
+    Uuid_Sub =
+    _{ '@id' : "Uuid_Sub",
+       '@type' : "Class",
+       '@subdocument' : [],
+       '@key' : _{ '@type' : "UuidV7"},
+       genus : "xsd:string"
+     },
+
+    create_context(Desc, _{ author : "me", message : "Adding context" }, Context),
+    with_transaction(
+        Context,
+        (   insert_schema_document(Context, Uuid_Sub),
+            insert_schema_document(Context, Has_Uuid_Sub)
+        ),
+        _
+    ),
+
+    Document =
+    _{ '@type' : "Has_Uuid_Sub",
+       me : "It's me",
+       uuid_sub : _{ '@type' : "Uuid_Sub",
+                     genus : "Malus Mill" }},
+
+    create_context(Desc, _{ author : "me", message : "Adding doc." }, Context2),
+    with_transaction(
+        Context2,
+        insert_document(Context2, Document,Id),
+        _
+    ),
+
+    get_document(Desc, Id, Assigned),
+    !,
+
+    get_dict('@id', Assigned, Parent_Id),
+    atom_concat('Has_Uuid_Sub/', _, Parent_Id),
+    ends_with_uuid_v7(Parent_Id),
+
+    get_dict(uuid_sub, Assigned, Sub),
+    get_dict('@id', Sub, Sub_Id),
+    once(sub_atom(Sub_Id, _, _, _, '/uuid_sub/Uuid_Sub/')),
+    ends_with_uuid_v7(Sub_Id).
 
 test(document_with_no_required_field,
      [
@@ -11991,6 +12302,141 @@ test(document_valuehash,
 
         'Thing/78b07792a224ec58ac4b7688707482a1f42a7a695a907f5780d11dc634739aae').
 
+test(document_uuid_v7,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "UuidV7"},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        ID),
+
+    atom_concat('Thing/', _, ID),
+    ends_with_uuid_v7(ID).
+
+test(document_uuid_v7_arbitrary_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "https://linked.art/example/object/47",
+           title: "The Night Watch"},
+
+        "https://linked.art/example/object/47").
+
+test(document_uuid_v7_off_base_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "Sculpture/david-1504",
+           title: "David"},
+
+        'Sculpture/david-1504').
+
+test(document_uuid_v7_schema_roundtrip,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    create_context(Desc, commit_info{author:"test",message:"test"}, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(
+            Context,
+            _{ '@type': "Class",
+               '@id': "Artwork",
+               '@key': _{'@type': "UuidV7"},
+               title: "xsd:string"}),
+        _),
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Artwork', Doc),
+    get_dict('@key', Doc, json{'@type': "UuidV7"}).
+
+test(document_uuid_v7_tagged_union,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "TaggedUnion",
+           '@id': "Either",
+           '@key': _{'@type': "UuidV7"},
+           left: "xsd:string",
+           right: "xsd:integer"},
+
+        _{ '@type': "Either",
+           left: "yes"},
+
+        ID),
+
+    atom_concat('Either/', _, ID),
+    ends_with_uuid_v7(ID).
+
+test(document_uuid_v7_prefixed_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "owl:example/object/47",
+           title: "Prefixed"},
+
+        'http://www.w3.org/2002/07/owl#example/object/47'),
+
+    % Fetching by the fully expanded IRI proves the prefix was
+    % expanded at insert time, not stored as the literal compact form
+    get_document(Desc, 'http://www.w3.org/2002/07/owl#example/object/47', Doc),
+    get_dict(title, Doc, "Prefixed").
+
 test(document_valuehash_with_subdocument_list,
      [setup((setup_temp_store(State),
              create_db_with_empty_schema("admin","foo"),
@@ -15283,6 +15729,89 @@ test(class_frame,
                      '@values':[yes,no]},
          name:'xsd:string'}.
 
+memo_example_schema_v1('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}
+{ "@id" : "MemoExample",
+  "@type" : "Class",
+  "@key" : {"@type" : "Random"},
+  "name" : "xsd:string" }
+').
+
+memo_example_schema_v2('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#"
+}
+{ "@id" : "MemoExample",
+  "@type" : "Class",
+  "@key" : {"@type" : "Random"},
+  "name" : "xsd:string",
+  "nickname" : "xsd:string" }
+').
+
+test(class_frame_memoized_per_schema_layer,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % The class frame is a pure function of the schema read layer, but
+    % computing it rebuilds the whole-schema supermap. It runs once per
+    % elaborated document, so it is memoized per (layer, class, options);
+    % repeat calls return the memoized answer.
+    class_frame(Desc, 'Example', Frame1),
+    class_frame(Desc, 'Example', Frame2),
+    assertion(Frame1 =@= Frame2),
+    assertion(predicate_property('document/json':schema_class_frame_tabled(_,_,_,_,_), tabled)),
+    assertion(predicate_property('document/schema':schema_supermap_tabled(_,_,_,_), tabled)).
+
+test(class_frame_not_stale_after_schema_update,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             memo_example_schema_v1(V1),
+             write_schema_string(V1, Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % Memoization is keyed on the schema read layer, so a schema commit
+    % (new layer) must not see a stale frame.
+    class_frame(Desc, 'MemoExample', Frame1),
+    assertion(\+ get_dict(nickname, Frame1, _)),
+    memo_example_schema_v2(V2),
+    write_schema_string(V2, Desc),
+    class_frame(Desc, 'MemoExample', Frame2),
+    get_dict(nickname, Frame2, _).
+
+test(schema_supermap_memoized_per_schema_layer,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(multilingual_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(Desc, DB),
+    database_schema(DB, Schema),
+    database_prefixes(DB, Prefixes),
+    'document/schema':schema_supermap(Schema, Prefixes, First, [compress_ids(true)]),
+    'document/schema':schema_supermap(Schema, Prefixes, Second, [compress_ids(true)]),
+    assertion(Second == First),
+    % The memoized answer is identical to a fresh computation.
+    'document/schema':schema_supermap_compute(Schema, Prefixes, Expected, [compress_ids(true)]),
+    assertion(First == Expected).
+
+test(schema_supermap_falls_back_without_read_layer, []) :-
+    % Without a schema read layer there is nothing stable to key a table on;
+    % the untabled computation is used directly.
+    'document/schema':schema_supermap_compute([], _P1, SM_Computed, [compress_ids(true)]),
+    'document/schema':schema_supermap([], _P2, SM_Direct, [compress_ids(true)]),
+    assertion(SM_Direct == SM_Computed).
+
 test(bogus_schema_write,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(Desc)
@@ -16617,3 +17146,85 @@ test(foreign_card_schema_change_after_instance,
     ).
 
 :- end_tests(foreign_families).
+
+:- begin_tests(schemaless_shape_check, []).
+:- use_module(core(util/test_utils)).
+
+schemaless_shape_test_schema('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+{ "@id" : "Moo",
+  "@type" : "Class",
+  "name" : "xsd:string" }
+').
+
+% When the per-DB schema toggle is on but the shape-check flag is off,
+% the original inference behaviour is retained: schema violations are still
+% rejected.
+test(rejected_when_schemaless_but_shape_check_enabled,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 schemaless_shape_test_schema(Schema),
+                 write_schema_string(Schema, Desc),
+                 set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false)
+             )),
+         cleanup(
+             (   set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false),
+                 teardown_temp_store(State)
+             )),
+         error(
+             schema_check_failure(
+                 [json{'@type':required_field_does_not_exist_in_document,
+                       document:_,
+                       field:'http://s/name'}]),
+             _)
+     ]) :-
+    toggle_schema_off(Desc),
+    Document = _{ '@id' : "Moo/doug",
+                  '@type' : "Moo"},
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "shape check enabled" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, _Id),
+        _
+    ).
+
+% When the shape-check flag is flipped, the inference layer treats the
+% database as fully schemaless and accepts schema-violating documents.
+test(accepted_when_schemaless_shape_check_disabled,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 schemaless_shape_test_schema(Schema),
+                 write_schema_string(Schema, Desc),
+                 set_prolog_flag(terminusdb_schemaless_shape_check_disabled, true)
+             )),
+         cleanup(
+             (   set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false),
+                 teardown_temp_store(State)
+             ))
+     ]) :-
+    toggle_schema_off(Desc),
+    Document = _{ '@id' : "Moo/doug",
+                  '@type' : "Moo"},
+    open_descriptor(Desc, DB),
+    create_context(DB, _{ author : "me", message : "shape check disabled" }, Context),
+    with_transaction(
+        Context,
+        insert_document(Context, Document, Id),
+        _
+    ),
+    get_document(Desc, Id, _).
+
+toggle_schema_off(Desc) :-
+    with_test_transaction(Desc, C,
+        ask(C,
+            insert('terminusdb://data/Schema', rdf:type, rdf:nil, schema))
+    ).
+
+:- end_tests(schemaless_shape_check).

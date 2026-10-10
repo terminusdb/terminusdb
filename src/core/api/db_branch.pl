@@ -8,6 +8,7 @@
 
 :- use_module(library(terminus_store)).
 :- use_module(core(transaction/validate), [commit_validation_object/2]).
+:- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
 :- use_module(library(plunit)).
 
 create_schema(Repository_Context, New_Branch_Name, Branch_Uri, Schema, Prefixes) :-
@@ -131,8 +132,27 @@ branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name,
                                               New_Branch_Name,
                                               Branch_Uri),
                          (   branch_head_commit(Context, Branch_Descriptor.branch_name, Head_Commit_Uri)
-                         ->  link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri)
-                         ;   true)),
+                         ->  link_commit_object_to_branch(Context, Branch_Uri, Head_Commit_Uri),
+                             (   commit_id_uri(Context, Head_Commit_Id, Head_Commit_Uri)
+                             ->  New_Branch_Descriptor = branch_descriptor{
+                                                                     branch_name: New_Branch_Name,
+                                                                     repository_descriptor: Repository_Descriptor
+                                                                 },
+                                 branch_key_from_descriptor(New_Branch_Descriptor, BranchKey),
+                                 atom_string(Head_Commit_Id_Atom, Head_Commit_Id),
+                                 catch('$change_window':register_commit(BranchKey,
+                                                                        Head_Commit_Id_Atom,
+                                                                        none,
+                                                                        none,
+                                                                        none,
+                                                                        [],
+                                                                        []),
+                                       _,
+                                       true)
+                             ;   true
+                             )
+                         ;   true
+                         )),
                      _).
 branch_create_(Repository_Descriptor, _Auth, Branch_Descriptor, New_Branch_Name, Branch_Uri) :-
     branch_descriptor{} :< Branch_Descriptor,

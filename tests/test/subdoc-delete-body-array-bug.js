@@ -62,12 +62,13 @@ describe('subdoc-delete-body-array-bug', function () {
 
     before(async function () {
       agent.dbName = dbName
+      try { await db.delete(agent) } catch (e) { /* ignore if not exists */ }
       await db.create(agent)
       await document.insert(agent, { schema })
     })
 
     after(async function () {
-      await db.delete(agent)
+      try { await db.delete(agent) } catch (e) { /* ignore if not exists */ }
     })
 
     it('properly cleans up all subdocuments', async function () {
@@ -91,12 +92,13 @@ describe('subdoc-delete-body-array-bug', function () {
 
     before(async function () {
       agent.dbName = dbName
+      try { await db.delete(agent) } catch (e) { /* ignore if not exists */ }
       await db.create(agent)
       await document.insert(agent, { schema })
     })
 
     after(async function () {
-      await db.delete(agent)
+      try { await db.delete(agent) } catch (e) { /* ignore if not exists */ }
     })
 
     it('cleans up all subdocuments', async function () {
@@ -121,6 +123,7 @@ describe('subdoc-delete-body-array-bug', function () {
 
     it('query.id method cleans up properly', async function () {
       agent.dbName = dbName1
+      try { await db.delete(agent) } catch (e) { /* ignore if not exists */ }
       await db.create(agent)
       await document.insert(agent, { schema })
       await document.insert(agent, {
@@ -139,6 +142,7 @@ describe('subdoc-delete-body-array-bug', function () {
 
     it('body array method cleans up properly', async function () {
       agent.dbName = dbName2
+      try { await db.delete(agent) } catch (e) { /* ignore if not exists */ }
       await db.create(agent)
       await document.insert(agent, { schema })
       await document.insert(agent, {

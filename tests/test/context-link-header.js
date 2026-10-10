@@ -56,7 +56,7 @@ describe('context-link-header', function () {
 
       // Retrieve the instance document and check Link header
       const response = await axios.get(
-        `http://127.0.0.1:6363/api/document/admin/${agent.dbName}`,
+        `${agent.baseUrl}/api/document/admin/${agent.dbName}`,
         {
           auth: { username: 'admin', password: 'root' },
           params: { id: 'Person/janedoe' },
@@ -97,7 +97,7 @@ describe('context-link-header', function () {
       await document.insert(agent, { instance: [janeDoe] })
 
       const response = await axios.get(
-        `http://127.0.0.1:6363/api/document/admin/${agent.dbName}`,
+        `${agent.baseUrl}/api/document/admin/${agent.dbName}`,
         {
           auth: { username: 'admin', password: 'root' },
           params: { id: 'Person/janedoe' },
@@ -129,7 +129,7 @@ describe('context-link-header', function () {
       await document.insert(agent, { instance: [janeDoe] })
 
       const response = await axios.get(
-        `http://127.0.0.1:6363/api/document/admin/${agent.dbName}`,
+        `${agent.baseUrl}/api/document/admin/${agent.dbName}`,
         {
           auth: { username: 'admin', password: 'root' },
           params: { id: 'Person/janedoe' },
@@ -161,7 +161,7 @@ describe('context-link-header', function () {
       await document.insert(agent, { instance: [janeDoe] })
 
       const response = await axios.get(
-        `http://127.0.0.1:6363/api/document/admin/${agent.dbName}`,
+        `${agent.baseUrl}/api/document/admin/${agent.dbName}`,
         {
           auth: { username: 'admin', password: 'root' },
           params: { id: 'Person/janedoe' },
@@ -194,7 +194,7 @@ describe('context-link-header', function () {
       await document.insert(agent, { instance: [janeDoe] })
 
       const response = await axios.get(
-        `http://127.0.0.1:6363/api/document/admin/${agent.dbName}`,
+        `${agent.baseUrl}/api/document/admin/${agent.dbName}`,
         {
           auth: { username: 'admin', password: 'root' },
           params: { id: 'Person/janedoe' },
@@ -226,7 +226,7 @@ describe('context-link-header', function () {
       await document.insert(agent, { instance: [janeDoe] })
 
       const response = await axios.get(
-        `http://127.0.0.1:6363/api/document/admin/${agent.dbName}`,
+        `${agent.baseUrl}/api/document/admin/${agent.dbName}`,
         {
           auth: { username: 'admin', password: 'root' },
           params: { id: 'Person/janedoe' },

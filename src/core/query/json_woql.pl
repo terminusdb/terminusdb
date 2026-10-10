@@ -22,7 +22,7 @@
 :- use_module(global_prefixes).
 :- reexport(core(util/syntax)).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -120,6 +120,11 @@ json_data_to_woql_ast(JSON,WOQL) :-
     ;   _{'@value' : V, '@language' : L } :< JSON
     ->  atom_string(LE,L),
         WOQL = '@'(V,LE)
+    ;   dict_pairs(JSON, _, ['@value'-V]),
+        (   string(V)
+        ;   atom(V)
+        ;   number(V))
+    ->  json_data_to_woql_ast(V,WOQL)
     ;   true = JSON
     ->  WOQL = true
     ;   % NOTE: @-prefixed keys in dictionaries destined for sys:JSON fields
@@ -1115,6 +1120,15 @@ json_type_to_woql_ast('RandomKey',JSON,WOQL,Path) :-
     json_value_to_woql_ast(URI,WURI,[uri
                                      |Path]),
     WOQL = idgen_random(WBase,[],WURI).
+json_type_to_woql_ast('UuidV7',JSON,WOQL,Path) :-
+    _{base : Base,
+      uri : URI
+     } :< JSON,
+    json_value_to_woql_ast(Base,WBase,[base
+                                       |Path]),
+    json_value_to_woql_ast(URI,WURI,[uri
+                                     |Path]),
+    WOQL = idgen_uuid_v7(WBase,[],WURI).
 json_type_to_woql_ast('Upper',JSON,WOQL,Path) :-
     _{mixed :  S,
       upper : V
@@ -1635,10 +1649,7 @@ dictionary_template_to_woql_ast(Template, WOQL, Path) :-
                 get_dict(field, Pair, Key_String),
                 get_dict(value, Pair, V),
                 atom_string(Key,Key_String),
-                json_value_to_woql_ast(V, WOQL_Value, [value,I|Path]),
-                (   WOQL_Value = Value^^_ % unnecessary specificity
-                ->  true
-                ;   WOQL_Value = Value)
+                json_value_to_woql_ast(V, Value, [value,I|Path])
             ), Pairs, Indexes, NewPairs),
    !,
    dict_create(WOQL, json, NewPairs).
@@ -1947,7 +1958,7 @@ test(dateTimeStamp, []) :-
                                       "@type": "xsd:dateTimeStamp"}}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_woql(JSON,WOQL),
-    WOQL = (v('X')=date_time(2004,4,12,8,20,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
+    WOQL = (v('X')=date_time(2004,4,12,18,20,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTimeStamp').
 
 test(gyear, []) :-
     JSON_Atom= '{"@type": "Equals",
@@ -2208,6 +2219,9 @@ test(dictionary_template_to_woql_ast, []) :-
                                               "variable" : "Father"}}]}}',
     atom_json_dict(JSON_Atom, JSON, []),
     json_value_to_woql_ast(JSON,WOQL,[]),
-    WOQL = json{'@type':"User",employed:true,father:v('Father'),name:"Jim"}.
+    WOQL = json{'@type':"User"^^xsd:string,
+                employed:true^^xsd:boolean,
+                father:v('Father'),
+                name:"Jim"^^xsd:string}.
 
 :- end_tests(jsonld_ast).

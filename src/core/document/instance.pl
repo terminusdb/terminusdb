@@ -5,7 +5,8 @@
               refute_referential_integrity/2,
               is_instance/3,
               is_instance_class/3,
-              instance_of/3
+              instance_of/3,
+              schema_layer/2
           ]).
 
 /*
@@ -28,7 +29,7 @@
 
 :- use_module(schema).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(aggregate)).
 :- use_module(library(lists)).
 :- use_module(library(dicts)).

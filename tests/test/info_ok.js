@@ -5,7 +5,7 @@ describe('info_ok', function () {
   let agent
 
   before(async function () {
-    agent = new Agent()
+    agent = new Agent().auth()
   })
 
   it('responds to /api/ok with success', async function () {
@@ -21,7 +21,7 @@ describe('info_ok', function () {
     expect(r.status).to.equal(200)
     expect(r.body['api:status']).to.equal('api:success')
     expect(r.body['@type']).to.equal('api:InfoResponse')
-    expect(r.body['api:info']).to.have.property('authority').that.equals('terminusdb://system/data/User/anonymous')
+    expect(r.body['api:info']).to.have.property('authority').that.equals('terminusdb://system/data/User/admin')
     expect(r.body['api:info']).to.have.property('storage').that.is.an('object')
     expect(r.body['api:info'].storage).to.have.property('version').that.equals('2')
     expect(r.body['api:info']).to.have.property('terminusdb').that.is.an('object')

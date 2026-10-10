@@ -37,6 +37,7 @@ pub const SYS_JSON_DOCUMENT: &str = "http://terminusdb.com/schema/sys#JSONDocume
 pub const SYS_FOREIGN_TYPE_PREDICATE_ID: &str = "http://terminusdb.com/schema/sys#foreign_type";
 pub const SYS_KEY: &str = "http://terminusdb.com/schema/sys#key";
 pub const SYS_VALUE_HASH: &str = "http://terminusdb.com/schema/sys#ValueHash";
+pub const SYS_RANDOM: &str = "http://terminusdb.com/schema/sys#Random";
 generate_lookup_type! {
     SysIds {
         class: node SYS_CLASS,
@@ -63,6 +64,7 @@ generate_lookup_type! {
         tdb_context: node TDB_CONTEXT,
         key: pred SYS_KEY,
         value_hash: node SYS_VALUE_HASH,
+        random: node SYS_RANDOM,
     }
 }
 
