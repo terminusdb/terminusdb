@@ -86,6 +86,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/rust
+          # Share one cache entry across jobs: v2 defaults add-job-id-key
+          # to true, which would give each job its own key.
+          add-job-id-key: false
 
       - name: Build
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
@@ -179,6 +182,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/rust
+          # Restore-only consumer of the build job's cache entry (same OS +
+          # workspaces + Cargo.lock → same key once the job id is excluded).
+          add-job-id-key: false
+          save-if: false
 
       - name: Build
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}

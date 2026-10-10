@@ -67,6 +67,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/rust
+          add-job-id-key: false
       - uses: actions-rs/clippy-check@v1
         continue-on-error: true
         with:
