@@ -166,16 +166,23 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
 
-      - name: Download build artifact
-        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: terminusdb-build-${{ matrix.os }}
-          path: .
+      - name: Install Protobuf Compiler (Linux)
+        if: ${{runner.os == 'Linux' &&  steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - name: Make binary executable
+      - name: Install Protobuf Compiler (macOS)
+        if: ${{ runner.os == 'macOS' && steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: brew install protobuf
+
+      - name: Cache Rust build
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        run: chmod +x terminusdb
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/rust
+
+      - name: Build
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: make
 
       - name: Unit tests
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
