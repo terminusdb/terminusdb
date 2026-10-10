@@ -619,6 +619,10 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusTypeCollection<C> {
         Some("TerminusTypeCollection")
     }
 
+    fn concrete_type_name(&self, _context: &Self::Context, info: &Self::TypeInfo) -> String {
+        <Self as GraphQLType>::name(info).unwrap().to_string()
+    }
+
     fn resolve_field(
         &self,
         info: &Self::TypeInfo,
@@ -733,6 +737,13 @@ impl<C: TerminusResolveContext> TerminusType<C> {
             id,
             _phantom: std::marker::PhantomData,
         }
+    }
+
+    fn type_iri(&self, instance: &SyncStoreLayer) -> Option<String> {
+        instance
+            .predicate_id(RDF_TYPE)
+            .and_then(|pid| instance.single_triple_sp(self.id, pid))
+            .and_then(|t| instance.id_object_node(t.object))
     }
 
     fn register_field<'r, T: GraphQLType>(
@@ -1005,6 +1016,35 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
         Some(info.class.as_str())
     }
 
+    fn concrete_type_name(&self, context: &Self::Context, info: &Self::TypeInfo) -> String {
+        let instance = context
+            .instance
+            .as_ref()
+            .expect("documents are only resolved when an instance layer exists");
+        let type_iri = self
+            .type_iri(instance)
+            .expect("document instance should have an rdf:type");
+        info.allframes
+            .iri_to_graphql_name(&IriName(type_iri))
+            .to_string()
+    }
+
+    fn resolve_into_type(
+        &self,
+        info: &Self::TypeInfo,
+        type_name: &str,
+        selection_set: Option<&[juniper::Selection<DefaultScalarValue>]>,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        if self.type_name(info) == Some(type_name)
+            || self.concrete_type_name(executor.context(), info) == type_name
+        {
+            self.resolve(info, selection_set, executor)
+        } else {
+            panic!("GraphQLValue::resolve_into_type() must be implemented by unions and interfaces")
+        }
+    }
+
     fn resolve_field(
         &self,
         info: &Self::TypeInfo,
@@ -1085,17 +1125,12 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusType<C> {
             let class = &info.class;
 
             if field_name.as_str() == "_type" {
-                let ty = instance
-                    .predicate_id(RDF_TYPE)
-                    .and_then(|pid| instance.single_triple_sp(self.id, pid))
-                    .and_then(|t| instance.id_object_node(t.object))
-                    .map(|ty| {
-                        let small_ty = allframes.iri_to_graphql_name(&IriName(ty));
-                        Ok(Value::Scalar(DefaultScalarValue::String(
-                            small_ty.to_string(),
-                        )))
-                    });
-                return ty;
+                return self.type_iri(instance).map(|ty| {
+                    let small_ty = allframes.iri_to_graphql_name(&IriName(ty));
+                    Ok(Value::Scalar(DefaultScalarValue::String(
+                        small_ty.to_string(),
+                    )))
+                });
             }
 
             // Subscription metadata: _CommitMetadata is a nested object type.
