@@ -69,9 +69,12 @@ parts:
       - diffutils
       - protobuf-compiler
       - libprotobuf-dev
+      - pkg-config  # openssl-sys (reqwest via lance) finds OpenSSL through it
+      - libssl-dev
     stage-packages:
       - swi-prolog  # Full package includes all extensions
       - binutils  # Provides addr2line for crash stack traces
+      - libssl3t64  # OpenSSL 3 runtime on core24, needed by reqwest/lance
     override-build: |
       echo "=== Installing Rust ==="
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
