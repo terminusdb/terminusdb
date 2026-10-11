@@ -87,6 +87,27 @@ add_plugin_path :-
 
 :- add_plugin_path.
 
+% Built-in plugins are always loaded. They live in builtin_plugins/ at the
+% repository root (a sibling of src/) unless TERMINUSDB_BUILTIN_PLUGINS_PATH
+% overrides the location (installed deployments, Docker).
+%
+% The plugins(...) alias resolves built-in plugins FIRST, then user plugins,
+% so that use_module(plugins(name)) inside plugin code finds core modules
+% before user-supplied ones of the same name.
+add_builtin_plugin_path :-
+    (   getenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', Value),
+        absolute_file_name(Value, Config)
+    ->  true
+    ;   user:file_search_path(terminus_home, Dir),
+        directory_file_path(Dir, '..', Parent),
+        directory_file_path(Parent, 'builtin_plugins', Config)
+    ),
+    asserta(user:file_search_path(builtin_plugins, Config)),
+    % asserta puts the built-in dir ahead of the plugins/ entry asserted above.
+    asserta(user:file_search_path(plugins, Config)).
+
+:- add_builtin_plugin_path.
+
 add_ontology_path :-
     user:file_search_path(terminus_home, Dir),
     directory_file_path(Dir,'terminus-schema',Ontology),
