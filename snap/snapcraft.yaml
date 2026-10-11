@@ -102,7 +102,7 @@ parts:
       make
       
       echo "=== Installing to snap ==="
-      cp -r terminusdb distribution src builtin_plugins $CRAFT_PART_INSTALL/
+      cp -r terminusdb distribution src builtin_plugins assets $CRAFT_PART_INSTALL/
     build-environment:
       - TERMINUSDB_SERVER_PACK_DIR: $CRAFT_STAGE
       - LANG: C.UTF-8
