@@ -22,6 +22,8 @@
     maybe_nudge_push_async/4,
     % Config
     vectorlink_endpoint/1,
+    % Embedded-engine dispatch (also used by search_resolve)
+    engine_http_open/3,
     clean_vectorlink_env/0
 ]).
 
@@ -63,6 +65,18 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 % Config predicates — plugin-owned, using generic plugin_api env helpers
 % ==========================================================================
 
+%% embedded_endpoint(-Endpoint) is det.
+%
+%  Marker endpoint returned by vectorlink_endpoint/1 when the embedded
+%  backend (TERMINUSDB_INDEXER_BACKEND=vectorlink) is active. URLs built
+%  on it are intercepted by engine_http_open/3 and dispatched in-process
+%  to the embedded vectorlink engine via the $vectorlink FFI module.
+embedded_endpoint('embedded://vectorlink').
+
+vectorlink_endpoint(Endpoint) :-
+    config:indexer_backend(vectorlink),
+    !,
+    embedded_endpoint(Endpoint).
 vectorlink_endpoint(Endpoint) :-
     plugin_env('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint).
 
@@ -89,6 +103,142 @@ clean_vectorlink_env :-
 vectorlink_auth_header(authorization(basic(User, Secret))) :-
     plugins:vectorlink_admin_user(User),
     plugins:vectorlink_admin_secret(Secret).
+
+% ==========================================================================
+% Engine transport — http_open/3 or in-process dispatch
+% ==========================================================================
+
+%% engine_http_open(+URL, -In, +Options) is det.
+%
+%  Drop-in replacement for http_open/3 covering the option subset this
+%  plugin uses: method/1, post/1, request_header/1, status_code/1,
+%  header/2, timeout/1 and authorization/1. URLs on the embedded marker
+%  endpoint are dispatched in-process to the embedded vectorlink engine
+%  through the $vectorlink FFI module; every other URL is delegated to
+%  http_open/3 unchanged.
+%
+%  The response body streams through a kernel pipe pumped by the Rust
+%  runtime — In is a real fd-backed stream with the same semantics as an
+%  http_open socket stream, so lazy consumers (e.g. stream_ndjson_from/2)
+%  get true backpressure.
+%
+%  Trust note: the embedded router is built without the engine's auth
+%  gate — in-process calls are trusted because callers are already
+%  authorized at the TerminusDB API layer. Consequently every dynamic
+%  value embedded in an engine URL MUST be passed through
+%  plugin_api:encode_query_value/2 — a raw value could smuggle extra
+%  query params (e.g. a different domain) past TerminusDB ACL checks.
+engine_http_open(URL, In, Options) :-
+    embedded_endpoint(Prefix),
+    atom_concat(Prefix, Path_Query, URL),
+    % Require a path boundary so look-alike prefixes
+    % (e.g. embedded://vectorlink2) are not intercepted.
+    sub_atom(Path_Query, 0, 1, _, '/'),
+    !,
+    embedded_http_open(Path_Query, In, Options).
+engine_http_open(URL, In, Options) :-
+    http_open(URL, In, Options).
+
+%% embedded_http_open(+Path_Query, -In, +Options) is det.
+embedded_http_open(Path_Query, In, Options) :-
+    embedded_request_parts(Options, Method, Headers, Body),
+    embedded_dispatch(Method, Path_Query, Headers, Body, Meta, In),
+    embedded_unify_options(Meta, Options).
+
+%% embedded_request_parts(+Options, -Method, -Headers, -Body) is det.
+%
+%  Extracts method, request headers and body from the http_open option
+%  subset. Body is `none` for requests without a payload; Headers is a
+%  list of Name=Value pairs. The authorization/1 option is skipped — the
+%  embedded router needs no credentials.
+embedded_request_parts(Options, Method, Headers, Body) :-
+    (   memberchk(post(Data), Options)
+    ->  embedded_post_body(Data, Body, Post_Content_Type)
+    ;   Body = none,
+        Post_Content_Type = none
+    ),
+    (   memberchk(method(Method), Options)
+    ->  true
+    ;   Body \== none
+    ->  Method = post
+    ;   Method = get
+    ),
+    findall(Name=Value, member(request_header(Name=Value), Options), Pairs),
+    (   Post_Content_Type \== none,
+        \+ memberchk(request_header('Content-Type'=_), Options)
+    ->  Headers = ['Content-Type'=Post_Content_Type | Pairs]
+    ;   Headers = Pairs
+    ).
+
+embedded_post_body(json(Dict), Body, 'application/json') :-
+    !,
+    atom_json_dict(Body, Dict, []).
+embedded_post_body(string(S), S, 'text/plain') :- !.
+embedded_post_body(atom(A), A, 'text/plain') :- !.
+embedded_post_body(codes(C), S, 'text/plain') :-
+    string_codes(S, C).
+
+%% embedded_dispatch(+Method, +Path_Query, +Headers, +Body, -Meta, -In) is det.
+%
+%  Calls $vectorlink:vectorlink_request/6, parses the metadata JSON
+%  `{"status":N,"headers":{...}}` and wraps the returned read fd as a
+%  Prolog stream via $appserver:appserver_open_fd_stream/4 — the same
+%  fd-stream mechanism the request worker pool uses for handler output.
+%  Throws vectorlink_engine_unavailable/2 when the FFI is missing or the
+%  engine cannot serve the request.
+embedded_dispatch(Method, Path_Query, Headers, Body, Meta, In) :-
+    (   current_predicate('$vectorlink':vectorlink_request/6),
+        current_predicate('$appserver':appserver_open_fd_stream/4),
+        embedded_headers_json(Headers, Headers_Arg),
+        embedded_body_arg(Body, Body_Arg),
+        '$vectorlink':vectorlink_request(Method, Path_Query, Headers_Arg,
+                                         Body_Arg, Meta_Json, Read_Fd)
+    ->  (   catch(atom_json_dict(Meta_Json, Meta, [default_tag(json)]),
+                  _, fail),
+            '$appserver':appserver_open_fd_stream(Read_Fd, read, utf8, In)
+        ->  % The stream wraps a dup() of the fd — release the original.
+            catch('$appserver':appserver_close_fd(Read_Fd), _, true)
+        ;   % Open failed — closing the fd makes the pump see EPIPE.
+            catch('$appserver':appserver_close_fd(Read_Fd), _, true),
+            throw(error(vectorlink_engine_unavailable(Method, Path_Query), _))
+        )
+    ;   throw(error(vectorlink_engine_unavailable(Method, Path_Query), _))
+    ).
+
+embedded_headers_json([], none) :- !.
+embedded_headers_json(Pairs, Json) :-
+    dict_create(Dict, json, Pairs),
+    atom_json_dict(Json, Dict, []).
+
+embedded_body_arg(none, none) :- !.
+embedded_body_arg(Body, Body).
+
+%% embedded_unify_options(+Resp, +Options) is det.
+%
+%  Unifies the status_code/1 and header/2 output options the caller
+%  supplied, mirroring http_open/3 semantics: a header/2 whose name is
+%  absent from the response leaves the value unbound.
+embedded_unify_options(Resp, Options) :-
+    (   memberchk(status_code(Status_Var), Options)
+    ->  Status_Var = Resp.status
+    ;   true
+    ),
+    forall(member(header(Name, Value), Options),
+           embedded_header_value(Resp.headers, Name, Value)).
+
+%% embedded_header_value(+Headers, +Name, ?Value) is semidet.
+%
+%  Looks up Name (e.g. terminusdb_data_version) in the response headers
+%  dict, whose keys are lowercase and hyphenated. Leaves Value unbound
+%  when the header is absent.
+embedded_header_value(Headers, Name, Value) :-
+    downcase_atom(Name, Lower),
+    atomic_list_concat(Parts, '_', Lower),
+    atomic_list_concat(Parts, '-', Key),
+    (   get_dict(Key, Headers, Value)
+    ->  true
+    ;   true
+    ).
 
 % ==========================================================================
 % Embedding queries + api_index_jobs (moved from api_indexer.pl)
@@ -238,7 +388,7 @@ tdb_http_get(URL, Status, Body) :-
     base64(Creds, B64),
     format(atom(AuthHeader), "Basic ~w", [B64]),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ request_header('Authorization'=AuthHeader),
                     request_header('Accept'='application/json'),
                     status_code(Status),
@@ -286,7 +436,7 @@ io_stream_push(Endpoint, Domain, Branch, Target_Commit,
     base64(Creds, B64),
     format(atom(AuthHeader), "Basic ~w", [B64]),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ method(post),
                     post(string(NDJSON_Body)),
                     request_header('Authorization'=AuthHeader),
@@ -376,7 +526,7 @@ io_check_task(Endpoint, Task_Id, Status) :-
     format(atom(AuthHeader), "Basic ~w", [B64]),
     catch(
         (   setup_call_cleanup(
-                http_open(URL, In,
+                engine_http_open(URL, In,
                           [request_header('Authorization'=AuthHeader),
                            status_code(Http_Status)]),
                 read_string(In, _, Body_String),
@@ -845,7 +995,7 @@ io_compare_forward(Endpoint, Method, Role, Body_Dict, Response_Body) :-
     search_auth_header(AuthHeader),
     build_compare_url(Endpoint, Method, Role, URL),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ method(post),
                     post(json(Body_Dict)),
                     status_code(Status),
@@ -866,7 +1016,7 @@ handle_compare_response(Status, Body, URL) :-
 
 io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header) :-
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ status_code(Status),
                     AuthHeader,
                     request_header('Accept' = 'application/json'),
@@ -883,7 +1033,7 @@ io_forward_get(URL, AuthHeader, Response_Body, Data_Version_Header) :-
 %  Forwards a POST request with a JSON body to vectorlink.
 io_forward_post(URL, AuthHeader, Post_Body, Response_Body, Data_Version_Header) :-
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ method(post),
                     post(json(Post_Body)),
                     status_code(Status),
@@ -1162,7 +1312,7 @@ io_resolve_forward(Endpoint, Domain, Search_Ref, Ancestors,
                  Body_Dict, Forward_Body)
     ),
     setup_call_cleanup(
-        http_open(Resolve_URL, In,
+        engine_http_open(Resolve_URL, In,
                   [ method(post),
                     post(json(Forward_Body)),
                     status_code(Status),
@@ -1185,7 +1335,7 @@ io_delete_domain(Endpoint, Domain) :-
     search_auth_header(AuthHeader),
     build_delete_domain_url(Endpoint, Domain, URL),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ method(delete),
                     status_code(Status),
                     AuthHeader,
@@ -1215,6 +1365,14 @@ handle_delete_domain_response(Status, Body, URL) :-
 %  and auth header into the Rust IndexerRegistry via the indexer_set_config
 %  FFI predicate. This runs once at boot, after vectorlink_endpoint/1 is
 %  configured but before any commits arrive.
+%
+%  Under the embedded backend the engine runs in-process instead:
+%  init_embedded_engine/0 brings it up and installs it as the indexer
+%  transport, so no indexer_set_config call happens.
+plugins:post_server_startup_hook(_Port) :-
+    config:indexer_backend(vectorlink),
+    !,
+    init_embedded_engine.
 plugins:post_server_startup_hook(_Port) :-
     (   vectorlink_endpoint(Endpoint),
         plugin_api:indexer_available
@@ -1234,6 +1392,46 @@ plugins:post_server_startup_hook(_Port) :-
                          [Error]))
         )
     ;   true
+    ).
+
+%% init_embedded_engine is det.
+%
+%  Starts the embedded vectorlink engine: stores its data in
+%  <storage>/vectorlink (sibling of db_path), loads the tokenizer asset
+%  shipped in builtin_plugins/assets/, and registers it as the indexer
+%  transport. No credentials are involved — in-process calls are
+%  authorized at the TerminusDB API layer and the embedded router is
+%  built without the engine's HTTP auth gate. Throws loud when the
+%  $vectorlink FFI is unavailable — the embedded backend cannot run
+%  without the Rust dylib.
+init_embedded_engine :-
+    do_or_die(
+        current_predicate('$vectorlink':vectorlink_init/2),
+        error(vectorlink_ffi_not_loaded(vectorlink_init), _)),
+    config:db_path(Db_Path),
+    file_directory_name(Db_Path, Storage_Dir),
+    atomic_list_concat([Storage_Dir, 'vectorlink'], '/', Data_Dir),
+    embedded_tokenizer_path(Tokenizer_Path),
+    do_or_die(
+        '$vectorlink':vectorlink_init(Data_Dir, Tokenizer_Path),
+        error(vectorlink_engine_init_failed(Data_Dir), _)).
+
+%% embedded_tokenizer_path(-Path) is det.
+%
+%  Absolute path of the tokenizer asset the embedded engine loads.
+%  VECTORLINK_TOKENIZER_PATH wins when set (it must match the embedding
+%  model); otherwise the asset shipped under builtin_plugins/assets/,
+%  else '' so the engine falls back to its own config default.
+embedded_tokenizer_path(Path) :-
+    (   getenv('VECTORLINK_TOKENIZER_PATH', Env_Path),
+        Env_Path \== ''
+    ->  Path = Env_Path
+    ;   config:builtin_plugin_path(Builtin_Path),
+        atomic_list_concat([Builtin_Path, 'assets/tokenizer.json.bz2'], '/',
+                           Candidate),
+        exists_file(Candidate)
+    ->  Path = Candidate
+    ;   Path = ''
     ).
 
 :- multifile plugins:post_delete_db_hook/2.
@@ -2083,7 +2281,7 @@ io_embeddings_forward(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestor
     build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ status_code(Status),
                     AuthHeader,
                     request_header('Accept' = 'application/json'),
@@ -2110,7 +2308,7 @@ io_embeddings_forward_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, A
     build_embeddings_url(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Types, Ancestors, Base_URL),
     append_extra_params(Base_URL, Extra_Params, URL),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ status_code(Status),
                     AuthHeader,
                     request_header('Accept' = 'application/x-ndjson'),
@@ -2149,7 +2347,7 @@ io_embeddings_forward_post_stream(Endpoint, Domain, Search_Ref, Doc_Ids, Doc_Typ
                        ancestors: Ancestors, stream: true}
     ),
     setup_call_cleanup(
-        http_open(URL, In,
+        engine_http_open(URL, In,
                   [ method(post),
                     status_code(Status),
                     AuthHeader,
@@ -2777,7 +2975,105 @@ test("admin secret defaults to root",
      ]) :-
     plugins:vectorlink_admin_secret(Secret).
 
+test("vectorlink embedded backend resolves and passes the startup check",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink))),
+       cleanup(clean_vectorlink_test_env),
+       true(Backend == vectorlink)
+     ]) :-
+    config:check_indexer_backend_config,
+    config:indexer_backend(Backend).
+
+test("vectorlink backend with vectorlink endpoint set is ambiguous and refuses startup",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              setenv('TERMINUSDB_VECTORLINK_ENDPOINT', 'http://vectorlink:8080'))),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(indexer_backend_ambiguous(vectorlink, _), _))
+     ]) :-
+    config:check_indexer_backend_config.
+
+test("vectorlink backend with legacy endpoint set is ambiguous and refuses startup",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              setenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT', 'http://legacy-vectorlink:8080'))),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(indexer_backend_ambiguous(vectorlink, _), _))
+     ]) :-
+    config:check_indexer_backend_config.
+
+test("vectorlink_endpoint returns the embedded marker under the embedded backend",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink))),
+       cleanup(clean_vectorlink_test_env),
+       true(Endpoint == 'embedded://vectorlink')
+     ]) :-
+    vectorlink_endpoint(Endpoint).
+
 :- end_tests(vectorlink_indexer_backend_selector).
+
+% ==========================================================================
+% Embedded-dispatch unit tests
+% ==========================================================================
+
+:- begin_tests(vectorlink_embedded_dispatch).
+
+test("embedded_request_parts defaults to GET without a body",
+     [ true((Method, Headers, Body) == (get, [], none))
+     ]) :-
+    vectorlink:embedded_request_parts(
+        [status_code(_), authorization(basic(admin, root))],
+        Method, Headers, Body).
+
+test("embedded_request_parts infers POST from a body",
+     [ true((Method == post,
+             Body == '{"q":"x"}',
+             memberchk('Accept'='application/x-ndjson', Headers),
+             memberchk('Content-Type'='application/json', Headers)))
+     ]) :-
+    vectorlink:embedded_request_parts(
+        [post(json(_{q:"x"})),
+         authorization(basic(admin, root)),
+         request_header('Accept'='application/x-ndjson'),
+         request_header('Content-Type'='application/json'),
+         status_code(_)],
+        Method, Headers, Body).
+
+test("embedded_request_parts overrides the post content type via request_header",
+     [ true((memberchk('Content-Type'='application/x-ndjson', Headers),
+             \+ memberchk('Content-Type'='application/json', Headers)))
+     ]) :-
+    vectorlink:embedded_request_parts(
+        [method(post), post(string('{"a":1}\n')),
+         request_header('Content-Type'='application/x-ndjson')],
+        _Method, Headers, _Body).
+
+test("engine_http_open dispatches marker URLs to the embedded engine",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink))),
+       cleanup(clean_vectorlink_test_env),
+       throws(error(vectorlink_engine_unavailable(get, '/search?domain=admin%2Fdb'), _))
+     ]) :-
+    silence_user_error(
+        vectorlink:engine_http_open(
+            'embedded://vectorlink/search?domain=admin%2Fdb', _In,
+            [status_code(_)])).
+
+test("embedded_header_value maps underscore names to hyphenated keys",
+     [ true(Value == "abc123")
+     ]) :-
+    vectorlink:embedded_header_value(
+        json{'terminusdb-data-version':"abc123"},
+        terminusdb_data_version, Value).
+
+test("embedded_header_value leaves the value unbound when the header is absent",
+     [ true(var(Value))
+     ]) :-
+    vectorlink:embedded_header_value(
+        json{'content-type':"application/json"},
+        x_served_commit, Value).
+
+:- end_tests(vectorlink_embedded_dispatch).
 
 % ==========================================================================
 % Push driver unit tests

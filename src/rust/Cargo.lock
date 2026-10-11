@@ -6090,7 +6090,6 @@ name = "terminusdb-vectorlink"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.9",
- "base64 0.22.1",
  "futures",
  "http-body-util",
  "nix",

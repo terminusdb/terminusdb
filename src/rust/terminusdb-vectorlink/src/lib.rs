@@ -13,13 +13,12 @@
 //!   webserver's IndexerRegistry, so the commit-push pipeline
 //!   (/last-indexed, /push, DELETE /domain) flows in-process.
 //! - FFI predicates in module `$vectorlink` for the Prolog plugin:
-//!   `vectorlink_init/4` and `vectorlink_request/6`, used by the
+//!   `vectorlink_init/2` and `vectorlink_request/6`, used by the
 //!   builtin vectorlink plugin to forward search traffic.
 
 use std::os::fd::IntoRawFd;
 use std::sync::{Arc, RwLock};
 
-use base64::Engine as _;
 use futures::StreamExt;
 use swipl::prelude::*;
 use terminusdb_webserver::indexer::{
@@ -28,11 +27,10 @@ use terminusdb_webserver::indexer::{
 #[cfg(test)]
 use terminusdb_webserver::indexer::ByteStream;
 
-/// The embedded vectorlink engine: its axum router plus the Basic auth
-/// header the service expects on authed routes.
+/// The embedded vectorlink engine: its axum router, built without the
+/// auth layer — in-process requests are already authorized by the host.
 struct EmbeddedEngine {
     router: axum::Router,
-    auth_header: String,
 }
 
 impl EmbeddedEngine {
@@ -57,20 +55,11 @@ impl EmbeddedEngine {
     }
 
     /// Dispatch a prepared request through the in-process router.
-    ///
-    /// The engine's Basic auth header is injected (overwriting any
-    /// Authorization header the caller set — the engine owns auth).
     async fn dispatch(
         &self,
-        mut http_req: axum::http::Request<axum::body::Body>,
+        http_req: axum::http::Request<axum::body::Body>,
     ) -> Result<EngineResponse, String> {
         use tower::ServiceExt;
-
-        http_req.headers_mut().insert(
-            axum::http::header::AUTHORIZATION,
-            axum::http::HeaderValue::from_str(&self.auth_header)
-                .map_err(|e| format!("invalid auth header: {}", e))?,
-        );
 
         let resp = match self.router.clone().oneshot(http_req).await {
             Ok(r) => r,
@@ -131,14 +120,9 @@ fn engine() -> Option<Arc<EmbeddedEngine>> {
 /// Embedding provider settings come from the standard `VECTORLINK_*`
 /// environment variables via `Config::from_env` (e.g.
 /// `VECTORLINK_EMBED_PROVIDER`, `VECTORLINK_EMBED_URL`,
-/// `VECTORLINK_MODEL`, `VECTORLINK_DIM`). `data_dir` and the admin
-/// credentials are supplied by TerminusDB instead.
-fn init_engine(
-    data_dir: String,
-    admin_user: String,
-    admin_secret: String,
-    tokenizer_path: String,
-) -> Result<(), String> {
+/// `VECTORLINK_MODEL`, `VECTORLINK_DIM`). `data_dir` is supplied by
+/// TerminusDB instead.
+fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
     if engine().is_some() {
         // Idempotent: a second init (e.g. after a plugin reload) is a
         // no-op. The engine is process-wide by design.
@@ -153,8 +137,6 @@ fn init_engine(
 
     let mut config = vectorlink::config::Config::from_env();
     config.data_dir = data_dir;
-    config.admin_user = admin_user;
-    config.admin_secret = admin_secret;
     // TerminusDB supplies the tokenizer path (resolved against the builtin
     // plugin dir or VECTORLINK_TOKENIZER_PATH) so the asset travels with
     // the embedding model choice, not the binary.
@@ -193,17 +175,11 @@ fn init_engine(
     }
 
     let service = vectorlink::service::SearchService::new(store, config.clone(), tokenizer);
-    let router = vectorlink::http_api::router(service, config.clone());
+    // No auth layer: requests only reach this router through the FFI from
+    // already-authorized Prolog handlers.
+    let router = vectorlink::http_api::trusted_router(service, config.clone());
 
-    let auth = format!(
-        "Basic {}",
-        base64::engine::general_purpose::STANDARD
-            .encode(format!("{}:{}", config.admin_user, config.admin_secret))
-    );
-    let engine = Arc::new(EmbeddedEngine {
-        router,
-        auth_header: auth,
-    });
+    let engine = Arc::new(EmbeddedEngine { router });
     *ENGINE.write().unwrap() = Some(engine.clone());
     set_engine_transport(engine);
 
@@ -238,23 +214,16 @@ predicates! {
     /// Initialize the embedded vectorlink engine.
     ///
     /// Signature:
-    /// `$vectorlink:vectorlink_init(+DataDir, +AdminUser, +AdminSecret, +TokenizerPathOrEmpty)`.
+    /// `$vectorlink:vectorlink_init(+DataDir, +TokenizerPathOrEmpty)`.
     /// Called once at startup from the vectorlink plugin when
     /// `TERMINUSDB_INDEXER_BACKEND=vectorlink`. Idempotent. An empty
     /// tokenizer path falls back to `Config::from_env` (i.e.
     /// `VECTORLINK_TOKENIZER_PATH` or its default).
     #[module("$vectorlink")]
-    pub semidet fn vectorlink_init(_context, data_dir_term, user_term, secret_term, tokenizer_term) {
+    pub semidet fn vectorlink_init(_context, data_dir_term, tokenizer_term) {
         let data_dir: PrologText = data_dir_term.get_ex()?;
-        let user: PrologText = user_term.get_ex()?;
-        let secret: PrologText = secret_term.get_ex()?;
         let tokenizer: PrologText = tokenizer_term.get_ex()?;
-        init_engine(
-            data_dir.into_inner(),
-            user.into_inner(),
-            secret.into_inner(),
-            tokenizer.into_inner(),
-        )
+        init_engine(data_dir.into_inner(), tokenizer.into_inner())
         .map_err(|e| {
             terminusdb_webserver::log::log_error(format!(
                 "[vectorlink] init failed: {}",
@@ -273,7 +242,8 @@ predicates! {
     /// path + query string (e.g. `"/search?domain=admin/db&branch=main"`),
     /// HeadersOrNone is a JSON object string of extra request headers or
     /// the atom `none`, BodyOrNone is a string body or the atom `none`.
-    /// The engine injects its own Authorization header.
+    /// No credentials are needed — the embedded router is built without
+    /// the engine's auth layer.
     ///
     /// MetaJson unifies with a JSON string `{"status":N,"headers":{...}}`
     /// — parse it with `atom_json_dict/3`. ReadFd unifies with a POSIX
@@ -507,10 +477,7 @@ mod tests {
                     ]))
                 }),
             );
-        EmbeddedEngine {
-            router,
-            auth_header: "Basic dGVzdDpzZWNyZXQ=".to_string(),
-        }
+        EmbeddedEngine { router }
     }
 
     fn get_req(path: &str) -> EngineRequest {
@@ -560,10 +527,8 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status, 200);
         let body = collect_stream(resp.body).await.unwrap();
-        assert_eq!(
-            body,
-            b"Basic dGVzdDpzZWNyZXQ=||{\"a\":1}\n{\"a\":2}\n".as_slice()
-        );
+        // No auth is injected — in-process callers are trusted.
+        assert_eq!(body, b"||{\"a\":1}\n{\"a\":2}\n".as_slice());
     }
 
     #[tokio::test]
@@ -600,8 +565,7 @@ mod tests {
         ));
         let service = vectorlink::service::SearchService::new(store, config.clone(), tokenizer);
         let engine = EmbeddedEngine {
-            router: vectorlink::http_api::router(service, config),
-            auth_header: "Basic YWRtaW46cm9vdA==".to_string(),
+            router: vectorlink::http_api::trusted_router(service, config),
         };
 
         let resp = engine
@@ -620,6 +584,29 @@ mod tests {
             405,
             "GET /search must route to handle_search_get, body: {}",
             String::from_utf8_lossy(&body)
+        );
+    }
+
+    /// Transport errors carry "{METHOD} {path} failed: {cause}" — the
+    /// indexer logs the string verbatim, so pin the format.
+    #[tokio::test]
+    async fn call_error_includes_method_and_path() {
+        let engine = test_engine();
+        let err = engine
+            .call(EngineRequest {
+                method: axum::http::Method::GET,
+                path: "bad uri with spaces".to_string(),
+                body: None,
+                content_type: None,
+                timeout: None,
+            })
+            .await
+            .err()
+            .expect("invalid URI must fail");
+        assert!(
+            err.starts_with("GET bad uri with spaces failed:"),
+            "unexpected error format: {}",
+            err
         );
     }
 

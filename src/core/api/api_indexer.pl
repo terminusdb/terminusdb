@@ -209,10 +209,18 @@ validate_index_segments(N, _Segments, Path) :-
  *   - vectorlink endpoint not configured
  *   - indexer_notify FFI not loaded (Rust runtime not available)
  */
+%% push_indexer_backend is semidet.
+%
+%  Succeeds when a push/search indexer backend is active — either the
+%  remote http_vectorlink engine or the embedded vectorlink engine.
+push_indexer_backend :-
+    indexer_backend(Backend),
+    memberchk(Backend, [http_vectorlink, vectorlink]).
+
 io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     validate_index_path(Path),
     do_or_die(
-        indexer_backend(http_vectorlink),
+        push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_push_delta), _)),
     do_or_die(
         vectorlink_endpoint(_Endpoint),
@@ -280,7 +288,7 @@ io_index_branch(System_DB, Auth, Path) :-
     % Validate path structure FIRST — before any descriptor resolution or I/O.
     validate_index_path(Path),
     do_or_die(
-        indexer_backend(http_vectorlink),
+        push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_index_branch), _)),
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
     do_or_die(
@@ -321,8 +329,8 @@ io_index_branch(System_DB, Auth, Path) :-
 :- multifile plugins:post_commit_hook/2.
 
 plugins:post_commit_hook(Validations, _Meta_Data) :-
-    % Gate 1: backend must be http_vectorlink. Cheap tabled check.
-    indexer_backend(http_vectorlink),
+    % Gate 1: a push indexer backend must be active. Cheap tabled check.
+    push_indexer_backend,
     % Gate 2: FFI predicate must be registered (Rust runtime loaded).
     plugin_api:indexer_available,
     % Gate 3: for each branch validation, call indexer_notify.

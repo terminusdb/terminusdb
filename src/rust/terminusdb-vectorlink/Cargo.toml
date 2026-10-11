@@ -15,7 +15,6 @@ axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 serde_json = "1"
-base64 = "0.22"
 nix = { version = "0.31", features = ["fs"] }
 
 [dev-dependencies]

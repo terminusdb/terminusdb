@@ -207,6 +207,50 @@ export TERMINUSDB_VECTORLINK_ENDPOINT=http://127.0.0.1:7372
 ../tdb-search/tests/tdb-search-server.sh start
 ```
 
+### Embedded Vectorlink (In-Process Search Engine)
+
+TerminusDB can run the vectorlink search engine in-process — no
+separate tdb-search server, no external endpoint to configure.
+The engine ships as a builtin plugin backed by a Rust shim crate
+(`src/rust/terminusdb-vectorlink`) that embeds vectorlink's axum
+router inside `librust.dylib`.
+
+**Requirements:**
+- `TERMINUSDB_SERVER_BACKEND=rust` — embedded dispatch needs the
+  Rust webserver's tokio runtime
+- An embedding provider reachable from the engine, configured
+  through the usual `VECTORLINK_*` variables
+  (`VECTORLINK_EMBED_PROVIDER`, `VECTORLINK_EMBED_URL`,
+  `VECTORLINK_MODEL`, `VECTORLINK_DIM`)
+
+**Starting the test server with the embedded engine:**
+
+```bash
+export TERMINUSDB_INDEXER_BACKEND=vectorlink
+./tests/terminusdb-test-server.sh start
+```
+
+Engine data lives under `<storage>/vectorlink` by default; override
+with `TERMINUSDB_VECTORLINK_DATA_DIR`. The engine loads its tokenizer
+from `builtin_plugins/assets/tokenizer.json.bz2` (shipped with the
+server); override with `VECTORLINK_TOKENIZER_PATH` when switching
+embedding models — the tokenizer must match the model. The HTTP backends
+(`http_vectorlink`, `http_legacy_vectorlink`) remain supported —
+`TERMINUSDB_INDEXER_BACKEND` selects exactly one, and the startup
+check fails loud on unknown values or on endpoints configured for
+inactive backends.
+
+**How requests flow:** the Prolog routes and response handling are
+identical in both modes. `engine_http_open/3` in
+`builtin_plugins/vectorlink.pl` intercepts `embedded://` URLs and
+forwards them through the `$vectorlink` FFI predicates; the Rust
+side dispatches through vectorlink's own axum router via
+`tower::ServiceExt::oneshot`, so embedded mode preserves the wire
+semantics (streaming NDJSON, error codes) without a socket. The
+embedded router is built without the engine's auth gate — no
+credentials are needed because every request is already authorised
+at the TerminusDB API layer.
+
 ### Release Build and Restart
 
 The development sections above use `make dev` which produces a development
