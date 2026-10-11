@@ -126,10 +126,6 @@ RUN mkdir -p storage \
 ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
 ENV TERMINUSDB_BUILTIN_PLUGINS_PATH=${TERMINUSDB_BUILTIN_PLUGINS_PATH:-/builtin_plugins}
 COPY builtin_plugins/ ${TERMINUSDB_BUILTIN_PLUGINS_PATH}/
-# Tokenizer for the embedded vectorlink engine (per embedding model; override
-# with VECTORLINK_TOKENIZER_PATH when switching models).
-ENV VECTORLINK_TOKENIZER_PATH=${VECTORLINK_TOKENIZER_PATH:-/app/terminusdb/assets/tokenizer.json.bz2}
-COPY assets/ /app/terminusdb/assets/
 RUN mkdir -p /app/terminusdb/dashboard/src/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/src/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/src/assets/

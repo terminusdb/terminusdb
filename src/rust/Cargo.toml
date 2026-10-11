@@ -1,5 +1,5 @@
 [workspace]
-members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib", "terminusdb-webserver"]
+members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib", "terminusdb-webserver", "terminusdb-vectorlink"]
 # v2 required for per-platform dep features: v1 unifies them across all
 # targets, leaking tikv-jemallocator/background_threads into macOS builds.
 resolver = "2"
@@ -17,3 +17,8 @@ swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 
 #[patch."https://github.com/terminusdb-org/terminusdb-store"]
 #terminus-store = {path="../../../terminusdb-store"}
+
+# TODO: remove once the vectorlink terminusdb-12.1 branch is pushed —
+# the git dependency above then resolves directly.
+[patch."ssh://git@github.com/terminusdb-org/vectorlink"]
+vectorlink = {path="../../../vectorlink"}

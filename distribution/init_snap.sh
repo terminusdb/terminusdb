@@ -29,11 +29,6 @@ if [ -z "$TERMINUSDB_BUILTIN_PLUGINS_PATH" ]; then
     export TERMINUSDB_BUILTIN_PLUGINS_PATH="$SNAP/builtin_plugins"
 fi
 
-# Tokenizer asset for the embedded vectorlink engine ships with the snap.
-if [ -z "$VECTORLINK_TOKENIZER_PATH" ]; then
-    export VECTORLINK_TOKENIZER_PATH="$SNAP/assets/tokenizer.json.bz2"
-fi
-
 # Silent pack validation - only report errors
 if [ ! -d "$SNAP/tus" ] || [ ! -f "$SNAP/tus/pack.pl" ]; then
     echo "ERROR: TUS pack not found or incomplete at $SNAP/tus" >&2

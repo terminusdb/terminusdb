@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 terminusdb-community = {path="../terminusdb-community"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
 terminusdb-webserver = {path="../terminusdb-webserver"}
+terminusdb-vectorlink = {path="../terminusdb-vectorlink"}
 
 # background_threads is Linux-only (requires resolver="2" in the workspace so
 # target-gated dep features don't leak to other platforms). The embedded
