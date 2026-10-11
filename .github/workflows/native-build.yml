@@ -2,9 +2,9 @@ name: Native Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 12.1-rc ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, 12.1-rc ]
   workflow_dispatch:
 
 jobs:
