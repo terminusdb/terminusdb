@@ -19,10 +19,149 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use swipl::prelude::*;
-use futures::FutureExt;
+use futures::future::BoxFuture;
+use futures::{FutureExt, StreamExt};
+use axum::body::Bytes;
+use axum::http::{HeaderMap, Method};
 use tokio::sync::mpsc;
 use tokio::io::AsyncReadExt;
 use tokio::net::unix::pipe::Receiver as PipeReceiver;
+
+// ───────────────────────── Engine transport ─────────────────────────
+
+/// A byte stream that can be shared across threads.
+pub type ByteStream =
+    std::pin::Pin<Box<dyn futures::Stream<Item = Result<Bytes, String>> + Send + Sync + 'static>>;
+
+/// Wrap any `Send` byte stream so it also satisfies `Sync`.
+///
+/// Streams are only ever polled sequentially, so the mutex never
+/// contends — it exists purely to satisfy the `Sync` bound that
+/// `reqwest::Body::wrap` and axum request bodies require.
+pub fn boxed_sync_stream<S>(stream: S) -> ByteStream
+where
+    S: futures::Stream<Item = Result<Bytes, String>> + Send + 'static,
+{
+    struct SyncStream<S> {
+        inner: StdMutex<S>,
+    }
+    impl<S: futures::Stream + Unpin> futures::Stream for SyncStream<S> {
+        type Item = S::Item;
+        fn poll_next(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            std::pin::Pin::new(&mut *self.get_mut().inner.lock().unwrap()).poll_next(cx)
+        }
+    }
+    Box::pin(SyncStream {
+        inner: StdMutex::new(Box::pin(stream)),
+    })
+}
+
+/// A request to the vectorlink engine, transport-agnostic.
+///
+/// `path` carries the path + query string only (e.g.
+/// "/push?domain=a%2Fb&branch=main&target_commit=c&stream=true") — the
+/// transport decides how it is delivered (remote HTTP vs in-process).
+pub struct EngineRequest {
+    pub method: Method,
+    pub path: String,
+    /// Request body as a byte stream (used by /push for NDJSON).
+    pub body: Option<ByteStream>,
+    /// Content-Type header value when a body is present.
+    pub content_type: Option<String>,
+    /// Per-request timeout. Applied by the HTTP transport; the embedded
+    /// transport executes in-process where socket timeouts do not apply.
+    pub timeout: Option<Duration>,
+}
+
+/// A response from the vectorlink engine.
+pub struct EngineResponse {
+    pub status: u16,
+    pub headers: HeaderMap,
+    pub body: ByteStream,
+}
+
+/// Transport to the vectorlink engine.
+///
+/// Two implementations exist:
+/// - `HttpTransport` (this module) — talks to a remote vectorlink server
+///   over reqwest, installed via `indexer_set_config`.
+/// - An in-process implementation installed by the `terminusdb-vectorlink`
+///   shim crate via `set_engine_transport` when the embedded backend is
+///   active (`TERMINUSDB_INDEXER_BACKEND=vectorlink`). It routes the same
+///   requests through vectorlink's own axum router without a socket.
+pub trait EngineTransport: Send + Sync + 'static {
+    fn execute<'a>(
+        &'a self,
+        req: EngineRequest,
+    ) -> BoxFuture<'a, Result<EngineResponse, String>>;
+
+    /// Downcast support for tests and diagnostics.
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+/// HTTP transport to a remote vectorlink server.
+struct HttpTransport {
+    client: reqwest::Client,
+    /// Scheme + authority, no trailing slash (e.g. "http://127.0.0.1:7372").
+    base_url: String,
+    auth_header: String,
+}
+
+impl EngineTransport for HttpTransport {
+    fn execute<'a>(&'a self, req: EngineRequest) -> BoxFuture<'a, Result<EngineResponse, String>> {
+        Box::pin(async move {
+            use http_body_util::StreamBody;
+            use http_body::Frame;
+
+            let method = req.method.clone();
+            let url = format!("{}{}", self.base_url, req.path);
+            let mut builder = self
+                .client
+                .request(req.method, &url)
+                .header("Authorization", &self.auth_header);
+            if let Some(ct) = req.content_type {
+                builder = builder.header("Content-Type", ct);
+            }
+            if let Some(timeout) = req.timeout {
+                builder = builder.timeout(timeout);
+            }
+            if let Some(body) = req.body {
+                let stream = StreamBody::new(body.map(|r| {
+                    r.map(Frame::data)
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                }));
+                builder = builder.body(reqwest::Body::wrap(stream));
+            }
+            let resp = builder
+                .send()
+                .await
+                .map_err(|e| format!("{} {} failed: {}", method, url, e))?;
+            Ok(EngineResponse {
+                status: resp.status().as_u16(),
+                headers: resp.headers().clone(),
+                body: boxed_sync_stream(
+                    resp.bytes_stream().map(|r| r.map_err(|e| e.to_string())),
+                ),
+            })
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// Collect a response body stream into a single buffer.
+async fn collect_body(mut stream: ByteStream) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        out.extend_from_slice(&chunk?);
+    }
+    Ok(out)
+}
 
 // ───────────────────────── Data structures ─────────────────────────
 
@@ -261,9 +400,10 @@ pub struct IndexerRegistry {
     tasks: StdMutex<HashMap<BranchKey, Arc<BranchTask>>>,
     pending_queue: StdMutex<VecDeque<BranchKey>>,
     current_branch: StdMutex<Option<BranchKey>>,
-    vectorlink_url: StdMutex<Option<String>>,
-    auth_header: StdMutex<Option<String>>,
-    http_client: reqwest::Client,
+    /// How indexer traffic reaches the vectorlink engine. Set either by
+    /// `indexer_set_config` (remote HTTP) or `set_engine_transport`
+    /// (embedded, installed by the terminusdb-vectorlink shim crate).
+    transport: StdMutex<Option<Arc<dyn EngineTransport>>>,
     /// Cache of domains known to have no embedding types in their schema.
     /// Keyed by the path portion of BranchKey (e.g. "admin/db/local/branch/main").
     /// When a domain is in this set, notify() with has_embeddings=false
@@ -279,28 +419,43 @@ impl IndexerRegistry {
             tasks: StdMutex::new(HashMap::new()),
             pending_queue: StdMutex::new(VecDeque::new()),
             current_branch: StdMutex::new(None),
-            vectorlink_url: StdMutex::new(None),
-            auth_header: StdMutex::new(None),
-            http_client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .build()
-                .expect("failed to build reqwest client"),
+            transport: StdMutex::new(None),
             no_embedding_cache: StdMutex::new(HashSet::new()),
         }
     }
 
+    /// Configure the remote HTTP vectorlink backend (called from the
+    /// `indexer_set_config` FFI predicate).
     fn set_config(&self, url: String, auth: String) {
-        *self.vectorlink_url.lock().unwrap() = Some(url);
-        *self.auth_header.lock().unwrap() = Some(auth);
+        if url.trim().is_empty() {
+            // Preserve previous semantics: an empty URL means "not
+            // configured" — get_transport() then reports the error at
+            // use time rather than here.
+            return;
+        }
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .expect("failed to build reqwest client");
+        *self.transport.lock().unwrap() = Some(Arc::new(HttpTransport {
+            client,
+            base_url: url.trim_end_matches('/').to_string(),
+            auth_header: auth,
+        }));
     }
 
-    fn get_config(&self) -> Result<(String, String), String> {
-        let url = self.vectorlink_url.lock().unwrap().clone()
-            .filter(|u| !u.is_empty())
-            .ok_or("vectorlink_url not set")?;
-        let auth = self.auth_header.lock().unwrap().clone()
-            .unwrap_or_default();
-        Ok((url, auth))
+    /// Install an engine transport directly. Used by the embedded
+    /// vectorlink backend (see the terminusdb-vectorlink crate).
+    fn set_transport(&self, transport: Arc<dyn EngineTransport>) {
+        *self.transport.lock().unwrap() = Some(transport);
+    }
+
+    fn get_transport(&self) -> Result<Arc<dyn EngineTransport>, String> {
+        self.transport
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| "engine transport not configured".to_string())
     }
 
     /// Notify that a commit happened on a branch. If a task already exists,
@@ -416,10 +571,9 @@ impl IndexerRegistry {
             }
         }
 
-        // 2. Call DELETE /branch-index on vectorlink (async), then create
+        // 2. Call DELETE /domain on vectorlink (async), then create
         //    a fresh task and enqueue it after the delete completes.
-        let (vectorlink_url, auth_header) = self.get_config()?;
-        let http_client = self.http_client.clone();
+        let transport = self.get_transport()?;
         let domain = key.domain().to_string();
         let branch_clone = branch.clone();
         let path_clone = path.clone();
@@ -436,22 +590,25 @@ impl IndexerRegistry {
                     // branch tags. Using /domain (not /branch-index) ensures
                     // old documents are wiped, so re-indexed pushes insert
                     // fresh data instead of silently upserting existing docs.
-                    let delete_url = format!(
-                        "{}/domain?domain={}",
-                        vectorlink_url.trim_end_matches('/'),
+                    let delete_path = format!(
+                        "/domain?domain={}",
                         urlencoding::encode(&domain),
                     );
                     crate::log::log_info(format!(
                         "[indexer] reindex: DELETE {} for {} {}",
-                        delete_url, path_clone, branch_clone
+                        delete_path, path_clone, branch_clone
                     ));
-                    let resp = http_client
-                        .delete(&delete_url)
-                        .header("Authorization", &auth_header)
-                        .send()
+                    let resp = transport
+                        .execute(EngineRequest {
+                            method: Method::DELETE,
+                            path: delete_path,
+                            body: None,
+                            content_type: None,
+                            timeout: Some(Duration::from_secs(30)),
+                        })
                         .await;
                     match resp {
-                        Ok(r) if r.status().is_success() => {
+                        Ok(r) if (200..300).contains(&r.status) => {
                             crate::log::log_info(format!(
                                 "[indexer] reindex: domain deleted for {} {}",
                                 path_clone, branch_clone
@@ -460,7 +617,7 @@ impl IndexerRegistry {
                         Ok(r) => {
                             crate::log::log_error(format!(
                                 "[indexer] reindex: DELETE domain returned {}: {}",
-                                r.status(),
+                                r.status,
                                 path_clone
                             ));
                         }
@@ -577,12 +734,14 @@ impl IndexerRegistry {
         // when the push actually begins. This prevents false positives
         // when the worker is busy with other requests and the dispatch
         // sits in the queue for a long time.
-        progress.set_pending_commit(next_commit.clone().unwrap_or_default());
+        if let Some(ref c) = next_commit {
+            progress.set_pending_commit(c.clone());
+        }
 
-        let (vectorlink_url, auth_header) = match self.get_config() {
-            Ok(c) => c,
+        let transport = match self.get_transport() {
+            Ok(t) => t,
             Err(e) => {
-                crate::log::log_error(format!("[indexer] config not set: {}", e));
+                crate::log::log_error(format!("[indexer] engine transport not set: {}", e));
                 progress.set_error(e);
                 *self.current_branch.lock().unwrap() = None;
                 self.remove_task(&key);
@@ -603,8 +762,6 @@ impl IndexerRegistry {
             }
         };
 
-        let http_client = self.http_client.clone();
-
         match crate::dispatch::tokio_handle() {
             Some(h) => {
                 let registry_clone = registry.clone();
@@ -613,9 +770,7 @@ impl IndexerRegistry {
                     let result = std::panic::AssertUnwindSafe(
                         run_commit_task(
                             key_clone.clone(),
-                            vectorlink_url,
-                            auth_header,
-                            http_client,
+                            transport,
                             progress.clone(),
                             cancel,
                             next_commit,
@@ -922,6 +1077,16 @@ impl IndexerRegistry {
 /// Global indexer registry singleton.
 static INDEXER_REGISTRY: std::sync::OnceLock<Arc<IndexerRegistry>> = std::sync::OnceLock::new();
 
+/// Install an engine transport into the global registry.
+///
+/// Called by the `terminusdb-vectorlink` shim crate when the embedded
+/// vectorlink backend initializes (`TERMINUSDB_INDEXER_BACKEND=vectorlink`).
+/// After this call, all indexer traffic (last-indexed, push, delete domain)
+/// flows through the given transport instead of a remote HTTP server.
+pub fn set_engine_transport(transport: Arc<dyn EngineTransport>) {
+    indexer_registry().set_transport(transport);
+}
+
 /// Get the global indexer registry, initializing it if needed.
 /// Also spawns the dead man's switch watchdog task on first init.
 fn indexer_registry() -> &'static Arc<IndexerRegistry> {
@@ -960,9 +1125,7 @@ fn indexer_registry() -> &'static Arc<IndexerRegistry> {
 /// Returns the TaskResult so the scheduler can decide what to do next.
 async fn run_commit_task(
     key: BranchKey,
-    vectorlink_url: String,
-    auth_header: String,
-    http_client: reqwest::Client,
+    transport: Arc<dyn EngineTransport>,
     progress: Arc<BranchProgress>,
     cancel: tokio_util::sync::CancellationToken,
     next_commit: Option<String>,
@@ -983,7 +1146,7 @@ async fn run_commit_task(
     let (commit_id, mode) = match next_commit {
         Some(c) => (c, "process"),
         None => {
-            match get_last_indexed(&http_client, &vectorlink_url, &key, &auth_header).await {
+            match get_last_indexed(&transport, &key).await {
                 Ok(c) if !c.is_empty() => {
                     // We have a last-indexed commit. We need to find the next commit
                     // after it. The Prolog handler will do this — we pass the
@@ -1175,12 +1338,10 @@ async fn run_commit_task(
 
     // 6. Stream the NDJSON body (leftover + remaining pipe data) to vectorlink /push.
     let push_result = post_push_stream(
-        &http_client,
-        &vectorlink_url,
+        &transport,
         &key,
         &actual_commit_id,
         &parent_commit,
-        &auth_header,
         leftover_body,
         pipe_receiver,
         &cancel,
@@ -1208,36 +1369,30 @@ async fn run_commit_task(
 /// GET /last-indexed from vectorlink.
 /// Returns the commit ID string, or empty string if never indexed (null).
 async fn get_last_indexed(
-    http_client: &reqwest::Client,
-    vectorlink_url: &str,
+    transport: &Arc<dyn EngineTransport>,
     key: &BranchKey,
-    auth_header: &str,
 ) -> Result<String, String> {
-    let url = format!(
-        "{}/last-indexed?domain={}&branch={}",
-        vectorlink_url.trim_end_matches('/'),
-        urlencoding::encode(key.domain()),
-        urlencoding::encode(&key.branch),
-    );
+    let resp = transport
+        .execute(EngineRequest {
+            method: Method::GET,
+            path: format!(
+                "/last-indexed?domain={}&branch={}",
+                urlencoding::encode(key.domain()),
+                urlencoding::encode(&key.branch),
+            ),
+            body: None,
+            content_type: None,
+            timeout: Some(Duration::from_secs(5)),
+        })
+        .await?;
 
-    let resp = http_client
-        .get(&url)
-        .header("Authorization", auth_header)
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await
-        .map_err(|e| format!("GET /last-indexed failed: {}", e))?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("GET /last-indexed returned {}: {}", status, body));
+    let status = resp.status;
+    let body_bytes = collect_body(resp.body).await.unwrap_or_default();
+    let body_text = String::from_utf8_lossy(&body_bytes).to_string();
+    if !(200..300).contains(&status) {
+        return Err(format!("GET /last-indexed returned {}: {}", status, body_text));
     }
 
-    let body_text = resp
-        .text()
-        .await
-        .map_err(|e| format!("failed to read /last-indexed response: {}", e))?;
     let body: serde_json::Value = serde_json::from_str(&body_text)
         .map_err(|e| format!("failed to parse /last-indexed response: {}", e))?;
 
@@ -1253,32 +1408,25 @@ async fn get_last_indexed(
 ///
 /// Returns Ok(()) on success (2xx or 409), Err on failure.
 async fn post_push_stream(
-    http_client: &reqwest::Client,
-    vectorlink_url: &str,
+    transport: &Arc<dyn EngineTransport>,
     key: &BranchKey,
     commit_id: &str,
     parent_commit: &str,
-    auth_header: &str,
     leftover: Vec<u8>,
     mut receiver: PipeReceiver,
     cancel: &tokio_util::sync::CancellationToken,
     progress: &Arc<BranchProgress>,
     store_clustering: bool,
 ) -> Result<(), String> {
-    use futures::StreamExt;
-    use http_body_util::StreamBody;
-    use http_body::Frame;
-
     let clustering_param = if store_clustering {
         "&store_clustering=true"
     } else {
         ""
     };
 
-    let url = if parent_commit == "none" || parent_commit.is_empty() {
+    let path = if parent_commit == "none" || parent_commit.is_empty() {
         format!(
-            "{}/push?domain={}&branch={}&target_commit={}&stream=true{}",
-            vectorlink_url.trim_end_matches('/'),
+            "/push?domain={}&branch={}&target_commit={}&stream=true{}",
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
@@ -1286,8 +1434,7 @@ async fn post_push_stream(
         )
     } else {
         format!(
-            "{}/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true{}",
-            vectorlink_url.trim_end_matches('/'),
+            "/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true{}",
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
@@ -1369,49 +1516,50 @@ async fn post_push_stream(
         drop(body_tx);
     });
 
-    let stream = tokio_stream::wrappers::ReceiverStream::new(body_rx);
-    let body = StreamBody::new(stream.map(|result| {
-        result.map(|bytes| Frame::data(bytes))
-    }));
+    let stream = tokio_stream::wrappers::ReceiverStream::new(body_rx)
+        .map(|r| r.map_err(|e: std::io::Error| e.to_string()));
 
-    crate::log::log_info(format!("[indexer] POST /push URL: {}", url));
+    crate::log::log_info(format!("[indexer] POST /push path: {}", path));
 
-    let resp = http_client
-        .post(&url)
-        .header("Authorization", auth_header)
-        .header("Content-Type", "application/x-ndjson")
-        .body(reqwest::Body::wrap(body))
-        .timeout(std::time::Duration::from_secs(600))
-        .send()
-        .await
-        .map_err(|e| format!("POST /push failed: {}", e))?;
+    let resp = transport
+        .execute(EngineRequest {
+            method: Method::POST,
+            path,
+            body: Some(boxed_sync_stream(stream)),
+            content_type: Some("application/x-ndjson".to_string()),
+            timeout: Some(Duration::from_secs(600)),
+        })
+        .await?;
 
-    let status = resp.status();
+    let status = resp.status;
 
     // Log X-Task-Id from response header if present.
-    if let Some(task_id) = resp.headers().get("X-Task-Id") {
+    if let Some(task_id) = resp.headers.get("X-Task-Id") {
         crate::log::log_info(format!(
             "[indexer] POST /push X-Task-Id: {}",
             task_id.to_str().unwrap_or("<invalid>")
         ));
     }
 
-    if !status.is_success() {
+    if !(200..300).contains(&status) {
         // Non-streaming error response (e.g. 409, 422, 400, 503) — read as text.
-        let resp_body = resp.text().await.unwrap_or_default();
+        let resp_body = String::from_utf8_lossy(
+            &collect_body(resp.body).await.unwrap_or_default(),
+        )
+        .to_string();
         crate::log::log_info(format!(
             "[indexer] POST /push response status: {}, body: {}",
             status, resp_body
         ));
-        if status.as_u16() == 409 {
+        if status == 409 {
             // 409 Conflict: commit already indexed by vectorlink.
             // This is a safe no-op — treat as success.
             return Ok(());
         }
-        if status.as_u16() == 422 {
+        if status == 422 {
             return Err(format!("POST /push returned 422 (abort): {}", resp_body));
         }
-        if status.as_u16() == 503 {
+        if status == 503 {
             crate::log::log_info(format!(
                 "[indexer] POST /push returned 503 (compaction in progress), will retry"
             ));
@@ -1423,7 +1571,7 @@ async fn post_push_stream(
     // Stream the NDJSON response body, parsing each line as a ProgressUpdate.
     // Progress lines: {"status":"progress","indexed":N,"total_seen":M,"skipped":K}
     // Terminal lines: {"status":"complete",...} or {"status":"error",...} or {"status":"aborted"}
-    let mut resp_stream = resp.bytes_stream();
+    let mut resp_stream = resp.body;
     let mut ndjson_buf = String::new();
     let mut terminal_status: Option<String> = None;
     let mut terminal_error: Option<String> = None;
@@ -1531,7 +1679,7 @@ async fn post_push_stream(
             terminal_error.unwrap_or_else(|| "unknown".to_owned())
         )),
         _ => {
-            if status.is_success() {
+            if (200..300).contains(&status) {
                 crate::log::log_info(
                     "[indexer] response stream ended without terminal status, treating as success".to_string(),
                 );
@@ -1682,16 +1830,27 @@ mod tests {
     #[test]
     fn test_indexer_registry_new() {
         let registry = IndexerRegistry::new();
-        assert!(registry.get_config().is_err(), "config should be unset");
+        assert!(registry.get_transport().is_err(), "transport should be unset");
     }
 
     #[test]
     fn test_indexer_registry_set_get_config() {
         let registry = IndexerRegistry::new();
         registry.set_config("http://localhost:8080".to_string(), "Basic abc".to_string());
-        let (url, auth) = registry.get_config().expect("config should be set");
-        assert_eq!(url, "http://localhost:8080");
-        assert_eq!(auth, "Basic abc");
+        let transport = registry.get_transport().expect("transport should be set");
+        let transport = transport
+            .as_any()
+            .downcast_ref::<HttpTransport>()
+            .expect("set_config installs an HttpTransport");
+        assert_eq!(transport.base_url, "http://localhost:8080");
+        assert_eq!(transport.auth_header, "Basic abc");
+    }
+
+    #[test]
+    fn test_indexer_registry_set_config_empty_url_leaves_transport_unset() {
+        let registry = IndexerRegistry::new();
+        registry.set_config("".to_string(), "Basic abc".to_string());
+        assert!(registry.get_transport().is_err());
     }
 
     #[test]
@@ -2305,7 +2464,7 @@ mod tests {
             branch: "dummy".to_string(),
         });
 
-        registry.notify(path.clone(), branch.clone(), false, true);
+        registry.notify(path.clone(), branch.clone(), false, true).unwrap();
         assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),
             "no_embedding_cache should be cleared when has_embeddings=true");
     }
