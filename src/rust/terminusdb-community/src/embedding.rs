@@ -2,6 +2,7 @@ use std::{collections::HashMap, io::Write, sync::Arc};
 
 use crate::{
     graphql::{
+        post_process_graphql_numbers,
         schema::TerminusTypeCollectionInfo, type_collection_from_term, GraphQLExecutionContext,
     },
     template::handlebars_from_term,
@@ -131,7 +132,9 @@ impl EmbeddingContext {
         let mut queries = HashMap::new();
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
-        let execution_context = unsafe {
+        let true_term = context.new_term_ref();
+        true_term.unify(atom!("true"))?;
+        let execution_context =
             GraphQLExecutionContext::new_from_context_terms(
                 types.clone(),
                 context,
@@ -142,8 +145,8 @@ impl EmbeddingContext {
                 &transaction_term,
                 &none_term,
                 &none_term,
-            )?
-        };
+                &true_term,
+            )?;
         let inner_context = execution_context.prolog_context();
 
         for type_tuple_term in inner_context.term_list_iter(queries_term) {
@@ -204,7 +207,9 @@ impl EmbeddingContext {
     ) -> Result<Value<DefaultScalarValue>, EmbeddingError> {
         let none_term = context.new_term_ref();
         none_term.unify(atom!("none"))?;
-        let execution_context = unsafe {
+        let true_term = context.new_term_ref();
+        true_term.unify(atom!("true"))?;
+        let execution_context =
             GraphQLExecutionContext::new_from_context_terms(
                 self.types.clone(),
                 context,
@@ -215,8 +220,8 @@ impl EmbeddingContext {
                 transaction_term,
                 &none_term,
                 &none_term,
-            )?
-        };
+                &true_term,
+            )?;
         let document = self.get_query_document(&type_name);
         if document.is_none() {
             return Err(LimitedEmbeddingError::NoQueryForType {
@@ -279,7 +284,7 @@ impl EmbeddingContext {
 
         if self.templates.has_template(&type_name) {
             match self.templates.render(&*type_name, &doc) {
-                Ok(result) => Ok(result),
+                Ok(result) => Ok(post_process_graphql_numbers(result)),
                 Err(e) => {
                     let msg = e.to_string();
                     let line = e.line_no.unwrap_or(0) as u64;
@@ -296,7 +301,7 @@ impl EmbeddingContext {
         } else {
             let result = serde_json::to_string(&doc)
                 .expect("Couldn't turn a graphql result document into a json string");
-            Ok(result)
+            Ok(post_process_graphql_numbers(result))
         }
     }
 }

@@ -43,7 +43,7 @@ user_organizations(System_DB, Auth, Result) :-
 :- use_module(core(query)).
 :- use_module(core(transaction)).
 :- use_module(db_branch).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(retrieve_organization_databases,
      [setup((setup_temp_store(State),

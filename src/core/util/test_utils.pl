@@ -42,9 +42,13 @@
 
               with_test_transaction/3,
               with_test_transaction/4,
+              with_quiet_user_error/1,
 
               write_schema_string/2,
-              write_schema/2
+              write_schema/2,
+
+              is_uuid_v7_string/1,
+              ends_with_uuid_v7/1
           ]).
 
 /** <module> Test Utilities
@@ -81,13 +85,14 @@
 
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(filesex)).
 
 :- use_module(library(debug)).
+:- use_module(library(memfile)).
 :- use_module(library(process)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
@@ -111,6 +116,32 @@
 %
 test_format(Goal, Format, Args) :-
     print_message(testing, test_format(Goal, Format, Args)).
+
+:- meta_predicate with_quiet_user_error(0).
+
+%!  with_quiet_user_error(:Goal) is det
+%
+%   Run Goal with `user_error` redirected to a memory file.
+%   Suppresses expected json_log/format output from tests that
+%   deliberately trigger error paths. The alias is restored on
+%   completion, failure or exception.
+%
+%   A memory file is used so no OS fd is allocated — real files can
+%   reuse an fd the test just closed, changing what code under test
+%   observes.
+%
+with_quiet_user_error(Goal) :-
+    stream_property(OldErr, alias(user_error)),
+    new_memory_file(MemFile),
+    open_memory_file(MemFile, write, NullStream),
+    setup_call_cleanup(
+        set_stream(NullStream, alias(user_error)),
+        Goal,
+        (   close(NullStream),
+            set_stream(OldErr, alias(user_error)),
+            free_memory_file(MemFile)
+        )
+    ).
 
 :- multifile prolog:message//1.
 
@@ -466,7 +497,9 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'SystemRoot', % Windows specific stuff...
                          'TMP', % Windows sadness
                          'TEMP', % Again...
+                         'TERMINUSDB_ADDON_PATH',
                          'TERMINUSDB_ADMIN_PASSWD',
+                         'TERMINUSDB_PLUGINS_PATH',
                          'TERMINUSDB_SERVER_PACK_DIR',
 %                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH',
@@ -643,10 +676,10 @@ test_woql_label_descriptor(Name, Descriptor) :-
                      instance: Instance_Name
                  }.
 
+:- meta_predicate with_test_transaction(+, -, :, -).
 :- meta_predicate with_test_transaction(+, -, :).
 with_test_transaction(Descriptor, Context, Goal) :-
     with_test_transaction(Descriptor, Context, Goal, _).
-:- meta_predicate with_test_transaction(+, -, :, -).
 with_test_transaction(Descriptor, Context, Goal, Result) :-
     do_or_die(var(Context),
               error(test_transaction_initiated_with_bound_context, _)),
@@ -662,3 +695,16 @@ write_schema_string(Schema, Desc) :-
 write_schema(P,Desc) :-
     call(P,Schema),
     write_schema_string(Schema, Desc).
+
+/* RFC 9562 UUID v7 shape: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx */
+is_uuid_v7_string(S) :-
+    string_length(S, 36),
+    split_string(S, "-", "", [_G1, _G2, G3, G4, _G5]),
+    sub_string(G3, 0, 1, _, "7"),
+    sub_string(G4, 0, 1, _, Variant),
+    memberchk(Variant, ["8", "9", "a", "b"]).
+
+ends_with_uuid_v7(Id) :-
+    atom_string(Id, S),
+    sub_string(S, _, 36, 0, UUID),
+    is_uuid_v7_string(UUID).

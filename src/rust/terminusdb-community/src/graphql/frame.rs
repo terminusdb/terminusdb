@@ -661,6 +661,7 @@ impl FieldDefinition {
 #[serde(tag = "@type")]
 pub enum UncleanKeyDefinition {
     Random,
+    UuidV7,
     Lexical {
         #[serde(rename = "@fields")]
         fields: Vec<ShortName>,
@@ -676,6 +677,7 @@ pub enum UncleanKeyDefinition {
 #[serde(tag = "@type")]
 pub enum KeyDefinition {
     Random,
+    UuidV7,
     Lexical {
         #[serde(rename = "@fields")]
         fields: Vec<GraphQLName<'static>>,
@@ -691,6 +693,7 @@ impl UncleanKeyDefinition {
     pub fn sanitize(self) -> KeyDefinition {
         match self {
             UncleanKeyDefinition::Random => KeyDefinition::Random,
+            UncleanKeyDefinition::UuidV7 => KeyDefinition::UuidV7,
             UncleanKeyDefinition::Lexical { fields } => {
                 let fields = fields.iter().map(|f| f.sanitize()).collect();
                 KeyDefinition::Lexical { fields }
@@ -1156,6 +1159,16 @@ impl AllFrames {
         self.class_renaming.get_by_right(short_name).cloned()
     }
 
+    pub fn cache_key(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let debug_str = format!("{:?}", self);
+        let mut hasher = DefaultHasher::new();
+        debug_str.hash(&mut hasher);
+        hasher.finish()
+    }
+
     #[allow(dead_code)]
     pub fn short_name_to_graphql_name<'a>(&'a self, db_name: &ShortName) -> GraphQLName<'a> {
         self.short_to_graphql_name_opt(db_name)
@@ -1225,6 +1238,31 @@ impl AllFrames {
             .get(class)
             .cloned()
             .unwrap_or_else(|| vec![class.clone()])
+    }
+
+    /// Returns all superclasses of `class` (including `class` itself),
+    /// walking the `@inherits` chain. Used by _ChangeSet to group
+    /// subclass documents under their superclass fields.
+    pub fn superclasses_of<'a>(&'a self, class: &GraphQLName<'a>) -> Vec<GraphQLName<'a>> {
+        let mut result = vec![class.clone()];
+        let mut current = class.clone();
+        loop {
+            let next = self.frames.get(&current);
+            match next {
+                Some(TypeDefinition::Class(cd)) => {
+                    if let Some(inherits) = &cd.inherits {
+                        if let Some(first) = inherits.first() {
+                            result.push(first.clone());
+                            current = first.clone();
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                _ => break,
+            }
+        }
+        result
     }
 
     pub fn is_foreign<'a>(&'a self, class: &GraphQLName<'a>) -> bool {

@@ -86,7 +86,7 @@ jobs:
             --name=terminusdb \
             --detach \
             --net=host \
-            -e TERMINUSDB_PLUGINS_PATH=/void \
+            -e TERMINUSDB_PLUGINS_PATH=/plugins \
             terminusdb/terminusdb-server:local
 
       # Give the server some time to start up

@@ -37,6 +37,8 @@
               schema_oneof_descriptor/3,
               type_family_constructor/1,
               is_schemaless/1,
+              schema_is_schemaless/1,
+              schemaless_shape_check_disabled/1,
               drop_schemaless_mode/1,
               concrete_subclass/3,
               is_abstract/2,
@@ -306,6 +308,11 @@ schema_supermap(Schema, Prefixes, Supermap, Options) :-
     ;   schema_supermap_compute(Schema, Prefixes, Supermap, Options)
     ).
 
+% The supermap is a pure function of the schema read layer, and building it
+% walks the transitive superclass closure of every schema class. It is invoked
+% once per elaborated document via schema_class_frame/5, so it must be cached
+% or elaboration pays O(schema classes * hierarchy depth) triple reads per
+% document.
 :- table schema_supermap_tabled/4 as private.
 schema_supermap_tabled(Layer, Prefixes, Supermap, Options) :-
     schema_supermap_compute([_{read: Layer}], Prefixes, Supermap, Options).
@@ -901,7 +908,7 @@ refute_documentation_value(Schema,Type,Class,Result,Witness) :-
     ).
 
 is_key(Type) :-
-    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
+    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random', sys:'UuidV7'], List),
     memberchk(Type, List).
 
 is_documentation(Type) :-
@@ -1331,10 +1338,31 @@ schema_key_descriptor_(Schema, Prefixes, Type, Obj, value_hash(Base)) :-
 schema_key_descriptor_(Schema, Prefixes, Type, Obj, random(Base)) :-
     xrdf(Schema, Obj, rdf:type, sys:'Random'),
     schema_key_base(Schema,Prefixes,Type,Base).
+schema_key_descriptor_(Schema, Prefixes, Type, Obj, uuid_v7(Base)) :-
+    xrdf(Schema, Obj, rdf:type, sys:'UuidV7'),
+    schema_key_base(Schema,Prefixes,Type,Base).
+
+:- create_prolog_flag(terminusdb_schemaless_shape_check_disabled, false,
+                      [type(boolean), keep(true)]).
+
+:- initialization(
+    (   getenv('TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED', Value),
+        atom_string(Value_Atom, Value),
+        memberchk(Value_Atom, [true, 'true', '1', yes])
+    ->  set_prolog_flag(terminusdb_schemaless_shape_check_disabled, true)
+    ;   set_prolog_flag(terminusdb_schemaless_shape_check_disabled, false)
+    ), program).
+
+schema_is_schemaless(Schema) :-
+    xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
+
+schemaless_shape_check_disabled(Schema) :-
+    schema_is_schemaless(Schema),
+    current_prolog_flag(terminusdb_schemaless_shape_check_disabled, true).
 
 is_schemaless(Validation_Object) :-
     database_schema(Validation_Object, Schema),
-    xrdf(Schema, 'terminusdb://data/Schema', rdf:type, rdf:nil).
+    schema_is_schemaless(Schema).
 
 drop_schemaless_mode(Transaction) :-
    (   is_schemaless(Transaction)

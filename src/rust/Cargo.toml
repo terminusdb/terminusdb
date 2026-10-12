@@ -1,13 +1,15 @@
 [workspace]
-members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib"]
-resolver = "1"
+members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib", "terminusdb-webserver"]
+# v2 required for per-platform dep features: v1 unifies them across all
+# targets, leaking tikv-jemallocator/background_threads into macOS builds.
+resolver = "2"
 
 [profile.release]
 debug = true
 
 [patch.crates-io]
 #tdb-succinct = {path="../../../tdb-succinct"}
-tdb-succinct = {git="https://github.com/terminusdb-org/tdb-succinct"}
+tdb-succinct = {git="https://github.com/terminusdb-org/tdb-succinct", branch="xbrl-json-iso-intervals"}
 #terminus-store = {path="../../../terminusdb-store"}
 terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store"}
 swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
