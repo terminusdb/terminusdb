@@ -24,7 +24,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Check for file changes
       id: check_changes
@@ -57,13 +57,13 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install swi-prolog 
         run: ./.github/install-swi-prolog.sh stable
 
       - name: Checkout tus
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: terminusdb-org/tus
           path: tus
