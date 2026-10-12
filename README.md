@@ -13,47 +13,29 @@
 [![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Project Overview (Updated May 2026)
+## TerminusDB is a Knowledge Graph Database with Version Control
 
-**TerminusDB is a distributed database with a collaboration model — git for data.**
+**A graph database with distributed JSON and RDF, with a git for data collaboration model built in**
 
-If you find this project useful, please consider **starring the repo** ⭐
+Please consider **starring our repo** ⭐ to find your way back, and join us on **[Discord](https://discord.gg/yTJKAma)**
 
 TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.org/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
-
-Now with new maintainers and an enterprise version. 
 
 ### Key Features
 
 - **Revision Control**: Commits for every update — track changes over time
-- **Diff**: Differences between commits can be interpreted as patches between states
+- **JSON Diff and Patch**: Differences between commits can be applied as patches
 - **Push/Pull/Clone**: Communicate diffs between nodes using familiar git-like operations
-- **Time-Travel Queries**: Query any state of the database at any commit
-- **Document + Knowledge Graph**: Link JSON documents in a knowledge graph
-- **Multimodal**: Support for REST API, GraphQL, WOQL and with Closed World RDF
+- **Time-Travel Queries**: Query any state of the database at any historical commit
+- **Document + Knowledge Graph**: Link JSON documents in a knowledge graph using JSON-LD
+- **Multimodal**: Support for REST API, GraphQL, WOQL and using RDF semantics
 - **Goal seeking**: Built in unification, path queries, and a datalog logic engine
-
-### What's New in Version 12
-
-[TerminusDB 12](https://github.com/terminusdb/terminusdb/releases/tag/v12.0.5) features performance, stability and precision provided by the new [DFRNT](https://dfrnt.com?utm_source=github_terminusdb) maintainers. Now engineered for industrial and financial use cases with high precision math, temporal reasoning, and stability under load. Version 12 includes:
-
-- **[Arbitrary Precision xsd:decimal]()**: Arbitrary rational precision xsd:decimal mathematics, including high precision JSON decimals over the wire for JSON, GraphQL and WOQL, see [ISO/IEC 21778:2017](https://www.iso.org/standard/71616.html)
-- **[Allen Integer Algebra and Temporal Reasoning](https://terminusdb.org/docs/woql-interval-algebra/)**: Reason about ISO8601 date, time and durations with high precision rational math
-- **[Range Queries over Succinct Data](https://terminusdb.org/docs/woql-triple-slice/)**: Extremely fast range queries with constant time retrieval over arbitrary size ordered data, which is great for knowledge graph processing over timestamp, numeric, and interval ranges; with strong temporal reasoning and classification
-- **[ISO8601 Allen Interval Algebra](https://terminusdb.org/docs/woql-interval-algebra/)**: Support for temporal reasoning and storage of XSD time datatypes including temporal interval classification, storage and life cycle management with datalog reasoning
-- **[JSON Git-for-Data (Linked Data)](https://terminusdb.org/docs/git-for-data-reference/)**: Git for data for JSON, JSON-LD, XML and Turtle documents with schema control (and also for deduplicated schemaless JSON documents)
-- **[REST API](https://terminusdb.org/docs/rest-api)**: Use REST API as a proper graph query language with deep link discovery, path queries and linked data
-- **[GraphQL Support](https://terminusdb.org/docs/graphql-basics)**: Use GraphQL as a proper graph query language with deep link discovery and path queries
-- **[WOQL Datalog](https://terminusdb.org/docs/what-is-datalog)**: Use WOQL as a goal-seeking problem-solving toolbox, complete with triples across and within documents, path queries and variables unification
-- **[Schema Constraints](https://terminusdb.org/docs/schema-reference-guide/)**: Use schema constraints to enforce data quality and consistency, including for advanced typing
-- **`@unfoldable` Documents**: Unfold subdocuments within a frame to add all relevant data in one place
-- **`@metadata` Support**: Include additional metadata in document frames, including Markdown-formatted data
 
 ## Getting Started
 
 The easiest way to install TerminusDB as a developer is by following the [10-minutes docker getting started manual](https://terminusdb.org/docs/get-started/) with the latest [Docker TerminusDB Image](https://hub.docker.com/r/terminusdb/terminusdb-server). It can be installed locally using [Snap](https://snapcraft.io/terminusdb) as both git-for-data client and server to perform push and pull. Docker brings the server component, and snap the ability to try TerminusDB on the command line, for example for ML/Ops and AI use cases requiring deterministic symbolic AI processing.
 
-For deployments, copy the docker-compose.yml file from the repository. For a complete modeller user interface, create an account for the [DFRNT Studio](https://studio.dfrnt.com) which can also be used to model TerminusDB on localhost! There is still the possibility to run the now deprecated (buggy) dashboard, by following a [the instructions for the TerminusDB dashboard](https://terminusdb.org/docs/dashboard).
+For deployments, copy the [docker-compose.yml](./docker-compose.yml) file from the repository.
 
 1. Add the following to a `.env` file in the source directory:
 
@@ -73,7 +55,7 @@ You should be able to view TerminusDB running by default at `localhost:6363`
 
 > If you're installing TerminusDB on Windows with Docker, follow the comprehensive guide for [TerminusDB on Windows with Docker]([https://dfrnt.com/blog/2023-02-25-run-terminusdb-on-windows-with-docker/](https://terminusdb.org/docs/install-terminusdb-docker-windows/)).
 
-You can also install TerminusDB from [Source Code](https://terminusdb.org/docs/install-terminusdb-from-source-code).
+You can also install TerminusDB from [Source Code](https://terminusdb.com/docs/install-terminusdb-from-source-code).
 
 ## Usage
 
@@ -96,20 +78,6 @@ terminusdb doc insert admin/example1 --message='adding Gavin' <<EOF
 EOF
 ```
 
-### Client Libraries
-
-TerminusDB provides official client libraries for multiple languages:
-
-- 🐍 **[Python Client (v12)](https://pypi.org/project/terminusdb/)**: Full-featured Python library for TerminusDB
-- 🌐 **[JavaScript Client (v12)](https://www.npmjs.com/package/terminusdb)**: Browser and Node.js support
-- 🦀 **[Rust Client](https://github.com/ParapluOU/terminusdb-rs)**: Full-featured Rust library for TerminusDB, community contribution
-- 🔮 **[Elixir Client](https://hex.pm/packages/terminusdb_client)**: An idiomatic Elixir client, community contribution
-
-
-## Documentation
-
-Full documentation is available at **[https://terminusdb.org/docs](https://terminusdb.org/docs/get-started-with-terminusdb/)**.
-
 ### Key Resources
 
 - **[What is TerminusDB](https://terminusdb.org/docs/terminusdb-explanation/)**: Why TerminusDB is a unique Graph Database
@@ -130,6 +98,35 @@ Come visit us on **[Discord](https://discord.gg/yTJKAma)** to:
 - Share your projects and use cases
 - Contribute to discussions
 - Stay updated on the latest developments
+
+### Client Libraries
+
+TerminusDB provides official client libraries for multiple languages:
+
+- 🐍 **[Python Client (v12)](https://pypi.org/project/terminusdb/)**: Full-featured Python library for TerminusDB
+- 🌐 **[JavaScript Client (v12)](https://www.npmjs.com/package/terminusdb)**: Browser and Node.js support
+- 🦀 **[Rust Client](https://github.com/ParapluOU/terminusdb-rs)**: Full-featured Rust library for TerminusDB, community contribution
+- 🔮 **[Elixir Client](https://hex.pm/packages/terminusdb_client)**: An idiomatic Elixir client, community contribution
+
+### What's New in Version 12
+
+[TerminusDB 12](https://github.com/terminusdb/terminusdb/releases/tag/v12.0.7) is maintained by the Gettier team and used in production today by many organizations. Now engineered for financial and industrial use cases with high precision math, temporal reasoning, and enterprise support. Version 12 additions by the [Gettier](https://gettier.ai?utm_source=github_terminusdb) team include:
+
+- **[Allen Integer Algebra and Temporal Reasoning](https://terminusdb.org/docs/woql-interval-algebra/)**: Support for temporal reasoning and storage of XSD time datatypes including temporal interval classification, storage and life cycle management with datalog reasoning
+- **[Range Queries over Succinct Data](https://terminusdb.org/docs/woql-triple-slice/)**: Extremely fast range queries with constant time retrieval over arbitrary size ordered data, which is great for knowledge graph processing over timestamp, numeric, and interval ranges; with strong temporal reasoning and classification
+- **[Raw JSON support](https://terminusdb.org/docs/raw-json/)**: Raw JSON support for documents where each object is only stored once (deduplicated) with unlimited size (seen up to 100mb JSON document loads)
+- **[JSON Git-for-Data (Linked Data)](https://terminusdb.org/docs/git-for-data-reference/)**: Git for data for JSON, JSON-LD, XML and Turtle documents with schema control (and also for deduplicated raw JSON documents)
+- **[REST API](https://terminusdb.org/docs/rest-api)**: Use REST API as a proper graph query language with deep link discovery, path queries and linked data
+- **[Arbitrary Precision xsd:decimal](https://terminusdb.org/docs/xsd-data-types/#xsd-decimal)**: Arbitrary rational precision xsd:decimal mathematics, including high precision JSON decimals over the wire for JSON, GraphQL and WOQL, see [ISO/IEC 21778:2017](https://www.iso.org/standard/71616.html)
+- **[GraphQL Support](https://terminusdb.org/docs/graphql-basics)**: Use GraphQL as a proper graph query language with deep link discovery and path queries
+- **[WOQL Datalog](https://terminusdb.org/docs/what-is-datalog)**: Use WOQL as a goal-seeking problem-solving toolbox, complete with triples across and within documents, path queries and variables unification
+- **[Schema Constraints](https://terminusdb.org/docs/schema-reference-guide/)**: Use schema constraints to enforce data quality and consistency, including for advanced typing
+- **`@unfoldable` Documents**: Unfold subdocuments within a frame to add all relevant data in one place
+- **`@shared` Documents with arbitrary IRI**: Load documents with arbitrary IRIs with cascading delete graph semantics
+- **`@metadata` Support**: Include additional metadata in document frames, including Markdown-formatted data
+## Documentation
+
+Full documentation is available at **[https://terminusdb.org/docs](https://terminusdb.org/docs/get-started-with-terminusdb/)**.
 
 ## Contributing
 
@@ -172,10 +169,11 @@ Found a bug? Have a feature request? Please [open an issue](https://github.com/t
 - Expected vs. actual behavior
 - Your environment details (OS, TerminusDB version)
 
-## License
+## License and copyright
 
-TerminusDB is licensed under the **Apache License 2.0**.
+Copyright (c) 2026 Gettier. TerminusDB is licensed under the **Apache License 2.0**.
 
 You may obtain a copy of the license at: http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
