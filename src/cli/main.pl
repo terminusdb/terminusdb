@@ -42,11 +42,24 @@
 
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
 
+% Commands that never open the store: skipping update_system_graphs and
+% load_plugins keeps them cheap and safe on locked or corrupt stores.
+store_free_invocation(Argv) :-
+    (   Argv = []
+    ;   Argv = [Cmd|_],
+        member(Cmd, ['--version', help])
+    ;   member(Help_Flag, ['-h', '--help']),
+        member(Help_Flag, Argv)
+    ).
+
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
-    update_system_graphs,
-    load_plugins,
+    (   store_free_invocation(Argv)
+    ->  true
+    ;   update_system_graphs,
+        load_plugins
+    ),
     % Better error handling here...
     catch_with_backtrace(
         (   set_prolog_flag(verbose, true),
