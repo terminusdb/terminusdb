@@ -27,7 +27,10 @@
                with_memory_file/1,
                alternate/2,
                with_memory_file_stream/3]).
-:- use_module(core(plugins)).
+% load_plugins/0 is only needed by `serve`; store-touching commands skip it
+% so per-invocation startup stays cheap (hook entry points degrade cleanly —
+% invoked via findall/forall, with shipping defaults in core modules).
+:- use_module(core(plugins), [load_plugins/0]).
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -45,8 +48,8 @@
 % Meta-predicate declaration must appear before any caller to satisfy xref.
 :- meta_predicate api_report_errors(?,0).
 
-% Commands that never open the store: skipping update_system_graphs and
-% load_plugins keeps them cheap and safe on locked or corrupt stores.
+% Commands that never open the store: skipping update_system_graphs keeps
+% them cheap and safe on locked or corrupt stores.
 store_free_invocation(Argv) :-
     (   Argv = []
     ;   Argv = [Cmd|_],
@@ -60,8 +63,7 @@ cli_toplevel :-
     initialise_log_settings,
     (   store_free_invocation(Argv)
     ->  true
-    ;   update_system_graphs,
-        load_plugins
+    ;   update_system_graphs
     ),
     % Better error handling here...
     (   catch_with_backtrace(
@@ -1650,7 +1652,8 @@ run_command(test,_Positional,Opts) :-
 run_command(serve,_Positional,Opts) :-
     api_report_errors(
         server,
-        (   option(interactive(true), Opts)
+        (   load_plugins,
+            option(interactive(true), Opts)
         ->  terminus_server([serve|Opts], false),
             prolog
         ;   terminus_server([serve|Opts], true))
