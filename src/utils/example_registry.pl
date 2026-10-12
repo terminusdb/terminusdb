@@ -4,7 +4,7 @@
  *
  * The Terminus DB API interface.
  *
- * A RESTful endpoint inventory for weilding the full capabilities of the
+ * A RESTful endpoint inventory for wielding the full capabilities of the
  * terminusDB.
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */

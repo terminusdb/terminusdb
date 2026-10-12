@@ -8,13 +8,20 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib"]
 
-[features]
-default = ["jemalloc-bg-threads"]
-jemalloc-bg-threads = ["tikv-jemallocator/background_threads"]
-
 [dependencies]
 terminusdb-community = {path="../terminusdb-community"}
 terminusdb-store-prolog = {path="../terminusdb-store-prolog"}
+terminusdb-webserver = {path="../terminusdb-webserver"}
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
+# background_threads is Linux-only (requires resolver="2" in the workspace so
+# target-gated dep features don't leak to other platforms). The embedded
+# jemalloc has no pthread bg-thread support on macOS and warns
+# `<jemalloc>: option background_thread currently supports pthread only` on
+# every process start, which breaks tests that regex-match stderr.
+# Nix/packaging opt-out: JEMALLOC_SYS_WITH_MALLOC_CONF="background_thread:false"
+# at build time (jemalloc-sys appends env conf after the feature-derived conf).
+[target.'cfg(target_os = "linux")'.dependencies]
+tikv-jemallocator = { version = "0.6", features = ["disable_initial_exec_tls", "background_threads"] }
+
+[target.'cfg(all(not(target_env = "msvc"), not(target_os = "linux")))'.dependencies]
 tikv-jemallocator = { version = "0.6", features = ["disable_initial_exec_tls"] }

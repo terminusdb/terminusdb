@@ -15,6 +15,7 @@
 
 :- use_module(library(main)).
 :- use_module(library(settings)).
+:- use_module(library(filesex)).
 :- initialization(main).
 
 initialise_signals :-
@@ -62,6 +63,26 @@ prolog:message(server_missing_config(BasePath)) -->
 
 :- use_module(cli(main)).
 :- use_module(library(debug)).
+
+% Load all plugins from the repo plugins/ directory so that plugin tests and
+% hooks are available in the test runner without having to list every plugin
+% module explicitly. terminus_home is src/, so the repo root is the parent of
+% terminus_home. The repo root is used as the addon path and plugin path
+% unless the caller already set those variables.
+:- (   user:file_search_path(terminus_home, Terminus_Home),
+       file_directory_name(Terminus_Home, Repo_Root)
+   ->  (   getenv('TERMINUSDB_ADDON_PATH', _)
+       ->  true
+       ;   setenv('TERMINUSDB_ADDON_PATH', Repo_Root)
+       ),
+       (   getenv('TERMINUSDB_PLUGINS_PATH', _)
+       ->  true
+       ;   directory_file_path(Repo_Root, plugins, Plugins_Dir),
+           setenv('TERMINUSDB_PLUGINS_PATH', Plugins_Dir)
+       ),
+       load_plugins
+   ;   format(user_error, "Warning: could not locate plugins directory for test runner~n", [])
+   ).
 
 shutdown_signal(_Signal) :-
     thread_send_message(main, stop).

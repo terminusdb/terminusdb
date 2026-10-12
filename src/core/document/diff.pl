@@ -791,7 +791,7 @@ test(deep_list_patch, []) :-
     simple_diff(Before,After,Diff,[keep(json{})]),
     simple_patch(Diff,Before,success(After),[]).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 test(deep_list_id_patch, []) :-
     OldAtom = '{

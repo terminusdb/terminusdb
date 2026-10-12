@@ -2,15 +2,15 @@
 :- use_module(core(api)).
 :- use_module(core(util)).
 :- use_module(core(query)).
+:- use_module(core(document/commit_queue)).
 :- use_module(config(terminus_config), [log_level/1]).
 :- use_module(library(http/http_server)).
 :- use_module(library(random)).
 :- use_module(library(lists)).
 :- use_module(library(pairs)).
 
-% Flags to track if GC/optimization is currently running (prevents piling up requests)
+% Flag to track if GC is currently running (prevents piling up requests)
 :- dynamic gc_running/0.
-:- dynamic optimization_running/0.
 
 % Requirement to add to plugins since TerminusDB 11.2.0
 :- multifile plugins:post_commit_hook/2.
@@ -136,13 +136,38 @@ print_stack_statistics_json(Label) :-
     },
     json_log_debug(Stats).
 
+% Probability of running abolish_all_tables during GC.
+% This is a rare global table cleanup — most GC cycles just collect
+% atoms and trim stacks. At 10%, this fires roughly once per 2000
+% commits (0.5% GC chance × 10% abolish chance), which is frequent
+% enough to reclaim stale tabled results without thrashing.
+abolish_tables_chance(0.10).
+
 % Actual GC work - runs in dedicated thread
 do_garbage_collect :-
     maybe_print_stats('PRE-GC'),
     garbage_collect,
     trim_stacks,
+    maybe_abolish_tables,
     maybe_print_stats('POST-GC'),
     json_log_debug("Ran garbage_collect").
+
+% Periodic deep cleanup: abolish all tabled results and reclaim atoms.
+% Fires at 10% of GC cycles (~0.05% of commits). Both operations are
+% global and can block other threads, so we run them together as a
+% rare periodic cleanup rather than independently.
+maybe_abolish_tables :-
+    abolish_tables_chance(Chance),
+    random(X),
+    (   X < Chance
+    ->  abolish_all_tables,
+        statistics(atoms, AtomsBefore),
+        garbage_collect_atoms,
+        statistics(atoms, AtomsAfter),
+        format(atom(Msg), "GC: periodic deep cleanup - abolished tables, reclaimed atoms (~w -> ~w)", [AtomsBefore, AtomsAfter]),
+        json_log_info(Msg)
+    ;   true
+    ).
 
 maybe_print_stats(Label) :-
     log_level('DEBUG'),
@@ -180,6 +205,7 @@ schedule_gc :-
     thread_create(gc_thread_wrapper, _, [detached(true)]).
 
 % Actual optimization work - optimizes all descriptors (parent-first order)
+% This is used only as a synchronous fallback in non-server contexts.
 do_optimize_descriptors(Validation_Objects) :-
     findall(Descriptor,
             (member(V, Validation_Objects),
@@ -201,22 +227,27 @@ sort_descriptors(Descriptors, Sorted) :-
     keysort(Pairs, SortedPairs),
     pairs_values(SortedPairs, Sorted).
 
-% Optimization thread wrapper - clears flag when done
-optimization_thread_wrapper(Validation_Objects) :-
-    % Reset streams to avoid inheriting closed HTTP streams
-    set_prolog_IO(user_input, user_output, user_error),
-    json_log_debug("Optimization thread started"),
-    catch(
-        do_optimize_descriptors(Validation_Objects),
-        Error,
-        handle_optimization_error(Error)
-    ),
-    with_mutex(auto_optimize_opt, retractall(optimization_running)).
+% Schedule a descriptor optimization through the commit queue so it runs when
+% the relevant queue drains, rather than spawning a dedicated thread here.
+schedule_optimizations(Validation_Objects) :-
+    findall(Descriptor,
+            (member(V, Validation_Objects),
+             all_descriptor(V.descriptor, Descriptor)),
+            Descriptors),
+    sort_descriptors(Descriptors, Sorted),
+    forall(member(D, Sorted), schedule_descriptor_optimization(D)).
 
-handle_optimization_error(error(label_version_changed(_, _), _)) :-
-    !.  % Silently skip when there is a concurrent optimization
-handle_optimization_error(Error) :-
-    json_log_error_formatted("Optimization error: ~w", [Error]).
+schedule_descriptor_optimization(Descriptor) :-
+    (   system_descriptor{} :< Descriptor
+    ->  true
+    ;   branch_descriptor{} :< Descriptor
+    ->  commit_queue:schedule_branch_optimization(Descriptor)
+    ;   (   database_descriptor{} :< Descriptor
+        ;   repository_descriptor{} :< Descriptor
+        )
+    ->  commit_queue:schedule_database_optimization(Descriptor)
+    ;   true
+    ).
 
 % Schedule async optimization if not already running (random check at commit level like GC)
 maybe_optimize(Validation_Objects) :-
@@ -225,17 +256,10 @@ maybe_optimize(Validation_Objects) :-
     X < Chance,
     !,
     (   http_server_property(_, _)
-    ->  with_mutex(auto_optimize_opt, schedule_optimization(Validation_Objects))
+    ->  schedule_optimizations(Validation_Objects)
     ;   do_optimize_descriptors(Validation_Objects)
     ).
 maybe_optimize(_).
-
-schedule_optimization(_) :-
-    optimization_running,
-    !.  % Already running, skip silently
-schedule_optimization(Validation_Objects) :-
-    assertz(optimization_running),
-    thread_create(optimization_thread_wrapper(Validation_Objects), _, [detached(true)]).
 
 commit_has_changes(Meta_Data) :-
     get_dict(inserts, Meta_Data, Inserts),

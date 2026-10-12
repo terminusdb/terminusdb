@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
@@ -44,7 +44,7 @@ jobs:
 #        run: ./.github/install-swi-prolog.sh stable
 
 #      - name: Checkout tus
-#        uses: actions/checkout@v4
+#        uses: actions/checkout@v7
 #        with:
 #          repository: terminusdb-org/tus
 #          path: tus
@@ -86,7 +86,7 @@ jobs:
             --name=terminusdb \
             --detach \
             --net=host \
-            -e TERMINUSDB_PLUGINS_PATH=/void \
+            -e TERMINUSDB_PLUGINS_PATH=/plugins \
             terminusdb/terminusdb-server:local
 
       # Give the server some time to start up
@@ -128,7 +128,7 @@ jobs:
   #   runs-on: ${{ inputs.runner }}
 
   #   steps:
-  #     - uses: actions/checkout@v3
+  #     - uses: actions/checkout@v7
   #       with:
   #         repository: ${{ inputs.test_repository }}
   #         ref: ${{ inputs.test_ref }}
@@ -181,7 +181,7 @@ jobs:
   #   runs-on: ${{ inputs.runner }}
 
   #   steps:
-  #     - uses: actions/checkout@v3
+  #     - uses: actions/checkout@v7
   #       with:
   #         repository: ${{ inputs.test_repository }}
   #         ref: ${{ inputs.test_ref }}
@@ -236,7 +236,7 @@ jobs:
   #   runs-on: ${{ inputs.runner }}
 
   #   steps:
-  #     - uses: actions/checkout@v3
+  #     - uses: actions/checkout@v7
   #       with:
   #         repository: ${{ inputs.test_repository }}
   #         ref: ${{ inputs.test_ref }}

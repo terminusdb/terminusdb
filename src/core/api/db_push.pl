@@ -1,6 +1,8 @@
 :- module(db_push, [
               push/8,
-              authorized_push/3
+              authorized_push/3,
+              noop_pusher/2,
+              optimize_thread_loop/3
           ]).
 
 :- use_module(core(util)).
@@ -8,6 +10,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(account)).
 :- use_module(core(document)).
+:- use_module(core(document/meta_commit_queue)).
+:- use_module(core(api/api_optimize), [api_optimize/3]).
 :- use_module(core(util)).
 :- use_module(config(terminus_config), [terminusdb_version/1]).
 :- use_module(core(triple)).
@@ -22,6 +26,33 @@
 :- use_module(library(tus)).
 :- use_module(library(plunit)).
 :- use_module(library(lists)).
+
+% Test hook for the push race regression test. The default is inert; unit tests
+% can register an optimizer thread via push_optimize_thread/1 to interleave an
+% optimization between the repository head update and the database commit.
+:- dynamic push_pre_database_commit_hook/1.
+:- dynamic push_optimize_thread/1.
+
+push_pre_database_commit_hook(_Database_Transaction_Object) :-
+    push_optimize_thread(OptimizeThread),
+    % Guard: only fire if the registered thread is still alive.
+    catch(thread_property(OptimizeThread, status(running)), _, fail),
+    !,
+    thread_send_message(OptimizeThread, optimize_now).
+
+noop_pusher(_Remote_URL, _Payload).
+
+optimize_thread_loop(Store, Auth, Meta_Path) :-
+    thread_get_message(Message),
+    (   Message == optimize_now
+    ->  api_optimize(system_descriptor{}, Auth, Meta_Path)
+    ;   true
+    ),
+    (   Message == stop
+    ->  true
+    ;   optimize_thread_loop(Store, Auth, Meta_Path)
+    ).
+
 % error conditions:
 % - branch to push does not exist
 % - repository does not exist
@@ -143,8 +174,19 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
             [Read_Obj] = (Remote_Transaction_Object.instance_objects),
             Layer = (Read_Obj.read),
             layer_to_id(Layer, Current_Head_Id),
-            update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-            run_transactions([Database_Transaction_Object], true, _),
+            database_descriptor{organization_name: Organization,
+                              database_name: Database} :< Database_Transaction_Object.descriptor,
+            organization_database_name(Organization, Database, Database_Key),
+            with_meta_commit_lock(
+                Database_Key,
+                (
+                    update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
+                    % The hook is used for regression tests; when no test thread is
+                    % registered it fails, ignore/1 makes this continue regardless.
+                    ignore(push_pre_database_commit_hook(Database_Transaction_Object)),
+                    run_transactions([Database_Transaction_Object], true, _)
+                )
+            ),
             Result = new(Current_Head_Id)
         )
     % We are using a shared store
@@ -155,10 +197,21 @@ push(System_DB, Auth, Branch, Remote_Name, Remote_Branch, _Options,
         [Read_Obj] = (Remote_Transaction_Object.instance_objects),
         Layer = (Read_Obj.read),
         layer_to_id(Layer, Current_Head_Id),
+        database_descriptor{organization_name: Organization2,
+                          database_name: Database2} :< Database_Transaction_Object.descriptor,
+        organization_database_name(Organization2, Database2, Database_Key),
 
         local_push(System_DB, Auth, Organization, DB, Current_Head_Id),
-        update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
-        run_transactions([Database_Transaction_Object], true, _),
+        with_meta_commit_lock(
+            Database_Key,
+            (
+                update_repository_head(Database_Transaction_Object, Remote_Name, Current_Head_Id),
+                    % The hook is used for regression tests; when no test thread is
+                    % registered it fails, ignore/1 makes this continue regardless.
+                ignore(push_pre_database_commit_hook(Database_Transaction_Object)),
+                run_transactions([Database_Transaction_Object], true, _)
+            )
+        ),
         Result = new(Current_Head_Id)
     ).
 
@@ -700,3 +753,67 @@ test(push_prefixes,
                  '@type': 'Context'}.
 
 :- end_tests(push).
+
+:- begin_tests(push_race, [concurrent(false)]).
+:- use_module(core(util/test_utils)).
+:- use_module(core(query)).
+:- use_module(core(triple)).
+:- use_module(core(transaction)).
+:- use_module(core(account)).
+:- use_module(core(document)).
+:- use_module(db_create).
+:- use_module(db_branch).
+
+% Regression test for the race between push's database commit and a concurrent
+% optimization. The hook fires an optimize between update_repository_head and
+% run_transactions; the meta_commit_lock held across that window serializes the
+% two operations.
+%
+% Uses the URL-based remote path with a no-op pusher so the test exercises the
+% same commit path as a real network push without requiring a second database.
+test(push_races_with_database_optimize,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo")
+            )),
+      cleanup((retractall(db_push:push_optimize_thread(_)),
+               teardown_temp_store(State)))
+     ])
+:-
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    super_user_authority(Auth),
+
+    % Commit on main so the remote repository will receive a real layer.
+    create_context(Master_Descriptor, commit_info{author:"test", message:"commit a"}, Ctx1),
+    with_transaction(Ctx1, ask(Ctx1, insert(a,b,c)), _),
+
+    % Add a remote repository so the push takes the URL-based commit path.
+    Database_Descriptor = (Master_Descriptor.repository_descriptor.database_descriptor),
+    resolve_relative_string_descriptor(Database_Descriptor, "remote/_commits", Remote_Repository_Descriptor),
+    create_context(Database_Descriptor, Database_Context),
+    with_transaction(Database_Context,
+                     insert_remote_repository(Database_Context, "remote", "http://fakeytown.mock", _),
+                     _),
+    create_ref_layer(Remote_Repository_Descriptor),
+
+    triple_store(Store),
+    Master_Meta_Path = "admin/foo/_meta",
+
+    setup_call_cleanup(
+        (   thread_create(
+                with_triple_store(Store,
+                                  db_push:optimize_thread_loop(Store, Auth, Master_Meta_Path)),
+                OptimizeThread,
+                []
+            ),
+            assertz(db_push:push_optimize_thread(OptimizeThread))
+        ),
+        push(system_descriptor{}, Auth, "admin/foo", "remote", "main", [], db_push:noop_pusher, _Result),
+        (   db_push:push_optimize_thread(OptimizeThread),
+            thread_send_message(OptimizeThread, stop),
+            thread_join(OptimizeThread, OptimizeResult),
+            assertion(OptimizeResult == true)
+        )
+    ).
+
+:- end_tests(push_race).

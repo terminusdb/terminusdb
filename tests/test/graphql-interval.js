@@ -22,18 +22,18 @@ describe('GraphQL dateTimeInterval', function () {
   }]
 
   const events = [
-    { '@type': 'Event', name: 'ev-2024-H1', interval: '2024-01-01/2024-07-01' },
-    { '@type': 'Event', name: 'ev-2024-H2', interval: '2024-07-01/2025-01-01' },
-    { '@type': 'Event', name: 'ev-2025-Q1', interval: '2025-01-01/2025-04-01' },
-    { '@type': 'Event', name: 'ev-2025-Q2', interval: '2025-04-01/2025-07-01' },
-    { '@type': 'Event', name: 'ev-2025-Q3', interval: '2025-07-01/2025-10-01' },
+    { '@type': 'Event', name: 'ev-2024-H1', interval: '2024-01-01/2024-06-30' },
+    { '@type': 'Event', name: 'ev-2024-H2', interval: '2024-07-01/2024-12-31' },
+    { '@type': 'Event', name: 'ev-2025-Q1', interval: '2025-01-01/2025-03-31' },
+    { '@type': 'Event', name: 'ev-2025-Q2', interval: '2025-04-01/2025-06-30' },
+    { '@type': 'Event', name: 'ev-2025-Q3', interval: '2025-07-01/2025-09-30' },
   ]
 
   before(async function () {
     agent = new Agent().auth()
     const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
     const base = agent.baseUrl
-    const uri = `${base}${path}`
+    const uri = `${base}${path}?compress_ids=false`
 
     const httpLink = new HttpLink({ uri, fetch })
     const authMiddleware = new ApolloLink((operation, forward) => {
@@ -66,13 +66,15 @@ describe('GraphQL dateTimeInterval', function () {
   })
 
   it('filters with eq', async function () {
-    const Q = gql`query { Event(filter: { interval: { eq: "2025-01-01/2025-04-01" }}) { name } }`
+    // Stored values are normalized: date-only end bumps to next day (exclusive)
+    // e.g. Q1 end 2025-03-31 bumps to 2025-04-01T00:00:00Z
+    const Q = gql`query { Event(filter: { interval: { eq: "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z" }}) { name } }`
     const result = await client.query({ query: Q })
     expect(result.data.Event).to.deep.equal([{ name: 'ev-2025-Q1' }])
   })
 
   it('filters with ne', async function () {
-    const Q = gql`query { Event(filter: { interval: { ne: "2025-01-01/2025-04-01" }}) { name } }`
+    const Q = gql`query { Event(filter: { interval: { ne: "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z" }}) { name } }`
     const result = await client.query({ query: Q })
     expect(result.data.Event).to.have.lengthOf(4)
     const names = result.data.Event.map(e => e.name)
@@ -80,28 +82,28 @@ describe('GraphQL dateTimeInterval', function () {
   })
 
   it('filters with gt (chronological)', async function () {
-    const Q = gql`query { Event(filter: { interval: { gt: "2025-01-01/2025-04-01" }}) { name } }`
+    const Q = gql`query { Event(filter: { interval: { gt: "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z" }}) { name } }`
     const result = await client.query({ query: Q })
     const names = result.data.Event.map(e => e.name).sort()
     expect(names).to.deep.equal(['ev-2025-Q2', 'ev-2025-Q3'])
   })
 
   it('filters with ge (chronological)', async function () {
-    const Q = gql`query { Event(filter: { interval: { ge: "2025-01-01/2025-04-01" }}) { name } }`
+    const Q = gql`query { Event(filter: { interval: { ge: "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z" }}) { name } }`
     const result = await client.query({ query: Q })
     const names = result.data.Event.map(e => e.name).sort()
     expect(names).to.deep.equal(['ev-2025-Q1', 'ev-2025-Q2', 'ev-2025-Q3'])
   })
 
   it('filters with lt (chronological)', async function () {
-    const Q = gql`query { Event(filter: { interval: { lt: "2025-01-01/2025-04-01" }}) { name } }`
+    const Q = gql`query { Event(filter: { interval: { lt: "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z" }}) { name } }`
     const result = await client.query({ query: Q })
     const names = result.data.Event.map(e => e.name).sort()
     expect(names).to.deep.equal(['ev-2024-H1', 'ev-2024-H2'])
   })
 
   it('filters with le (chronological)', async function () {
-    const Q = gql`query { Event(filter: { interval: { le: "2025-01-01/2025-04-01" }}) { name } }`
+    const Q = gql`query { Event(filter: { interval: { le: "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z" }}) { name } }`
     const result = await client.query({ query: Q })
     const names = result.data.Event.map(e => e.name).sort()
     expect(names).to.deep.equal(['ev-2024-H1', 'ev-2024-H2', 'ev-2025-Q1'])
