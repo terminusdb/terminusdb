@@ -265,6 +265,23 @@ describe('GraphQL', function () {
     },
     name: 'xsd:string',
   },
+  {
+    '@type': 'Class',
+    '@id': 'Tree',
+    name: 'xsd:string',
+  },
+  {
+    '@type': 'Class',
+    '@id': 'Animal',
+    '@abstract': [],
+    name: 'xsd:string',
+  },
+  {
+    '@type': 'Class',
+    '@id': 'Dog',
+    '@inherits': 'Animal',
+    capabilities: { '@type': 'Set', '@class': 'xsd:string' },
+  },
   ]
 
   const aristotle = { '@type': 'Person', name: 'Aristotle', age: '61', order: '3', friend: ['Person/Plato'] }
@@ -1232,6 +1249,145 @@ query EverythingQuery {
             name: 'Dad',
           },
         ])
+    })
+
+    it('graphql __typename on concrete class', async function () {
+      const members = [{ '@type': 'Tree', name: 'Oak' }]
+      await document.insert(agent, { instance: members })
+      const TREE_QUERY = gql`
+ query TreeQuery {
+    Tree(filter: {name: {eq: "Oak"}}){
+        name
+        __typename
+    }
+}`
+      const result = await client.query({ query: TREE_QUERY })
+      expect(result.data.Tree).to.deep.equal(
+        [
+          {
+            name: 'Oak',
+            __typename: 'Tree',
+          },
+        ])
+    })
+
+    it('graphql __typename resolves concrete type under abstract class', async function () {
+      const members = [{ '@type': 'Dog', name: 'Rex', capabilities: ['bark'] }]
+      await document.insert(agent, { instance: members })
+      const ANIMAL_QUERY = gql`
+ query AnimalQuery {
+    Animal(filter: {name: {eq: "Rex"}}){
+        name
+        __typename
+    }
+}`
+      const result = await client.query({ query: ANIMAL_QUERY })
+      expect(result.data.Animal).to.deep.equal(
+        [
+          {
+            name: 'Rex',
+            __typename: 'Dog',
+          },
+        ])
+    })
+
+    it('graphql __typename under subsumption', async function () {
+      const members = [
+        { '@type': 'Parent', name: 'TnParent' },
+        { '@type': 'Child', name: 'TnChild', number: 4 },
+      ]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(filter: {name: {startsWith: "Tn"}}, orderBy: {name : ASC}){
+        name
+        __typename
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'TnChild',
+            __typename: 'Child',
+          },
+          {
+            name: 'TnParent',
+            __typename: 'Parent',
+          },
+        ])
+    })
+
+    it('graphql __typename on query root', async function () {
+      const ROOT_QUERY = gql`
+ query RootQuery {
+    __typename
+}`
+      const result = await client.query({ query: ROOT_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.__typename).to.equal('Query')
+    })
+
+    it('graphql inline fragment on declared type', async function () {
+      const members = [{ '@type': 'Parent', name: 'FragParent' }]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ query ParentQuery {
+    Parent(filter: {name: {eq: "FragParent"}}){
+        ... on Parent {
+            name
+        }
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'FragParent',
+          },
+        ])
+    })
+
+    it('graphql named fragment resolves on subsumed type', async function () {
+      const members = [{ '@type': 'Child', name: 'FragChild', number: 9 }]
+      await document.insert(agent, { instance: members })
+      const PARENT_QUERY = gql`
+ fragment ParentFields on Parent {
+    name
+ }
+ query ParentQuery {
+    Parent(filter: {name: {eq: "FragChild"}}){
+        ...ParentFields
+    }
+}`
+      const result = await client.query({ query: PARENT_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.Parent).to.deep.equal(
+        [
+          {
+            name: 'FragChild',
+          },
+        ])
+    })
+
+    it('graphql inline fragment on query root', async function () {
+      const ROOT_QUERY = gql`
+ query RootQuery {
+    ... on Query {
+        __typename
+    }
+}`
+      const result = await client.query({ query: ROOT_QUERY, fetchPolicy: 'no-cache' })
+      expect(result.data.__typename).to.equal('Query')
+    })
+
+    it('graphql inline fragment on mutation root', async function () {
+      const MUTATION = gql`
+ mutation RootMutation {
+    ... on TerminusMutation {
+        __typename
+    }
+}`
+      const result = await client.mutate({ mutation: MUTATION, fetchPolicy: 'no-cache' })
+      expect(result.data.__typename).to.equal('TerminusMutation')
     })
 
     it('collects le filtered strings', async function () {

@@ -82,6 +82,24 @@ impl GraphQLValue for TerminusMutationRoot {
         Some("TerminusMutation")
     }
 
+    fn concrete_type_name(&self, _context: &Self::Context, info: &Self::TypeInfo) -> String {
+        <Self as GraphQLType>::name(info).unwrap().to_string()
+    }
+
+    fn resolve_into_type(
+        &self,
+        info: &Self::TypeInfo,
+        type_name: &str,
+        selection_set: Option<&[juniper::Selection<DefaultScalarValue>]>,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        if <Self as GraphQLType>::name(info) == Some(type_name) {
+            self.resolve(info, selection_set, executor)
+        } else {
+            panic!("GraphQLValue::resolve_into_type() must be implemented by unions and interfaces")
+        }
+    }
+
     fn resolve_field(
         &self,
         _info: &Self::TypeInfo,
