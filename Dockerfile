@@ -40,6 +40,8 @@ RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swi
 WORKDIR /app/rust
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
+# Vectorlink tests resolve builtin plugin assets relative to the crate dir.
+COPY builtin_plugins/assets builtin_plugins/assets/
 
 # Build the community dylib.
 FROM rust_builder_base AS rust_builder
