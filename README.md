@@ -21,7 +21,7 @@ TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge
 
 Please consider **starring our repo** ⭐ to come back easily!
 
-Join us on **[Discord](https://discord.gg/yTJKAma)** to learn more!
+Join us on **[Discord](https://discord.gg/yTJKAma)** to engage in our graph building community!
 
 ### Key Features
 
