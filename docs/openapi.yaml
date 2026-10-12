@@ -2,7 +2,7 @@ openapi: 3.0.1
 info:
   title: TerminusDB API
   description: |
-    API for the TerminusDB document graph database. Manage databases, documents, schemas, system, and queries.
+    API for the TerminusDB knowledge graph database. Manage databases, documents, schemas, system, and queries.
     
     # Quick Start
     ```bash
