@@ -19,12 +19,18 @@ class Cli {
     const rootDir = path.join(testDir, '..')
     const dbPath = util.testDbPath(testDir)
     const terminusdbExec = path.join(rootDir, 'terminusdb')
-    this.terminusdbSh = path.join(testDir, 'terminusdb.sh')
+    // Docker runs go through terminusdb.sh; local runs exec the binary
+    // directly to skip a shell spawn on every CLI invocation.
+    this.terminusdbSh = process.env.TERMINUSDB_DOCKER_CONTAINER
+      ? path.join(testDir, 'terminusdb.sh')
+      : (process.env.TERMINUSDB_EXEC_PATH || terminusdbExec)
     this.envs = {
       ...process.env,
       TERMINUSDB_SERVER_DB_PATH: dbPath,
       // Use existing TERMINUSDB_EXEC_PATH if set (e.g., snap), otherwise default to local binary
       TERMINUSDB_EXEC_PATH: process.env.TERMINUSDB_EXEC_PATH || terminusdbExec,
+      // terminusdb.sh forces this; keep parity when exec'ing the binary directly
+      TERMINUSDB_LOG_LEVEL: 'ERROR',
     }
   }
 
