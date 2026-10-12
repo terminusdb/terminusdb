@@ -92,6 +92,9 @@ jobs:
           # Share one cache entry across jobs: v2 defaults add-job-id-key
           # to true, which would give each job its own key.
           add-job-id-key: false
+          # Distinct from the clippy job's entry and rotates away from the
+          # previously clippy-poisoned Linux-x64 key.
+          shared-key: native
 
       - name: Build
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
@@ -188,6 +191,7 @@ jobs:
           # Restore-only consumer of the build job's cache entry (same OS +
           # workspaces + Cargo.lock → same key once the job id is excluded).
           add-job-id-key: false
+          shared-key: native
           save-if: false
 
       - name: Build

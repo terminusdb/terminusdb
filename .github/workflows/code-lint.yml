@@ -68,6 +68,10 @@ jobs:
         with:
           workspaces: src/rust
           add-job-id-key: false
+          # Clippy stores cargo-check artifacts, not build artifacts. Sharing
+          # the native-build key poisons it: GHA cache entries are immutable,
+          # so a clippy save makes every later cargo build a full rebuild.
+          shared-key: clippy
       - uses: actions-rs/clippy-check@v1
         continue-on-error: true
         with:
