@@ -2349,7 +2349,7 @@ api_document_error_jsonld(Type, error(unable_to_assign_ids(Document),_),JSON) :-
             }.
 api_document_error_jsonld(Type, error(document_key_type_unknown(Key_Type, Document),_),JSON) :-
     document_error_type(Type, JSON_Type),
-    format(string(Msg), "Document @key type unknown: ~q. It must be ValueHash, Hash, Lexical, or Random.", [Key_Type]),
+    format(string(Msg), "Document @key type unknown: ~q. It must be ValueHash, Hash, Lexical, Random, or UuidV7.", [Key_Type]),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:DocumentKeyTypeUnknown',

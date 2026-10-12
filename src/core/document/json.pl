@@ -1,6 +1,8 @@
 :- module('document/json', [
               idgen_random/2,
               idgen_random/3,
+              idgen_uuid_v7/2,
+              idgen_uuid_v7/3,
               idgen_hash/3,
               idgen_lexical/3,
               context_triple/2,
@@ -456,17 +458,17 @@ idgen_suffix(Values, Suffix) :-
 
 idgen_lexical(Base,Values,ID) :-
     idgen_suffix(Values, Suffix),
-    format(string(ID), '~w~w', [Base,Suffix]).
+    string_concat(Base, Suffix, ID).
 
 idgen_hash(Base,Values,ID) :-
     idgen_suffix(Values, Suffix),
     crypto_data_hash(Suffix, Hash, [algorithm(sha256)]),
-    format(string(ID), "~w~w", [Base,Hash]).
+    string_concat(Base, Hash, ID).
 
 idgen_path_values_hash(Base,Path,ID) :-
     format(string(A), '~q', [Path]),
     crypto_data_hash(A, Hash, [algorithm(sha256)]),
-    format(string(ID), "~w~w", [Base,Hash]).
+    string_concat(Base, Hash, ID).
 
 idgen_random(Base,ID) :-
     % Make configurable as part of random key generation strategy later.
@@ -481,7 +483,16 @@ idgen_random(Base,[],ID) :-
 idgen_random(Base,Length, ID) :-
     integer(Length),
     utils:random_base64(Length, Hash),
-    format(string(ID),'~w~w',[Base,Hash]).
+    string_concat(Base, Hash, ID).
+
+idgen_uuid_v7(Base,ID) :-
+    utils:uuid_v7(UUID),
+    string_concat(Base, UUID, ID).
+
+idgen_uuid_v7(Base,[],ID) :-
+    % Empty list signature matches idgen_lexical/3 and idgen_hash/3 calling convention
+    % Used by UuidV7 WOQL predicate
+    idgen_uuid_v7(Base,ID).
 
 path_strings_([], _Prefixes, []).
 path_strings_([index(N)|Path], Prefixes, [N_String|Strings]) :-
@@ -543,6 +554,8 @@ json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_(uuid_v7(Base), JSON, _DB, Context, Path, Id) :-
+    json_idgen_uuid_v7(Base, JSON, Context, Path, Id).
 json_idgen_(base(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 
@@ -565,6 +578,8 @@ json_idgen_schema_(value_hash(Base), JSON, _Schema, _Context, _Path, Id) :-
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_schema_(random(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
+json_idgen_schema_(uuid_v7(Base), JSON, _Schema, Context, Path, Id) :-
+    json_idgen_uuid_v7(Base, JSON, Context, Path, Id).
 json_idgen_schema_(base(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
 
@@ -577,6 +592,17 @@ json_idgen_base(Base, JSON, Context, Path, Id) :-
     ;   path_component([type(Base)|Path], Context, [Path_Base]),
         idgen_random(Path_Base, Id)
     ).
+
+% UuidV7: a submitted @id can be any IRI (prefix notation is expanded),
+% no base prefix enforcement. Without @id, mint a UUID v7 under the base.
+json_idgen_uuid_v7(_Base, JSON, Context, _Path, Id) :-
+    get_dict('@id', JSON, Submitted_Id),
+    ground(Submitted_Id),
+    !,
+    prefix_expand(Submitted_Id, Context, Id).
+json_idgen_uuid_v7(Base, _JSON, Context, Path, Id) :-
+    path_component([type(Base)|Path], Context, [Path_Base]),
+    idgen_uuid_v7(Path_Base, Id).
 
 idgen_check_base(Submitted_ID, Base, Context) :-
     prefix_expand(Submitted_ID, Context, Submitted_ID_Ex),
@@ -1475,6 +1501,10 @@ json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
     get_dict('@type', V, Random),
     expand_match_system(Random, 'Random', Type),
     !.
+json_schema_elaborate_key(V,_,json{ '@type' : Type}) :-
+    get_dict('@type', V, UuidV7),
+    expand_match_system(UuidV7, 'UuidV7', Type),
+    !.
 json_schema_elaborate_key(V,_,_) :-
     get_dict('@type', V, Type),
     !,
@@ -1899,7 +1929,8 @@ check_schema_document_restrictions(Elaborated) :-
         (   global_prefix_expand(sys:'ValueHash',Key_Type)
         ;   global_prefix_expand(sys:'Hash',Key_Type)
         ;   global_prefix_expand(sys:'Lexical',Key_Type)
-        ;   global_prefix_expand(sys:'Random',Key_Type)),
+        ;   global_prefix_expand(sys:'Random',Key_Type)
+        ;   global_prefix_expand(sys:'UuidV7',Key_Type)),
         error(subdocument_key_type_unknown(Key_Type_String),_)).
 
 json_schema_elaborate(JSON,Context,JSON_Schema) :-
@@ -2646,6 +2677,7 @@ key_descriptor_json(hash(_, Fields), Prefixes, json{ '@type' : "Hash",
     ).
 key_descriptor_json(value_hash(_), _, json{ '@type' : "ValueHash" },_).
 key_descriptor_json(random(_), _, json{ '@type' : "Random" },_).
+key_descriptor_json(uuid_v7(_), _, json{ '@type' : "UuidV7" },_).
 
 documentation_descriptor_json(Descriptor, Prefixes, Result) :-
     documentation_descriptor_json(Descriptor,Prefixes, Result, [compress_ids(true)]).
@@ -3270,6 +3302,7 @@ expand_json_document_id(Id_Short, Prefixes, UseJSONDocumentPrefix, Id) :-
     ;   atom_string(Id_Short_Atom, Id_Short)
     ),
     (   % If it has a scheme (http://, https://, etc.) or prefix (foo:bar), expand normally
+        % '://' is redundant (subsumed by ':'), kept to read as "URI scheme"
         (sub_atom(Id_Short_Atom, _, _, _, '://') ; sub_atom(Id_Short_Atom, _, _, _, ':'))
     ->  prefix_expand(Id_Short, Prefixes, Id)
     ;   % Plain string without scheme/prefix - prepend @base
@@ -4940,6 +4973,22 @@ test(schema_key_elaboration1, []) :-
                '@type':"@id"}
         }.
 
+test(schema_uuid_v7_key_elaboration, []) :-
+    Doc = json{'@id':"Artwork",
+               '@key':json{'@type':"UuidV7"},
+               '@type':"Class",
+               title:"xsd:string"},
+
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+
+    json_schema_elaborate(Doc, Context, Elaborate),
+
+    get_dict('http://terminusdb.com/schema/sys#key', Elaborate, Key),
+    Key = json{ '@id':'https://s/Artwork/key/UuidV7',
+                '@type':'http://terminusdb.com/schema/sys#UuidV7'
+              }.
+
 test(schema_lexical_key_elaboration, []) :-
     Doc = json{ '@id' : "Person",
                 '@type' : "Class",
@@ -5341,6 +5390,27 @@ test(idgen_random,
         },
 
     atom_concat('http://i/Event/',_,Id).
+
+test(idgen_uuid_v7, []) :-
+    idgen_uuid_v7('terminusdb:///data/Person/', ID),
+    atom_concat('terminusdb:///data/Person/', UUID, ID),
+    atom_string(UUID, UUID_String),
+    is_uuid_v7_string(UUID_String),
+
+    idgen_uuid_v7('terminusdb:///data/Person/', ID2),
+    ID \= ID2,
+
+    % Shared counter context guarantees strict ordering
+    atom_string(ID_Atom, ID),
+    atom_string(ID2_Atom, ID2),
+    ID_Atom @< ID2_Atom,
+
+    % Empty list signature matches idgen_lexical/3 and idgen_hash/3
+    % calling convention; used by the UuidV7 WOQL predicate
+    idgen_uuid_v7('terminusdb:///data/Person/', [], ID3),
+    atom_concat('terminusdb:///data/Person/', UUID3, ID3),
+    atom_string(UUID3, UUID3_String),
+    is_uuid_v7_string(UUID3_String).
 
 test(type_family_id, []) :-
 
@@ -7788,6 +7858,68 @@ test(subdocument_lexical_key_with_odd_chars,
                          '@type':'Not_A_Squash',
                          genus:"Malus / Mill"}}.
 
+
+test(subdocument_uuid_v7_key,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+
+    Has_Uuid_Sub =
+    _{ '@id' : "Has_Uuid_Sub",
+       '@type' : "Class",
+       '@key' : _{ '@type' : "UuidV7"},
+       me : "xsd:string",
+       uuid_sub : "Uuid_Sub"
+     },
+
+    Uuid_Sub =
+    _{ '@id' : "Uuid_Sub",
+       '@type' : "Class",
+       '@subdocument' : [],
+       '@key' : _{ '@type' : "UuidV7"},
+       genus : "xsd:string"
+     },
+
+    create_context(Desc, _{ author : "me", message : "Adding context" }, Context),
+    with_transaction(
+        Context,
+        (   insert_schema_document(Context, Uuid_Sub),
+            insert_schema_document(Context, Has_Uuid_Sub)
+        ),
+        _
+    ),
+
+    Document =
+    _{ '@type' : "Has_Uuid_Sub",
+       me : "It's me",
+       uuid_sub : _{ '@type' : "Uuid_Sub",
+                     genus : "Malus Mill" }},
+
+    create_context(Desc, _{ author : "me", message : "Adding doc." }, Context2),
+    with_transaction(
+        Context2,
+        insert_document(Context2, Document,Id),
+        _
+    ),
+
+    get_document(Desc, Id, Assigned),
+    !,
+
+    get_dict('@id', Assigned, Parent_Id),
+    atom_concat('Has_Uuid_Sub/', _, Parent_Id),
+    ends_with_uuid_v7(Parent_Id),
+
+    get_dict(uuid_sub, Assigned, Sub),
+    get_dict('@id', Sub, Sub_Id),
+    once(sub_atom(Sub_Id, _, _, _, '/uuid_sub/Uuid_Sub/')),
+    ends_with_uuid_v7(Sub_Id).
 
 test(document_with_no_required_field,
      [
@@ -11990,6 +12122,141 @@ test(document_valuehash,
            baz: 42},
 
         'Thing/78b07792a224ec58ac4b7688707482a1f42a7a695a907f5780d11dc634739aae').
+
+test(document_uuid_v7,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Thing",
+           '@key': _{'@type': "UuidV7"},
+           foo: "xsd:string",
+           bar: "xsd:decimal",
+           baz: "xsd:integer"},
+
+        _{ '@type': "Thing",
+           foo: "hi",
+           bar: (0.5),
+           baz: 42},
+
+        ID),
+
+    atom_concat('Thing/', _, ID),
+    ends_with_uuid_v7(ID).
+
+test(document_uuid_v7_arbitrary_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "https://linked.art/example/object/47",
+           title: "The Night Watch"},
+
+        "https://linked.art/example/object/47").
+
+test(document_uuid_v7_off_base_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "Sculpture/david-1504",
+           title: "David"},
+
+        'Sculpture/david-1504').
+
+test(document_uuid_v7_schema_roundtrip,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    create_context(Desc, commit_info{author:"test",message:"test"}, Context),
+    with_transaction(
+        Context,
+        insert_schema_document(
+            Context,
+            _{ '@type': "Class",
+               '@id': "Artwork",
+               '@key': _{'@type': "UuidV7"},
+               title: "xsd:string"}),
+        _),
+
+    open_descriptor(Desc, DB),
+    get_schema_document(DB, 'Artwork', Doc),
+    get_dict('@key', Doc, json{'@type': "UuidV7"}).
+
+test(document_uuid_v7_tagged_union,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "TaggedUnion",
+           '@id': "Either",
+           '@key': _{'@type': "UuidV7"},
+           left: "xsd:string",
+           right: "xsd:integer"},
+
+        _{ '@type': "Either",
+           left: "yes"},
+
+        ID),
+
+    atom_concat('Either/', _, ID),
+    ends_with_uuid_v7(ID).
+
+test(document_uuid_v7_prefixed_iri,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo", Desc)
+            )),
+      cleanup(teardown_temp_store(State))]) :-
+    test_generated_document_id(
+        Desc,
+
+        _{ '@type': "Class",
+           '@id': "Artwork",
+           '@key': _{'@type': "UuidV7"},
+           title: "xsd:string"},
+
+        _{ '@type': "Artwork",
+           '@id': "owl:example/object/47",
+           title: "Prefixed"},
+
+        'http://www.w3.org/2002/07/owl#example/object/47'),
+
+    % Fetching by the fully expanded IRI proves the prefix was
+    % expanded at insert time, not stored as the literal compact form
+    get_document(Desc, 'http://www.w3.org/2002/07/owl#example/object/47', Doc),
+    get_dict(title, Doc, "Prefixed").
 
 test(document_valuehash_with_subdocument_list,
      [setup((setup_temp_store(State),

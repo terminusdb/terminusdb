@@ -901,7 +901,7 @@ refute_documentation_value(Schema,Type,Class,Result,Witness) :-
     ).
 
 is_key(Type) :-
-    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random'], List),
+    prefix_list([sys:'Lexical', sys:'Hash', sys:'ValueHash', sys:'Random', sys:'UuidV7'], List),
     memberchk(Type, List).
 
 is_documentation(Type) :-
@@ -1330,6 +1330,9 @@ schema_key_descriptor_(Schema, Prefixes, Type, Obj, value_hash(Base)) :-
     schema_key_base(Schema,Prefixes,Type,Base).
 schema_key_descriptor_(Schema, Prefixes, Type, Obj, random(Base)) :-
     xrdf(Schema, Obj, rdf:type, sys:'Random'),
+    schema_key_base(Schema,Prefixes,Type,Base).
+schema_key_descriptor_(Schema, Prefixes, Type, Obj, uuid_v7(Base)) :-
+    xrdf(Schema, Obj, rdf:type, sys:'UuidV7'),
     schema_key_base(Schema,Prefixes,Type,Base).
 
 is_schemaless(Validation_Object) :-
