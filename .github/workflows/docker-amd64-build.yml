@@ -2,7 +2,16 @@ name: AMD64 Image
 
 on:
   workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run image test suite after building"
+        type: boolean
+        default: true
   workflow_call:
+    inputs:
+      run_tests:
+        type: boolean
+        default: true
   
 jobs:
 
@@ -49,6 +58,7 @@ jobs:
   amd64_tests:
     name: Tests
     needs: amd64_build
+    if: ${{ inputs.run_tests }}
     uses: ./.github/workflows/docker-image-test.yml
     with:
       test_repository: ${{ github.repository }}
