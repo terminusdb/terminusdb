@@ -17,9 +17,11 @@
 
 **A graph database with distributed JSON and RDF, with a git for data collaboration model built in**
 
-Please consider **starring our repo** ⭐ to find your way back, and join us on **[Discord](https://discord.gg/yTJKAma)**
-
 TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.org/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
+
+Please consider **starring our repo** ⭐ to come back easily!
+
+Join us on **[Discord](https://discord.gg/yTJKAma)** to learn more!
 
 ### Key Features
 
