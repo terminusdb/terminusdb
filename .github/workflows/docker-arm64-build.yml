@@ -35,7 +35,10 @@ jobs:
           tags: terminusdb/terminusdb-server:local
           outputs: type=docker,dest=terminusdb-server-snapshot-arm64.tar
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # mode=min: see docker-amd64-build.yml — intermediate-stage blobs
+          # are never reusable (src/rust COPY invalidates them per change)
+          # and their churn evicts the rust-cache entries.
+          cache-to: type=gha,mode=min
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner

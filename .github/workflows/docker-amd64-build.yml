@@ -33,7 +33,12 @@ jobs:
           tags: terminusdb/terminusdb-server:local
           outputs: type=docker,dest=terminusdb-server-snapshot-amd64.tar
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # mode=min: only export final-image layers. The src/rust COPY
+          # invalidates the cargo layer on every change, so mode=max's
+          # intermediate-stage blobs are written but never reused — and
+          # they churn the shared 10 GB Actions cache quota hard enough to
+          # evict the rust-cache entries the native builds depend on.
+          cache-to: type=gha,mode=min
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
