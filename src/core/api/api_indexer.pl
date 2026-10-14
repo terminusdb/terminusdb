@@ -1075,5 +1075,86 @@ test(schema_store_indices_for_descriptor_returns_true_with_both_options,
     schema_store_indices_for_descriptor(Desc, Result),
     assertion(Result == true).
 
+test(process_commit_renders_embedding_with_commit_schema,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "headdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    %% Schema v1: embedding template marked V1MARKER
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }",
+        "template": "V1MARKER {{title}}"
+      }
+    }
+  }
+]
+', SchemaStream1),
+    Options1 = [author("test"), full_replace(true), graph_type(schema), message("schema v1")],
+    api_insert_documents(System, Auth, "admin/headdb", SchemaStream1, no_data_version, _, _, _, Options1),
+    %% Documents commit — this becomes non-head once schema v2 lands
+    open_string('
+[
+  {"@type": "Article", "title": "My Title", "body": "My Body"}
+]
+', DocStream),
+    DocOptions = [author("test"), graph_type(instance), message("docs")],
+    api_insert_documents(System, Auth, "admin/headdb", DocStream, no_data_version, _, _, _, DocOptions),
+    resolve_absolute_string_descriptor("admin/headdb/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Docs_Head_Uri),
+    commit_id_uri(Repo_Desc, Docs_Commit_Id, Docs_Head_Uri),
+    %% Schema v2: same class, new template marked V2MARKER
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }",
+        "template": "V2MARKER {{title}}"
+      }
+    }
+  }
+]
+', SchemaStream2),
+    Options2 = [author("test"), full_replace(true), graph_type(schema), message("schema v2")],
+    api_insert_documents(System, Auth, "admin/headdb", SchemaStream2, no_data_version, _, _, _, Options2),
+    %% Process the pre-v2 commit: it must render with the schema that was
+    %% in effect at that commit — versioned rendering, V1MARKER.
+    text_to_string(Docs_Commit_Id, Docs_Commit_Str),
+    tmp_file_stream(text, TmpFile, WriteStream),
+    indexer_process_commit("admin/headdb/local/branch/main",
+                           "main", Docs_Commit_Str, WriteStream),
+    close(WriteStream),
+    read_file_to_string(TmpFile, Out, []),
+    delete_file(TmpFile),
+    assertion(sub_string(Out, _, _, _, "V1MARKER")),
+    assertion(\+ sub_string(Out, _, _, _, "V2MARKER")).
+
 :- end_tests(indexer_predicates).
 
