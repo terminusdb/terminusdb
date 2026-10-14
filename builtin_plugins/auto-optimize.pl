@@ -24,14 +24,17 @@ optimize_chance(0.1).     % 10% - Optimization runs on average every 10th commit
 
 %% optimizer_enabled is semidet.
 %
-%  As a built-in plugin this file is always loaded, but the probabilistic
-%  post-commit GC/optimize work only activates when
-%  TERMINUSDB_ENABLE_OPTIMIZER is set to a truthy value. Disabled by
-%  default: the random optimization timing breaks tests that rely on
-%  deterministic data versions.
+%  As a built-in plugin this file is always loaded, and the probabilistic
+%  post-commit GC/optimize work is on by default — optimization should
+%  happen in production. Set TERMINUSDB_ENABLE_OPTIMIZER to a falsy value
+%  (0/false/no/off) to disable it — test harnesses do this because the
+%  random optimization timing breaks tests that rely on deterministic
+%  data versions.
 optimizer_enabled :-
-    getenv('TERMINUSDB_ENABLE_OPTIMIZER', Value),
-    memberchk(Value, ['1', 'true', 'yes']).
+    (   getenv('TERMINUSDB_ENABLE_OPTIMIZER', Value)
+    ->  \+ memberchk(Value, ['0', 'false', 'no', 'off'])
+    ;   true
+    ).
 
 :- (   optimizer_enabled
    ->  gc_chance(GC), optimize_chance(OPT),
@@ -39,7 +42,7 @@ optimizer_enabled :-
        OPT_Pct is round(OPT * 100),
        format(atom(Msg), "auto-optimize plugin loaded: probabilistic GC (~w%) and optimization (~w%) enabled", [GC_Pct, OPT_Pct]),
        json_log_info(Msg)
-   ;   json_log_info("auto-optimize plugin loaded (inactive; set TERMINUSDB_ENABLE_OPTIMIZER=1 to enable)")
+   ;   json_log_info("auto-optimize plugin loaded (inactive; TERMINUSDB_ENABLE_OPTIMIZER disables optimization)")
    ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
