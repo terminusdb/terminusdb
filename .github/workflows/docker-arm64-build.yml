@@ -34,11 +34,13 @@ jobs:
           context: .
           tags: terminusdb/terminusdb-server:local
           outputs: type=docker,dest=terminusdb-server-snapshot-arm64.tar
-          cache-from: type=gha
-          # mode=min: see docker-amd64-build.yml — intermediate-stage blobs
-          # are never reusable (src/rust COPY invalidates them per change)
-          # and their churn evicts the rust-cache entries.
-          cache-to: type=gha,mode=min
+          cache-from: type=gha,scope=arm64
+          # Per-arch scope keeps amd64 layers out of this cache. mode=max
+          # exports the rust_deps stage — the compiled dependency tree,
+          # stable while Cargo.lock is unchanged — which is the expensive
+          # half of this build. rust_builder stays thin: target/ is
+          # deleted in the same RUN.
+          cache-to: type=gha,mode=max,scope=arm64
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
