@@ -462,6 +462,23 @@ pipe_write_health_check(Fd) :-
 %%  the message queue orphaned and causing all subsequent requests
 %%  dispatched to this worker to hang forever.
 worker_loop(Queue) :-
+    catch(
+        worker_loop_iteration(Queue),
+        error(client_disconnected, _),
+        (   %% A stray cancel (late signal, stale active_pipe entry, or a
+            %% watchdog health check on a dead pipe) can deliver
+            %% client_disconnected outside the per-request catches — e.g.
+            %% while blocked in thread_get_message. That must not kill the
+            %% worker: a dead worker halts the server via the watchdog.
+            json_log_error_formatted(
+                "Worker discarded stray client_disconnected signal", []),
+            catch(signal_worker_ready(Queue),
+                  error(client_disconnected, _), true)
+        )
+    ),
+    worker_loop(Queue).
+
+worker_loop_iteration(Queue) :-
     thread_get_message(Queue, Message),
     (   Message = work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId))
     ->  log_worker_memory(before, HandlerModule, HandlerName),
@@ -486,8 +503,7 @@ worker_loop(Queue) :-
                 "Worker cleanup error (non-fatal, thread continues): ~q",
                 [CleanupError])
         ),
-        signal_worker_ready(Queue),
-        worker_loop(Queue)
+        signal_worker_ready(Queue)
     ;   Message = work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId))
     ->  catch(
             (   log_worker_memory(before, HandlerModule, HandlerName),
@@ -514,9 +530,8 @@ worker_loop(Queue) :-
                 "Worker cleanup error (non-fatal, thread continues): ~q",
                 [CleanupError])
         ),
-        signal_worker_ready(Queue),
-        worker_loop(Queue)
-    ;   worker_loop(Queue)
+        signal_worker_ready(Queue)
+    ;   true
     ).
 
 %% cleanup_worker_state is det.
@@ -1946,6 +1961,26 @@ test(worker_loop_catches_client_disconnected) :-
     thread_join(ThreadId, _),
     message_queue_destroy(TestQ),
     message_queue_destroy(ReadyQ).
+
+test(worker_loop_survives_stray_client_disconnected) :-
+    %% A client_disconnected signal delivered while the worker is blocked
+    %% in thread_get_message (e.g. a late cancel on a stale active_pipe
+    %% entry) must not kill the worker — a dead worker crashes the server
+    %% via the watchdog.
+    message_queue_create(TestQ),
+    thread_create(request_worker_pool:worker_loop(TestQ), ThreadId,
+                  [detached(false)]),
+    sleep(0.2),
+    thread_signal(ThreadId, throw(error(client_disconnected, _))),
+    sleep(0.2),
+    catch(thread_property(ThreadId, status(Status)), _, Status = not_found),
+    assertion(Status == running),
+    %% Other exceptions remain fatal: the worker must still die on a
+    %% different signal so the watchdog can crash the server.
+    thread_signal(ThreadId, throw(error(test_thread_death(stray_signal), _))),
+    thread_join(ThreadId,
+                exception(error(test_thread_death(stray_signal), _))),
+    message_queue_destroy(TestQ).
 
 %% --- Pipe cleanup ordering (watchdog race regression) ---
 
