@@ -384,21 +384,13 @@ jobs:
         run: |
             kill $(cat terminusdb.pid)
 
-  # Docker images build on every push/PR and start with the native build
-  # jobs (no `needs`), so the long-pole arm64 build finishes in time and
-  # pushes to main keep the gha cache warm for the release workflow.
-  # The amd64 image is tested on ready PRs and pushes; draft PRs skip the
-  # test suite. The arm64 image builds without tests — arm64 correctness
-  # is covered by the macos-latest native jobs and the publish workflow's
-  # own arm64 test run.
-  docker-amd64:
-    name: "AMD64 Image"
-    uses: ./.github/workflows/docker-amd64-build.yml
-    with:
-      run_tests: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
-
+  # Only the arm64 image builds on every push/PR (the long pole — starting
+  # with the native build jobs keeps it on the critical path and pushes to
+  # main keep the gha cache warm for the release workflow). It runs the
+  # image test suite on ready PRs and pushes; draft PRs skip it. The amd64
+  # image is exercised by the publish workflow instead of per-PR.
   docker-arm64:
     name: "ARM64 Image"
     uses: ./.github/workflows/docker-arm64-build.yml
     with:
-      run_tests: false
+      run_tests: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
