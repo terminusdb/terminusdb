@@ -1347,6 +1347,7 @@ async fn run_commit_task(
         &cancel,
         &progress,
         store_clustering,
+        new_doc_count,
     ).await;
 
     // Clear the current commit marker — the task is done.
@@ -1355,7 +1356,7 @@ async fn run_commit_task(
     match push_result {
         Ok(_) => next_commit_result,
         Err(e) => {
-            if e == "RETRY_503" {
+            if e == "RETRY_503" || e.contains("truncated push") {
                 TaskResult::Retry
             } else {
                 TaskResult::Error(e)
@@ -1417,29 +1418,37 @@ async fn post_push_stream(
     cancel: &tokio_util::sync::CancellationToken,
     progress: &Arc<BranchProgress>,
     store_clustering: bool,
+    expected_docs: Option<u64>,
 ) -> Result<(), String> {
     let clustering_param = if store_clustering {
         "&store_clustering=true"
     } else {
         ""
     };
+    // Forward the producer's declared doc count so the engine can reject a
+    // truncated stream instead of tagging a partial commit as indexed.
+    let expected_param = expected_docs
+        .map(|n| format!("&expected_docs={}", n))
+        .unwrap_or_default();
 
     let path = if parent_commit == "none" || parent_commit.is_empty() {
         format!(
-            "/push?domain={}&branch={}&target_commit={}&stream=true{}",
+            "/push?domain={}&branch={}&target_commit={}&stream=true{}{}",
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
             clustering_param,
+            expected_param,
         )
     } else {
         format!(
-            "/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true{}",
+            "/push?domain={}&branch={}&target_commit={}&parent_commit={}&stream=true{}{}",
             urlencoding::encode(key.domain()),
             urlencoding::encode(&key.branch),
             urlencoding::encode(commit_id),
             urlencoding::encode(parent_commit),
             clustering_param,
+            expected_param,
         )
     };
 
