@@ -18,3 +18,8 @@ swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 #[patch."https://github.com/terminusdb-org/terminusdb-store"]
 #terminus-store = {path="../../../terminusdb-store"}
 
+# To develop against a local vectorlink checkout instead of the pinned
+# rev, uncomment:
+#[patch."https://github.com/terminusdb-org/vectorlink"]
+#vectorlink = {path="../../../vectorlink"}
+

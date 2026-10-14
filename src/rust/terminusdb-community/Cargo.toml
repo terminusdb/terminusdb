@@ -26,7 +26,7 @@ rand = "0.9"
 uuid = { version = "1.10", features = ["v7", "fast-rng"] }
 sha1 = "0.10"
 #juniper = "0.15.11"
-juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-v0.15.11-p1"}
+juniper = {git="https://github.com/terminusdb-labs/juniper.git", tag = "juniper-v0.15.11-p1", default-features = false, features = ["chrono", "schema-language", "url", "uuid"]}
 serde = {version="1.0", features=["derive"]}
 float-ord = "0.3"
 regex = "1"
