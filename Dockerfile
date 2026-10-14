@@ -52,7 +52,9 @@ RUN cd src/rust && cargo chef prepare --recipe-path /app/rust/recipe.json
 # Compile all dependencies once; reused until the lockfile changes.
 FROM rust_builder_base AS rust_deps
 COPY --from=rust_planner /app/rust/recipe.json src/rust/recipe.json
-RUN cd src/rust && cargo chef cook --release --recipe-path recipe.json
+# --all-targets cooks the dev-dep graph too (tower/axum/tonic for tests);
+# without it `cargo swipl test` recompiles shared deps under test features.
+RUN cd src/rust && cargo chef cook --release --all-targets --recipe-path recipe.json
 
 # Build the community dylib. Sources land on top of the cached dependency
 # layer, so only workspace crates recompile. The target dir is deleted
