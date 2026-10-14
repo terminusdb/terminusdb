@@ -87,6 +87,9 @@ jobs:
             --detach \
             --net=host \
             -e TERMINUSDB_PLUGINS_PATH=/plugins \
+            # Probabilistic post-commit optimize/GC breaks tests that assert
+            # on deterministic data versions — keep it off in image tests.
+            -e TERMINUSDB_ENABLE_OPTIMIZER=false \
             terminusdb/terminusdb-server:local
 
       # Give the server some time to start up
