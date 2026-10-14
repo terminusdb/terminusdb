@@ -1408,13 +1408,26 @@ init_embedded_engine :-
     do_or_die(
         current_predicate('$vectorlink':vectorlink_init/2),
         error(vectorlink_ffi_not_loaded(vectorlink_init), _)),
-    config:db_path(Db_Path),
-    file_directory_name(Db_Path, Storage_Dir),
-    atomic_list_concat([Storage_Dir, 'vectorlink'], '/', Data_Dir),
+    embedded_data_dir(Data_Dir),
     embedded_tokenizer_path(Tokenizer_Path),
     do_or_die(
         '$vectorlink':vectorlink_init(Data_Dir, Tokenizer_Path),
         error(vectorlink_engine_init_failed(Data_Dir), _)).
+
+%% embedded_data_dir(-Path) is det.
+%
+%  Data directory for the embedded engine's Lance store and embed cache.
+%  VECTORLINK_DATA_DIR wins when set; otherwise a 'vectorlink' directory
+%  next to the database store (db_path is <storage>/db by convention, so
+%  its parent is the storage root).
+embedded_data_dir(Path) :-
+    (   getenv('VECTORLINK_DATA_DIR', Env_Path),
+        Env_Path \== ''
+    ->  Path = Env_Path
+    ;   config:db_path(Db_Path),
+        file_directory_name(Db_Path, Storage_Dir),
+        atomic_list_concat([Storage_Dir, 'vectorlink'], '/', Path)
+    ).
 
 %% embedded_tokenizer_path(-Path) is det.
 %
