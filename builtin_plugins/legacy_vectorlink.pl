@@ -14,6 +14,9 @@ Activates when TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set. Provides:
 */
 
 :- use_module(core(plugin_api)).
+:- use_module(core(api/api_indexer),
+             [commit_ops_begin/0, commit_op/8,
+              embedding_refresh_purge_types/6]).
 :- use_module(library(json)).
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
@@ -136,11 +139,18 @@ api_index_jobs(System_DB, Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous
     open_descriptor(Commit_Descriptor, Transaction),
     all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
     '$embedding':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
+    (   Maybe_Previous_Commit_Id = none
+    ->  RefreshTypes = [], PurgeTypes = []
+    ;   embedding_refresh_purge_types(Transaction, Descriptor,
+                                      Commit_Id, TypeQueries,
+                                      RefreshTypes, PurgeTypes)
+    ),
     call(Prelude,Stream),
+    commit_ops_begin,
     forall(
-        (   member(Type-_Query-_Template, TypeQueries),
-            api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
-                          Type, Operation)),
+        commit_op(Transaction, Descriptor, Commit_Id, TypeQueries,
+                  Maybe_Previous_Commit_Id, RefreshTypes, PurgeTypes,
+                  Type-Operation),
         (   get_dict(op, Operation, Op),
             ignore(get_dict(id, Operation, Id)),
             '$embedding':write_op_for(Stream, System_DB, Transaction, Embedding_Context, Type, Id, Op)
