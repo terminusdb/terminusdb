@@ -103,6 +103,10 @@ jobs:
         with:
           name: terminusdb-build-${{ matrix.os }}
           retention-days: 1
+          # .last-dist is a hidden file; without this flag it is silently
+          # dropped and `make test` sees a stamp mismatch → deletes
+          # librust.* → full cargo rebuild (which then fails on protoc).
+          include-hidden-files: true
           path: |
             terminusdb
             src/rust/librust.*
@@ -380,16 +384,21 @@ jobs:
         run: |
             kill $(cat terminusdb.pid)
 
-  # Docker images build on every PR, kicked off right after the native
-  # build (parallel to the test jobs — the image compiles its own Rust).
-  # On draft PRs the image test suite is skipped (build only); on ready
-  # PRs the amd64 image is built and tested. ARM64 PR coverage comes from
-  # the macos-latest native build+test jobs (Apple Silicon), so the arm64
-  # image build only runs via workflow_dispatch / publish workflows.
+  # Docker images build on every push/PR and start with the native build
+  # jobs (no `needs`), so the long-pole arm64 build finishes in time and
+  # pushes to main keep the gha cache warm for the release workflow.
+  # The amd64 image is tested on ready PRs and pushes; draft PRs skip the
+  # test suite. The arm64 image builds without tests — arm64 correctness
+  # is covered by the macos-latest native jobs and the publish workflow's
+  # own arm64 test run.
   docker-amd64:
     name: "AMD64 Image"
-    needs: build
-    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/docker-amd64-build.yml
     with:
-      run_tests: ${{ github.event.pull_request.draft == false }}
+      run_tests: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+
+  docker-arm64:
+    name: "ARM64 Image"
+    uses: ./.github/workflows/docker-arm64-build.yml
+    with:
+      run_tests: false
