@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 # Embedded vectorlink engine, built from git source.
 # shortcut: pinned rev; bump manually when pulling vectorlink updates.
-vectorlink = { git = "https://github.com/terminusdb-org/vectorlink", rev = "a5582442642df369de450947b67dce0e0d70dbc0" }
+vectorlink = { git = "https://github.com/terminusdb-org/vectorlink", rev = "854c7b519e15551455ea8535e9dd6eb14c2657bf" }
 terminusdb-webserver = { path = "../terminusdb-webserver" }
 swipl = { version = "0.3.16", features = ["serde"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
