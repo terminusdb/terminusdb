@@ -233,12 +233,11 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
   })
 
   it('should omit @id in as_list reads when raw_id=false', async function () {
-    const insertResult = await document.insert(agent, {
+    await document.insert(agent, {
       instance: { name: 'list_member' },
       author: 'test_author',
       raw_json: true,
     })
-    const id = insertResult.body[0]
 
     const retrieved = await document.get(agent, {
       query: { as_list: true, raw_id: false },
