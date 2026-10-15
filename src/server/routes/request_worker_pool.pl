@@ -470,7 +470,7 @@ worker_loop(Queue) :-
             %% client_disconnected outside the per-request catches — e.g.
             %% while blocked in thread_get_message. That must not kill the
             %% worker: a dead worker halts the server via the watchdog.
-            json_log_error_formatted(
+            json_log_notice_formatted(
                 "Worker discarded stray client_disconnected signal", []),
             catch(signal_worker_ready(Queue),
                   error(client_disconnected, _), true)

@@ -32,8 +32,12 @@ jobs:
           context: .
           tags: terminusdb/terminusdb-server:local
           outputs: type=docker,dest=terminusdb-server-snapshot-amd64.tar
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=amd64
+          # Per-arch scope keeps arm64 layers out of this cache. mode=max
+          # exports intermediate stages: rust_deps carries the compiled
+          # dependency tree (stable while Cargo.lock is unchanged) and
+          # rust_builder stays thin — target/ is deleted in the same RUN.
+          cache-to: type=gha,mode=max,scope=amd64
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner

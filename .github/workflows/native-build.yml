@@ -103,6 +103,10 @@ jobs:
         with:
           name: terminusdb-build-${{ matrix.os }}
           retention-days: 1
+          # .last-dist is a hidden file; without this flag it is silently
+          # dropped and `make test` sees a stamp mismatch → deletes
+          # librust.* → full cargo rebuild (which then fails on protoc).
+          include-hidden-files: true
           path: |
             terminusdb
             src/rust/librust.*
@@ -172,28 +176,16 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
 
-      - name: Install Protobuf Compiler (Linux)
-        if: ${{runner.os == 'Linux' &&  steps.check_changes.outputs.relevant_changed == 'true' }}
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Install Protobuf Compiler (macOS)
-        if: ${{ runner.os == 'macOS' && steps.check_changes.outputs.relevant_changed == 'true' }}
-        run: brew install protobuf
-
-      - name: Cache Rust build
+      - name: Download build artifact
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        uses: Swatinem/rust-cache@v2
+        uses: actions/download-artifact@v4
         with:
-          workspaces: src/rust
-          # Restore-only consumer of the build job's cache entry (same OS +
-          # workspaces + Cargo.lock → same key once the job id is excluded).
-          add-job-id-key: false
-          shared-key: native
-          save-if: false
+          name: terminusdb-build-${{ matrix.os }}
+          path: .
 
-      - name: Build
+      - name: Make binary executable
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        run: make
+        run: chmod +x terminusdb
 
       - name: Unit tests
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
@@ -285,31 +277,120 @@ jobs:
       - name: Run tests
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
-            cd tests        
-            npm install-ci-test
+            cd tests
+            npm ci
+            npm run check
+            npm run test-nocli
+            npm run test-dataversion
+            npm run test-served
 
       - name: Stop TerminusDB
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
             kill $(cat terminusdb.pid)
 
-  # Docker images build on every PR, kicked off right after the native
-  # build (parallel to the test jobs — the image compiles its own Rust).
-  # On draft PRs the image test suite is skipped (build only); on ready
-  # PRs images are built and tested. Manual runs stay available via
-  # workflow_dispatch on the docker-* workflows.
-  docker-amd64:
-    name: "AMD64 Image"
+  # The cli-*.js suites run on their own runners so the ~18 files
+  # parallelise (MOCHA_PARALLEL) without lengthening the main suite.
+  cli-tests:
+    name: "CLI Tests"
     needs: build
     if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/docker-amd64-build.yml
-    with:
-      run_tests: ${{ github.event.pull_request.draft == false }}
 
+    strategy:
+      # Run all jobs even when some jobs fail.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            swipl_release: stable
+          - os: macos-latest
+            swipl_release: homebrew
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check for file changes
+        id: check_changes
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          RELEVANT_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|tests/|distribution/|Makefile|\.github/workflows/)' || true)
+          if [ -n "$RELEVANT_CHANGED" ]; then
+            echo "Relevant files changed: $RELEVANT_CHANGED"
+            echo "relevant_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No relevant files changed"
+            echo "relevant_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install swi-prolog
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: ./.github/install-swi-prolog.sh ${{ matrix.swipl_release }}
+
+      - name: Checkout tus
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        uses: actions/checkout@v7
+        with:
+          repository: terminusdb-org/tus
+          path: tus
+          ref: v0.0.17
+
+      - name: Install tus
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
+
+      - name: Download build artifact
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: terminusdb-build-${{ matrix.os }}
+          path: .
+
+      - name: Make binary executable
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: chmod +x terminusdb
+
+      - name: Init TerminusDB
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: |
+          ./terminusdb store init
+
+      - name: Start TerminusDB
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: |
+          export TERMINUSDB_PLUGINS_PATH="$GITHUB_WORKSPACE/plugins"
+          ./terminusdb serve &
+          echo $! > terminusdb.pid
+          sleep 5  # wait for server to start
+
+      - name: Install NodeJS
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run cli tests
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: |
+            cd tests
+            npm ci
+            npm run test-cli
+
+      - name: Stop TerminusDB
+        if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
+        run: |
+            kill $(cat terminusdb.pid)
+
+  # Only the arm64 image builds on every push/PR (the long pole — starting
+  # with the native build jobs keeps it on the critical path and pushes to
+  # main keep the gha cache warm for the release workflow). It runs the
+  # image test suite on ready PRs and pushes; draft PRs skip it. The amd64
+  # image is exercised by the publish workflow instead of per-PR.
   docker-arm64:
     name: "ARM64 Image"
-    needs: build
-    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/docker-arm64-build.yml
     with:
-      run_tests: ${{ github.event.pull_request.draft == false }}
+      run_tests: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}

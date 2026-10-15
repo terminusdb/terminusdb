@@ -35,19 +35,42 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
-# Initialize the crates.io index git repo to cache it.
-RUN (cargo install lazy_static 2> /dev/null || true) && (cargo install cargo-swipl || true)
+# cargo-chef splits dependency compilation from workspace compilation: the
+# dependency layer survives source edits and is only invalidated when the
+# lockfile or a workspace manifest changes. Also initialize the crates.io
+# index git repo to cache it.
+RUN (cargo install lazy_static 2> /dev/null || true) && \
+    (cargo install cargo-swipl || true) && \
+    cargo install cargo-chef --locked
 WORKDIR /app/rust
+
+# Dependency recipe: derived only from workspace manifests and Cargo.lock.
+FROM rust_builder_base AS rust_planner
+COPY src/rust src/rust/
+RUN cd src/rust && cargo chef prepare --recipe-path /app/rust/recipe.json
+
+# Compile all dependencies once; reused until the lockfile changes.
+FROM rust_builder_base AS rust_deps
+COPY --from=rust_planner /app/rust/recipe.json src/rust/recipe.json
+# --all-targets cooks the dev-dep graph too (tower/axum/tonic for tests);
+# without it `cargo swipl test` recompiles shared deps under test features.
+RUN cd src/rust && cargo chef cook --release --all-targets --recipe-path recipe.json
+
+# Build the community dylib. Sources land on top of the cached dependency
+# layer, so only workspace crates recompile. The target dir is deleted
+# afterwards to keep this layer thin under cache-to mode=max.
+FROM rust_deps AS rust_builder
+ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
+ARG SKIP_TESTS=false
 COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 # Vectorlink tests resolve builtin plugin assets relative to the crate dir.
 COPY builtin_plugins/assets builtin_plugins/assets/
-
-# Build the community dylib.
-FROM rust_builder_base AS rust_builder
-ARG CARGO_NET_GIT_FETCH_WITH_CLI=true
-ARG SKIP_TESTS=false
-RUN make DIST=community && ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo swipl test --release))
+# TERMINUSDB_ENABLE_OPTIMIZER=false keeps the in-build plunit runs
+# deterministic (probabilistic optimize/GC would otherwise fire mid-test).
+RUN TERMINUSDB_ENABLE_OPTIMIZER=false make DIST=community && \
+    ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && TERMINUSDB_ENABLE_OPTIMIZER=false cargo swipl test --release)) && \
+    rm -rf src/rust/target
 
 # Download the pre-built tdb-admin dist package from GitHub releases.
 FROM alpine:latest AS admin_dist
@@ -103,7 +126,7 @@ ARG SKIP_TESTS=false
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 RUN set -eux; \
     make DIST=community; \
-    [ "$SKIP_TESTS" = "true" ] || make test
+    [ "$SKIP_TESTS" = "true" ] || TERMINUSDB_ENABLE_OPTIMIZER=false make test
 
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb /app/terminusdb/

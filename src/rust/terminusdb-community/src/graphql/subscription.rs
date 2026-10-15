@@ -821,7 +821,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_basic() {
+    fn parse_change_set_basic() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet { Person_added { _id } } }",
@@ -835,7 +835,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_multiple_fields() {
+    fn parse_change_set_multiple_fields() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet { Person_added { _id name } Person_changed { _id name } Person_deleted { _id name } } }",
@@ -853,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_different_selection_sets_different_hashes() {
+    fn parse_change_set_different_selection_sets_different_hashes() {
         let tc = person_type_collection();
         let r1 = parse_subscription_query(
             "subscription { _ChangeSet { Person_added { _id } } }",
@@ -867,7 +867,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_with_filter() {
+    fn parse_change_set_with_filter() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet(filter: {types: [\"Person\"]}) { Person_added { _id } } }",
@@ -880,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_include_children_false() {
+    fn parse_change_set_include_children_false() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet(include_children: false) { Person_added { _id } } }",
@@ -892,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_include_children_default_true() {
+    fn parse_change_set_include_children_default_true() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet { Person_added { _id } } }",
@@ -904,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_include_children_true() {
+    fn parse_change_set_include_children_true() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet(include_children: true) { Person_added { _id } } }",
@@ -916,7 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_ChangeSet_only_CommitMetadata() {
+    fn parse_change_set_only_commit_metadata() {
         let tc = person_type_collection();
         let result = parse_subscription_query(
             "subscription { _ChangeSet { _CommitMetadata { _id } } }",
