@@ -66,8 +66,10 @@ COPY distribution/Makefile.rust Makefile
 COPY src/rust src/rust/
 # Vectorlink tests resolve builtin plugin assets relative to the crate dir.
 COPY builtin_plugins/assets builtin_plugins/assets/
-RUN make DIST=community && \
-    ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && cargo swipl test --release)) && \
+# TERMINUSDB_ENABLE_OPTIMIZER=false keeps the in-build plunit runs
+# deterministic (probabilistic optimize/GC would otherwise fire mid-test).
+RUN TERMINUSDB_ENABLE_OPTIMIZER=false make DIST=community && \
+    ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && TERMINUSDB_ENABLE_OPTIMIZER=false cargo swipl test --release)) && \
     rm -rf src/rust/target
 
 # Download the pre-built tdb-admin dist package from GitHub releases.
@@ -124,7 +126,7 @@ ARG SKIP_TESTS=false
 COPY --from=rust_builder /app/rust/src/rust/librust.so src/rust/
 RUN set -eux; \
     make DIST=community; \
-    [ "$SKIP_TESTS" = "true" ] || make test
+    [ "$SKIP_TESTS" = "true" ] || TERMINUSDB_ENABLE_OPTIMIZER=false make test
 
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb /app/terminusdb/
