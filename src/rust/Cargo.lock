@@ -1068,7 +1068,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -1866,7 +1866,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -1904,7 +1904,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -2636,8 +2636,8 @@ dependencies = [
 
 [[package]]
 name = "terminus-store"
-version = "0.21.7"
-source = "git+https://github.com/terminusdb-org/terminusdb-store#16199af82d09af289219342be1a042db9b6b09ba"
+version = "0.21.8"
+source = "git+https://github.com/terminusdb-org/terminusdb-store?tag=v0.21.8#9258b6f30e53dfb96bf0827e48775cfde465d565"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
