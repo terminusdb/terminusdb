@@ -322,6 +322,36 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
         date_string(D2,Val2)
     ->  format(string(S), '[~w,~w]', [Val1,Val2])
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
+%%% xdd:dateRange => xdd:dateTimeInterval
+typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://terminusdb.com/schema/xdd#dateRange', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
+    !,
+    (   is_date_range(Val),
+        Val = date_range(D1,D2)
+    ->  % Inclusive date range: end date covers the whole day, so the
+        % exclusive interval end is the following day at midnight.
+        normalise_interval_start(D1, N1),
+        normalise_interval_end(D2, N2),
+        compute_duration_between(N1, N2, Dur),
+        Cast = date_time_interval(N1, N2, Dur, explicit)
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
+%%% xdd:dateTimeInterval => xdd:dateRange
+typecast_switch('http://terminusdb.com/schema/xdd#dateRange', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateRange') :-
+    !,
+    (   is_date_time_interval(Val),
+        Val = date_time_interval(C1, C2, _, _)
+    ->  component_to_parts(C1, S1, _),
+        component_to_parts(C2, S2, NS2),
+        % The interval end is exclusive: the last covered instant is
+        % end - 1ns. An end with zero nanoseconds lands exactly on a
+        % second boundary, so back off one second to find its date.
+        (   NS2 > 0
+        ->  EStamp = S2
+        ;   EStamp is S2 - 1
+        ),
+        stamp_date_time(S1, date(Y1,M1,D1,_,_,_,0,'UTC',-), 'UTC'),
+        stamp_date_time(EStamp, date(Y2,M2,D2,_,_,_,0,'UTC',-), 'UTC'),
+        Cast = date_range(date(Y1,M1,D1,0), date(Y2,M2,D2,0))
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
 %%% xsd:string => xdd:dateTimeInterval
 typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
     !,
@@ -410,26 +440,33 @@ normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
 normalise_interval_end(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
 
 compute_duration_between(Start, End, duration(Sign, 0, 0, Days, Hours, Minutes, Seconds)) :-
-    component_to_timestamp(Start, T1),
-    component_to_timestamp(End, T2),
-    Diff is T2 - T1,
-    (   Diff >= 0
-    ->  Sign = 1, AbsDiff = Diff
-    ;   Sign = -1, AbsDiff is abs(Diff)
+    component_to_parts(Start, T1, NS1),
+    component_to_parts(End, T2, NS2),
+    % Whole seconds as an exact float difference, nanoseconds as integers —
+    % never pass NS through the float timestamp (precision loss at epoch
+    % scale would corrupt sub-second durations).
+    SecDiff is T2 - T1,
+    NSDiff is NS2 - NS1,
+    (   NSDiff < 0
+    ->  SecNorm is SecDiff - 1, NSNorm is NSDiff + 1000000000
+    ;   SecNorm = SecDiff, NSNorm = NSDiff
+    ),
+    (   SecNorm < 0
+    ->  Sign = -1, AbsDiff is -SecNorm
+    ;   Sign = 1, AbsDiff = SecNorm
     ),
     Days is truncate(AbsDiff / 86400),
     Rem1 is AbsDiff - Days * 86400,
     Hours is truncate(Rem1 / 3600),
     Rem2 is Rem1 - Hours * 3600,
     Minutes is truncate(Rem2 / 60),
-    Seconds is Rem2 - Minutes * 60 * 1.0.
+    Seconds is Rem2 - Minutes * 60 + NSNorm / 1000000000.
 
-component_to_timestamp(date(Y,M,D,_), T) :-
+component_to_parts(date(Y,M,D,_), T, 0) :-
     !,
     date_time_stamp(date(Y,M,D,0,0,0,0,-,-), T).
-component_to_timestamp(date_time(Y,Mo,D,H,Mi,S,NS), T) :-
-    Sec is S + NS / 1000000000,
-    date_time_stamp(date(Y,Mo,D,H,Mi,Sec,0,-,-), T).
+component_to_parts(date_time(Y,Mo,D,H,Mi,S,NS), T, NS) :-
+    date_time_stamp(date(Y,Mo,D,H,Mi,S,0,-,-), T).
 
 interval_component_string(date(Y,M,D,Offset), S) :- !, date_string(date(Y,M,D,Offset), S).
 interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
@@ -1538,5 +1575,34 @@ test(interval_roundtrip_duration_with_hours, []) :-
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
     S = "2025-01-01T00:00:00Z/PT1H".
+
+test(date_range_to_interval_inclusive, []) :-
+    % [D1, D2] covers both whole days: the interval end is the exclusive
+    % instant at (D2 + 1 day)T00:00:00Z.
+    typecast(date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), _, explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
+
+test(interval_to_date_range_exclusive_end, []) :-
+    % An exclusive end at exactly midnight belongs to the next day, so the
+    % last included date is the day before it.
+    typecast(date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), duration(1,0,0,90,0,0,0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://terminusdb.com/schema/xdd#dateRange', [],
+             date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
+
+test(interval_to_date_range_midday_end, []) :-
+    % An end instant inside a day includes that day's date.
+    typecast(date_time_interval(date_time(2025,1,1,9,30,0,0), date_time(2025,3,31,17,15,0,0), duration(1,0,0,0,0,0,0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://terminusdb.com/schema/xdd#dateRange', [],
+             date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
+
+test(date_range_interval_roundtrip, []) :-
+    typecast(date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://terminusdb.com/schema/xdd#dateRange', [],
+             date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
+
 
 :- end_tests(typecast).

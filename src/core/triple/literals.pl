@@ -217,12 +217,9 @@ date_time_stamp_string(Date_Time,String) :-
     remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,Date_Time).
 
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
-    % SWI-Prolog's date_time_stamp interprets arg 7 as seconds *west* of
-    % Greenwich, but XSD offsets are seconds *east* (positive = east).  Negate
-    % so that e.g. +02:00 (7200s east) becomes -7200s west, yielding the
-    % correct UTC conversion.
-    Swipl_Offset is -Offset,
-    date_time_stamp(date(Y, M, D, HH, MM, SS, Swipl_Offset, -, -), TS),
+    % time_offset//1 already emits SWI-Prolog's convention: seconds *west* of
+    % Greenwich (+02:00 parses to -7200), matching date_time_stamp arg 7.
+    date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),
     stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
     SS_Floor is floor(SS1).
 
@@ -238,27 +235,43 @@ add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
     duration_clamp_day(Y2, M2, D, D2),
-    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + DS),
+    WholeDS is floor(DS),
+    FracNS is Sign * round((DS - WholeDS) * 1000000000),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + WholeDS),
     date_time_stamp(date(Y2,M2,D2,0,0,0,0,-,-), BaseStamp),
-    EndStamp is BaseStamp + DaySecs,
+    (   FracNS < 0
+    ->  Carry = -1, ENS is FracNS + 1000000000
+    ;   Carry = 0, ENS = FracNS
+    ),
+    EndStamp is BaseStamp + DaySecs + Carry,
     stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS,0,'UTC',-), 'UTC'),
     ESSF is floor(ESS),
     (   DH =:= 0, DMi =:= 0, DS =:= 0
     ->  End = date(EY,EM,ED,O)
-    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,0)
+    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS)
     ).
 add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
     duration_clamp_day(Y2, M2, D, D2),
-    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + DS),
-    S is SS + NS / 1000000000,
-    date_time_stamp(date(Y2,M2,D2,HH,MM,S,0,-,-), BaseStamp),
-    EndStamp is BaseStamp + DaySecs,
+    % Split the duration seconds: whole seconds go through the timestamp (which
+    % is float and must never carry nanoseconds), the fractional part is kept
+    % as integer nanoseconds to avoid float error (0.1s -> 99999904ns).
+    WholeDS is floor(DS),
+    FracNS is Sign * round((DS - WholeDS) * 1000000000),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + WholeDS),
+    date_time_stamp(date(Y2,M2,D2,HH,MM,SS,0,-,-), BaseStamp),
+    NS_Total is NS + FracNS,
+    (   NS_Total < 0
+    ->  Carry = -1, ENS is NS_Total + 1000000000
+    ;   NS_Total >= 1000000000
+    ->  Carry = 1, ENS is NS_Total - 1000000000
+    ;   Carry = 0, ENS = NS_Total
+    ),
+    EndStamp is BaseStamp + DaySecs + Carry,
     stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
     ESSF is floor(ESS1),
-    ENS is floor((ESS1 - ESSF) * 1000000000),
     End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS).
 
 /*

@@ -1386,10 +1386,10 @@ woql_interval(Start, End, Interval) :-
         End = D2^^_,
         normalise_interval_start(D1, N1),
         normalise_interval_end(D2, N2),
-        interval_component_stamp(N1, S1),
-        interval_component_stamp(N2, S2),
-        DiffSecs is S2 - S1,
-        seconds_to_duration(DiffSecs, Dur),
+        interval_component_stamp_ns(N1, NS1),
+        interval_component_stamp_ns(N2, NS2),
+        DiffNanos is NS2 - NS1,
+        nanoseconds_to_duration(DiffNanos, Dur),
         Interval = date_time_interval(N1,N2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval), _))
     ).
@@ -1406,12 +1406,46 @@ interval_component_typed(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
  * component: date_time_interval(Start, End, Duration).
  */
 
-% Convert an interval component to a Unix timestamp (seconds).
-interval_component_stamp(date(Y,M,D,_O), Stamp) :-
-    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp).
-interval_component_stamp(date_time(Y,M,D,HH,MM,SS,NS), Stamp) :-
-    S is SS + NS / 1000000000,
-    date_time_stamp(date(Y,M,D,HH,MM,S,0,-,-), Stamp).
+% Convert an interval component to a Unix timestamp in nanoseconds.
+interval_component_stamp_ns(date(Y,M,D,_O), StampNanos) :-
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
+    StampNanos is floor(Stamp * 1000000000).
+interval_component_stamp_ns(date_time(Y,M,D,HH,MM,SS,NS), StampNanos) :-
+    date_time_stamp(date(Y,M,D,HH,MM,SS,0,-,-), Stamp),
+    StampNanos is floor(Stamp * 1000000000) + NS.
+
+% Convert a nanoseconds difference to an xsd:duration term (days/time only).
+nanoseconds_to_duration(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Nanos < 0
+    ->  Sign = -1, AbsNanos is abs(Nanos)
+    ;   Sign = 1, AbsNanos = Nanos),
+    Days is AbsNanos // 86400000000000,
+    Rem1 is AbsNanos mod 86400000000000,
+    Hours is Rem1 // 3600000000000,
+    Rem2 is Rem1 mod 3600000000000,
+    Mins is Rem2 // 60000000000,
+    Rem3 is Rem2 mod 60000000000,
+    SSec is Rem3 / 1000000000.
+
+% Convert a nanoseconds difference to an xsd:duration term, omitting zero time components.
+nanoseconds_to_duration_significant(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Nanos < 0
+    ->  Sign = -1, AbsNanos is abs(Nanos)
+    ;   Sign = 1, AbsNanos = Nanos),
+    Days is AbsNanos // 86400000000000,
+    Rem1 is AbsNanos mod 86400000000000,
+    (   Days =:= 0
+    ->  Hours is Rem1 // 3600000000000,
+        Rem2 is Rem1 mod 3600000000000,
+        Mins is Rem2 // 60000000000,
+        Rem3 is Rem2 mod 60000000000,
+        (   Rem3 =:= 0
+        ->  SSec = 0.0
+        ;   SSec is Rem3 / 1000000000)
+    ;   Hours = 0,
+        Mins = 0,
+        SSec = 0.0
+    ).
 
 % Convert a Unix timestamp back to a component matching the type of a template.
 stamp_to_component_like(Stamp, date(_,_,_,_), date(Y,M,D,0)) :- !,
@@ -1420,19 +1454,6 @@ stamp_to_component_like(Stamp, date_time(_,_,_,_,_,_,_), date_time(Y,M,D,HH,MM,S
     stamp_date_time(Stamp, date(Y,M,D,HH,MM,SS1,0,'UTC',-), 'UTC'),
     SSF is floor(SS1),
     NS is floor((SS1 - SSF) * 1000000000).
-
-% Convert seconds difference to xsd:duration term (days/time only).
-seconds_to_duration(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
-    (   Secs < 0
-    ->  Sign = -1, AbsSecs is abs(Secs)
-    ;   Sign = 1, AbsSecs = Secs
-    ),
-    Days is floor(AbsSecs) // 86400,
-    Rem1 is floor(AbsSecs) mod 86400,
-    Hours is Rem1 // 3600,
-    Rem2 is Rem1 mod 3600,
-    Mins is Rem2 // 60,
-    SSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60).
 
 % Convert xsd:duration day/time components to seconds (ignores Y/M).
 duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
@@ -1758,10 +1779,10 @@ woql_date_duration(Start, End, Duration) :-
     ->  % Compute duration from Start and End (day-count/time)
         Start = C1^^_,
         End = C2^^_,
-        interval_component_stamp(C1, S1),
-        interval_component_stamp(C2, S2),
-        DiffSecs is S2 - S1,
-        seconds_to_duration_significant(DiffSecs, Dur),
+        interval_component_stamp_ns(C1, NS1),
+        interval_component_stamp_ns(C2, NS2),
+        DiffNanos is NS2 - NS1,
+        nanoseconds_to_duration_significant(DiffNanos, Dur),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Start), nonvar(Duration)
     ->  % Compute End = Start + Duration (EOM-aware)
@@ -1842,30 +1863,6 @@ eom_add_duration(Component, duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
 eom_subtract_duration(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
     NSign is Sign * -1,
     eom_add_duration(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
-
-/*
- * seconds_to_duration_significant(+Secs, -Duration) is det.
- *
- * Converts a seconds difference to an xsd:duration term.
- * Omits time components when they are all zero (produces PnD).
- * When there are only time components (< 1 day), produces PTnHnMnS.
- */
-seconds_to_duration_significant(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
-    (   Secs < 0
-    ->  Sign = -1, AbsSecs is abs(Secs)
-    ;   Sign = 1, AbsSecs = Secs
-    ),
-    Days is floor(AbsSecs) // 86400,
-    Rem1 is floor(AbsSecs) mod 86400,
-    Hours is Rem1 // 3600,
-    Rem2 is Rem1 mod 3600,
-    Mins is Rem2 // 60,
-    RemSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60),
-    % Use 0.0 (float) for zero seconds so duration_string's SS \= 0.0 check works
-    (   RemSec =:= 0
-    ->  SSec = 0.0
-    ;   SSec = RemSec
-    ).
 
 /*
  * term_literal(Value, Value_Cast) is det.
@@ -9085,7 +9082,7 @@ test(interval_start_duration_nanoseconds_construct, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.500Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.5S"}.
 
 test(interval_duration_end_nanoseconds_from_interval, [
     setup((setup_temp_store(State),
@@ -9120,7 +9117,7 @@ test(interval_duration_end_nanoseconds_construct, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.500Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "PT0.5S/2025-01-01T00:00:00.500Z"}.
 
 test(interval_start_duration_tenth_second, [
     setup((setup_temp_store(State),
@@ -9137,7 +9134,7 @@ test(interval_start_duration_tenth_second, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.100Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.1S"}.
 
 test(interval_start_duration_two_tenths_second, [
     setup((setup_temp_store(State),
@@ -9154,7 +9151,7 @@ test(interval_start_duration_two_tenths_second, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.200Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.2S"}.
 
 test(interval_start_duration_full_nanos, [
     setup((setup_temp_store(State),
@@ -9171,7 +9168,7 @@ test(interval_start_duration_full_nanos, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.123456789Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.123456789S"}.
 
 test(interval_duration_end_tenth_second, [
     setup((setup_temp_store(State),
@@ -9188,7 +9185,7 @@ test(interval_duration_end_tenth_second, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.100Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "PT0.1S/2025-01-01T00:00:00.100Z"}.
 
 test(interval_start_duration_explicit_nanos_roundtrip, [
     setup((setup_temp_store(State),
