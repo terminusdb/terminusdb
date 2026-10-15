@@ -78,6 +78,8 @@ jobs:
           docker rm -f terminusdb || true
         
       - name: Run server
+        # TERMINUSDB_ENABLE_OPTIMIZER=false: the probabilistic post-commit
+        # optimize/GC breaks tests that assert on deterministic data versions.
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker run --platform ${{ inputs.image_platform }} \
@@ -87,8 +89,6 @@ jobs:
             --detach \
             --net=host \
             -e TERMINUSDB_PLUGINS_PATH=/plugins \
-            # Probabilistic post-commit optimize/GC breaks tests that assert
-            # on deterministic data versions — keep it off in image tests.
             -e TERMINUSDB_ENABLE_OPTIMIZER=false \
             terminusdb/terminusdb-server:local
 
