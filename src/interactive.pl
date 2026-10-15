@@ -80,6 +80,11 @@ prolog:message(server_missing_config(BasePath)) -->
        ;   directory_file_path(Repo_Root, plugins, Plugins_Dir),
            setenv('TERMINUSDB_PLUGINS_PATH', Plugins_Dir)
        ),
+       (   getenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', _)
+       ->  true
+       ;   directory_file_path(Repo_Root, builtin_plugins, Builtin_Plugins_Dir),
+           setenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', Builtin_Plugins_Dir)
+       ),
        load_plugins
    ;   format(user_error, "Warning: could not locate plugins directory for test runner~n", [])
    ).

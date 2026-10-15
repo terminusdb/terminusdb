@@ -9,6 +9,9 @@
               indexer_process_commit/4,
               indexer_next_commit/4,
               count_indexable_documents/4,
+              commit_ops_begin/0,
+              commit_op/8,
+              embedding_refresh_purge_types/6,
               embedding_type_queries/2,
               schema_store_clustering/2,
               schema_store_clustering_for_descriptor/2,
@@ -25,6 +28,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(transaction/ref_entity),
              [branch_head_commit/3, commit_id_uri/3,
+              commit_uri_to_parent_uri/3, layer_uri_for_commit/4,
               commit_uri_to_history_commit_ids/3]).
 :- use_module(core(util)).
 :- use_module(core(account)).
@@ -116,11 +120,18 @@ api_index_jobs(System_DB, Auth, Stream, Prelude, Path, Commit_Id, Maybe_Previous
     open_descriptor(Commit_Descriptor, Transaction),
     all_class_frames(Transaction, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
     '$embedding':embedding_context(System_DB, Transaction, Templates, Queries, Frames, Embedding_Context),
+    (   Maybe_Previous_Commit_Id = none
+    ->  RefreshTypes = [], PurgeTypes = []
+    ;   embedding_refresh_purge_types(Transaction, Descriptor,
+                                      Commit_Id, TypeQueries,
+                                      RefreshTypes, PurgeTypes)
+    ),
     call(Prelude,Stream),
+    commit_ops_begin,
     forall(
-        (   member(Type-_Query-_Template, TypeQueries),
-            api_indexable(Maybe_Previous_Commit_Id, Descriptor, Commit_Id,
-                          Type, Operation)),
+        commit_op(Transaction, Descriptor, Commit_Id, TypeQueries,
+                  Maybe_Previous_Commit_Id, RefreshTypes, PurgeTypes,
+                  Type-Operation),
         (   get_dict(op, Operation, Op),
             ignore(get_dict(id, Operation, Id)),
             '$embedding':write_op_for(Stream, System_DB, Transaction, Embedding_Context, Type, Id, Op)
@@ -209,10 +220,18 @@ validate_index_segments(N, _Segments, Path) :-
  *   - vectorlink endpoint not configured
  *   - indexer_notify FFI not loaded (Rust runtime not available)
  */
+%% push_indexer_backend is semidet.
+%
+%  Succeeds when a push/search indexer backend is active — either the
+%  remote http_vectorlink engine or the embedded vectorlink engine.
+push_indexer_backend :-
+    indexer_backend(Backend),
+    memberchk(Backend, [http_vectorlink, vectorlink]).
+
 io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     validate_index_path(Path),
     do_or_die(
-        indexer_backend(http_vectorlink),
+        push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_push_delta), _)),
     do_or_die(
         vectorlink_endpoint(_Endpoint),
@@ -280,7 +299,7 @@ io_index_branch(System_DB, Auth, Path) :-
     % Validate path structure FIRST — before any descriptor resolution or I/O.
     validate_index_path(Path),
     do_or_die(
-        indexer_backend(http_vectorlink),
+        push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_index_branch), _)),
     resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
     do_or_die(
@@ -321,8 +340,8 @@ io_index_branch(System_DB, Auth, Path) :-
 :- multifile plugins:post_commit_hook/2.
 
 plugins:post_commit_hook(Validations, _Meta_Data) :-
-    % Gate 1: backend must be http_vectorlink. Cheap tabled check.
-    indexer_backend(http_vectorlink),
+    % Gate 1: a push indexer backend must be active. Cheap tabled check.
+    push_indexer_backend,
     % Gate 2: FFI predicate must be registered (Rust runtime loaded).
     plugin_api:indexer_available,
     % Gate 3: for each branch validation, call indexer_notify.
@@ -565,6 +584,173 @@ indexer_process_commit(Path, _BranchName, CommitIdRaw, Stream) :-
         )
     ).
 
+%% commit_parent(+Descriptor, +CommitId, -Maybe_Previous) is det.
+%
+%  The parent commit in the branch history: some(Parent_Id), or none for
+%  the first commit.
+commit_parent(Descriptor, CommitId, Maybe_Previous) :-
+    get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+    commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
+    (   commit_uri_to_parent_uri(Repository_Descriptor, Commit_Uri,
+                                 Parent_Uri)
+    ->  commit_id_uri(Repository_Descriptor, Parent_Id, Parent_Uri),
+        Maybe_Previous = some(Parent_Id)
+    ;   Maybe_Previous = none
+    ).
+
+%% embedding_changed_types(+Transaction, -Types) is det.
+%
+%  Types whose embedding query/template changed in this commit's schema
+%  layer, detected from the sys:metadata → json#embedding →
+%  json#query|json#template chains in the layer's triple delta
+%  (Rust: $changes:collect_changed_embedding_types/2).
+embedding_changed_types(Transaction, Types) :-
+    findall(TA,
+            (   '$changes':collect_changed_embedding_types(Transaction, T),
+                atom_string(TA, T)
+            ),
+            Types0),
+    sort(Types0, Types).
+
+%% embedding_refresh_purge_types(+Transaction, +TypeQueries,
+%%                               -RefreshTypes, -PurgeTypes) is det.
+%
+%  Splits detected embedding-config changes into types with a complete
+%  config (query AND template — re-embed their docs) and types whose
+%  config is now incomplete or gone (purge: no valid embedding exists
+%  without both fields).
+embedding_refresh_purge_types(Transaction, Descriptor, CommitId,
+                              TypeQueries, RefreshTypes, PurgeTypes) :-
+    (   % Only a commit that actually wrote the schema graph can change
+        % embedding configs — an unchanged commit shares its parent's
+        % schema layer, whose delta belongs to the commit that wrote it.
+        commit_wrote_graph_(Descriptor, CommitId, schema)
+    ->  embedding_changed_types(Transaction, Changed),
+        include(complete_embedding_config(TypeQueries), Changed,
+                RefreshTypes),
+        exclude(complete_embedding_config(TypeQueries), Changed,
+                PurgeTypes)
+    ;   RefreshTypes = [],
+        PurgeTypes = []
+    ).
+
+%% commit_wrote_graph_(+Descriptor, +CommitId, +GraphType) is semidet.
+%
+%  True if this commit wrote a new GraphType (instance or schema) layer.
+%  Commits that only touch the other graph share the parent's layer, so
+%  the layer delta cannot be attributed to them.
+commit_wrote_graph_(Descriptor, CommitId, GraphType) :-
+    get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
+    commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
+    layer_uri_for_commit(Repository_Descriptor, Commit_Uri, GraphType,
+                         Layer_Uri),
+    (   commit_uri_to_parent_uri(Repository_Descriptor, Commit_Uri,
+                                 Parent_Uri)
+    ->  \+ layer_uri_for_commit(Repository_Descriptor, Parent_Uri,
+                                GraphType, Layer_Uri)
+    ;   true
+    ).
+
+%% commit_wrote_graph(+Descriptor, +CommitId, +GraphType) is semidet.
+%
+%  Memoised variant of commit_wrote_graph_/3 — safe to call per candidate
+%  inside commit_op/8 enumeration. Requires commit_ops_begin/0 to have
+%  run first (it resets the memo).
+commit_wrote_graph(Descriptor, CommitId, GraphType) :-
+    (   nb_current(commit_wrote_graph_memo, Memo)
+    ->  (   get_assoc(GraphType, Memo, Result)
+        ->  Result == true
+        ;   (   commit_wrote_graph_(Descriptor, CommitId, GraphType)
+            ->  Result = true
+            ;   Result = false
+            ),
+            put_assoc(GraphType, Memo, Result, Memo2),
+            nb_setval(commit_wrote_graph_memo, Memo2),
+            Result == true
+        )
+    ;   commit_wrote_graph_(Descriptor, CommitId, GraphType)
+    ).
+
+%% complete_embedding_config(+TypeQueries, +Type) is semidet.
+%
+%  The type has a usable embedding config in this commit's schema: both
+%  query and template present. A detected type failing this is purged —
+%  there are no valid embeddings without both fields.
+complete_embedding_config(TypeQueries, Type) :-
+    member(Type-_Query-Template, TypeQueries),
+    Template \== none.
+
+%% commit_ops_begin is det.
+%
+%  Initialises the per-enumeration dedup set used by mark_fresh/1.
+commit_ops_begin :-
+    empty_assoc(Empty),
+    nb_setval(commit_ops_seen_ids, Empty),
+    nb_setval(commit_wrote_graph_memo, Empty).
+
+%% mark_fresh(+Id) is semidet.
+%
+%  Fails if Id was already yielded by this commit_ops enumeration;
+%  otherwise records it. Prevents a doc changed in a schema commit from
+%  being emitted twice (once as a changed doc, once via type refresh).
+mark_fresh(Id) :-
+    atom_string(Key, Id),
+    (   nb_current(commit_ops_seen_ids, Seen)
+    ->  true
+    ;   empty_assoc(Seen)
+    ),
+    (   get_assoc(Key, Seen, _)
+    ->  fail
+    ;   put_assoc(Key, Seen, t, Seen2),
+        nb_setval(commit_ops_seen_ids, Seen2)
+    ).
+
+%% purge_id_of_type(+Transaction, +Descriptor, +Maybe_Previous, +Type, -Id)
+%%  is nondet.
+%
+%  Doc ids of a type whose embedding config is now invalid/absent —
+%  enumerated at this commit plus, when a parent exists, at the parent
+%  (covers docs deleted in this same commit, which Phase 1 cannot see
+%  once the type is no longer embedding-enabled).
+purge_id_of_type(Transaction, _Descriptor, _Maybe_Previous, Type, Id) :-
+    ask(Transaction, t(Id, rdf:type, Type), [compress_prefixes(false)]).
+purge_id_of_type(_Transaction, Descriptor, some(Parent_Id), Type, Id) :-
+    resolve_relative_descriptor(Descriptor, ["commit", Parent_Id],
+                                Parent_Descriptor),
+    ask(Parent_Descriptor, t(Id, rdf:type, Type),
+        [compress_prefixes(false)]).
+
+%% commit_op(+Transaction, +Descriptor, +CommitId, +TypeQueries,
+%%           +Maybe_Previous, +RefreshTypes, +PurgeTypes, -Op) is nondet.
+%
+%  Single source of truth for the ops a commit pushes to the engine:
+%  changed documents of embedding-enabled types, plus Changed upserts for
+%  every doc of a type whose embedding query/template changed in this
+%  commit, plus Deleted ops for docs of types whose config became
+%  incomplete or was removed. commit_ops_begin/0 must run before
+%  enumerating; duplicate ids across phases are suppressed.
+commit_op(Transaction, Descriptor, CommitId, TypeQueries, Maybe_Previous,
+          RefreshTypes, PurgeTypes, Type-Operation) :-
+    (   % Only enumerate doc changes when this commit actually wrote the
+        % instance graph — otherwise the shared layer would replay the
+        % last instance-writing commit's delta.
+        commit_wrote_graph(Descriptor, CommitId, instance),
+        member(Type-_Query-_Template, TypeQueries),
+        \+ memberchk(Type, PurgeTypes),
+        api_indexable(Maybe_Previous, Descriptor, CommitId,
+                      Type, Operation)
+    ;   member(Type, RefreshTypes),
+        ask(Transaction, t(Id, rdf:type, Type),
+            [compress_prefixes(false)]),
+        Operation = json{op:'Changed', id:Id}
+    ;   member(Type, PurgeTypes),
+        purge_id_of_type(Transaction, Descriptor, Maybe_Previous,
+                         Type, Id),
+        Operation = json{op:'Deleted', id:Id}
+    ),
+    get_dict(id, Operation, Op_Id),
+    mark_fresh(Op_Id).
+
 %% write_commit_ndjson(+Transaction, +Descriptor, +CommitId,
 %%                     +TypeQueries, +Stream)
 %
@@ -573,7 +759,14 @@ indexer_process_commit(Path, _BranchName, CommitIdRaw, Stream) :-
 %  and writes NDJSON lines with embedding text to Stream.
 write_commit_ndjson(Transaction, Descriptor, CommitId,
                     TypeQueries, Stream) :-
-    (   TypeQueries = []
+    commit_parent(Descriptor, CommitId, Maybe_Previous),
+    (   Maybe_Previous = none
+    ->  RefreshTypes = [], PurgeTypes = []
+    ;   embedding_refresh_purge_types(Transaction, Descriptor,
+                                      CommitId, TypeQueries,
+                                      RefreshTypes, PurgeTypes)
+    ),
+    (   TypeQueries = [], RefreshTypes = [], PurgeTypes = []
     ->  true
     ;   open_descriptor(system_descriptor{}, System_DB),
         maplist([Type-Query-_Template, Type-Query]>>true,
@@ -585,20 +778,12 @@ write_commit_ndjson(Transaction, Descriptor, CommitId,
                           simple(true)]),
         '$embedding':embedding_context(System_DB, Transaction, Templates,
                                        Queries, Frames, Embedding_Context),
-        get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-        commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
-        commit_uri_to_history_commit_ids(Repository_Descriptor,
-                                         Commit_Uri, History_Oldest_First),
-        (   append(_, [Parent_Id, CommitId|_], History_Oldest_First)
-        ->  Maybe_Previous = some(Parent_Id)
-        ;   Maybe_Previous = none
-        ),
         nb_setval(ndjson_count, 0),
+        commit_ops_begin,
         forall(
-            (   member(Type-_Query-_Template, TypeQueries),
-                api_indexable(Maybe_Previous, Descriptor, CommitId,
-                              Type, Operation)
-            ),
+            commit_op(Transaction, Descriptor, CommitId, TypeQueries,
+                      Maybe_Previous, RefreshTypes, PurgeTypes,
+                      Type-Operation),
             (   get_dict(op, Operation, Op),
                 ignore(get_dict(id, Operation, Id)),
                 nb_getval(ndjson_count, PrevCount),
@@ -627,44 +812,23 @@ count_indexable_documents(Path, _BranchName, CommitIdRaw, Count) :-
                                 ["commit", CommitId],
                                 Commit_Descriptor),
     embedding_type_queries(Commit_Descriptor, TypeQueries),
-    (   TypeQueries = []
+    open_descriptor(Commit_Descriptor, Transaction),
+    commit_parent(Descriptor, CommitId, Maybe_Previous),
+    (   Maybe_Previous = none
+    ->  RefreshTypes = [], PurgeTypes = []
+    ;   embedding_refresh_purge_types(Transaction, Descriptor,
+                                      CommitId, TypeQueries,
+                                      RefreshTypes, PurgeTypes)
+    ),
+    (   TypeQueries = [], RefreshTypes = [], PurgeTypes = []
     ->  Count = 0
-    ;   open_descriptor(Commit_Descriptor, Transaction),
-        get_dict(repository_descriptor, Descriptor, Repository_Descriptor),
-        commit_id_uri(Repository_Descriptor, CommitId, Commit_Uri),
-        commit_uri_to_history_commit_ids(Repository_Descriptor,
-                                         Commit_Uri, History_Oldest_First),
-        (   append(_, [Parent_Id, CommitId|_], History_Oldest_First)
-        ->  Maybe_Previous = some(Parent_Id)
-        ;   Maybe_Previous = none
-        ),
-        count_indexable_documents_(Maybe_Previous, Transaction,
-                                    TypeQueries, Count)
-    ).
-
-%% count_indexable_documents_(+Maybe_Previous, +Transaction, +TypeQueries, -Count) is det.
-%
-%  Helper that does the actual counting based on whether there is a parent commit.
-count_indexable_documents_(some(_Parent_Id), Transaction, TypeQueries, Count) :-
-    findall(TypeAtom,
-            (   member(Type-__-_Template, TypeQueries),
-                atom_string(TypeAtom, Type)
-            ),
-            TypeAtoms),
-    (   TypeAtoms = []
-    ->  Count = 0
-    ;   aggregate_all(count,
-                      '$changes':collect_changed_documents_filtered(
-                          Transaction, TypeAtoms, _Id, _ChangeType),
+    ;   commit_ops_begin,
+        aggregate_all(count,
+                      commit_op(Transaction, Descriptor, CommitId,
+                                TypeQueries, Maybe_Previous,
+                                RefreshTypes, PurgeTypes, _TypeOp),
                       Count)
     ).
-count_indexable_documents_(none, Transaction, TypeQueries, Count) :-
-    aggregate_all(count,
-                  (   member(Type-__-_Template, TypeQueries),
-                      ask(Transaction, t(_Id, rdf:type, Type),
-                          [compress_prefixes(false)])
-                  ),
-                  Count).
 
 
 :- begin_tests(indexer_predicates, [concurrent(true)]).
@@ -1066,6 +1230,503 @@ test(schema_store_indices_for_descriptor_returns_true_with_both_options,
     resolve_absolute_string_descriptor("admin/bothoptsdb/local/branch/main", Desc),
     schema_store_indices_for_descriptor(Desc, Result),
     assertion(Result == true).
+
+test(process_commit_renders_embedding_with_commit_schema,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "headdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    %% Schema v1: embedding template marked V1MARKER
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }",
+        "template": "V1MARKER {{title}}"
+      }
+    }
+  }
+]
+', SchemaStream1),
+    Options1 = [author("test"), full_replace(true), graph_type(schema), message("schema v1")],
+    api_insert_documents(System, Auth, "admin/headdb", SchemaStream1, no_data_version, _, _, _, Options1),
+    %% Documents commit — this becomes non-head once schema v2 lands
+    open_string('
+[
+  {"@type": "Article", "title": "My Title", "body": "My Body"}
+]
+', DocStream),
+    DocOptions = [author("test"), graph_type(instance), message("docs")],
+    api_insert_documents(System, Auth, "admin/headdb", DocStream, no_data_version, _, _, _, DocOptions),
+    resolve_absolute_string_descriptor("admin/headdb/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Docs_Head_Uri),
+    commit_id_uri(Repo_Desc, Docs_Commit_Id, Docs_Head_Uri),
+    %% Schema v2: same class, new template marked V2MARKER
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }",
+        "template": "V2MARKER {{title}}"
+      }
+    }
+  }
+]
+', SchemaStream2),
+    Options2 = [author("test"), full_replace(true), graph_type(schema), message("schema v2")],
+    api_insert_documents(System, Auth, "admin/headdb", SchemaStream2, no_data_version, _, _, _, Options2),
+    %% Process the pre-v2 commit: it must render with the schema that was
+    %% in effect at that commit — versioned rendering, V1MARKER.
+    text_to_string(Docs_Commit_Id, Docs_Commit_Str),
+    tmp_file_stream(text, TmpFile, WriteStream),
+    indexer_process_commit("admin/headdb/local/branch/main",
+                           "main", Docs_Commit_Str, WriteStream),
+    close(WriteStream),
+    read_file_to_string(TmpFile, Out, []),
+    delete_file(TmpFile),
+    assertion(sub_string(Out, _, _, _, "V1MARKER")),
+    assertion(\+ sub_string(Out, _, _, _, "V2MARKER")).
+
+/* ================================================================
+ * Embedding change detection — schema commits that alter a type's
+ * @metadata.embedding query or template emit refresh (Changed) or
+ * purge (Deleted) ops for all documents of that type inside the schema
+ * commit's own push stream.
+ * ================================================================ */
+
+%% article_schema(+MetaFragment, -Json)
+%  MetaFragment is either '' (no metadata) or a JSON object member list
+%  such as '"@metadata": { "embedding": {...} }' preceded by a comma.
+article_schema(MetaFragment, Json) :-
+    format(string(Json),
+'[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string"~w
+  }
+]', [MetaFragment]).
+
+embedding_meta(Query, Template, Fragment) :-
+    format(string(Fragment),
+           ', "@metadata": { "embedding": { "query": "~s", "template": "~s" } }',
+           [Query, Template]).
+
+insert_schema_json(System, Auth, DbPath, Json) :-
+    open_string(Json, Stream),
+    api_insert_documents(System, Auth, DbPath, Stream, no_data_version,
+                         _, _, _,
+                         [author("test"), full_replace(true),
+                          graph_type(schema), message("schema")]).
+
+insert_docs_json(System, Auth, DbPath, Json) :-
+    open_string(Json, Stream),
+    api_insert_documents(System, Auth, DbPath, Stream, no_data_version,
+                         _, _, _,
+                         [author("test"), graph_type(instance),
+                          message("docs")]).
+
+three_articles(System, Auth, DbPath) :-
+    insert_docs_json(System, Auth, DbPath,
+'[
+  {"@type": "Article", "title": "First", "body": "Body one"},
+  {"@type": "Article", "title": "Second", "body": "Body two"},
+  {"@type": "Article", "title": "Third", "body": "Body three"}
+]').
+
+head_commit_string(DbPath, CommitStr) :-
+    atomic_list_concat([DbPath, "local/branch/main"], '/', BranchPath),
+    resolve_absolute_string_descriptor(BranchPath, Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    text_to_string(Head_Commit_Id, CommitStr).
+
+%% collect_commit_ops(+DbPath, +CommitId, -Ops)
+%  Runs indexer_process_commit into a temp file and parses the NDJSON
+%  lines into dicts. Used to assert the exact op stream a commit emits.
+collect_commit_ops(DbPath, CommitId, Ops) :-
+    atomic_list_concat([DbPath, "local/branch/main"], '/', BranchPath),
+    tmp_file_stream(text, TmpFile, WriteStream),
+    indexer_process_commit(BranchPath, "main", CommitId, WriteStream),
+    close(WriteStream),
+    open(TmpFile, read, RS),
+    read_ndjson_dicts(RS, Ops),
+    close(RS),
+    delete_file(TmpFile).
+
+read_ndjson_dicts(Stream, Dicts) :-
+    read_line_to_string(Stream, Line),
+    (   Line == end_of_file
+    ->  Dicts = []
+    ;   atom_json_dict(Line, Dict, [default_tag(json)]),
+        Dicts = [Dict|Rest],
+        read_ndjson_dicts(Stream, Rest)
+    ).
+
+ops_of_kind(Ops, Kind, Matching) :-
+    atom_string(KindAtom, Kind),
+    include(op_is_kind(KindAtom), Ops, Matching).
+
+op_is_kind(KindAtom, Dict) :-
+    get_dict(op, Dict, Op),
+    atom_string(KindAtom, Op).
+
+%% count_parity(+DbPath, +CommitId, +Ops)
+%  Asserts X-Document-Count parity: count_indexable_documents must equal
+%  the number of ops the stream actually emitted.
+count_parity(DbPath, CommitId, Ops) :-
+    atomic_list_concat([DbPath, "local/branch/main"], '/', BranchPath),
+    count_indexable_documents(BranchPath, "main", CommitId, Count),
+    length(Ops, N),
+    assertion(Count == N).
+
+test(schema_template_change_reembeds_all_docs_of_type,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "tpldb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'V1TPL {{title}}', Meta1),
+    article_schema(Meta1, Schema1),
+    insert_schema_json(System, Auth, "admin/tpldb", Schema1),
+    three_articles(System, Auth, "admin/tpldb"),
+    %% Schema v2: template only change
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'V2TPL {{title}}', Meta2),
+    article_schema(Meta2, Schema2),
+    insert_schema_json(System, Auth, "admin/tpldb", Schema2),
+    head_commit_string("admin/tpldb", CommitId),
+    collect_commit_ops("admin/tpldb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 3),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Changed"))),
+    forall(member(Op, Ops),
+           assertion(sub_string(Op.string, _, _, _, "V2TPL"))),
+    count_parity("admin/tpldb", CommitId, Ops).
+
+test(schema_query_change_reembeds_all_docs_of_type,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "qrydb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title } }',
+                   'QTPL {{title}}', Meta1),
+    article_schema(Meta1, Schema1),
+    insert_schema_json(System, Auth, "admin/qrydb", Schema1),
+    three_articles(System, Auth, "admin/qrydb"),
+    %% Schema v2: query selects an extra field
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'QTPL {{title}}', Meta2),
+    article_schema(Meta2, Schema2),
+    insert_schema_json(System, Auth, "admin/qrydb", Schema2),
+    head_commit_string("admin/qrydb", CommitId),
+    collect_commit_ops("admin/qrydb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 3),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Changed"))),
+    count_parity("admin/qrydb", CommitId, Ops).
+
+test(identical_schema_recommit_emits_no_ops,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "samedb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'SAME {{title}}', Meta),
+    article_schema(Meta, Schema),
+    insert_schema_json(System, Auth, "admin/samedb", Schema),
+    three_articles(System, Auth, "admin/samedb"),
+    %% Re-commit identical schema — content-addressed metadata produces
+    %% no delta, so no refresh ops.
+    insert_schema_json(System, Auth, "admin/samedb", Schema),
+    head_commit_string("admin/samedb", CommitId),
+    collect_commit_ops("admin/samedb", CommitId, Ops),
+    assertion(Ops == []),
+    count_parity("admin/samedb", CommitId, Ops).
+
+test(unrelated_schema_property_change_emits_no_refresh,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "propdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'PTPL {{title}}', Meta),
+    article_schema(Meta, Schema1),
+    insert_schema_json(System, Auth, "admin/propdb", Schema1),
+    three_articles(System, Auth, "admin/propdb"),
+    %% Schema v2: add an unrelated property, metadata identical
+    format(string(Schema2),
+'[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "summary": "xsd:string"~w
+  }
+]', [Meta]),
+    insert_schema_json(System, Auth, "admin/propdb", Schema2),
+    head_commit_string("admin/propdb", CommitId),
+    collect_commit_ops("admin/propdb", CommitId, Ops),
+    assertion(Ops == []),
+    count_parity("admin/propdb", CommitId, Ops).
+
+test(non_embedding_metadata_change_emits_no_refresh,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "metadb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    format(string(EmbJson),
+           '{"query": "query($id: ID){ Article(id: $id) { title body } }", "template": "MTPL {{title}}"}',
+           []),
+    format(string(Meta1),
+           ', "@metadata": { "embedding": ~s, "other": {"note": "v1"} }',
+           [EmbJson]),
+    article_schema(Meta1, Schema1),
+    insert_schema_json(System, Auth, "admin/metadb", Schema1),
+    three_articles(System, Auth, "admin/metadb"),
+    %% Schema v2: unrelated metadata key changes; embedding subtree is
+    %% content-identical, so its leaf edges do not churn — no refresh.
+    format(string(Meta2),
+           ', "@metadata": { "embedding": ~s, "other": {"note": "v2"} }',
+           [EmbJson]),
+    article_schema(Meta2, Schema2),
+    insert_schema_json(System, Auth, "admin/metadb", Schema2),
+    head_commit_string("admin/metadb", CommitId),
+    collect_commit_ops("admin/metadb", CommitId, Ops),
+    assertion(Ops == []),
+    count_parity("admin/metadb", CommitId, Ops).
+
+test(embedding_metadata_removal_purges_all_docs,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "purgedb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'RTPL {{title}}', Meta),
+    article_schema(Meta, Schema1),
+    insert_schema_json(System, Auth, "admin/purgedb", Schema1),
+    three_articles(System, Auth, "admin/purgedb"),
+    %% Schema v2: class remains, @metadata gone
+    article_schema('', Schema2),
+    insert_schema_json(System, Auth, "admin/purgedb", Schema2),
+    head_commit_string("admin/purgedb", CommitId),
+    collect_commit_ops("admin/purgedb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 3),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Deleted"))),
+    count_parity("admin/purgedb", CommitId, Ops).
+
+test(class_removal_purges_its_documents,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "clsdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'CTPL {{title}}', Meta),
+    article_schema(Meta, Schema1),
+    insert_schema_json(System, Auth, "admin/clsdb", Schema1),
+    three_articles(System, Auth, "admin/clsdb"),
+    %% Schema v2: only the context — Article class deleted entirely
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  }
+]', S2),
+    api_insert_documents(System, Auth, "admin/clsdb", S2, no_data_version,
+                         _, _, _,
+                         [author("test"), full_replace(true),
+                          graph_type(schema), message("schema v2")]),
+    head_commit_string("admin/clsdb", CommitId),
+    collect_commit_ops("admin/clsdb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 3),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Deleted"))),
+    count_parity("admin/clsdb", CommitId, Ops).
+
+test(embedding_added_to_existing_type_reembeds_docs,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "adddb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    article_schema('', Schema1),
+    insert_schema_json(System, Auth, "admin/adddb", Schema1),
+    three_articles(System, Auth, "admin/adddb"),
+    %% Schema v2: introduce embedding metadata for the existing type
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'ADDED {{title}}', Meta2),
+    article_schema(Meta2, Schema2),
+    insert_schema_json(System, Auth, "admin/adddb", Schema2),
+    head_commit_string("admin/adddb", CommitId),
+    collect_commit_ops("admin/adddb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 3),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Changed"))),
+    forall(member(Op, Ops),
+           assertion(sub_string(Op.string, _, _, _, "ADDED"))),
+    count_parity("admin/adddb", CommitId, Ops).
+
+test(template_removal_purges_rather_than_partial_embed,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "notpldb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'WTPL {{title}}', Meta),
+    article_schema(Meta, Schema1),
+    insert_schema_json(System, Auth, "admin/notpldb", Schema1),
+    three_articles(System, Auth, "admin/notpldb"),
+    %% Schema v2: query kept, template dropped — an incomplete config is
+    %% not a valid embedding, so documents purge rather than re-embed.
+    article_schema(', "@metadata": { "embedding": { "query": "query($id: ID){ Article(id: $id) { title body } }" } }',
+                   Schema2),
+    insert_schema_json(System, Auth, "admin/notpldb", Schema2),
+    head_commit_string("admin/notpldb", CommitId),
+    collect_commit_ops("admin/notpldb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 3),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Deleted"))),
+    count_parity("admin/notpldb", CommitId, Ops).
+
+test(document_only_commit_emits_exactly_changed_docs,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "docdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'DTPL {{title}}', Meta),
+    article_schema(Meta, Schema),
+    insert_schema_json(System, Auth, "admin/docdb", Schema),
+    three_articles(System, Auth, "admin/docdb"),
+    %% A second docs commit adding one document
+    insert_docs_json(System, Auth, "admin/docdb",
+'[
+  {"@type": "Article", "title": "Fourth", "body": "Body four"}
+]'),
+    head_commit_string("admin/docdb", CommitId),
+    collect_commit_ops("admin/docdb", CommitId, Ops),
+    length(Ops, N),
+    assertion(N == 1),
+    forall(member(Op, Ops),
+           assertion(get_dict(op, Op, "Inserted"))),
+    count_parity("admin/docdb", CommitId, Ops).
+
+test(refresh_and_doc_change_dedup_on_same_id,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "dedupdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    embedding_meta('query($id: ID){ Article(id: $id) { title body } }',
+                   'DEDUP {{title}}', Meta),
+    article_schema(Meta, Schema),
+    insert_schema_json(System, Auth, "admin/dedupdb", Schema),
+    three_articles(System, Auth, "admin/dedupdb"),
+    resolve_absolute_string_descriptor("admin/dedupdb/local/branch/main",
+                                       Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Uri1),
+    commit_id_uri(Repo_Desc, Parent_Id, Uri1),
+    %% Doc commit adding a fourth Article
+    insert_docs_json(System, Auth, "admin/dedupdb",
+'[
+  {"@type": "Article", "title": "Fourth", "body": "New body"}
+]'),
+    head_commit_string("admin/dedupdb", CommitId),
+    resolve_absolute_string_descriptor("admin/dedupdb/local/branch/main",
+                                       Desc2),
+    resolve_relative_descriptor(Desc2, ["commit", CommitId], CDesc),
+    embedding_type_queries(CDesc, TQ),
+    open_descriptor(CDesc, Tx),
+    %% Simulate the doc's type also appearing in this commit's refresh
+    %% set (as it would in a combined schema+instance commit): the new
+    %% doc must be emitted exactly once, not once per phase.
+    memberchk(ArticleType-_-_, TQ),
+    commit_ops_begin,
+    findall(Op,
+            commit_op(Tx, Desc2, CommitId, TQ, some(Parent_Id),
+                      [ArticleType], [], _T-Op),
+            Ops),
+    length(Ops, N),
+    assertion(N == 4),
+    ops_of_kind(Ops, "Inserted", InsertedOps),
+    ops_of_kind(Ops, "Changed", ChangedOps),
+    assertion(length(InsertedOps, 1)),
+    assertion(length(ChangedOps, 3)),
+    maplist([D, I]>>(get_dict(id, D, I)), Ops, Ids0),
+    maplist([X, A]>>atom_string(A, X), Ids0, Ids),
+    sort(Ids, UniqueIds),
+    length(UniqueIds, NU),
+    assertion(NU == 4).
 
 :- end_tests(indexer_predicates).
 

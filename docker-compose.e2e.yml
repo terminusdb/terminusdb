@@ -37,6 +37,9 @@ services:
       - TERMINUSDB_SEARCH_ADMIN_SECRET=root
       # legacy_vectorlink plugin config
       - TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT=http://legacy-vectorlink:8080
+      # Optimizer off in e2e — probabilistic post-commit optimization breaks
+      # deterministic data-version assertions (it is on by default otherwise)
+      - TERMINUSDB_ENABLE_OPTIMIZER=0
     ports:
       - "127.0.0.1:6370:6363"
     volumes:

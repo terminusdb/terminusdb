@@ -61,6 +61,36 @@ build-restart-search:
 	@$(MAKE) -f distribution/Makefile.prolog
 	../vectorlink/tests/vectorlink-server.sh restart
 
+# Start the test server (port 6363) with the embedded vectorlink engine,
+# embedding through a local Ollama. Pulls multilingual-e5-base (768-dim,
+# Q8_0/int8 weights) into Ollama and fetches its XLM-RoBERTa tokenizer on
+# first run, then rebuilds the dev binary and restarts the server.
+.PHONY: test-server-vectorlink
+test-server-vectorlink: dev
+	@curl -sf --max-time 5 http://localhost:11434/api/tags > /dev/null || { \
+		echo "ERROR: Ollama not reachable on localhost:11434"; \
+		echo "Start it with: ollama serve"; \
+		exit 1; \
+	}
+	ollama pull hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0
+	ollama cp hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0 multilingual-e5-base
+	@if [ ! -f tests/.terminusdb-test-e5-tokenizer.json ]; then \
+		echo "Fetching multilingual-e5-base XLM-RoBERTa tokenizer..."; \
+		curl -fsSL "https://huggingface.co/intfloat/multilingual-e5-base/resolve/main/tokenizer.json" \
+			-o tests/.terminusdb-test-e5-tokenizer.json; \
+	fi
+	@curl -sf http://localhost:11434/api/embed \
+		-d '{"model":"multilingual-e5-base","input":"warmup"}' \
+		| python3 -c "import json,sys; d=len(json.load(sys.stdin)['embeddings'][0]); assert d==768, 'expected 768-dim embeddings, got {}'.format(d); print('Ollama multilingual-e5-base ready (768-dim)')" || { \
+		echo "ERROR: multilingual-e5-base did not return 768-dim embeddings"; exit 1; }
+	TERMINUSDB_INDEXER_BACKEND=vectorlink \
+	VECTORLINK_EMBED_PROVIDER=openai_compatible \
+	VECTORLINK_EMBED_URL=http://localhost:11434 \
+	VECTORLINK_MODEL=multilingual-e5-base \
+	VECTORLINK_DIM=768 \
+	VECTORLINK_TOKENIZER_PATH=$(CURDIR)/tests/.terminusdb-test-e5-tokenizer.json \
+	tests/terminusdb-test-server.sh restart
+
 .PHONY: server-clean
 # Set REUSE_SERVER=1 to skip (re)starting the server — e.g. when running the
 # tests against an already-running instrumented session.

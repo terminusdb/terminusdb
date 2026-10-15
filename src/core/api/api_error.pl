@@ -3097,6 +3097,14 @@ generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(vectorlink_engine_unavailable(Method, Path), JSON) :-
+    format(string(Msg), "embedded vectorlink engine cannot serve ~w ~w (not initialized or FFI missing)", [Method, Path]),
+    JSON = _{'@type' : 'api:EngineUnavailable',
+             'api:status' : 'api:server_error',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEngineUnavailable',
+                             'api:method' : Method,
+                             'api:path' : Path}}.
 generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
     format(string(Msg), "vectorlink endpoint is not configured (called from ~w)", [Context]),
     JSON = _{'@type' : 'api:EndpointNotConfigured',

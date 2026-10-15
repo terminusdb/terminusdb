@@ -50,20 +50,44 @@
 :- multifile vectorlink_admin_user/1.
 :- multifile vectorlink_admin_secret/1.
 
+%% plugin_dirs(-Dirs) is det.
+%
+%  Ordered list of plugin directories to load: the built-in plugin
+%  directory first (always shipped — search stack, webserver plugins,
+%  auto-optimize), then the user plugin directory (TERMINUSDB_PLUGINS_PATH
+%  or <storage>/plugins). Directories that do not exist are skipped.
+plugin_dirs(Dirs) :-
+    findall(Path,
+            (   plugin_dir_candidate(Path),
+                exists_directory(Path)),
+            Dirs).
+
+plugin_dir_candidate(Path) :-
+    builtin_plugin_path(Path).
+plugin_dir_candidate(Path) :-
+    plugin_path(Path).
+
 load_plugins :-
-    plugin_path(Path),
-    exists_directory(Path),
+    plugin_dirs(Dirs),
+    Dirs \= [],
     !,
     % Update the plugins file search path at runtime so that plugins
     % can import each other via use_module(plugins(other_plugin), [...]).
     % The load_paths.pl directive runs at compile time when
-    % TERMINUSDB_PLUGINS_PATH is not yet set, so it points to src/plugins/
-    % which may not exist. This corrects it to the actual plugin directory.
-    (   user:file_search_path(plugins, Path)
-    ->  true
-    ;   retractall(user:file_search_path(plugins, _)),
-        asserta(user:file_search_path(plugins, Path))
-    ),
+    % TERMINUSDB_PLUGINS_PATH/TERMINUSDB_BUILTIN_PLUGINS_PATH may not be
+    % set, so it points to directories that may not exist. This corrects
+    % it to the actual plugin directories, built-in first.
+    retractall(user:file_search_path(plugins, _)),
+    forall(member(Dir, Dirs),
+           assertz(user:file_search_path(plugins, Dir))),
+    forall(member(Dir, Dirs),
+           load_plugins_from_dir(Dir)).
+load_plugins.
+
+%% load_plugins_from_dir(+Path) is det.
+%
+%  Loads all .pl plugin files and all foreign shared objects from Path.
+load_plugins_from_dir(Path) :-
     directory_files(Path, Files),
     findall(Full_Path,
             (   member(File, Files),
@@ -71,13 +95,9 @@ load_plugins :-
                 directory_file_path(Path, File, Full_Path)
             ),
             Plugin_Files),
-    (   Plugin_Files = []
-    ->  true
-    ;   forall(member(Full_Path, Plugin_Files),
-               load_plugin_file(Full_Path)),
-        load_foreign_plugins(Path, Files)
-    ).
-load_plugins.
+    forall(member(Full_Path, Plugin_Files),
+           load_plugin_file(Full_Path)),
+    load_foreign_plugins(Path, Files).
 
 %% load_plugin_file(+Full_Path) is det.
 %
@@ -425,3 +445,35 @@ test(load_foreign_plugins_no_so_files) :-
         delete_directory(TmpDir)).
 
 :- end_tests(foreign_plugin_loader).
+
+:- begin_tests(builtin_plugin_path, [concurrent(false)]).
+
+test(plugin_dirs_only_existing_dirs) :-
+    plugin_dirs(Dirs),
+    forall(member(D, Dirs), exists_directory(D)).
+
+test(plugin_dirs_builtin_precedes_user) :-
+    once((   builtin_plugin_path(Builtin),
+             plugin_path(User),
+             exists_directory(Builtin),
+             exists_directory(User)
+         ->  plugin_dirs(Dirs),
+             nth0(Bi, Dirs, Builtin),
+             nth0(Ui, Dirs, User),
+             assertion(Bi < Ui)
+         ;   true
+         )).
+
+test(builtin_plugin_path_env_override) :-
+    tmp_file(temp, TmpDir),
+    make_directory(TmpDir),
+    setup_call_cleanup(
+        setenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', TmpDir),
+        (   abolish_table_subgoals(config:builtin_plugin_path(_)),
+            builtin_plugin_path(Path)),
+        unsetenv('TERMINUSDB_BUILTIN_PLUGINS_PATH')),
+    abolish_table_subgoals(config:builtin_plugin_path(_)),
+    absolute_file_name(TmpDir, Expected),
+    assertion(Path =@= Expected).
+
+:- end_tests(builtin_plugin_path).

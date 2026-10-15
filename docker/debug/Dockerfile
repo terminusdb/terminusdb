@@ -142,15 +142,8 @@ WORKDIR /app/terminusdb
 RUN mkdir -p storage \
     && chown -R 1000:1000 storage
 ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
-COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/search_resolve.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/legacy_vectorlink.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/webserver_spa.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/webserver_commits.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/webserver_events.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/webserver_graphql_subs.pl ${TERMINUSDB_PLUGINS_PATH}/
-COPY plugins/webserver_debugger_log.pl ${TERMINUSDB_PLUGINS_PATH}/
+ENV TERMINUSDB_BUILTIN_PLUGINS_PATH=${TERMINUSDB_BUILTIN_PLUGINS_PATH:-/builtin_plugins}
+COPY builtin_plugins/ ${TERMINUSDB_BUILTIN_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/src/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/src/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/src/assets/

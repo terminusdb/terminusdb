@@ -108,18 +108,15 @@ function start_server() {
     export TERMINUSDB_SERVER_NAME=127.0.0.1
     export TERMINUSDB_ADMIN_PASS="$ADMIN_PASS"
     export TERMINUSDB_SERVER_DB_PATH="$STORAGE_DIR"
-    # Load the appserver plugin (starts the Rust webserver) and the example
-    # webserver plugins. By default, auto-optimize is NOT loaded because it
-    # runs optimization probabilistically after commits and can break
-    # data-version tests. Set TERMINUSDB_ENABLE_OPTIMIZER=1 to enable it.
+    # Load the builtin plugins (always loaded — search stack, webserver
+    # plugins) plus any user plugins in plugins/. auto-optimize is a builtin
+    # plugin and runs by default in production, but the test server disables
+    # it: it optimises probabilistically after commits and can break
+    # data-version tests. Set TERMINUSDB_ENABLE_OPTIMIZER=1 to re-enable.
+    export TERMINUSDB_ENABLE_OPTIMIZER="${TERMINUSDB_ENABLE_OPTIMIZER:-0}"
     export TERMINUSDB_ADDON_PATH="$PROJECT_ROOT"
     export TERMINUSDB_PLUGINS_PATH="$PROJECT_ROOT/plugins"
-    if [ "${TERMINUSDB_ENABLE_OPTIMIZER:-0}" = "1" ]; then
-        echo "Optimizer plugin enabled (TERMINUSDB_ENABLE_OPTIMIZER=1)"
-        cp "$PROJECT_ROOT/docker/plugins/auto-optimize.pl" "$PROJECT_ROOT/plugins/auto-optimize.pl"
-    else
-        rm -f "$PROJECT_ROOT/plugins/auto-optimize.pl"
-    fi
+    export TERMINUSDB_BUILTIN_PLUGINS_PATH="$PROJECT_ROOT/builtin_plugins"
     # Single-port server: TERMINUSDB_SERVER_BACKEND selects the implementation
     # (swipl or rust). TERMINUSDB_SERVER_PORT sets the listen port (default 6363).
     export TERMINUSDB_SERVER_PORT=${TERMINUSDB_SERVER_PORT:-6363}
@@ -127,7 +124,17 @@ function start_server() {
 
     # tdb-search plugin: disabled by default. Set TERMINUSDB_INDEXER_BACKEND=http_tdb_search
     # and TERMINUSDB_TDB_SEARCH_ENDPOINT=http://127.0.0.1:7372 to enable.
+    # For the embedded vectorlink engine use TERMINUSDB_INDEXER_BACKEND=vectorlink
+    # (requires TERMINUSDB_SERVER_BACKEND=rust); for a remote engine use
+    # http_vectorlink + TERMINUSDB_VECTORLINK_ENDPOINT.
     export TERMINUSDB_INDEXER_BACKEND=${TERMINUSDB_INDEXER_BACKEND:-none}
+    # Embedded vectorlink backend: size the embedding cache for bulk ingestion.
+    # Millions of entries need gigabytes of disk in the data directory.
+    export VECTORLINK_EMBED_CACHE_SIZE=${VECTORLINK_EMBED_CACHE_SIZE:-3000000}
+    # Keep the embedded engine's Lance store inside the test storage dir
+    # (db_path is the storage root here, so the plugin's parent-dir
+    # convention would otherwise land it in tests/).
+    export VECTORLINK_DATA_DIR=${VECTORLINK_DATA_DIR:-$STORAGE_DIR/vectorlink}
     # When the indexer backend is http_tdb_search, export the endpoint so
     # the tdb_search plugin can find it via plugin_env/2. Without this,
     # suggest/search/similar handlers fail with TdbSearchEndpointNotConfigured.

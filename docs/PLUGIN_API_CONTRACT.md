@@ -166,6 +166,24 @@ Native predicates may only add new predicates and may never change
 internal behavior. The intent is to provide functionality to
 plugins for enabling algorithms and functionality to be used.
 
+### Plugin directories
+
+The server loads plugins from two locations, in this order:
+
+- **Builtin plugins** — the `builtin_plugins/` directory shipped
+  with the server (`TERMINUSDB_BUILTIN_PLUGINS_PATH`). These are
+  maintained by the project, always present, and versioned with
+  the server. A builtin plugin may still be feature-gated behind
+  an environment variable; being loaded does not imply being
+  active.
+- **User plugins** — the `plugins/` directory under the storage
+  path (`TERMINUSDB_PLUGINS_PATH`). Operator-installed extensions.
+
+Both directories are subject to the same contract and the same
+loading rules. The split exists so the server can ship core
+functionality — such as the embedded vectorlink engine — as
+plugins without forcing operators to install anything.
+
 ## Contract Obligations
 
 ### For the core team

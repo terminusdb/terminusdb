@@ -500,6 +500,7 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TERMINUSDB_ADDON_PATH',
                          'TERMINUSDB_ADMIN_PASSWD',
                          'TERMINUSDB_PLUGINS_PATH',
+                         'TERMINUSDB_BUILTIN_PLUGINS_PATH',
                          'TERMINUSDB_SERVER_PACK_DIR',
 %                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH',

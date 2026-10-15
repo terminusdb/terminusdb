@@ -111,7 +111,7 @@ io_candidates_forward(Endpoint, Domain, Commit, Ancestors,
     put_dict(_{domain: Domain, commit: Commit, ancestors: Ancestors},
              Body_Dict, Forward_Body),
     setup_call_cleanup(
-        http_open(Candidates_URL, In,
+        vectorlink:engine_http_open(Candidates_URL, In,
                   [ method(post),
                     post(json(Forward_Body)),
                     status_code(Status),

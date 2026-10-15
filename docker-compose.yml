@@ -6,7 +6,7 @@
 # 4. docker compose logs (to verify all started)
 # 5. connect to localhost:6363, login with admin and the .env password
 #
- 
+
 services:
   terminusdb-server:
     image: terminusdb/terminusdb-server:12.1-rc
@@ -28,18 +28,41 @@ services:
       # (Create a .env file from .env.example and add a password)
       - "TERMINUSDB_ADMIN_PASS=${TERMINUSDB_ADMIN_PASS:?error}"
 
-      # vectorlink (tdb-search) plugin config
-      - TERMINUSDB_INDEXER_BACKEND=http_vectorlink
-      - TERMINUSDB_VECTORLINK_ENDPOINT=http://vectorlink:8080
-      - "TERMINUSDB_SEARCH_ADMIN_SECRET=${TDB_SEARCH_ADMIN_SECRET:-root}"
+      # Built-in vectorlink engine (embedded search plugin, no separate
+      # service or credentials needed). Its store lives at
+      # /app/terminusdb/storage/vectorlink inside the terminusdb-storage volume.
+      - TERMINUSDB_INDEXER_BACKEND=vectorlink
+
+      # Embedding provider for the built-in vectorlink engine. The engine
+      # POSTs to ${VECTORLINK_EMBED_URL}/v1/embeddings — the defaults point at
+      # the bundled ollama sidecar below (nomic-embed-v2, dim 768, no key).
+      - VECTORLINK_EMBED_PROVIDER=openai_compatible
+      - VECTORLINK_EMBED_URL=http://embeddings:11434
+      - VECTORLINK_MODEL=nomic-embed-v2
+      - VECTORLINK_DIM=768
+
+      # To use OpenAI instead (any OpenAI-compatible endpoint works the same):
+      #   - VECTORLINK_EMBED_PROVIDER=openai
+      #   - VECTORLINK_EMBED_URL=https://api.openai.com
+      #   - VECTORLINK_MODEL=text-embedding-3-small
+      #   - VECTORLINK_DIM=1536
+      #   - "VECTORLINK_EMBED_API_KEY=${OPENAI_KEY}"
+      # ...and remove or scale-to-zero the embeddings services below.
+
+      # IMPORTANT: the embedding parameters above are locked into the
+      # vectorlink store at first initialization (vectorlink-params.json) —
+      # every stored vector is only valid for the provider/model/dim that
+      # produced it. Changing them on an existing store aborts engine init.
+      # To switch: stop the stack, delete the store, start with the new
+      # parameters; all documents are re-embedded on reindex:
+      #   docker compose down
+      #   docker run --rm -v "$(basename "$PWD")_terminusdb-storage":/storage alpine rm -rf /storage/vectorlink
+      #   docker compose up -d
     volumes:
-      - ./storage/terminusdb:/app/terminusdb/storage
-    depends_on:
-      vectorlink:
-        condition: service_healthy
+      - terminusdb-storage:/app/terminusdb/storage
     restart: unless-stopped
 
-  # Ollama embedding sidecar — serves nomic-embed-text-v2-moe via /v1/embeddings.
+  # Ollama embedding sidecar — serves nomic-embed-v2 via /v1/embeddings.
   # CPU-only (no GPU required). The model is pulled on first start by embeddings-init.
   embeddings:
     image: ollama/ollama:latest
@@ -77,37 +100,6 @@ services:
         ollama cp hf.co/nomic-ai/nomic-embed-text-v2-moe-GGUF:Q8_0 nomic-embed-v2 2>/dev/null || true
         echo "Model ready."
     restart: "no"
-
-  # vectorlink (tdb-search) — the new search and indexing engine.
-  # Replaces the legacy_vectorlink semantic indexer.
-  vectorlink:
-    image: ghcr.io/terminusdb-org/vectorlink:dev
-    pull_policy: always
-    container_name: vectorlink
-    hostname: vectorlink
-    environment:
-      - TDB_SEARCH_ADMIN_USER=admin
-      - "TDB_SEARCH_ADMIN_SECRET=${TDB_SEARCH_ADMIN_SECRET:-root}"
-      - TDB_SEARCH_EMBED_PROVIDER=openai_compatible
-      - TDB_SEARCH_EMBED_URL=http://embeddings:11434
-      - TDB_SEARCH_MODEL=nomic-embed-v2
-      - TDB_SEARCH_DIM=768
-      - TDB_SEARCH_DATA_DIR=/data
-      - TDB_SEARCH_TOKENIZER_PATH=/opt/tdb-search/tokenizer.json.bz2
-    ports:
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - ./storage/vectorlink:/data
-    depends_on:
-      embeddings:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && echo -e \"GET /health/live HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && timeout 2 grep -q 200 <&3'"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-    restart: unless-stopped
 
   # --- Legacy / optional services (commented out) ---
 
@@ -148,5 +140,5 @@ services:
   # docker compose exec -ti terminusdb-server ./terminusdb user password admin -p [FancyPassword]
 
 volumes:
+  terminusdb-storage:
   ollama-models:
-  vectorlink-data:

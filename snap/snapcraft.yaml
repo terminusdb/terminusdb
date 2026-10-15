@@ -69,12 +69,12 @@ parts:
       - diffutils
       - protobuf-compiler
       - libprotobuf-dev
-      # openssl-sys locates system OpenSSL via pkg-config at build time.
-      - pkg-config
+      - pkg-config  # openssl-sys (reqwest via lance) finds OpenSSL through it
       - libssl-dev
     stage-packages:
       - swi-prolog  # Full package includes all extensions
       - binutils  # Provides addr2line for crash stack traces
+      - libssl3t64  # OpenSSL 3 runtime on core24, needed by reqwest/lance
     override-build: |
       echo "=== Installing Rust ==="
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
@@ -105,7 +105,7 @@ parts:
       make
       
       echo "=== Installing to snap ==="
-      cp -r terminusdb distribution src plugins $CRAFT_PART_INSTALL/
+      cp -r terminusdb distribution src builtin_plugins $CRAFT_PART_INSTALL/
     build-environment:
       - TERMINUSDB_SERVER_PACK_DIR: $CRAFT_STAGE
       - LANG: C.UTF-8

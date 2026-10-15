@@ -41,6 +41,7 @@
               pinned_databases/1,
               pinned_organizations/1,
               plugin_path/1,
+              builtin_plugin_path/1,
               dashboard_enabled/0,
               parallelize_enabled/0,
               grpc_label_endpoint/1,
@@ -154,6 +155,23 @@ plugin_path(Path) :-
         db_path(Db_Path),
         file_directory_name(Db_Path, Storage_Dir),  % Get parent dir: ./storage/db -> ./storage
         atomic_list_concat([Storage_Dir, 'plugins'], '/', Path)
+    ).
+
+/**
+ * builtin_plugin_path(-Path) is det.
+ *
+ * Directory for built-in plugins that are always loaded (search stack,
+ * webserver plugins, auto-optimize). Defaults to builtin_plugins/ at the
+ * repository root (terminus_home is <repo>/src). Installed deployments set
+ * TERMINUSDB_BUILTIN_PLUGINS_PATH explicitly.
+ */
+:- table builtin_plugin_path/1 as shared.
+builtin_plugin_path(Path) :-
+    (   getenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', Value)
+    ->  absolute_file_name(Value, Path)
+    ;   user:file_search_path(terminus_home, Home),
+        file_directory_name(Home, Repo_Root),
+        atomic_list_concat([Repo_Root, '/builtin_plugins'], Path)
     ).
 
 jwt_enabled_env_var :-
@@ -520,8 +538,11 @@ expose_stack_traces :-
  * can never both be wired, and no endpoint is ever consulted for an inactive
  * backend.
  *
- *   TERMINUSDB_INDEXER_BACKEND        ∈ {none, http_legacy_vectorlink, http_vectorlink}
- *                                       default `none`.
+ *   TERMINUSDB_INDEXER_BACKEND        ∈ {none, http_legacy_vectorlink, http_vectorlink,
+ *                                       vectorlink}
+ *                                       default `none`. `vectorlink` selects the embedded
+ *                                       engine that runs in-process via the Rust plugin;
+ *                                       it takes no remote endpoint.
  *   TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT  the legacy pull host
  *                                       (read only when backend = http_legacy_vectorlink).
  *   TERMINUSDB_VECTORLINK_ENDPOINT    the push/search host
@@ -536,6 +557,7 @@ expose_stack_traces :-
 valid_indexer_backend(none).
 valid_indexer_backend(http_legacy_vectorlink).
 valid_indexer_backend(http_vectorlink).
+valid_indexer_backend(vectorlink).
 
 /**
  * indexer_backend(-Backend) is det.
@@ -592,7 +614,11 @@ check_indexer_backend_config :-
     ->  Legacy_Endpoint_Set = true
     ;   Legacy_Endpoint_Set = false
     ),
-    (   current_predicate(vectorlink:vectorlink_endpoint/1),
+    (   % Under the embedded backend, vectorlink_endpoint/1 returns a
+        % marker instead of reading the env, so only the env var itself
+        % counts as "an endpoint is configured".
+        Backend \== vectorlink,
+        current_predicate(vectorlink:vectorlink_endpoint/1),
         vectorlink:vectorlink_endpoint(_)
     ->  Search_Endpoint_Set = true
     ;   getenv('TERMINUSDB_VECTORLINK_ENDPOINT', _)
@@ -622,6 +648,13 @@ check_indexer_backend_config_(http_vectorlink, Legacy_Set, Search_Set) :-
     do_or_die(Search_Set == true,
               error(indexer_backend_incomplete(http_vectorlink,
                      'TERMINUSDB_INDEXER_BACKEND is http_vectorlink but TERMINUSDB_VECTORLINK_ENDPOINT is not set'), _)).
+check_indexer_backend_config_(vectorlink, Legacy_Set, Search_Set) :-
+    die_if(Legacy_Set == true,
+           error(indexer_backend_ambiguous(vectorlink,
+                     'TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT is set but the active backend is the embedded vectorlink'), _)),
+    die_if(Search_Set == true,
+           error(indexer_backend_ambiguous(vectorlink,
+                     'TERMINUSDB_VECTORLINK_ENDPOINT is set but the active backend is the embedded vectorlink'), _)).
 
 :- table doc_work_limit/1.
 doc_work_limit(Limit) :-

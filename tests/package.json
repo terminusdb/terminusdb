@@ -15,7 +15,10 @@
     "lint": "eslint --ext .js,.json --fix .",
     "start-server": "http-server ./served -c-1 --port 7474",
     "test": "npm run check && npm run test-local && npm run test-served",
+    "test-cli": "MOCHA_PARALLEL=true mocha 'test/cli-*.js'",
+    "test-dataversion": "mocha test/data-version.js",
     "test-local": "rc=0; mocha test --exclude test/data-version.js --exclude 'test/cli-*.js' || rc=1; MOCHA_PARALLEL=true mocha 'test/cli-*.js' || rc=1; mocha test/data-version.js || rc=1; exit $rc",
+    "test-nocli": "mocha test --exclude test/data-version.js --exclude 'test/cli-*.js'",
     "test-served": "start-server-and-test start-server http://127.0.0.1:7474/ 'mocha test-served'"
   },
   "dependencies": {
@@ -25,7 +28,7 @@
     "cross-fetch": "^3.1.5",
     "decimal.js": "^10.6.0",
     "fast-glob": "^3.2.11",
-    "jsonwebtoken": "^9.0.0",
+    "jsonwebtoken": "^9.0.3",
     "mocha": "^10.8.2",
     "optionator": "^0.9.1",
     "stream-json": "^3.6.0",
