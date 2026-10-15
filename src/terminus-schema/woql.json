@@ -1249,8 +1249,8 @@
 }
 {
   "@documentation": {
-    "@comment":"Constructs or deconstructs a half-open xdd:dateTimeInterval [start, end] from two date or dateTime endpoints. Bidirectional: given start+end computes interval, given interval extracts start+end. Endpoints are stored in UTC canonical form for correct lexical ordering. A date-only start or end includes the duration of the day in the interval, starts with beginning of start day, and ends with end date stored as the timestamp of the start of the following day at 00:00:00Z.",
-    "@properties": {"start":"Inclusive start date, or dateTime.", "end":"Inclusive end date, or dateTime, stored as dateTime of start of day after the date.", "interval":"The xdd:dateTimeInterval value."}
+    "@comment":"The interval is a half-open xdd:dateTimeInterval [start, end). Give start and end to make an interval, or give an interval to get start and end. The endpoints are stored in UTC for correct lexical order. A date includes its full day: the interval starts at 00:00:00Z of the start date and ends at 00:00:00Z of the day after the end date.",
+    "@properties": {"start":"Start date or dateTime, included in the interval.", "end":"End date or dateTime. A date includes its full day and is stored as 00:00:00Z of the next day.", "interval":"The xdd:dateTimeInterval value."}
   },
   "@id":"Interval",
   "@inherits":"Query",
@@ -1269,7 +1269,7 @@
 }
 {
   "@documentation": {
-    "@comment":"Relates an xdd:dateTimeInterval to its start endpoint and precise xsd:duration. Bidirectional: given interval extracts start+duration, given start+duration computes interval. Duration is a precise day/time count. A date-only start covers from that day at 00:00:00Z.",
+    "@comment":"Relates an xdd:dateTimeInterval to its start endpoint and precise xsd:duration. Bidirectional: given interval extracts start+duration, given start+duration computes interval. Duration is a precise day/time count. A date-only start includes its full day from 00:00:00Z.",
     "@properties": {"start":"Inclusive start date or dateTime.", "duration":"The xsd:duration between start and end.", "interval":"The xdd:dateTimeInterval value."}
   },
   "@id":"IntervalStartDuration",
@@ -1289,8 +1289,8 @@
 }
 {
   "@documentation": {
-    "@comment":"Relates an xdd:dateTimeInterval to its end endpoint and precise xsd:duration. Bidirectional: given interval extracts duration+end, given duration+end computes interval. Duration is a precise day/time count. A date-only end covers the whole day and is stored as the following day at 00:00:00Z (exclusive).",
-    "@properties": {"duration":"The xsd:duration between start and end.", "end":"Exclusive end boundary for dateTime. A dateTime is verbatim; a date-only value covers the whole day and is stored as the following start of day.", "interval":"The xdd:dateTimeInterval value."}
+    "@comment":"Relates an xdd:dateTimeInterval to its end endpoint and precise xsd:duration. Bidirectional: given interval extracts duration+end, given duration+end computes interval. Duration is a precise day/time count. A date-only end includes its full day and is stored as 00:00:00Z of the next day.",
+    "@properties": {"duration":"The xsd:duration between start and end.", "end":"End date or dateTime. A date includes its full day and is stored as 00:00:00Z of the next day.", "interval":"The xdd:dateTimeInterval value."}
   },
   "@id":"IntervalDurationEnd",
   "@inherits":"Query",
