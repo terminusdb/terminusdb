@@ -33,6 +33,10 @@ do_install() {
     homebrew)
       # Install swipl from Homebrew: https://www.swi-prolog.org/build/macos.html
       brew install swi-prolog
+      # Some runner images carry a swi-prolog bottle whose crypto4pl links
+      # openssl@4 while the formula only depends on openssl@3 — installing the
+      # keg explicitly covers both bottle variants.
+      brew install openssl@4
       [ "$(which swipl)" = "/opt/homebrew/bin/swipl" ] || die "swipl command not found"
       ;;
     *)
