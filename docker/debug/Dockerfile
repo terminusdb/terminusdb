@@ -113,6 +113,7 @@ WORKDIR /app/terminusdb
 RUN mkdir -p storage \
     && chown -R 1000:1000 storage
 ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
+ENV TERMINUSDB_LISTEN_ADDRESS=0.0.0.0
 COPY docker/plugins/auto-optimize.pl ${TERMINUSDB_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/assets
 COPY dashboard/src/index.html /app/terminusdb/dashboard/
