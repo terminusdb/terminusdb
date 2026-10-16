@@ -173,7 +173,7 @@ with open(pid_file, 'w') as f:
     
     # Wait for server to be ready
     echo -n "Waiting for server to be ready"
-    local max_wait=5
+    local max_wait=10
     local waited=0
     while [ $waited -lt $max_wait ]; do
         # Check both if process is running and if API responds
