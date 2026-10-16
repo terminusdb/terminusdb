@@ -51,7 +51,6 @@ ignore_predicate("setup_call_cleanup/4").
 
 % Rust FFI predicates in $doc module: xref_called strips the '$doc': prefix,
 % so the linter sees these as unqualified calls and flags them.
-ignore_predicate("get_document_context/2").
 ignore_predicate("get_document_context/3").
 ignore_predicate("print_all_documents_json/8").
 ignore_predicate("par_print_all_documents_json/8").
