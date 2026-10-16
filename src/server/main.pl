@@ -135,6 +135,7 @@ terminus_server(Argv,Wait) :-
                 on_signal(hup,  _, server_shutdown_signal)
             ;   true),
             thread_get_message(stop),
+            nl(user_error),
             shutdown_message('Shutting down'),
             (   catch(call_with_time_limit(5, http_stop_server(Port, [])),
                       _, fail)
