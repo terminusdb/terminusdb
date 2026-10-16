@@ -406,4 +406,16 @@ test("TERMINUSDB_SERVER_DB_PATH=/absolute/path",
      ]) :-
     config:default_database_path(DB_Path).
 
+test("TERMINUSDB_LISTEN_ADDRESS is not set",
+     [ true(Addr == localhost)
+     ]) :-
+    listen_address(Addr).
+
+test("TERMINUSDB_LISTEN_ADDRESS=0.0.0.0",
+     [ setup(setenv('TERMINUSDB_LISTEN_ADDRESS', '0.0.0.0')),
+       cleanup(unsetenv('TERMINUSDB_LISTEN_ADDRESS')),
+       true(Addr == '0.0.0.0')
+     ]) :-
+    listen_address(Addr).
+
 :- end_tests(env_vars).
