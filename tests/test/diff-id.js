@@ -1,6 +1,16 @@
 const { expect } = require('chai')
 const { Agent, api, branch, db, document, util } = require('../lib')
 
+function rawParse (res, cb) {
+  let data = ''
+  res.on('data', chunk => { data += chunk })
+  res.on('end', () => {
+    const jsonStart = data.indexOf('{')
+    if (jsonStart > 0) data = data.substring(jsonStart)
+    try { cb(null, JSON.parse(data)) } catch (e) { cb(null, data) }
+  })
+}
+
 describe('diff-id', function () {
   let agent
 
@@ -809,6 +819,57 @@ describe('diff-id', function () {
         },
       })
       expect(r5.body).to.have.length(3)
+    })
+
+    it('apply squash commit on raw json modification and delete', async function () {
+      const modId = 'item/' + util.randomString()
+      const delId = 'item/' + util.randomString()
+      await document
+        .insert(agent, {
+          instance: [
+            { '@id': modId, name: 'Socrates', n: 1 },
+            { '@id': delId, name: 'Delete me', n: 0 },
+          ],
+          raw_json: true,
+        })
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const newDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      await document
+        .replace(agent, {
+          path: newDocPath,
+          instance: { '@id': modId, name: 'Socrates', n: 2 },
+          raw_json: true,
+        })
+
+      await document
+        .delete(agent, {
+          path: newDocPath,
+          query: { id: delId },
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: 'main',
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+          match_final_state: false,
+        })
+
+      expect(r4.status).to.equal(200)
+      expect(r4.body).to.deep.equal({ '@type': 'api:ApplyResponse', 'api:status': 'api:success' })
+
+      const r5 = await document.get(agent, { query: { id: modId } })
+      expect(r5.body.n).to.equal(2)
+
+      const r6 = await agent.get(api.path.document(agent)).query({ id: delId }).buffer(true).parse(rawParse)
+      expect(r6.body['api:status']).to.equal('api:not_found')
     })
 
     it('gets an error on apply', async function () {
