@@ -42,6 +42,8 @@
 :- use_module(library(yall)).
 :- use_module(library(lists)).
 :- use_module(library(dicts)).
+:- use_module(library(assoc)).
+:- use_module(library(readutil)).
 :- use_module(library(url), [www_form_encode/2]).
 
 embedding_type_queries(Commit_Descriptor, TypeQueries) :-
