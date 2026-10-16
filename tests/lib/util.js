@@ -11,6 +11,13 @@ const defaultContext = {
   '@type': '@context',
 }
 
+// True when the suite runs against an enterprise server (MOCHA_ENTERPRISE=true,
+// exported by the terminusdb-enterprise Makefile). Enterprise routes may
+// deliberately differ — e.g. anonymous /api/info returns only the caller's
+// authority — so tests branch on this rather than asserting community-only
+// behaviour.
+const enterprise = process.env.MOCHA_ENTERPRISE === 'true'
+
 function deepClone (object) {
   return JSON.parse(JSON.stringify(object))
 }
@@ -211,6 +218,7 @@ module.exports = {
   authorizationHeader,
   deepClone,
   defaultContext,
+  enterprise,
   firstCapture,
   isBoolean,
   isDefined,
