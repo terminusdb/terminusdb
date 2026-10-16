@@ -2629,16 +2629,20 @@ get_document_(Schema, Instance, Prefixes, Id, Document, Options) :-
     xrdf(Instance, Id_Ex, rdf:type, Class),
     (   Class = 'http://terminusdb.com/schema/sys#JSONDocument'
     ->  graph_get_json_object(Instance, Id_Ex, JSON0),
-        (   option(keep_json_type(true), Options)
-        ->  (   option(compress_ids(true), Options)
-            ->  prefix_expand_schema(Class, Prefixes, Class_Ex)
-            ;   Class = Class_Ex
+        (   option(raw_id(false), Options)
+        ->  % Return the stored JSON verbatim: no injected @id or @type
+            Document = JSON0
+        ;   (   option(keep_json_type(true), Options)
+            ->  (   option(compress_ids(true), Options)
+                ->  prefix_expand_schema(Class, Prefixes, Class_Ex)
+                ;   Class = Class_Ex
+                ),
+                put_dict(_{'@type': Class_Ex}, JSON0, JSON)
+            ;   JSON = JSON0
             ),
-            put_dict(_{'@type': Class_Ex}, JSON0, JSON)
-        ;   JSON = JSON0
-        ),
-        % JSONDocument @id is xsd:anyURI - always use full IRI, never compressed
-        put_dict(_{'@id' : Id_Ex}, JSON, Document)
+            % JSONDocument @id is xsd:anyURI - always use full IRI, never compressed
+            put_dict(_{'@id' : Id_Ex}, JSON, Document)
+        )
     ;   findall(
             Prop-Value,
             (   distinct([P],xrdf(Instance,Id_Ex,P,O)),
@@ -3141,7 +3145,7 @@ json_to_database_type(O, O).
 % contains stale layer from before previous transaction's commit.
 % tabled_get_document_context must fetch fresh layer state for each transaction.
 tabled_get_document_context(Transaction, Context) :-
-    '$doc':get_document_context(Transaction, Context).
+    '$doc':get_document_context(Transaction, true, Context).
 
 run_delete_document(Desc, Commit, ID) :-
     create_context(Desc,Commit,Context),
@@ -14509,6 +14513,59 @@ test(top_level_json_without_id,
     json{'@id' : Id,
          json:json{some:json{random:"stuff",that:2.0}},
          name:"testing"}.
+
+test(top_level_json_raw_id_false,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        name : "testing",
+        json : json{ some :
+                     json{ random : "stuff",
+                           that : 2.0
+                         }}
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,Id)
+    ),
+    get_document(Desc,Id,JSON,options{raw_id:false}),
+    \+ get_dict('@id', JSON, _),
+    \+ get_dict('@type', JSON, _),
+    JSON = json{json:json{some:json{random:"stuff",that:2.0}},
+                name:"testing"}.
+
+test(top_level_json_raw_id_false_overrides_keep_json_type,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(json_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Document =
+    json{
+        '@id' : 'JSONDocument/my_json',
+        name : "testing"
+    },
+
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_document(C1,Document,true,_Id)
+    ),
+    get_document(Desc,'JSONDocument/my_json',JSON,
+                 options{keep_json_type:true, raw_id:false}),
+    \+ get_dict('@id', JSON, _),
+    \+ get_dict('@type', JSON, _),
+    JSON = json{name:"testing"}.
 
 test(replace_document,
      [setup((setup_temp_store(State),

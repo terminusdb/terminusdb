@@ -47,6 +47,17 @@ api_global_error_jsonld(error(malformed_parameter(Param), _), Type, JSON) :-
                               'api:parameter' : Param },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(conflicting_document_id(Param_Id, Doc_Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document id parameter ~s conflicts with @id ~s in document", [Param_Id, Doc_Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:ConflictingDocumentId',
+                              'api:parameter' : "id",
+                              'api:parameter_id' : Param_Id,
+                              'api:document_id' : Doc_Id },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(bad_parameter_type(Param, Expected_Type, Value), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     (   Expected_Type = boolean

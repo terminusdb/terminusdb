@@ -39,7 +39,7 @@
 :- use_module(library(lists), [reverse/2]).
 :- use_module(library(sort)).
 :- use_module(core(util)).
-:- use_module(core(triple/casting), [typecast/4, decimal_precision/1]).
+:- use_module(core(triple/casting), [typecast/4, decimal_precision/1, rational_to_decimal_string/3]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
 /*
@@ -81,71 +81,6 @@ string_decimal_to_rational(String, Rational) :-
             )
         )
     ).
-
-/*
- * rational_to_decimal_string(+Rational, -String, +MaxDecimals) is det.
- *
- * Convert rational to decimal string with up to MaxDecimals precision.
- * Per XSD_DECIMAL_SPECIFICATION.md: compute 20 digits, preserve all significant digits.
- */
-rational_to_decimal_string(Rational, String, MaxDecimals) :-
-    (   rational(Rational)
-    ->  % Use exact rational arithmetic
-        (   Rational < 0
-        ->  Sign = "-",
-            AbsRational is abs(Rational)
-        ;   Sign = "",
-            AbsRational = Rational
-        ),
-        % Extract numerator and denominator (may be simplified by GCD)
-        rational(AbsRational, Num, Den),
-        % Integer part
-        IntPart is Num // Den,
-        % Fractional part
-        Remainder is Num mod Den,
-        (   Remainder =:= 0
-        ->  % No fractional part
-            format(string(String), "~w~w", [Sign, IntPart])
-        ;   % Compute MaxDecimals digits of precision WITH ROUNDING
-            Multiplier is 10^MaxDecimals,
-            % Round to nearest: add 0.5 before truncating
-            % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
-            FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
-            % Format with leading zeros if needed, then trim trailing zeros
-            format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
-            format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
-        )
-    ;   number(Rational)
-    ->  % Regular number - format as-is
-        format(string(String), "~w", [Rational])
-    ;   throw(error(type_error(number, Rational), _))
-    ).
-
-/*
- * format_and_trim_decimal(+FracDigits, +MaxLen, -FracStr) is det.
- *
- * Format fractional digits with leading zeros, then trim trailing zeros.
- * Preserves all significant digits (non-zero or zeros between non-zeros).
- */
-format_and_trim_decimal(FracDigits, MaxLen, FracStr) :-
-    % Pad with leading zeros to MaxLen
-    format(string(Padded), "~w", [FracDigits]),
-    atom_length(Padded, ActualLen),
-    (   ActualLen < MaxLen
-    ->  ZeroCount is MaxLen - ActualLen,
-        format(string(Zeros), "~*c", [ZeroCount, 0'0]),
-        string_concat(Zeros, Padded, FullStr)
-    ;   FullStr = Padded
-    ),
-    % Trim trailing zeros
-    atom_codes(FullStr, Codes),
-    reverse(Codes, RevCodes),
-    trim_trailing_zeros(RevCodes, TrimmedRev),
-    reverse(TrimmedRev, TrimmedCodes),
-    atom_codes(FracStr, TrimmedCodes).
-
-trim_trailing_zeros([0'0|Rest], Trimmed) :- !, trim_trailing_zeros(Rest, Trimmed).
-trim_trailing_zeros(Codes, Codes).
 
 /*
  * date_time_string(-Date_Time,+String) is det.
