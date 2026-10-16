@@ -145,6 +145,23 @@ api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(worker_exited(WorkerId), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The commit queue worker processing this request exited unexpectedly; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. Schödingers cat. This should not be possible in production.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueWorkerExited',
+                              'api:worker_id' : WorkerId },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_failed_without_error, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The commit queue job ended without completing; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. Schrödingers cat. This should not be possible in production.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueIncomplete' },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(parallel_elaboration_timeout(_RequestId, Outstanding, Timeout), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Timed out after ~w seconds waiting for ~w outstanding elaboration chunks; the request was not committed and is safe to retry. If this happens under sustained write load, raise the worker message timeout via TERMINUSDB_ELABORATION_TIMEOUT.", [Timeout, Outstanding]),
@@ -3272,6 +3289,22 @@ test(commit_queue_timeout_is_indeterminate_server_error, []) :-
     get_dict('api:error', JSON, Error),
     get_dict('@type', Error, 'api:CommitQueueTimeout'),
     get_dict('api:request_id', Error, request42),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500),
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "may or may not have been applied")).
+
+test(worker_exited_is_indeterminate_server_error, []) :-
+    % A worker dying mid-commit is the same indeterminate-outcome class as
+    % the commit-queue timeout: the client must get an honest 500, plus the
+    % worker id for operational diagnosis.
+    api_error_jsonld(insert_documents,
+                     error(worker_exited(worker_4), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueWorkerExited'),
+    get_dict('api:worker_id', Error, worker_4),
     get_dict('api:status', JSON, "api:server_error"),
     json_http_code(JSON, 500),
     get_dict('api:message', JSON, Message),

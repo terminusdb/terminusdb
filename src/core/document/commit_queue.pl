@@ -792,7 +792,21 @@ cleanup_active_branches_for_worker(WorkerId) :-
     with_mutex(commit_scheduler_mutex,
         findall(BranchKey, active_branch(BranchKey, WorkerId), Branches)),
     forall(member(BranchKey, Branches),
-           requeue_branch(BranchKey, WorkerId)).
+           requeue_branch(BranchKey, WorkerId)),
+    % A worker that dies mid-commit leaves its in-flight package unreplied;
+    % its producer would otherwise block forever on the infinite wait. The
+    % hook runs in the dying thread, so the thread-local is readable without
+    % a race. A duplicate (reply sent, death before the clear) lands on a
+    % consumed or destroyed queue and is ignored by deliver_commit_error.
+    (   nb_current(in_flight_package, Package),
+        Package \= none
+    ->  catch(get_dict(request_id, Package, RequestId), _, RequestId = unknown),
+        catch(deliver_commit_error(Package, worker_exited(WorkerId)), _, true),
+        nb_setval(in_flight_package, none),
+        json_log_error_formatted("Commit queue worker ~w exited with an undelivered commit result for request ~w",
+                                 [WorkerId, RequestId])
+    ;   true
+    ).
 
 try_commit_work :-
     thread_self(WorkerId),
@@ -818,10 +832,13 @@ process_one_commit(BranchKey, true) :-
     branch_commit_queue(BranchKey, Queue),
     thread_get_message(Queue, Package, [timeout(0)]),
     !,
-    catch(
-        run_queued_job(Package),
-        Error,
-        deliver_commit_error(Package, Error)
+    nb_setval(in_flight_package, Package),
+    (   catch(run_queued_job(Package), Error, deliver_commit_error(Package, Error))
+    ->  nb_setval(in_flight_package, none)
+    ;   % A queued job that fails without raising must still reply, or its
+        % producer blocks forever on the infinite wait.
+        deliver_commit_error(Package, commit_failed_without_error),
+        nb_setval(in_flight_package, none)
     ).
 process_one_commit(_, false).
 
@@ -830,11 +847,12 @@ process_commit_batch(BranchKey, Max, true) :-
     branch_commit_queue(BranchKey, Queue),
     thread_get_message(Queue, Package, [timeout(0)]),
     !,
-    catch(
-        run_queued_job(Package),
-        Error,
-        deliver_commit_error(Package, Error)
+    nb_setval(in_flight_package, Package),
+    (   catch(run_queued_job(Package), Error, deliver_commit_error(Package, Error))
+    ->  true
+    ;   deliver_commit_error(Package, commit_failed_without_error)
     ),
+    nb_setval(in_flight_package, none),
     Max1 is Max - 1,
     process_commit_batch(BranchKey, Max1, _).
 process_commit_batch(_, _, false).
@@ -897,10 +915,12 @@ deliver_commit_error(Package, Error) :-
 invalidate_pending_after_schema_change(BranchKey) :-
     branch_commit_queue(BranchKey, Queue),
     (   thread_get_message(Queue, Package, [timeout(0)])
-    ->  catch(thread_send_message(Package.reply_queue,
+    ->  nb_setval(in_flight_package, Package),
+        catch(thread_send_message(Package.reply_queue,
                                   commit_result(reject(schema_changed), Package.request_id)),
               error(existence_error(message_queue, _), _),
               true),
+        nb_setval(in_flight_package, none),
         invalidate_pending_after_schema_change(BranchKey)
     ;   true
     ).
@@ -1236,6 +1256,78 @@ test(process_one_commit_delivers_error, [setup(asserta(api_document:commit_packa
     thread_get_message(ReplyQueue, commit_result(error(test_error), req_2), [timeout(1)]),
     message_queue_destroy(ReplyQueue),
     destroy_branch_queue('test_process_error').
+
+% A queued job that fails without raising must still reply to its producer,
+% otherwise the producer blocks forever on its infinite wait.
+test(process_one_commit_delivers_error_when_job_fails, [setup(asserta(api_document:commit_package_test_handler(commit_queue:failing_commit_test_handler))), cleanup(retractall(api_document:commit_package_test_handler(_)))]) :-
+    cleanup_workers_and_branches,
+    destroy_branch_queue('test_process_fail'),
+    ensure_branch_queue('test_process_fail', Queue),
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_process_fail',
+        all_branches: ['test_process_fail'],
+        reply_queue: ReplyQueue,
+        request_id: req_fail
+    },
+    thread_send_message(Queue, Package),
+    process_one_commit('test_process_fail', true),
+    thread_get_message(ReplyQueue,
+                       commit_result(error(commit_failed_without_error), req_fail),
+                       [timeout(1)]),
+    message_queue_destroy(ReplyQueue),
+    destroy_branch_queue('test_process_fail').
+
+% A worker that dies mid-commit must not leave its producer blocked forever:
+% the worker-exit hook delivers an error for the package the worker had taken.
+test(worker_exit_hook_delivers_error_for_in_flight_package) :-
+    cleanup_workers_and_branches,
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_exit',
+        all_branches: ['test_exit'],
+        reply_queue: ReplyQueue,
+        request_id: req_exit
+    },
+    nb_setval(in_flight_package, Package),
+    cleanup_active_branches_for_worker(worker_1),
+    thread_get_message(ReplyQueue,
+                       commit_result(error(worker_exited(worker_1)), req_exit),
+                       [timeout(1)]),
+    nb_setval(in_flight_package, none),
+    message_queue_destroy(ReplyQueue).
+
+test(worker_exit_hook_delivers_nothing_without_in_flight_package) :-
+    cleanup_workers_and_branches,
+    message_queue_create(ReplyQueue, []),
+    nb_setval(in_flight_package, none),
+    cleanup_active_branches_for_worker(worker_2),
+    assertion(message_queue_property(ReplyQueue, size(0))),
+    message_queue_destroy(ReplyQueue).
+
+% thread_at_exit runs its goal in the dying thread, so thread-local
+% state survives to deliver the in-flight package's error.
+test(thread_death_flushes_in_flight_package) :-
+    cleanup_workers_and_branches,
+    message_queue_create(ReplyQueue, []),
+    Package = commit_package{
+        branch_key: 'test_death',
+        all_branches: ['test_death'],
+        reply_queue: ReplyQueue,
+        request_id: req_death
+    },
+    thread_create(
+        (   thread_self(Me),
+            thread_at_exit(commit_queue:cleanup_active_branches_for_worker(Me)),
+            nb_setval(in_flight_package, Package),
+            thread_exit(dead)
+        ),
+        ThreadId, []),
+    thread_join(ThreadId, _),
+    thread_get_message(ReplyQueue,
+                       commit_result(error(worker_exited(_)), req_death),
+                       [timeout(1)]),
+    message_queue_destroy(ReplyQueue).
 
 % Test that try_commit_work picks up an enqueued commit and delivers the
 % result to the reply queue, using the current thread as the worker.
@@ -1748,6 +1840,9 @@ success_handler(P, success(test_meta, [test_id])) :-
 
 error_handler(P, error(test_error)) :-
     get_dict(test_marker_error, P, true).
+
+failing_commit_test_handler(_, _) :-
+    fail.
 
 % Private-tabled probe used by worker_abolishes_private_tables_after_commit.
 % Calling it leaves a table entry on the calling thread, mimicking the
