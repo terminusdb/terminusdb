@@ -324,7 +324,7 @@ process_chunk(DB, Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Elaborated) :
 
 rust_elaborate_chunk(DB, _Wrap, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs) :-
     rust_elaboration_available,
-    '$doc':get_document_context(DB, Context),
+    '$doc':get_document_context(DB, true, Context),
     catch(
         '$doc':rust_elaborate_simple_documents(Context, Docs, PreBranchCommitId, PreSchemaLayerId, Pairs),
         _Error,
@@ -907,7 +907,7 @@ test(rust_elaboration_matches_prolog_simple, [
     open_descriptor(Desc, DB),
     json_elaborate(DB, Doc, Prolog_Elaborated),
     (   rust_elaboration_available
-    ->  '$doc':get_document_context(DB, Context),
+    ->  '$doc':get_document_context(DB, true, Context),
         '$doc':rust_elaborate_simple_documents(Context, [Doc], none, none, [Rust_Elaborated-_Rust_Contract]),
         elaboration_for_comparison(Prolog_Elaborated, Prolog_Normalized),
         elaboration_for_comparison(Rust_Elaborated, Rust_Normalized),
@@ -960,7 +960,7 @@ test(rust_elaboration_fails_on_missing_required_field, [
     (   rust_elaboration_available
     ->  Doc = json{'@type':'Person', age:30},
         open_descriptor(Desc, DB),
-        '$doc':get_document_context(DB, Context),
+        '$doc':get_document_context(DB, true, Context),
         % The Rust fast path must refuse to elaborate a document that is
         % missing a required schema property, so the Prolog inference fallback
         % can generate the standard required_field_does_not_exist_in_document
@@ -981,7 +981,7 @@ test(rust_vs_prolog_elaboration_performance, [
     ->  DocCount = 10000,
         helper_docs(DocCount, Docs),
         open_descriptor(Desc, DB),
-        '$doc':get_document_context(DB, Context),
+        '$doc':get_document_context(DB, true, Context),
         % Warm-up to avoid cold-start effects.
         '$doc':rust_elaborate_simple_documents(Context, [json{'@type':'Person', name:'Warm', age:1}], none, none, _),
         forall(member(D, Docs), json_elaborate(DB, D, _)),
@@ -1144,7 +1144,12 @@ test(helper_elaboration_produces_ground_contract, [
     create_request_queue(none, DB, [chunk(0, [Doc])], 1, false,
                          PreBranchCommitId, PreSchemaLayerId, RequestId),
     maybe_help_with_elaboration,
-    thread_get_message(RequestId, chunk_done(0, [_Doc-Contract])),
+    thread_get_message(RequestId, Message),
+    (   Message = chunk_done(0, [_Doc-Contract])
+    ->  true
+    ;   Message = chunk_error(_, Error),
+        throw(Error)
+    ),
     cleanup_request(RequestId),
     get_dict(pre_schema_layer_id, Contract, GotSchemaLayerId),
     assertion(ground(GotSchemaLayerId)),
