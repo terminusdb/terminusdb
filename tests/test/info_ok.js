@@ -11,7 +11,8 @@ describe('info_ok', function () {
   it('responds to /api/ok with success', async function () {
     const r = await agent.get('/api/ok')
     expect(r.status).to.equal(200)
-    expect(r.header['content-length']).to.equal('0')
+    expect(r.header['content-type']).to.contain('text/plain')
+    expect(r.text).to.equal('ok\n')
   })
 
   it('responds to /api/info with success (git hash matches binary version)', async function () {

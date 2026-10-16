@@ -97,6 +97,9 @@ function start_server() {
     export TERMINUSDB_SERVER_PORT="$SERVER_PORT"
     export TERMINUSDB_ADMIN_PASS="$ADMIN_PASS"
     export TERMINUSDB_SERVER_DB_PATH="$STORAGE_DIR"
+    # JWT is opt-in at runtime; enable it for the test server to preserve
+    # the prior compile-in behavior so jwt.js integration tests can run.
+    export TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED:-true}
     # NOTE: Do NOT enable auto-optimize plugin for tests!
     # The plugin runs optimization probabilistically after commits, which causes
     # data-version tests to fail due to race conditions (layer IDs change between requests).

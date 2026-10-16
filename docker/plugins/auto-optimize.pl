@@ -26,7 +26,7 @@ optimize_chance(0.1).     % 10% - Optimization runs on average every 10th commit
    GC_Pct is round(GC * 100),
    OPT_Pct is round(OPT * 100),
    format(atom(Msg), "auto-optimize plugin loaded: probabilistic GC (~w%) and optimization (~w%) enabled", [GC_Pct, OPT_Pct]),
-   json_log_info(Msg).
+   json_log_debug(Msg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Optimization predicates
