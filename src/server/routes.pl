@@ -164,8 +164,9 @@ info_handler(get, Request, System_DB, Auth) :-
                  methods([options,get])]).
 
 ok_handler(_Method, _Request, _System_DB, _Auth) :-
-    format('Content-type: application/octets~n', []),
-    format('Status: 200 OK~n~n', []).
+    format('Content-type: text/plain~n', []),
+    format('Status: 200~n~n', []),
+    format('ok~n', []).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),
