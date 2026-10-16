@@ -2599,8 +2599,8 @@ dependencies = [
 
 [[package]]
 name = "tdb-succinct"
-version = "0.1.2"
-source = "git+https://github.com/terminusdb-org/tdb-succinct#91a6096725c7e7031ed1724ea4939041cebe5456"
+version = "0.1.4"
+source = "git+https://github.com/terminusdb-org/tdb-succinct#8164f4c500192d53dea1b7c5d7f06d37082a3ab3"
 dependencies = [
  "async-trait",
  "base64 0.21.7",

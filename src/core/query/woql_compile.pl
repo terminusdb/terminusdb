@@ -34,6 +34,7 @@
 
 :- use_module(core(account)).
 :- use_module(core(triple)).
+:- use_module(core(triple/casting), [normalise_interval_start/2, normalise_interval_end/2]).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(api), [call_catch_document_mutation/2]).
@@ -816,6 +817,22 @@ woql_lte(AE,BE) :-
     ;   woql_equal(AE,BE)
     ).
 
+/* ──────────────────────────────────────────────────────────────────
+ * Notation convention for ranges and intervals
+ * ──────────────────────────────────────────────────────────────────
+ * Throughout this section we use the standard mathematical notation for
+ * half-open intervals:
+ *
+ *   [start, end)   means  start <= x < end   (start inclusive, end exclusive)
+ *
+ * The closing ')' is intentional, not a typo.  This is the convention used
+ * by InRange, seq, TripleSlice and the numeric Allen's relation tests.
+ *
+ * For xdd:dateTimeInterval the stored end is the exclusive boundary, so we
+ * write [start, end] to emphasise that both endpoints are materialised in
+ * the stored value (the end being the day-after bump for date-only ends).
+ * ────────────────────────────────────────────────────────────────── */
+
 /*
  * woql_in_range(VE,SE,EE) is semidet.
  *
@@ -1329,6 +1346,23 @@ woql_day_before(Date, Previous) :-
     ).
 
 /*
+ * normalise_typed_or_component(+Value, :Normaliser, -Component) is semidet.
+ *
+ * Extracts the typed value from a ^^/2 term and normalises it using the
+ * given normaliser (normalise_interval_start/2 or normalise_interval_end/2),
+ * then unifies the result with Component. Falls back to
+ * interval_component_typed/2 if Value is not a ^^/2 term (e.g. a bare
+ * date_time/7 term from non-WOQL code paths).
+ */
+:- meta_predicate normalise_typed_or_component(?, 2, ?).
+normalise_typed_or_component(Value, Normaliser, Component) :-
+    (   Value = D^^_
+    ->  call(Normaliser, D, N),
+        N = Component
+    ;   interval_component_typed(Value, Component)
+    ).
+
+/*
  * woql_interval(Start, End, Interval) is det.
  *
  * Constructs or deconstructs a half-open xdd:dateTimeInterval [Start, End].
@@ -1339,16 +1373,24 @@ woql_interval(Start, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
         IV = date_time_interval(C1,C2,_Dur,_Flag),
-        interval_component_typed(C1, Start),
-        interval_component_typed(C2, End)
+        (   nonvar(Start)
+        ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
+        ;   interval_component_typed(C1, Start)
+        ),
+        (   nonvar(End)
+        ->  normalise_typed_or_component(End, normalise_interval_end, C2)
+        ;   interval_component_typed(C2, End)
+        )
     ;   nonvar(Start), nonvar(End)
     ->  Start = D1^^_,
         End = D2^^_,
-        interval_component_stamp(D1, S1),
-        interval_component_stamp(D2, S2),
-        DiffSecs is S2 - S1,
-        seconds_to_duration(DiffSecs, Dur),
-        Interval = date_time_interval(D1,D2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        normalise_interval_start(D1, N1),
+        normalise_interval_end(D2, N2),
+        interval_component_stamp_ns(N1, NS1),
+        interval_component_stamp_ns(N2, NS2),
+        DiffNanos is NS2 - NS1,
+        nanoseconds_to_duration(DiffNanos, Dur),
+        Interval = date_time_interval(N1,N2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval), _))
     ).
 
@@ -1364,12 +1406,46 @@ interval_component_typed(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
  * component: date_time_interval(Start, End, Duration).
  */
 
-% Convert an interval component to a Unix timestamp (seconds).
-interval_component_stamp(date(Y,M,D,_O), Stamp) :-
-    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp).
-interval_component_stamp(date_time(Y,M,D,HH,MM,SS,NS), Stamp) :-
-    S is SS + NS / 1000000000,
-    date_time_stamp(date(Y,M,D,HH,MM,S,0,-,-), Stamp).
+% Convert an interval component to a Unix timestamp in nanoseconds.
+interval_component_stamp_ns(date(Y,M,D,_O), StampNanos) :-
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
+    StampNanos is floor(Stamp * 1000000000).
+interval_component_stamp_ns(date_time(Y,M,D,HH,MM,SS,NS), StampNanos) :-
+    date_time_stamp(date(Y,M,D,HH,MM,SS,0,-,-), Stamp),
+    StampNanos is floor(Stamp * 1000000000) + NS.
+
+% Convert a nanoseconds difference to an xsd:duration term (days/time only).
+nanoseconds_to_duration(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Nanos < 0
+    ->  Sign = -1, AbsNanos is abs(Nanos)
+    ;   Sign = 1, AbsNanos = Nanos),
+    Days is AbsNanos // 86400000000000,
+    Rem1 is AbsNanos mod 86400000000000,
+    Hours is Rem1 // 3600000000000,
+    Rem2 is Rem1 mod 3600000000000,
+    Mins is Rem2 // 60000000000,
+    Rem3 is Rem2 mod 60000000000,
+    SSec is Rem3 / 1000000000.
+
+% Convert a nanoseconds difference to an xsd:duration term, omitting zero time components.
+nanoseconds_to_duration_significant(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Nanos < 0
+    ->  Sign = -1, AbsNanos is abs(Nanos)
+    ;   Sign = 1, AbsNanos = Nanos),
+    Days is AbsNanos // 86400000000000,
+    Rem1 is AbsNanos mod 86400000000000,
+    (   Days =:= 0
+    ->  Hours is Rem1 // 3600000000000,
+        Rem2 is Rem1 mod 3600000000000,
+        Mins is Rem2 // 60000000000,
+        Rem3 is Rem2 mod 60000000000,
+        (   Rem3 =:= 0
+        ->  SSec = 0.0
+        ;   SSec is Rem3 / 1000000000)
+    ;   Hours = 0,
+        Mins = 0,
+        SSec = 0.0
+    ).
 
 % Convert a Unix timestamp back to a component matching the type of a template.
 stamp_to_component_like(Stamp, date(_,_,_,_), date(Y,M,D,0)) :- !,
@@ -1378,19 +1454,6 @@ stamp_to_component_like(Stamp, date_time(_,_,_,_,_,_,_), date_time(Y,M,D,HH,MM,S
     stamp_date_time(Stamp, date(Y,M,D,HH,MM,SS1,0,'UTC',-), 'UTC'),
     SSF is floor(SS1),
     NS is floor((SS1 - SSF) * 1000000000).
-
-% Convert seconds difference to xsd:duration term (days/time only).
-seconds_to_duration(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
-    (   Secs < 0
-    ->  Sign = -1, AbsSecs is abs(Secs)
-    ;   Sign = 1, AbsSecs = Secs
-    ),
-    Days is floor(AbsSecs) // 86400,
-    Rem1 is floor(AbsSecs) mod 86400,
-    Hours is Rem1 // 3600,
-    Rem2 is Rem1 mod 3600,
-    Mins is Rem2 // 60,
-    SSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60).
 
 % Convert xsd:duration day/time components to seconds (ignores Y/M).
 duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
@@ -1410,13 +1473,17 @@ woql_interval_start_duration(Start, Duration, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
         IV = date_time_interval(C1,_C2,Dur,_Flag),
-        interval_component_typed(C1, Start),
+        (   nonvar(Start)
+        ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
+        ;   interval_component_typed(C1, Start)
+        ),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Start), nonvar(Duration)
-    ->  Start = C1^^_,
+    ->  Start = D1^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        add_duration_to_component(C1, Dur, C2),
-        Interval = date_time_interval(C1,C2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        normalise_interval_start(D1, N1),
+        add_duration_to_component(N1, Dur, N2),
+        Interval = date_time_interval(N1,N2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_start_duration), _))
     ).
 
@@ -1431,13 +1498,21 @@ woql_interval_duration_end(Duration, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
         IV = date_time_interval(_C1,C2,Dur,_Flag),
-        interval_component_typed(C2, End),
+        (   nonvar(End)
+        ->  normalise_typed_or_component(End, normalise_interval_end, C2)
+        ;   interval_component_typed(C2, End)
+        ),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Duration), nonvar(End)
-    ->  End = C2^^_,
+    ->  End = D2^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        subtract_duration_from_component(C2, Dur, C1),
-        Interval = date_time_interval(C1,C2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        % Compute start from the unbumped end so that "P3M/2025-03-31"
+        % yields a start of 2024-12-31 (3 months before Mar 31), then
+        % bump the end for the exclusive endpoint.
+        normalise_interval_start(D2, D2N),
+        subtract_duration_from_component(D2N, Dur, N1),
+        normalise_interval_end(D2, N2),
+        Interval = date_time_interval(N1,N2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_duration_end), _))
     ).
 
@@ -1465,7 +1540,7 @@ days_in_month(_, 12, 31).
 /*
  * woql_interval_relation(Rel, Xs, Xe, Ys, Ye) is semidet.
  *
- * Allen's Interval Algebra for half-open intervals [start, end).
+ * Allen's Interval Algebra for half-open intervals [start, end].
  * When Rel is ground, validates the named relation holds.
  * When Rel is unbound, classifies which of the 13 Allen relations holds (deterministic).
  */
@@ -1704,10 +1779,10 @@ woql_date_duration(Start, End, Duration) :-
     ->  % Compute duration from Start and End (day-count/time)
         Start = C1^^_,
         End = C2^^_,
-        interval_component_stamp(C1, S1),
-        interval_component_stamp(C2, S2),
-        DiffSecs is S2 - S1,
-        seconds_to_duration_significant(DiffSecs, Dur),
+        interval_component_stamp_ns(C1, NS1),
+        interval_component_stamp_ns(C2, NS2),
+        DiffNanos is NS2 - NS1,
+        nanoseconds_to_duration_significant(DiffNanos, Dur),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Start), nonvar(Duration)
     ->  % Compute End = Start + Duration (EOM-aware)
@@ -1788,30 +1863,6 @@ eom_add_duration(Component, duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
 eom_subtract_duration(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
     NSign is Sign * -1,
     eom_add_duration(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
-
-/*
- * seconds_to_duration_significant(+Secs, -Duration) is det.
- *
- * Converts a seconds difference to an xsd:duration term.
- * Omits time components when they are all zero (produces PnD).
- * When there are only time components (< 1 day), produces PTnHnMnS.
- */
-seconds_to_duration_significant(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
-    (   Secs < 0
-    ->  Sign = -1, AbsSecs is abs(Secs)
-    ;   Sign = 1, AbsSecs = Secs
-    ),
-    Days is floor(AbsSecs) // 86400,
-    Rem1 is floor(AbsSecs) mod 86400,
-    Hours is Rem1 // 3600,
-    Rem2 is Rem1 mod 3600,
-    Mins is Rem2 // 60,
-    RemSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60),
-    % Use 0.0 (float) for zero seconds so duration_string's SS \= 0.0 check works
-    (   RemSec =:= 0
-    ->  SSec = 0.0
-    ;   SSec = RemSec
-    ).
 
 /*
  * term_literal(Value, Value_Cast) is det.
@@ -8604,13 +8655,13 @@ test(interval_construct, [
                start : _{'@type' : "DataValue",
                          'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
                'end' : _{'@type' : "DataValue",
-                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-03-31"}},
                interval : _{'@type' : "DataValue",
                             variable : "i"}
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z"}.
 
 test(interval_deconstruct, [
     setup((setup_temp_store(State),
@@ -8623,12 +8674,12 @@ test(interval_deconstruct, [
                'end' : _{'@type' : "DataValue",
                          variable : "e"},
                interval : _{'@type' : "DataValue",
-                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-03-31"}}
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.s = _{'@type': 'xsd:date', '@value': "2025-01-01"},
-    Binding.e = _{'@type': 'xsd:date', '@value': "2025-04-01"}.
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"},
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2025-04-01T00:00:00Z"}.
 
 test(interval_validate, [
     setup((setup_temp_store(State),
@@ -8639,9 +8690,9 @@ test(interval_validate, [
                start : _{'@type' : "DataValue",
                          'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
                'end' : _{'@type' : "DataValue",
-                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-03-31"}},
                interval : _{'@type' : "DataValue",
-                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-03-31"}}
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 1).
@@ -8655,9 +8706,9 @@ test(interval_validate_mismatch, [
                start : _{'@type' : "DataValue",
                          'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
                'end' : _{'@type' : "DataValue",
-                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-01"}},
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-06-30"}},
                interval : _{'@type' : "DataValue",
-                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-03-31"}}
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 0).
@@ -8712,7 +8763,7 @@ test(interval_mixed_date_datetime, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01T12:00:00Z"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"}.
 
 test(interval_typecast_datetime_string, [
     setup((setup_temp_store(State),
@@ -8731,6 +8782,185 @@ test(interval_typecast_datetime_string, [
     [Binding] = JSON.bindings,
     Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00Z/2025-04-01T17:30:00Z"}.
 
+test(interval_construct_timezone_shift, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Timezone-shifted datetime endpoints are normalised to UTC on
+    %% construction. +02:00 shifts back by 2 hours, -05:00 shifts
+    %% forward by 5 hours.
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00+02:00"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-03-31T09:00:00-05:00"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T07:00:00Z/2025-03-31T14:00:00Z"}.
+
+test(interval_deconstruct_timezone_shift, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% An interval constructed from timezone-shifted endpoints stores
+    %% the UTC-normalised values. Deconstruction returns those UTC
+    %% values, not the original timezone-shifted form.
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00+02:00/2025-03-31T09:00:00-05:00"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T07:00:00Z"},
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2025-03-31T14:00:00Z"}.
+
+test(interval_validate_timezone_shift, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Validation succeeds when the timezone-shifted inputs normalise
+    %% to the same UTC values as the stored interval.
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00+02:00"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-03-31T09:00:00-05:00"}},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T07:00:00Z/2025-03-31T14:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_validate_timezone_shift_mismatch, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Validation fails when the timezone-shifted inputs normalise to
+    %% different UTC values than the stored interval.
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00+02:00"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-06-30T09:00:00-05:00"}},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T07:00:00Z/2025-03-31T14:00:00Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 0).
+
+test(interval_typecast_timezone_string, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Typecasting a timezone-shifted interval string to
+    %% xdd:dateTimeInterval normalises both endpoints to UTC.
+    Query = _{ '@type' : "Typecast",
+               value : _{'@type' : "Value",
+                         'data' : _{'@type': 'xsd:string', '@value': "2025-01-31T09:00:00+02:00/2025-03-31T09:00:00-05:00"}},
+               type : _{'@type' : "NodeValue",
+                         node : 'xdd:dateTimeInterval'},
+               result : _{'@type' : "Value",
+                           variable : "iv"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-31T07:00:00Z/2025-03-31T14:00:00Z"}.
+
+test(interval_mixed_date_timezone_datetime, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% A date-only start (no bump, start of day) combined with a
+    %% timezone-shifted datetime end (normalised to UTC).
+    Query = _{ '@type' : "Interval",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-04-01T14:30:00+03:00"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-04-01T11:30:00Z"}.
+
+test(interval_relation_typed_timezone_meets, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Allen's "meets" relation holds across timezone-shifted
+    %% intervals: X ends where Y begins (both normalised to UTC).
+    %% X: 2024-01-01T09:00:00+02:00 .. 2024-03-31T09:00:00+02:00
+    %%    normalises to 2024-01-01T07:00:00Z .. 2024-03-31T07:00:00Z
+    %% Y: 2024-03-31T09:00:00+02:00 .. 2024-06-30T09:00:00+02:00
+    %%    normalises to 2024-03-31T07:00:00Z .. 2024-06-30T07:00:00Z
+    %% X_end (2024-03-31T07:00:00Z) equals Y_start (2024-03-31T07:00:00Z),
+    %% so meets succeeds (1 binding).
+    Query = _{ '@type' : "IntervalRelationTyped",
+               relation : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:string', '@value': "meets"}},
+               x : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01T09:00:00+02:00/2024-03-31T09:00:00+02:00"}},
+               y : _{'@type' : "DataValue",
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-03-31T09:00:00+02:00/2024-06-30T09:00:00+02:00"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    length(JSON.bindings, 1).
+
+test(interval_start_duration_timezone_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Constructing an interval from a timezone-shifted start and a
+    %% duration normalises the start to UTC. The serialised form
+    %% preserves the start_duration flag.
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00+02:00"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P90D"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T07:00:00Z/P90D"}.
+
+test(interval_duration_end_timezone_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    %% Constructing an interval from a duration and a timezone-shifted
+    %% end normalises the end to UTC. The serialised form preserves the
+    %% duration_end flag.
+    Query = _{ '@type' : "IntervalDurationEnd",
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "P90D"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-04-01T09:00:00+02:00"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "P90D/2025-04-01T07:00:00Z"}.
+
 test(interval_start_duration_from_interval, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),
@@ -8742,11 +8972,11 @@ test(interval_start_duration_from_interval, [
                duration : _{'@type' : "DataValue",
                             variable : "d"},
                interval : _{'@type' : "DataValue",
-                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-03-31"}}
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.s = _{'@type': 'xsd:date', '@value': "2025-01-01"},
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"},
     Binding.d = _{'@type': 'xsd:duration', '@value': "P90D"}.
 
 test(interval_start_duration_construct, [
@@ -8764,7 +8994,7 @@ test(interval_start_duration_construct, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/P90D"}.
 
 test(interval_duration_end_from_interval, [
     setup((setup_temp_store(State),
@@ -8777,11 +9007,11 @@ test(interval_duration_end_from_interval, [
                'end' : _{'@type' : "DataValue",
                          variable : "e"},
                interval : _{'@type' : "DataValue",
-                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}}
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-03-31"}}
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.e = _{'@type': 'xsd:date', '@value': "2025-04-01"},
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2025-04-01T00:00:00Z"},
     Binding.d = _{'@type': 'xsd:duration', '@value': "P90D"}.
 
 test(interval_duration_end_construct, [
@@ -8793,13 +9023,13 @@ test(interval_duration_end_construct, [
                duration : _{'@type' : "DataValue",
                             'data' : _{'@type': 'xsd:duration', '@value': "P90D"}},
                'end' : _{'@type' : "DataValue",
-                         'data' : _{'@type': 'xsd:date', '@value': "2025-04-01"}},
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-04-01T00:00:00Z"}},
                interval : _{'@type' : "DataValue",
                             variable : "i"}
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01/2025-04-01"}.
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "P90D/2025-04-01T00:00:00Z"}.
 
 test(interval_start_duration_datetime, [
     setup((setup_temp_store(State),
@@ -8818,6 +9048,180 @@ test(interval_start_duration_datetime, [
     [Binding] = JSON.bindings,
     Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T09:00:00Z"},
     Binding.d = _{'@type': 'xsd:duration', '@value': "PT8H30M"}.
+
+test(interval_start_duration_nanoseconds_from_interval, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/2025-01-01T00:00:00.500Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT0.5S"}.
+
+test(interval_start_duration_nanoseconds_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "PT0.5S"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.5S"}.
+
+test(interval_duration_end_nanoseconds_from_interval, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalDurationEnd",
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               'end' : _{'@type' : "DataValue",
+                         variable : "e"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00.000Z/2025-01-01T00:00:00.500Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.e = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00.500Z"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT0.5S"}.
+
+test(interval_duration_end_nanoseconds_construct, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalDurationEnd",
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "PT0.5S"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00.500Z"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "PT0.5S/2025-01-01T00:00:00.500Z"}.
+
+test(interval_start_duration_tenth_second, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "PT0.1S"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.1S"}.
+
+test(interval_start_duration_two_tenths_second, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "PT0.2S"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.2S"}.
+
+test(interval_start_duration_full_nanos, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "PT0.123456789S"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00Z/PT0.123456789S"}.
+
+test(interval_duration_end_tenth_second, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalDurationEnd",
+               duration : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xsd:duration', '@value': "PT0.1S"}},
+               'end' : _{'@type' : "DataValue",
+                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00.100Z"}},
+               interval : _{'@type' : "DataValue",
+                            variable : "i"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.i = _{'@type': 'xdd:dateTimeInterval', '@value': "PT0.1S/2025-01-01T00:00:00.100Z"}.
+
+test(interval_start_duration_explicit_nanos_roundtrip, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T00:00:00.000Z/2025-01-01T00:00:00.123456789Z"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT0.123456789S"}.
+
+test(interval_start_duration_timezone_nanos_roundtrip, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "IntervalStartDuration",
+               start : _{'@type' : "DataValue",
+                         variable : "s"},
+               duration : _{'@type' : "DataValue",
+                            variable : "d"},
+               interval : _{'@type' : "DataValue",
+                            'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00.000+02:00/2025-01-01T09:00:00.123456789+02:00"}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xsd:dateTime', '@value': "2025-01-01T07:00:00Z"},
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT0.123456789S"}.
 
 test(day_after_mid_month, [
     setup((setup_temp_store(State),
@@ -9290,9 +9694,9 @@ test(interval_relation_typed_meets, [
                relation : _{'@type' : "DataValue",
                             'data' : _{'@type': 'xsd:string', '@value': "meets"}},
                x : _{'@type' : "DataValue",
-                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-31"}},
                y : _{'@type' : "DataValue",
-                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-07-01"}}
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-06-30"}}
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 1).
@@ -9306,9 +9710,9 @@ test(interval_relation_typed_meets_fails, [
                relation : _{'@type' : "DataValue",
                             'data' : _{'@type': 'xsd:string', '@value': "meets"}},
                x : _{'@type' : "DataValue",
-                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-31"}},
                y : _{'@type' : "DataValue",
-                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-05-01/2024-07-01"}}
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-05-01/2024-06-30"}}
              },
     query_test_response_test_branch(Query, JSON),
     length(JSON.bindings, 0).
@@ -9354,9 +9758,9 @@ test(interval_relation_typed_classify, [
                relation : _{'@type' : "DataValue",
                             variable : "rel"},
                x : _{'@type' : "DataValue",
-                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-04-01"}},
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-01-01/2024-03-31"}},
                y : _{'@type' : "DataValue",
-                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-07-01"}}
+                     'data' : _{'@type': 'xdd:dateTimeInterval', '@value': "2024-04-01/2024-06-30"}}
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,

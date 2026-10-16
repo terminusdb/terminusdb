@@ -195,3 +195,6 @@ $(ROFF_FILE): $(RONN_FILE)
 
 .PHONY: pr
 pr: lint lint-mocha lint-openapi clean dev restart test test-int
+
+.PHONY: pr-light
+pr-light: lint lint-mocha lint-openapi dev restart test test-int

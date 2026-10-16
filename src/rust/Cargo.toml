@@ -14,4 +14,4 @@ swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 #swipl = {path="../../../swipl-rs/swipl"}
 
 #[patch."https://github.com/terminusdb-org/terminusdb-store"]
-#terminus-store = {path="../../../terminusdb-store"}
+#terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store", tag="v0.21.8"}
