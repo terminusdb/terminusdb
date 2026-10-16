@@ -480,6 +480,9 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
+            % raw_id: keep internal @id/@type on raw JSON documents.
+            % Default flips to false in 12.1.
+            param_value_search_or_json_optional(Search, JSON, raw_id, boolean, true, Raw_Id),
             param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
             param_value_search_or_json_optional(Search, JSON, type, non_empty_atom, _, Type),
 
@@ -509,6 +512,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          compress: Compress_Ids,
                          unfold: Unfold,
                          minimized: Minimized,
+                         raw_id: Raw_Id,
                          format: OutputFormat,
                          request: Request
                      },
@@ -544,6 +548,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
             param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
+            param_value_search_optional(Search, id, non_empty_atom, _, Id),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -557,7 +562,8 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           allow_destructive_migration: Allow_Destructive_Migration,
                           merge_repeats: Merge_Repeats,
                           overwrite: Overwrite,
-                          input_format: InputFormat
+                          input_format: InputFormat,
+                          document_id: Id
                       },
             api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 
@@ -628,6 +634,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
+            param_value_search_optional(Search, id, non_empty_atom, _, Id),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -639,7 +646,8 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 require_migration: Require_Migration,
                 allow_destructive_migration: Allow_Destructive_Migration,
                 merge_repeats: Merge_Repeats,
-                input_format: InputFormat
+                input_format: InputFormat,
+                document_id: Id
             },
             api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Ids, Options),
 

@@ -38,6 +38,8 @@ pub struct DocumentContext<L: Layer + Clone> {
     value_hashes: HashSet<u64>,
     shared_types: HashSet<u64>,
     sys_index_ids: Vec<u64>,
+    // when false, sys:JSONDocument documents are emitted without the injected @id
+    include_id: bool,
 
     rdf: Arc<RdfIds<L>>,
     sys: Arc<SysIds<L>>,
@@ -46,6 +48,14 @@ pub struct DocumentContext<L: Layer + Clone> {
 
 impl<L: Layer + Clone> DocumentContext<L> {
     pub fn new(schema: L, instance: Option<L>) -> DocumentContext<L> {
+        Self::new_with_options(schema, instance, true)
+    }
+
+    pub fn new_with_options(
+        schema: L,
+        instance: Option<L>,
+        include_id: bool,
+    ) -> DocumentContext<L> {
         let schema_rdf = RdfIds::new(Some(schema.clone()));
         let schema_sys = Arc::new(SysIds::new(Some(schema.clone())));
         let schema_query_context = SchemaQueryContext::new(&schema, &schema_rdf, &schema_sys);
@@ -188,6 +198,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             value_hashes,
             shared_types,
             sys_index_ids,
+            include_id,
 
             rdf,
             sys,
@@ -212,6 +223,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             value_hashes: HashSet::with_capacity(0),
             shared_types: HashSet::with_capacity(0),
             sys_index_ids: Vec::with_capacity(0),
+            include_id: true,
 
             rdf: Arc::new(RdfIds::new(instance.clone())),
             sys: Arc::new(SysIds::new(instance)),
@@ -436,7 +448,8 @@ impl<L: Layer + Clone> DocumentContext<L> {
         } else {
             let mut result = Map::new();
 
-            if type_id.is_none() || type_id != self.sys.json() {
+            let suppress_raw_id = !self.include_id && type_id == self.sys.json_document();
+            if !suppress_raw_id && (type_id.is_none() || type_id != self.sys.json()) {
                 // we only care about the id for non-json types, and for the top level json documents. Json (sub)documents should not include an id.
                 result.insert("@id".to_string(), Value::String(id_name_contracted));
             }
@@ -1242,11 +1255,12 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static
 use super::types::*;
 predicates! {
     #[module("$doc")]
-    semidet fn get_document_context(context, transaction_term, context_term) {
+    semidet fn get_document_context(context, transaction_term, include_id_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?;
+        let include_id: bool = include_id_term.get()?;
 
-        let get_context = DocumentContext::new(schema_layer, instance_layer);
+        let get_context = DocumentContext::new_with_options(schema_layer, instance_layer, include_id);
 
         context_term.unify(DocumentContextBlob(Arc::new(get_context)))
     }
