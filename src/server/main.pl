@@ -14,13 +14,16 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
-:- use_module(core(util), [json_log_error_formatted/2]).
+:- use_module(core(util), [json_log_error_formatted/2,
+                          json_log_warning_formatted/2]).
 :- use_module(core(api)).
 :- use_module(core(plugins)).
 
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,
+                                       jwt_key_source_configured/0,
+                                       jwt_runtime_enabled/0,
                                        oidc_issuer_url/1,
                                        check_jwt_scopes_claim_safety/0,
                                        check_jwt_subject_claim_safety/0,
@@ -50,19 +53,26 @@
 :- if(jwt_enabled).
 
 load_jwt_conditionally :-
-    (   jwt_jwks_endpoint(Endpoint)
-    ->  ignore(catch('$rustnative':jwt_setup_jwks(Endpoint), E,
-              (   json_log_error_formatted('JWT JWKS setup failed: ~w', [E]),
-                  true)))
-    ;   oidc_issuer_url(IssuerUrl)
-    ->  ignore(catch('$rustnative':jwt_setup_oidc(IssuerUrl), E,
-              (   json_log_error_formatted('JWT OIDC setup failed: ~w', [E]),
-                  true)))
-    ;   true  % No JWKS or OIDC configured — JWT auth will fail at decode time
-    ),
-    check_jwt_scopes_claim_safety,
-    check_jwt_subject_claim_safety,
-    check_jwt_config_safety.
+    (   jwt_runtime_enabled
+    ->  (   jwt_jwks_endpoint(Endpoint)
+        ->  ignore(catch('$rustnative':jwt_setup_jwks(Endpoint), E,
+                  (   json_log_error_formatted('JWT JWKS setup failed: ~w', [E]),
+                      true)))
+        ;   oidc_issuer_url(IssuerUrl)
+        ->  ignore(catch('$rustnative':jwt_setup_oidc(IssuerUrl), E,
+                  (   json_log_error_formatted('JWT OIDC setup failed: ~w', [E]),
+                      true)))
+        ;   true  % No JWKS or OIDC configured — JWT auth will fail at decode time
+        ),
+        check_jwt_scopes_claim_safety,
+        check_jwt_subject_claim_safety,
+        check_jwt_config_safety
+    ;   jwt_key_source_configured
+    ->  json_log_warning_formatted(
+            'A JWT key source is configured (TERMINUSDB_SERVER_JWKS_ENDPOINT or TERMINUSDB_OIDC_ISSUER_URL) but JWT is disabled. Set TERMINUSDB_JWT_ENABLED=true to enable JWT authentication.',
+            [])
+    ;   true
+    ).
 
 :- else.
 

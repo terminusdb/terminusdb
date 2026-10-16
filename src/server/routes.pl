@@ -3671,6 +3671,10 @@ fetch_authorization_data(Request, Username, KS) :-
  *  Fetches the HTTP JWT data and returns both the username and the full
  *  payload dict (for scope extraction).
  */
+fetch_jwt_data(_Token, _Username, _PayloadDict) :-
+    \+ config:jwt_runtime_enabled,
+    !,
+    throw(error(authentication_incorrect(jwt_authentication_disabled),_)).
 fetch_jwt_data(Token, Username, PayloadDict) :-
     atom_string(TokenAtom, Token),
     % Build JWT decode options dict from config predicates
@@ -4509,3 +4513,78 @@ test(jwt_scopes_from_payload_array_claim) :-
 :- end_tests(jwt_scope_parsing).
 
 :- endif.
+
+:- begin_tests(jwt_key_source).
+
+% Snapshot and clear JWT key-source env vars so tests are hermetic.
+:- dynamic saved_jwt_env/2.
+
+save_jwt_env :-
+    forall(member(Var, ['TERMINUSDB_SERVER_JWKS_ENDPOINT',
+                        'TERMINUSDB_OIDC_ISSUER_URL',
+                        'TERMINUSDB_JWT_ENABLED']),
+           (   getenv(Var, Val)
+           ->  assertz(saved_jwt_env(Var, Val)),
+               unsetenv(Var)
+           ;   true)).
+
+restore_jwt_env :-
+    forall(retract(saved_jwt_env(Var, Val)),
+           setenv(Var, Val)).
+
+test(no_key_source_not_configured,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    \+ config:jwt_key_source_configured.
+
+test(jwks_https_endpoint_configures_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', 'https://example.com/jwks.json'),
+    config:jwt_key_source_configured.
+
+test(jwks_localhost_endpoint_configures_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', 'http://localhost:8080/jwks.json'),
+    config:jwt_key_source_configured.
+
+test(jwks_insecure_endpoint_is_not_a_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', 'http://example.com/jwks.json'),
+    \+ config:jwt_key_source_configured.
+
+test(oidc_issuer_url_configures_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_OIDC_ISSUER_URL', 'https://issuer.example.com'),
+    config:jwt_key_source_configured.
+
+test(empty_endpoint_is_not_a_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', ''),
+    setenv('TERMINUSDB_OIDC_ISSUER_URL', ''),
+    \+ config:jwt_key_source_configured.
+
+test(jwt_safety_checks_det_without_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    config:check_jwt_subject_claim_safety,
+    config:check_jwt_config_safety.
+
+test(jwt_safety_checks_det_with_key_source,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_SERVER_JWKS_ENDPOINT', 'https://example.com/jwks.json'),
+    config:check_jwt_subject_claim_safety,
+    config:check_jwt_config_safety.
+
+test(jwt_disabled_by_default,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    \+ config:jwt_runtime_enabled.
+
+test(jwt_enabled_when_env_true,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_JWT_ENABLED', 'true'),
+    config:jwt_runtime_enabled.
+
+test(jwt_disabled_when_env_false,
+     [setup(save_jwt_env), cleanup(restore_jwt_env)]) :-
+    setenv('TERMINUSDB_JWT_ENABLED', 'false'),
+    \+ config:jwt_runtime_enabled.
+
+:- end_tests(jwt_key_source).
