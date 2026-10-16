@@ -4,6 +4,7 @@
               server/1,
               server_name/1,
               server_port/1,
+              listen_address/1,
               worker_amount/1,
               max_transaction_retries/1,
               db_path/1,
@@ -19,6 +20,8 @@
               check_jwt_scopes_claim_safety/0,
               check_jwt_subject_claim_safety/0,
               check_jwt_config_safety/0,
+              jwt_key_source_configured/0,
+              jwt_runtime_enabled/0,
               registry_path/1,
               tmp_path/1,
               server_worker_options/1,
@@ -84,6 +87,9 @@ server_name(Value) :-
 
 server_port(Value) :-
     getenv_default_number('TERMINUSDB_SERVER_PORT', 6363, Value).
+
+listen_address(Value) :-
+    getenv_default('TERMINUSDB_LISTEN_ADDRESS', localhost, Value).
 
 worker_amount(Value) :-
     current_prolog_flag(cpu_count,Integer),
@@ -181,6 +187,33 @@ oidc_issuer_url(Url) :-
         ),
         Url = Value ).
 
+/**
+ * jwt_key_source_configured is semidet.
+ *
+ * Succeeds if a JWT verification key source is configured: either a JWKS
+ * endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) or an OIDC issuer URL
+ * (TERMINUSDB_OIDC_ISSUER_URL). Without a key source no JWT can be
+ * verified.
+ */
+jwt_key_source_configured :-
+    jwt_jwks_endpoint(_),
+    !.
+jwt_key_source_configured :-
+    oidc_issuer_url(_).
+
+/**
+ * jwt_runtime_enabled is semidet.
+ *
+ * Succeeds when JWT authentication is opted into at runtime via
+ * TERMINUSDB_JWT_ENABLED=true. Default is false: JWT support may be
+ * compiled into the binary, but it stays off — and silent — unless
+ * explicitly enabled. A key source (JWKS endpoint or OIDC issuer URL)
+ * alone does not enable JWT; see jwt_key_source_configured/0.
+ */
+jwt_runtime_enabled :-
+    getenv_default('TERMINUSDB_JWT_ENABLED', false, Value),
+    Value = true.
+
 jwt_scopes_enabled :-
     getenv_default('TERMINUSDB_JWT_SCOPES_ENABLED', false, Value),
     Value = true.
@@ -238,8 +271,7 @@ check_jwt_key_source_safety :-
         'OIDC issuer URL (TERMINUSDB_OIDC_ISSUER_URL) is set but does not use HTTPS or http://localhost. Only https:// URLs (or http://localhost for testing) are accepted. JWT authentication will fail until a valid issuer URL is provided.',
         []).
 check_jwt_key_source_safety :-
-    \+ jwt_jwks_endpoint(_),
-    \+ oidc_issuer_url(_),
+    \+ jwt_key_source_configured,
     !,
     json_log_warning_formatted(
         'JWT is enabled but no JWKS endpoint (TERMINUSDB_SERVER_JWKS_ENDPOINT) or OIDC issuer URL (TERMINUSDB_OIDC_ISSUER_URL) is configured. JWT authentication will fail for all tokens until a key source is provided.',

@@ -1,6 +1,13 @@
 :- dynamic user:file_search_path/2.
 :- multifile user:file_search_path/2.
 
+% library(http/json) and library(http/json_convert) moved to library(json*)
+% in SWI 10. The old paths still work on both 9 and 10 via compat stubs, so
+% keep them and silence the move notice.
+:- multifile user:message_hook/3.
+:- dynamic user:message_hook/3.
+user:message_hook(deprecated(moved_library(_,_)), _, _).
+
 :- use_module(library(filesex)).
 
 :- set_prolog_flag(terminusdb_monolithic_module, true).

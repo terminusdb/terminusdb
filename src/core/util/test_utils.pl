@@ -424,7 +424,7 @@ read_line_until_start_line(Error, Collected) :-
     (   Line = end_of_file
     ->  reverse(Collected, Stderr_Lines),
         throw(error(server_has_no_output(Stderr_Lines), _))
-    ;   re_match("% You can view your server in a browser at ",Line)
+    ;   re_match("% Listening on ",Line)
     ->  true
     ;   read_line_until_start_line(Error, [Line|Collected])
     ).
@@ -456,7 +456,8 @@ spawn_server_1(Path, URL, PID, Options) :-
 
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
+        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json',
+        'TERMINUSDB_JWT_ENABLED'='true'
     ],
 
     (   memberchk(env_vars(Env_List_User), Options)
