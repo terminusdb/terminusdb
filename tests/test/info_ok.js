@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, info } = require('../lib')
+const { Agent, info, util } = require('../lib')
 
 describe('info_ok', function () {
   let agent
@@ -17,6 +17,11 @@ describe('info_ok', function () {
   it('responds to /api/info with success (git hash matches binary version)', async function () {
     const terminusdbVersion = await info.terminusdbVersion()
     const gitHash = await info.gitHash()
+    // Enterprise withholds storage and version details from anonymous callers,
+    // so authenticate to exercise the full response contract.
+    if (util.enterprise) {
+      agent.auth()
+    }
     const r = await agent.get('/api/info')
     expect(r.status).to.equal(200)
     expect(r.body['api:status']).to.equal('api:success')
@@ -29,5 +34,8 @@ describe('info_ok', function () {
     expect(r.body['api:info'].terminusdb).to.have.property('git_hash').that.equals(gitHash)
     expect(r.body['api:info']).to.have.property('terminusdb_store').that.is.an('object')
     expect(r.body['api:info'].terminusdb_store).to.have.property('version').that.is.a('string').and.lengthOf.greaterThan(0)
+    if (util.enterprise) {
+      expect(r.body['api:info']).to.have.property('enterprise').that.is.an('object')
+    }
   })
 })

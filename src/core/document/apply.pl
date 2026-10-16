@@ -18,6 +18,7 @@
 
 :- use_module(core(document/patch)).
 :- use_module(core(document/json)).
+:- use_module(core(document/json_rdf), [is_json_document_type/1]).
 :- use_module(core(document/normalize)).
 :- use_module(core(transaction/database)).
 
@@ -73,13 +74,35 @@ apply_diff(Context, Diff, Conflict, Options) :-
         get_dict('@id', Diff, ID),
         error(missing_field('@id', Diff), _)
     ),
-    get_document(Context, ID, JSON_In),
+    get_document(Context, ID, JSON_In,
+                 options{compress_ids: true, unfold: true, keep_json_type: true}),
     simple_patch(Diff,JSON_In,Result,Options),
     (   Result = success(JSON_Out)
-    ->  replace_document(Context, JSON_Out, _),
+    ->  apply_replace_document(Context, JSON_In, JSON_Out, _),
         Conflict = null
     ;   Result = conflict(Conflict_Prototype),
         put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+    ).
+
+%% apply_replace_document(+Context, +JSON_In, +JSON_Out, -Id) is det.
+%% apply_replace_document(+Context, +JSON_In, +JSON_Out, +Captures_In, -Ids, +Captures_Out) is det.
+%
+% JSONDocument instances bypass schema elaboration and are written
+% through the raw JSON path, mirroring the @type detection in
+% insert_document/9.
+apply_replace_document(Context, JSON_In, JSON_Out, Id) :-
+    (   get_dict('@type', JSON_In, Type),
+        is_json_document_type(Type)
+    ->  del_dict('@type', JSON_Out, _, JSON_Raw),
+        replace_document(Context, JSON_Raw, false, true, Id)
+    ;   replace_document(Context, JSON_Out, Id)
+    ).
+apply_replace_document(Context, JSON_In, JSON_Out, Captures_In, Ids, Captures_Out) :-
+    (   get_dict('@type', JSON_In, Type),
+        is_json_document_type(Type)
+    ->  del_dict('@type', JSON_Out, _, JSON_Raw),
+        replace_document(Context, JSON_Raw, false, true, Captures_In, Ids, _Dependencies, Captures_Out)
+    ;   replace_document(Context, JSON_Out, false, false, Captures_In, Ids, _Dependencies, Captures_Out)
     ).
 
 
@@ -142,11 +165,12 @@ apply_diff_ids_captures(Context, Diff, Conflict, Ids, Options, Captures_In, Capt
     get_dict(prefixes, Context, Prefixes),
     normalize_diff(Prefixes, Diff, Normalized_Diff),
     resolve_refs_in_diff(Captures_In, Normalized_Diff, Resolved_Diff),
-    get_document(Context, ID, JSON_In),
+    get_document(Context, ID, JSON_In,
+                 options{compress_ids: true, unfold: true, keep_json_type: true}),
     put_dict(options{prefixes:Prefixes}, Options, Options_With_Prefixes),
     simple_patch(Resolved_Diff,JSON_In,Result,Options_With_Prefixes),
     (   Result = success(JSON_Out)
-    ->  replace_document(Context, JSON_Out, false, false, Captures_In, Ids, _Dependencies, Captures_Out),
+    ->  apply_replace_document(Context, JSON_In, JSON_Out, Captures_In, Ids, Captures_Out),
         Conflict = null
     ;   Result = conflict(Conflict_Prototype),
         Ids = [],

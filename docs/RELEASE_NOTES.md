@@ -12,6 +12,37 @@ This is a major release that also builds the core foundation for a reactive futu
 ## Bugfixes
 * Fix rebase race condition on throttled cpu 
 
+# TerminusDB Server v12.0.8 Release Notes
+
+## New functionality
+* UuidV7 key strategy: generated UUIDs, arbitrary IRIs (!!), WOQL by @dfrnt-hoijnet in [#2547](https://github.com/terminusdb/terminusdb/pull/2547)
+
+## Developer experience (DX) improvments
+
+* Faster CLI and integration test battery via parallelism and startup trims by @dfrnt-hoijnet in [#2543](https://github.com/terminusdb/terminusdb/pull/2543)
+
+## Maintenance and Bugfixes
+
+* Fix unbundle failing with unknown_layer_reference across stores by @dfrnt-hoijnet in [#2540](https://github.com/terminusdb/terminusdb/pull/2540)
+* Fix significant insert performance regressions by @dfrnt-hoijnet in [#2529](https://github.com/terminusdb/terminusdb/pull/2529)
+* Fix field-level `@unfold` being silently ignored for `List` and multi-dim `Array` properties by @bixycler in [#2513](https://github.com/terminusdb/terminusdb/pull/2513)
+* Accept @shared class annotation in GraphQL frames by @[ideo67 in ](2533)[https://github.com/terminusdb/terminusdb/pull)2533]
+* Remove leftover GraphQL debug logging that panics on multibyte UTF-8 by @hideo67 in [#2532](https://github.com/terminusdb/terminusdb/pull/2532)
+* Put with `charset=utf-8` regression on PUT prevented document write by @dfrnt-hoijnet in [#2544](https://github.com/terminusdb/terminusdb/pull/2544)
+* Fix garbled UTF-8 in streaming history endpoint response by @dfrnt-hoijnet in [#2545](https://github.com/terminusdb/terminusdb/pull/2545)
+* Bump **JS integration test packages**: axios, qs, source-map-js, js-yaml, brace-expansion, joi, stream-json
+* Bump rustls from 0.23.43 to 0.23.45 in /src/rust in [#2526](https://github.com/terminusdb/terminusdb/pull/2526)
+* JWT scopes (upgrade) now resolves roles by id, not display name by @dfrnt-hoijnet in [#2539](https://github.com/terminusdb/terminusdb/pull/2539)
+* Remove a debug log detected via #2530 by @dfrnt-hoijnet in [#2534](https://github.com/terminusdb/terminusdb/pull/2534)
+* Fix GraphQL `__typename` and fragment resolution on dynamically generated types by @dfrnt-hoijnet in [#2551](https://github.com/terminusdb/terminusdb/pull/2551)
+* Fix WOQL JSON boolean and list scalar insertion by @dfrnt-hoijnet in [#2546](https://github.com/terminusdb/terminusdb/pull/2546)
+
+## New Contributors (thank you!!)
+* @hideo67 made their first contribution in [#2532](https://github.com/terminusdb/terminusdb/pull/2532)
+* @bixycler made their first contribution in [#2513](https://github.com/terminusdb/terminusdb/pull/2513)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.7...v12.0.8
+
 # TerminusDB Server v12.0.7 Release Notes
 
 ## New clients
