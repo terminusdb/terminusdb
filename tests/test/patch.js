@@ -522,4 +522,33 @@ describe('patch', function () {
       expect(charlieDoc.body[0].friend).to.equal(`${refClass}/Alice`)
     }).timeout(10000)
   })
+
+  describe('1 schemaless database, shared', function () {
+    beforeEach(async function () {
+      await db.create(agent, { schema: false })
+      const response = await document.insert(agent, {
+        instance: { '@id': 'item/a', name: 'alpha', n: 1 },
+        raw_json: true,
+      })
+      ids = response.body
+      id1 = ids[0]
+    })
+
+    afterEach(async function () {
+      await db.delete(agent)
+    })
+
+    it('applies field patch to a raw json document', async function () {
+      const path = api.path.patchDb(agent)
+      const patch = { '@id': 'item/a', n: { '@op': 'SwapValue', '@before': 1, '@after': 42 } }
+      const author = 'me'
+      const message = 'yo'
+      const res = await agent.post(path).send({ patch, author, message })
+      expect(res.status).to.equal(200)
+      expect(res.body).to.deep.equal(ids)
+
+      const getRes = await document.get(agent, { query: { id: 'item/a' } })
+      expect(getRes.body.n).to.equal(42)
+    })
+  })
 })

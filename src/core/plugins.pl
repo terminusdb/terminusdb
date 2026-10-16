@@ -123,7 +123,7 @@ perform_shared_cascade(Validation, Result) :-
     % Convert validation to transaction (gets a fresh builder)
     validation_objects_to_transaction_objects([Validation], [Transaction]),
     % Get document context from the transaction (reflects current committed layer)
-    '$doc':get_document_context(Transaction, Context),
+    '$doc':get_document_context(Transaction, true, Context),
     % Ensure the transaction has an instance builder
     ensure_transaction_has_builder(instance, Transaction),
     % Call Rust fast path: collects candidates from layer removals and deletes orphans

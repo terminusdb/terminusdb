@@ -191,7 +191,7 @@ json_list_triple([First|Rest], hash(Pieces_In, Node_In), Triple_Or_Hash) =>
 assign_json_document_id(Prefixes,Id) :-
     get_dict('@base', Prefixes, Base),
     atom_concat(Base, 'JSONDocument/', Obj_Base),
-    idgen_random(Obj_Base, Id).
+    idgen_uuid_v7(Obj_Base, Id).
 
 bind_vars(Object) :-
     term_variables(Object, Vars),
@@ -323,11 +323,13 @@ delete_json_object(Query_Context, Unlink, Id) :-
     delete_json_object(TO, Unlink, Id).
 
 :- begin_tests(json_rdf, [concurrent(true)]).
+:- use_module(core(util/test_utils), [ends_with_uuid_v7/1]).
 
 test(assign_json_document_id,[]) :-
     Prefixes = _{ '@base' : 'foo/' },
     assign_json_document_id(Prefixes,Id),
-    atom_concat('foo/JSONDocument', _, Id).
+    atom_concat('foo/JSONDocument/', _, Id),
+    ends_with_uuid_v7(Id).
 
 test(generate_data_triples,[]) :-
     JSON = json{

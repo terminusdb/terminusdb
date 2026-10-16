@@ -266,6 +266,7 @@ api_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version, Afte
 :- use_module(core(document)).
 :- use_module(core(triple)).
 :- use_module(core(api/api_document)).
+:- use_module(core(api/db_branch)).
 :- use_module(library(http/json)).
 
 test(delete_missing,
@@ -350,6 +351,49 @@ test(insert_twice,
                       [json{'@id_already_exists':_,
                             '@op':'InsertConflict'}]))
     ).
+
+test(schemaless_apply_insert_modify_delete,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+
+    open_string('[{"@id":"item/a","name":"alpha","n":1},{"@id":"item/c","name":"gamma","n":3}]', Stream1),
+    api_insert_documents(SystemDB, Auth, Path, Stream1, no_data_version,
+                         data_version(branch,Commit1), _Ids1, Options),
+
+    open_string('["item/c"]', Stream2),
+    api_delete_documents(SystemDB, Auth, Path, Stream2, no_data_version,
+                         _Data_Version2, _Ids2, Options),
+
+    open_string('{"@id":"item/a","name":"alpha","n":99}', Stream3),
+    api_replace_documents(SystemDB, Auth, Path, Stream3, no_data_version,
+                          _Data_Version3, _Ids3, [create(false)|Options]),
+
+    open_string('{"@id":"item/b","name":"beta","n":2}', Stream4),
+    api_insert_documents(SystemDB, Auth, Path, Stream4, no_data_version,
+                         data_version(branch,Commit4), _Ids4, Options),
+
+    atomic_list_concat([Path, '/local/branch/dev'], Dev_Path),
+    atomic_list_concat([Path, '/local/commit/', Commit1], Commit_Path),
+    branch_create(SystemDB, Auth, Dev_Path, branch(Commit_Path), _Branch_Uri),
+
+    Commit_Info = commit_info{ author : "gavin", message: "apply" },
+    api_apply_squash_commit(SystemDB, Auth, Dev_Path, Commit_Info,
+                            Commit1, Commit4, [match_final_state(false)]),
+
+    resolve_absolute_string_descriptor(Dev_Path, Dev_Descriptor),
+    open_descriptor(Dev_Descriptor, Dev_Transaction),
+    get_document(Dev_Transaction, 'item/a', Doc_A),
+    get_dict(n, Doc_A, 99),
+    get_document(Dev_Transaction, 'item/b', _Doc_B),
+    \+ get_document(Dev_Transaction, 'item/c', _Doc_C).
 
 :- end_tests(apply).
 
@@ -804,5 +848,29 @@ test(patch_resource_field_patch_swapvalue_with_ref,
     get_document(T, 'Person/Charlie', Doc_C),
     get_dict(friend, Doc_C, Friend_C),
     atom_string(Friend_C, "Person/Alice").
+
+test(patch_resource_schemaless_field_patch,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    open_string('{"@id":"item/a","name":"alpha","n":1}', Stream),
+    api_insert_documents(SystemDB, Auth, Path, Stream, no_data_version, _DV, _Ids,
+                         [author("test"), message("setup"), raw_json(true)]),
+    Commit_Info = commit_info{ author : "test", message: "field patch" },
+    Patch = [json{ '@id':"item/a",
+                   n:json{ '@op':'SwapValue',
+                           '@before':1,
+                           '@after':42}}],
+    api_patch_resource(SystemDB, Auth, Path, Patch, Commit_Info, _Patch_Ids, []),
+    resolve_absolute_string_descriptor(Path, Desc),
+    open_descriptor(Desc, T),
+    get_document(T, 'item/a', Doc),
+    get_dict(n, Doc, 42).
 
 :- end_tests(patch_resource).
