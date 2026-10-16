@@ -321,8 +321,8 @@ $(ROFF_FILE): $(RONN_FILE)
 test-e2e:
 	./tests/run-e2e.sh $(ARGS)
 
-.PHONY: pr-light
-pr-light: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int
-
 .PHONY: pr
-pr: clean pr-light
+pr: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int
+
+.PHONY: pr-full
+pr-full: clean pr-light
