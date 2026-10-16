@@ -118,9 +118,19 @@ rational_to_decimal_string(Rational, String, MaxDecimals) :-
             % Round to nearest: add 0.5 before truncating
             % (Remainder * Multiplier * 2 + Den) // (Den * 2) achieves rounding
             FracDigits is (Remainder * Multiplier * 2 + Den) // (Den * 2),
-            % Format with leading zeros if needed, then trim trailing zeros
-            format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
-            format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
+            (   FracDigits =:= Multiplier
+            ->  % fraction rounded up past the decimal boundary - carry
+                Carried is IntPart + 1,
+                format(string(String), "~w~w", [Sign, Carried])
+            ;   % Format with leading zeros if needed, then trim trailing zeros
+                format_and_trim_decimal(FracDigits, MaxDecimals, FracStr),
+                % a fraction that rounds to all zeros yields an empty
+                % FracStr; emitting "2." would be malformed, so drop the dot
+                (   FracStr = ''
+                ->  format(string(String), "~w~w", [Sign, IntPart])
+                ;   format(string(String), "~w~w.~w", [Sign, IntPart, FracStr])
+                )
+            )
         )
     ;   number(Rational)
     ->  % Regular number - format as-is
@@ -1604,5 +1614,36 @@ test(date_range_interval_roundtrip, []) :-
              'http://terminusdb.com/schema/xdd#dateRange', [],
              date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
 
+test(rational_decimal_full_precision, []) :-
+    % 20 significant decimal places survive unchanged. Regression anchor:
+    % JSON decimals are kept as rationals end to end, so the document API
+    % must return the exact lexical value, not a float-truncated form like
+    % 0.01234567890123457.
+    rational_to_decimal_string(1234567890123456789r100000000000000000000,
+                               "0.01234567890123456789", 20).
+
+test(rational_decimal_fraction_rounds_to_zero, []) :-
+    % Why this test exists: the rounded fraction (1/10^22 at 20 digits)
+    % becomes all zeros, and the old code emitted the malformed literal
+    % "2." — an empty fractional part after the dot. The Rust store then
+    % panicked in Decimal::new (DecimalValidationError) and a raw JSON
+    % insert returned HTTP 500. A fraction that rounds to nothing must
+    % produce a bare integer instead.
+    rational_to_decimal_string(20000000000000000000001r10000000000000000000000,
+                               "2", 20).
+
+test(rational_decimal_rounds_into_integer, []) :-
+    % Why this test exists: rounding 2.999...9 to 20 decimals produces
+    % 10^20 fractional digits, which must carry into the integer part
+    % (result "3"). The old code emitted "2.1" — the digit string wrapped
+    % back past the decimal point — silently storing a wrong value.
+    rational_to_decimal_string(2999999999999999999999r1000000000000000000000,
+                               "3", 20).
+
+test(rational_decimal_negative_trimming, []) :-
+    % Baseline: sign, leading zeros after the point, and interior zeros
+    % survive; only trailing zeros are trimmed.
+    rational_to_decimal_string(-156r100, "-1.56", 20),
+    rational_to_decimal_string(2005r100, "20.05", 20).
 
 :- end_tests(typecast).

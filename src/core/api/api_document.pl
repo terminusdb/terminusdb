@@ -172,7 +172,7 @@ api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config,
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
     forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
            (   Stream_Started = started(Started),
                do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
@@ -192,7 +192,7 @@ api_document_exists(instance, Transaction, Id) :-
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
     Stream_Started = started(Started),
     database_prefixes(Transaction, Prefixes),
     prefix_expand(Id, Prefixes, Id_Ex),
@@ -208,7 +208,7 @@ api_print_documents(schema, Transaction, Config, Stream_Started) :-
     forall(api_get_documents(Transaction, schema, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents(instance, Transaction, Config, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
     (   parallelize_enabled
     ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
     ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
@@ -217,7 +217,7 @@ api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :
     forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
     database_and_default_prefixes(Transaction,Prefixes),
     % TODO errors on unknown prefix
     prefix_expand_schema(Type, Prefixes, Type_Ex),
@@ -231,7 +231,7 @@ api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
             api_get_document(schema, Transaction, Id, Config, Document)),
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Context),
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
     database_and_default_prefixes(Transaction, Prefixes),
     maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
             Ids,
@@ -241,7 +241,8 @@ api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :
     ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
-    Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false},
+    Raw_Id = Config.get(raw_id, true),
+    Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false, raw_id: Raw_Id},
     do_or_die(get_document(Transaction, Id, Document, Options),
               error(document_not_found(Id), _)).
 api_get_document(schema, Transaction, Id, _Config, Document) :-
@@ -331,7 +332,7 @@ api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document,
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -350,10 +351,48 @@ insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, C
         database_prefixes(Transaction, Prefixes),
         stream_to_lazy_docs(Stream, Lazy_List)
     ),
-    api_insert_document_from_lazy_list_unsafe(Lazy_List, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
-insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
+    api_insert_document_from_lazy_list_unsafe(Lazy_List_With_Id, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
+insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     stream_to_lazy_docs(Stream, Lazy_List),
-    api_insert_document_from_lazy_list(Lazy_List, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+    inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
+    api_insert_document_from_lazy_list(Lazy_List_With_Id, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+
+/* A request-level document id is addressed exactly like a body @id. The
+ * body must hold a single document; a matching @id is fine and a differing
+ * one is a client-visible conflict. Injection happens on the parsed
+ * document, so no re-serialization can truncate numeric precision. */
+inject_document_id(null, Lazy_List, Lazy_List) :-
+    !.
+inject_document_id(Id, Lazy_List, Lazy_List_With_Id) :-
+    (   Lazy_List = [Document]
+    ->  true
+    ;   throw(error(malformed_parameter(id), _))
+    ),
+    (   is_dict(Document),
+        get_dict('@id', Document, Doc_Id)
+    ->  (   document_ids_equivalent(Id, Doc_Id)
+        ->  Lazy_List_With_Id = Lazy_List
+        ;   throw(error(conflicting_document_id(Id, Doc_Id), _))
+        )
+    ;   is_dict(Document)
+    ->  put_dict('@id', Document, Id, Document_With_Id),
+        Lazy_List_With_Id = [Document_With_Id]
+    ;   throw(error(malformed_parameter(id), _))
+    ).
+
+/* Two document ids are equivalent when identical or when they expand to
+ * the same IRI under the default prefixes (short form vs full IRI). */
+document_ids_equivalent(A, B) :-
+    atom_string(A, A_Atom),
+    atom_string(B, B_Atom),
+    (   A_Atom == B_Atom
+    ->  true
+    ;   default_prefixes(Prefixes),
+        prefix_expand(A_Atom, Prefixes, A_Ex),
+        prefix_expand(B_Atom, Prefixes, B_Ex),
+        A_Ex == B_Ex
+    ).
 
 api_insert_document_from_lazy_list_unsafe([Document|Rest], Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
@@ -411,6 +450,15 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     option(raw_json(Raw_JSON), Options),
     option(merge_repeats(Doc_Merge), Options),
     option(overwrite(Overwrite), Options),
+    option(input_format(InputFormat), Options),
+    % A request-level document id applies to a single JSON document.
+    Injected_Id = Options.get(document_id, null),
+    die_if(
+        (   ground(Injected_Id),
+            InputFormat \= json
+        ),
+        error(malformed_parameter(id), _)
+    ),
     die_if(
         (   Graph_Type = schema,
             Raw_JSON = true
@@ -425,23 +473,22 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     % See routes.pl where HTTP body is buffered into string stream for this reason.
     % Reset stream to beginning for each transaction attempt (retry on conflict)
     stream_property(Stream, position(Pos)),
-    option(input_format(InputFormat), Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          (   InputFormat = json
                          ->  InsertStream = Stream
                          ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, InsertStream)
                          ),
-                         api_insert_documents_core(Transaction, InsertStream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids)
+                         api_insert_documents_core(Transaction, InsertStream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Injected_Id, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
+api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Injected_Id, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Captures_In, Captures_Out, BackLinks, Ids_List),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids_List),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     database_instance(Transaction, [Instance]),
@@ -455,7 +502,7 @@ api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replac
 
 api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
     open_string(String, Stream),
-    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids_Atoms),
+    api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, null, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
@@ -619,9 +666,17 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     option(message(Message),Options),
     option(raw_json(Raw_JSON),Options,false),
     option(merge_repeats(Doc_Merge), Options),
+    option(input_format(InputFormat), Options),
+    % A request-level document id applies to a single JSON document.
+    Injected_Id = Options.get(document_id, null),
+    die_if(
+        (   ground(Injected_Id),
+            InputFormat \= json
+        ),
+        error(malformed_parameter(id), _)
+    ),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
-    option(input_format(InputFormat), Options),
     stream_property(Stream, position(Pos)),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
@@ -629,17 +684,18 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                          ->  ReplaceStream = Stream
                          ;   convert_input_to_json_stream(InputFormat, Stream, Transaction, ReplaceStream)
                          ),
-                         api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids)
+                         api_replace_documents_core(Transaction, ReplaceStream, Graph_Type, Raw_JSON, Create, Doc_Merge, Injected_Id, Ids)
                      ),
                      Meta_Data,
                      Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version).
 
-api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
+api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Injected_Id, Ids) :-
     empty_assoc(Captures),
     ensure_transaction_has_builder(Graph_Type, Transaction),
     stream_to_lazy_docs(Stream, Lazy_List),
-    api_replace_document_from_lazy_list(Lazy_List,
+    inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
+    api_replace_document_from_lazy_list(Lazy_List_With_Id,
                                         Graph_Type,
                                         Raw_JSON,
                                         Transaction,
@@ -658,7 +714,7 @@ api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Do
 
 api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
     open_string(String, Stream),
-    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids_Atoms),
+    api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, null, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
@@ -2024,3 +2080,77 @@ test(embedding_api_end_to_end, [
 
 :- end_tests(document_embedding).
 
+
+:- begin_tests(raw_id, []).
+:- use_module(core(util/test_utils)).
+
+raw_id_test_db(System, Auth) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{"name": "internal-mechanics-hidden"}', Stream),
+    api_insert_documents(System, Auth, "admin/testdb", Stream, no_data_version, _, _Ids,
+                         [author("t"), message("t"), raw_json(true)]).
+
+raw_id_test_config(Raw_Id, Config) :-
+    Base = config{compress: true,
+                  unfold: true,
+                  skip: 0,
+                  count: unlimited,
+                  as_list: false,
+                  minimized: true,
+                  request: [] },
+    (   Raw_Id = unbound
+    ->  Config = Base
+    ;   put_dict(raw_id, Base, Raw_Id, Config)).
+
+test(raw_id_false_omits_id_and_type,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    raw_id_test_db(System, Auth),
+    raw_id_test_config(false, Config),
+    with_output_to(
+        string(Out),
+        api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                   _Id, _Ids, _Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Out, Doc, []),
+    \+ get_dict('@id', Doc, _),
+    \+ get_dict('@type', Doc, _),
+    "internal-mechanics-hidden" = Doc.name.
+
+test(raw_id_default_keeps_id,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    raw_id_test_db(System, Auth),
+    raw_id_test_config(unbound, Config),
+    with_output_to(
+        string(Out),
+        api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                   _Id, _Ids, _Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Out, Doc, []),
+    get_dict('@id', Doc, _),
+    "internal-mechanics-hidden" = Doc.name.
+
+test(raw_id_false_omits_id_in_list,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    raw_id_test_db(System, Auth),
+    raw_id_test_config(false, Config0),
+    Config = Config0.put(as_list, true),
+    with_output_to(
+        string(Out),
+        api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                   _Id, _Ids, _Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Out, [Doc], []),
+    \+ get_dict('@id', Doc, _),
+    "internal-mechanics-hidden" = Doc.name.
+
+:- end_tests(raw_id).

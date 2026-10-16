@@ -24,7 +24,7 @@ ignore_predicate("json_write_dict/2").
 ignore_predicate("json_write_dict/3").
 
 % These predicates come from rust. We need a better way to ignore those
-ignore_predicate("get_document_context/2").
+ignore_predicate("get_document_context/3").
 ignore_predicate("print_all_documents_json/8").
 ignore_predicate("par_print_all_documents_json/8").
 ignore_predicate("print_all_documents_json_by_type/9").
