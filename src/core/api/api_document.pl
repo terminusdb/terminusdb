@@ -529,7 +529,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     % A request-level document id applies to a single JSON document.
     Injected_Id = Options.get(document_id, null),
     die_if(
-        (   ground(Injected_Id),
+        (   Injected_Id \= null,
             InputFormat \= json
         ),
         error(malformed_parameter(id), _)
@@ -1146,7 +1146,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     % A request-level document id applies to a single JSON document.
     Injected_Id = Options.get(document_id, null),
     die_if(
-        (   ground(Injected_Id),
+        (   Injected_Id \= null,
             InputFormat \= json
         ),
         error(malformed_parameter(id), _)
