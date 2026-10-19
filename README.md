@@ -15,7 +15,7 @@
 
 ## TerminusDB is a Knowledge Graph Database with Version Control
 
-**A graph database with distributed JSON and RDF, with a git for data collaboration model built in**
+**TerminusDB is the open-source knowledge graph database with git-like version control for graphs and vectors. Branch, merge, diff and hybrid search any commit.**
 
 TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.com/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
 
