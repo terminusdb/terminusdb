@@ -120,7 +120,14 @@ terminus_server(Argv,Wait) :-
     publish_readiness,
     start_server_backend(Backend, Port, Workers),
 
-    (   catch(triple_store(_Store), % ensure triple store has been set up by retrieving it once
+    % Hooks run first so detached init (e.g. vectorlink) overlaps the
+    % store open, which stays synchronous and aborts on failure exactly
+    % as before. await_all_components then blocks until every component
+    % resolves and rethrows the first failure, preserving the old
+    % abort-on-init-error semantics for detached init.
+    (   welcome_banner(Server,Argv),
+        run_post_server_startup_hooks(Backend, Port),
+        catch(triple_store(_Store), % ensure triple store has been set up by retrieving it once
               Store_Error,
               (   readiness:readiness_failed(store, Store_Error),
                   throw(Store_Error))),
@@ -129,8 +136,10 @@ terminus_server(Argv,Wait) :-
         ->  http_delete_handler(id(busy_loading))
         ;   true
         ),
-        welcome_banner(Server,Argv),
-        run_post_server_startup_hooks(Backend, Port),
+        readiness:await_all_components(Failed),
+        (   Failed = [failed(_Component, Init_Error)|_]
+        ->  throw(Init_Error)
+        ;   true),
         (   Wait = true
         ->  wait_for_backend(Backend, Port)
         ;   true

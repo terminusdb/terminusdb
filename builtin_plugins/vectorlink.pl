@@ -1414,10 +1414,16 @@ plugins:readiness_component(vectorlink) :-
 %
 %  Under the embedded backend the engine runs in-process instead:
 %  init_embedded_engine/0 brings it up and installs it as the indexer
-%  transport, so no indexer_set_config call happens.
+%  transport, so no indexer_set_config call happens. It runs on a detached
+%  thread so engine startup overlaps the store open — the readiness gate
+%  holds callers until the component reports ready. A failed init marks
+%  the component failed; the boot sequence rethrows it and aborts.
 plugins:post_server_startup_hook(_Port) :-
     config:indexer_backend(vectorlink),
     !,
+    thread_create(vectorlink_engine_init, _, [detached(true)]).
+
+vectorlink_engine_init :-
     catch(init_embedded_engine,
           Error,
           (   readiness:readiness_failed(vectorlink, Error),
@@ -3171,6 +3177,18 @@ test("embedded dispatch reports init timeout when the wait expires",
                   [status_code(_)]),
               Error, true)),
     assertion(Error = error(vectorlink_engine_init_timeout(get, '/search?domain=admin%2Fdb'), _)).
+
+test("post-server hook resolves the component on a detached thread",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              readiness:readiness_pending(vectorlink))),
+       cleanup(clean_vectorlink_test_env)
+     ]) :-
+    plugins:post_server_startup_hook(0),
+    % Init runs detached; the component must reach a terminal state —
+    % ready or failed — and never leave gated callers waiting forever.
+    readiness:await_readiness(vectorlink, Outcome),
+    assertion(memberchk(Outcome, [ready, failed(_)])).
 
 test("embedded_header_value maps underscore names to hyphenated keys",
      [ true(Value == "abc123")

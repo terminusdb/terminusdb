@@ -7,6 +7,7 @@
               await_readiness/2,
               await_readiness/4,
               mark_hooks_done/0,
+              await_all_components/1,
               server_ready/0,
               publish_readiness/0,
               readiness_timeout/1
@@ -97,6 +98,44 @@ mark_hooks_done :-
     ->  true
     ;   assertz(hooks_done)),
     publish_readiness.
+
+%% await_all_components(-Failed) is det.
+%
+%  Block until every registered component reaches a terminal state. Boot
+%  uses this instead of the request deadline — startup may take as long as
+%  initialization takes (matching the old synchronous hooks), and failures
+%  are reported, not timed out. Failed = [failed(Component, Error), ...].
+await_all_components(Failed) :-
+    findall(Name, component_state(Name, _), Names),
+    findall(failed(Name, Error),
+            (   member(Name, Names),
+                await_terminal(Name, failed(Error))),
+            Failed).
+
+%% await_terminal(+Component, -State) is det.
+%
+%  Event-based wait with no deadline. Unregistered components report
+%  ready, like await_readiness/2.
+await_terminal(Component, State) :-
+    (   component_state(Component, pending)
+    ->  message_queue_create(Queue),
+        setup_call_cleanup(
+            with_mutex(readiness,
+                       (   component_state(Component, pending)
+                       ->  assertz(readiness_waiter(Component, Queue)),
+                           Subscribed = true
+                       ;   Subscribed = false)),
+            % Fetch with a free variable: thread_get_message/2 blocks until a
+            % message *unifies*, so a constrained State would wait forever.
+            (   Subscribed == true
+            ->  thread_get_message(Queue, Message),
+                State = Message
+            ;   component_state(Component, State)),
+            (   with_mutex(readiness, retractall(readiness_waiter(Component, Queue))),
+                message_queue_destroy(Queue)))
+    ;   component_state(Component, State)
+    ->  true
+    ;   State = ready).
 
 %% server_ready is semidet.
 %
@@ -285,6 +324,33 @@ test("server_ready waits for hooks when components are tracked",
     assertion(\+ server_ready),
     mark_hooks_done,
     assertion(server_ready).
+
+test("await_all_components collects failures after all resolve",
+     [setup((reset_readiness,
+             readiness_pending(a),
+             readiness_pending(b),
+             readiness_pending(c))),
+      cleanup(reset_readiness)]) :-
+    thread_create((sleep(0.05), readiness_ready(a)), _, [detached(true)]),
+    thread_create((sleep(0.15), readiness_failed(b, boom)), _, [detached(true)]),
+    thread_create((sleep(0.10), readiness_ready(c)), _, [detached(true)]),
+    get_time(Start),
+    await_all_components(Failed),
+    get_time(End),
+    assertion(Failed == [failed(b, boom)]),
+    assertion(End - Start >= 0.15).
+
+test("await_all_components returns empty when everything is ready",
+     [setup((reset_readiness,
+             readiness_pending(a),
+             readiness_ready(a))),
+      cleanup(reset_readiness), true(Failed == [])]) :-
+    await_all_components(Failed).
+
+test("await_all_components returns empty with no components",
+     [setup(reset_readiness), cleanup(reset_readiness),
+      true(Failed == [])]) :-
+    await_all_components(Failed).
 
 test("server_ready stays false for a failed component",
      [setup((reset_readiness,
