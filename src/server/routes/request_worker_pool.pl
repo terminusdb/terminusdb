@@ -723,6 +723,7 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                 HandlerName == rust_handler
             ->  catch(
                     (   cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(SWIRequest)]),
+                        cgi_property(CGI, id(Local_Id)),
                         setup_call_cleanup(
                             (   Binary == true
                             ->  set_stream(CGI, encoding(octet))
@@ -738,12 +739,15 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                     Error,
                     handle_handler_error(Error, OutStream, CGI)
                 ),
-                % Clean up saved_request/5 facts that were asserted by
+                % Clean up this request's saved_request/5 fact, asserted by
                 % http:request_expansion/2 during handler execution.
                 % In the SWI-Prolog HTTP server, this is done via
                 % http(request_finished(...)) broadcast events, but the
                 % Rust backend does not emit those events.
-                retractall_saved_request_for_request(SWIRequest)
+                (   var(Local_Id)
+                ->  true
+                ;   retractall(saved_request(Local_Id, _, _, _, _))
+                )
             ;   HandlerModule == indexer_worker
             ->  catch(
                     (   indexer_worker:indexer_process_commit_handler(Request, OutStream)
@@ -783,16 +787,9 @@ release_pipe_resources(OutStream, InStream, BodyStream, MemoryFile, OutputWriteF
         (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
     ).
 
-%% retractall_saved_request_for_request(+SWIRequest) is det.
-%%
-%%  Clean up saved_request/5 facts asserted by http:request_expansion/2
-%%  during handler execution. The Rust backend does not emit
-%%  http(request_finished(...)) broadcast events, so without this
-%%  cleanup, saved_request/5 facts accumulate indefinitely.
-%%  Each worker processes one request at a time, so retracting all
-%%  is safe.
-retractall_saved_request_for_request(_SWIRequest) :-
-    retractall(saved_request(_, _, _, _, _)).
+%% saved_request/5 cleanup is scoped per request: workers run concurrently,
+%% so a global retractall would delete facts of in-flight requests and strip
+%% api:trace_id from their error responses.
 
 %% call_raw_plugin_handler(+Module, +Handler, +Request, +OutStream) is det.
 %%
