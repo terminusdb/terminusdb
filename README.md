@@ -173,6 +173,10 @@ Found a bug? Have a feature request? Please [open an issue](https://github.com/t
 - Expected vs. actual behavior
 - Your environment details (OS, TerminusDB version)
 
+### Recognition
+
+<a href="https://trendshift.io/repositories/125203?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-125203" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/125203/monthly?language=Prolog" alt="terminusdb/terminusdb | #1 Prolog Repository Of The Month on Trendshift" width="250" height="55"/></a>
+
 ## License and copyright
 
 Copyright (c) 2026 [Gettier](https://gettier.ai). TerminusDB is licensed under the **Apache License 2.0**.
