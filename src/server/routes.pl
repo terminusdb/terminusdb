@@ -808,17 +808,23 @@ frame_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, type, text, all, Class_URI),
             param_value_search_or_json_optional(Search, JSON, compress_ids, boolean, true, Compress_Ids),
             param_value_search_or_json_optional(Search, JSON, expand_abstract, boolean, true, Expand_Abstract),
+            param_value_search_or_json_optional(Search, JSON, format, text, frame, Format),
             (   Class_URI = all
             ->  Class = all
             ;   Class = uri(Class_URI)
             ),
 
-            Options =
-            _{
-                compress_ids: Compress_Ids,
-                expand_abstract: Expand_Abstract
-            },
-            api_class_frame(System_DB, Auth, Path, Class, Frame, Options),
+            (   Format = jsonschema
+            ->  api_class_jsonschema(System_DB, Auth, Path, Class, Frame)
+            ;   Format = frame
+            ->  Options =
+                _{
+                    compress_ids: Compress_Ids,
+                    expand_abstract: Expand_Abstract
+                },
+                api_class_frame(System_DB, Auth, Path, Class, Frame, Options)
+            ;   throw(error(bad_parameter_value(format, Format), _))
+            ),
             write_cors_headers(Request),
             reply_json(Frame, [width(0)])
         )

@@ -68,6 +68,10 @@
               api_class_frame/6,
               api_filled_frame/5,
 
+              % api_jsonschema.pl
+              tdb_class_to_json_schema/3,
+              api_class_jsonschema/5,
+
               % api_woql.pl
               woql_query_json/9,
               woql_query_streaming_json/5,
@@ -237,6 +241,7 @@
 :- use_module(api/graph_load).
 :- use_module(api/graph_dump).
 :- use_module(api/api_frame).
+:- use_module(api/api_jsonschema).
 :- use_module(api/api_woql).
 :- use_module(api/api_squash).
 :- use_module(api/api_reset).

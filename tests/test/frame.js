@@ -98,4 +98,63 @@ describe('frame', function () {
         name: 'xsd:string',
       })
   })
+
+  it('passes JSON Schema for a class with format=jsonschema', async function () {
+    const enumSchema = {
+      '@id': util.randomString(),
+      '@type': 'Enum',
+      '@value': ['red', 'green'],
+    }
+    const schema = {
+      '@id': util.randomString(),
+      '@type': 'Class',
+      '@key': { '@type': 'Lexical', '@fields': ['name'] },
+      name: 'xsd:string',
+      nickname: { '@type': 'Optional', '@class': 'xsd:string' },
+      tags: { '@type': 'Set', '@class': 'xsd:string' },
+      color: enumSchema['@id'],
+    }
+    await document.insert(agent, { schema: [enumSchema, schema] })
+    const path = `/api/schema/admin/${agent.dbName}?type=${schema['@id']}&format=jsonschema`
+    const r = await agent.get(path)
+    const body = r.body
+    expect(body.$schema).to.equal('https://json-schema.org/draft-07/schema#')
+    expect(body.type).to.equal('object')
+    expect(body.additionalProperties).to.equal(false)
+    // @type and @id are supported optional keys with arbitrary values
+    expect(body.properties['@type']).to.deep.equal({ type: 'string' })
+    expect(body.properties['@id']).to.deep.equal({ type: 'string' })
+    expect(body.properties.name).to.deep.equal({ type: 'string' })
+    expect(body.properties.nickname).to.deep.equal({ type: 'string' })
+    expect(body.properties.tags).to.deep.equal({
+      type: 'array',
+      uniqueItems: true,
+      items: { type: 'string' },
+    })
+    // enum properties are $refs into definitions.EnumtraitValues (zebra)
+    expect(body.properties.color).to.deep.equal({
+      $ref: `#/definitions/EnumtraitValues/${enumSchema['@id']}`,
+    })
+    const enumDef = body.definitions.EnumtraitValues[enumSchema['@id']]
+    expect(enumDef.type).to.equal('string')
+    expect(enumDef.oneOf).to.have.length(2)
+    expect(enumDef.oneOf[0]).to.have.property('enum')
+    expect(body.required).to.have.members(['name', 'color', 'tags'])
+    expect(body['x-terminusdb'].type_choices).to.deep.equal([schema['@id']])
+    expect(body['x-terminusdb'].id_pattern).to.have.string(`^${schema['@id']}/`)
+    expect(body['x-terminusdb'].key).to.deep.equal({
+      '@type': 'Lexical',
+      '@fields': ['name'],
+    })
+  })
+
+  it('passes JSON Schema for all classes with format=jsonschema', async function () {
+    const path = `/api/schema/admin/${agent.dbName}?format=jsonschema`
+    const r = await agent.get(path)
+    expect(r.body.$schema).to.equal('https://json-schema.org/draft-07/schema#')
+    expect(r.body.definitions).to.be.an('object')
+    expect(Object.keys(r.body.definitions)).to.not.be.empty
+    const first = r.body.definitions[Object.keys(r.body.definitions)[0]]
+    expect(first).to.have.property('type')
+  })
 })
