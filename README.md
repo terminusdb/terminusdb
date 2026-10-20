@@ -39,6 +39,8 @@ The easiest way to install TerminusDB as a developer is by following the [10-min
 
 For deployments, copy the [docker-compose.yml](./docker-compose.yml) file from the repository.
 
+> **Try the 12.1 release candidate:** the [vectorsearch/](./vectorsearch/) folder has a docker compose setup for `12.1-rc` with built-in vector search and local embeddings (no API key needed). It is a release candidate, not a final release. See [vectorsearch/README.md](./vectorsearch/README.md).
+
 1. Add the following to a `.env` file in the source directory:
 
 ```shell
