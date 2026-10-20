@@ -744,10 +744,7 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                 % In the SWI-Prolog HTTP server, this is done via
                 % http(request_finished(...)) broadcast events, but the
                 % Rust backend does not emit those events.
-                (   var(Local_Id)
-                ->  true
-                ;   retractall(saved_request(Local_Id, _, _, _, _))
-                )
+                retractall_saved_request_for_request(Local_Id)
             ;   HandlerModule == indexer_worker
             ->  catch(
                     (   indexer_worker:indexer_process_commit_handler(Request, OutStream)
@@ -787,9 +784,17 @@ release_pipe_resources(OutStream, InStream, BodyStream, MemoryFile, OutputWriteF
         (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
     ).
 
-%% saved_request/5 cleanup is scoped per request: workers run concurrently,
-%% so a global retractall would delete facts of in-flight requests and strip
-%% api:trace_id from their error responses.
+%% retractall_saved_request_for_request(+Local_Id) is det.
+%%
+%%  Remove the saved_request/5 fact of the request identified by Local_Id
+%%  (the CGI stream id). Cleanup is scoped per request: workers run
+%%  concurrently, so a global retractall would delete facts of in-flight
+%%  requests and strip api:trace_id from their error responses.
+retractall_saved_request_for_request(Local_Id) :-
+    (   var(Local_Id)
+    ->  true
+    ;   retractall(saved_request(Local_Id, _, _, _, _))
+    ).
 
 %% call_raw_plugin_handler(+Module, +Handler, +Request, +OutStream) is det.
 %%
@@ -2263,6 +2268,20 @@ test("plugin stream request dispatches once the store is ready",
     handle_plugin_stream_request(request_worker_pool, test_stream_probe,
                                  _{path: "/api/plugin/x"}, [], _StreamId, Response),
     assertion(Response.status == 200).
+
+test(saved_request_cleanup_removes_only_owning_request,
+     [cleanup(retractall(json_log:saved_request(_, _, _, _, _)))]) :-
+    assert(json_log:saved_request(req_a, 1.0, '/a', some(op_a), [])),
+    assert(json_log:saved_request(req_b, 1.0, '/b', some(op_b), [])),
+    retractall_saved_request_for_request(req_a),
+    assertion(\+ json_log:saved_request(req_a, _, _, _, _)),
+    assertion(json_log:saved_request(req_b, _, _, _, _)).
+
+test(saved_request_cleanup_tolerates_unbound_id,
+     [cleanup(retractall(json_log:saved_request(_, _, _, _, _)))]) :-
+    assert(json_log:saved_request(req_a, 1.0, '/a', some(op_a), [])),
+    retractall_saved_request_for_request(_Unbound),
+    assertion(json_log:saved_request(req_a, _, _, _, _)).
 
 :- end_tests(request_worker_pool).
 
