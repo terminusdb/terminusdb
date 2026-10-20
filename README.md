@@ -13,8 +13,6 @@
 [![Issues](https://img.shields.io/github/issues/terminusdb/terminusdb)](https://github.com/terminusdb/terminusdb/issues)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-<a href="https://trendshift.io/repositories/125203?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-125203" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/125203/monthly?language=Prolog" alt="terminusdb/terminusdb | #1 Prolog Repository Of The Month on Trendshift" width="250" height="55"/></a>
-
 ## TerminusDB is a Knowledge Graph Database with Version Control
 
 **TerminusDB is the open-source knowledge graph database with git-like version control for graphs and vectors. Branch, merge, diff and hybrid search any commit.**
@@ -172,6 +170,10 @@ Found a bug? Have a feature request? Please [open an issue](https://github.com/t
 - Steps to reproduce (for bugs)
 - Expected vs. actual behavior
 - Your environment details (OS, TerminusDB version)
+
+### Recognition
+
+<a href="https://trendshift.io/repositories/125203?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-125203" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/125203/monthly?language=Prolog" alt="terminusdb/terminusdb | #1 Prolog Repository Of The Month on Trendshift" width="250" height="55"/></a>
 
 ## License and copyright
 
