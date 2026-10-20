@@ -25,6 +25,9 @@
 % Load the Rust appserver and its built-in route modules. These are now core
 % server components rather than optional plugins.
 :- use_module(server(srv)).
+:- use_module(server(readiness), [register_components/0,
+                                  publish_readiness/0,
+                                  mark_hooks_done/0]).
 
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
@@ -103,6 +106,10 @@ terminus_server(Argv,Wait) :-
     ;   true),
     start_elaboration_workers(Workers),
     server_backend(Backend),
+    % Mark every declared readiness component pending and publish the
+    % not-ready state before the socket accepts a single request.
+    register_components,
+    publish_readiness,
     start_server_backend(Backend, Port, Workers),
 
     (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
@@ -170,7 +177,8 @@ start_server_backend(rust, Port, _Workers) :-
 %  Run post-startup hooks for both backends. These hooks wire up
 %  plugin configuration (e.g. indexer_set_config for tdb-search).
 run_post_server_startup_hooks(_Backend, Port) :-
-    foreach(post_server_startup_hook(Port), true).
+    foreach(post_server_startup_hook(Port), true),
+    mark_hooks_done.
 
 %% wait_for_backend(+Backend, +Port) is det.
 %%

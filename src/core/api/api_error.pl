@@ -3133,6 +3133,14 @@ generic_exception_jsonld(vectorlink_engine_unavailable(Method, Path), JSON) :-
              'api:error' : _{'@type' : 'api:VectorlinkEngineUnavailable',
                              'api:method' : Method,
                              'api:path' : Path}}.
+generic_exception_jsonld(vectorlink_engine_init_timeout(Method, Path), JSON) :-
+    format(string(Msg), "embedded vectorlink engine still initializing, cannot serve ~w ~w yet", [Method, Path]),
+    JSON = _{'@type' : 'api:EngineUnavailable',
+             'api:status' : 'api:service_unavailable',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEngineInitTimeout',
+                             'api:method' : Method,
+                             'api:path' : Path}}.
 generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
     format(string(Msg), "vectorlink endpoint is not configured (called from ~w)", [Context]),
     JSON = _{'@type' : 'api:EndpointNotConfigured',
