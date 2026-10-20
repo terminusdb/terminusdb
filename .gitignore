@@ -40,3 +40,4 @@ tests/.terminusdb-test-*.pid
 dashboard/src/assets/openapi.json
 
 assets/
+test-logs/

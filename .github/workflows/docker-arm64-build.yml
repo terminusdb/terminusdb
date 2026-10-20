@@ -73,4 +73,3 @@ jobs:
       image_artifact: terminusdb-server-snapshot-arm64
       image_platform: linux/arm64
       runner: ubuntu-22.04-arm
-      mocha_parallel: false
