@@ -958,15 +958,23 @@ handle_plugin_request(SWIRequest, Response) :-
 %%  signature is Handler(+RequestDict, +StreamId, -Response). The request
 %%  dict is the original JSON request from Rust (with params, query, etc.).
 handle_plugin_stream_request(HandlerModule, HandlerName, Request, _SWIRequest, ResponseStreamId, Response) :-
+    (   get_dict(path, Request, PathString)
+    ->  atom_string(GatePath, PathString)
+    ;   GatePath = ''),
     Goal =.. [HandlerName, Request, ResponseStreamId, Response],
     catch(
-        (   call(HandlerModule:Goal)
-        ->  true
-        ;   json_log_error_formatted("Plugin stream handler ~w:~w failed", [HandlerModule, HandlerName]),
-            plugin_api:plugin_error_response(failure, Response)
+        (   store_ready_for(GatePath)
+        ->  (   call(HandlerModule:Goal)
+            ->  true
+            ;   json_log_error_formatted("Plugin stream handler ~w:~w failed", [HandlerModule, HandlerName]),
+                plugin_api:plugin_error_response(failure, Response)
+            )
+        ;   throw(error(server_not_ready, _))
         ),
         Error,
-        (   json_log_error_formatted("Plugin stream handler ~w:~w error: ~q", [HandlerModule, HandlerName, Error]),
+        (   Error = error(server_not_ready, _)
+        ->  plugin_api:plugin_error_response(Error, Response)
+        ;   json_log_error_formatted("Plugin stream handler ~w:~w error: ~q", [HandlerModule, HandlerName, Error]),
             plugin_api:plugin_error_response(Error, Response)
         )
     ).
@@ -2242,6 +2250,23 @@ test(call_raw_plugin_handler_with_dict_missing_payload) :-
     assertion(sub_string(Result, _, _, _, 'Status: 200')),
     assertion(sub_string(Result, _, _, _, '"has_payload":false')).
 
+test("plugin stream request returns 503 while the store is initializing",
+     [setup((readiness:reset_readiness,
+             setenv('TERMINUSDB_READINESS_TIMEOUT', '0.2'),
+             readiness:readiness_pending(store))),
+      cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+               readiness:reset_readiness))]) :-
+    handle_plugin_stream_request(request_worker_pool, test_stream_probe,
+                                 _{path: "/api/plugin/x"}, [], _StreamId, Response),
+    assertion(Response.status == 503),
+    assertion(Response.body.'api:status' == 'api:service_unavailable').
+
+test("plugin stream request dispatches once the store is ready",
+     [setup(readiness:reset_readiness), cleanup(readiness:reset_readiness)]) :-
+    handle_plugin_stream_request(request_worker_pool, test_stream_probe,
+                                 _{path: "/api/plugin/x"}, [], _StreamId, Response),
+    assertion(Response.status == 200).
+
 :- end_tests(request_worker_pool).
 
 %% Test handler that echoes back fields from the Request dict.
@@ -2260,3 +2285,7 @@ test_dict_handler(Request, Response) :-
             _{path: Path, has_payload: HasPayload},
             [as(string), width(0)])),
     Response = _{status: 200, body: Body, headers: _{'Content-Type': 'application/json'}}.
+
+%% Test stream handler for handle_plugin_stream_request tests.
+test_stream_probe(_Request, _StreamId, Response) :-
+    Response = _{status: 200, body: _{}, headers: _{}}.

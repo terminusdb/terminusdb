@@ -29,6 +29,14 @@
                                   publish_readiness/0,
                                   mark_hooks_done/0]).
 
+:- multifile plugins:readiness_component/1.
+
+% The system store participates in startup readiness: triple_store/1
+% opens it lazily after the socket accepts, so requests are held until
+% it is usable. Memory mode sets the global store before bind; the same
+% mark-ready point covers both modes.
+plugins:readiness_component(store).
+
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,
@@ -112,7 +120,11 @@ terminus_server(Argv,Wait) :-
     publish_readiness,
     start_server_backend(Backend, Port, Workers),
 
-    (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
+    (   catch(triple_store(_Store), % ensure triple store has been set up by retrieving it once
+              Store_Error,
+              (   readiness:readiness_failed(store, Store_Error),
+                  throw(Store_Error))),
+        readiness:readiness_ready(store),
         (   Backend == swipl
         ->  http_delete_handler(id(busy_loading))
         ;   true
