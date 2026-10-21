@@ -16,11 +16,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            swipl_release: stable
+            swipl_release: 10.0.2
           - os: macos-latest
             swipl_release: homebrew
 #            - os: ubuntu-latest
-#            swipl_release: devel
+#            swipl_release: 10.0.2
 
     runs-on: ${{ matrix.os }}
 
@@ -121,11 +121,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            swipl_release: stable
+            swipl_release: 10.0.2
           - os: macos-latest
             swipl_release: homebrew
 #            - os: ubuntu-latest
-#            swipl_release: devel
+#            swipl_release: 10.0.2
 
     runs-on: ${{ matrix.os }}
 
@@ -202,11 +202,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            swipl_release: stable
+            swipl_release: 10.0.2
           - os: macos-latest
             swipl_release: homebrew
 #            - os: ubuntu-latest
-#            swipl_release: devel
+#            swipl_release: 10.0.2
 
     runs-on: ${{ matrix.os }}
 
@@ -302,7 +302,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            swipl_release: stable
+            swipl_release: 10.0.2
           - os: macos-latest
             swipl_release: homebrew
 
