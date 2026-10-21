@@ -38,6 +38,12 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 */
 
 :- use_module(core(plugin_api)).
+% Readiness predicates are called qualified (readiness:...) rather than
+% imported: plugin files load at runtime through load_files/2, where
+% use_module(server(readiness)) re-resolves the source file against the
+% saved image and spuriously warns that predicates are not exported.
+% The readiness module itself is always loaded — src/server/main.pl
+% imports it before plugins run.
 :- use_module(core(api/api_indexer),
              [commit_ops_begin/0, commit_op/8,
               embedding_refresh_purge_types/6]).
@@ -181,6 +187,25 @@ embedded_post_body(atom(A), A, 'text/plain') :- !.
 embedded_post_body(codes(C), S, 'text/plain') :-
     string_codes(S, C).
 
+%% embedded_await_engine(+Method, +Path_Query) is det.
+%
+%  Holds the request while the embedded engine is still initializing —
+%  the readiness registry marks `vectorlink` pending as soon as the
+%  backend is selected, so a request that beats the startup hook waits
+%  for the engine instead of racing it. Throws
+%  vectorlink_engine_unavailable/2 when initialization failed and
+%  vectorlink_engine_init_timeout/2 when the wait deadline expires.
+%  When the component was never registered (e.g. unit tests), returns
+%  immediately and dispatch fails fast as before.
+embedded_await_engine(Method, Path_Query) :-
+    readiness:await_readiness(vectorlink, Outcome),
+    (   Outcome == ready
+    ->  true
+    ;   Outcome = failed(_)
+    ->  throw(error(vectorlink_engine_unavailable(Method, Path_Query), _))
+    ;   throw(error(vectorlink_engine_init_timeout(Method, Path_Query), _))
+    ).
+
 %% embedded_dispatch(+Method, +Path_Query, +Headers, +Body, -Meta, -In) is det.
 %
 %  Calls $vectorlink:vectorlink_request/6, parses the metadata JSON
@@ -190,6 +215,7 @@ embedded_post_body(codes(C), S, 'text/plain') :-
 %  Throws vectorlink_engine_unavailable/2 when the FFI is missing or the
 %  engine cannot serve the request.
 embedded_dispatch(Method, Path_Query, Headers, Body, Meta, In) :-
+    embedded_await_engine(Method, Path_Query),
     (   current_predicate('$vectorlink':vectorlink_request/6),
         current_predicate('$appserver':appserver_open_fd_stream/4),
         embedded_headers_json(Headers, Headers_Arg),
@@ -1368,6 +1394,16 @@ handle_delete_domain_response(Status, Body, URL) :-
 % ==========================================================================
 
 :- multifile plugins:post_server_startup_hook/1.
+:- multifile plugins:readiness_component/1.
+
+%% readiness_component(-Component) is nondet.
+%
+%  Declares the embedded engine as a startup-gated component: the server
+%  marks `vectorlink` pending before it accepts requests, and
+%  embedded_dispatch/6 holds requests until init_embedded_engine/0
+%  reports ready (or failed) instead of erroring during boot.
+plugins:readiness_component(vectorlink) :-
+    config:indexer_backend(vectorlink).
 
 %% post_server_startup_hook(+Port) is det.
 %
@@ -1378,11 +1414,21 @@ handle_delete_domain_response(Status, Body, URL) :-
 %
 %  Under the embedded backend the engine runs in-process instead:
 %  init_embedded_engine/0 brings it up and installs it as the indexer
-%  transport, so no indexer_set_config call happens.
+%  transport, so no indexer_set_config call happens. It runs on a detached
+%  thread so engine startup overlaps the store open — the readiness gate
+%  holds callers until the component reports ready. A failed init marks
+%  the component failed; the boot sequence rethrows it and aborts.
 plugins:post_server_startup_hook(_Port) :-
     config:indexer_backend(vectorlink),
     !,
-    init_embedded_engine.
+    thread_create(vectorlink_engine_init, _, [detached(true)]).
+
+vectorlink_engine_init :-
+    catch(init_embedded_engine,
+          Error,
+          (   readiness:readiness_failed(vectorlink, Error),
+              throw(Error))),
+    readiness:readiness_ready(vectorlink).
 plugins:post_server_startup_hook(_Port) :-
     (   vectorlink_endpoint(Endpoint),
         plugin_api:indexer_available
@@ -2832,6 +2878,7 @@ clean_vectorlink_test_env :-
     ->  config:clear_indexer_backend_config
     ;   true
     ),
+    readiness:reset_readiness,
     unsetenv('TERMINUSDB_INDEXER_BACKEND'),
     unsetenv('TERMINUSDB_SEMANTIC_INDEXER_ENDPOINT'),
     unsetenv('TERMINUSDB_VECTORLINK_ENDPOINT'),
@@ -3081,6 +3128,67 @@ test("engine_http_open dispatches marker URLs to the embedded engine",
         vectorlink:engine_http_open(
             'embedded://vectorlink/search?domain=admin%2Fdb', _In,
             [status_code(_)])).
+
+test("embedded dispatch waits for a pending engine, then proceeds",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              readiness:readiness_pending(vectorlink))),
+       cleanup(clean_vectorlink_test_env)
+     ]) :-
+    thread_create((sleep(0.2), readiness:readiness_ready(vectorlink)),
+                  _, [detached(true)]),
+    get_time(Start),
+    silence_user_error(
+        catch(vectorlink:engine_http_open(
+                  'embedded://vectorlink/search?domain=admin%2Fdb', _In,
+                  [status_code(_)]),
+              Error, true)),
+    get_time(End),
+    assertion(End - Start >= 0.2),
+    assertion(Error = error(vectorlink_engine_unavailable(get, '/search?domain=admin%2Fdb'), _)).
+
+test("embedded dispatch fails fast when engine init has failed",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              readiness:readiness_failed(vectorlink, init_broken))),
+       cleanup(clean_vectorlink_test_env)
+     ]) :-
+    get_time(Start),
+    silence_user_error(
+        catch(vectorlink:engine_http_open(
+                  'embedded://vectorlink/search?domain=admin%2Fdb', _In,
+                  [status_code(_)]),
+              Error, true)),
+    get_time(End),
+    assertion(End - Start < 1),
+    assertion(Error = error(vectorlink_engine_unavailable(get, '/search?domain=admin%2Fdb'), _)).
+
+test("embedded dispatch reports init timeout when the wait expires",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              setenv('TERMINUSDB_READINESS_TIMEOUT', '0.3'),
+              readiness:readiness_pending(vectorlink))),
+       cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+                clean_vectorlink_test_env))
+     ]) :-
+    silence_user_error(
+        catch(vectorlink:engine_http_open(
+                  'embedded://vectorlink/search?domain=admin%2Fdb', _In,
+                  [status_code(_)]),
+              Error, true)),
+    assertion(Error = error(vectorlink_engine_init_timeout(get, '/search?domain=admin%2Fdb'), _)).
+
+test("post-server hook resolves the component on a detached thread",
+     [ setup((clean_vectorlink_test_env,
+              setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+              readiness:readiness_pending(vectorlink))),
+       cleanup(clean_vectorlink_test_env)
+     ]) :-
+    plugins:post_server_startup_hook(0),
+    % Init runs detached; the component must reach a terminal state —
+    % ready or failed — and never leave gated callers waiting forever.
+    readiness:await_readiness(vectorlink, Outcome),
+    assertion(memberchk(Outcome, [ready, failed(_)])).
 
 test("embedded_header_value maps underscore names to hyphenated keys",
      [ true(Value == "abc123")

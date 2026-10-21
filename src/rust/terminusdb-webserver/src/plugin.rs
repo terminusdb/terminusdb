@@ -516,6 +516,20 @@ predicates! {
         limiter.release(&user_id);
         Ok(())
     }
+
+    /// Publish the server readiness flag reported by /api/v1/health.
+    ///
+    /// Signature: `appserver_set_ready(+Ready)` where Ready is `true` or
+    /// `false`. Prolog pushes `false` before the socket accepts and
+    /// `true` once startup has completed, so the health endpoint answers
+    /// 503 {"status":"starting"} during initialization and 200
+    /// {"status":"ready"} afterwards.
+    #[module("$appserver")]
+    pub semidet fn appserver_set_ready(_context, ready_term) {
+        let ready: bool = ready_term.get_ex()?;
+        crate::server::set_ready(ready);
+        Ok(())
+    }
 }
 
 pub fn register() {
@@ -537,4 +551,5 @@ pub fn register() {
     register_appserver_active_connections();
     register_appserver_check_subscription_limit();
     register_appserver_release_subscription();
+    register_appserver_set_ready();
 }

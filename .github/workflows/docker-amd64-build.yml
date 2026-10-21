@@ -70,4 +70,3 @@ jobs:
       image_artifact: terminusdb-server-snapshot-amd64
       image_platform: linux/amd64
       runner: ubuntu-latest
-      mocha_parallel: false

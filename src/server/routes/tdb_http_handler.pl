@@ -1,6 +1,7 @@
 :- module(tdb_http_handler, [
                   tdb_http_handler/3,
-                  rust_handler/2
+                  rust_handler/2,
+                  store_ready_for/1
               ]).
 
 :- use_module(library(http/http_dispatch)).
@@ -14,6 +15,7 @@
 :- use_module(library(readutil)).
 :- use_module(core(appserver_hooks)).
 :- use_module(core(util)).
+:- use_module(server(readiness), [await_readiness/2]).
 :- use_module(server(routes/srv_http)).
 
 :- multifile appserver_hooks:appserver_route/3.
@@ -237,6 +239,14 @@ rust_handler_safe(Request, Response) :-
         )
     ).
 
+%% store_ready_for(+Path) is semidet.
+%
+%  /api/ok bypasses the wait so readiness probes answer during startup.
+store_ready_for(Path) :-
+    (   Path == '/api/ok'
+    ->  true
+    ;   await_readiness(store, ready)).
+
 %% http_dispatch_with_expansion(+Request) is det.
 %%
 %%  Run the SWI-Prolog `http:request_expansion/2` hook (used by the native
@@ -245,6 +255,19 @@ rust_handler_safe(Request, Response) :-
 %%  current output, so this is called inside capture_http_output/3.
 http_dispatch_with_expansion(Request) :-
     http:request_expansion(Request, Expanded),
+    catch(dispatch_when_ready(Expanded),
+          error(server_not_ready, Context),
+          routes:customise_exception(error(server_not_ready, Context))).
+
+%% dispatch_when_ready(+Request) is det.
+dispatch_when_ready(Expanded) :-
+    (   memberchk(path(Path), Expanded),
+        \+ store_ready_for(Path)
+    ->  throw(error(server_not_ready, _))
+    ;   dispatch_expanded(Expanded)).
+
+%% dispatch_expanded(+Request) is det.
+dispatch_expanded(Expanded) :-
     %% Clear the cached http_dispatch tree so that path_tree/1 rebuilds it
     %% with fresh unbound variables. The tree caches handler closures and
     %% '$extract' options that share variables (e.g. method(Method)). Once
@@ -386,5 +409,62 @@ test(register_routes_binary_flag, [setup(asserta(http:location(test_api, '/test'
     sort(Paths, Sorted),
     maplist(atom_string, Sorted, SortedStrings),
     assertion(SortedStrings == ["/test/blob"]).
+
+% store_ready_for/1 — the post-bind gate on the lazily opened system store.
+
+test("store_ready_for answers probes without waiting",
+     [setup(readiness:reset_readiness), cleanup(readiness:reset_readiness)]) :-
+    readiness:readiness_pending(store),
+    get_time(Start),
+    assertion(store_ready_for('/api/ok')),
+    get_time(End),
+    assertion(End - Start < 0.5).
+
+test("store_ready_for holds a gated path until the store is ready",
+     [setup(readiness:reset_readiness), cleanup(readiness:reset_readiness)]) :-
+    readiness:readiness_pending(store),
+    thread_create((sleep(0.2), readiness:readiness_ready(store)), _, [detached(true)]),
+    get_time(Start),
+    assertion(store_ready_for('/api/document/admin/db')),
+    get_time(End),
+    assertion(End - Start >= 0.2).
+
+test("store_ready_for passes when nothing registered the component",
+     [setup(readiness:reset_readiness), cleanup(readiness:reset_readiness)]) :-
+    assertion(store_ready_for('/api/document/admin/db')).
+
+test("store_ready_for fails when the wait deadline expires",
+     [setup((readiness:reset_readiness,
+             setenv('TERMINUSDB_READINESS_TIMEOUT', '0.2'),
+             readiness:readiness_pending(store))),
+      cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+               readiness:reset_readiness))]) :-
+    assertion(\+ store_ready_for('/api/document/admin/db')).
+
+test("store_ready_for fails fast when store init has failed",
+     [setup((readiness:reset_readiness,
+             readiness:readiness_failed(store, init_broken))),
+      cleanup(readiness:reset_readiness)]) :-
+    get_time(Start),
+    assertion(\+ store_ready_for('/api/document/admin/db')),
+    get_time(End),
+    assertion(End - Start < 1).
+
+test("dispatch_when_ready throws server_not_ready when the wait expires",
+     [setup((readiness:reset_readiness,
+             setenv('TERMINUSDB_READINESS_TIMEOUT', '0.2'),
+             readiness:readiness_pending(store))),
+      cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+               readiness:reset_readiness))]) :-
+    assertion(catch(dispatch_when_ready([path('/api/document/admin/db')]),
+                    error(server_not_ready, _), true)).
+
+test("server_not_ready renders through the standard error machinery",
+     []) :-
+    with_output_to(string(Text),
+                   once(routes:customise_exception(error(server_not_ready, _)))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:service_unavailable")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
 
 :- end_tests(tdb_http_handler).
