@@ -12,14 +12,23 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Use port-specific PID/storage/log files when a non-default port is set,
 # so multiple TerminusDB instances (e.g. 6363 and 7373) don't conflict.
+# Test storage goes on tmpfs where available — store fsyncs then hit RAM
+# instead of the repo checkout disk. /dev/shm is tmpfs on Linux; /tmp is a
+# plain disk fallback. TERMINUSDB_TEST_TMPDIR overrides for e.g. a
+# container --tmpfs mount.
+_TEST_TMPDIR="${TERMINUSDB_TEST_TMPDIR:-$( [ -d /dev/shm ] && echo /dev/shm || echo /tmp )}"
+# The storage dir name carries a hash of the checkout path: two clones on one
+# host share the tmpfs base but must not share — or wipe — each other's data.
+_CHECKOUT_ID="$(printf '%s' "$PROJECT_ROOT" | cksum | cut -d' ' -f1)"
+
 _TDB_PORT="${TERMINUSDB_SERVER_PORT:-6363}"
 if [ "$_TDB_PORT" = "6363" ]; then
     PID_FILE="$SCRIPT_DIR/.terminusdb-test.pid"
-    STORAGE_DIR="$SCRIPT_DIR/.terminusdb-test-storage"
+    STORAGE_DIR="$_TEST_TMPDIR/terminusdb-test-storage-${_CHECKOUT_ID}"
     LOG_FILE="$SCRIPT_DIR/.terminusdb-test.log"
 else
     PID_FILE="$SCRIPT_DIR/.terminusdb-test-${_TDB_PORT}.pid"
-    STORAGE_DIR="$SCRIPT_DIR/.terminusdb-test-storage-${_TDB_PORT}"
+    STORAGE_DIR="$_TEST_TMPDIR/terminusdb-test-storage-${_TDB_PORT}-${_CHECKOUT_ID}"
     LOG_FILE="$SCRIPT_DIR/.terminusdb-test-${_TDB_PORT}.log"
 fi
 

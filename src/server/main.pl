@@ -25,6 +25,17 @@
 % Load the Rust appserver and its built-in route modules. These are now core
 % server components rather than optional plugins.
 :- use_module(server(srv)).
+:- use_module(server(readiness), [register_components/0,
+                                  publish_readiness/0,
+                                  mark_hooks_done/0]).
+
+:- multifile plugins:readiness_component/1.
+
+% The system store participates in startup readiness: triple_store/1
+% opens it lazily after the socket accepts, so requests are held until
+% it is usable. Memory mode sets the global store before bind; the same
+% mark-ready point covers both modes.
+plugins:readiness_component(store).
 
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
@@ -103,15 +114,32 @@ terminus_server(Argv,Wait) :-
     ;   true),
     start_elaboration_workers(Workers),
     server_backend(Backend),
+    % Mark every declared readiness component pending and publish the
+    % not-ready state before the socket accepts a single request.
+    register_components,
+    publish_readiness,
     start_server_backend(Backend, Port, Workers),
 
-    (   triple_store(_Store), % ensure triple store has been set up by retrieving it once
+    % Hooks run first so detached init (e.g. vectorlink) overlaps the
+    % store open, which stays synchronous and aborts on failure exactly
+    % as before. await_all_components then blocks until every component
+    % resolves and rethrows the first failure, preserving the old
+    % abort-on-init-error semantics for detached init.
+    (   welcome_banner(Server,Argv),
+        run_post_server_startup_hooks(Backend, Port),
+        catch(triple_store(_Store), % ensure triple store has been set up by retrieving it once
+              Store_Error,
+              (   readiness:readiness_failed(store, Store_Error),
+                  throw(Store_Error))),
+        readiness:readiness_ready(store),
         (   Backend == swipl
         ->  http_delete_handler(id(busy_loading))
         ;   true
         ),
-        welcome_banner(Server,Argv),
-        run_post_server_startup_hooks(Backend, Port),
+        readiness:await_all_components(Failed),
+        (   Failed = [failed(_Component, Init_Error)|_]
+        ->  throw(Init_Error)
+        ;   true),
         (   Wait = true
         ->  wait_for_backend(Backend, Port)
         ;   true
@@ -170,7 +198,8 @@ start_server_backend(rust, Port, _Workers) :-
 %  Run post-startup hooks for both backends. These hooks wire up
 %  plugin configuration (e.g. indexer_set_config for tdb-search).
 run_post_server_startup_hooks(_Backend, Port) :-
-    foreach(post_server_startup_hook(Port), true).
+    foreach(post_server_startup_hook(Port), true),
+    mark_hooks_done.
 
 %% wait_for_backend(+Backend, +Port) is det.
 %%

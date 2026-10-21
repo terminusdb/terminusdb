@@ -127,7 +127,8 @@ is_anonymous_authority(doc:anonymous) :- !.
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple/constants), [super_user_authority/1]).
 :- use_module(config(terminus_config), [set_memory_mode/0,
-                                        is_memory_mode/0]).
+                                        is_memory_mode/0,
+                                        is_enterprise/0]).
 
 % server_edition/1 is pure logic over the terminusdb_enterprise flag.
 % It reports the atom `community` for the open source build and
@@ -213,7 +214,8 @@ test(info_logged_in_includes_all_sections,
 % info/3 for an anonymous user omits terminusdb and terminusdb_store
 % but still includes the indexer section.
 test(info_anonymous_omits_version_sections,
-     [setup((setup_temp_store(State),
+     [condition(\+ is_enterprise),
+      setup((setup_temp_store(State),
              set_memory_mode)),
       cleanup((terminus_config:retractall(memory_mode_enabled),
                teardown_temp_store(State)))

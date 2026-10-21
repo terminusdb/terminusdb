@@ -7,6 +7,7 @@
               fast_document_history_entries/5,
               pre_server_startup_hook/1,
               post_server_startup_hook/1,
+              readiness_component/1,
               enrich_history/5,
               enrich_history/6,
               load_plugins/0,
@@ -45,6 +46,7 @@
 :- multifile enrich_history/6.
 :- multifile pre_server_startup_hook/1.
 :- multifile post_server_startup_hook/1.
+:- multifile readiness_component/1.
 :- multifile embedding_for_type/4.
 :- multifile embedding_for_type/3.
 :- multifile vectorlink_admin_user/1.
@@ -415,6 +417,15 @@ vectorlink_admin_user(_) :- fail.
 %  Multifile hook provided by the vectorlink plugin.
 %  Returns the admin secret for HTTP Basic auth to the search backend.
 vectorlink_admin_secret(_) :- fail.
+
+%% readiness_component(-Component) is nondet.
+%
+%  Multifile hook: a plugin declares a component name that participates
+%  in startup readiness. The server marks every declared component
+%  pending before it starts accepting requests; the plugin then reports
+%  readiness via readiness:readiness_ready/1 or
+%  readiness:readiness_failed/2 when its initialization finishes.
+readiness_component(_) :- fail.
 
 :- begin_tests(foreign_plugin_loader, [concurrent(false)]).
 
