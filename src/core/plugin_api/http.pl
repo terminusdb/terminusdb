@@ -132,6 +132,13 @@ plugin_error_response(error(bad_parameter_type(Param, Type, Value), _), Response
         },
         headers: _{'Content-Type': 'application/json'}
     }.
+plugin_error_response(error(server_not_ready, _), Response) :- !,
+    once(api_error:generic_exception_jsonld(server_not_ready, Body)),
+    Response = _{
+        status: 503,
+        body: Body,
+        headers: _{'Content-Type': 'application/json'}
+    }.
 plugin_error_response(_, Response) :-
     Response = _{
         status: 500,

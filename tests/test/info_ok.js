@@ -8,10 +8,10 @@ describe('info_ok', function () {
     agent = new Agent().auth()
   })
 
-  it('responds to /api/ok with success', async function () {
+  it('responds to /api/ok with a ready status', async function () {
     const r = await agent.get('/api/ok')
     expect(r.status).to.equal(200)
-    expect(r.header['content-length']).to.equal('0')
+    expect(r.body).to.have.property('status').that.equals('ready')
   })
 
   it('responds to /api/info with success (git hash matches binary version)', async function () {

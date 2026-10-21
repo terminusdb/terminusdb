@@ -55,6 +55,7 @@
 
 % http libraries
 :- use_module(library(http/http_dispatch)).
+:- use_module(server(readiness), [server_ready/0]).
 :- use_module(server(routes/tdb_http_handler)).
 :- use_module(server(routes/request_worker_pool)).
 :- use_module(server(routes/indexer_worker)).
@@ -216,9 +217,19 @@ info_handler(get, Request, System_DB, Auth) :-
                 [method(Method),
                  methods([options,get])]).
 
+%% ok_handler — readiness probe for both HTTP backends.
+%
+%  Responds immediately with the server readiness contract: 200
+%  {"status":"ready"} once startup (post-startup hooks and every
+%  registered component) has completed, 503 {"status":"starting"}
+%  before that. Clients polling for readiness get a real signal instead
+%  of racing subsystems that are still initializing.
 ok_handler(_Method, _Request, _System_DB, _Auth) :-
-    format('Content-type: application/octets~n', []),
-    format('Status: 200 OK~n~n', []).
+    (   server_ready
+    ->  Status = '200 OK', Body = '{"status":"ready"}'
+    ;   Status = '503 Service Unavailable', Body = '{"status":"starting"}'),
+    format('Content-type: application/json~n', []),
+    format('Status: ~w~n~n~s~n', [Status, Body]).
 
 %%%%%%%%%%%%%%%%%%%% Database Handlers %%%%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(db), cors_handler(Method, db_handler(_Org), [add_payload(false)]),

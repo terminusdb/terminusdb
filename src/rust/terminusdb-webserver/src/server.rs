@@ -9,13 +9,30 @@ use axum::middleware::Next;
 use axum::extract::Request;
 use serde_json::json;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::config::MAX_BODY_SIZE;
 use crate::routes::root_redirect;
 
 /// Global counter for active HTTP connections.
 static ACTIVE_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Readiness flag reported by `/api/v1/health`. Prolog publishes `false`
+/// before the socket accepts and `true` once post-startup hooks and
+/// every registered readiness component have completed. Defaults to
+/// `true` so hosts that never publish (unit tests, embedders) keep the
+/// historical always-200 response.
+static SERVER_READY: AtomicBool = AtomicBool::new(true);
+
+/// Set the server readiness flag.
+pub fn set_ready(ready: bool) {
+    SERVER_READY.store(ready, Ordering::SeqCst);
+}
+
+/// Current server readiness flag.
+pub fn is_ready() -> bool {
+    SERVER_READY.load(Ordering::SeqCst)
+}
 
 /// Get the current number of active connections.
 pub fn active_connections() -> u64 {
@@ -73,9 +90,26 @@ pub fn app() -> Router {
         .route("/api/v1/health", get(health_handler))
 }
 
+/// Health-check response for a given readiness state.
+///
+/// Responds immediately: 200 {"status":"ready"} once startup has fully
+/// completed, 503 {"status":"starting"} while the server is still
+/// initializing — a real readiness signal for probes instead of racing
+/// subsystems that are still coming up.
+fn health_response(ready: bool) -> (StatusCode, Json<serde_json::Value>) {
+    if ready {
+        (StatusCode::OK, Json(json!({"status": "ready"})))
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"status": "starting"})),
+        )
+    }
+}
+
 /// Health-check handler.
-async fn health_handler() -> Json<serde_json::Value> {
-    Json(json!({"status": "ok"}))
+async fn health_handler() -> impl IntoResponse {
+    health_response(is_ready())
 }
 
 /// Fallback handler for unmatched routes.
@@ -258,6 +292,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn health_response_ready_reports_ready() {
+        let (status, Json(body)) = health_response(true);
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "ready");
+    }
+
+    #[test]
+    fn health_response_starting_reports_503() {
+        let (status, Json(body)) = health_response(false);
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(body["status"], "starting");
     }
 
     #[tokio::test]

@@ -723,6 +723,7 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                 HandlerName == rust_handler
             ->  catch(
                     (   cgi_open(OutStream, CGI, srv_http:cgi_capture_hook, [request(SWIRequest)]),
+                        cgi_property(CGI, id(Local_Id)),
                         setup_call_cleanup(
                             (   Binary == true
                             ->  set_stream(CGI, encoding(octet))
@@ -738,12 +739,12 @@ handle_pipe_work(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
                     Error,
                     handle_handler_error(Error, OutStream, CGI)
                 ),
-                % Clean up saved_request/5 facts that were asserted by
+                % Clean up this request's saved_request/5 fact, asserted by
                 % http:request_expansion/2 during handler execution.
                 % In the SWI-Prolog HTTP server, this is done via
                 % http(request_finished(...)) broadcast events, but the
                 % Rust backend does not emit those events.
-                retractall_saved_request_for_request(SWIRequest)
+                retractall_saved_request_for_request(Local_Id)
             ;   HandlerModule == indexer_worker
             ->  catch(
                     (   indexer_worker:indexer_process_commit_handler(Request, OutStream)
@@ -783,16 +784,17 @@ release_pipe_resources(OutStream, InStream, BodyStream, MemoryFile, OutputWriteF
         (   InputReadFd >= 0 -> catch('$appserver':appserver_close_fd(InputReadFd), _, true) ; true )
     ).
 
-%% retractall_saved_request_for_request(+SWIRequest) is det.
+%% retractall_saved_request_for_request(+Local_Id) is det.
 %%
-%%  Clean up saved_request/5 facts asserted by http:request_expansion/2
-%%  during handler execution. The Rust backend does not emit
-%%  http(request_finished(...)) broadcast events, so without this
-%%  cleanup, saved_request/5 facts accumulate indefinitely.
-%%  Each worker processes one request at a time, so retracting all
-%%  is safe.
-retractall_saved_request_for_request(_SWIRequest) :-
-    retractall(saved_request(_, _, _, _, _)).
+%%  Remove the saved_request/5 fact of the request identified by Local_Id
+%%  (the CGI stream id). Cleanup is scoped per request: workers run
+%%  concurrently, so a global retractall would delete facts of in-flight
+%%  requests and strip api:trace_id from their error responses.
+retractall_saved_request_for_request(Local_Id) :-
+    (   var(Local_Id)
+    ->  true
+    ;   retractall(saved_request(Local_Id, _, _, _, _))
+    ).
 
 %% call_raw_plugin_handler(+Module, +Handler, +Request, +OutStream) is det.
 %%
@@ -958,15 +960,23 @@ handle_plugin_request(SWIRequest, Response) :-
 %%  signature is Handler(+RequestDict, +StreamId, -Response). The request
 %%  dict is the original JSON request from Rust (with params, query, etc.).
 handle_plugin_stream_request(HandlerModule, HandlerName, Request, _SWIRequest, ResponseStreamId, Response) :-
+    (   get_dict(path, Request, PathString)
+    ->  atom_string(GatePath, PathString)
+    ;   GatePath = ''),
     Goal =.. [HandlerName, Request, ResponseStreamId, Response],
     catch(
-        (   call(HandlerModule:Goal)
-        ->  true
-        ;   json_log_error_formatted("Plugin stream handler ~w:~w failed", [HandlerModule, HandlerName]),
-            plugin_api:plugin_error_response(failure, Response)
+        (   store_ready_for(GatePath)
+        ->  (   call(HandlerModule:Goal)
+            ->  true
+            ;   json_log_error_formatted("Plugin stream handler ~w:~w failed", [HandlerModule, HandlerName]),
+                plugin_api:plugin_error_response(failure, Response)
+            )
+        ;   throw(error(server_not_ready, _))
         ),
         Error,
-        (   json_log_error_formatted("Plugin stream handler ~w:~w error: ~q", [HandlerModule, HandlerName, Error]),
+        (   Error = error(server_not_ready, _)
+        ->  plugin_api:plugin_error_response(Error, Response)
+        ;   json_log_error_formatted("Plugin stream handler ~w:~w error: ~q", [HandlerModule, HandlerName, Error]),
             plugin_api:plugin_error_response(Error, Response)
         )
     ).
@@ -2242,6 +2252,37 @@ test(call_raw_plugin_handler_with_dict_missing_payload) :-
     assertion(sub_string(Result, _, _, _, 'Status: 200')),
     assertion(sub_string(Result, _, _, _, '"has_payload":false')).
 
+test("plugin stream request returns 503 while the store is initializing",
+     [setup((readiness:reset_readiness,
+             setenv('TERMINUSDB_READINESS_TIMEOUT', '0.2'),
+             readiness:readiness_pending(store))),
+      cleanup((unsetenv('TERMINUSDB_READINESS_TIMEOUT'),
+               readiness:reset_readiness))]) :-
+    handle_plugin_stream_request(request_worker_pool, test_stream_probe,
+                                 _{path: "/api/plugin/x"}, [], _StreamId, Response),
+    assertion(Response.status == 503),
+    assertion(Response.body.'api:status' == 'api:service_unavailable').
+
+test("plugin stream request dispatches once the store is ready",
+     [setup(readiness:reset_readiness), cleanup(readiness:reset_readiness)]) :-
+    handle_plugin_stream_request(request_worker_pool, test_stream_probe,
+                                 _{path: "/api/plugin/x"}, [], _StreamId, Response),
+    assertion(Response.status == 200).
+
+test(saved_request_cleanup_removes_only_owning_request,
+     [cleanup(retractall(json_log:saved_request(_, _, _, _, _)))]) :-
+    assert(json_log:saved_request(req_a, 1.0, '/a', some(op_a), [])),
+    assert(json_log:saved_request(req_b, 1.0, '/b', some(op_b), [])),
+    retractall_saved_request_for_request(req_a),
+    assertion(\+ json_log:saved_request(req_a, _, _, _, _)),
+    assertion(json_log:saved_request(req_b, _, _, _, _)).
+
+test(saved_request_cleanup_tolerates_unbound_id,
+     [cleanup(retractall(json_log:saved_request(_, _, _, _, _)))]) :-
+    assert(json_log:saved_request(req_a, 1.0, '/a', some(op_a), [])),
+    retractall_saved_request_for_request(_Unbound),
+    assertion(json_log:saved_request(req_a, _, _, _, _)).
+
 :- end_tests(request_worker_pool).
 
 %% Test handler that echoes back fields from the Request dict.
@@ -2260,3 +2301,7 @@ test_dict_handler(Request, Response) :-
             _{path: Path, has_payload: HasPayload},
             [as(string), width(0)])),
     Response = _{status: 200, body: Body, headers: _{'Content-Type': 'application/json'}}.
+
+%% Test stream handler for handle_plugin_stream_request tests.
+test_stream_probe(_Request, _StreamId, Response) :-
+    Response = _{status: 200, body: _{}, headers: _{}}.

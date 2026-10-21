@@ -3133,6 +3133,18 @@ generic_exception_jsonld(vectorlink_engine_unavailable(Method, Path), JSON) :-
              'api:error' : _{'@type' : 'api:VectorlinkEngineUnavailable',
                              'api:method' : Method,
                              'api:path' : Path}}.
+generic_exception_jsonld(vectorlink_engine_init_timeout(Method, Path), JSON) :-
+    format(string(Msg), "embedded vectorlink engine still initializing, cannot serve ~w ~w yet", [Method, Path]),
+    JSON = _{'@type' : 'api:EngineUnavailable',
+             'api:status' : 'api:service_unavailable',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEngineInitTimeout',
+                             'api:method' : Method,
+                             'api:path' : Path}}.
+generic_exception_jsonld(server_not_ready, JSON) :-
+    JSON = _{'@type' : 'api:NotReadyErrorResponse',
+             'api:status' : 'api:service_unavailable',
+             'api:message' : 'server is still initializing, retry shortly'}.
 generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
     format(string(Msg), "vectorlink endpoint is not configured (called from ~w)", [Context]),
     JSON = _{'@type' : 'api:EndpointNotConfigured',
@@ -3321,5 +3333,11 @@ test(commit_queue_timeout_without_request_id_is_indeterminate_error, []) :-
     get_dict('@type', Error, 'api:CommitQueueTimeout'),
     get_dict('api:status', JSON, "api:server_error"),
     json_http_code(JSON, 500).
+
+test(server_not_ready_is_retryable_503, []) :-
+    once(generic_exception_jsonld(server_not_ready, JSON)),
+    get_dict('@type', JSON, 'api:NotReadyErrorResponse'),
+    get_dict('api:status', JSON, 'api:service_unavailable'),
+    json_http_code(JSON, 503).
 
 :- end_tests(error_reporting).

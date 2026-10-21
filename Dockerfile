@@ -71,6 +71,7 @@ COPY builtin_plugins/assets builtin_plugins/assets/
 RUN TERMINUSDB_ENABLE_OPTIMIZER=false make DIST=community && \
     ([ "$SKIP_TESTS" = "true" ] || (cd src/rust && TERMINUSDB_ENABLE_OPTIMIZER=false cargo swipl test --release)) && \
     rm -rf src/rust/target
+RUN strip --strip-debug src/rust/librust.so
 
 # Download the pre-built tdb-admin dist package from GitHub releases.
 FROM alpine:latest AS admin_dist
@@ -130,9 +131,11 @@ RUN set -eux; \
 
 FROM swipl_minimal AS min_community
 COPY --from=base_community /app/terminusdb/terminusdb /app/terminusdb/
+COPY --from=rust_builder /app/rust/src/rust/librust.so /app/terminusdb/src/rust/librust.so
 
 FROM min_community
 COPY --from=base_community /app/terminusdb/terminusdb /app/terminusdb/
+COPY --from=rust_builder /app/rust/src/rust/librust.so /app/terminusdb/src/rust/librust.so
 COPY --from=base_community /app/terminusdb/src/terminus-schema /app/terminusdb/src/terminus-schema/
 COPY --from=base_community /app/terminusdb/distribution/init_docker.sh /app/terminusdb/init_docker.sh
 

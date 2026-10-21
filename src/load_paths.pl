@@ -125,7 +125,12 @@ add_template_path :-
 add_rust_path :-
     user:file_search_path(terminus_home, Dir),
     directory_file_path(Dir, 'rust',Rust),
-    asserta(user:file_search_path(foreign, Rust)).
+    asserta(user:file_search_path(foreign, Rust)),
+    % foreign(no_save) binaries bake these paths at build time and are not
+    % relocatable. Assert each known install location as a candidate, tried
+    % before the build path; the first existing file wins.
+    asserta(user:file_search_path(foreign, '/snap/terminusdb/current/src/rust')),
+    asserta(user:file_search_path(foreign, '/app/terminusdb/src/rust')).
 
 :- add_rust_path.
 
