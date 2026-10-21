@@ -46,6 +46,10 @@
 :- use_module(library(readutil)).
 :- use_module(library(url), [www_form_encode/2]).
 
+% Defined by the vectorlink plugin, loaded at runtime — declare so the
+% qualified call below compiles whether or not the plugin is present.
+:- dynamic vectorlink:vectorlink_endpoint/1.
+
 embedding_type_queries(Commit_Descriptor, TypeQueries) :-
     open_descriptor(Commit_Descriptor, Transaction),
     database_schema(Transaction, Schema),
@@ -236,7 +240,8 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
         push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_push_delta), _)),
     do_or_die(
-        vectorlink_endpoint(_Endpoint),
+        (   current_predicate(vectorlink:vectorlink_endpoint/1),
+            vectorlink:vectorlink_endpoint(_Endpoint)),
         error(vectorlink_endpoint_not_configured(io_push_delta), _)),
     (   atom_concat(_, '/local/branch/', Path)
     ->  Branch_Path = Path
@@ -1731,4 +1736,29 @@ test(refresh_and_doc_change_dedup_on_same_id,
     assertion(NU == 4).
 
 :- end_tests(indexer_predicates).
+
+:- begin_tests(indexer_endpoint_config).
+:- use_module(core(util/test_utils)).
+:- use_module(core(triple), [super_user_authority/1]).
+
+% Regression: the endpoint check in io_push_delta must reach the plugin's
+% vectorlink_endpoint/1 through a runtime-qualified call — an unconfigured
+% endpoint must surface vectorlink_endpoint_not_configured, never an
+% existence_error for api_indexer:vectorlink_endpoint/1.
+test(push_delta_reports_unconfigured_endpoint,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"),
+             setenv('TERMINUSDB_INDEXER_BACKEND', 'http_vectorlink'),
+             unsetenv('TERMINUSDB_VECTORLINK_ENDPOINT'),
+             config:clear_indexer_backend_config)),
+      cleanup((unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               config:clear_indexer_backend_config,
+               teardown_temp_store(State))),
+      throws(error(vectorlink_endpoint_not_configured(io_push_delta), _))
+     ]) :-
+    super_user_authority(Auth),
+    open_descriptor(system_descriptor{}, System_DB),
+    io_index_branch(System_DB, Auth, "admin/foo").
+
+:- end_tests(indexer_endpoint_config).
 

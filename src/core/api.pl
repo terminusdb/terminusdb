@@ -134,6 +134,10 @@
 
               % api_document.pl
               api_can_read_document/6,
+              api_check_documents/11,
+              api_check_insert_body/4,
+              api_check_replace_body/4,
+              api_check_delete_body/3,
               api_insert_documents/9,
               api_delete_documents/9,
               api_delete_documents_by_type/8,

@@ -103,7 +103,8 @@ indexer_info(Info) :-
     ->  Configured = true
     ;   Configured = false
     ),
-    (   catch(indexer_available, _, fail)
+    (   Configured = true,
+        catch(indexer_available, _, fail)
     ->  Available = true
     ;   Available = false
     ),
