@@ -16,7 +16,7 @@ describe('In-Memory Mode', function () {
   const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
-  async function waitForServer (maxRetries = 20) {
+  async function waitForServer (maxRetries = 200) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const res = await new Promise((resolve, reject) => {
@@ -35,7 +35,7 @@ describe('In-Memory Mode', function () {
       } catch (e) {
         // Server not ready yet
       }
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error('Server did not start in time')
   }
@@ -54,12 +54,12 @@ describe('In-Memory Mode', function () {
       } catch (e) {
         // Endpoint not ready yet
       }
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error('/api/ did not return 200 in time')
   }
 
-  async function waitForJsonEndpoint (path, auth, maxRetries = 10) {
+  async function waitForJsonEndpoint (path, auth, maxRetries = 50) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const res = await new Promise((resolve, reject) => {
@@ -88,7 +88,7 @@ describe('In-Memory Mode', function () {
       } catch (e) {
         // Endpoint not ready yet
       }
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error(`Endpoint ${path} did not return valid JSON in time`)
   }
@@ -108,10 +108,11 @@ describe('In-Memory Mode', function () {
 
   function stopServer (done) {
     if (serverProcess) {
+      serverProcess.once('exit', () => {
+        serverProcess = null
+        done()
+      })
       serverProcess.kill('SIGTERM')
-      serverProcess = null
-      // Wait a bit for the port to be released
-      setTimeout(done, 2000)
     } else {
       done()
     }

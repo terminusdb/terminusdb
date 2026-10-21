@@ -51,6 +51,7 @@ do_install() {
         unixodbc libsqlite3-0 libserd-0-0 libraptor2-0
       docker pull "swipl:${release}"
       cid="$(docker create "swipl:${release}")"
+      sudo mkdir -p /opt/swipl
       sudo docker cp "${cid}":/usr /opt/swipl/usr
       docker rm "${cid}"
       echo "/opt/swipl/usr/bin" >> "$GITHUB_PATH"
