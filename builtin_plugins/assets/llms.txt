@@ -1,0 +1,268 @@
+# TerminusDB MCP
+
+Model Context Protocol endpoint for TerminusDB. One endpoint, six workflow tools:
+schema → orient, query → retrieve and verify, write → change data, git → version,
+admin → operate, plugins → extend.
+
+## Endpoints
+
+- HTTP (enterprise): `POST /api/mcp` — stateless streamable HTTP, one JSON-RPC 2.0
+  request per POST. `GET /llms.txt` serves this document.
+- stdio (community): `terminusdb mcp` — newline-delimited JSON-RPC on stdin/stdout
+  against the local binary store. No port is opened.
+
+Client registration:
+
+    claude mcp add terminusdb -- terminusdb mcp
+
+    .vscode/mcp.json:
+    { "servers": { "terminusdb": { "command": "terminusdb", "args": ["mcp"] } } }
+
+    claude_desktop_config.json:
+    { "mcpServers": { "terminusdb": { "command": "terminusdb", "args": ["mcp"] } } }
+
+    Enterprise HTTP:
+    { "url": "https://<host>/api/mcp", "headers": { "Authorization": "Bearer <token>" } }
+
+`terminusdb mcp` is configured by environment:
+
+    TERMINUSDB_SERVER_DB_PATH    store location — default ~/.terminusdb,
+                                 auto-initialized on first run
+    TERMINUSDB_INDEXER_BACKEND   semantic indexer — `vectorlink` enables the
+                                 embedded engine; default `none` disables
+                                 search (no webserver needed — works on stdio)
+    TERMINUSDB_MEMORY_PASSWORD   set to run an ephemeral in-memory store;
+                                 the value is the admin password (empty → root)
+
+## Auth
+
+HTTP: basic auth, `Authorization: API_KEY <key>`, or `Authorization: Bearer <JWT>`
+(OIDC discovery on the enterprise build). stdio: runs as the invoking local user —
+no token.
+
+## Resources
+
+`"org/db"` (default branch main), `"org/db/local/branch/<name>"`,
+`"org/db/local/commit/<id>"`. `graph_type`: `"instance"` | `"schema"`.
+
+## Calling
+
+    {"jsonrpc":"2.0","id":1,"method":"tools/call",
+     "params":{"name":"<tool>","arguments":{"action":"…",…}}}
+
+Response: `result.structuredContent` carries the payload; `result.content` mirrors
+it as text. Tool failure is `isError:true` — never a JSON-RPC error. Malformed
+requests (bad JSON, missing or non-string `method`) do get JSON-RPC errors
+(-32700/-32600/-32601/-32602); a request with no `id` is a notification and gets
+no response. Transport-level failure (calls failing with "Not connected" or
+similar) means the client lost the server process — restart it; no tool call can
+reconnect for you.
+
+## Tools
+
+Every tool takes `action` plus its own arguments; errors are `isError:true` results
+with `structuredContent.{error,message,hint}` — the hint names the corrected call.
+
+### schema — read the data model
+
+    {"action":"summary","resource":"org/db"}          → counts, classes, data_version
+    {"action":"full","resource":"org/db"}             → all class frames
+    {"action":"frame","resource":"org/db","class":"Person"}
+    {"action":"frame",...,"format":"jsonschema"}      → JSON Schema draft-07
+    {"action":"vocab","resource":"org/db"}            → @context/prefixes
+    {"action":"contract","resource":"org/db"}         → compact class shapes
+    {"action":"datatypes"}                            → every valid type spelling —
+        no resource needed. `datatypes` lists base types ("xsd:string",
+        "xsd:integer", "xdd:coordinate", ...), `schema_types` the document
+        @type spellings (Class, TaggedUnion, Enum, Foreign), `families` the
+        range wrappers (Optional, Set, List, Array, Table, Cardinality).
+        A property range is a datatype string or a family wrapper:
+        {"name":"xsd:string"} or {"nick":{"@type":"Optional","@class":"xsd:string"}}
+        — there is no "@type":"String" object form. `annotations` lists the
+        recognized class metadata keys (@key, @inherits, @subdocument,
+        @abstract, @unfoldable, @shared, @metadata, @documentation); every
+        non-@ member of a Class doc is a property slot — "comment",
+        "description", "title" are NOT annotations, they become properties
+        whose range is their string value (usually a schema error).
+
+### query — retrieve and verify (read-only)
+
+    {"action":"document","path":"org/db","id":"Person/x"}
+    {"action":"document","path":"org/db","type":"City","count":10}
+    {"action":"document","path":"org/db","type":"City","query":{"name":"Lisbon"}}
+        — match by property value; "fields":["name"] projects properties
+    {"action":"document",...,"id_only":true}          → ids only
+    {"action":"document",...,"format":"embedding"}    → rendered text, not JSON
+        — renders each doc through its class's @metadata.embedding template
+          (GraphQL query + Handlebars — the same text that gets embedded for
+          semantic search). "format":"markdown" renders markdown instead.
+          Returns documents:[{id,text}] plus "page": the concatenated page.
+          Needs no indexer backend; incompatible with id_only/fields.
+    {"action":"woql","path":"org/db","query":<WOQL JSON AST>,"count":5}
+        — count caps returned bindings
+    {"action":"check","path":"org/db","verb":"insert","documents":<doc|[docs]>}
+    {"action":"graphql","path":"org/db","query":"{ Person { name } }","variables":{…}}
+    {"action":"search","path":"org/db","kind":"search","q":"lisbon"}
+        — "query" is accepted as an alias for "q"
+        — kind: search|similar|suggest|duplicates; needs a VectorLink index
+    {"action":"history","path":"org/db","id":"Person/x","count":50}
+        — flags: created/updated/diff/fast/complete; bounds: before/after/start/count
+    {"action":"diff","path":"org/db","before":"<commit>","after":"<commit>","id":"Person/x"}
+        — omit id for all changed documents
+
+`query.woql` is read-only — InsertDocument/UpdateDocument/DeleteDocument/
+AddTriple/DeleteTriple etc. are rejected with a hint to route through `write`.
+WOQL `Get` (file/URL ingest) is rejected on both `query` and `write` — over MCP
+there is no upload channel for `post` and `url` would fetch server-side.
+
+`query.check` is the try-before-commit dry run: runs the real write path in a
+discarded transaction and reports `{api:valid, api:witnesses, api:embedding}`.
+`valid:false` is DATA, not an error — read the witnesses. Run `check` before
+every `write` batch — it is free.
+
+### write — change data or schema (every write is a commit)
+
+    {"action":"insert","resource":"org/db","commit_info":{"author":"me","message":"add cities"},
+     "documents":[{"@type":"City","name":"Lisbon"}]}
+    {"action":"update", ...same shape — replaces documents by @id}
+    {"action":"delete","resource":"org/db","commit_info":{...},"id":"City/x"}
+        — selectors: id | ids | type | nuke:true
+    {"action":"patch","patch":[{"@id":"Person/x","name":{"@op":"SwapValue","@before":"a","@after":"b"}}]}
+        — or [{"@op":"Insert","@insert":{…}}]; a list of diff ops
+    {"action":"woql","query":<write-capable WOQL AST>}
+        — InsertDocument takes the document as a Value/DictionaryTemplate:
+        {"@type":"InsertDocument",
+         "document":{"@type":"Value","dictionary":{"@type":"DictionaryTemplate",
+           "data":[{"@type":"FieldValuePair","field":"@type","value":{"@type":"Value","data":"City"}},
+                   {"@type":"FieldValuePair","field":"@id","value":{"@type":"Value","node":"City/Lisbon"}},
+                   {"@type":"FieldValuePair","field":"name","value":{"@type":"Value","data":"Lisbon"}}]}},
+         "identifier":{"@type":"NodeValue","variable":"id"}}
+    {"action":"graphql","query":"mutation($i:JSON!){_insertDocuments(json:$i)}",
+     "variables":{"i":[{doc…}]},"commit_info":{...}}
+        — json: takes a JSON variable or JSON string, not an inline object
+
+`commit_info` is mandatory. Returns `{data_version, ids, embedded, not_embedded}`.
+Pass `expected_data_version:"branch:<commit>"` to guard against drift — on
+conflict, re-read, re-check, rewrite at the new head.
+
+A schema write is an ordinary insert/update with `graph_type:"schema"`. A
+class is one document; a property's range is the bare datatype string, NOT a
+`{"@id":…,"@type":…}` object — `{"name":{"@type":"String"}}` is never valid:
+
+    {"action":"insert","resource":"org/db","graph_type":"schema","commit_info":{...},
+     "documents":[{"@type":"Class","@id":"Employee",
+                   "@key":{"@type":"Lexical","@fields":["name"]},
+                   "name":"xsd:string",
+                   "age":"xsd:integer",
+                   "nickname":{"@type":"Optional","@class":"xsd:string"},
+                   "aliases":{"@type":"Set","@class":"xsd:string"}}]}
+
+Schema writes (`graph_type:"schema"`) auto-inject `@metadata.embedding` for
+classes that lack it when an indexer backend is active — every class becomes
+vector-searchable. `indexing:false` opts out; `indexing:{"query","template"}`
+overrides the generated query and is stored even with no backend — the
+template then renders via `query.document format:"embedding"`, though the
+class is not searchable until an indexer runs. The response's `embedded`/
+`not_embedded` lists name which classes will and will not be searchable,
+with reasons.
+
+### git — version control for data
+
+    {"action":"log","resource":"org/db","count":20}
+    {"action":"list_branches","resource":"org/db"}
+    {"action":"create_branch","resource":"org/db/local/branch/new","source":"org/db"}
+    {"action":"delete_branch","resource":"org/db/local/branch/x",
+     "confirm":"permanently delete x"}
+    {"action":"merge","resource":"org/db","source":"org/db/local/branch/feature",
+     "commit_info":{...}}
+        — the other-end ref goes in "source", "to" or "onto" (interchangeable)
+    {"action":"squash","resource":"org/db","commit_info":{...},
+     "confirm":"rewrite history of main"}
+        — rewrites branch history to one commit; confirm-gated like reset
+    {"action":"reset","resource":"org/db","to":"<commit-id-or-path>",
+     "confirm":"rewrite history of main"}
+        — bare commit ids and "org/db/local/commit/<id>" paths both work
+    {"action":"rebase","resource":"org/db/local/branch/feature","source":"org/db",
+     "commit_info":{...}}
+        — replays the resource branch's commits onto the source head
+
+Merge computes the true common ancestor itself — never pass one. Conflicts
+return isError with `witnesses` naming the contested document and fields —
+`@expected` is the ancestor value, `@found` yours, `@incoming` theirs. Decide
+the correct values, then `write` the resolved documents on the target
+branch: that commit completes the merge manually. Retrying `merge` re-reports
+the same conflict (it is always computed against the shared ancestor).
+
+### admin — operate the server
+
+    {"action":"info"}                                  → version, auth, indexer
+    {"action":"list_databases"}
+    {"action":"create_database","resource":"org/db","label":"…","comment":"…"}
+    {"action":"delete_database","resource":"org/db",
+     "confirm":"permanently delete org/db"}
+    {"action":"optimize","resource":"org/db"}
+    {"action":"index_status","resource":"org/db"}      → per-branch indexing lag
+    {"action":"reindex","resource":"org/db"}
+    {"action":"export","resource":"org/db"}            → bundle text in `payload`
+    {"action":"import","resource":"org/db","payload":"<bundle text>"}
+    {"action":"export","resource":"org/db","path":"/tmp/dump.terminusdb"}   ← stdio only
+    {"action":"import","resource":"org/db","path":"/tmp/dump.terminusdb"}   ← stdio only
+    {"action":"docs"}                                  → this document
+
+export/import move the bundle as a `payload` string — pass it back to
+`import` verbatim (it is not JSON; do not reformat it). `path` reads and
+writes files on the server, so it is rejected over HTTP and works on
+`terminusdb mcp` only. `import` writes into an existing database —
+`create_database` the target first if it is new.
+A bundle carries ONE branch's history (main by default) — the export result
+lists `branches_not_exported`; export other branches one at a time by
+addressing them (`org/db/local/branch/name`), or use git remotes for a
+full clone.
+
+## The confirm contract
+
+Irreversible actions require `confirm` echoing the refusal's exact string —
+`"permanently delete <resource>"` for deletes (a database `admin/uat`, or a
+branch name `x`), `"rewrite history of <branch>"` for resets and squashes.
+Try once without it: the error names the literal expected. Applies to:
+`admin.delete_database`, `git.delete_branch`, `git.reset`, `git.squash`.
+
+## Data-version discipline
+
+Every `write`/`git` mutation returns `data_version` ("branch:<commit>"). Capture
+it; pass `expected_data_version` on the next write to prove you are updating the
+head you read. Mismatch → conflict error → re-read, re-check, rewrite.
+
+## Semantic search (GraphRAG)
+
+VectorLink provides vector storage and search; Ollama provides the embeddings —
+it is a prerequisite, not an optional extra:
+
+    https://ollama.com/download
+    ollama pull hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0
+    ollama cp hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0 multilingual-e5-base
+
+Set `TERMINUSDB_INDEXER_BACKEND=vectorlink` before launching `terminusdb mcp` —
+the embedded engine runs in-process (no webserver, no separate endpoint).
+Schema writes auto-inject embedding metadata; `query.check` reports
+`api:will_embed` before you commit. If a class lacks embedding metadata,
+`write` reports it in `not_embedded` with the reason.
+
+Changing a class's schema, embedding query or template reindexes every touched
+object — on large data products verify impact first (`admin.index_status`,
+`git` for a safe branch).
+
+## WOQL cheat-sheet (JSON AST)
+
+    {"@type":"IsA","element":{"@type":"NodeValue","variable":"X"},
+     "type":{"@type":"NodeValue","node":"City"}}
+    {"@type":"Triple","subject":{...NodeValue/Value...},"predicate":{...},
+     "object":{...}}
+    {"@type":"And","and":[<query>,...]}  |  {"@type":"Or","or":[...]}
+    {"@type":"Select","variables":["X"],"query":<query>}
+
+Discover classes with `schema` action `summary`, property names with `frame` or
+`contract`, prefixes with `vocab`.
+
+This document is served at GET /llms.txt on any TerminusDB server and is also
+available through the `admin` tool's `docs` action.

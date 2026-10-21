@@ -31,6 +31,10 @@
 % so per-invocation startup stays cheap (hook entry points degrade cleanly —
 % invoked via findall/forall, with shipping defaults in core modules).
 :- use_module(core(plugins), [load_plugins/0]).
+% The mcp entry point lives in the builtin plugin (loaded by load_plugins).
+% Declaring it multifile here keeps qsave's undefined-predicate check from
+% flagging the qualified call, without pulling the plugin into the state.
+:- multifile mcp:run_stdio/1.
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -43,7 +47,8 @@
 :- use_module(library(settings)).
 :- use_module(library(terminus_store), [terminus_store_version/1]).
 
-:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0]).
+:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0,
+                                       set_memory_mode/0]).
 
 % Meta-predicate declaration must appear before any caller to satisfy xref.
 :- meta_predicate api_report_errors(?,0).
@@ -61,6 +66,12 @@ store_free_invocation(Argv) :-
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
     initialise_log_settings,
+    % Environment defaults for `terminusdb mcp` must land before the
+    % first db_path/1 resolution anywhere — db_path is tabled, so a
+    % setenv after the first call is a no-op.
+    (   Argv = [mcp|_]
+    ->  apply_mcp_env_defaults
+    ;   true),
     (   store_free_invocation(Argv)
     ->  true
     ;   update_system_graphs
@@ -133,6 +144,14 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            meta(password),
            default('_'),
            help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
+opt_spec(mcp,'terminusdb mcp OPTIONS',
+         'Run an MCP (Model Context Protocol) server on stdin/stdout against the local store. No port is opened. Connect a client such as Claude Code with `claude mcp add terminusdb -- terminusdb mcp`. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer, default none — set vectorlink to enable semantic indexing; it requires a running Ollama with the embedding model, see https://ollama.com/download), TERMINUSDB_MEMORY_PASSWORD (run in-memory without a persistent store, with the value as admin password — empty means \'root\').',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('Print help for `mcp` command')]]).
 opt_spec(list,'terminusdb list OPTIONS',
          'List available databases. [DEPRECATED]',
          [[opt(help),
@@ -1586,6 +1605,10 @@ assert_system_db_is_accessible :-
             halt(1))).
 
 run(Argv) :-
+    % Idempotent: also applied in cli_toplevel before store probing.
+    (   Argv = [mcp|_]
+    ->  apply_mcp_env_defaults
+    ;   true),
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
     (   Argv = [Cmd|_],
@@ -1593,6 +1616,8 @@ run(Argv) :-
     % Skip db check for in-memory mode - the store will be created on the fly
     ;   member(MemFlag, ['--memory', '-m']),
         member(MemFlag, Argv)
+    % mcp self-provisions its store (default ~/.terminusdb) on first run
+    ;   Argv = [mcp|_]
     ;   assert_system_db_is_accessible),
     run_(Argv).
 
@@ -1639,6 +1664,28 @@ run_(_) :-
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~w~n", [Commands]),
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
 
+%% apply_mcp_env_defaults is det.
+%
+%  Environment defaults for `terminusdb mcp`. Must run before the first
+%  db_path/1 resolution anywhere in the process — db_path is tabled, so
+%  a setenv after the first call is a no-op. cli_toplevel calls this
+%  before update_system_graphs; it is repeated in run_command for
+%  direct invocations that bypass the toplevel.
+apply_mcp_env_defaults :-
+    (   getenv('TERMINUSDB_SERVER_DB_PATH', _)
+    ->  true
+    ;   expand_file_name('~/.terminusdb', [DB_Home]),
+        setenv('TERMINUSDB_SERVER_DB_PATH', DB_Home),
+        % The embedded engine derives its data dir from db_path's parent
+        % — which would be ~/ — so pin it inside the store folder.
+        (   getenv('VECTORLINK_DATA_DIR', _)
+        ->  true
+        ;   expand_file_name('~/.terminusdb/vectorlink', [VL_Dir]),
+            setenv('VECTORLINK_DATA_DIR', VL_Dir))),
+    (   getenv('TERMINUSDB_INDEXER_BACKEND', _)
+    ->  true
+    ;   setenv('TERMINUSDB_INDEXER_BACKEND', 'none')).
+
 % Commands
 run_command(help,_Positional,Opts) :-
     terminusdb_help(Opts).
@@ -1657,6 +1704,30 @@ run_command(serve,_Positional,Opts) :-
         ->  terminus_server([serve|Opts], false),
             prolog
         ;   terminus_server([serve|Opts], true))
+    ).
+run_command(mcp,_Positional,Opts) :-
+    apply_mcp_env_defaults,
+    api_report_errors(
+        mcp,
+        (   % In-memory store — same init as serve's --memory flag, via
+            % TERMINUSDB_MEMORY_PASSWORD.
+            (   getenv('TERMINUSDB_MEMORY_PASSWORD', Memory_Password)
+            ->  memory_triple_store(Store),
+                global_triple_store(Store),
+                (   Memory_Password = ''
+                ->  Password = root
+                ;   Password = Memory_Password),
+                initialize_database_with_store(Password, Store),
+                set_memory_mode
+            ;   % First run on a persistent store: initialize it in place.
+                catch(open_descriptor(system_descriptor{}, _), _, fail)
+            ->  true
+            ;   config:db_path(DB_Path),
+                initialize_database(root, false),
+                format(user_error, 'Initialized new store at ~w~n', [DB_Path])),
+            load_plugins,
+            opt_authority(Opts, Auth),
+            mcp:run_stdio(Auth))
     ).
 run_command(list,Databases,Opts) :-
     opt_authority(Opts, Auth),

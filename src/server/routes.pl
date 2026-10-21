@@ -604,6 +604,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
             param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
+            param_value_search_optional(Search, check, boolean, false, Check),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -621,14 +622,19 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           input_format: InputFormat,
                           document_id: Id
                       },
-            api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
+            (   Check = true
+            ->  check_document_write(System_DB, Auth, Path, Request,
+                                     insert, Options, Stream, Graph_Type,
+                                     Author, Message, Requested_Data_Version)
+            ;   api_insert_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
 
-            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
-            write_cors_headers(Request),
-            write_data_version_header(New_Data_Version),
-            write_transaction_retry_count_header(Transaction_Retry_Count),
-            reply_json(Ids, [width(0)]),
-            nl
+                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
+                write_cors_headers(Request),
+                write_data_version_header(New_Data_Version),
+                write_transaction_retry_count_header(Transaction_Retry_Count),
+                reply_json(Ids, [width(0)]),
+                nl
+            )
         )).
 
 document_handler(delete, Path, Request, System_DB, Auth) :-
@@ -648,6 +654,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, type, non_empty_atom, _, Type),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
+            param_value_search_optional(Search, check, boolean, false, Check),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -658,22 +665,28 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
                           allow_destructive_migration: Allow_Destructive_Migration
                       },
 
-            (   Nuke = true
-            ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
-            ;   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
-            ;   ground(Type)
-            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
-            ;   http_read_json_semidet(stream(Stream), Request)
-            ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, _Ids, Options)
-            ;   throw(error(missing_targets, _))
-            ),
+            (   Check = true
+            ->  check_document_delete(System_DB, Auth, Path, Request,
+                                      Options, Graph_Type,
+                                      Author, Message, Requested_Data_Version,
+                                      Nuke, Id, Type)
+            ;   (   Nuke = true
+                ->  api_nuke_documents(System_DB, Auth, Path, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
+                ;   ground(Id)
+                ->  api_delete_document(System_DB, Auth, Path, Id, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
+                ;   ground(Type)
+                ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Options)
+                ;   http_read_json_semidet(stream(Stream), Request)
+                ->  api_delete_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, _Ids, Options)
+                ;   throw(error(missing_targets, _))
+                ),
 
-            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
-            write_cors_headers(Request),
-            write_data_version_header(New_Data_Version),
-            write_transaction_retry_count_header(Transaction_Retry_Count),
-            format("Status: 204~n~n")
+                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
+                write_cors_headers(Request),
+                write_data_version_header(New_Data_Version),
+                write_transaction_retry_count_header(Transaction_Retry_Count),
+                format("Status: 204~n~n")
+            )
         )).
 
 document_handler(put, Path, Request, System_DB, Auth) :-
@@ -696,6 +709,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
             param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
+            param_value_search_optional(Search, check, boolean, false, Check),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -711,15 +725,83 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 input_format: InputFormat,
                 document_id: Id
             },
-            api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
+            (   Check = true
+            ->  check_document_write(System_DB, Auth, Path, Request,
+                                     replace, Options, Stream, Graph_Type,
+                                     Author, Message, Requested_Data_Version)
+            ;   api_replace_documents(System_DB, Auth, Path, Stream, Requested_Data_Version, New_Data_Version, Transaction_Meta_Data, Ids, Options),
 
-            transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
-            write_cors_headers(Request),
-            write_data_version_header(New_Data_Version),
-            write_transaction_retry_count_header(Transaction_Retry_Count),
-            reply_json(Ids, [width(0)]),
-            nl
+                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
+                write_cors_headers(Request),
+                write_data_version_header(New_Data_Version),
+                write_transaction_retry_count_header(Transaction_Retry_Count),
+                reply_json(Ids, [width(0)]),
+                nl
+            )
         )).
+
+/* check_document_write — ?check=true dry-run for POST/PUT /api/document.
+ *
+ *  Runs the same document core the commit path uses inside a discarded
+ *  transaction, then the same schema + pre-commit validations. Nothing
+ *  is written; the reply is api:CheckResponse with 200.
+ */
+check_document_write(System_DB, Auth, Path, Request, Op, Options, Stream,
+                     Graph_Type, Author, Message, Requested_Data_Version) :-
+    check_touched_types(Stream, Options, Touched_Types),
+    (   Op = insert
+    ->  api_check_insert_body(Stream, Graph_Type, Options, Body)
+    ;   api_check_replace_body(Stream, Graph_Type, Options, Body)),
+    api_check_documents(System_DB, Auth, Path, Graph_Type, Author, Message,
+                        Requested_Data_Version, Body, Touched_Types, Options,
+                        Result),
+    write_cors_headers(Request),
+    reply_json(Result, [width(0), status(200)]).
+
+/* check_document_delete — ?check=true dry-run for DELETE /api/document. */
+check_document_delete(System_DB, Auth, Path, Request, Options, Graph_Type,
+                      Author, Message, Requested_Data_Version,
+                      Nuke, Id, Type) :-
+    (   Nuke = true
+    ->  Spec = nuke
+    ;   ground(Id)
+    ->  Spec = id(Id)
+    ;   ground(Type)
+    ->  Spec = type(Type)
+    ;   http_read_json_semidet(stream(Stream), Request)
+    ->  Spec = ids_stream(Stream)
+    ;   throw(error(missing_targets, _))
+    ),
+    api_check_delete_body(Spec, Graph_Type, Body),
+    % Deletes embed nothing; the touched-types report does not apply.
+    api_check_documents(System_DB, Auth, Path, Graph_Type, Author, Message,
+                        Requested_Data_Version, Body, [], Options, Result),
+    write_cors_headers(Request),
+    reply_json(Result, [width(0), status(200)]).
+
+%% check_touched_types(+Stream, +Options, -Types) is det.
+%
+%  Peek at the document stream to learn which classes a write touches —
+%  used for the embedding report. Only JSON input is inspected; other
+%  formats report no touched types.
+check_touched_types(Stream, Options, Types) :-
+    (   option(input_format(json), Options)
+    ->  stream_property(Stream, position(Pos)),
+        catch(findall(T,
+                      (   json_read_list_stream(Stream, Doc),
+                          doc_types_of_doc(Doc, Doc_Types),
+                          member(T, Doc_Types)),
+                      Types),
+              _, Types = []),
+        set_stream_position(Stream, Pos)
+    ;   Types = []).
+
+doc_types_of_doc(Doc, Types) :-
+    (   get_dict('@type', Doc, Type_Value)
+    ->  (   is_list(Type_Value)
+        ->  Types = Type_Value
+        ;   Types = [Type_Value])
+    ;   Types = []).
 
 %%%%%%%%%%%%%%%%%%%% History %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 :- tdb_http_handler(api(history/Path), cors_handler(Method, history_handler(Path), [add_payload(false)]),
@@ -3550,6 +3632,9 @@ cors_handler(Method, Goal, Options, R) :-
                   error(authentication_incorrect(Reason),_),
 
                   (   write_cors_headers(Request),
+                      (   option(www_authenticate(Challenge), Options)
+                      ->  format('WWW-Authenticate: ~w~n', [Challenge])
+                      ;   true),
                       % SECURITY: Sanitize reason to avoid leaking credentials in logs
                       sanitize_auth_reason(Reason, SafeReason),
                       json_log_error_formatted("~NAuthentication Incorrect for reason: ~q~n", [SafeReason]),
