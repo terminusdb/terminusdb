@@ -1247,7 +1247,7 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
     ;   (   plugin_api:indexer_available
         ->  (   branch_path_for_notify(Path, Branch, Branch_Path),
                 api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-                catch((plugin_api:indexer_notify(Branch_Path, Branch, Store_Clustering) ; true),
+                catch((plugin_api:indexer_notify(Branch_Path, Branch, Store_Clustering, true) ; true),
                       Nudge_Error,
                       format(user_error,
                              "[WARN] Search stale-version nudge failed for ~w: ~q~n",

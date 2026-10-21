@@ -129,11 +129,17 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
         return Ok(());
     }
 
-    let handle = terminusdb_webserver::dispatch::tokio_handle().ok_or_else(|| {
-        "tokio runtime not available — embedded vectorlink requires \
-         TERMINUSDB_SERVER_BACKEND=rust"
-            .to_string()
-    })?;
+    // Without the webserver (e.g. `terminusdb mcp` stdio) this installs a
+    // dedicated background runtime — the engine needs a reactor, not HTTP.
+    let handle = terminusdb_webserver::dispatch::tokio_handle_or_install()
+        .ok_or_else(|| "tokio runtime unavailable".to_string())?;
+
+    // Indexing tasks stream commit data through Prolog handlers via the
+    // request dispatcher, which serve() installs at startup. Under
+    // `terminusdb mcp` there is no webserver, so install it here.
+    if !terminusdb_webserver::dispatch::dispatcher_initialized() {
+        terminusdb_webserver::dispatch::init_dispatcher();
+    }
 
     let mut config = vectorlink::config::Config::from_env();
     config.data_dir = data_dir;

@@ -686,6 +686,34 @@ pub fn tokio_handle() -> Option<tokio::runtime::Handle> {
     TOKIO_HANDLE.lock().unwrap().clone()
 }
 
+/// Dedicated runtime for processes that never start the webserver —
+/// `terminusdb mcp` stdio is the one that matters: the embedded
+/// vectorlink engine and the indexer task spawner both need a reactor.
+/// Created on first need and kept for the process lifetime so its tasks
+/// keep running; once installed via set_tokio_handle every downstream
+/// tokio_handle() caller sees it.
+static STANDALONE_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+fn standalone_runtime() -> &'static tokio::runtime::Runtime {
+    STANDALONE_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("standalone tokio runtime")
+    })
+}
+
+/// Get the tokio runtime handle, installing the standalone runtime when
+/// the server's runtime is absent.
+pub fn tokio_handle_or_install() -> Option<tokio::runtime::Handle> {
+    if let Some(handle) = tokio_handle() {
+        return Some(handle);
+    }
+    let handle = standalone_runtime().handle().clone();
+    set_tokio_handle(handle.clone());
+    Some(handle)
+}
+
 /// Registry of active input stream receivers.
 ///
 /// Input streams carry the HTTP request body from Rust to Prolog. Rust writes
@@ -794,6 +822,13 @@ fn in_flight_requests() -> Arc<Mutex<HashSet<String>>> {
         .get()
         .expect("request dispatcher not initialized")
         .clone()
+}
+
+/// Whether the request dispatcher has been initialized. Callers that need
+/// the dispatcher outside a webserver process (the embedded vectorlink
+/// engine under `terminusdb mcp`) install it themselves when this is false.
+pub fn dispatcher_initialized() -> bool {
+    DISPATCH_QUEUE.get().is_some()
 }
 
 /// Initialize the single-engine request dispatcher. Must be called once
@@ -1800,6 +1835,16 @@ mod tests {
         assert_eq!(picks[4].0, "b");
         assert_eq!(picks[5].0, "c");
         assert!(!picks[0].2);
+    }
+
+    #[test]
+    fn standalone_runtime_runs_futures() {
+        // The runtime must exist independent of the global TOKIO_HANDLE —
+        // `terminusdb mcp` has no webserver to install one.
+        let result = standalone_runtime().handle().block_on(async { 42 });
+        assert_eq!(result, 42);
+        // A second call reuses the same runtime (OnceLock), not a fresh one.
+        assert!(std::ptr::eq(standalone_runtime(), standalone_runtime()));
     }
 
     #[test]
