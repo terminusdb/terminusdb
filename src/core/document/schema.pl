@@ -1034,9 +1034,10 @@ refute_property_(Validation_Object, Class, Witness) :-
     xrdf(Schema, Class, P, Range),
     \+ is_built_in(P),
     (   is_type_family(Validation_Object, Range)
-    ->  refute_type(Validation_Object, Range, Witness)
-    ;   refute_class_or_base_type(Validation_Object, Range, Witness)
-    ).
+    ->  refute_type(Validation_Object, Range, Witness0)
+    ;   refute_class_or_base_type(Validation_Object, Range, Witness0)
+    ),
+    Witness = Witness0.put(property, P).
 
 refute_class_or_base_type(Validation_Object,Class,Witness) :-
     \+ is_base_type(Class),

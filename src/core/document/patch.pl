@@ -171,18 +171,16 @@ check_before_after(Original, Before, After, Final, Options) :-
     ->  Final = success(After)
     ;   values_equal(Original, Before, Prefixes)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
 check_before_after(Original, Before, After, Final, Options) :-
     option(prefixes(Prefixes), Options),
     !,
     (   values_equal(Original, Before, Prefixes)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
 check_before_after(Original, Before, After, Final, Options) :-
     option(match_final_state(true), Options),
@@ -191,17 +189,30 @@ check_before_after(Original, Before, After, Final, Options) :-
     ->  Final = success(After)
     ;   values_equal(Original, Before)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
-check_before_after(Original, Before, After, Final, _Options) :-
+check_before_after(Original, Before, After, Final, Options) :-
     (   values_equal(Original, Before)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
+
+% conflict_json(+Before, +Original, +After, +Options, -Conflict) is det.
+%
+%  '@incoming' names the value the diff was carrying (the source side of
+%  a merge). Opt-in via conflict_incoming(true) — bare callers get the
+%  historical two-value witness.
+conflict_json(Before, Original, After, Options, Conflict) :-
+    (   option(conflict_incoming(true), Options)
+    ->  Conflict = json{ '@op' : 'Conflict',
+                         '@expected' : Before,
+                         '@found' : Original,
+                         '@incoming' : After }
+    ;   Conflict = json{ '@op' : 'Conflict',
+                         '@expected' : Before,
+                         '@found' : Original }).
 
 non_conflict_list(List, Conflict) :-
     maplist([_,null]>>true, List, Conflict).

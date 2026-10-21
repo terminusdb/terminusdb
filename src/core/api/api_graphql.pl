@@ -151,8 +151,15 @@ handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Respon
                                      Meta_Data),
                     response(ResponseRaw),
                     json_log_info_formatted("intercepted a failing graphql, not committing", [])),
-                Transaction_Meta_Data = Meta_Data,
-                meta_data_version(Transaction, Meta_Data, New_Data_Version),
+                % A failed operation throws response/1 before
+                % with_transaction commits, leaving Meta_Data unbound —
+                % don't ask data_version of an aborted transaction.
+                (   nonvar(Meta_Data)
+                ->  Transaction_Meta_Data = Meta_Data,
+                    meta_data_version(Transaction, Meta_Data,
+                                      New_Data_Version)
+                ;   Transaction_Meta_Data = none,
+                    New_Data_Version = no_data_version),
                 % Post-process: convert decimal strings to JSON numbers
                 post_process_graphql_decimals(ResponseRaw, Response)
             ),
