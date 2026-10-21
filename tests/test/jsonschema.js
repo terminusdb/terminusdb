@@ -667,13 +667,54 @@ describe('jsonschema', function () {
     expect(r.body['api:status']).to.equal('api:failure')
   }
 
-  // The check endpoint is not yet implemented; when it lands these
-  // assertions verify the same documents without writing them.
-  describe.skip('check endpoint', function () {
-    it('checks a document without committing it', async function () {
-      const path = `/api/check/admin/${agent.dbName}`
-      const r = await agent.post(path).send({ '@type': 'UnknownClass' })
-      expect(r.body['api:status']).to.equal('api:failure')
+  // The check surface lives behind `check=true` on the document
+  // endpoint — a dry run reports a verdict without writing.
+  describe('check=true dry run', function () {
+    let className
+
+    before(async function () {
+      className = util.randomString()
+      await document.insert(agent, {
+        schema: {
+          '@id': className,
+          '@type': 'Class',
+          '@key': { '@type': 'Lexical', '@fields': ['name'] },
+          name: 'xsd:string',
+        },
+      })
+    })
+
+    it('reports an invalid document without committing it', async function () {
+      const path = `/api/document/admin/${agent.dbName}?check=true&author=a&message=m`
+      const r = await agent.post(path).send({ '@type': className })
+      expect(r.body['api:valid']).to.equal(false)
+      expect(r.body['api:witnesses']).to.not.be.empty
+    })
+
+    it('reports a valid document with generated ids', async function () {
+      const path = `/api/document/admin/${agent.dbName}?check=true&author=a&message=m`
+      const r = await agent.post(path).send({ '@type': className, name: 'Checked' })
+      expect(r.body['api:valid']).to.equal(true)
+      expect(r.body['api:extra'].ids).to.have.lengthOf(1)
+      expect(r.body['api:extra'].ids[0]).to.contain(`${className}/`)
+    })
+
+    it('leaves the data untouched', async function () {
+      const r = await agent.get(`/api/document/admin/${agent.dbName}?type=${className}&as_list=true`)
+      expect(r.body).to.be.an('array').that.is.empty
+    })
+
+    it('reports a valid delete without committing it', async function () {
+      const inserted = await document.insert(agent, {
+        instance: { '@type': className, name: 'ToDelete' },
+      })
+      const id = inserted.body[0]
+      const path = `/api/document/admin/${agent.dbName}?check=true&author=a&message=m&id=${id}`
+      const r = await agent.delete(path)
+      expect(r.body['api:valid']).to.equal(true)
+      const found = await agent.get(
+        `/api/document/admin/${agent.dbName}?id=${id}`)
+      expect(found.status).to.equal(200)
     })
   })
 })
