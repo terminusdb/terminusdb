@@ -1171,10 +1171,12 @@ check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
                            'api:valid':false,
                            'api:witnesses':Witnesses,
                            'api:embedding':Embedding})
-        ;   Result = _{'@type':'api:CheckResponse',
+        ;   check_no_embedding(Embedding),
+            Result = _{'@type':'api:CheckResponse',
                        'api:valid':false,
                        'api:witnesses':[],
-                       'api:error':_{'api:message':'check body failed'}}),
+                       'api:error':_{'api:message':'check body failed'},
+                       'api:embedding':Embedding}),
         Error,
         check_error_result(Error, Result)).
 
@@ -4307,6 +4309,22 @@ test(check_embedding_report_no_backend,
     Embedding = Result.'api:embedding',
     get_dict('api:will_embed', Embedding, false),
     once(sub_string(Embedding.get('api:reason'), _, _, _, "indexer")).
+
+test(check_body_failure_still_reports_embedding_block,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb5))),
+      cleanup(teardown_temp_store(State))]) :-
+    % A body that fails outright (rather than throwing a schema error)
+    % must still carry api:embedding — callers read api:will_embed
+    % unconditionally on every verdict
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb5", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, _Extra]>>fail, [], options{}, Result),
+    get_dict('api:valid', Result, false),
+    get_dict('api:embedding', Result, Embedding),
+    get_dict('api:will_embed', Embedding, false).
 
 test(check_bad_path_throws,
      [setup(setup_temp_store(State)),
