@@ -32,6 +32,7 @@
 :- use_module(config(terminus_config), [terminusdb_version/1,
                                         indexer_backend/1,
                                         builtin_plugin_path/1]).
+:- use_module(library(debug)).
 :- use_module(library(http/http_json), [reply_json/2]).
 :- use_module(library(readutil), [read_line_to_string/2,
                                  read_file_to_string/3]).
@@ -141,7 +142,8 @@ dispatch_one(Auth, System_DB, Request, Transport, Response) :-
         % the stdio loop, so errors are logged and swallowed
         catch(once(handle_method(Auth, System_DB, Request, Transport, _Ignored)),
               NError,
-              debug(mcp, 'MCP notification error: ~w', [NError])),
+              (   nonvar(NError),
+                  debug(mcp, 'MCP notification error: ~w', [NError]))),
         Response = none
     ;   get_dict(jsonrpc, Request, "2.0")
     ->  (   catch(once(handle_method(Auth, System_DB, Request, Transport, Result)),
