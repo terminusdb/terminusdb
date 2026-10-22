@@ -9,7 +9,7 @@ You are the test agent. You will exercise the `terminusdb` MCP server as a real 
 1. `tools/list` — note the tool names.
 2. `admin` `{"action":"docs"}` — the onboarding material; skim it once. It doubles as your schema-writing reference: in Phase 1 you write your own tracking schema from the vocabulary it documents (class docs, `@key`, `@shared`, family wrappers, embedding metadata).
 3. `admin` `{"action":"info"}` — note the edition/version and whether an indexer backend is configured and available.
-4. `admin` `{"action":"list_databases"}` — pick your test database name `uat_<something-unique>`; it must not already exist.
+4. `admin` `{"action":"list_databases"}` — pick your test database name `uat_<YYYYMMDDHHMM>` from the run's start time; it must not already exist (re-run within the same minute → append a counter).
 
 Then go straight to Phase 1.
 
@@ -17,7 +17,7 @@ Then go straight to Phase 1.
 
 1. Use only the MCP tool surface. No shell, no filesystem access to the store, no reading the server's source code or documentation outside what the MCP itself exposes. If the server can't teach you something through `tools/list`, tool schemas, `admin` action `docs`, or error messages, that is a finding — record it and move on.
 2. Consulting the onboarding material the server exposes (`admin` action `docs`) is expected — a few goals are easier with it. Note in the report whenever you had to resort to it; it means the tool's own description wasn't enough.
-3. Invent one database name for the whole run, e.g. `uat_<something-unique>`. Do not create, modify, or delete anything outside your test databases. One goal (export/import) needs a second database name — derive it from the first (e.g. `<name>_import`) and clean it up too.
+3. One database name for the whole run, derived from the run's start time: `uat_<YYYYMMDDHHMM>` — predictable and unique; append a counter only on a same-minute collision. Do not create, modify, or delete anything outside your test databases. One goal (export/import) needs a second database name — derive it from the first (`<name>_import`). Leave both in place when the run finishes: the artifacts are the evidence — a later reviewer should be able to open the database and see the tasks, notes and friction fields exactly as you left them.
 4. Choosing which tool, action, and arguments accomplish each goal is part of the test.
 5. Some goals are expected rejections — a clear, instructive refusal is the pass condition there, not a crash and not a silent wrong answer.
 6. Record every error the MOMENT it happens — write it verbatim into the task's `friction` field immediately, before you retry. Do not hold errors in memory for a later summary: your context is finite, and an error you don't write down is an error the report never sees. Friction is the signal: an error that teaches you the fix is a pass; an error that dead-ends you is a finding.
@@ -35,7 +35,7 @@ Phase 1 ends when `UatPlan/main` reads back with every step. Do not start execut
 
 **1.1 Create the database** — `admin` action `create_database` on your chosen name. (This is also goal B1 — the task is already done when you tick it.)
 
-**1.2 Bootstrap the schema** — one schema `write` defining three classes:
+**1.2 Bootstrap the schema** — schema `write`s defining three classes; `indexing` is a per-write argument, so each class needing its own embedding template goes in its own write (UatTask and UatPlan differ — two indexed writes plus UatSample):
 
 - `UatTask` — `"@shared":[]` marks the class *shared*: each task is an independent document addressable by its own id, which is exactly what `UatPlan.steps` references and what `query.search`/tick-off updates need — without it the list would demand inline subdocuments. (The value is an empty list, not `true` — `true` is rejected.) `@key` `{"@type":"Lexical","@fields":["name"]}`, properties `name`, `title`, `status`, `notes`, `friction`, all `xsd:string` (`notes` = evidence, `friction` = verbatim errors and what the experience was like — they answer different report sections). Pass `indexing:{"query":"query($id: ID){ UatTask(id: $id) { name title status notes } }","template":"- **{{name}} {{title}}** — {{status}}. {{notes}}"}` on the same write — the stored render is used twice: it is the text semantic search indexes, and `format:"embedding"` returns it as a markdown fragment.
 - `UatPlan` — `@key` `{"@type":"Lexical","@fields":["name"]}`, `name` `xsd:string`, `steps` `{"@type":"List","@class":"UatTask"}`. Pass `indexing:{"query":"query($id: ID){ UatPlan(id: $id) { name steps { name title status notes } } }","template":"# UAT status\n{{#each steps}}- **{{name}} {{title}}** — {{status}}. {{notes}}\n{{/each}}"}` — rendering this single document produces the whole status page.
@@ -52,7 +52,7 @@ The loop, repeated until no `todo` remains:
 1. **Locate.** Read `UatPlan/main` for the ordered step ids and read the next task whose `status` is `todo` — or locate it by meaning with `query.search`. You only need the step identifier; the database holds the rest. If your context is wiped mid-run, resume here.
 2. **Load.** Read that task's section below — only that section. The `title`/`notes` in the task doc plus the goal text tell you exactly what to do and what counts as proof.
 3. **Execute.** Do the goal.
-4. **Tick.** Cheaply — a `SwapValue` patch changes one field without resending the whole document: `write` `{"action":"patch","resource":"<db>","patch":[{"@id":"UatTask/<id>","status":{"@op":"SwapValue","@before":"todo","@after":"pass"},"notes":{"@op":"SwapValue","@before":"","@after":"<evidence>"}}],"commit_info":{…}}` — add a `friction` SwapValue alongside when there was friction. If you hit an error mid-goal, patch `friction` right then, before retrying — don't wait for the tick. (`@before` must match the current value exactly, and an empty `@before` on a field that has a value throws `empty_key` — re-read the task doc if unsure.)
+4. **Tick.** Cheaply — a patch changes one field without resending the whole document: `write` `{"action":"patch","resource":"<db>","patch":[{"@id":"UatTask/<id>","status":{"@op":"SwapValue","@before":"todo","@after":"pass"},"notes":{"@op":"ForceValue","@after":"<evidence>"}}],"commit_info":{…}}` — add a `friction` op alongside when there was friction. If you hit an error mid-goal, patch `friction` right then, before retrying — don't wait for the tick. (`SwapValue` requires `@before` to match the stored value exactly — empty `""` is valid and matches an empty field; `ForceValue` needs no `@before` and is the right op for fields like `notes` and `friction` whose current value you haven't read.)
 5. Next task. Do not look ahead.
 
 ### Section A — Orientation (done in Phase 0 — tick with evidence)
@@ -114,8 +114,8 @@ The loop, repeated until no `todo` remains:
 
 ## Phase 3 — Finish
 
-- **G1** title:`delete test databases` — delete the primary database and the imported copy, satisfying the confirmation gate. Do this AFTER rendering the status page — the page is generated from live documents. Verify the listing contains neither.
-- Paste the `page` output into the report below as the goal-results evidence, then produce the report.
+- **G1** title:`retain test databases` — do NOT delete anything. List the databases, confirm both `uat_<timestamp>` and `uat_<timestamp>_import` are present, and record their names in the report — they stay behind as the auditable record of the run. (Deletion is deliberately skipped: the task documents, notes and friction fields are the evidence a reviewer inspects.)
+- Paste the `page` output into the report below as the goal-results evidence, then produce the report — including the database names a reviewer can open.
 
 ---
 

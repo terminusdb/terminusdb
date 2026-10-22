@@ -129,6 +129,9 @@ every `write` batch — it is free.
         — selectors: id | ids | type | nuke:true
     {"action":"patch","patch":[{"@id":"Person/x","name":{"@op":"SwapValue","@before":"a","@after":"b"}}]}
         — or [{"@op":"Insert","@insert":{…}}]; a list of diff ops
+        — SwapValue's @before must equal the stored value exactly ("" is a
+          valid @before and matches an empty field); to set a field without
+          checking the old value: {"@op":"ForceValue","@after":"b"}
     {"action":"woql","query":<write-capable WOQL AST>}
         — InsertDocument takes the document as a Value/DictionaryTemplate:
         {"@type":"InsertDocument",
