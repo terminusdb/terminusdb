@@ -475,7 +475,7 @@ register_builtin_tools :-
     }, mcp:admin_tool),
     register_tool(write, _{
         name: "write",
-        description: "Change data or schema — one commit contract. Actions: `insert`/`update` (a document or list in `documents`; `graph_type`:\"instance\"|\"schema\" — schema writes auto-inject embedding metadata so classes become vector-searchable; opt out with `indexing`:false or override with `indexing`:{\"query\",\"template\"}), `delete` (`id`|`ids`|`type`|`nuke` selectors), `patch` (a list of diff ops in `patch` — e.g. `[{\"@id\":\"Person/x\",\"name\":{\"@op\":\"SwapValue\",\"@before\":\"a\",\"@after\":\"b\"}}]` or `[{\"@op\":\"Insert\",\"@insert\":{…}}]`), `woql` (a write-capable WOQL JSON AST in `query` — for InsertDocument the document goes in `{\"@type\":\"Value\",\"dictionary\":{\"@type\":\"DictionaryTemplate\",\"data\":[{\"@type\":\"FieldValuePair\",\"field\":\"name\",\"value\":{\"@type\":\"Value\",\"data\":\"x\"}}…]}}`; see admin action `docs` for the full shape), `graphql` (a GraphQL mutation string in `query` — `json:` takes a JSON string or a `JSON` variable; the mutation's own `_commitInfo(author,message)` field also lands in history). Every action requires `commit_info`:{\"author\",\"message\"}. Optional `expected_data_version` (\"branch:<commit>\") guards against drift — on conflict, re-read, re-check, rewrite at the new head. Dry-run any of these first with query action `check`. Returns the new data_version and the assigned document ids.",
+        description: "Change data or schema — one commit contract. Actions: `insert`/`update` (a document or list in `documents`; `graph_type`:\"instance\"|\"schema\" — schema writes auto-inject embedding metadata so classes become vector-searchable; opt out with `indexing`:false or override with `indexing`:{\"query\",\"template\"}), `delete` (`id`|`ids`|`type`|`nuke` selectors), `patch` (a list of diff ops in `patch` — e.g. `[{\"@id\":\"Person/x\",\"name\":{\"@op\":\"SwapValue\",\"@before\":\"a\",\"@after\":\"b\"}}]` or `[{\"@op\":\"Insert\",\"@insert\":{…}}]`; SwapValue's `@before` must equal the stored value exactly — `{\"@op\":\"ForceValue\",\"@after\":\"b\"}` sets the field with no `@before` check), `woql` (a write-capable WOQL JSON AST in `query` — for InsertDocument the document goes in `{\"@type\":\"Value\",\"dictionary\":{\"@type\":\"DictionaryTemplate\",\"data\":[{\"@type\":\"FieldValuePair\",\"field\":\"name\",\"value\":{\"@type\":\"Value\",\"data\":\"x\"}}…]}}`; see admin action `docs` for the full shape), `graphql` (a GraphQL mutation string in `query` — `json:` takes a JSON string or a `JSON` variable; the mutation's own `_commitInfo(author,message)` field also lands in history). Every action requires `commit_info`:{\"author\",\"message\"}. Optional `expected_data_version` (\"branch:<commit>\") guards against drift — on conflict, re-read, re-check, rewrite at the new head. Dry-run any of these first with query action `check`. Returns the new data_version and the assigned document ids.",
         inputSchema: _{
             type:"object",
             properties:_{
@@ -2012,7 +2012,10 @@ git_merge(Auth, System_DB, Path, Source, Commit_Info, Result) :-
     catch(
         api_patch:api_apply_squash_commit(
             System_DB, Auth, Path, Commit_Info,
-            Before, After, [conflict_incoming(true)]),
+            Before, After, [conflict_incoming(true),
+                            % both sides resolving to the same value is
+                            % convergence, not a conflict
+                            match_final_state(true)]),
         error(apply_squash_witnesses(Witnesses)),
         (   format(string(Merge_Hint),
                    'changes to the same fields conflict — decide the correct value per document (witnesses show @expected ancestor, @found yours, @incoming theirs), then `write` the resolved documents on ~w: that commit completes the merge manually (retrying `merge` re-reports the same conflict)',
@@ -3354,6 +3357,58 @@ test(git_merge_conflict_witness_names_incoming_value,
     % the hint names the merge target explicitly
     once(sub_string(R.result.structuredContent.hint, _, _, _,
                     "admin/mcpmerge3")).
+
+test(git_merge_identical_final_value_converges,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, mcpmerge4))),
+      cleanup(teardown_temp_store(State))]) :-
+    superuser(Auth),
+    open_descriptor(system_descriptor{}, System),
+    CI = _{author:"a", message:"m"},
+    tool_call("write",
+              _{action:"insert", resource:"admin/mcpmerge4",
+                commit_info:CI,
+                documents:_{'@type':"City", name:"Shared"}},
+              97, Req0),
+    dispatch(Auth, System, Req0, http, R0),
+    get_dict(ids, R0.result.structuredContent, [Doc_Id|_]),
+    tool_call("git",
+              _{action:"create_branch",
+                resource:"admin/mcpmerge4/local/branch/feature"},
+              98, ReqB),
+    dispatch(Auth, System, ReqB, http, _),
+    % both sides resolve the same field to the SAME value — semantically
+    % converged, so the merge must commit rather than report Conflict
+    tool_call("write",
+              _{action:"patch",
+                resource:"admin/mcpmerge4/local/branch/feature",
+                commit_info:CI,
+                patch:[_{'@id':Doc_Id,
+                         name:_{'@op':"SwapValue",
+                                '@before':"Shared",
+                                '@after':"resolved"}}]},
+              99, ReqF),
+    dispatch(Auth, System, ReqF, http, _),
+    tool_call("write",
+              _{action:"patch", resource:"admin/mcpmerge4",
+                commit_info:CI,
+                patch:[_{'@id':Doc_Id,
+                         name:_{'@op':"SwapValue",
+                                '@before':"Shared",
+                                '@after':"resolved"}}]},
+              100, ReqM),
+    dispatch(Auth, System, ReqM, http, _),
+    tool_call("git",
+              _{action:"merge", resource:"admin/mcpmerge4",
+                source:"admin/mcpmerge4/local/branch/feature",
+                commit_info:CI},
+              101, ReqG),
+    dispatch(Auth, System, ReqG, http, R),
+    \+ get_dict(isError, R.result, true),
+    mcp_read_transaction(Auth, System, "admin/mcpmerge4", instance, _{},
+                         Transaction, _),
+    api_document:get_document(Transaction, Doc_Id, Doc),
+    get_dict(name, Doc, "resolved").
 
 test(git_merge_unrelated_histories_is_iserror,
      [setup((setup_temp_store(State),

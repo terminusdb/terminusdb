@@ -3485,6 +3485,51 @@ test(embedding_api_end_to_end, [
     % Verify the output contains the rendered template
     once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Plato.")).
 
+test(embedding_render_does_not_html_escape, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}', SchemaStream),
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _,
+                         [author("test"), graph_type(schema), message("test")]),
+    open_string('
+{ "@type": "Animal", "name": "x=y it''s \\\"quoted\\\"" }
+', InstanceStream),
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id],
+                         [author("test"), graph_type(instance), message("test")]),
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    once(sub_string(EmbeddingOutput, _, _, _, "x=y it's \"quoted\"")),
+    \+ sub_string(EmbeddingOutput, _, _, _, "&#").
+
 test(embedding_plugin_fallback_for_jsondocument, [
          setup((setup_temp_store(State),
                 create_db_with_empty_schema("admin", "testdb"))),
@@ -3577,10 +3622,13 @@ test(embedding_rejects_schema_document_without_embedding_instructions, [
                      minimized: true,
                      request: [] },
     catch(
-        (   document_stream_headers(embedding, [], no_data_version),
-            api_read_document_selector(System, Auth, "admin/testdb", instance,
-                                       Id, [], _, _, Config,
-                                       no_data_version, _, _)
+        with_output_to(
+            string(_),
+            (   document_stream_headers(embedding, [], no_data_version),
+                api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                           Id, [], _, _, Config,
+                                           no_data_version, _, _)
+            )
         ),
         error(no_embedding_queries_defined, _),
         true
