@@ -204,7 +204,7 @@ the same conflict (it is always computed against the shared ancestor).
     {"action":"delete_database","resource":"org/db",
      "confirm":"permanently delete org/db"}
     {"action":"optimize","resource":"org/db"}
-    {"action":"index_status","resource":"org/db"}      → per-branch indexing lag
+    {"action":"index_status","resource":"org/db"}      → indexer backend state (one block per resource)
     {"action":"reindex","resource":"org/db"}
     {"action":"export","resource":"org/db"}            → bundle text in `payload`
     {"action":"import","resource":"org/db","payload":"<bundle text>"}

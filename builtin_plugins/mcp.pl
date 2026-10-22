@@ -457,7 +457,7 @@ register_builtin_tools :-
     }, mcp:query_tool),
     register_tool(admin, _{
         name: "admin",
-        description: "Server and data-product lifecycle. Actions: `info` (version, auth, indexer status), `list_databases`, `create_database`, `delete_database` (irreversible — requires confirm:\"permanently delete <name>\"), `optimize`, `index_status` (per-branch indexing lag), `reindex`, `export`/`import` (bundle moves inline as `payload` — `path` for a server-local file is stdio only), `docs` (the bundled onboarding doc). Resources look like \"org/db\".",
+        description: "Server and data-product lifecycle. Actions: `info` (version, auth, indexer status), `list_databases`, `create_database`, `delete_database` (irreversible — requires confirm:\"permanently delete <name>\"), `optimize`, `index_status` (indexer backend readiness for the resource), `reindex`, `export`/`import` (one branch's history — main by default; bundle moves inline as `payload`, `path` for a server-local file is stdio only), `docs` (the bundled onboarding doc). Resources look like \"org/db\".",
         inputSchema: _{
             type:"object",
             properties:_{
