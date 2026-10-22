@@ -1081,7 +1081,7 @@ test(apply_schema_only_commit_keeps_instance,
                                             New_Commit_Uri),
                      _),
 
-    layer_uri_for_commit(Descriptor1.repository_descriptor, New_Commit_Uri, instance, _),
+    once(layer_uri_for_commit(Descriptor1.repository_descriptor, New_Commit_Uri, instance, _)),
     once(ask(Descriptor1, t(a,b,c))).
 
 :- end_tests(commit_application).
