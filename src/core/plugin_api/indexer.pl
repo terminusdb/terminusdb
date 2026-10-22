@@ -34,6 +34,14 @@ indexer_available :-
     current_predicate('$appserver':indexer_notify/4),
     current_predicate('$appserver':indexer_reindex/3).
 
+% The vectorlink plugin loads at runtime, not at qsave time; declaring
+% its predicates multifile here keeps the release build's undefined-
+% predicate check from flagging the qualified calls without pulling the
+% plugin into the saved state (same pattern as cli/main.pl's
+% mcp:run_stdio declaration).
+:- multifile vectorlink:embedding_endpoint_available/0.
+:- multifile vectorlink:embedding_tokenizer_available/1.
+
 %% indexer_endpoint_available is semidet.
 %
 %  An OpenAI-compatible embedding endpoint answers (probed at most once
