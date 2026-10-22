@@ -13,6 +13,8 @@
               readiness_timeout/1
           ]).
 
+:- use_module(library(lists)).
+:- use_module(library(memfile)).
 :- use_module(core(plugins)).
 :- use_module(core(util/json_log)).
 
