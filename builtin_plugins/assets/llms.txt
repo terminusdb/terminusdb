@@ -140,6 +140,10 @@ every `write` batch — it is free.
                    {"@type":"FieldValuePair","field":"@id","value":{"@type":"Value","node":"City/Lisbon"}},
                    {"@type":"FieldValuePair","field":"name","value":{"@type":"Value","data":"Lisbon"}}]}},
          "identifier":{"@type":"NodeValue","variable":"id"}}
+        — the response's `ids` lists every document the commit actually
+          changed (parent→head document diff) — generated ids and changes
+          made by raw triple writes are covered too, not just AST-declared
+          identifier nodes
     {"action":"graphql","query":"mutation($i:JSON!){_insertDocuments(json:$i)}",
      "variables":{"i":[{doc…}]},"commit_info":{...}}
         — json: takes a JSON variable or JSON string, not an inline object
