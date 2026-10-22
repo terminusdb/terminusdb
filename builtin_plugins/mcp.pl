@@ -475,7 +475,7 @@ register_builtin_tools :-
     }, mcp:admin_tool),
     register_tool(write, _{
         name: "write",
-        description: "Change data or schema — one commit contract. Actions: `insert`/`update` (a document or list in `documents`; `graph_type`:\"instance\"|\"schema\" — schema writes auto-inject embedding metadata so classes become vector-searchable; opt out with `indexing`:false or override with `indexing`:{\"query\",\"template\"}), `delete` (`id`|`ids`|`type`|`nuke` selectors), `patch` (a list of diff ops in `patch` — e.g. `[{\"@id\":\"Person/x\",\"name\":{\"@op\":\"SwapValue\",\"@before\":\"a\",\"@after\":\"b\"}}]` or `[{\"@op\":\"Insert\",\"@insert\":{…}}]`; SwapValue's `@before` must equal the stored value exactly — `{\"@op\":\"ForceValue\",\"@after\":\"b\"}` sets the field with no `@before` check), `woql` (a write-capable WOQL JSON AST in `query` — for InsertDocument the document goes in `{\"@type\":\"Value\",\"dictionary\":{\"@type\":\"DictionaryTemplate\",\"data\":[{\"@type\":\"FieldValuePair\",\"field\":\"name\",\"value\":{\"@type\":\"Value\",\"data\":\"x\"}}…]}}`; see admin action `docs` for the full shape), `graphql` (a GraphQL mutation string in `query` — `json:` takes a JSON string or a `JSON` variable; the mutation's own `_commitInfo(author,message)` field also lands in history). Every action requires `commit_info`:{\"author\",\"message\"}. Optional `expected_data_version` (\"branch:<commit>\") guards against drift — on conflict, re-read, re-check, rewrite at the new head. Dry-run any of these first with query action `check`. Returns the new data_version and the assigned document ids.",
+        description: "Change data or schema — one commit contract. Actions: `insert`/`update` (a document or list in `documents`; `graph_type`:\"instance\"|\"schema\" — schema writes auto-inject embedding metadata so classes become vector-searchable; opt out with `indexing`:false or override with `indexing`:{\"query\",\"template\"}), `delete` (`id`|`ids`|`type`|`nuke` selectors), `patch` (a list of diff ops in `patch` — e.g. `[{\"@id\":\"Person/x\",\"name\":{\"@op\":\"SwapValue\",\"@before\":\"a\",\"@after\":\"b\"}}]` or `[{\"@op\":\"Insert\",\"@insert\":{…}}]`; SwapValue's `@before` must equal the stored value exactly — `{\"@op\":\"ForceValue\",\"@after\":\"b\"}` sets the field with no `@before` check), `woql` (a write-capable WOQL JSON AST in `query` — for InsertDocument the document goes in `{\"@type\":\"Value\",\"dictionary\":{\"@type\":\"DictionaryTemplate\",\"data\":[{\"@type\":\"FieldValuePair\",\"field\":\"name\",\"value\":{\"@type\":\"Value\",\"data\":\"x\"}}…]}}`; see admin action `docs` for the full shape), `graphql` (a GraphQL mutation string in `query` — `json:` takes a JSON string or a `JSON` variable; the mutation's own `_commitInfo(author,message)` field also lands in history). Every action requires `commit_info`:{\"author\",\"message\"}. Optional `expected_data_version` (\"branch:<commit>\") guards against drift — on conflict, re-read, re-check, rewrite at the new head. Dry-run any of these first with query action `check`. Returns the new data_version and the documents the commit changed — for `woql`, `ids` is the parent→head document diff, so generated ids and raw triple writes are covered too.",
         inputSchema: _{
             type:"object",
             properties:_{
@@ -1645,9 +1645,17 @@ write_action(Auth, System_DB, "woql", Path, _Graph_Type, Requested,
     woql_query_json(System_DB, Auth, some(Path), json_query(Query),
                     _Context, New_DV, _Meta, Bindings, Options),
     serialize_data_version(New_DV, Data_Version),
+    % Mutations are frozen until commit, so bindings can't name what was
+    % created — the parent→head document diff is the ground truth for
+    % what changed, covering generated ids and triple writes too
+    (   woql_changed_ids(System_DB, Auth, Path, New_DV, Changed_Ids)
+    ->  true
+    ;   Changed_Ids = []),
     Result = _{'_text':"woql write committed",
                data_version:Data_Version,
+               ids:Changed_Ids,
                result:Bindings}.
+
 write_action(Auth, System_DB, "graphql", Path, _Graph_Type, Requested,
              _Author, _Message, _CI, Args, Result) :-
     !,
@@ -1672,6 +1680,34 @@ write_action(_Auth, _System_DB, Action, _Path, _Graph_Type, _Requested,
     format(string(Hint),
            'write action "~w" unknown. Actions: insert, update, delete, patch, woql, graphql.', [Action]),
     throw(mcp_tool_error(unsupported_action(write, Action), Hint)).
+
+%% woql_changed_ids(+System_DB, +Auth, +Path, +Data_Version, -Ids) is semidet.
+%
+%  The documents the write's commit actually changed — diff the parent
+%  head against the new head and collect each diff's @id. Fails when the
+%  new head has no parent (initial commit).
+woql_changed_ids(System_DB, Auth, Path, data_version(_, New_Id), Ids) :-
+    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Branch_Desc),
+    create_context(Branch_Desc.repository_descriptor, Repo_Ctx),
+    ref_entity:commit_id_to_parent_uri(Repo_Ctx, New_Id, Parent_Uri),
+    ref_entity:commit_id_uri(Repo_Ctx, Parent_Id, Parent_Uri),
+    Options = options{start:0, count:inf,
+                      keep:_{'@id':true, '_id':true},
+                      unfold:true},
+    api_patch:api_diff_all_documents(System_DB, Auth, Path,
+                                     Parent_Id, New_Id, Diffs, Options),
+    findall(Id, (member(Diff, Diffs), diff_document_id(Diff, Id)), Ids).
+
+diff_document_id(Diff, Id) :-
+    get_dict('@id', Diff, Id).
+diff_document_id(Diff, Id) :-
+    (   get_dict('@insert', Diff, Doc)
+    ;   get_dict('@delete', Diff, Doc)
+    ),
+    (   is_dict(Doc)
+    ->  get_dict('@id', Doc, Id)
+    ;   Id = Doc
+    ).
 
 %% mcp_assert_head(+Path, +Requested) is det.
 %
@@ -2721,6 +2757,68 @@ test(query_woql_delta_read_ops_are_not_writes,
     ->  \+ sub_string(R.result.structuredContent.error, _, _, _,
                       "read_only_woql")
     ;   true).
+
+test(write_woql_insert_reports_document_id,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, mcpwoqlid))),
+      cleanup(teardown_temp_store(State))]) :-
+    % The identifier variable binds too late to reach result.bindings —
+    % the response must surface the id the AST itself declares (@id in
+    % the dictionary template) so the write can report what it created
+    superuser(Auth),
+    open_descriptor(system_descriptor{}, System),
+    Query = _{'@type':"InsertDocument",
+              document:_{'@type':"Value",
+                         dictionary:_{'@type':"DictionaryTemplate",
+                                      data:[_{'@type':"FieldValuePair",
+                                              field:"@id",
+                                              value:_{'@type':"Value",node:"City/Ids"}},
+                                            _{'@type':"FieldValuePair",
+                                              field:"@type",
+                                              value:_{'@type':"Value",data:"City"}},
+                                            _{'@type':"FieldValuePair",
+                                              field:"name",
+                                              value:_{'@type':"Value",data:"Ids"}}]}},
+              identifier:_{'@type':"NodeValue", variable:"id"}},
+    tool_call("write",
+              _{action:"woql", resource:"admin/mcpwoqlid",
+                commit_info:_{author:"a", message:"m"},
+                query:Query},
+              45, Req),
+    dispatch(Auth, System, Req, http, R),
+    \+ get_dict(isError, R.result, true),
+    get_dict(ids, R.result.structuredContent, ['City/Ids']).
+
+test(write_woql_triple_change_reports_document_id,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, mcpwoqlt))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Triple writes declare no document — the changed document must still
+    % surface through the commit diff
+    superuser(Auth),
+    open_descriptor(system_descriptor{}, System),
+    tool_call("write",
+              _{action:"insert", resource:"admin/mcpwoqlt",
+                commit_info:_{author:"a", message:"seed"},
+                documents:[_{'@type':"Person", name:"TP", address:"a"}]},
+              46, Req0),
+    dispatch(Auth, System, Req0, http, R0),
+    \+ get_dict(isError, R0.result, true),
+    [Doc_Id] = R0.result.structuredContent.ids,
+    Query = _{'@type':"AddTriple",
+              subject:_{'@type':"NodeValue", node:Doc_Id},
+              predicate:_{'@type':"NodeValue", node:"parent"},
+              object:_{'@type':"NodeValue", node:Doc_Id}},
+    tool_call("write",
+              _{action:"woql", resource:"admin/mcpwoqlt",
+                commit_info:_{author:"a", message:"m"},
+                query:Query},
+              47, Req),
+    dispatch(Auth, System, Req, http, R),
+    \+ get_dict(isError, R.result, true),
+    get_dict(ids, R.result.structuredContent, Ids),
+    (   atom(Doc_Id) -> atom_string(Doc_Id, Doc_Str) ; Doc_Str = Doc_Id),
+    once(member(Doc_Str, Ids)).
 
 test(query_check_valid_insert_is_data_not_error,
      [setup((setup_temp_store(State),
