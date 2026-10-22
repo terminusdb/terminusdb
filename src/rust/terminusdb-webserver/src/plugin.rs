@@ -51,6 +51,18 @@ predicates! {
             })
     }
 
+    /// Shut down the request-dispatcher thread and destroy its Prolog
+    /// engine (aliased `tdb_http`).
+    ///
+    /// Signature: `appserver_shutdown`. Called from an at_halt hook so
+    /// the engine does not outlive SWI-Prolog's thread shutdown sweep.
+    /// Succeeds even when the dispatcher was never started.
+    #[module("$appserver")]
+    pub semidet fn appserver_shutdown(_context) {
+        crate::dispatch::shutdown_dispatcher();
+        Ok(())
+    }
+
     /// Send a chunk to an active streaming response.
     ///
     /// Signature: `appserver_stream_send(+StreamId, +Data)` where StreamId
@@ -534,6 +546,7 @@ predicates! {
 
 pub fn register() {
     register_appserver_start();
+    register_appserver_shutdown();
     register_appserver_stream_send();
     register_appserver_stream_send_raw();
     register_appserver_stream_send_batch();

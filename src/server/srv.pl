@@ -15,3 +15,9 @@ start_server(Port) :-
     appserver_hooks:normalize_static_paths,
     root_redirect_target(RedirectTarget),
     '$appserver':appserver_start(Port, RedirectTarget).
+
+% Destroy the request-dispatcher Prolog engine (tdb_http) at halt so it
+% does not linger into SWI-Prolog's thread shutdown sweep. Registered
+% unconditionally: appserver_shutdown succeeds when the dispatcher was
+% never started.
+:- at_halt(catch('$appserver':appserver_shutdown, _, true)).
