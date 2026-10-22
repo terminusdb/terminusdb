@@ -2238,7 +2238,7 @@ sample_plugin_tool(_Auth, _System_DB, Args,
 % Tests
 % ==========================================================================
 
-:- begin_tests(mcp, []).
+:- begin_tests(mcp, [serial(true)]).
 
 superuser(Auth) :- super_user_authority(Auth).
 
@@ -2340,7 +2340,14 @@ test(dispatch_notification_with_unknown_method_is_swallowed) :-
     dispatch(Auth, _, _{jsonrpc:"2.0", method:"bogus"}, http, R),
     R = none.
 
-test(admin_info_returns_payload) :-
+test(admin_info_returns_payload,
+     [setup((setup_temp_store(State),
+             config:set_memory_mode)),
+      cleanup((config:retractall(memory_mode_enabled),
+               teardown_temp_store(State)))]) :-
+    % info reads the storage version from db_path when not in memory
+    % mode — a bare CI runner has no initialised store, so run in memory
+    % mode like the api_info tests do
     superuser(Auth),
     open_descriptor(system_descriptor{}, System_DB),
     req("tools/call", _{name:"admin", arguments:_{action:"info"}}, 12, Req),
