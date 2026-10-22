@@ -707,7 +707,7 @@ org_db_path(Path, Org, DB) :-
 indexer_status_report(_Auth, _System_DB, _Path, none, Report) :-
     !,
     Report = _{backend:"none", ready:false,
-               reason:"indexer backend is none — no documents are embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)"}.
+               reason:"indexer backend is none — no documents are embedded; it is auto-selected at startup when an OpenAI-compatible endpoint such as Ollama answers on localhost:11434 (VECTORLINK_EMBED_URL to point elsewhere), or set TERMINUSDB_INDEXER_BACKEND=vectorlink and restart"}.
 indexer_status_report(Auth, System_DB, Path, Backend, Report) :-
     (   catch(vectorlink:vectorlink_endpoint(Endpoint), _, fail)
     ->  Endpoint_Info = Endpoint

@@ -484,7 +484,13 @@ spawn_server_1(Path, URL, PID, Options) :-
 
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
-        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json'
+        'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json',
+        % Spawned test servers must not auto-select the embedded
+        % vectorlink engine when an Ollama endpoint happens to answer on
+        % the host — its sled embed cache lives under the shared
+        % temporary_terminus_store parent dir, so concurrent test servers
+        % would collide on the cache lock and die mid-startup.
+        'TERMINUSDB_INDEXER_BACKEND'='none'
     ],
 
     (   memberchk(env_vars(Env_List_User), Options)

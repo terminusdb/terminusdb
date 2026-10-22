@@ -4,7 +4,9 @@
     indexer_set_config/2,
     indexer_progress/3,
     indexer_abort_domain/1,
-    indexer_available/0
+    indexer_available/0,
+    indexer_endpoint_available/0,
+    indexer_tokenizer_available/1
 ]).
 
 /** <module> Indexer FFI predicate wrappers
@@ -31,6 +33,24 @@ loaded (e.g. in unit tests or when the swipl backend is used).
 indexer_available :-
     current_predicate('$appserver':indexer_notify/4),
     current_predicate('$appserver':indexer_reindex/3).
+
+%% indexer_endpoint_available is semidet.
+%
+%  An OpenAI-compatible embedding endpoint answers (probed at most once
+%  per second by the vectorlink plugin's cache). Fails when the plugin
+%  is not loaded.
+indexer_endpoint_available :-
+    current_predicate(vectorlink:embedding_endpoint_available/0),
+    vectorlink:embedding_endpoint_available.
+
+%% indexer_tokenizer_available(-Available) is det.
+%
+%  A tokenizer file the embedded engine can load is present. false when
+%  the plugin is not loaded.
+indexer_tokenizer_available(Available) :-
+    (   current_predicate(vectorlink:embedding_tokenizer_available/1)
+    ->  vectorlink:embedding_tokenizer_available(Available)
+    ;   Available = false).
 
 %% indexer_notify(+Path, +BranchName, +StoreClustering, +HasEmbeddings) is det.
 %

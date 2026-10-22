@@ -11,8 +11,13 @@
 
 % indexer_available/0 is a semidet predicate exported by plugin_api.
 % It succeeds when the Rust indexer FFI predicates are registered.
-% We use autoload instead of explicit import to avoid load-order issues.
-:- autoload(core(plugin_api), [indexer_available/0]).
+% indexer_endpoint_available/0 and indexer_tokenizer_available/1 delegate
+% to the vectorlink plugin (probe-cached at most once a second) so info
+% never hammers the endpoint. We use autoload instead of explicit
+% import to avoid load-order issues.
+:- autoload(core(plugin_api), [indexer_available/0,
+                               indexer_endpoint_available/0,
+                               indexer_tokenizer_available/1]).
 
 info(_System_DB, Auth, Info) :-
     terminusdb_version(TerminusDB_Version),
@@ -94,6 +99,12 @@ http_engine(Engine) :-
 %  - configured: true when backend is not 'none'
 %  - available: true when the Rust indexer FFI predicates are registered
 %    (i.e. the indexer runtime is loaded and operational)
+%  - endpoint_available: an OpenAI-compatible endpoint answered the last
+%    probe (cached, at most one probe per second) — what boot detection
+%    keyed on. Boot-only for now; re-probing later is a naming-compatible
+%    change.
+%  - tokenizer_available: a tokenizer file the embedded engine can load
+%    is present (env-pinned or shipped asset)
 indexer_info(Info) :-
     (   catch(indexer_backend(Backend), _, Backend = none)
     ->  true
@@ -108,10 +119,17 @@ indexer_info(Info) :-
     ->  Available = true
     ;   Available = false
     ),
+    (   catch(indexer_endpoint_available, _, fail)
+    ->  Endpoint_Available = true
+    ;   Endpoint_Available = false
+    ),
+    catch(indexer_tokenizer_available(Tokenizer_Available), _, false),
     Info = _{
         backend: Backend,
         configured: Configured,
-        available: Available
+        available: Available,
+        endpoint_available: Endpoint_Available,
+        tokenizer_available: Tokenizer_Available
     }.
 
 %% is_anonymous_authority(+Auth) is semidet.
@@ -123,7 +141,7 @@ indexer_info(Info) :-
 is_anonymous_authority('terminusdb://system/data/User/anonymous') :- !.
 is_anonymous_authority(doc:anonymous) :- !.
 
-:- begin_tests(api_info, []).
+:- begin_tests(api_info, [serial(true)]).
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple/constants), [super_user_authority/1]).
 :- use_module(config(terminus_config), [set_memory_mode/0,
@@ -184,6 +202,13 @@ test(indexer_info_produces_dict) :-
     get_dict(backend, Info, _),
     get_dict(configured, Info, _),
     get_dict(available, Info, _).
+
+% Detection feedback: the info block names what the boot probe saw, so
+% an agent can tell an unreachable endpoint from a missing tokenizer.
+test(indexer_info_reports_endpoint_and_tokenizer) :-
+    indexer_info(Info),
+    get_dict(endpoint_available, Info, _),
+    get_dict(tokenizer_available, Info, _).
 
 % indexer_info/1 reports configured=false when backend is none.
 test(indexer_info_none_backend_not_configured,

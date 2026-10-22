@@ -35,6 +35,9 @@
 % Declaring it multifile here keeps qsave's undefined-predicate check from
 % flagging the qualified call, without pulling the plugin into the state.
 :- multifile mcp:run_stdio/1.
+% Likewise the indexer boot detection — picks the embedded vectorlink
+% backend when an OpenAI-compatible endpoint answers at startup.
+:- multifile vectorlink:auto_configure_indexer/0.
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -145,7 +148,7 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            default('_'),
            help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
 opt_spec(mcp,'terminusdb mcp OPTIONS',
-         'Run an MCP (Model Context Protocol) server on stdin/stdout against the local store. No port is opened. Connect a client such as Claude Code with `claude mcp add terminusdb -- terminusdb mcp`. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer, default none — set vectorlink to enable semantic indexing; it requires a running Ollama with the embedding model, see https://ollama.com/download), TERMINUSDB_MEMORY_PASSWORD (run in-memory without a persistent store, with the value as admin password — empty means \'root\').',
+         'Run an MCP (Model Context Protocol) server on stdin/stdout against the local store. No port is opened. Connect a client such as Claude Code with `claude mcp add terminusdb -- terminusdb mcp`. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer — the embedded vectorlink backend is selected automatically at startup when an OpenAI-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink|http_vectorlink|none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in-memory without a persistent store, with the value as admin password — empty means \'root\').',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -1681,10 +1684,10 @@ apply_mcp_env_defaults :-
         (   getenv('VECTORLINK_DATA_DIR', _)
         ->  true
         ;   expand_file_name('~/.terminusdb/vectorlink', [VL_Dir]),
-            setenv('VECTORLINK_DATA_DIR', VL_Dir))),
-    (   getenv('TERMINUSDB_INDEXER_BACKEND', _)
-    ->  true
-    ;   setenv('TERMINUSDB_INDEXER_BACKEND', 'none')).
+            setenv('VECTORLINK_DATA_DIR', VL_Dir))).
+    % TERMINUSDB_INDEXER_BACKEND stays unset when the user hasn't chosen
+    % — auto_configure_indexer probes for a live endpoint after plugins
+    % load and selects the embedded backend when one answers.
 
 % Commands
 run_command(help,_Positional,Opts) :-
@@ -1700,6 +1703,7 @@ run_command(serve,_Positional,Opts) :-
     api_report_errors(
         server,
         (   load_plugins,
+            vectorlink:auto_configure_indexer,
             option(interactive(true), Opts)
         ->  terminus_server([serve|Opts], false),
             prolog
@@ -1726,6 +1730,7 @@ run_command(mcp,_Positional,Opts) :-
                 initialize_database(root, false),
                 format(user_error, 'Initialized new store at ~w~n', [DB_Path])),
             load_plugins,
+            vectorlink:auto_configure_indexer,
             opt_authority(Opts, Auth),
             mcp:run_stdio(Auth))
     ).

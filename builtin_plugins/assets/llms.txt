@@ -28,9 +28,11 @@ Client registration:
 
     TERMINUSDB_SERVER_DB_PATH    store location — default ~/.terminusdb,
                                  auto-initialized on first run
-    TERMINUSDB_INDEXER_BACKEND   semantic indexer — `vectorlink` enables the
-                                 embedded engine; default `none` disables
-                                 search (no webserver needed — works on stdio)
+    TERMINUSDB_INDEXER_BACKEND   semantic indexer — auto-selected at
+                                 startup when an OpenAI-compatible endpoint
+                                 (e.g. Ollama on localhost:11434) answers;
+                                 set `vectorlink` to force, `none` to
+                                 disable. No webserver needed — works on stdio
     TERMINUSDB_MEMORY_PASSWORD   set to run an ephemeral in-memory store;
                                  the value is the admin password (empty → root)
 
@@ -249,7 +251,11 @@ it is a prerequisite, not an optional extra:
     ollama pull hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0
     ollama cp hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0 multilingual-e5-base
 
-Set `TERMINUSDB_INDEXER_BACKEND=vectorlink` before launching `terminusdb mcp` —
+With Ollama running, no env is needed — the server probes
+localhost:11434 at startup and selects the embedded engine itself
+(`admin.info` reports `indexer.endpoint_available` and
+`indexer.tokenizer_available`; boot-time detection, so start Ollama
+first). To force it, set `TERMINUSDB_INDEXER_BACKEND=vectorlink` —
 the embedded engine runs in-process (no webserver, no separate endpoint).
 Schema writes auto-inject embedding metadata; `query.check` reports
 `api:will_embed` before you commit. If a class lacks embedding metadata,
