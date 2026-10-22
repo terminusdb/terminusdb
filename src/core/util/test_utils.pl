@@ -92,6 +92,7 @@
 :- use_module(library(filesex)).
 
 :- use_module(library(debug)).
+:- use_module(library(time), [call_with_time_limit/2]).
 :- use_module(library(memfile)).
 :- use_module(library(process)).
 :- use_module(library(plunit)).
