@@ -447,6 +447,12 @@ inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
 read_line_until_start_line(Error) :-
     read_line_until_start_line(Error, []).
 
+% A dead child (EOF before the banner) or an over-30s stall both mean
+% the spawn failed on this port — retry with a different one.
+spawn_failure(error(server_has_no_output(_Stderr_Lines), _)).
+spawn_failure(time_limit_exceeded).
+spawn_failure(error(time_limit_exceeded, _)).
+
 read_line_until_start_line(Error, Collected) :-
     read_line_to_string(Error, Line),
     (   Line = end_of_file
@@ -529,11 +535,16 @@ spawn_server_1(Path, URL, PID, Options) :-
     sleep(0.5),
     % Catch server startup failures and retry with a different port.
     % Previously, server_has_no_output threw past the between/3 retry.
-    catch(read_line_until_start_line(Error),
-          error(server_has_no_output(_Stderr_Lines), _),
-          (   catch(process_kill(PID, 9), _, true),
+    % The wait is bounded: a child that lives but never prints its banner
+    % (e.g. a slow blocking fetch at boot) must not hang the suite —
+    % kill it and let the between/3 port retry try again.
+    catch(call_with_time_limit(30, read_line_until_start_line(Error)),
+          Catchable,
+          (   spawn_failure(Catchable)
+          ->  catch(process_kill(PID, 9), _, true),
               catch(process_wait(PID, _), _, true),
-              fail)),
+              fail
+          ;   throw(Catchable))),
 
     ignore(memberchk(error(Error), Options)),
     ignore(memberchk(input(Input), Options)),
