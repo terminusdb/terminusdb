@@ -850,8 +850,9 @@ schema_action(Auth, System_DB, "summary", Path, _Args, Result) :-
     mcp_doc_config(_{}, Config),
     findall(_, api_document:api_generate_document_ids(
                    instance, Transaction, Config, _), Instance_Ids),
-    findall(_, api_document:api_generate_document_ids(
-                   schema, Transaction, Config, _), Schema_Ids),
+    findall(_, (api_document:api_generate_document_ids(
+                    schema, Transaction, Config, Schema_Id),
+                Schema_Id \== '@context'), Schema_Ids),
     findall(Name, schema_class_name(Transaction, Name), Classes0),
     sort(Classes0, Classes),
     length(Instance_Ids, Doc_Count),
@@ -2372,6 +2373,19 @@ test(schema_summary_counts_and_classes,
     once(member('City', Content.classes)),
     Content.documents =:= 0,
     once(sub_string(Content.data_version, 0, _, _, "branch:")).
+
+test(schema_summary_excludes_context_doc_from_elements,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin, mcpschemectx))),
+      cleanup(teardown_temp_store(State))]) :-
+    % an empty schema holds only the @context doc — counting it as a
+    % schema element tells the agent a schema exists when none does
+    superuser(Auth),
+    open_descriptor(system_descriptor{}, System),
+    tool_call("schema", _{action:"summary", resource:"admin/mcpschemectx"}, 20, Req),
+    dispatch(Auth, System, Req, http, R),
+    \+ get_dict(isError, R.result, true),
+    get_dict(schema_elements, R.result.structuredContent, 0).
 
 test(schema_frame_jsonschema_for_class,
      [setup((setup_temp_store(State),
