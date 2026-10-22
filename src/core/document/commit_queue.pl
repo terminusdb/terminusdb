@@ -34,7 +34,8 @@
 
 :- use_module(config(terminus_config), [worker_amount/1]).
 :- use_module(core(util)).
-:- use_module(core(util/test_utils), [setup_temp_store/1, teardown_temp_store/1]).
+:- use_module(core(util/test_utils), [setup_temp_store/1, teardown_temp_store/1,
+                                     with_quiet_user_error/1]).
 :- use_module(core(triple), [triple_store/1, with_triple_store/2]).
 :- use_module(core(transaction/descriptor), [branch_key_from_descriptor/2]).
 :- use_module(core(triple/database_utils), [organization_database_name/3]).
@@ -1290,7 +1291,9 @@ test(worker_exit_hook_delivers_error_for_in_flight_package) :-
         request_id: req_exit
     },
     nb_setval(in_flight_package, Package),
-    cleanup_active_branches_for_worker(worker_1),
+    % The exit hook logs the undelivered package as an error — expected
+    % noise for this test.
+    with_quiet_user_error(cleanup_active_branches_for_worker(worker_1)),
     thread_get_message(ReplyQueue,
                        commit_result(error(worker_exited(worker_1)), req_exit),
                        [timeout(1)]),
@@ -1318,7 +1321,11 @@ test(thread_death_flushes_in_flight_package) :-
     },
     thread_create(
         (   thread_self(Me),
-            thread_at_exit(commit_queue:cleanup_active_branches_for_worker(Me)),
+            % The exit hook logs the undelivered package as an error —
+            % expected noise for this test; it runs in the dying thread,
+            % so the silencer wraps the hook goal itself.
+            thread_at_exit(test_utils:with_quiet_user_error(
+                               commit_queue:cleanup_active_branches_for_worker(Me))),
             nb_setval(in_flight_package, Package),
             thread_exit(dead)
         ),

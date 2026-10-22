@@ -2238,7 +2238,7 @@ sample_plugin_tool(_Auth, _System_DB, Args,
 % Tests
 % ==========================================================================
 
-:- begin_tests(mcp, [serial(true)]).
+:- begin_tests(mcp).
 
 superuser(Auth) :- super_user_authority(Auth).
 

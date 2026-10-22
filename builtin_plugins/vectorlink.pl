@@ -3002,7 +3002,7 @@ silence_user_error(Goal) :-
 % are discarded.
 % ==========================================================================
 
-:- begin_tests(vectorlink_endpoint_detection, [serial(true)]).
+:- begin_tests(vectorlink_endpoint_detection).
 
 :- dynamic probe_calls/1.
 
@@ -3102,7 +3102,7 @@ test("auto_configure respects an explicitly chosen backend",
 
 :- end_tests(vectorlink_endpoint_detection).
 
-:- begin_tests(vectorlink_indexer_backend_selector, [serial(true)]).
+:- begin_tests(vectorlink_indexer_backend_selector).
 
 test("default backend is none when unset",
      [ setup(clean_vectorlink_test_env),
@@ -3271,7 +3271,7 @@ test("vectorlink_endpoint returns the embedded marker under the embedded backend
 % Embedded-dispatch unit tests
 % ==========================================================================
 
-:- begin_tests(vectorlink_embedded_dispatch, [serial(true)]).
+:- begin_tests(vectorlink_embedded_dispatch).
 
 test("embedded_request_parts defaults to GET without a body",
      [ true((Method, Headers, Body) == (get, [], none))
@@ -3395,7 +3395,7 @@ test("embedded_header_value leaves the value unbound when the header is absent",
 % Push driver unit tests
 % ==========================================================================
 
-:- begin_tests(vectorlink_push_driver, [serial(true)]).
+:- begin_tests(vectorlink_push_driver).
 
 test("path_to_domain extracts org/db from short path",
      [true(Domain == 'admin/testdb')]) :-
@@ -3712,7 +3712,7 @@ test("io_push_delta rejects _meta path before any I/O",
 % Auto-push-on-commit hook tests
 % ==========================================================================
 
-:- begin_tests(vectorlink_auto_push_hook, [serial(true)]).
+:- begin_tests(vectorlink_auto_push_hook).
 
 test("validation_is_index_enabled succeeds for schema with embedding metadata",
      [ setup((setup_temp_store(State),
@@ -3868,7 +3868,7 @@ test("post_commit_hook returns quickly even if engine is slow",
 % Search fronting + authz parity tests
 % ==========================================================================
 
-:- begin_tests(vectorlink_search_fronting, [serial(true)]).
+:- begin_tests(vectorlink_search_fronting).
 
 test("build_search_url constructs correct URL with ancestors",
      [true(URL == 'http://engine:8080/search?domain=admin%2fdb&commit=abc123&ancestor=prev1&ancestor=prev2')]) :-
@@ -4188,7 +4188,7 @@ test("io_resolve_forward refuses when endpoint is not configured",
 % DELETE /domain trigger tests
 % ==========================================================================
 
-:- begin_tests(vectorlink_delete_domain_trigger, [serial(true)]).
+:- begin_tests(vectorlink_delete_domain_trigger).
 
 test("build_delete_domain_url constructs correct URL",
      [true(URL == 'http://engine:8080/domain?domain=admin%2fmydb')]) :-

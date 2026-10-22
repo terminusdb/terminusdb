@@ -141,7 +141,7 @@ indexer_info(Info) :-
 is_anonymous_authority('terminusdb://system/data/User/anonymous') :- !.
 is_anonymous_authority(doc:anonymous) :- !.
 
-:- begin_tests(api_info, [serial(true)]).
+:- begin_tests(api_info, []).
 :- use_module(core(util/test_utils)).
 :- use_module(core(triple/constants), [super_user_authority/1]).
 :- use_module(config(terminus_config), [set_memory_mode/0,
