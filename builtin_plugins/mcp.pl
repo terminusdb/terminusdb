@@ -495,7 +495,10 @@ register_builtin_tools :-
                 variables:_{type:"object", description:"graphql variables — mutations take document payloads here (e.g. variables:{input:{…}} with `json: $input`)"},
                 indexing:_{description:"schema writes: false opts out of auto-embedding; {\"query\",\"template\"} overrides the generated embedding query"},
                 expected_data_version:_{type:"string"}},
-            required:["action","resource","commit_info"]},
+            % commit_info deliberately absent from required — a schema-level
+            % refusal would preempt the designed missing_argument error that
+            % explains every write is a commit and points at query check
+            required:["action","resource"]},
         outputSchema:_{type:"object"},
         annotations:_{destructiveHint:true}
     }, mcp:write_tool),
