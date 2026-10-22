@@ -467,6 +467,14 @@ impl IndexerRegistry {
     /// When has_embeddings=true, clears the no_embedding cache for this domain
     /// (embeddings were just added to the schema).
     fn notify(&self, path: String, branch: String, store_clustering: bool, has_embeddings: bool) -> Result<(), String> {
+        // No engine transport installed — indexing is unconfigured, so a
+        // commit notify is a cheap no-op rather than a spawn+fail cycle.
+        if self.transport.lock().unwrap().is_none() {
+            crate::log::log_debug(format!(
+                "[indexer] notify skipped for {} — engine transport not configured", path));
+            return Ok(());
+        }
+
         let key = BranchKey { path: path.clone(), branch };
 
         // Fast path: if the caller doesn't know whether embeddings exist

@@ -141,7 +141,7 @@ dispatch_one(Auth, System_DB, Request, Transport, Response) :-
         % the stdio loop, so errors are logged and swallowed
         catch(once(handle_method(Auth, System_DB, Request, Transport, _Ignored)),
               NError,
-              format(user_error, "MCP notification error: ~w~n", [NError])),
+              debug(mcp, 'MCP notification error: ~w', [NError])),
         Response = none
     ;   get_dict(jsonrpc, Request, "2.0")
     ->  (   catch(once(handle_method(Auth, System_DB, Request, Transport, Result)),
