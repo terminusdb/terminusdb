@@ -164,3 +164,24 @@ add_dashboard_path :-
 :- add_enterprise_test_path.
 :- set_prolog_flag(terminusdb_enterprise, true).
 :- endif.
+
+:- multifile user:prolog_load_file/2.
+
+%% user:prolog_load_file(+Module:Spec, +Options) is semidet.
+%
+%  Standalone saved states embed every module loaded at build time but
+%  keep no source-file bookkeeping, so a use_module in a runtime-loaded
+%  plugin always resolves through the filesystem — where the baked
+%  build paths are dead (snap, Docker) and a relocated copy would hit
+%  "no permission to redefine module" on load. When Spec expands to the
+%  very file a module was already loaded from, skip the load and run
+%  only the import wiring, exactly as '$already_loaded' would.
+user:prolog_load_file(Context:Spec, Options) :-
+    compound(Spec),
+    functor(Spec, _, 1),
+    memberchk(if(not_loaded), Options),
+    expand_file_search_path(Spec, Path),
+    file_name_extension(Path, pl, File),
+    module_property(Module, file(File)),
+    !,
+    system:'$import_from_loaded_module'(Module, Context, Options).
