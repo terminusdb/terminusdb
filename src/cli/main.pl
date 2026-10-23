@@ -68,6 +68,14 @@ store_free_invocation(Argv) :-
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
+    % One-shot commands exit right after running — SWI's background
+    % atom-GC daemon buys nothing and can still be collecting at halt,
+    % producing "threads wouldn't die: [gc]" on stderr. Serve and mcp
+    % are long-lived and keep the daemon.
+    (   Argv = [Cmd|_],
+        memberchk(Cmd, [serve, mcp])
+    ->  true
+    ;   catch(set_prolog_flag(gc_thread, false), _, true)),
     initialise_log_settings,
     % Environment defaults for `terminusdb mcp` must land before the
     % first db_path/1 resolution anywhere — db_path is tabled, so a
