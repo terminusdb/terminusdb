@@ -3367,7 +3367,10 @@ test("post-server hook resolves the component on a detached thread",
      [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
               readiness:readiness_pending(vectorlink))),
-       cleanup(clean_vectorlink_test_env)
+       % The hook installs the embedded engine as the indexer transport;
+       % clear it so later tests' commits don't enqueue index tasks.
+       cleanup((clean_vectorlink_test_env,
+                catch(plugin_api:indexer_set_config("", ""), _, true)))
      ]) :-
     plugins:post_server_startup_hook(0),
     % Init runs detached; the component must reach a terminal state —
@@ -3510,9 +3513,11 @@ test("io_push_delta delegates to indexer_notify (push architecture)",
               setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL),
               plugin_api:indexer_set_config(Endpoint_URL, "")
              )),
-       cleanup((stop_push_stub(Port),
+       % Clearing the indexer config cancels queued tasks — do it before
+       % the stub dies so nothing is left firing at a dead endpoint.
+       cleanup((catch(plugin_api:indexer_set_config("", ""), _, true),
+                stop_push_stub(Port),
                 clean_vectorlink_test_env,
-                catch(plugin_api:indexer_set_config("", ""), _, true),
                 teardown_temp_store(State)))
      ]) :-
     super_user_authority(Auth),
