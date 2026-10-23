@@ -599,7 +599,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -1953,7 +1953,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2001,7 +2001,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4012,7 +4012,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4604,7 +4604,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03da047801ff44bb6a4d407d4860c05fd70bb81714e6b2f3812603d5b145b042"
 dependencies = [
  "heck 0.5.0",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "log",
  "multimap",
  "petgraph 0.8.3",
@@ -4636,7 +4636,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -4713,7 +4713,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5130,7 +5130,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5665,7 +5665,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "swipl"
 version = "0.3.16"
-source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
+source = "git+https://github.com/terminusdb-org/swipl-rs#2fdd55ee360afc3657aca44e3bf04ca1f48b1c50"
 dependencies = [
  "convert_case",
  "either",
@@ -5680,7 +5680,7 @@ dependencies = [
 [[package]]
 name = "swipl-fli"
 version = "0.3.6"
-source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
+source = "git+https://github.com/terminusdb-org/swipl-rs#2fdd55ee360afc3657aca44e3bf04ca1f48b1c50"
 dependencies = [
  "bindgen",
  "swipl-info",
@@ -5689,7 +5689,7 @@ dependencies = [
 [[package]]
 name = "swipl-info"
 version = "0.3.2"
-source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
+source = "git+https://github.com/terminusdb-org/swipl-rs#2fdd55ee360afc3657aca44e3bf04ca1f48b1c50"
 dependencies = [
  "regex",
 ]
@@ -5697,7 +5697,7 @@ dependencies = [
 [[package]]
 name = "swipl-macros"
 version = "0.3.8"
-source = "git+https://github.com/terminusdb-org/swipl-rs#3e57d52dcd8298fed5ece4d17b32776304f41bc8"
+source = "git+https://github.com/terminusdb-org/swipl-rs#2fdd55ee360afc3657aca44e3bf04ca1f48b1c50"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -5842,7 +5842,7 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6950,7 +6950,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
