@@ -95,6 +95,7 @@
 :- use_module(library(time), [call_with_time_limit/2]).
 :- use_module(library(memfile)).
 :- use_module(library(process)).
+:- use_module(library(socket)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
 :- use_module(library(random)).
@@ -752,15 +753,22 @@ ends_with_uuid_v7(Id) :-
 
 :- begin_tests(spawn_server_diagnostics).
 
-% A spawn on a port the child cannot bind fails on its single attempt.
+% A spawn on a port already bound by a listener fails on its single
+% attempt (deterministic even when running as root, unlike a low port).
 % The thrown error must wrap the recorded attempt failure — the child's
 % last stderr lines or a timeout — instead of a bare atom.
 test("failed spawn surfaces the attempt failure in the thrown error") :-
+    tcp_socket(Socket),
+    % The server binds 0.0.0.0 with SO_REUSEADDR, which tolerates a
+    % specific-address listener — the holder must take the wildcard too.
+    tcp_bind(Socket, '0.0.0.0':Port),
+    tcp_listen(Socket, 1),
     setup_temp_store(State-Dir),
-    catch(spawn_server(Dir, _URL, _PID, [port(1)]),
+    catch(spawn_server(Dir, _URL, _PID, [port(Port)]),
           E,
           true),
     teardown_temp_store(State-Dir),
+    tcp_close_socket(Socket),
     E = error(server_spawn_failure(server_spawn_port_in_use, Failure), _),
     assertion(Failure \= none).
 
