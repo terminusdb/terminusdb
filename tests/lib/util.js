@@ -203,8 +203,13 @@ function testDbPath () {
   // Snap/Native/in-container: absolute path on tmpfs where available, so
   // per-command fsync goes to RAM. /dev/shm is tmpfs on Linux; /tmp is not,
   // but still avoids repo checkout I/O. TERMINUSDB_TEST_TMPDIR overrides.
-  const base = process.env.TERMINUSDB_TEST_TMPDIR ||
-    (fs.existsSync('/dev/shm') ? '/dev/shm' : '/tmp')
+  // Under strict snap confinement /dev/shm exists but mkdir is AppArmor-denied
+  // and /tmp is a private namespace, so use the snap's shared common dir.
+  let base = process.env.TERMINUSDB_TEST_TMPDIR
+  if (!base && (process.env.TERMINUSDB_EXEC_PATH || '').startsWith('/snap/')) {
+    base = path.join(process.env.HOME, 'snap', 'terminusdb', 'common')
+  }
+  if (!base) base = fs.existsSync('/dev/shm') ? '/dev/shm' : '/tmp'
   return path.join(base, 'terminusdb-test', randomString())
 }
 
