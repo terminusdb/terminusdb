@@ -157,6 +157,7 @@
               convert_input_to_json_stream/4,
               document_stream_headers/3,
               document_stream_start/3,
+              document_stream_preamble/3,
               document_stream_write/4,
               document_stream_end/2,
 

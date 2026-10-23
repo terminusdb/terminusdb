@@ -39,6 +39,7 @@
               convert_input_to_json_stream/4,
               document_stream_headers/3,
               document_stream_start/3,
+              document_stream_preamble/3,
               pre_branch_commit_id/2,
               document_stream_write/4,
               document_stream_end/2,
@@ -117,6 +118,7 @@
 :- multifile convert_input_to_json_stream/4.
 :- multifile document_stream_headers/3.
 :- multifile document_stream_start/3.
+:- multifile document_stream_preamble/3.
 :- multifile document_stream_write/4.
 :- multifile document_stream_end/2.
 
@@ -1757,6 +1759,11 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
     document_stream_start(Format, ConfigWithCtx, StreamState),
 
     document_stream_headers(Format, Request, DataVersion),
+
+    % Body preamble (e.g. turtle @prefix block, rdfxml prolog) must be
+    % emitted after the CGI headers — writing it in document_stream_start
+    % would corrupt the response framing.
+    ignore(document_stream_preamble(Format, ConfigWithCtx, StreamState)),
 
     (   nonvar(Query)
     ->  die_if(Graph_Type \= instance,
