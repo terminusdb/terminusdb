@@ -9,7 +9,7 @@ debug = true
 
 [patch.crates-io]
 #tdb-succinct = {path="../../../tdb-succinct"}
-tdb-succinct = {git="https://github.com/terminusdb-org/tdb-succinct", branch="xbrl-json-iso-intervals"}
+tdb-succinct = {git="https://github.com/terminusdb-org/tdb-succinct"}
 #terminus-store = {path="../../../terminusdb-store"}
 terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store", tag="v0.21.8"}
 swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
@@ -22,4 +22,3 @@ swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 # rev, uncomment:
 #[patch."https://github.com/terminusdb-org/vectorlink"]
 #vectorlink = {path="../../../vectorlink"}
-

@@ -42,8 +42,8 @@
 :- use_module(core(query/partition)).
 :- use_module(core(query/ask)).
 
-:- use_module(library(json)).
-:- use_module(library(json_convert)).
+:- use_module(library(http/json)).
+:- use_module(library(http/json_convert)).
 :- use_module(library(solution_sequences)).
 :- use_module(library(option)).
 :- use_module(library(csv)).
@@ -8710,7 +8710,7 @@ test(interval_validate, [
 ]) :-
     Query = _{ '@type' : "Interval",
                start : _{'@type' : "DataValue",
-                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
                'end' : _{'@type' : "DataValue",
                          'data' : _{'@type': 'xsd:date', '@value': "2025-03-31"}},
                interval : _{'@type' : "DataValue",
@@ -8726,7 +8726,7 @@ test(interval_validate_mismatch, [
 ]) :-
     Query = _{ '@type' : "Interval",
                start : _{'@type' : "DataValue",
-                         'data' : _{'@type': 'xsd:dateTime', '@value': "2025-01-01T00:00:00Z"}},
+                         'data' : _{'@type': 'xsd:date', '@value': "2025-01-01"}},
                'end' : _{'@type' : "DataValue",
                          'data' : _{'@type': 'xsd:date', '@value': "2025-06-30"}},
                interval : _{'@type' : "DataValue",

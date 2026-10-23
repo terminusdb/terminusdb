@@ -117,6 +117,9 @@ function start_server() {
     export TERMINUSDB_SERVER_NAME=127.0.0.1
     export TERMINUSDB_ADMIN_PASS="$ADMIN_PASS"
     export TERMINUSDB_SERVER_DB_PATH="$STORAGE_DIR"
+    # JWT is opt-in at runtime; enable it for the test server to preserve
+    # the prior compile-in behavior so jwt.js integration tests can run.
+    export TERMINUSDB_JWT_ENABLED=${TERMINUSDB_JWT_ENABLED:-true}
     # Load the builtin plugins (always loaded — search stack, webserver
     # plugins) plus any user plugins in plugins/. auto-optimize is a builtin
     # plugin and runs by default in production, but the test server disables

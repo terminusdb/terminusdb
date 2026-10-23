@@ -460,7 +460,7 @@ read_line_until_start_line(Error, Collected) :-
     (   Line = end_of_file
     ->  reverse(Collected, Stderr_Lines),
         throw(error(server_has_no_output(Stderr_Lines), _))
-    ;   re_match("% You can view your server in a browser at ",Line)
+    ;   re_match("% Listening on ",Line)
     ->  true
     ;   read_line_until_start_line(Error, [Line|Collected])
     ).
@@ -508,7 +508,8 @@ spawn_server_1(Path, URL, PID, Options) :-
         % the host — its sled embed cache lives under the shared
         % temporary_terminus_store parent dir, so concurrent test servers
         % would collide on the cache lock and die mid-startup.
-        'TERMINUSDB_INDEXER_BACKEND'='none'
+        'TERMINUSDB_INDEXER_BACKEND'='none',
+        'TERMINUSDB_JWT_ENABLED'='true'
     ],
 
     (   memberchk(env_vars(Env_List_User), Options)

@@ -119,14 +119,42 @@ date_time_string(Date_Time,String) :-
     phrase(dateTime(Y,M,D,HH,MM,SS,NS,Offset),Codes),
     remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset, Date_Time).
 
+date_time_stamp_string(Date_Time,String) :-
+    nonvar(Date_Time),
+    !,
+    % ToDo, add appropriate time zone! Doesn't work in xsd_time_string!
+    Date_Time = date_time(Y,M,D,HH,MM,SS,NS),
+    (   NS = 0
+    ->  format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+Z',
+               [Y,M,D,HH,MM,SS])
+    ;   0 is NS mod 1 000 000
+    ->  MS is NS div 1 000 000,
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+Z',
+               [Y,M,D,HH,MM,SS,MS])
+    ;   0 is NS mod 1 000
+    ->  MuS is NS div 1 000,
+        format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~6+Z',
+               [Y,M,D,HH,MM,SS,MuS])
+    ;   format(string(String),
+               '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~9+Z',
+               [Y,M,D,HH,MM,SS,NS])
+
+    ).
+date_time_stamp_string(Date_Time,String) :-
+    % So expensive! Let's do this faster somehow.
+    nonvar(String),
+    !,
+    atom_codes(String,Codes),
+    phrase(dateTimeStamp(Y,M,D,HH,MM,SS,NS,Offset),Codes),
+    remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,Date_Time).
+
 remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_Floor,NS)) :-
-    % The XSD parser (time_offset DCG in xsd_parser.pl) stores offsets in
-    % XSD convention: positive = seconds east of Greenwich. SWI-Prolog's
-    % date_time_stamp expects seconds *west* (negative = east).  Negate
-    % at this boundary so the rest of the codebase stays XSD-conformant.
-    % swipl processing is unix style, from mktime. TerminusDB uses standards.
-    Swipl_Offset is -Offset,
-    date_time_stamp(date(Y, M, D, HH, MM, SS, Swipl_Offset, -, -), TS),
+    % time_offset//1 already emits SWI-Prolog's convention: seconds *west* of
+    % Greenwich (+02:00 parses to -7200), matching date_time_stamp arg 7.
+    date_time_stamp(date(Y, M, D, HH, MM, SS, Offset, -, -), TS),
     stamp_date_time(TS, date(Y1, M1, D1, HH1, MM1, SS1, 0, 'UTC', -), 'UTC'),
     SS_Floor is floor(SS1).
 
@@ -142,32 +170,44 @@ add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
     duration_clamp_day(Y2, M2, D, D2),
-    DayNanos is Sign * (DD * 86400 * 1000000000 + DH * 3600 * 1000000000 + DMi * 60 * 1000000000 + round(DS * 1000000000)),
+    WholeDS is floor(DS),
+    FracNS is Sign * round((DS - WholeDS) * 1000000000),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + WholeDS),
     date_time_stamp(date(Y2,M2,D2,0,0,0,0,-,-), BaseStamp),
-    BaseNanos is floor(BaseStamp * 1000000000),
-    EndNanos is BaseNanos + DayNanos,
-    EndSeconds is EndNanos // 1000000000,
-    EndNanosRem is EndNanos mod 1000000000,
-    stamp_date_time(EndSeconds, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
-    ESSF is floor(ESS1),
+    (   FracNS < 0
+    ->  Carry = -1, ENS is FracNS + 1000000000
+    ;   Carry = 0, ENS = FracNS
+    ),
+    EndStamp is BaseStamp + DaySecs + Carry,
+    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS,0,'UTC',-), 'UTC'),
+    ESSF is floor(ESS),
     (   DH =:= 0, DMi =:= 0, DS =:= 0
     ->  End = date(EY,EM,ED,O)
-    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,EndNanosRem)
+    ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS)
     ).
 add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
     duration_clamp_day(Y2, M2, D, D2),
-    DayNanos is Sign * (DD * 86400 * 1000000000 + DH * 3600 * 1000000000 + DMi * 60 * 1000000000 + round(DS * 1000000000)),
+    % Split the duration seconds: whole seconds go through the timestamp (which
+    % is float and must never carry nanoseconds), the fractional part is kept
+    % as integer nanoseconds to avoid float error (0.1s -> 99999904ns).
+    WholeDS is floor(DS),
+    FracNS is Sign * round((DS - WholeDS) * 1000000000),
+    DaySecs is Sign * (DD * 86400 + DH * 3600 + DMi * 60 + WholeDS),
     date_time_stamp(date(Y2,M2,D2,HH,MM,SS,0,-,-), BaseStamp),
-    BaseNanos is floor(BaseStamp * 1000000000) + NS,
-    EndNanos is BaseNanos + DayNanos,
-    EndSeconds is EndNanos // 1000000000,
-    EndNanosRem is EndNanos mod 1000000000,
-    stamp_date_time(EndSeconds, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
+    NS_Total is NS + FracNS,
+    (   NS_Total < 0
+    ->  Carry = -1, ENS is NS_Total + 1000000000
+    ;   NS_Total >= 1000000000
+    ->  Carry = 1, ENS is NS_Total - 1000000000
+    ;   Carry = 0, ENS = NS_Total
+    ),
+    EndStamp is BaseStamp + DaySecs + Carry,
+    stamp_date_time(EndStamp, date(EY,EM,ED,EHH,EMM,ESS1,0,'UTC',-), 'UTC'),
     ESSF is floor(ESS1),
-    End = date_time(EY,EM,ED,EHH,EMM,ESSF,EndNanosRem).
+    End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS).
 
 /*
  * subtract_duration_from_component(+Component, +Duration, -Result) is det.

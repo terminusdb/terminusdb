@@ -51,7 +51,7 @@
 :- use_module(library(terminus_store), [terminus_store_version/1]).
 
 :- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0,
-                                       set_memory_mode/0]).
+                                       log_format/1, set_memory_mode/0]).
 
 % Meta-predicate declaration must appear before any caller to satisfy xref.
 :- meta_predicate api_report_errors(?,0).
@@ -2720,7 +2720,9 @@ run_command(store,init, _, Opts) :-
     api_report_errors(
         store_init,
         initialize_database(Key,Force)),
-    format('Successfully initialised database.~n').
+    (   log_format(json)
+    ->  format('{"message": "Successfully initialised database.", "severity": "INFO"}~n', [])
+    ;   format('Successfully initialised database.~n')).
 run_command(remote,add,[Path,Remote_Name,URL],Opts) :-
     opt_authority(Opts, Auth),
     create_context(system_descriptor{}, System_DB),

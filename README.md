@@ -15,7 +15,7 @@
 
 ## TerminusDB is a Knowledge Graph Database with Version Control
 
-**A graph database with distributed JSON and RDF, with a git for data collaboration model built in**
+**TerminusDB is the open-source knowledge graph database with git-like version control for graphs and vectors. Branch, merge, diff and hybrid search any commit.**
 
 TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.com/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
 
@@ -38,6 +38,8 @@ Join us on **[Discord](https://discord.gg/yTJKAma)** to engage in our graph buil
 The easiest way to install TerminusDB as a developer is by following the [10-minutes docker getting started manual](https://terminusdb.com/docs/get-started/) with the latest [Docker TerminusDB Image](https://hub.docker.com/r/terminusdb/terminusdb-server). It can be installed locally using [Snap](https://snapcraft.io/terminusdb) as both git-for-data client and server to perform push and pull. Docker brings the server component, and snap the ability to try TerminusDB on the command line, for example for ML/Ops and AI use cases requiring deterministic symbolic AI processing.
 
 For deployments, copy the [docker-compose.yml](./docker-compose.yml) file from the repository.
+
+> **Try the 12.1 release candidate:** the [vectorsearch/](./vectorsearch/) folder has a docker compose setup for `12.1-rc` with built-in vector search and local embeddings (no API key needed). It is a release candidate, not a final release. See [vectorsearch/README.md](./vectorsearch/README.md).
 
 1. Add the following to a `.env` file in the source directory:
 
@@ -170,6 +172,10 @@ Found a bug? Have a feature request? Please [open an issue](https://github.com/t
 - Steps to reproduce (for bugs)
 - Expected vs. actual behavior
 - Your environment details (OS, TerminusDB version)
+
+### Recognition
+
+<a href="https://trendshift.io/repositories/125203?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-125203" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/125203/monthly?language=Prolog" alt="terminusdb/terminusdb | #1 Prolog Repository Of The Month on Trendshift" width="250" height="55"/></a>
 
 ## License and copyright
 

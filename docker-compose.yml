@@ -1,3 +1,4 @@
+# Want to try the 12.1 release candidate with vector search? See vectorsearch/docker-compose.yml
 # Instructions:
 #
 # 1. Copy .env.example to .env

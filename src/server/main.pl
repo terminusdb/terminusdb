@@ -14,7 +14,8 @@
 
 :- use_module(core(triple)).
 :- use_module(core(util/utils)).
-:- use_module(core(util), [json_log_error_formatted/2]).
+:- use_module(core(util), [json_log_error_formatted/2,
+                          json_log_warning_formatted/2]).
 :- use_module(core(api)).
 :- use_module(core(document/parallel_elaboration), [
                   start_elaboration_workers/1,
@@ -40,12 +41,14 @@ plugins:readiness_component(store).
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,
+                                       jwt_key_source_configured/0,
+                                       jwt_runtime_enabled/0,
                                        oidc_issuer_url/1,
                                        check_jwt_scopes_claim_safety/0,
                                        check_jwt_subject_claim_safety/0,
                                        check_jwt_config_safety/0,
-                                       server/1,
                                        server_port/1,
+                                       listen_address/1,
                                        server_enabled/0,
                                        log_format/1,
                                        worker_amount/1,
@@ -63,6 +66,10 @@ plugins:readiness_component(store).
 :- use_module(library(http/http_ssl_plugin)).
 % html_write no longer needed after busy_loading simplified to CGI-style 503
 :- use_module(library(aggregate)).
+:- use_module(library(lists), [member/2]).
+:- use_module(library(time), [call_with_time_limit/2]).
+:- use_module(library(plunit)).
+:- use_module(library(debug), [assertion/1]).
 
 :- use_module(library(option)).
 
@@ -70,19 +77,26 @@ plugins:readiness_component(store).
 :- if(jwt_enabled).
 
 load_jwt_conditionally :-
-    (   jwt_jwks_endpoint(Endpoint)
-    ->  ignore(catch('$rustnative':jwt_setup_jwks(Endpoint), E,
-              (   json_log_error_formatted('JWT JWKS setup failed: ~w', [E]),
-                  true)))
-    ;   oidc_issuer_url(IssuerUrl)
-    ->  ignore(catch('$rustnative':jwt_setup_oidc(IssuerUrl), E,
-              (   json_log_error_formatted('JWT OIDC setup failed: ~w', [E]),
-                  true)))
-    ;   true  % No JWKS or OIDC configured — JWT auth will fail at decode time
-    ),
-    check_jwt_scopes_claim_safety,
-    check_jwt_subject_claim_safety,
-    check_jwt_config_safety.
+    (   jwt_runtime_enabled
+    ->  (   jwt_jwks_endpoint(Endpoint)
+        ->  ignore(catch('$rustnative':jwt_setup_jwks(Endpoint), E,
+                  (   json_log_error_formatted('JWT JWKS setup failed: ~w', [E]),
+                      true)))
+        ;   oidc_issuer_url(IssuerUrl)
+        ->  ignore(catch('$rustnative':jwt_setup_oidc(IssuerUrl), E,
+                  (   json_log_error_formatted('JWT OIDC setup failed: ~w', [E]),
+                      true)))
+        ;   true  % No JWKS or OIDC configured — JWT auth will fail at decode time
+        ),
+        check_jwt_scopes_claim_safety,
+        check_jwt_subject_claim_safety,
+        check_jwt_config_safety
+    ;   jwt_key_source_configured
+    ->  json_log_warning_formatted(
+            'A JWT key source is configured (TERMINUSDB_SERVER_JWKS_ENDPOINT or TERMINUSDB_OIDC_ISSUER_URL) but JWT is disabled. Set TERMINUSDB_JWT_ENABLED=true to enable JWT authentication.',
+            [])
+    ;   true
+    ).
 
 :- else.
 
@@ -94,8 +108,8 @@ load_jwt_conditionally :-
 
 
 terminus_server(Argv,Wait) :-
-    server(Server),
     server_port(Port),
+    listen_address(ListenAddress),
     worker_amount(Workers),
     load_jwt_conditionally,
     % initialize the global store as an in-memory store if the memory flag is set.
@@ -125,7 +139,8 @@ terminus_server(Argv,Wait) :-
     % as before. await_all_components then blocks until every component
     % resolves and rethrows the first failure, preserving the old
     % abort-on-init-error semantics for detached init.
-    (   welcome_banner(Server,Argv),
+    (   format(string(ListenSpec), '~w:~w', [ListenAddress, Port]),
+        welcome_banner(ListenSpec,Argv),
         run_post_server_startup_hooks(Backend, Port),
         catch(triple_store(_Store), % ensure triple store has been set up by retrieving it once
               Store_Error,
@@ -162,18 +177,18 @@ server_backend(Backend) :-
     ;   Backend = rust
     ).
 
-%% start_server_backend(+Backend, +Port, +Workers) is det.
+%% start_server_backend(+Backend, +ListenAddress, +Port, +Workers) is det.
 %%
 %  Start the selected HTTP server backend on Port.
-start_server_backend(swipl, Port, Workers) :-
+start_server_backend(swipl, ListenAddress, Port, Workers) :-
     (   server_enabled
-    ->  HTTPOptions = [port(Port), workers(Workers), silent(true)],
+    ->  HTTPOptions = [port(ListenAddress:Port), workers(Workers), silent(true)],
         foreach(pre_server_startup_hook(Port),true),
         catch(http_server(http_dispatch, HTTPOptions),
               E,
-              (
-                  writeq(E),
-                  format(user_error, "Error: Port ~d is already in use.", [Port]),
+              (   (   E = error(socket_error(eaddrinuse,_),_)
+                  ->  format(user_error, "Error: ~w:~d is already in use.~n", [ListenAddress, Port])
+                  ;   format(user_error, "Error starting server: ~w~n", [E])),
                   halt(98) % EADDRINUSE
               )),
         http_handler(root(.), busy_loading,
@@ -186,7 +201,9 @@ start_server_backend(swipl, Port, Workers) :-
     ;   format(user_error, "Main SWI-Prolog HTTP server disabled (TERMINUSDB_SERVER_PORT=false).~n", []),
         true
     ).
-start_server_backend(rust, Port, _Workers) :-
+start_server_backend(rust, _ListenAddress, Port, _Workers) :-
+    % The Rust webserver FFI binds unconditionally; TERMINUSDB_LISTEN_ADDRESS
+    % is honored only by the swipl backend.
     (   server_enabled
     ->  srv:start_server(Port)
     ;   format(user_error, "Main Rust HTTP server disabled (TERMINUSDB_SERVER_PORT=false).~n", []),
@@ -203,17 +220,38 @@ run_post_server_startup_hooks(_Backend, Port) :-
 
 %% wait_for_backend(+Backend, +Port) is det.
 %%
-%  Block until the selected backend terminates. For the Rust backend there is no
-%  worker thread to join, so we block on a message queue.
-wait_for_backend(swipl, Port) :-
-    (   server_enabled
-    ->  http_current_worker(Port,ThreadID),
-        thread_join(ThreadID, _Status)
-    ;   thread_get_message(_)
+%  Block until a shutdown signal arrives, then stop the HTTP layer for the
+%  swipl backend. For the Rust backend there is no HTTP layer to stop, so we
+%  return once the stop message lands.
+wait_for_backend(Backend, Port) :-
+    (   current_prolog_flag(unix, true)
+    ->  % Register at serve time: library(main) installs
+        % prolog_main:interrupt after the load-time handlers, and
+        % saved states lose load-time on_signal/3 registrations.
+        on_signal(int,  _, server_shutdown_signal),
+        on_signal(term, _, server_shutdown_signal),
+        on_signal(hup,  _, server_shutdown_signal)
+    ;   true),
+    thread_get_message(stop),
+    nl(user_error),
+    shutdown_message('Shutting down'),
+    (   Backend == swipl,
+        server_enabled
+    ->  (   catch(call_with_time_limit(5, http_stop_server(Port, [])),
+                  _, fail)
+        ->  shutdown_message('HTTP server stopped')
+        ;   shutdown_message('HTTP server stop timed out'))
+    ;   true
     ).
-wait_for_backend(rust, _Port) :-
-    thread_get_message(_).
 
+
+server_shutdown_signal(_Signal) :-
+    thread_send_message(main, stop).
+
+shutdown_message(Message) :-
+    (   log_format(json)
+    ->  format(user_error, '{"message": "~s", "severity": "INFO"}~n', [Message])
+    ;   format(user_error, '% ~s~n', [Message])).
 
 busy_loading(_) :-
     format('Status: 503 Service Unavailable~n'),
@@ -221,30 +259,36 @@ busy_loading(_) :-
     format('<html><body><h1>Still loading</h1><p>TerminusDB is preparing to serve requests</p></body></html>~n').
 
 
-print_welcome_banner(Version, ProductName, Argv, _, _, Server) :-
+print_welcome_banner(Version, ProductName, Argv, Iso, ListenSpec) :-
     log_format(json),
     !,
-    format(user_error, '{"message": "Welcome to ~s server! You can view your server in a browser at ~s",\c
-                          "version": "~s", "args": "~w", "severity": "INFO"}~n',
-          [ProductName, Server, Version, Argv]).
-print_welcome_banner(Version, ProductName, Argv, StrTime, Now, Server) :-
-    format(user_error,'~N% TerminusDB server started at ~w (utime ~w) args ~w~n',
-           [StrTime, Now, Argv]),
-    format(user_error,'% Welcome to ~s, version ~s!~n',[ProductName, Version]),
-    format(user_error,'% You can view your server in a browser at \'~s\'~n~n',[Server]).
+    format(user_error, '{"message": "~s ~s listening on ~s",\c
+                          "version": "~s", "args": "~w", "timestamp": "~s", "severity": "INFO"}~n',
+          [ProductName, Version, ListenSpec, Version, Argv, Iso]).
+print_welcome_banner(Version, ProductName, Argv, Iso, ListenSpec) :-
+    welcome_banner_lines(Version, ProductName, Argv, Iso, ListenSpec, Lines),
+    forall(member(Line, [''|Lines]), format(user_error, '~s~n', [Line])),
+    nl(user_error).
 
-welcome_banner(Server,Argv) :-
+welcome_banner_lines(Version, ProductName, Argv, Iso, ListenSpec,
+                     [Line1, Line2, Line3]) :-
+    format(string(Line1), '% ~s ~s started ~s', [ProductName, Version, Iso]),
+    format(string(Line2), '% Args: ~w', [Argv]),
+    format(string(Line3), '% Listening on ~s', [ListenSpec]).
+
+welcome_banner(ListenSpec,Argv) :-
     % Test utils currently reads this so watch out if you change it!
     get_time(Now),
+    stamp_date_time(Now, Date, 'UTC'),
+    format_time(string(Iso), '%Y-%m-%dT%H:%M:%SZ', Date),
     terminusdb_version(Version),
-    format_time(string(StrTime), '%A, %b %d, %H:%M:%S %Z', Now, posix),
     (   enterprise_product_name(ProductName)
     ->  true
     ;   is_enterprise
     ->  ProductName = "TerminusDB Enterprise"
     ;   ProductName = "TerminusDB"
     ),
-    print_welcome_banner(Version, ProductName, Argv, StrTime, Now, Server).
+    print_welcome_banner(Version, ProductName, Argv, Iso, ListenSpec).
 
 :- begin_tests(server_backend_selection).
 
@@ -295,3 +339,21 @@ test(case_insensitive_swipl, [setup(setup), cleanup(cleanup)]) :-
     Backend == swipl.
 
 :- end_tests(server_backend_selection).
+
+:- begin_tests(welcome_banner).
+
+test(boring_parseable_lines) :-
+    welcome_banner_lines('12.0.8', "TerminusDB", [serve,memory()],
+                         "2026-10-16T06:12:11Z", 'localhost:6480', Lines),
+    Lines = [Line1, Line2, Line3],
+    assertion(Line1 == "% TerminusDB 12.0.8 started 2026-10-16T06:12:11Z"),
+    assertion(Line2 == "% Args: [serve,memory()]"),
+    assertion(Line3 == "% Listening on localhost:6480").
+
+test(listening_line_shows_bind_address) :-
+    welcome_banner_lines('12.0.8', "TerminusDB", [serve],
+                         "2026-10-16T06:12:11Z", '0.0.0.0:6363', Lines),
+    Lines = [_, _, Line3],
+    assertion(Line3 == "% Listening on 0.0.0.0:6363").
+
+:- end_tests(welcome_banner).

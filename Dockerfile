@@ -152,6 +152,7 @@ WORKDIR /app/terminusdb
 RUN mkdir -p storage \
     && chown -R 1000:1000 storage
 ENV TERMINUSDB_PLUGINS_PATH=${TERMINUSDB_PLUGINS_PATH:-/plugins}
+ENV TERMINUSDB_LISTEN_ADDRESS=0.0.0.0
 ENV TERMINUSDB_BUILTIN_PLUGINS_PATH=${TERMINUSDB_BUILTIN_PLUGINS_PATH:-/builtin_plugins}
 COPY builtin_plugins/ ${TERMINUSDB_BUILTIN_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/src/assets

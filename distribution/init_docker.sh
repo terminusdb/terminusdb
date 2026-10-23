@@ -25,6 +25,9 @@ if [ ! -d /app/terminusdb/storage/db ]; then
     /app/terminusdb/terminusdb store init --key "$TERMINUSDB_ADMIN_PASS"
 fi
 
-echo "SERVER_PORT $TERMINUSDB_SERVER_PORT"
+if [ -n "${TERMINUSDB_ADMIN_SET_PASS:-}" ]; then
+    /app/terminusdb/terminusdb user password admin --password "$TERMINUSDB_ADMIN_SET_PASS" || exit 1
+fi
+
 exec /app/terminusdb/terminusdb serve
 
