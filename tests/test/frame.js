@@ -154,7 +154,9 @@ describe('frame', function () {
     expect(r.body.$schema).to.equal('https://json-schema.org/draft-07/schema#')
     expect(r.body.definitions).to.be.an('object')
     expect(Object.keys(r.body.definitions)).to.not.be.empty
-    const first = r.body.definitions[Object.keys(r.body.definitions)[0]]
-    expect(first).to.have.property('type')
+    // Class names are random, so the first definition is not necessarily
+    // a class — enum definitions are keyed by the enum id.
+    const defs = Object.values(r.body.definitions)
+    expect(defs.some((d) => d.type === 'object')).to.equal(true)
   })
 })
