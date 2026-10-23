@@ -464,6 +464,16 @@ read_line_until_start_line(Error, Collected) :-
     ;   read_line_until_start_line(Error, [Line|Collected])
     ).
 
+read_until_eof(Stream, Lines) :-
+    read_until_eof(Stream, [], Lines).
+
+read_until_eof(Stream, Acc, Lines) :-
+    read_line_to_string(Stream, Line),
+    (   Line = end_of_file
+    ->  reverse(Acc, Lines)
+    ;   read_until_eof(Stream, [Line|Acc], Lines)
+    ).
+
 % spawn_server(+Path, -URL, -PID, +Options) is det.
 spawn_server_1(Path, URL, PID, Options) :-
     (   memberchk(port(Port), Options)
@@ -544,6 +554,13 @@ spawn_server_1(Path, URL, PID, Options) :-
           (   spawn_failure(Catchable)
           ->  catch(process_kill(PID, 9), _, true),
               catch(process_wait(PID, _), _, true),
+              % Record why the attempt failed so spawn_server/4 can
+              % report it; a killed child's stderr drains to EOF, so a
+              % timeout still yields its last lines.
+              (   Catchable = error(server_has_no_output(_), _)
+              ->  nb_setval(spawn_server_failure, Catchable)
+              ;   catch(read_until_eof(Error, Lines), _, Lines = []),
+                  nb_setval(spawn_server_failure, spawn_timeout(Lines))),
               fail
           ;   throw(Catchable))),
 
@@ -555,18 +572,23 @@ spawn_server_1(Path, URL, PID, Options) :-
     ;   true),
     process_wait(PID, Status, [timeout(0)]),
     (   Status = exit(98)
-    ->  fail
+    ->  catch(read_until_eof(Error, Lines), _, Lines = []),
+        nb_setval(spawn_server_failure, spawn_exit(98, Lines)),
+        fail
     ;   Status \= timeout
     ->  throw(error(server_spawn_failed(Status), _))
     ;   true).
 
 spawn_server(Path, URL, PID, Options) :-
+    nb_setval(spawn_server_failure, none),
     (   memberchk(port(_), Options)
     ->  Error = server_spawn_port_in_use
     ;   Error = server_spawn_retry_exceeded),
 
-    do_or_die(spawn_server_1(Path, URL, PID, Options),
-              error(Error, _)).
+    (   spawn_server_1(Path, URL, PID, Options)
+    ->  true
+    ;   nb_getval(spawn_server_failure, Last),
+        throw(error(server_spawn_failure(Error, Last), _))).
 
 kill_server(PID) :-
     % As of SWI-Prolog v8.4.0, process_kill(PID), which defaults to SIGTERM,
@@ -727,3 +749,19 @@ ends_with_uuid_v7(Id) :-
     atom_string(Id, S),
     sub_string(S, _, 36, 0, UUID),
     is_uuid_v7_string(UUID).
+
+:- begin_tests(spawn_server_diagnostics).
+
+% A spawn on a port the child cannot bind fails on its single attempt.
+% The thrown error must wrap the recorded attempt failure — the child's
+% last stderr lines or a timeout — instead of a bare atom.
+test("failed spawn surfaces the attempt failure in the thrown error") :-
+    setup_temp_store(State-Dir),
+    catch(spawn_server(Dir, _URL, _PID, [port(1)]),
+          E,
+          true),
+    teardown_temp_store(State-Dir),
+    E = error(server_spawn_failure(server_spawn_port_in_use, Failure), _),
+    assertion(Failure \= none).
+
+:- end_tests(spawn_server_diagnostics).
