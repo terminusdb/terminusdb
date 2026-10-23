@@ -120,8 +120,6 @@ jobs:
           # Ensure no test tries to start a server (one is already running)
           export TERMINUSDB_SERVER_NAME=127.0.0.1
           export TERMINUSDB_SERVER_PORT=6363
-          # Diagnostic: snap-confine setup trace, shows why a confined spawn dies early
-          export SNAP_CONFINE_DEBUG=1
           echo "Verifying terminusdb binary is accessible:"
           which terminusdb || echo "terminusdb not in PATH"
           ls -la /snap/bin/terminusdb || echo "/snap/bin/terminusdb not found"
@@ -136,7 +134,7 @@ jobs:
         run: |
           # Confined apps re-parented into snap.*.scope can die with stderr
           # already severed; journald still records them
-          sudo journalctl -u 'snap.terminusdb.*' --no-pager -n 100
+          sudo journalctl -u 'snap.terminusdb.*' --no-pager -n 100 || true
 
       - name: Check Server Status After Tests
         if: always()
