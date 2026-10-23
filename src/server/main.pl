@@ -132,7 +132,7 @@ terminus_server(Argv,Wait) :-
     % not-ready state before the socket accepts a single request.
     register_components,
     publish_readiness,
-    start_server_backend(Backend, Port, Workers),
+    start_server_backend(Backend, ListenAddress, Port, Workers),
 
     % Hooks run first so detached init (e.g. vectorlink) overlaps the
     % store open, which stays synchronous and aborts on failure exactly
