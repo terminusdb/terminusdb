@@ -195,17 +195,22 @@ user:prolog_load_file(Context:Spec, Options) :-
 % The exact-path match above fails in relocated deployments where the
 % recorded module file and the expanded spec disagree (snap bakes a dead
 % build path, and SWI version differences in file bookkeeping can shift
-% the recorded form). Module names equal file basenames in this tree, so
-% when no candidate file exists on disk, a same-named module that is
-% already loaded satisfies the import. A genuinely absent module still
-% falls through to source_sink — the error is not masked.
+% the recorded form). When no candidate file exists on disk, match the
+% spec's relative tail against the recorded file of every loaded module —
+% 'document/commit_queue' maps to '.../document/commit_queue.pl' — which
+% also covers modules whose name differs from the file basename
+% ('document/json', 'config'). A genuinely absent module still falls
+% through to source_sink — the error is not masked.
 user:prolog_load_file(Context:Spec, Options) :-
     compound(Spec),
     functor(Spec, _, 1),
     memberchk(if(not_loaded), Options),
     \+ absolute_file_name(Spec, _, [file_type(prolog), access(read), file_errors(fail)]),
-    Spec =.. [_, Name],
-    file_base_name(Name, Module),
-    current_module(Module),
+    Spec =.. [_, PathSpec],
+    term_to_atom(PathSpec, Tail),
+    file_name_extension(Tail, pl, Leaf),
+    atom_concat('/', Leaf, Suffix),
+    module_property(Module, file(ModFile)),
+    atom_concat(_, Suffix, ModFile),
     !,
     system:'$import_from_loaded_module'(Module, Context, Options).
