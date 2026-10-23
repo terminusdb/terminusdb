@@ -113,6 +113,8 @@ describe('In-Memory Mode', function () {
     })
     serverProcess.stdout.on('data', d => process.stdout.write(`[memory-server] ${d}`))
     serverProcess.stderr.on('data', d => process.stderr.write(`[memory-server] ${d}`))
+    serverProcess.on('error', err => process.stderr.write(`[memory-server] spawn error: ${err}\n`))
+    serverProcess.on('exit', (code, signal) => process.stderr.write(`[memory-server] exited code=${code} signal=${signal}\n`))
   }
 
   function stopServer (done) {
