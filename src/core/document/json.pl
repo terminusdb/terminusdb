@@ -10582,6 +10582,7 @@ test(non_existing_class_reference,
          ),
          error(schema_check_failure(
                    [witness{'@type':not_a_class_or_base_type,
+                            property:'http://somewhere.for.now/schema#repository_star',
                             class:'http://somewhere.for.now/schema#star'}]),
                _)
      ]) :-

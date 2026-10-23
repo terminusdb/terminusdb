@@ -7,6 +7,7 @@
 
 :- use_module(library(option)).
 :- use_module(library(lists)).
+:- use_module(library(utf8)).
 :- use_module(library(plunit)).
 
 /** <module> Fast JSON Parser using Rust
@@ -66,7 +67,9 @@ json_read_dict(Stream, Dict, Options) :-
 json_read_dict_stream(Stream, Dict, Options) :-
     % Use Rust parser for one-at-a-time streaming
     % All streams are now string streams (buffered from HTTP)
-    (   catch('$json_preserve':json_read_one_from_stream(Stream, Value), _Error, fail)
+    % Parse errors must propagate — mapping them to eof would silently
+    % truncate multi-document streams and drop the remaining documents.
+    (   '$json_preserve':json_read_one_from_stream(Stream, Value)
     ->  (   Value = eof
         ->  Dict = eof
         ;   % The streaming parser may leave array tails as variables.
@@ -412,6 +415,35 @@ test(stream_eof_after_read) :-
     Dict1.x == 10,
     json_read_dict(Stream, Dict2, [end_of_file(eof)]),
     Dict2 == eof,
+    close(Stream).
+
+% Test UTF-8 content via the octet-byte string-stream convention used by
+% the HTTP layer (input_encoding(octet) into a string, then open_string):
+% each code point is one raw byte, so multi-byte UTF-8 survives intact.
+test(stream_utf8_bytes) :-
+    atom_codes('{"name":"Umeå","city":"São Paulo"}', Chars),
+    phrase(utf8_codes(Chars), Bytes),
+    string_codes(Byte_String, Bytes),
+    open_string(Byte_String, Stream),
+    json_read_dict(Stream, Dict, [end_of_file(eof)]),
+    Dict.name == "Umeå",
+    Dict.city == "São Paulo",
+    close(Stream).
+
+% Test that a parse error is raised, not silently reported as eof.
+% Returning eof here truncates multi-document streams mid-flight and
+% silently drops the remaining documents.
+test(stream_parse_error_not_eof, [error(json_parse_error(_,_,_), _)]) :-
+    open_string('{bad json', Stream),
+    json_read_dict(Stream, _Dict, [end_of_file(eof)]),
+    close(Stream).
+
+% Test non-UTF-8 bytes raise rather than silently return eof — a lone
+% latin-1 byte is what a decoded-character string stream would emit.
+test(stream_invalid_utf8_not_eof, [error(json_parse_error(_,_,_), _)]) :-
+    string_codes(Byte_String, [0x7B, 0x22, 0x6E, 0x22, 0x3A, 0x22, 0xE5, 0x22, 0x7D]),
+    open_string(Byte_String, Stream),
+    json_read_dict(Stream, _Dict, [end_of_file(eof)]),
     close(Stream).
 
 % Test array with nested objects

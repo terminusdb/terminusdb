@@ -151,6 +151,28 @@ paths:
                           "version":
                             type: string
                             example: "0.19.5"
+                      "indexer":
+                        type: object
+                        description: |
+                          Semantic indexer status.
+                          `backend` is the configured backend (`none`,
+                          `vectorlink`, `http_vectorlink`,
+                          `http_legacy_vectorlink`); `configured` is true
+                          when a backend other than `none` is selected;
+                          `available` is true when the indexer runtime is
+                          loaded and operational (a configured backend may
+                          still be unavailable, e.g. missing engine).
+                        properties:
+                          "backend":
+                            type: string
+                            enum: ["none", "vectorlink", "http_vectorlink", "http_legacy_vectorlink"]
+                            example: "vectorlink"
+                          "configured":
+                            type: boolean
+                            example: true
+                          "available":
+                            type: boolean
+                            example: true
                   "api:status":
                     type: string
                     example: api:success
@@ -892,10 +914,11 @@ paths:
           description: |
             Output format for retrieved documents.
             - `json` (default): Standard JSON document representation
-            - `embedding`: Text/plain rendered embedding string using schema-defined Handlebars template. Requires the document type to have an embedding query defined in `@metadata.embedding`.
+            - `embedding`: Text/plain rendered embedding string using schema-defined GraphQL query and Handlebars template. Requires the document type to have an embedding query defined in `@metadata.embedding`. No indexer backend is needed.
+            - `markdown`: Document rendered as markdown (text/markdown).
           schema:
             type: string
-            enum: [json, embedding]
+            enum: [json, embedding, markdown]
             default: json
         - name: skip
           in: query
@@ -1073,6 +1096,7 @@ paths:
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
+        - $ref: '#/components/parameters/check'
         - name: full_replace
           in: query
           required: false
@@ -1154,6 +1178,7 @@ paths:
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
+        - $ref: '#/components/parameters/check'
         - name: nuke
           in: query
           description: Remove all data from the graph
@@ -1190,6 +1215,7 @@ paths:
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
+        - $ref: '#/components/parameters/check'
         - name: create
           in: query
           description: Create a document if it does not exist
@@ -4855,6 +4881,18 @@ components:
       schema:
         type: string
         example: Fixed bad name for document
+    check:
+      name: check
+      in: query
+      description: |
+        Dry-run the write without committing. The response reports the
+        validity verdict and any schema witnesses instead of writing
+        documents — `api:valid` true/false is data, not an error status.
+        Supported on document POST (insert), PUT (replace) and DELETE.
+      required: false
+      schema:
+        type: boolean
+        default: false
     branch_path:
       name: path
       in: path

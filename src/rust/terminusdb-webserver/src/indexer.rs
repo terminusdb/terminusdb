@@ -428,9 +428,17 @@ impl IndexerRegistry {
     /// `indexer_set_config` FFI predicate).
     fn set_config(&self, url: String, auth: String) {
         if url.trim().is_empty() {
-            // Preserve previous semantics: an empty URL means "not
-            // configured" — get_transport() then reports the error at
-            // use time rather than here.
+            // An empty URL means "not configured": drop the transport so
+            // get_transport() reports the error at use time, and cancel
+            // any queued work — pending tasks would otherwise keep
+            // firing against an endpoint that is gone (e.g. a stopped
+            // test stub).
+            *self.transport.lock().unwrap() = None;
+            for (_, task) in self.tasks.lock().unwrap().drain() {
+                task.cancel.cancel();
+            }
+            self.pending_queue.lock().unwrap().clear();
+            *self.current_branch.lock().unwrap() = None;
             return;
         }
         let client = reqwest::Client::builder()
@@ -467,6 +475,14 @@ impl IndexerRegistry {
     /// When has_embeddings=true, clears the no_embedding cache for this domain
     /// (embeddings were just added to the schema).
     fn notify(&self, path: String, branch: String, store_clustering: bool, has_embeddings: bool) -> Result<(), String> {
+        // No engine transport installed — indexing is unconfigured, so a
+        // commit notify is a cheap no-op rather than a spawn+fail cycle.
+        if self.transport.lock().unwrap().is_none() {
+            crate::log::log_debug(format!(
+                "[indexer] notify skipped for {} — engine transport not configured", path));
+            return Ok(());
+        }
+
         let key = BranchKey { path: path.clone(), branch };
 
         // Fast path: if the caller doesn't know whether embeddings exist

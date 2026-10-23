@@ -1,5 +1,9 @@
 :- module(api_document, [
               api_can_read_document/6,
+              api_check_documents/11,
+              api_check_insert_body/4,
+              api_check_replace_body/4,
+              api_check_delete_body/3,
               api_insert_documents/9,
               api_delete_documents/9,
               api_delete_document/8,
@@ -11,8 +15,12 @@
               api_document_error_wrapper/3,
               api_read_document_selector/12,
               api_generate_document_ids/4,
+              api_generate_document_ids_by_type/5,
               api_get_documents/4,
               api_get_document/5,
+              api_get_documents_by_type/5,
+              api_get_documents_by_query/6,
+              before_read/4,
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
@@ -31,6 +39,7 @@
               convert_input_to_json_stream/4,
               document_stream_headers/3,
               document_stream_start/3,
+              document_stream_preamble/3,
               pre_branch_commit_id/2,
               document_stream_write/4,
               document_stream_end/2,
@@ -53,7 +62,10 @@
 :- use_module(core(transaction/database), [
                   reset_transaction_objects_graph_descriptors/1,
                   query_context_transaction_objects/2,
-                  transaction_object_database_key/2
+                  transaction_object_database_key/2,
+                  pre_transaction_tabling/0,
+                  post_transaction_tabling/0,
+                  infer_migrations_for_commit/4
               ]).
 :- use_module(core(document)).
 :- use_module(core(document/instance), [is_instance_class/3]).
@@ -85,6 +97,7 @@
 :- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
+:- use_module(library(utf8)).
 :- use_module(library(option)).
 :- use_module(library(assoc)).
 :- use_module(library(lists)).
@@ -105,6 +118,7 @@
 :- multifile convert_input_to_json_stream/4.
 :- multifile document_stream_headers/3.
 :- multifile document_stream_start/3.
+:- multifile document_stream_preamble/3.
 :- multifile document_stream_write/4.
 :- multifile document_stream_end/2.
 
@@ -967,14 +981,27 @@ api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replac
                error(same_ids_in_one_transaction(Duplicates), _))
     ).
 
+%% string_octet_stream(+String, -Stream) is det.
+%
+%  Open Stream over String as raw UTF-8 BYTES (one code point per byte) —
+%  the octet convention the byte-level JSON reader consumes. FFI callers
+%  (GraphQL mutations) hand in decoded strings; feeding one straight to
+%  open_string would emit each non-ASCII code point as a lone byte —
+%  invalid UTF-8, failing the parse.
+string_octet_stream(String, Stream) :-
+    string_codes(String, Chars),
+    once(phrase(utf8_codes(Chars), Bytes)),
+    string_codes(Byte_String, Bytes),
+    open_string(Byte_String, Stream).
+
 api_insert_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Ids) :-
-    open_string(String, Stream),
+    string_octet_stream(String, Stream),
     api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, none, null, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
 api_insert_documents_core_string_with_compress(Transaction, String, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, Compress_Ids, Ids) :-
-    open_string(String, Stream),
+    string_octet_stream(String, Stream),
     api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, none, null, Raw_Ids),
     compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Compressed_Ids),
     maplist(atom_string, Compressed_Ids, Ids).
@@ -1095,6 +1122,238 @@ api_nuke_documents_(schema, Transaction) :-
     nuke_schema_documents(Transaction).
 api_nuke_documents_(instance, Transaction) :-
     nuke_documents(Transaction).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * Document check (dry-run)
+ *
+ * api_check_documents runs a document write body against a transaction
+ * context exactly as the committing path does, then runs the same
+ * validation stages run_transactions runs — schema validation and the
+ * pre_commit_hook referential/cascade checks — and never commits. The
+ * uncommitted layer and context are discarded, leaving the branch head
+ * untouched.
+ *
+ * Body is a closure called as call(Body, Transaction, Extra): it runs
+ * the same *_core predicates the commit path uses (e.g.
+ * api_insert_documents_core/10, api_delete_documents_bulk_/3). Extra is
+ * echoed back on success so callers can report assigned ids.
+ *
+ * A check that ran always produces a Result dict — valid:false with
+ * witnesses or the raised error is normal output, not a failure of the
+ * predicate itself. Errors before the context exists (bad path,
+ * missing capability, stale data version) still throw.
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- meta_predicate api_check_documents(+, +, +, +, +, +, +, 2, +, +, -).
+
+api_check_documents(SystemDB, Auth, Path, Graph_Type, Author, Message,
+                    Requested_Data_Version, Body, Touched_Types, Options,
+                    Result) :-
+    resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
+    before_write(Descriptor, Auth, Author, Message, Requested_Data_Version,
+                 Context, Transaction),
+    setup_call_cleanup(
+        pre_transaction_tabling,
+        check_run(Context, Transaction, Body, Touched_Types, Options, Result),
+        post_transaction_tabling).
+
+check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
+    catch(
+        (   call(Body, Transaction, Extra)
+        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses),
+                      error(check_validation_failed(Context), _)),
+            check_embedding_report(Transaction, Touched_Types, Embedding),
+            (   Witnesses = []
+            ->  Result = _{'@type':'api:CheckResponse',
+                           'api:valid':true,
+                           'api:witnesses':[],
+                           'api:extra':Extra,
+                           'api:embedding':Embedding}
+            ;   Result = _{'@type':'api:CheckResponse',
+                           'api:valid':false,
+                           'api:witnesses':Witnesses,
+                           'api:embedding':Embedding})
+        ;   check_no_embedding(Embedding),
+            Result = _{'@type':'api:CheckResponse',
+                       'api:valid':false,
+                       'api:witnesses':[],
+                       'api:error':_{'api:message':'check body failed'},
+                       'api:embedding':Embedding}),
+        Error,
+        check_error_result(Error, Result)).
+
+% On invalid checks the embedding block is still present so callers can
+% read api:embedding.'api:will_embed' unconditionally — nothing embeds
+% when the write itself cannot commit.
+check_no_embedding(_{'api:will_embed':false,
+                     'api:reason':'the write is invalid — fix the witnesses or error first'}).
+
+check_error_result(error(schema_check_failure(Witnesses), _), Result) :-
+    !,
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':Witnesses,
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+check_error_result(schema_check_failure(Witnesses), Result) :-
+    !,
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':Witnesses,
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+check_error_result(error(Formal, _), Result) :-
+    !,
+    format(string(Msg), "~w", [Formal]),
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':[],
+               'api:error':_{'api:message':Msg},
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+check_error_result(Formal, Result) :-
+    format(string(Msg), "~w", [Formal]),
+    Result = _{'@type':'api:CheckResponse',
+               'api:valid':false,
+               'api:witnesses':[],
+               'api:error':_{'api:message':Msg},
+               'api:embedding':Embedding},
+    check_no_embedding(Embedding).
+
+%% check_validation_witnesses(+Context, +Options, -Witnesses) is det.
+%
+%  Mirrors the validation stages of run_transactions/4: schema
+%  validation plus the pre_commit_hook referential/cascade checks.
+%  Options carries the same migration flags a commit would see
+%  (require_migration, allow_destructive_migration). Nothing is
+%  committed — there is no commit_validation_objects call.
+check_validation_witnesses(Context, Options, Witnesses) :-
+    query_context_transaction_objects(Context, Transactions),
+    transaction_objects_to_validation_objects(Transactions, Validations0),
+    infer_migrations_for_commit(Validations0, Validations, _Inference, Options),
+    validate_validation_objects(Validations, _All_Witnesses, Schema_Witnesses),
+    findall(Witness,
+            pre_commit_hook(Validations, Witness),
+            Hook_Witnesses),
+    append(Schema_Witnesses, Hook_Witnesses, Witnesses).
+
+%% check_embedding_report(+Transaction, +Touched_Types, -Report) is det.
+%
+%  Reports whether the touched classes would be embedded by the indexer
+%  after such a commit: the indexer backend must be configured and every
+%  touched class must carry @metadata.embedding in the (post-write)
+%  schema.
+check_embedding_report(_Transaction, [], _{
+        'api:will_embed':false,
+        'api:reason':'no documents touched'}) :-
+    !.
+check_embedding_report(Transaction, Touched_Types, Report) :-
+    (   catch(indexer_backend(Backend), _, fail),
+        Backend \= none
+    ->  database_schema(Transaction, Schema),
+        database_prefixes(Transaction, Prefixes),
+        convlist(class_with_embedding_metadata(Transaction, Schema,
+                                               Prefixes), Touched_Types,
+                 Covered),
+        sort(Covered, Covered_Sorted),
+        sort(Touched_Types, Touched_Sorted),
+        (   Covered_Sorted == Touched_Sorted
+        ->  Report = _{'api:will_embed':true,
+                       'api:reason':'all touched classes have embedding metadata'}
+        ;   subtract(Touched_Sorted, Covered_Sorted, Missing),
+            atomic_list_concat(Missing, ', ', Missing_Text),
+            format(string(Reason),
+                   'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Missing_Text]),
+            Report = _{'api:will_embed':false,
+                       'api:reason':Reason})
+    ;   Report = _{'api:will_embed':false,
+                   'api:reason':'indexer backend is none or not configured — no documents are embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)'}).
+
+class_with_embedding_metadata(Transaction, Schema, Prefixes, Type, Type) :-
+    atom_string(Type_Atom, Type),
+    prefix_expand(Type_Atom, Prefixes, Expanded),
+    normalize_document_type(Transaction, Expanded, Normalized),
+    xrdf(Schema, Normalized, sys:metadata, _),
+    schema_metadata_descriptor(Schema, Normalized, metadata(Metadata)),
+    get_dict(embedding, Metadata, Embedding),
+    get_dict(query, Embedding, _).
+
+%% api_check_insert_body(+Stream, +Graph_Type, +Options, -Body) is det.
+%
+%  Build the check body mirroring the (non-queued) insert path.
+api_check_insert_body(Stream, Graph_Type, Options, Body) :-
+    option(raw_json(Raw_JSON), Options),
+    option(full_replace(Full_Replace), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    option(overwrite(Overwrite), Options),
+    Injected_Id = Options.get(document_id, null),
+    % api_check_documents is a meta-predicate: call(Body, Transaction,
+    % Extra) qualifies Body to the caller's module, so every goal must
+    % be a fully qualified closure.
+    Body = api_document:insert_check_goal(
+               Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge,
+               Overwrite, Injected_Id).
+
+% insert_check_goal args..., +Transaction, -Extra
+insert_check_goal(Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge,
+                  Overwrite, Injected_Id, Transaction, Extra) :-
+    api_insert_documents_core(Transaction, Stream, Graph_Type,
+                              Raw_JSON, Full_Replace, Doc_Merge,
+                              Overwrite, none, Injected_Id, Ids),
+    Extra = _{ids:Ids}.
+
+%% api_check_replace_body(+Stream, +Graph_Type, +Options, -Body) is det.
+api_check_replace_body(Stream, Graph_Type, Options, Body) :-
+    option(raw_json(Raw_JSON), Options),
+    option(create(Create), Options),
+    option(merge_repeats(Doc_Merge), Options),
+    Injected_Id = Options.get(document_id, null),
+    Body = api_document:replace_check_goal(
+               Stream, Graph_Type, Raw_JSON, Create, Doc_Merge,
+               Injected_Id).
+
+% replace_check_goal args..., +Transaction, -Extra
+replace_check_goal(Stream, Graph_Type, Raw_JSON, Create, Doc_Merge,
+                   Injected_Id, Transaction, Extra) :-
+    api_replace_documents_core(Transaction, Stream, Graph_Type,
+                               Raw_JSON, Create, Doc_Merge, none,
+                               Injected_Id, Ids),
+    Extra = _{ids:Ids}.
+
+%% api_check_delete_body(+Spec, +Graph_Type, -Body) is det.
+%
+%  Mirrors the DELETE dispatch variants — the caller picks one of:
+%  `nuke`, `id(Id)`, `type(Type)`, or `ids_stream(Stream)` whose stream
+%  yields the id list (same parse as the live path).
+api_check_delete_body(nuke, Graph_Type, Body) :-
+    !,
+    Body = api_document:nuke_check_goal(Graph_Type).
+api_check_delete_body(id(Id), Graph_Type, Body) :-
+    !,
+    Body = api_document:delete_id_check_goal(Graph_Type, Id).
+api_check_delete_body(type(Type), Graph_Type, Body) :-
+    !,
+    Body = api_document:delete_type_check_goal(Graph_Type, Type).
+api_check_delete_body(ids_stream(Stream), Graph_Type, Body) :-
+    Body = api_document:delete_ids_check_goal(Graph_Type, Stream).
+
+nuke_check_goal(Graph_Type, Transaction, Extra) :-
+    api_nuke_documents_(Graph_Type, Transaction),
+    Extra = _{}.
+delete_id_check_goal(Graph_Type, Id, Transaction, Extra) :-
+    api_delete_document_(Graph_Type, Transaction, Id),
+    Extra = _{}.
+delete_type_check_goal(Graph_Type, Type, Transaction, Extra) :-
+    api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
+    Extra = _{}.
+delete_ids_check_goal(Graph_Type, Stream, Transaction, Extra) :-
+    findall(Doc_Id,
+            (   json_read_list_stream(Stream, Id_Unchecked),
+                param_check_json(non_empty_string, id,
+                                 Id_Unchecked, Doc_Id)),
+            Ids_To_Delete),
+    api_delete_documents_bulk_(Graph_Type, Transaction, Ids_To_Delete),
+    Extra = _{ids:Ids_To_Delete}.
 
 nuke_documents_default_options(
     options{
@@ -1244,13 +1503,13 @@ api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Do
     ).
 
 api_replace_documents_core_string(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Ids) :-
-    open_string(String, Stream),
+    string_octet_stream(String, Stream),
     api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, none, null, Ids_Atoms),
     % Convert atoms to strings for Rust FFI compatibility
     maplist(atom_string, Ids_Atoms, Ids).
 
 api_replace_documents_core_string_with_compress(Transaction, String, Graph_Type, Raw_JSON, Create, Doc_Merge, Compress_Ids, Ids) :-
-    open_string(String, Stream),
+    string_octet_stream(String, Stream),
     api_replace_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Create, Doc_Merge, none, null, Raw_Ids),
     compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Compressed_Ids),
     maplist(atom_string, Compressed_Ids, Ids).
@@ -1500,6 +1759,11 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
     document_stream_start(Format, ConfigWithCtx, StreamState),
 
     document_stream_headers(Format, Request, DataVersion),
+
+    % Body preamble (e.g. turtle @prefix block, rdfxml prolog) must be
+    % emitted after the CGI headers — writing it in document_stream_start
+    % would corrupt the response framing.
+    ignore(document_stream_preamble(Format, ConfigWithCtx, StreamState)),
 
     (   nonvar(Query)
     ->  die_if(Graph_Type \= instance,
@@ -3230,6 +3494,51 @@ test(embedding_api_end_to_end, [
     % Verify the output contains the rendered template
     once(sub_string(EmbeddingOutput, _, _, _, "The animal is named Plato.")).
 
+test(embedding_render_does_not_html_escape, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "@metadata": {
+    "embedding": {
+      "query": "query($id: ID){ Animal(id: $id) { name } }",
+      "template": "The animal is named {{name}}."
+    }
+  }
+}', SchemaStream),
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _,
+                         [author("test"), graph_type(schema), message("test")]),
+    open_string('
+{ "@type": "Animal", "name": "x=y it''s \\\"quoted\\\"" }
+', InstanceStream),
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, [Id],
+                         [author("test"), graph_type(instance), message("test")]),
+    Config = config{ format: embedding,
+                     compress: true,
+                     unfold: true,
+                     skip: 0,
+                     count: unlimited,
+                     as_list: false,
+                     minimized: true,
+                     request: [] },
+    with_output_to(
+        string(EmbeddingOutput),
+        (   document_stream_headers(embedding, [], no_data_version),
+            api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                       Id, [], _, _, Config,
+                                       no_data_version, _, _)
+        )
+    ),
+    once(sub_string(EmbeddingOutput, _, _, _, "x=y it's \"quoted\"")),
+    \+ sub_string(EmbeddingOutput, _, _, _, "&#").
+
 test(embedding_plugin_fallback_for_jsondocument, [
          setup((setup_temp_store(State),
                 create_db_with_empty_schema("admin", "testdb"))),
@@ -3322,10 +3631,13 @@ test(embedding_rejects_schema_document_without_embedding_instructions, [
                      minimized: true,
                      request: [] },
     catch(
-        (   document_stream_headers(embedding, [], no_data_version),
-            api_read_document_selector(System, Auth, "admin/testdb", instance,
-                                       Id, [], _, _, Config,
-                                       no_data_version, _, _)
+        with_output_to(
+            string(_),
+            (   document_stream_headers(embedding, [], no_data_version),
+                api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                           Id, [], _, _, Config,
+                                           no_data_version, _, _)
+            )
         ),
         error(no_embedding_queries_defined, _),
         true
@@ -3911,3 +4223,195 @@ test(raw_id_false_omits_id_in_list,
     "internal-mechanics-hidden" = Doc.name.
 
 :- end_tests(raw_id).
+
+:- begin_tests(check_documents, []).
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+
+check_insert_body(Stream, Graph_Type, Body) :-
+    Body = [Transaction, Extra]>>(
+             api_insert_documents_core(Transaction, Stream, Graph_Type,
+                                       false, false, false, false,
+                                       none, null, Ids),
+             Extra = _{ids:Ids}).
+
+check_delete_bulk_body(Graph_Type, Ids, Body) :-
+    Body = [Transaction, Extra]>>(
+             api_delete_documents_bulk_(Graph_Type, Transaction, Ids),
+             Extra = _{ids:Ids}).
+
+checked_head(_System, Path, Version) :-
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    open_descriptor(Descriptor, Transaction),
+    transaction_data_version(Transaction, Version).
+
+test(check_valid_insert_leaves_no_side_effects,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb",
+    checked_head(System, Path, Before),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    get_dict('api:valid', Result, true),
+    once(member(Id, Result.get('api:extra').ids)),
+    once(sub_string(Id, _, _, _, "City/")),
+    checked_head(System, Path, Before).
+
+test(check_invalid_insert_reports_witnesses,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb2))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb2",
+    checked_head(System, Path, Before),
+    % City inherits "name" from Named — a document without it is invalid.
+    open_string('{ "@type": "City" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    get_dict('api:valid', Result, false),
+    Result.'api:witnesses' \= [],
+    checked_head(System, Path, Before).
+
+test(check_delete_of_referenced_document_fails,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb3))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb3",
+    % Person.parent is an Optional link to Person — deleting a parent
+    % that is still referenced must fail the referential check.
+    open_string('{ "@type": "Person", "name": "Parent", "@id": "Person/P", "address": "A Street" }
+{ "@type": "Person", "name": "Child", "@id": "Person/C", "address": "B Street", "parent": "Person/P" }',
+                Stream),
+    Options = [graph_type(instance), author("a"), message("m")],
+    api_insert_documents(System, Auth, Path, Stream, no_data_version,
+                         _DV, _MD, _Ids, Options),
+    check_delete_bulk_body(instance, ["Person/P"], Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, [], options{}, Result),
+    get_dict('api:valid', Result, false).
+
+test(check_embedding_report_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb4))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, "admin/checkdb4", instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    once(sub_string(Embedding.get('api:reason'), _, _, _, "indexer")).
+
+test(check_body_failure_still_reports_embedding_block,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb5))),
+      cleanup(teardown_temp_store(State))]) :-
+    % A body that fails outright (rather than throwing a schema error)
+    % must still carry api:embedding — callers read api:will_embed
+    % unconditionally on every verdict
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb5", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, _Extra]>>fail, [], options{}, Result),
+    get_dict('api:valid', Result, false),
+    get_dict('api:embedding', Result, Embedding),
+    get_dict('api:will_embed', Embedding, false).
+
+test(check_bad_path_throws,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Nowhere" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    catch(api_check_documents(System, Auth, "admin/nonexistent", instance,
+                              "checker", "dry run", no_data_version,
+                              Body, [], options{}, _Result),
+          error(_, _), true).
+
+test(check_valid_delete_result_is_fully_bound,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb5))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb5",
+    open_string('{ "@type": "City", "name": "Delville", "@id": "City/Delville" }', Insert_Stream),
+    Options = [graph_type(instance), author("a"), message("m")],
+    api_insert_documents(System, Auth, Path, Insert_Stream, no_data_version,
+                         _DV, _MD, _Ids, Options),
+    api_check_delete_body(id("City/Delville"), instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, [], options{}, Result),
+    get_dict('api:valid', Result, true),
+    % An unbound value in Result makes json_write_dict raise
+    % instantiation_error — the HTTP reply would be a truncated 500.
+    atom_json_dict(_, Result, []).
+
+test(check_passes_migration_options_to_inference,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb6))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb6",
+    open_string('{ "@type": "Person", "name": "P", "address": "Main St", "@id": "Person/P" }', Insert_Stream),
+    Options = [graph_type(instance), author("a"), message("m")],
+    api_insert_documents(System, Auth, Path, Insert_Stream, no_data_version,
+                         _DV, _MD, _Ids, Options),
+    % address xsd:string -> xsd:integer is not weakening-inferrable:
+    % with require_migration:true inference must hard-fail like a
+    % commit would, not fall back to plain validation witnesses.
+    open_string('{ "@id": "Person", "@type": "Class", "@inherits": "Named", "address": "xsd:integer", "parent": { "@type": "Optional", "@class": "Person" }, "birthday": { "@type": "Optional", "@class": "xsd:dateTime" } }', Stream),
+    Body_Options = options{raw_json:false, create:false, merge_repeats:false},
+    api_check_replace_body(Stream, schema, Body_Options, Body),
+    api_check_documents(System, Auth, Path, schema,
+                        "checker", "dry run", no_data_version,
+                        Body, [], options{require_migration:true}, Result),
+    get_dict('api:valid', Result, false),
+    once(sub_string(Result.get('api:error').get('api:message'),
+                    _, _, _, "no_inferrable_migration")).
+
+test(check_embedding_report_covers_embedded_class,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb7),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb7",
+    % The class carries @metadata.embedding — the same shape
+    % inject_embedding_metadata produces for schema writes.
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, true).
+
+:- end_tests(check_documents).

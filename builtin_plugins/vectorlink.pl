@@ -22,6 +22,11 @@
     maybe_nudge_push_async/4,
     % Config
     vectorlink_endpoint/1,
+    % Endpoint + tokenizer detection (boot auto-start, /api/info)
+    embedding_endpoint_available/0,
+    embedding_tokenizer_available/1,
+    probe_cached/3,
+    auto_configure_indexer/0,
     % Embedded-engine dispatch (also used by search_resolve)
     engine_http_open/3,
     clean_vectorlink_env/0
@@ -1273,7 +1278,7 @@ maybe_nudge_push(Data_Version_Header, Commit, _System_DB, _Auth, Path, Branch) :
     ;   (   plugin_api:indexer_available
         ->  (   branch_path_for_notify(Path, Branch, Branch_Path),
                 api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-                catch((plugin_api:indexer_notify(Branch_Path, Branch, Store_Clustering) ; true),
+                catch((plugin_api:indexer_notify(Branch_Path, Branch, Store_Clustering, true) ; true),
                       Nudge_Error,
                       format(user_error,
                              "[WARN] Search stale-version nudge failed for ~w: ~q~n",
@@ -1502,6 +1507,86 @@ embedded_tokenizer_path(Path) :-
     ->  Path = Candidate
     ;   Path = ''
     ).
+
+% ==========================================================================
+% Endpoint + tokenizer detection
+%
+% Boot-time auto-start and /api/info both ask the same questions: is an
+% OpenAI-compatible embedding endpoint answering, and is a tokenizer
+% loadable? probe_cached/3 rate-limits the answers to one per second so
+% repeated info calls never hammer the endpoint.
+% ==========================================================================
+
+:- dynamic endpoint_probe_cache/3. % Key, Result, Probe_Time
+
+%% probe_cached(+Key, :Probe, -Result) is det.
+%
+%  At most one Probe execution per Key per second — boot detection and
+%  /api/info share the cache, so inspecting the system stays cheap.
+:- meta_predicate probe_cached(+, 0, -).
+probe_cached(Key, Probe, Result) :-
+    get_time(Now),
+    with_mutex(vectorlink_probe_cache,
+               (   endpoint_probe_cache(Key, Cached, At),
+                   Now - At < 1.0
+               ->  Result = Cached
+               ;   (   call(Probe)
+                   ->  Probe_Result = true
+                   ;   Probe_Result = false),
+                   retractall(endpoint_probe_cache(Key, _, _)),
+                   asserta(endpoint_probe_cache(Key, Probe_Result, Now)),
+                   Result = Probe_Result)).
+
+%% embedding_endpoint_url(-URL) is det.
+%
+%  The OpenAI-compatible endpoint the embedded engine would embed
+%  against: VECTORLINK_EMBED_URL when set, else Ollama's default port.
+embedding_endpoint_url(URL) :-
+    (   getenv('VECTORLINK_EMBED_URL', Env_URL),
+        Env_URL \== ''
+    ->  URL = Env_URL
+    ;   URL = 'http://localhost:11434').
+
+%% embedding_endpoint_available is semidet.
+%
+%  An OpenAI-compatible server answers on the embedding endpoint
+%  (GET /v1/models, 1s timeout). Goes through the probe cache.
+embedding_endpoint_available :-
+    embedding_endpoint_url(Base),
+    format(atom(URL), "~w/v1/models", [Base]),
+    probe_cached(embedding_endpoint(URL),
+                 catch(http_open(URL, _Stream,
+                                 [status_code(200), timeout(1)]),
+                       _, fail),
+                 true).
+
+%% embedding_tokenizer_available(-Available) is det.
+%
+%  True when a tokenizer file the embedded engine can load is pin-able:
+%  the env-pinned path exists, or the asset shipped with the plugin is
+%  present. '' (engine's own fallback default) counts as unavailable —
+%  it cannot be verified from here.
+embedding_tokenizer_available(Available) :-
+    embedded_tokenizer_path(Path),
+    (   Path \== '',
+        exists_file(Path)
+    ->  Available = true
+    ;   Available = false).
+
+%% auto_configure_indexer is det.
+%
+%  Out-of-the-box boot detection: when TERMINUSDB_INDEXER_BACKEND is
+%  unset and an OpenAI-compatible endpoint answers, select the embedded
+%  vectorlink backend so the engine starts with the server. Boot-only
+%  today — a later change can re-run this to pick up an endpoint that
+%  appears mid-run, hence the name.
+auto_configure_indexer :-
+    (   getenv('TERMINUSDB_INDEXER_BACKEND', _)
+    ->  true
+    ;   (   embedding_endpoint_available
+        ->  setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+            config:clear_indexer_backend_config
+        ;   true)).
 
 :- multifile plugins:post_delete_db_hook/2.
 
@@ -2917,6 +3002,106 @@ silence_user_error(Goal) :-
 % are discarded.
 % ==========================================================================
 
+:- begin_tests(vectorlink_endpoint_detection).
+
+:- dynamic probe_calls/1.
+
+counting_probe :-
+    (   retract(probe_calls(N))
+    ->  true
+    ;   N = 0),
+    succ(N, N1),
+    asserta(probe_calls(N1)).
+
+clear_probe_state :-
+    retractall(probe_calls(_)),
+    retractall(vectorlink:endpoint_probe_cache(_, _, _)).
+
+test("probe_cached runs the probe at most once per second",
+     [cleanup(clear_probe_state)]) :-
+    clear_probe_state,
+    probe_cached(ttl_key, counting_probe, true),
+    probe_cached(ttl_key, counting_probe, true),
+    probe_cached(ttl_key, counting_probe, true),
+    once(probe_calls(1)).
+
+test("probe_cache expires after one second",
+     [cleanup(clear_probe_state)]) :-
+    clear_probe_state,
+    probe_cached(ttl_key, counting_probe, true),
+    % backdate the cache entry past the one-second window
+    retract(vectorlink:endpoint_probe_cache(ttl_key, _, _)),
+    asserta(vectorlink:endpoint_probe_cache(ttl_key, true, 0)),
+    probe_cached(ttl_key, counting_probe, true),
+    once(probe_calls(2)).
+
+test("probe_cached caches a failing probe as false",
+     [cleanup(clear_probe_state)]) :-
+    clear_probe_state,
+    probe_cached(ttl_key, fail, false),
+    probe_cached(ttl_key, fail, false),
+    \+ probe_calls(_).
+
+test("embedding_endpoint_available is true against a live openai-compatible endpoint",
+     [setup((clear_probe_state,
+             setenv('VECTORLINK_EMBED_URL', 'http://localhost:19876'),
+             http_handler('/v1/models', stub_models, []),
+             catch(start_push_stub(19876), _, true))),
+      cleanup((clear_probe_state,
+               catch(stop_push_stub(19876), _, true),
+               unsetenv('VECTORLINK_EMBED_URL')))]) :-
+    embedding_endpoint_available.
+
+stub_models(_Request) :-
+    format("Content-Type: application/json~n~n"),
+    write('{"object":"list","data":[]}').
+
+test("embedding_tokenizer_available reflects the shipped asset",
+     [cleanup(unsetenv('VECTORLINK_TOKENIZER_PATH'))]) :-
+    (   getenv('VECTORLINK_TOKENIZER_PATH', _)
+    ->  unsetenv('VECTORLINK_TOKENIZER_PATH')
+    ;   true),
+    embedding_tokenizer_available(true).
+
+test("auto_configure selects vectorlink when the endpoint answers",
+     [setup((clear_probe_state,
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             setenv('VECTORLINK_EMBED_URL', 'http://localhost:19876'),
+             http_handler('/v1/models', stub_models, []),
+             catch(start_push_stub(19876), _, true))),
+      cleanup((clean_vectorlink_test_env,
+               clear_probe_state,
+               catch(stop_push_stub(19876), _, true),
+               unsetenv('VECTORLINK_EMBED_URL'))),
+      true(Backend == vectorlink)]) :-
+    auto_configure_indexer,
+    config:indexer_backend(Backend).
+
+test("auto_configure leaves the backend alone without an endpoint",
+     [setup((clear_probe_state,
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             % port 9 (discard) — nothing answers there
+             setenv('VECTORLINK_EMBED_URL', 'http://localhost:9'))),
+      cleanup((clean_vectorlink_test_env,
+               clear_probe_state,
+               unsetenv('VECTORLINK_EMBED_URL'))),
+      true(Backend == none)]) :-
+    auto_configure_indexer,
+    config:indexer_backend(Backend).
+
+test("auto_configure respects an explicitly chosen backend",
+     [setup((clear_probe_state,
+             setenv('TERMINUSDB_INDEXER_BACKEND', 'http_vectorlink'),
+             setenv('VECTORLINK_EMBED_URL', 'http://localhost:9'))),
+      cleanup((clean_vectorlink_test_env,
+               clear_probe_state,
+               unsetenv('VECTORLINK_EMBED_URL'))),
+      true(Backend == http_vectorlink)]) :-
+    auto_configure_indexer,
+    config:indexer_backend(Backend).
+
+:- end_tests(vectorlink_endpoint_detection).
+
 :- begin_tests(vectorlink_indexer_backend_selector).
 
 test("default backend is none when unset",
@@ -3182,7 +3367,10 @@ test("post-server hook resolves the component on a detached thread",
      [ setup((clean_vectorlink_test_env,
               setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
               readiness:readiness_pending(vectorlink))),
-       cleanup(clean_vectorlink_test_env)
+       % The hook installs the embedded engine as the indexer transport;
+       % clear it so later tests' commits don't enqueue index tasks.
+       cleanup((clean_vectorlink_test_env,
+                catch(plugin_api:indexer_set_config("", ""), _, true)))
      ]) :-
     plugins:post_server_startup_hook(0),
     % Init runs detached; the component must reach a terminal state —
@@ -3325,9 +3513,11 @@ test("io_push_delta delegates to indexer_notify (push architecture)",
               setenv('TERMINUSDB_VECTORLINK_ENDPOINT', Endpoint_URL),
               plugin_api:indexer_set_config(Endpoint_URL, "")
              )),
-       cleanup((stop_push_stub(Port),
+       % Clearing the indexer config cancels queued tasks — do it before
+       % the stub dies so nothing is left firing at a dead endpoint.
+       cleanup((catch(plugin_api:indexer_set_config("", ""), _, true),
+                stop_push_stub(Port),
                 clean_vectorlink_test_env,
-                catch(plugin_api:indexer_set_config("", ""), _, true),
                 teardown_temp_store(State)))
      ]) :-
     super_user_authority(Auth),

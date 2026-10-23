@@ -68,6 +68,10 @@
               api_class_frame/6,
               api_filled_frame/5,
 
+              % api_jsonschema.pl
+              tdb_class_to_json_schema/3,
+              api_class_jsonschema/5,
+
               % api_woql.pl
               woql_query_json/9,
               woql_query_streaming_json/5,
@@ -130,6 +134,10 @@
 
               % api_document.pl
               api_can_read_document/6,
+              api_check_documents/11,
+              api_check_insert_body/4,
+              api_check_replace_body/4,
+              api_check_delete_body/3,
               api_insert_documents/9,
               api_delete_documents/9,
               api_delete_documents_by_type/8,
@@ -149,6 +157,7 @@
               convert_input_to_json_stream/4,
               document_stream_headers/3,
               document_stream_start/3,
+              document_stream_preamble/3,
               document_stream_write/4,
               document_stream_end/2,
 
@@ -237,6 +246,7 @@
 :- use_module(api/graph_load).
 :- use_module(api/graph_dump).
 :- use_module(api/api_frame).
+:- use_module(api/api_jsonschema).
 :- use_module(api/api_woql).
 :- use_module(api/api_squash).
 :- use_module(api/api_reset).

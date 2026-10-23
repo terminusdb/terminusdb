@@ -38,4 +38,14 @@ describe('info_ok', function () {
       expect(r.body['api:info']).to.have.property('enterprise').that.is.an('object')
     }
   })
+
+  it('serves GET /llms.txt publicly as text/plain', async function () {
+    // llms.txt is the MCP onboarding doc — it describes how to talk to the
+    // server, never what's in it, so it answers without authentication.
+    const r = await new Agent().get('/llms.txt')
+    expect(r.status).to.equal(200)
+    expect(r.header['content-type']).to.include('text/plain')
+    expect(r.text).to.include('tools/call')
+    expect(r.text).to.include('api/mcp')
+  })
 })

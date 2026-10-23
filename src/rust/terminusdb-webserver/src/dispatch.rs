@@ -686,6 +686,34 @@ pub fn tokio_handle() -> Option<tokio::runtime::Handle> {
     TOKIO_HANDLE.lock().unwrap().clone()
 }
 
+/// Dedicated runtime for processes that never start the webserver —
+/// `terminusdb mcp` stdio is the one that matters: the embedded
+/// vectorlink engine and the indexer task spawner both need a reactor.
+/// Created on first need and kept for the process lifetime so its tasks
+/// keep running; once installed via set_tokio_handle every downstream
+/// tokio_handle() caller sees it.
+static STANDALONE_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+fn standalone_runtime() -> &'static tokio::runtime::Runtime {
+    STANDALONE_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("standalone tokio runtime")
+    })
+}
+
+/// Get the tokio runtime handle, installing the standalone runtime when
+/// the server's runtime is absent.
+pub fn tokio_handle_or_install() -> Option<tokio::runtime::Handle> {
+    if let Some(handle) = tokio_handle() {
+        return Some(handle);
+    }
+    let handle = standalone_runtime().handle().clone();
+    set_tokio_handle(handle.clone());
+    Some(handle)
+}
+
 /// Registry of active input stream receivers.
 ///
 /// Input streams carry the HTTP request body from Rust to Prolog. Rust writes
@@ -765,6 +793,9 @@ pub struct PipeDispatchRequest {
 pub enum DispatchMessage {
     Pipe(PipeDispatchRequest),
     Stream(DispatchRequest),
+    /// Stop the dispatcher thread so its Prolog engine is destroyed
+    /// before process exit (see `shutdown_dispatcher`).
+    Shutdown,
     /// Cancel an in-flight pipe request by signalling the Prolog worker.
     CancelPipe {
         output_worker_write_fd: i32,
@@ -774,6 +805,10 @@ pub enum DispatchMessage {
 
 /// Sender for the single-engine dispatcher queue.
 static DISPATCH_QUEUE: OnceLock<mpsc::Sender<DispatchMessage>> = OnceLock::new();
+
+/// JoinHandle for the dispatcher thread so shutdown can wait (bounded)
+/// for its `tdb_http` Prolog engine to be destroyed.
+static DISPATCHER_THREAD: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
 
 /// In-flight request ids used to reject duplicate requests.
 static IN_FLIGHT_REQUESTS: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new();
@@ -796,6 +831,13 @@ fn in_flight_requests() -> Arc<Mutex<HashSet<String>>> {
         .clone()
 }
 
+/// Whether the request dispatcher has been initialized. Callers that need
+/// the dispatcher outside a webserver process (the embedded vectorlink
+/// engine under `terminusdb mcp`) install it themselves when this is false.
+pub fn dispatcher_initialized() -> bool {
+    DISPATCH_QUEUE.get().is_some()
+}
+
 /// Initialize the single-engine request dispatcher. Must be called once
 /// before the webserver starts accepting requests.
 pub fn init_dispatcher() {
@@ -804,7 +846,7 @@ pub fn init_dispatcher() {
     IN_FLIGHT_REQUESTS.set(Arc::new(Mutex::new(HashSet::new()))).ok();
     let log_rx = crate::log::init_log_channel();
 
-    std::thread::spawn(move || {
+    let handle = std::thread::spawn(move || {
         // Create the Prolog engine with the same stack_limit that
         // terminus_config.pl sets for the main engine (8 GB). Without this,
         // PL_create_engine(null) uses the SWI-Prolog default of 1 GB, which
@@ -842,6 +884,7 @@ pub fn init_dispatcher() {
             // Process pending log messages before each dispatch.
             crate::log::drain_log_messages(&context, &log_rx);
             match msg {
+                DispatchMessage::Shutdown => break,
                 DispatchMessage::Pipe(req) => {
                     let dispatch_start = std::time::Instant::now();
                     let dispatch_result = dispatch_pipe_to_prolog(&context, &req);
@@ -901,6 +944,38 @@ pub fn init_dispatcher() {
             }
         }
     });
+    *DISPATCHER_THREAD.lock().unwrap() = Some(handle);
+}
+
+/// Ask the dispatcher thread to exit and wait briefly for it to destroy
+/// its `tdb_http` Prolog engine. Called at process halt so the engine is
+/// gone before SWI-Prolog's thread shutdown sweep; a wedged dispatcher
+/// delays halt by about a second rather than hanging it.
+pub fn shutdown_dispatcher() {
+    if let Some(tx) = DISPATCH_QUEUE.get() {
+        // try_send with a bounded retry: the queue may briefly be full,
+        // and a plain send could block the halting process forever if
+        // the dispatcher is wedged.
+        for _ in 0..100 {
+            match tx.try_send(DispatchMessage::Shutdown) {
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
+                _ => break,
+            }
+        }
+    }
+    let handle = DISPATCHER_THREAD.lock().unwrap().take();
+    if let Some(handle) = handle {
+        // join has no timeout, so poll is_finished instead of blocking.
+        for _ in 0..200 {
+            if handle.is_finished() {
+                let _ = handle.join();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
 }
 
 fn init_prolog_worker_pool(context: &Context<impl QueryableContextType>) -> PrologResult<()> {
@@ -1800,6 +1875,16 @@ mod tests {
         assert_eq!(picks[4].0, "b");
         assert_eq!(picks[5].0, "c");
         assert!(!picks[0].2);
+    }
+
+    #[test]
+    fn standalone_runtime_runs_futures() {
+        // The runtime must exist independent of the global TOKIO_HANDLE —
+        // `terminusdb mcp` has no webserver to install one.
+        let result = standalone_runtime().handle().block_on(async { 42 });
+        assert_eq!(result, 42);
+        // A second call reuses the same runtime (OnceLock), not a fresh one.
+        assert!(std::ptr::eq(standalone_runtime(), standalone_runtime()));
     }
 
     #[test]

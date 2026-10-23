@@ -13,6 +13,8 @@
               readiness_timeout/1
           ]).
 
+:- use_module(library(lists)).
+:- use_module(library(memfile)).
 :- use_module(core(plugins)).
 :- use_module(core(util/json_log)).
 
@@ -296,7 +298,9 @@ test("await_readiness times out when the component never reports",
     assertion(End - Start < 2).
 
 test("await_readiness warns once when the wait exceeds the warn threshold",
-     [setup((reset_readiness, readiness_pending(slow))), cleanup(reset_readiness)]) :-
+     [setup((reset_readiness, readiness_pending(slow),
+             config:set_log_level('WARNING'))),
+      cleanup((reset_readiness, config:clear_log_level))]) :-
     new_memory_file(MF),
     stream_property(OldErr, alias(user_error)),
     setup_call_cleanup(

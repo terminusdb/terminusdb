@@ -351,7 +351,7 @@ ignore_ref_and_repo_schema :-
 log_level_env(Log_Level) :-
     getenv('TERMINUSDB_LOG_LEVEL', Log_Level_Lower),
     upcase_atom(Log_Level_Lower, Log_Level),
-    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    memberchk(Log_Level, ['OFF', 'ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
     !.
 log_level_env('INFO').
 
@@ -364,7 +364,7 @@ log_level(Log_Level) :-
     Log_Level = Found_Log_Level.
 
 set_log_level(Log_Level) :-
-    memberchk(Log_Level, ['ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
+    memberchk(Log_Level, ['OFF', 'ERROR', 'WARNING', 'NOTICE', 'INFO', 'DEBUG']),
     clear_log_level,
     asserta(log_level_override(Log_Level)).
 

@@ -140,5 +140,18 @@ describe('response-headers', function () {
       verifyDataVersionHeader(result)
       verifyCorsHeaders(result)
     })
+
+    it('returns the graphql error body on a failed query', async function () {
+      this.timeout(20000)
+      const path = `/api/graphql/${agent.orgName}/${agent.dbName}`
+      const result = await agent
+        .post(path)
+        .set('Origin', ORIGIN)
+        .set('Content-Type', 'application/json')
+        .send({ query: '{ NoSuchType { field } }' })
+
+      expect(result.status).to.equal(200)
+      expect(result.body.errors).to.be.an('array').that.is.not.empty
+    })
   })
 })

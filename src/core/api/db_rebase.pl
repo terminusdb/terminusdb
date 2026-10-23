@@ -731,6 +731,50 @@ test(rebase_divergent_history,
 
     true.
 
+test(rebase_divergent_history_no_common_commit_option,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    % Same shape as rebase_divergent_history but with the `none`
+    % common-commit option — the variant the MCP layer drives.
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         insert(d,e,f)),
+                     _),
+
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+
+    rebase_on_branch(system_descriptor{}, Auth, Second_Path, Master_Path, "rebaser", [], none, _Their_Commit_Ids, _Reports),
+
+    findall(t(S,P,O),
+            ask(Second_Descriptor,
+                t(S,P,O)),
+            Triples_Unsorted),
+
+    sort(Triples_Unsorted, Triples),
+    [t(a,b,c),
+     t(d,e,f),
+     t(j,k,l)] = Triples.
+
 test(rebase_conflicting_history_errors,
      [setup((setup_temp_store(State),
              create_db_with_test_schema("admin","test"))),
@@ -838,6 +882,61 @@ test(rebase_fast_forward_from_nothing,
 
     Optional_Common_Commit_Id = none,
     [Commit_Id1,Commit_Id2] = Their_Applied_Commit_Ids.
+
+test(rebase_schema_only_commit_keeps_instance,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ])
+:-
+    % A replayed commit that touched only the schema graph has no
+    % instance layer. The replay must carry the base instance layer
+    % forward, or everything the base knew silently disappears.
+    Master_Path = "admin/foo",
+    resolve_absolute_string_descriptor(Master_Path, Master_Descriptor),
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit a"}, Master_Context1),
+    with_transaction(Master_Context1,
+                     ask(Master_Context1,
+                         insert(a,b,c)),
+                    _),
+    Second_Path = "admin/foo/local/branch/second",
+    super_user_authority(Auth),
+    branch_create(system_descriptor{}, Auth, Second_Path, branch(Master_Path), _),
+    resolve_absolute_string_descriptor(Second_Path, Second_Descriptor),
+
+    % schema-only commit on second — no instance layer
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit s"}, Second_Context_S),
+    with_transaction(Second_Context_S,
+                     insert_schema_document(Second_Context_S,
+                                            _{ '@id' : "Extra",
+                                               '@type' : "Class" }),
+                    _),
+
+    % instance commit on second
+    create_context(Second_Descriptor, commit_info{author:"test",message:"commit b"}, Second_Context1),
+    with_transaction(Second_Context1,
+                     ask(Second_Context1,
+                         insert(d,e,f)),
+                     _),
+
+    % divergent commit on main
+    create_context(Master_Descriptor, commit_info{author:"test",message:"commit d"}, Master_Context2),
+    with_transaction(Master_Context2,
+                     ask(Master_Context2,
+                         insert(j,k,l)),
+                     _),
+
+    rebase_on_branch(system_descriptor{}, Auth, Second_Path, Master_Path, "rebaser", [], some(_), _Their_Commit_Ids, _Reports),
+
+    findall(t(S,P,O),
+            ask(Second_Descriptor,
+                t(S,P,O)),
+            Triples_Unsorted),
+
+    sort(Triples_Unsorted, Triples),
+    [t(a,b,c),
+     t(d,e,f),
+     t(j,k,l)] = Triples.
 
 test(rebase_conflict,
      [

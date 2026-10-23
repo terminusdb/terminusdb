@@ -157,11 +157,18 @@ values_equal(V1, V2, _Prefixes) :-
 values_equal(V1, V2, Prefixes) :-
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
     (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
-    prefix_expand(A1, Prefixes, E1),
-    prefix_expand(A2, Prefixes, E2),
-    atom_string(E1, E1_String),
-    atom_string(E2, E2_String),
-    E1_String = E2_String.
+    (   A1 = A2
+    ->  true
+    %   Empty strings are values, not keys — prefix_expand would throw
+    %   empty_key, so only expand when both sides are non-empty.
+    ;   A1 \= '',
+        A2 \= '',
+        prefix_expand(A1, Prefixes, E1),
+        prefix_expand(A2, Prefixes, E2),
+        atom_string(E1, E1_String),
+        atom_string(E2, E2_String),
+        E1_String = E2_String
+    ).
 
 check_before_after(Original, Before, After, Final, Options) :-
     option(match_final_state(true), Options),
@@ -171,18 +178,16 @@ check_before_after(Original, Before, After, Final, Options) :-
     ->  Final = success(After)
     ;   values_equal(Original, Before, Prefixes)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
 check_before_after(Original, Before, After, Final, Options) :-
     option(prefixes(Prefixes), Options),
     !,
     (   values_equal(Original, Before, Prefixes)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
 check_before_after(Original, Before, After, Final, Options) :-
     option(match_final_state(true), Options),
@@ -191,17 +196,30 @@ check_before_after(Original, Before, After, Final, Options) :-
     ->  Final = success(After)
     ;   values_equal(Original, Before)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
-check_before_after(Original, Before, After, Final, _Options) :-
+check_before_after(Original, Before, After, Final, Options) :-
     (   values_equal(Original, Before)
     ->  Final = success(After)
-    ;   Final = conflict(json{ '@op' : 'Conflict',
-                               '@expected' : Before,
-                               '@found' : Original })
+    ;   conflict_json(Before, Original, After, Options, Conflict),
+        Final = conflict(Conflict)
     ).
+
+% conflict_json(+Before, +Original, +After, +Options, -Conflict) is det.
+%
+%  '@incoming' names the value the diff was carrying (the source side of
+%  a merge). Opt-in via conflict_incoming(true) — bare callers get the
+%  historical two-value witness.
+conflict_json(Before, Original, After, Options, Conflict) :-
+    (   option(conflict_incoming(true), Options)
+    ->  Conflict = json{ '@op' : 'Conflict',
+                         '@expected' : Before,
+                         '@found' : Original,
+                         '@incoming' : After }
+    ;   Conflict = json{ '@op' : 'Conflict',
+                         '@expected' : Before,
+                         '@found' : Original }).
 
 non_conflict_list(List, Conflict) :-
     maplist([_,null]>>true, List, Conflict).
@@ -1166,6 +1184,64 @@ test(swap_decimal_value_json_preserve, []) :-
                                              '@type' : "Test",
                                              weight : 6r5 }), []).
 
+test(swapvalue_empty_before_against_empty, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : ""
+              },
+    Patch = _{ notes : _{ '@op' : "SwapValue",
+                          '@before' : "",
+                          '@after' : "first note" }
+             },
+    After =  _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "first note"
+              },
+    simple_patch(Patch, Before, success(After),
+                 _{ prefixes : _{ '@base' : "http://somewhere.for.now/document/" } }).
+
+test(swapvalue_empty_before_against_nonempty_conflicts, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "existing"
+              },
+    Patch = _{ notes : _{ '@op' : "SwapValue",
+                          '@before' : "",
+                          '@after' : "overwrite" }
+             },
+    simple_patch(Patch, Before, conflict(Conflict),
+                 _{ prefixes : _{ '@base' : "http://somewhere.for.now/document/" } }),
+    Conflict = json{ notes : json{ '@expected' : "",
+                                   '@found' : "existing",
+                                   '@op' : 'Conflict' } }.
+
+test(force_value_flips_unconditionally, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "anything"
+              },
+    Patch = _{ notes : _{ '@op' : "ForceValue",
+                          '@after' : "flipped" }
+             },
+    After =  _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "flipped"
+              },
+    simple_patch(Patch, Before, success(After), []).
+
+test(force_value_sets_missing_key, []) :-
+    Before = _{ '@id' : "Task/1",
+                '@type' : "Task"
+              },
+    Patch = _{ notes : _{ '@op' : "ForceValue",
+                          '@after' : "set" }
+             },
+    After =  _{ '@id' : "Task/1",
+                '@type' : "Task",
+                notes : "set"
+              },
+    simple_patch(Patch, Before, success(After), []).
+
 :- end_tests(simple_patch).
 
 :- begin_tests(values_equal_canonical).
@@ -1201,6 +1277,18 @@ test(number_comparison_with_prefixes, []) :-
 test(dict_comparison_with_prefixes, []) :-
     Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
     values_equal(json{x:1}, json{x:1}, Prefixes).
+
+test(empty_string_equal, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal("", "", Prefixes).
+
+test(empty_atom_vs_empty_string, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    values_equal('', "", Prefixes).
+
+test(empty_vs_nonempty_not_equal, []) :-
+    Prefixes = _{ '@base' : "http://somewhere.for.now/document/" },
+    \+ values_equal("", "x", Prefixes).
 
 :- end_tests(values_equal_canonical).
 

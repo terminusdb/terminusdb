@@ -651,7 +651,7 @@ log::log_debug(format!("[terminusdb-webserver] resolved path: {:?}", path));
 **Controlling Log Output:**
 
 ```bash
-# Set log level (DEBUG, INFO, NOTICE, WARNING, ERROR)
+# Set log level (DEBUG, INFO, NOTICE, WARNING, ERROR, OFF)
 export TERMINUSDB_LOG_LEVEL=DEBUG
 
 # Set log format (text or json)
