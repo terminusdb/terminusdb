@@ -528,6 +528,11 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'TERMINUSDB_SERVER_PACK_DIR',
 %                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH',
+                         % Relocatable swipl installs (e.g. the ubuntu CI
+                         % toolchain under /opt/swipl) need these to find
+                         % libswipl.so at exec time.
+                         'LD_LIBRARY_PATH',
+                         'DYLD_LIBRARY_PATH',
                          'PATH'
                      ],
                      Env_List),
