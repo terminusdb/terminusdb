@@ -12,6 +12,7 @@
 :- use_module(db_fetch).
 :- use_module(db_fast_forward).
 :- use_module(api_remote).
+:- use_module(core(plugins)).
 
 :- meta_predicate clone_(+,+,+,+,+,+,+,+,+,3,-).
 :- meta_predicate clone(+,+,+,+,+,+,+,+,+,3,-).
@@ -91,6 +92,73 @@ clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predic
             )
         ),
         ignore(retract(db_currently_creating(Account_String, DB_String)))
-    ).
+    ),
 
+    % The fast-forward applied commits without passing through the
+    % transaction commit path — fire the hook only after finalize_db and
+    % the creation gate have lifted, so consumers calling back into
+    % open_descriptor (e.g. the indexer) see a finished database.
+    (   get_dict(applied_commits, Meta_Data, Applied_Commits),
+        Applied_Commits \== []
+    ->  resolve_absolute_descriptor([Account, DB, "local", "branch", "main"],
+                                    Cloned_Branch_Descriptor),
+        ignore(forall(post_fast_forward_hook(Cloned_Branch_Descriptor,
+                                             Applied_Commits),
+                      true))
+    ;   true).
+
+
+:- begin_tests(clone_indexer_hook, [concurrent(false)]).
+
+:- use_module(core(util/test_utils)).
+:- use_module(core(transaction)).
+:- use_module(core(triple)).
+:- use_module(core(query)).
+:- use_module(core(plugins)).
+
+:- dynamic ff_hook_clause_ref/1.
+
+% The recorder clause records into the global recorded database — test
+% block code does not live in the module, so a qualified call back into
+% db_clone would not resolve at run time.
+install_ff_hook_recorder :-
+    assertz(plugins:(post_fast_forward_hook(D, I) :-
+                     recordz(clone_ff_hook_call, D-I)),
+            Ref),
+    assertz(ff_hook_clause_ref(Ref)).
+
+uninstall_ff_hook_recorder :-
+    forall(ff_hook_clause_ref(Ref), erase(Ref)),
+    retractall(ff_hook_clause_ref(_)),
+    forall(recorded(clone_ff_hook_call, _, Ref2), erase(Ref2)).
+
+test("clone fires post_fast_forward_hook for the cloned branch",
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffsrc"),
+             install_ff_hook_recorder)),
+      cleanup((uninstall_ff_hook_recorder,
+               teardown_temp_store(State)))
+     ]) :-
+    % Commit a triple on the source so there is history to apply.
+    resolve_absolute_string_descriptor("admin/ffsrc", Src_Branch),
+    create_context(Src_Branch,
+                   commit_info{author:"test", message:"test"},
+                   Src_Context),
+    with_transaction(Src_Context,
+                     ask(Src_Context, insert(a,b,c)),
+                     _),
+
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    clone(System, Auth, "admin", "ffdest", "label", "comment", false,
+          "origin", "admin/ffsrc", [_U,_H,_P]>>fail, Meta_Data),
+
+    get_dict(applied_commits, Meta_Data, Applied_Commits),
+    assertion(Applied_Commits \== []),
+    once(recorded(clone_ff_hook_call, Descriptor-Commit_Ids)),
+    assertion(Commit_Ids == Applied_Commits),
+    resolve_absolute_string_descriptor(Path, Descriptor),
+    assertion(Path == 'admin/ffdest/local/branch/main').
+
+:- end_tests(clone_indexer_hook).
 

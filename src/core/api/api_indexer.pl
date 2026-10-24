@@ -392,6 +392,61 @@ plugins:post_commit_hook(Validations, _Meta_Data) :-
                [Hook_Error])
     ).
 
+% ==========================================================================
+% Fast-forward hook
+%
+% Clone and pull apply commits through fast_forward_branch/3, bypassing the
+% transaction commit path — post_commit_hook never fires for them. Without
+% this hook a freshly cloned database is invisible to the indexer.
+%
+% GATE: same guards as post_commit_hook — push_indexer_backend and
+% plugin_api:indexer_available.
+%
+% FLAG SEMANTICS: mirror the schema-commit path — has_embeddings is true
+% exactly when the branch's current schema sets store_indices, which also
+% clears the engine-side no_embedding_cache (a pull can introduce
+% store_indices into a domain that was previously skipped).
+%
+% FIRE-AND-FORGET: notify failures are logged and never propagated —
+% indexing must not break clone/pull.
+% ==========================================================================
+
+:- multifile plugins:post_fast_forward_hook/2.
+
+plugins:post_fast_forward_hook(Branch_Descriptor, _Applied_Commit_Ids) :-
+    catch(
+        (   push_indexer_backend,
+            plugin_api:indexer_available,
+            branch_descriptor{branch_name: Branch_Name} :< Branch_Descriptor,
+            descriptor_graphspec(Branch_Descriptor, Path),
+            indexer_branch_flags(Branch_Descriptor,
+                                 Store_Clustering, Has_Embeddings),
+            plugin_api:indexer_notify(Path, Branch_Name,
+                                      Store_Clustering, Has_Embeddings)
+        ),
+        Fast_Forward_Notify_Error,
+        format(user_error,
+               "[WARN] indexer notify after fast-forward failed: ~q~n",
+               [Fast_Forward_Notify_Error])).
+
+/**
+ * indexer_branch_flags(+Branch_Descriptor, -Store_Clustering,
+ *                      -Has_Embeddings) is det.
+ *
+ * Reads store_indices/store_clustering from the branch's current
+ * (post-application) schema. Has_Embeddings mirrors the schema-commit
+ * path in post_commit_hook: true exactly when store_indices is set.
+ */
+indexer_branch_flags(Branch_Descriptor, Store_Clustering, Has_Embeddings) :-
+    schema_store_indices_for_descriptor(Branch_Descriptor, Store_Indices),
+    (   Store_Indices == true
+    ->  schema_store_clustering_for_descriptor(Branch_Descriptor,
+                                               Store_Clustering),
+        Has_Embeddings = true
+    ;   Store_Clustering = false,
+        Has_Embeddings = false
+    ).
+
 /**
  * validation_is_index_enabled(+Validation) is semidet.
  *
@@ -1734,6 +1789,103 @@ test(refresh_and_doc_change_dedup_on_same_id,
     sort(Ids, UniqueIds),
     length(UniqueIds, NU),
     assertion(NU == 4).
+
+%% indexer_branch_flags/3 — decides what indexer_notify receives after a
+%% fast-forward (clone/pull), where no commit validation objects exist to
+%% inspect. Reads the branch's post-application schema.
+
+test(indexer_branch_flags_both_options,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffflagdb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#",
+    "@metadata": {
+      "terminusdb": {
+        "options": ["store_indices", "store_clustering"]
+      }
+    }
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string",
+    "body": "xsd:string",
+    "@metadata": {
+      "embedding": {
+        "query": "query($id: ID){ Article(id: $id) { title body } }",
+        "template": "{{title}} {{body}}"
+      }
+    }
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/ffflagdb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/ffflagdb/local/branch/main", Desc),
+    indexer_branch_flags(Desc, Store_Clustering, Has_Embeddings),
+    assertion(Store_Clustering == true),
+    assertion(Has_Embeddings == true).
+
+test(indexer_branch_flags_no_options,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffnodb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('
+[
+  {
+    "@type": "@context",
+    "@base": "http://example.com/data/",
+    "@schema": "http://example.com/schema#"
+  },
+  {
+    "@type": "Class",
+    "@id": "Article",
+    "@key": { "@type": "Lexical", "@fields": ["title"] },
+    "title": "xsd:string"
+  }
+]
+', SchemaStream),
+    Options = [author("test"), full_replace(true), graph_type(schema), message("test schema")],
+    api_insert_documents(System, Auth, "admin/ffnodb", SchemaStream, no_data_version, _, _, _, Options),
+    resolve_absolute_string_descriptor("admin/ffnodb/local/branch/main", Desc),
+    indexer_branch_flags(Desc, Store_Clustering, Has_Embeddings),
+    assertion(Store_Clustering == false),
+    assertion(Has_Embeddings == false).
+
+test(indexer_branch_flags_schemaless_db,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffschemadb"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/ffschemadb/local/branch/main", Desc),
+    indexer_branch_flags(Desc, Store_Clustering, Has_Embeddings),
+    assertion(Store_Clustering == false),
+    assertion(Has_Embeddings == false).
+
+%% The hook implementation must never throw: a non-branch descriptor or a
+%% missing backend degrade to failure, which forall/2 turns into a no-op.
+
+test(post_fast_forward_hook_noop_without_backend,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffnobe"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+    config:clear_indexer_backend_config,
+    resolve_absolute_string_descriptor("admin/ffnobe/local/branch/main", Desc),
+    assertion(\+ plugins:post_fast_forward_hook(Desc, [anything])).
 
 :- end_tests(indexer_predicates).
 
