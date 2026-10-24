@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build
         uses: snapcore/action-build@v1
@@ -41,7 +41,7 @@ jobs:
 
     steps:   
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download
         uses: actions/download-artifact@v4
@@ -128,6 +128,13 @@ jobs:
           ps -p $(cat terminusdb.pid) || echo "WARNING: Server not running before tests!"
           netstat -ln | grep 6363 || echo "WARNING: Nothing listening on port 6363!"
           cd tests && npm i && npm run test
+
+      - name: Dump snap journal
+        if: always()
+        run: |
+          # Confined apps re-parented into snap.*.scope can die with stderr
+          # already severed; journald still records them
+          sudo journalctl -u 'snap.terminusdb.*' --no-pager -n 100 || true
 
       - name: Check Server Status After Tests
         if: always()

@@ -7,6 +7,7 @@
 **/.git*
 httpd.log
 docs
+!docs/openapi.yaml
 storage
 tmp
 **/target

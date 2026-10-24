@@ -2,6 +2,14 @@ DIST ?= community
 # Default was 9.2.9
 SWIPL_VERSION ?= 10.0.2
 
+# Version-tagged release of tdb-admin to download for the embedded admin panel.
+# Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
+TDB_ADMIN_VERSION ?= v0.1.1-rc3
+
+# Version-tagged release of tdb-data to download for the embedded data explorer.
+# Must match a tag in https://github.com/terminusdb-org/tdb-data/releases
+TDB_DATA_VERSION ?= v0.1.0-rc2
+
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
 TARGET=terminusdb
@@ -27,13 +35,71 @@ dev: clean-rust generate-dev-jwks
 generate-dev-jwks:
 	node tests/generate-dev-jwks.js
 
+.PHONY: start
+start:
+	tests/terminusdb-test-server.sh start
+
+.PHONY: stop
+stop:
+	tests/terminusdb-test-server.sh stop
+
 .PHONY: restart
 restart:
 	tests/terminusdb-test-server.sh restart
 
+# Build the release binary and restart the standalone test server (port 6363).
+.PHONY: build-restart
+build-restart:
+	@$(MAKE) -f distribution/Makefile.prolog
+	tests/terminusdb-test-server.sh restart
+
+# Build the release binary and restart both TerminusDB (port 7373) and
+# vectorlink (port 7372) for paired indexing/search development.
+# Requires the vectorlink repo as a sibling of the terminusdb repo.
+.PHONY: build-restart-search
+build-restart-search:
+	@$(MAKE) -f distribution/Makefile.prolog
+	../vectorlink/tests/vectorlink-server.sh restart
+
+# Start the test server (port 6363) with the embedded vectorlink engine,
+# embedding through a local Ollama. Pulls multilingual-e5-base (768-dim,
+# Q8_0/int8 weights) into Ollama and fetches its XLM-RoBERTa tokenizer on
+# first run, then rebuilds the dev binary and restarts the server.
+.PHONY: test-server-vectorlink
+test-server-vectorlink: dev
+	@curl -sf --max-time 5 http://localhost:11434/api/tags > /dev/null || { \
+		echo "ERROR: Ollama not reachable on localhost:11434"; \
+		echo "Start it with: ollama serve"; \
+		exit 1; \
+	}
+	ollama pull hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0
+	ollama cp hf.co/vectorlink/multilingual-e5-base-GGUF:q8_0 multilingual-e5-base
+	@if [ ! -f tests/.terminusdb-test-e5-tokenizer.json ]; then \
+		echo "Fetching multilingual-e5-base XLM-RoBERTa tokenizer..."; \
+		curl -fsSL "https://huggingface.co/intfloat/multilingual-e5-base/resolve/main/tokenizer.json" \
+			-o tests/.terminusdb-test-e5-tokenizer.json; \
+	fi
+	@curl -sf http://localhost:11434/api/embed \
+		-d '{"model":"multilingual-e5-base","input":"warmup"}' \
+		| python3 -c "import json,sys; d=len(json.load(sys.stdin)['embeddings'][0]); assert d==768, 'expected 768-dim embeddings, got {}'.format(d); print('Ollama multilingual-e5-base ready (768-dim)')" || { \
+		echo "ERROR: multilingual-e5-base did not return 768-dim embeddings"; exit 1; }
+	TERMINUSDB_INDEXER_BACKEND=vectorlink \
+	VECTORLINK_EMBED_PROVIDER=openai_compatible \
+	VECTORLINK_EMBED_URL=http://localhost:11434 \
+	VECTORLINK_MODEL=multilingual-e5-base \
+	VECTORLINK_DIM=768 \
+	VECTORLINK_TOKENIZER_PATH=$(CURDIR)/tests/.terminusdb-test-e5-tokenizer.json \
+	tests/terminusdb-test-server.sh restart
+
 .PHONY: server-clean
+# Set REUSE_SERVER=1 to skip (re)starting the server — e.g. when running the
+# tests against an already-running instrumented session.
 server-clean:
-	tests/terminusdb-test-server.sh start --clean
+	@if [ "$$REUSE_SERVER" = "1" ]; then \
+		echo "Reusing existing server (REUSE_SERVER=1)"; \
+	else \
+		tests/terminusdb-test-server.sh start --clean; \
+	fi
 
 # Build the Docker image for development and testing. To use the TerminusDB
 # container, see: https://github.com/terminusdb/terminusdb-bootstrap
@@ -48,6 +114,8 @@ docker:
 	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
 	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
 	  --build-arg DIST="$(DIST)" \
+	  --build-arg TDB_ADMIN_VERSION="$(TDB_ADMIN_VERSION)" \
+	  --build-arg TDB_DATA_VERSION="$(TDB_DATA_VERSION)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
 # Build the Docker image for development using local swipl-rs sources.
@@ -62,6 +130,8 @@ docker-debug:
 	  --build-arg SWIPL_VERSION="$(SWIPL_VERSION)" \
 	  --build-arg DIST="$(DIST)" \
 	  --build-arg SKIP_TESTS="$(SKIP_TESTS)" \
+	  --build-arg TDB_ADMIN_VERSION="$(TDB_ADMIN_VERSION)" \
+	  --build-arg TDB_DATA_VERSION="$(TDB_DATA_VERSION)" \
 	  --build-arg TERMINUSDB_GIT_HASH="$$(git rev-parse --verify HEAD)"
 
 # Install minimal pack dependencies.
@@ -85,7 +155,11 @@ lint:
 
 .PHONY: clippy
 clippy:
+ifeq "$(shell uname)" "Darwin"
+	cargo clippy --message-format=json --no-default-features --manifest-path=src/rust/Cargo.toml
+else
 	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
+endif
 
 .PHONY: lint-mocha
 lint-mocha:
@@ -106,6 +180,42 @@ lint-openapi:
 rust:
 	@$(MAKE) -f distribution/Makefile.rust
 
+# Build Rust plugin crates and copy shared objects to plugins/.
+.PHONY: plugins-rust
+plugins-rust:
+	@$(MAKE) -f distribution/Makefile.rust $@
+
+# Download and extract the tdb-admin dist package from GitHub releases.
+# The tarball contains only the built dist/ folder (no source code).
+# Requires TDB_ADMIN_VERSION to match a published release tag (with leading 'v').
+.PHONY: admin-dist
+admin-dist:
+	@echo "Downloading tdb-admin dist $(TDB_ADMIN_VERSION)..."
+	rm -rf app/admin/dist
+	mkdir -p app/admin/dist
+	$(eval TDB_ADMIN_VER := $(TDB_ADMIN_VERSION:v%=%))
+	curl -fsSL "https://github.com/terminusdb-org/tdb-admin/releases/download/$(TDB_ADMIN_VERSION)/tdb-admin-$(TDB_ADMIN_VER).tar.gz" \
+		| tar xzf - -C app/admin/dist
+	@echo "tdb-admin dist extracted to app/admin/dist/"
+
+# Download and extract the tdb-data dist package from GitHub releases.
+# The tarball contains only the built dist/ folder (no source code).
+# Requires TDB_DATA_VERSION to match a published release tag (with leading 'v').
+.PHONY: data-dist
+data-dist:
+	@echo "Downloading tdb-data dist $(TDB_DATA_VERSION)..."
+	rm -rf app/data/dist
+	mkdir -p app/data/dist
+	$(eval TDB_DATA_VER := $(TDB_DATA_VERSION:v%=%))
+	curl -fsSL "https://github.com/terminusdb-org/tdb-data/releases/download/$(TDB_DATA_VERSION)/tdb-data-$(TDB_DATA_VER).tar.gz" \
+		| tar xzf - -C app/data/dist
+	@echo "tdb-data dist extracted to app/data/dist/"
+
+# Build the static Scalar API dashboard (converts openapi.yaml to JSON).
+.PHONY: dashboard
+dashboard:
+	cd dashboard && npm install && npm run build
+
 # Run unit tests in swipl; all, or just one suite.
 # make test OR make test SUITE='[json,terminus_store,tables]'
 .PHONY: test
@@ -120,6 +230,8 @@ test:
 test-int: server-clean
 ifdef SUITE
 	sh -c "cd tests ; npx mocha 'test/$(SUITE).js'"
+else ifdef MOCHA_IGNORE
+	sh -c "cd tests ; npx mocha $(shell echo '$(MOCHA_IGNORE)' | sed 's/,/ --ignore /g' | sed 's/^/--ignore /')"
 else
 	sh -c "cd tests ; rc=0 ; npx mocha --exclude 'test/cli-*.js' || rc=1 ; MOCHA_PARALLEL=true npx mocha 'test/cli-*.js' || rc=1 ; exit \$$rc"
 endif
@@ -158,7 +270,7 @@ prolog-clean:
 
 # Remove everything.
 .PHONY: clean
-clean: realclean-rust clean-deps prolog-clean docs-clean
+clean: realclean-rust clean-deps prolog-clean docs-clean dashboard-clean
 
 # Remove the dylib.
 .PHONY: clean-rust
@@ -179,6 +291,10 @@ clean-deps:
 docs-clean:
 	@rm -f $(RONN_FILE)
 
+.PHONY: dashboard-clean
+dashboard-clean:
+	@rm -f dashboard/src/assets/openapi.json
+
 # Build the documentation.
 .PHONY: docs
 docs: default $(ROFF_FILE)
@@ -193,8 +309,23 @@ $(RONN_FILE): docs/terminusdb.1.ronn.template $(TARGET)
 $(ROFF_FILE): $(RONN_FILE)
 	ronn --roff $<
 
-.PHONY: pr
-pr: lint lint-mocha lint-openapi clean dev restart test test-int
+# Run end-to-end plugin tests (TerminusDB + vectorlink + Ollama).
+# Brings up the full stack via docker-compose.e2e.yml, runs the e2e mocha suite,
+# then tears down. Use --no-down to keep the stack running for debugging.
+#
+# Usage:
+#   make test-e2e              # full: build, up, test, down
+#   make test-e2e ARGS=--no-down  # keep stack running after tests
+#   make test-e2e ARGS=--no-up    # run against an already-running stack
+.PHONY: test-e2e
+test-e2e:
+	./tests/run-e2e.sh $(ARGS)
 
 .PHONY: pr-light
-pr-light: lint lint-mocha lint-openapi dev restart test test-int
+pr-light: lint lint-mocha lint-openapi clippy dev restart test test-int
+
+.PHONY: pr
+pr: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int
+
+.PHONY: pr-full
+pr-full: clean pr-light

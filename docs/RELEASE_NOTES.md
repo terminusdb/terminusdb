@@ -1,3 +1,17 @@
+# TerminusDB Server v12.1-rc1 Release Notes
+
+This is a major release that also builds the core foundation for a reactive future by moving to a scalable webserver foundation in Rust and a streaming commit pipeline.
+
+## Major changes
+* Subscriptions made possible by replacing streaming swipl http server with rust based streaming http server
+* Significantly improve performance and scalability with parallel write document elaboration and processing
+* Standards-compliant fully qualified intervals support
+* Embedded vectorlink search engine: set `TERMINUSDB_INDEXER_BACKEND=vectorlink` to run vectorlink in-process through the Rust webserver — no external endpoint needed (requires `TERMINUSDB_SERVER_BACKEND=rust`). The existing `http_vectorlink` and `http_legacy_vectorlink` remote backends are unchanged.
+* Two plugin paths: `builtin_plugins/` (always loaded, shipped with the server, `TERMINUSDB_BUILTIN_PLUGINS_PATH`) and `plugins/` (operator-installed, `TERMINUSDB_PLUGINS_PATH`). Shipped plugins moved to builtin; auto-optimize runs by default (set `TERMINUSDB_ENABLE_OPTIMIZER=0` to disable; test harnesses do for deterministic data versions).
+
+## Bugfixes
+* Fix rebase race condition on throttled cpu 
+
 # TerminusDB Server v12.0.8 Release Notes
 
 ## New functionality

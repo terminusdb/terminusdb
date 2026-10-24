@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download AMD64 Image
         uses: actions/download-artifact@v4
@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download ARM64 Image
         uses: actions/download-artifact@v4
@@ -119,24 +119,46 @@ jobs:
               IS_PRERELEASE=true
               ;;
           esac
-          
+
+          # On a stable tag, publish a minor-stream tag (v12.0, v12.1, ...) so
+          # users can pin a release line. The bare major tag follows the newest
+          # tag within that major, and latest follows the newest stable tag
+          # overall — a patch on an older stream demotes neither.
+          IS_STABLE_TAG=false
           if echo "$GITHUB_REF" | grep -q "refs/tags/v" && [ "$IS_PRERELEASE" = "false" ]; then
-            # Get the major version from the version (e.g., v11 from v11.0.4)
+            IS_STABLE_TAG=true
             VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
-            TAGS="${TAGS},${LATEST_IMAGE},terminusdb/terminusdb-server:${VERSION_MAJOR}"
+            VERSION_MINOR=$(echo "$VERSION" | cut -d '.' -f 1-2)
+            STABLE_TAGS=$(git ls-remote --tags https://github.com/${{ github.repository }} 'refs/tags/v*' \
+                          | sed 's,.*refs/tags/,,; s,\^{}$,,' | grep -v -- '-' | sort -uV)
+            NEWEST_IN_MAJOR=$(echo "$STABLE_TAGS" | grep "^${VERSION_MAJOR}\." | tail -1)
+            NEWEST_OVERALL=$(echo "$STABLE_TAGS" | tail -1)
+
+            TAGS="${TAGS},terminusdb/terminusdb-server:${VERSION_MINOR}"
+            if [ "$VERSION" == "$NEWEST_IN_MAJOR" ]; then
+              TAGS="${TAGS},terminusdb/terminusdb-server:${VERSION_MAJOR}"
+            fi
+            if [ "$VERSION" == "$NEWEST_OVERALL" ]; then
+              TAGS="${TAGS},${LATEST_IMAGE}"
+            fi
           fi
 
           # Set the tags as an environment variable
           echo "docker_tags=${TAGS}" >> $GITHUB_ENV
-          
+
           # Also create noroot tags
           NOROOT_TAGS="${VERSION}-noroot"
           if [ "$VERSION" == "dev" ]; then
             NOROOT_TAGS="${NOROOT_TAGS},${VERSION}-noroot-$GITHUB_SHA"
           fi
-          if echo "$GITHUB_REF" | grep -q "refs/tags/v" && [ "$IS_PRERELEASE" = "false" ]; then
-            VERSION_MAJOR=$(echo "$VERSION" | cut -d '.' -f 1)
-            NOROOT_TAGS="${NOROOT_TAGS},latest-noroot,${VERSION_MAJOR}-noroot"
+          if [ "$IS_STABLE_TAG" = "true" ]; then
+            NOROOT_TAGS="${NOROOT_TAGS},${VERSION_MINOR}-noroot"
+            if [ "$VERSION" == "$NEWEST_IN_MAJOR" ]; then
+              NOROOT_TAGS="${NOROOT_TAGS},${VERSION_MAJOR}-noroot"
+            fi
+            if [ "$VERSION" == "$NEWEST_OVERALL" ]; then
+              NOROOT_TAGS="${NOROOT_TAGS},latest-noroot"
+            fi
           fi
           echo "noroot_tags=${NOROOT_TAGS}" >> $GITHUB_ENV
 

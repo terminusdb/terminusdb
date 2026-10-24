@@ -25,7 +25,7 @@ describe('sys:JSON GraphQL with @-Prefixed Properties', function () {
     agent = new Agent().auth()
     const path = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
     const base = agent.baseUrl
-    const uri = `${base}${path}`
+    const uri = `${base}${path}?compress_ids=false`
 
     const httpLink = new HttpLink({ uri, fetch })
     const authMiddleware = new ApolloLink((operation, forward) => {

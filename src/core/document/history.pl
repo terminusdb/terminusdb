@@ -6,7 +6,8 @@
               document_history_entries/5,
               enrich_entry/7,
               changed_document_id/2,
-              commits_changed_id/5
+              commits_changed_id/5,
+              commit_info_dict/3
           ]).
 
 :- use_module(library(yall)).
@@ -27,7 +28,7 @@
 :- use_module(core(transaction)).
 :- use_module(core(plugins)).
 :- use_module(library(option)).
-:- use_module(library(http/json), [json_write_dict/3]).
+:- use_module(library(json), [json_write_dict/3]).
 
 commit_info_dict(Repo, Commit_Id, Info) :-
     commit_id_uri(Repo, Commit_Id, Commit_Uri),

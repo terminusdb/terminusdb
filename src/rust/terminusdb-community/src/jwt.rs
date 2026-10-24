@@ -283,16 +283,16 @@ fn parse_algorithm(alg: &str) -> Option<Algorithm> {
 /// Fetch JWKS from endpoint, initialize the global cache, and log the result.
 /// Returns Ok(()) on success, Err(PrologError::Failure) on failure.
 fn init_jwks_cache<C: FrameableContextType>(context: &Context<C>, endpoint: &str) -> Result<(), PrologError> {
-    log_info!(context, "JWT: fetching JWKS from {}", endpoint);
+    let _ = log_info!(context, "JWT: fetching JWKS from {}", endpoint);
     match fetch_jwks_blocking(endpoint) {
         Ok(keys) => {
             let key_count = keys.len();
-            log_info!(context, "JWT: loaded {} keys from JWKS", key_count);
+            let _ = log_info!(context, "JWT: loaded {} keys from JWKS", key_count);
             JWKS_CACHE.get_or_init(|| JwksCache::new(endpoint)).replace_keys(keys);
             Ok(())
         }
         Err(e) => {
-            log_error!(context, "JWT: JWKS fetch failed: {}", e);
+            let _ = log_error!(context, "JWT: JWKS fetch failed: {}", e);
             JWKS_CACHE.get_or_init(|| JwksCache::new(endpoint));
             Err(PrologError::Failure)
         }
@@ -309,14 +309,14 @@ predicates! {
     #[module("$rustnative")]
     semidet fn jwt_setup_oidc(context, issuer_url_term) {
         let issuer_url: String = match issuer_url_term.get::<PrologText>() { Ok(t) => t.into_inner(), Err(_) => return Err(PrologError::Failure) };
-        log_info!(context, "JWT: discovering OIDC config from {}", issuer_url);
+        let _ = log_info!(context, "JWT: discovering OIDC config from {}", issuer_url);
         match fetch_oidc_jwks_uri(&issuer_url) {
             Ok(jwks_uri) => {
-                log_info!(context, "JWT: discovered JWKS URI: {}", jwks_uri);
+                let _ = log_info!(context, "JWT: discovered JWKS URI: {}", jwks_uri);
                 init_jwks_cache(context, &jwks_uri)
             }
             Err(e) => {
-                log_error!(context, "JWT: OIDC discovery failed: {}", e);
+                let _ = log_error!(context, "JWT: OIDC discovery failed: {}", e);
                 Err(PrologError::Failure)
             }
         }
@@ -336,36 +336,36 @@ predicates! {
         };
 
         if header.alg == "none" {
-            log_warning!(context, "JWT: rejected token with alg:none");
+            let _ = log_warning!(context, "JWT: rejected token with alg:none");
             return Err(PrologError::Failure);
         }
 
         let header_alg = match parse_algorithm(&header.alg) {
             Some(a) => a,
-            None => { let alg = &header.alg; log_warning!(context, "JWT: unsupported algorithm {}", alg); return Err(PrologError::Failure); }
+            None => { let alg = &header.alg; let _ = log_warning!(context, "JWT: unsupported algorithm {}", alg); return Err(PrologError::Failure); }
         };
 
         let kid = match &header.kid {
             Some(k) => k,
-            None => { log_warning!(context, "JWT: token has no kid"); return Err(PrologError::Failure); }
+            None => { let _ = log_warning!(context, "JWT: token has no kid"); return Err(PrologError::Failure); }
         };
 
         let cache = match JWKS_CACHE.get() {
             Some(c) => c,
-            None => { log_error!(context, "JWT: JWKS cache not initialized"); return Err(PrologError::Failure); }
+            None => { let _ = log_error!(context, "JWT: JWKS cache not initialized"); return Err(PrologError::Failure); }
         };
 
         cache.maybe_background_refresh();
 
         if let Some(err) = cache.last_refresh_error.write().unwrap().take() {
-            log_error!(context, "{}", err);
+            let _ = log_error!(context, "{}", err);
         }
 
         let key = match cache.get_key(kid) {
             Some(k) => k,
             None => {
                 cache.trigger_background_refresh();
-                log_warning!(context, "JWT: kid not found in JWKS");
+                let _ = log_warning!(context, "JWT: kid not found in JWKS");
                 return Err(PrologError::Failure);
             }
         };
@@ -373,7 +373,7 @@ predicates! {
         if header_alg != key.algorithm {
             let hdr_alg = &header.alg;
             let key_alg = key.algorithm;
-            log_warning!(context, "JWT: algorithm mismatch — header {}, key {:?}", hdr_alg, key_alg);
+            let _ = log_warning!(context, "JWT: algorithm mismatch — header {}, key {:?}", hdr_alg, key_alg);
             return Err(PrologError::Failure);
         }
 
@@ -401,7 +401,7 @@ predicates! {
                 payload_term.unify(payload.as_str())
             }
             Err(e) => {
-                log_error!(context, "JWT: decode failed: {}", e);
+                let _ = log_error!(context, "JWT: decode failed: {}", e);
                 Err(PrologError::Failure)
             }
         }

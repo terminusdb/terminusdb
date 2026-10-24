@@ -4,6 +4,7 @@ use std::{
 };
 
 use swipl::{atom, predicates, prelude::Atom, result::PrologError};
+use swipl::prelude::PrologText;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::{
@@ -290,6 +291,67 @@ predicates! {
         }
     }
 
+    /// Nondet predicate that enumerates changed document IDs filtered by
+    /// a specific type IRI. This avoids the overhead of enumerating all
+    /// changes and filtering post-hoc in Prolog.
+    ///
+    /// Signature: changed_document_id_filtered(+Transaction, -Id, -ChangeType, +TypeIRI)
+    /// TypeIRI is the full IRI string of the type to filter by (e.g.
+    /// "terminusdb:///schema#MyClass"). If the type IRI is not in the
+    /// instance layer's dictionary, the predicate fails (no documents of
+    /// that type exist).
+    #[module("$changes")]
+    nondet fn changed_document_id_filtered<State>(context, transaction_term, id_term, change_type_term, type_iri_term) {
+        setup => {
+            let schema_layer = transaction_schema_layer(context, transaction_term)?;
+            let instance_layer = transaction_instance_layer(context, transaction_term)?;
+            match (schema_layer, instance_layer) {
+                (Some(schema_layer), Some(instance_layer)) => {
+                    let type_iri: String = type_iri_term.get_ex()?;
+                    let type_id = match instance_layer.subject_id(&type_iri) {
+                        Some(id) => id,
+                        None => return Err(PrologError::Failure),
+                    };
+                    let all_changes = context.try_or_die(changed_document_ids(&schema_layer, &instance_layer))?;
+                    let rdf_type_id = match instance_layer.predicate_id(RDF_TYPE) {
+                        Some(id) => id,
+                        None => return Err(PrologError::Failure),
+                    };
+                    // Filter: keep only entries whose rdf:type matches type_id.
+                    let filtered: Vec<(u64, ChangeType)> = all_changes
+                        .into_iter()
+                        .filter(|(id, change_type)| {
+                            let entry_type_id = match change_type {
+                                ChangeType::Added(t) | ChangeType::Deleted(t) => *t,
+                                ChangeType::Changed => {
+                                    match instance_layer.single_triple_sp(*id, rdf_type_id) {
+                                        Some(triple) => triple.object,
+                                        None => return false,
+                                    }
+                                }
+                            };
+                            entry_type_id == type_id
+                        })
+                        .collect();
+                    Ok(Some(State { changes: filtered, layer: instance_layer }))
+                },
+                _ => Err(PrologError::Failure)
+            }
+        },
+        call(state) => {
+            let State{changes, layer} = state;
+            if let Some((id, change_type)) = changes.pop() {
+                let iri = layer.id_subject(id).expect("id was not in dictionary");
+                id_term.unify(iri)?;
+                change_type_term.unify(change_type.as_atom())?;
+
+                Ok(!changes.is_empty())
+            } else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
     /// Semidet predicate that computes all document changes in a single call
     /// and returns three lists: Added, Changed, Deleted.
     /// This avoids the 3x overhead and cross-process non-determinism of
@@ -324,9 +386,368 @@ predicates! {
             _ => Err(PrologError::Failure)
         }
     }
+
+    /// Nondet predicate that enumerates changed document IDs filtered by
+    /// a list of type IRIs, streaming solutions one at a time.
+    ///
+    /// Signature: collect_changed_documents_filtered(+Transaction, +TypeIRIs, -Id, -ChangeType)
+    /// TypeIRIs is a Prolog list of type IRI strings to filter by (e.g.
+    /// ["terminusdb:///schema#Article", "terminusdb:///schema#Tutorial"]).
+    /// Only documents whose rdf:type matches one of the provided type IRIs
+    /// are yielded. Type IRIs not in the instance layer's dictionary are
+    /// silently skipped (no documents of that type exist in this layer).
+    ///
+    /// Each solution is a (Id, ChangeType) pair where ChangeType is the
+    /// atom `added`, `changed`, or `deleted`.
+    #[module("$changes")]
+    nondet fn collect_changed_documents_filtered<State>(context, transaction_term, type_iris_term, id_term, change_type_term) {
+        setup => {
+            let schema_layer = transaction_schema_layer(context, transaction_term)?;
+            let instance_layer = transaction_instance_layer(context, transaction_term)?;
+            match (schema_layer, instance_layer) {
+                (Some(schema_layer), Some(instance_layer)) => {
+                    let changes = context.try_or_die(changed_document_ids(&schema_layer, &instance_layer))?;
+
+                    // Collect type IRI strings from the Prolog list term.
+                    // PrologText handles both atoms and strings (IRIs are
+                    // typically atoms in TerminusDB).
+                    let type_iris: Vec<String> = context
+                        .term_list_iter(type_iris_term)
+                        .map(|t| t.get_ex::<PrologText>().map(|t| t.into_inner()))
+                        .collect::<Result<_, _>>()?;
+
+                    // Convert type IRIs to numeric IDs. Skip any that are not
+                    // in the instance layer dictionary.
+                    let mut filter_type_ids: HashSet<u64> = HashSet::new();
+                    for iri in &type_iris {
+                        if let Some(id) = instance_layer.subject_id(iri) {
+                            filter_type_ids.insert(id);
+                        }
+                    }
+
+                    // If no filter type IDs resolved, return empty (fail immediately).
+                    if filter_type_ids.is_empty() {
+                        return Err(PrologError::Failure);
+                    }
+
+                    let rdf_type_id = match instance_layer.predicate_id(RDF_TYPE) {
+                        Some(id) => id,
+                        None => return Err(PrologError::Failure),
+                    };
+
+                    // Filter changes by type.
+                    let filtered: Vec<(u64, ChangeType)> = changes
+                        .into_iter()
+                        .filter(|(id, change_type)| {
+                            let entry_type_id = match change_type {
+                                ChangeType::Added(t) | ChangeType::Deleted(t) => *t,
+                                ChangeType::Changed => {
+                                    match instance_layer.single_triple_sp(*id, rdf_type_id) {
+                                        Some(triple) => triple.object,
+                                        None => return false,
+                                    }
+                                }
+                            };
+                            filter_type_ids.contains(&entry_type_id)
+                        })
+                        .collect();
+
+                    Ok(Some(State { changes: filtered, layer: instance_layer }))
+                },
+                _ => Err(PrologError::Failure)
+            }
+        },
+        call(state) => {
+            let State{changes, layer} = state;
+            if let Some((id, change_type)) = changes.pop() {
+                let iri = layer.id_subject(id).expect("id was not in dictionary");
+                id_term.unify(iri)?;
+                change_type_term.unify(change_type.as_atom())?;
+
+                Ok(!changes.is_empty())
+            } else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+}
+
+/// Embedding metadata change detection on a commit's schema-layer delta.
+///
+/// Schema `@metadata` is stored as content-addressed JSON:
+/// `Type --sys:metadata--> JSON-root --json#embedding--> JSON-node`.
+/// The embedding node is the config's signature: identical query/template
+/// content yields the identical node, any change yields a new one.
+///
+/// Detection triggers on `sys:metadata` edges churning in the delta, then
+/// compares the embedding-node sets reachable from each type's old roots
+/// vs new roots. Roots are looked up in the merged layer (covering
+/// subtrees that survive, including roots shared between types with
+/// identical metadata) plus the delta's removed edges (covering subtrees
+/// that went away entirely). Piecing chains inside the delta alone is NOT
+/// sufficient: a shared root's subtree edges never enter the delta, so a
+/// type dropping metadata it shared would go undetected.
+///
+/// Equal embedding-node sets — e.g. an unrelated metadata key edit that
+/// retargets sys:metadata but keeps the same embedding subtree — produce
+/// no report, so unrelated edits cannot false-trigger. Default-embedding
+/// types (json2markdown) have no metadata edges and are excluded by
+/// construction.
+pub const SYS_METADATA: &str = "http://terminusdb.com/schema/sys#metadata";
+pub const JSON_EMBEDDING: &str = "http://terminusdb.com/schema/json#embedding";
+pub const JSON_QUERY: &str = "http://terminusdb.com/schema/json#query";
+pub const JSON_TEMPLATE: &str = "http://terminusdb.com/schema/json#template";
+
+/// Embedding nodes directly under the given metadata roots in the merged
+/// layer view (state at this commit).
+fn embedding_nodes(layer: &SyncStoreLayer, embedding_pred: u64, roots: &HashSet<u64>) -> HashSet<u64> {
+    let mut out = HashSet::new();
+    for r in roots {
+        for t in layer.triples_sp(*r, embedding_pred) {
+            out.insert(t.object);
+        }
+    }
+    out
+}
+
+/// Returns the subject ids of types whose embedding config changed in this
+/// schema layer's delta.
+pub fn changed_embedding_type_ids(layer: &SyncStoreLayer) -> io::Result<HashSet<u64>> {
+    let (Some(metadata_pred), Some(embedding_pred)) = (
+        layer.predicate_id(SYS_METADATA),
+        layer.predicate_id(JSON_EMBEDDING),
+    ) else {
+        // No metadata machinery in the dictionary → nothing can match.
+        return Ok(HashSet::new());
+    };
+
+    // sys:metadata edges churned per type, and embedding edges removed —
+    // the latter complete old subtrees that no merged-layer lookup can see.
+    let mut removed_roots: HashMap<u64, HashSet<u64>> = HashMap::new();
+    let mut added_roots: HashMap<u64, HashSet<u64>> = HashMap::new();
+    let mut removed_embed: HashMap<u64, HashSet<u64>> = HashMap::new();
+    for t in layer.triple_removals()? {
+        if t.predicate == metadata_pred {
+            removed_roots.entry(t.subject).or_default().insert(t.object);
+        } else if t.predicate == embedding_pred {
+            removed_embed.entry(t.subject).or_default().insert(t.object);
+        }
+    }
+    for t in layer.triple_additions()? {
+        if t.predicate == metadata_pred {
+            added_roots.entry(t.subject).or_default().insert(t.object);
+        }
+    }
+
+    let empty: HashSet<u64> = HashSet::new();
+    let mut result = HashSet::new();
+    for ty in removed_roots.keys().chain(added_roots.keys()) {
+        // Old roots whose subtrees were deleted outright only show in the
+        // delta's removed edges; surviving subtrees are in the merged view.
+        let mut old = embedding_nodes(layer, embedding_pred,
+                                      removed_roots.get(ty).unwrap_or(&empty));
+        for r in removed_roots.get(ty).into_iter().flatten() {
+            if let Some(objs) = removed_embed.get(r) {
+                old.extend(objs.iter().copied());
+            }
+        }
+        let new = embedding_nodes(layer, embedding_pred,
+                                  added_roots.get(ty).unwrap_or(&empty));
+        if old != new {
+            result.insert(*ty);
+        }
+    }
+    Ok(result)
+}
+
+predicates! {
+    /// Nondet predicate that enumerates the types whose embedding
+    /// query/template configuration changed in a commit's schema layer.
+    ///
+    /// Signature: collect_changed_embedding_types(+Transaction, -TypeIRI)
+    ///
+    /// Yields each changed type's IRI once. Fails (empty) when the commit
+    /// has no schema layer or no embedding-config delta.
+    #[module("$changes")]
+    nondet fn collect_changed_embedding_types<State>(context, transaction_term, type_iri_term) {
+        setup => {
+            let schema_layer = transaction_schema_layer(context, transaction_term)?;
+            match schema_layer {
+                Some(schema_layer) => {
+                    // ChangeType is unused here — ids only.
+                    let types: Vec<(u64, ChangeType)> = context
+                        .try_or_die(changed_embedding_type_ids(&schema_layer))?
+                        .into_iter()
+                        .map(|id| (id, ChangeType::Changed))
+                        .collect();
+                    if types.is_empty() {
+                        return Err(PrologError::Failure);
+                    }
+                    Ok(Some(State { changes: types, layer: schema_layer }))
+                },
+                _ => Err(PrologError::Failure)
+            }
+        },
+        call(state) => {
+            let State{changes, layer} = state;
+            if let Some((id, _)) = changes.pop() {
+                let iri = layer.id_subject(id).expect("id was not in dictionary");
+                type_iri_term.unify(iri)?;
+                Ok(!changes.is_empty())
+            } else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
 }
 
 pub fn register() {
     register_changed_document_id();
+    register_changed_document_id_filtered();
     register_collect_changed_documents();
+    register_collect_changed_documents_filtered();
+    register_collect_changed_embedding_types();
+}
+
+#[cfg(test)]
+mod embedding_change_tests {
+    use super::*;
+    use terminusdb_store_prolog::terminus_store::layer::ValueTriple;
+    use terminusdb_store_prolog::terminus_store::open_sync_memory_store;
+
+    const TYPE_A: &str = "http://example.com/schema#A";
+    const TYPE_B: &str = "http://example.com/schema#B";
+    const META_A1: &str = "terminusdb:///json/JSON/SHA1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa001";
+    const EMB_A1: &str = "terminusdb:///json/JSON/SHA1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa002";
+    const META_A2: &str = "terminusdb:///json/JSON/SHA1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb001";
+    const EMB_A2: &str = "terminusdb:///json/JSON/SHA1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb002";
+    const META_B: &str = "terminusdb:///json/JSON/SHA1/ccccccccccccccccccccccccccccccccccc001";
+    const EMB_B: &str = "terminusdb:///json/JSON/SHA1/ccccccccccccccccccccccccccccccccccc002";
+
+    fn metadata_chain(b: &terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayerBuilder, ty: &str, root: &str, emb: &str, template: &str) {
+        b.add_value_triple(ValueTriple::new_node(ty, SYS_METADATA, root)).unwrap();
+        b.add_value_triple(ValueTriple::new_node(root, JSON_EMBEDDING, emb)).unwrap();
+        b.add_value_triple(ValueTriple::new_string_value(emb, JSON_QUERY, "q")).unwrap();
+        b.add_value_triple(ValueTriple::new_string_value(emb, JSON_TEMPLATE, template)).unwrap();
+    }
+
+    /// v1 layer: types A and B each with a metadata chain.
+    fn base_layer() -> SyncStoreLayer {
+        let store = open_sync_memory_store();
+        let b = store.create_base_layer().unwrap();
+        metadata_chain(&b, TYPE_A, META_A1, EMB_A1, "OLD {{t}}");
+        metadata_chain(&b, TYPE_B, META_B, EMB_B, "SAME {{t}}");
+        b.commit().unwrap()
+    }
+
+    #[test]
+    fn template_change_reports_only_changed_type() {
+        let base = base_layer();
+        let b = base.open_write().unwrap();
+        // Remove A's whole old chain, add new chain (template changed).
+        for t in [
+            ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1),
+            ValueTriple::new_node(META_A1, JSON_EMBEDDING, EMB_A1),
+            ValueTriple::new_string_value(EMB_A1, JSON_QUERY, "q"),
+            ValueTriple::new_string_value(EMB_A1, JSON_TEMPLATE, "OLD {{t}}"),
+        ] {
+            b.remove_value_triple(t).unwrap();
+        }
+        metadata_chain(&b, TYPE_A, META_A2, EMB_A2, "NEW {{t}}");
+        // B untouched — identical metadata produces no delta.
+        let layer = b.commit().unwrap();
+
+        let changed = changed_embedding_type_ids(&layer).unwrap();
+        let a_id = layer.subject_id(TYPE_A).unwrap();
+        assert!(changed.contains(&a_id));
+        assert_eq!(changed.len(), 1);
+    }
+
+    #[test]
+    fn unrelated_metadata_change_does_not_report() {
+        let base = base_layer();
+        let b = base.open_write().unwrap();
+        // A's metadata root changes for an unrelated key — the embedding
+        // subtree hash is unchanged, so only the sys:metadata edge and the
+        // root's edge to the (same) embedding node are re-added. No leaf
+        // edges churn → chain incomplete → no report.
+        let other_old = "terminusdb:///json/JSON/SHA1/ddddddddddddddddddddddddddddddddddd001";
+        let other_new = "terminusdb:///json/JSON/SHA1/ddddddddddddddddddddddddddddddddddd002";
+        b.remove_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1)).unwrap();
+        b.add_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A2)).unwrap();
+        b.add_value_triple(ValueTriple::new_node(META_A2, JSON_EMBEDDING, EMB_A1)).unwrap();
+        b.add_value_triple(ValueTriple::new_string_value(META_A2, "http://terminusdb.com/schema/json#other", "x")).unwrap();
+        let _ = (other_old, other_new);
+        let layer = b.commit().unwrap();
+
+        let changed = changed_embedding_type_ids(&layer).unwrap();
+        assert!(changed.is_empty());
+    }
+
+    #[test]
+    fn metadata_removal_reports_type() {
+        let base = base_layer();
+        let b = base.open_write().unwrap();
+        for t in [
+            ValueTriple::new_node(TYPE_B, SYS_METADATA, META_B),
+            ValueTriple::new_node(META_B, JSON_EMBEDDING, EMB_B),
+            ValueTriple::new_string_value(EMB_B, JSON_QUERY, "q"),
+            ValueTriple::new_string_value(EMB_B, JSON_TEMPLATE, "SAME {{t}}"),
+        ] {
+            b.remove_value_triple(t).unwrap();
+        }
+        let layer = b.commit().unwrap();
+
+        let changed = changed_embedding_type_ids(&layer).unwrap();
+        let b_id = layer.subject_id(TYPE_B).unwrap();
+        assert_eq!(changed.iter().copied().collect::<Vec<_>>(), vec![b_id]);
+    }
+
+    #[test]
+    fn shared_metadata_root_removal_reports_type() {
+        // A and B share one content-addressed metadata root. Removing A's
+        // metadata emits only the A→root removal — the root's subtree edges
+        // still exist via B, so they are absent from the delta.
+        let store = open_sync_memory_store();
+        let b = store.create_base_layer().unwrap();
+        metadata_chain(&b, TYPE_A, META_A1, EMB_A1, "T {{t}}");
+        b.add_value_triple(ValueTriple::new_node(TYPE_B, SYS_METADATA, META_A1)).unwrap();
+        let base = b.commit().unwrap();
+
+        let b = base.open_write().unwrap();
+        b.remove_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_A1)).unwrap();
+        let layer = b.commit().unwrap();
+
+        let changed = changed_embedding_type_ids(&layer).unwrap();
+        let a_id = layer.subject_id(TYPE_A).unwrap();
+        assert_eq!(changed.iter().copied().collect::<Vec<_>>(), vec![a_id]);
+    }
+
+    #[test]
+    fn shared_metadata_root_addition_reports_type() {
+        // A gains metadata identical to B's existing config: only the
+        // A→root edge is added; the root's subtree already existed.
+        let store = open_sync_memory_store();
+        let b = store.create_base_layer().unwrap();
+        metadata_chain(&b, TYPE_B, META_B, EMB_B, "T {{t}}");
+        let base = b.commit().unwrap();
+
+        let b = base.open_write().unwrap();
+        b.add_value_triple(ValueTriple::new_node(TYPE_A, SYS_METADATA, META_B)).unwrap();
+        let layer = b.commit().unwrap();
+
+        let changed = changed_embedding_type_ids(&layer).unwrap();
+        let a_id = layer.subject_id(TYPE_A).unwrap();
+        assert_eq!(changed.iter().copied().collect::<Vec<_>>(), vec![a_id]);
+    }
+
+    #[test]
+    fn no_schema_delta_reports_nothing() {
+        let base = base_layer();
+        let b = base.open_write().unwrap();
+        // Commit an empty child layer.
+        let layer = b.commit().unwrap();
+        let changed = changed_embedding_type_ids(&layer).unwrap();
+        assert!(changed.is_empty());
+    }
 }
