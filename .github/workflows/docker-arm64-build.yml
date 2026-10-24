@@ -44,7 +44,7 @@ jobs:
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           input: terminusdb-server-snapshot-arm64.tar
           format: 'table'
@@ -52,6 +52,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
+          version: 'v0.76.1'
 
       - name: Compress image
         run: gzip terminusdb-server-snapshot-arm64.tar
