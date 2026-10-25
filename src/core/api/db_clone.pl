@@ -110,6 +110,7 @@ clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predic
 
 :- begin_tests(clone_indexer_hook, [concurrent(false)]).
 
+:- use_module(library(yall)).
 :- use_module(core(util/test_utils)).
 :- use_module(core(transaction)).
 :- use_module(core(triple)).

@@ -1,6 +1,11 @@
 const { expect } = require('chai')
 const { Agent, api, document, db, util } = require('../lib')
 
+// Patch responses return compressed document IDs.
+function compress (id) {
+  return id.replace('terminusdb:///data/', '')
+}
+
 function rawParse (res, cb) {
   let data = ''
   res.on('data', chunk => { data += chunk })
@@ -60,7 +65,7 @@ describe('patch', function () {
       const author = 'me'
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
-      expect(res.body).to.deep.equal([id1])
+      expect(res.body).to.deep.equal([compress(id1)])
     })
 
     it('applies patch to db and gets a conflict', async function () {
@@ -104,7 +109,7 @@ describe('patch', function () {
       const author = 'me'
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
-      expect(res.body).to.deep.equal([id1, id2])
+      expect(res.body).to.deep.equal([compress(id1), compress(id2)])
     })
 
     it('fails apply several patches to db without final state match', async function () {
@@ -186,7 +191,7 @@ describe('patch', function () {
       const res = await agent.post(path).send({ patch, author, message })
 
       // Should succeed without conflict
-      expect(res.body).to.deep.equal([enumId])
+      expect(res.body).to.deep.equal([compress(enumId)])
     })
 
     it('applies patch to decimal property without false conflict', async function () {
@@ -232,7 +237,7 @@ describe('patch', function () {
         console.log('DECIMAL PATCH FAILED - body:', res.text)
       }
       expect(res.status).to.equal(200)
-      expect(res.body).to.deep.equal([decimalId])
+      expect(res.body).to.deep.equal([compress(decimalId)])
     })
 
     it('applies insert and delete via patch', async function () {
@@ -545,7 +550,7 @@ describe('patch', function () {
       const message = 'yo'
       const res = await agent.post(path).send({ patch, author, message })
       expect(res.status).to.equal(200)
-      expect(res.body).to.deep.equal(ids)
+      expect(res.body).to.deep.equal(ids.map(compress))
 
       const getRes = await document.get(agent, { query: { id: 'item/a' } })
       expect(getRes.body.n).to.equal(42)

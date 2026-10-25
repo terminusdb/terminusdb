@@ -616,10 +616,12 @@ describe('plugin-e2e', function () {
   //     becomes searchable on clone without any explicit /api/index call.
   // ─────────────────────────────────────────────────────────────────────────
   describe('clone of indexed data product becomes searchable', function () {
-    const srcAgent = makeAgent()
-    const cloneAgent = makeAgent()
+    let srcAgent
+    let cloneAgent
 
     before(async function () {
+      srcAgent = makeAgent()
+      cloneAgent = makeAgent()
       await db.create(srcAgent, { schema: true })
 
       // Schema with embedding metadata: store_indices opt-in on the
