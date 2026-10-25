@@ -15,7 +15,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(api/api_document), [
                   idlists_duplicates_toplevel/3,
-                  nonground_captures/2
+                  nonground_captures/2,
+                  compress_doc_ids/4
               ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
 :- use_module(core(document/history),
@@ -102,8 +103,9 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
             ;   throw(error(patch_conflicts(Witnesses)))
             ),
             exclude(=([]), Ids_List, Non_Empty_Ids_List),
-            idlists_duplicates_toplevel(Non_Empty_Ids_List, Duplicates, Ids),
-            die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _))
+            idlists_duplicates_toplevel(Non_Empty_Ids_List, Duplicates, Raw_Ids),
+            die_if(Duplicates \= [], error(same_ids_in_one_transaction(Duplicates), _)),
+            compress_doc_ids(true, Context, Raw_Ids, Ids)
         ),
         _
     ).
@@ -872,5 +874,26 @@ test(patch_resource_schemaless_field_patch,
     open_descriptor(Desc, T),
     get_document(T, 'item/a', Doc),
     get_dict(n, Doc, 42).
+
+test(patch_resource_returns_compressed_ids,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Commit_Info = commit_info{ author : "test", message: "compressed ids" },
+    Patch = [json{ '@op':'Insert',
+                   '@insert':json{ '@id':"City/Berlin",
+                                   '@type':"City",
+                                   name:"Berlin" }}],
+    api_patch_resource(SystemDB, Auth, Path, Patch, Commit_Info, Ids, []),
+    Ids = [Id],
+    atom_string(Id_Atom, Id),
+    atom_concat('City/', Local, Id_Atom),
+    atom_concat('Berlin', '', Local).
 
 :- end_tests(patch_resource).

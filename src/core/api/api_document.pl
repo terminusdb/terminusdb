@@ -24,6 +24,7 @@
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
+              compress_doc_ids/4,
 
               api_insert_documents_core_string/8,
               api_insert_documents_core_string_with_compress/9,
