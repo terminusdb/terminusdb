@@ -1770,6 +1770,23 @@ api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:ResourceHasNoHistory",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(log, error(mutually_exclusive_log_parameters(Provided), _), JSON) :-
+    atomic_list_concat(Provided, ", ", Params),
+    format(string(Msg), "Log window parameters are mutually exclusive, only one may be given: ~s", [Params]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:MutuallyExclusiveLogParameters",
+                              'api:parameters' : Provided}
+            }.
+api_error_jsonld_(log, error(invalid_log_datetime(DateTime), _), JSON) :-
+    format(string(Msg), "Datetime parameter is not a valid ISO 8601 value: ~w", [DateTime]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InvalidLogDateTime",
+                              'api:datetime' : DateTime}
+            }.
 api_error_jsonld_(migration, error(no_migration_at_commit(Commit_Id), _), JSON) :-
     format(string(Msg), "Unable to find a migration for schema change at commit id: ~q", [Commit_Id]),
     JSON = _{'@type' : 'api:MigrationErrorResponse',

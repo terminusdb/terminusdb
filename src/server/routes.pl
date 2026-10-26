@@ -176,13 +176,38 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         log,
         Request,
         (   param_value_search_optional(Search, start, integer, 0, Start),
+            param_value_search_optional(Search, startDateTime, text, _, StartDateTime),
+            param_value_search_optional(Search, endDateTime, text, _, EndDateTime),
             param_value_search_optional(Search, count, integer, -1, Count),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
             param_value_search_optional(Search, stream, boolean, false, Stream),
             param_value_search_optional(Search, with_counts, boolean, false, With_Counts),
-            Options = opts{ start: Start, count: Count, verbose: Verbose, with_counts: With_Counts},
+            (   Start \= 0 -> S0 = 1 ; S0 = 0 ),
+            (   ground(StartDateTime) -> S1 = 1 ; S1 = 0 ),
+            (   ground(EndDateTime) -> S2 = 1 ; S2 = 0 ),
+            (   S0 + S1 + S2 > 1
+            ->  findall(P, (   (   Start \= 0, P = start )
+                           ;   (   ground(StartDateTime), P = startDateTime )
+                           ;   (   ground(EndDateTime), P = endDateTime )),
+                        Provided),
+                throw(error(mutually_exclusive_log_parameters(Provided), _))
+            ;   true
+            ),
+            (   ground(StartDateTime)
+            ->  DateTime_Options = [startDateTime(StartDateTime)]
+            ;   ground(EndDateTime)
+            ->  DateTime_Options = [endDateTime(EndDateTime)]
+            ;   DateTime_Options = []
+            ),
+            Options = [start(Start), count(Count), verbose(Verbose),
+                       with_counts(With_Counts) | DateTime_Options],
             (   Stream = true
-            ->  write_cors_headers(Request),
+            ->  api_log:api_log_streaming_prepare(System_DB, Auth, Path, Options,
+                                                  Resolved_Start, Repo_Transaction,
+                                                  Anchor_Uri, Repository_Descriptor,
+                                                  Effective_Start),
+                write_cors_headers(Request),
+                format('TerminusDB-Log-Start: ~d~n', [Resolved_Start]),
                 format('Status: 200~n'),
                 format('Content-Type: application/x-ndjson~n'),
                 format('Cache-Control: no-cache~n'),
@@ -190,7 +215,9 @@ log_handler(get, Path, Request, System_DB, Auth) :-
                 format('Connection: close~n'),
                 format("Transfer-Encoding: chunked~n~n"),
                 flush_output,
-                api_log:api_log_streaming(System_DB, Auth, Path, Options)
+                api_log:api_log_stream_emit(Repo_Transaction, Anchor_Uri,
+                                            Effective_Start, Count, With_Counts,
+                                            Repository_Descriptor, Options)
             ;   api_log(System_DB, Auth, Path, Log, Options),
                 cors_reply_json(Request, Log)
             )
