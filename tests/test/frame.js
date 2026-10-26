@@ -99,6 +99,98 @@ describe('frame', function () {
       })
   })
 
+  it('passes frame for a diamond with an abstract range', async function () {
+    // A subclass narrows an inherited Set of an abstract class to an
+    // Optional of a more specific abstract class. The frame expands the
+    // range to concrete subclasses; the diamond check must still compare
+    // the declared types.
+    const suffix = util.randomString()
+    const schema = [
+      {
+        '@id': `DObject${suffix}`,
+        '@type': 'Class',
+        '@abstract': [],
+      },
+      {
+        '@id': `DAgent${suffix}`,
+        '@type': 'Class',
+        '@abstract': [],
+        '@inherits': `DObject${suffix}`,
+      },
+      {
+        '@id': `DXRobot${suffix}`,
+        '@type': 'Class',
+        '@inherits': `DAgent${suffix}`,
+      },
+      {
+        '@id': `DEvent${suffix}`,
+        '@type': 'Class',
+        hasParticipant: { '@type': 'Set', '@class': `DObject${suffix}` },
+      },
+      {
+        '@id': `DAction${suffix}`,
+        '@type': 'Class',
+        '@inherits': `DEvent${suffix}`,
+        hasParticipant: { '@type': 'Optional', '@class': `DAgent${suffix}` },
+      },
+    ]
+    await document.insert(agent, { schema })
+    const path = `/api/schema/admin/${agent.dbName}?type=DAction${suffix}`
+    const r = await agent.get(path)
+    expect(r.body.hasParticipant).to.deep.equal({
+      '@type': 'Optional',
+      '@class': [`DXRobot${suffix}`],
+    })
+    const all = await agent.get(`/api/schema/admin/${agent.dbName}`)
+    expect(all.body[`DAction${suffix}`].hasParticipant).to.deep.equal({
+      '@type': 'Optional',
+      '@class': [`DXRobot${suffix}`],
+    })
+  })
+
+  it('passes frame for a diamond narrowed to a required value', async function () {
+    // A subclass narrows an inherited Set of an abstract class to a
+    // mandatory (exactly-one) value of a more specific abstract class.
+    // Required is a subset of Set, so the narrower declaration wins and
+    // the frame expands the abstract range to concrete subclasses.
+    const suffix = util.randomString()
+    const schema = [
+      {
+        '@id': `DObject${suffix}`,
+        '@type': 'Class',
+        '@abstract': [],
+      },
+      {
+        '@id': `DAgent${suffix}`,
+        '@type': 'Class',
+        '@abstract': [],
+        '@inherits': `DObject${suffix}`,
+      },
+      {
+        '@id': `DXRobot${suffix}`,
+        '@type': 'Class',
+        '@inherits': `DAgent${suffix}`,
+      },
+      {
+        '@id': `DEvent${suffix}`,
+        '@type': 'Class',
+        hasParticipant: { '@type': 'Set', '@class': `DObject${suffix}` },
+      },
+      {
+        '@id': `DAction${suffix}`,
+        '@type': 'Class',
+        '@inherits': `DEvent${suffix}`,
+        hasParticipant: `DAgent${suffix}`,
+      },
+    ]
+    await document.insert(agent, { schema })
+    const path = `/api/schema/admin/${agent.dbName}?type=DAction${suffix}`
+    const r = await agent.get(path)
+    expect(r.body.hasParticipant).to.deep.equal([`DXRobot${suffix}`])
+    const all = await agent.get(`/api/schema/admin/${agent.dbName}`)
+    expect(all.body[`DAction${suffix}`].hasParticipant).to.deep.equal([`DXRobot${suffix}`])
+  })
+
   it('passes JSON Schema for a class with format=jsonschema', async function () {
     const enumSchema = {
       '@id': util.randomString(),
