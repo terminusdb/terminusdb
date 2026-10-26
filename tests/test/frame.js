@@ -191,6 +191,54 @@ describe('frame', function () {
     expect(all.body[`DAction${suffix}`].hasParticipant).to.deep.equal([`DXRobot${suffix}`])
   })
 
+  it('passes frame for a diamond narrowed to a cardinality range', async function () {
+    // A subclass narrows an inherited Set of an abstract class to an
+    // explicit Cardinality range of a more specific abstract class.
+    // A bounded range is a subset of Set, so the narrower declaration
+    // wins and the frame expands the abstract range.
+    const suffix = util.randomString()
+    const schema = [
+      {
+        '@id': `DObject${suffix}`,
+        '@type': 'Class',
+        '@abstract': [],
+      },
+      {
+        '@id': `DAgent${suffix}`,
+        '@type': 'Class',
+        '@abstract': [],
+        '@inherits': `DObject${suffix}`,
+      },
+      {
+        '@id': `DXRobot${suffix}`,
+        '@type': 'Class',
+        '@inherits': `DAgent${suffix}`,
+      },
+      {
+        '@id': `DEvent${suffix}`,
+        '@type': 'Class',
+        hasParticipant: { '@type': 'Set', '@class': `DObject${suffix}` },
+      },
+      {
+        '@id': `DAction${suffix}`,
+        '@type': 'Class',
+        '@inherits': `DEvent${suffix}`,
+        hasParticipant: {
+          '@type': 'Cardinality',
+          '@class': `DAgent${suffix}`,
+          '@min_cardinality': 0,
+          '@max_cardinality': 2,
+        },
+      },
+    ]
+    await document.insert(agent, { schema })
+    const path = `/api/schema/admin/${agent.dbName}?type=DAction${suffix}`
+    const r = await agent.get(path)
+    expect(r.body.hasParticipant['@class']).to.deep.equal([`DXRobot${suffix}`])
+    expect(r.body.hasParticipant['@min']).to.equal(0)
+    expect(r.body.hasParticipant['@max']).to.equal(2)
+  })
+
   it('passes JSON Schema for a class with format=jsonschema', async function () {
     const enumSchema = {
       '@id': util.randomString(),
