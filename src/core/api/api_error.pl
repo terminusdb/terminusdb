@@ -130,7 +130,7 @@ api_global_error_jsonld(error(commit_rejected(Reason), _), Type, JSON) :-
             }.
 api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. This timeout is controlled by TERMINUSDB_COMMIT_QUEUE_TIMEOUT, a test instrument that should be left unset (or 0, meaning infinite) for production workloads", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:server_error",
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout',
@@ -139,7 +139,7 @@ api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :
             }.
 api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. This timeout is controlled by TERMINUSDB_COMMIT_QUEUE_TIMEOUT, a test instrument that should be left unset (or 0, meaning infinite) for production workloads", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:server_error",
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
