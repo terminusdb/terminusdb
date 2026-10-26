@@ -195,6 +195,121 @@
             transition: color 0.15s ease;
         }
         footer a:hover { color: var(--accent); }
+        .auth-link {
+            color: inherit;
+            text-decoration: underline;
+            text-underline-offset: 0.2em;
+        }
+        .auth-link:hover { color: var(--accent); }
+        .logout-link {
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 0.75rem;
+            text-decoration: none;
+            margin-left: 0.5rem;
+        }
+        .logout-link:hover { color: var(--accent); }
+        .login-link {
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-decoration: none;
+            margin-left: 0.5rem;
+        }
+        .login-link:hover { text-decoration: underline; }
+        .browse {
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            background: var(--surface);
+            padding: 0.75rem;
+            margin-bottom: 3rem;
+        }
+        .browse-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 0.7rem;
+            color: inherit;
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: background 0.15s ease;
+        }
+        .browse-row:hover { background: var(--surface-hover); }
+        .browse-row .count {
+            margin-left: auto;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+        .browse-row svg { flex-shrink: 0; color: var(--accent); }
+        .browse-back {
+            display: inline-block;
+            margin: 0.25rem 0 0.5rem;
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-decoration: none;
+        }
+        .browse-back:hover { color: var(--accent); }
+        .browse .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0.9rem; }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 8, 16, 0.55);
+            backdrop-filter: blur(10px) saturate(1.15);
+            -webkit-backdrop-filter: blur(10px) saturate(1.15);
+            display: grid;
+            place-items: center;
+            z-index: 10;
+        }
+        .modal-overlay[hidden] { display: none; }
+        .modal {
+            width: min(24rem, calc(100vw - 2rem));
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            background: #101527;
+            padding: 1.75rem;
+        }
+        .modal h2 { margin: 0 0 0.4rem; font-size: 1.2rem; }
+        .modal-sub { margin: 0 0 1.25rem; color: var(--muted); font-size: 0.85rem; }
+        .modal label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 0.9rem;
+        }
+        .modal input {
+            display: block;
+            width: 100%;
+            margin-top: 0.35rem;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            font-size: 0.95rem;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+        .modal input:focus { outline: none; border-color: var(--accent); }
+        .modal-error { color: #fca5a5; font-size: 0.85rem; margin: 0 0 0.9rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+        .modal button {
+            padding: 0.55rem 1.1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .modal button[type="submit"] {
+            background: linear-gradient(145deg, rgba(34, 211, 238, 0.25), rgba(34, 211, 238, 0.1));
+            border-color: rgba(34, 211, 238, 0.4);
+        }
+        .modal button:hover { border-color: var(--accent); }
     </style>
 </head>
 <body>
@@ -249,6 +364,9 @@
             <p class="loading">Reading /api/info…</p>
         </div>
 
+        <h3 class="section" id="browse-title" hidden>Teams</h3>
+        <div class="browse" id="browse" hidden></div>
+
         <footer>
             <h3 class="section">Resources</h3>
             <div class="links">
@@ -258,6 +376,24 @@
                 <a href="/llms.txt">llms.txt — MCP onboarding</a>
             </div>
         </footer>
+    </div>
+
+    <div class="modal-overlay" id="login-overlay" hidden>
+        <form class="modal" id="login-form" autocomplete="off">
+            <h2>Sign in</h2>
+            <p class="modal-sub">Your TerminusDB credentials — the same login the Data Explorer uses.</p>
+            <label>Username
+                <input id="login-user" name="username" autocomplete="username" required>
+            </label>
+            <label>Password
+                <input id="login-pass" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <p class="modal-error" id="login-error" hidden></p>
+            <div class="modal-actions">
+                <button type="button" id="login-cancel">Cancel</button>
+                <button type="submit">Sign in</button>
+            </div>
+        </form>
     </div>
 
     <script nonce="--TDB--CSP--DYNAMIC--CSP--NONCE--">
@@ -273,6 +409,16 @@
                 "indexer.endpoint_available": "Indexer endpoint",
                 "indexer.tokenizer_available": "Indexer tokenizer"
             };
+            var AUTH_KEY = "terminusdb_data_auth"; // same key the Data Explorer persists
+
+            var auth = (function () {
+                try {
+                    var a = JSON.parse(window.localStorage.getItem(AUTH_KEY));
+                    if (a && a.isAuthenticated && a.credentials && a.username) return a;
+                } catch (e) { /* ignore storage errors */ }
+                return null;
+            })();
+            var databases = null;
 
             function el(tag, cls, text) {
                 var n = document.createElement(tag);
@@ -291,44 +437,224 @@
                 return out;
             }
 
-            fetch("/api/info")
-                .then(function (r) { return r.json(); })
-                .then(function (res) {
-                    var info = res && res["api:info"];
-                    var host = document.getElementById("info");
-                    host.innerHTML = "";
-                    if (!info) {
-                        host.appendChild(el("p", "load-error", "Unexpected /api/info response."));
-                        return;
-                    }
-                    if (info.edition) {
-                        var chip = document.getElementById("edition");
-                        chip.textContent = info.edition;
-                        chip.hidden = false;
-                    }
-                    var dl = el("dl");
-                    flatten(info, "", []).forEach(function (pair) {
-                        var key = pair[0], value = pair[1];
-                        var dt = el("dt", "", LABELS[key] || key);
-                        var dd = el("dd");
-                        if (typeof value === "boolean") {
-                            var dot = el("span", "dot " + (value ? "on" : "off"));
-                            dd.appendChild(dot);
-                            dd.appendChild(document.createTextNode(value ? "available" : "unavailable"));
-                        } else {
-                            dd.textContent = String(value);
+            function api(path) {
+                var headers = {};
+                if (auth) headers["Authorization"] = "Basic " + auth.credentials;
+                return fetch(path, { headers: headers });
+            }
+
+            function currentTeam() {
+                var m = /^#team=(.+)$/.exec(window.location.hash || "");
+                return m ? decodeURIComponent(m[1]) : null;
+            }
+
+            function loadInfo() {
+                api("/api/info")
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        var info = res && res["api:info"];
+                        var host = document.getElementById("info");
+                        host.innerHTML = "";
+                        if (!info) {
+                            host.appendChild(el("p", "load-error", "Unexpected /api/info response."));
+                            return;
                         }
-                        var cell = el("div");
-                        cell.appendChild(dt);
-                        cell.appendChild(dd);
-                        dl.appendChild(cell);
+                        if (info.edition) {
+                            var chip = document.getElementById("edition");
+                            chip.textContent = info.edition;
+                            chip.hidden = false;
+                        }
+                        var dl = el("dl");
+                        flatten(info, "", []).forEach(function (pair) {
+                            var key = pair[0], value = pair[1];
+                            var dt = el("dt", "", LABELS[key] || key);
+                            var dd = el("dd");
+                            if (key === "authority") {
+                                var shown = String(value).replace(/^terminusdb:\/\/system\/data\//, "");
+                                var a = el("a", "auth-link", shown);
+                                a.href = "#";
+                                a.title = "Sign in";
+                                a.addEventListener("click", function (e) {
+                                    e.preventDefault();
+                                    openLogin();
+                                });
+                                dd.appendChild(a);
+                                if (auth) {
+                                    var lo = el("a", "logout-link", "(logout)");
+                                    lo.href = "#";
+                                    lo.addEventListener("click", function (e) {
+                                        e.preventDefault();
+                                        logout();
+                                    });
+                                    dd.appendChild(lo);
+                                } else {
+                                    var li = el("a", "login-link", "(login)");
+                                    li.href = "#";
+                                    li.addEventListener("click", function (e) {
+                                        e.preventDefault();
+                                        openLogin();
+                                    });
+                                    dd.appendChild(li);
+                                }
+                            } else if (typeof value === "boolean") {
+                                var dot = el("span", "dot " + (value ? "on" : "off"));
+                                dd.appendChild(dot);
+                                dd.appendChild(document.createTextNode(value ? "available" : "unavailable"));
+                            } else {
+                                dd.textContent = String(value);
+                            }
+                            var cell = el("div");
+                            cell.appendChild(dt);
+                            cell.appendChild(dd);
+                            dl.appendChild(cell);
+                        });
+                        host.appendChild(dl);
+                    })
+                    .catch(function () {
+                        document.getElementById("info").innerHTML =
+                            '<p class="load-error">Could not read /api/info — the server may still be starting.</p>';
                     });
-                    host.appendChild(dl);
-                })
-                .catch(function () {
-                    document.getElementById("info").innerHTML =
-                        '<p class="load-error">Could not read /api/info — the server may still be starting.</p>';
+            }
+
+            function groupedTeams() {
+                var teams = {};
+                var order = [];
+                (databases || []).forEach(function (d) {
+                    var p = d && d.path;
+                    var i = typeof p === "string" ? p.indexOf("/") : -1;
+                    if (i < 1) return;
+                    var org = p.slice(0, i);
+                    var db = p.slice(i + 1);
+                    if (!teams[org]) { teams[org] = []; order.push(org); }
+                    teams[org].push(db);
                 });
+                return { map: teams, order: order };
+            }
+
+            function renderBrowse() {
+                var box = document.getElementById("browse");
+                var title = document.getElementById("browse-title");
+                box.innerHTML = "";
+                if (!auth) {
+                    box.hidden = true;
+                    title.hidden = true;
+                    return;
+                }
+                box.hidden = false;
+                if (!databases) {
+                    title.textContent = "Teams";
+                    title.hidden = false;
+                    box.appendChild(el("p", "empty", "Loading…"));
+                    api("/api/db")
+                        .then(function (r) {
+                            if (!r.ok) throw new Error("db list failed: " + r.status);
+                            return r.json();
+                        })
+                        .then(function (list) {
+                            databases = Array.isArray(list) ? list : [];
+                            renderBrowse();
+                        })
+                        .catch(function (err) {
+                            box.innerHTML = "";
+                            box.appendChild(el("p", "empty", "Could not list data products: " + err.message));
+                        });
+                    return;
+                }
+                var teams = groupedTeams();
+                var team = currentTeam();
+                if (team && teams.map[team]) {
+                    title.textContent = team;
+                    var back = el("a", "browse-back", "← All teams");
+                    back.href = "#";
+                    box.appendChild(back);
+                    teams.map[team].forEach(function (db) {
+                        var row = el("a", "browse-row", db);
+                        row.href = "/app/data/" + encodeURIComponent(team) + "/" +
+                            encodeURIComponent(db) + "/local/branch/main";
+                        var arrow = el("span", "count", "→");
+                        row.appendChild(arrow);
+                        box.appendChild(row);
+                    });
+                    return;
+                }
+                title.textContent = "Teams";
+                title.hidden = false;
+                if (!teams.order.length) {
+                    box.appendChild(el("p", "empty", "No data products visible to this account."));
+                    return;
+                }
+                teams.order.forEach(function (org) {
+                    var row = el("a", "browse-row", org);
+                    row.href = "#team=" + encodeURIComponent(org);
+                    var n = teams.map[org].length;
+                    row.appendChild(el("span", "count", n + (n === 1 ? " data product" : " data products")));
+                    box.appendChild(row);
+                });
+            }
+
+            var overlay = document.getElementById("login-overlay");
+            var form = document.getElementById("login-form");
+            var errBox = document.getElementById("login-error");
+
+            function openLogin() {
+                errBox.hidden = true;
+                form.reset();
+                overlay.hidden = false;
+                document.getElementById("login-user").focus();
+            }
+            function closeLogin() { overlay.hidden = true; }
+
+            document.getElementById("login-cancel").addEventListener("click", closeLogin);
+            overlay.addEventListener("click", function (e) {
+                if (e.target === overlay) closeLogin();
+            });
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape" && !overlay.hidden) closeLogin();
+            });
+
+            form.addEventListener("submit", function (e) {
+                e.preventDefault();
+                var username = document.getElementById("login-user").value.trim();
+                var password = document.getElementById("login-pass").value;
+                var credentials = btoa(username + ":" + password);
+                fetch("/api/info", { headers: { "Authorization": "Basic " + credentials } })
+                    .then(function (r) {
+                        if (!r.ok) throw new Error("rejected");
+                        return r.json();
+                    })
+                    .then(function (res) {
+                        var authority = res && res["api:info"] && res["api:info"].authority;
+                        if (!authority || /\/User\/anonymous$/.test(authority)) {
+                            throw new Error("anonymous");
+                        }
+                        auth = { credentials: credentials, username: username, isAuthenticated: true };
+                        try {
+                            window.localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+                        } catch (e2) { /* ignore storage errors */ }
+                        databases = null;
+                        closeLogin();
+                        loadInfo();
+                        renderBrowse();
+                    })
+                    .catch(function () {
+                        errBox.textContent = "Sign-in failed — check the username and password.";
+                        errBox.hidden = false;
+                    });
+            });
+
+            function logout() {
+                auth = null;
+                databases = null;
+                try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+                if (currentTeam()) window.location.hash = "";
+                loadInfo();
+                renderBrowse();
+            }
+
+            window.addEventListener("hashchange", renderBrowse);
+
+            loadInfo();
+            renderBrowse();
         })();
     </script>
 </body>
