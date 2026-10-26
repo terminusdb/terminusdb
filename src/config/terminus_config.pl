@@ -151,7 +151,7 @@ dashboard_enabled :-
 
 :- table root_redirect_target/1 as shared.
 root_redirect_target(Target) :-
-    getenv_default('TERMINUSDB_ROOT_REDIRECT', '/app/admin', Target).
+    getenv_default('TERMINUSDB_ROOT_REDIRECT', '/dashboard', Target).
 
 :- table plugin_path/1 as shared.
 plugin_path(Path) :-
