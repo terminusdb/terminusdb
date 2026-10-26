@@ -6,6 +6,7 @@ mod dict_lookup;
 
 mod change_window;
 pub mod changes;
+mod clock;
 pub mod consts;
 mod doc;
 mod embedding;
@@ -149,6 +150,7 @@ pub fn install() {
     json_preserve::register();
     template::register();
     changes::register();
+    clock::register();
     change_window::register();
     embedding::register();
     jwt::register();
