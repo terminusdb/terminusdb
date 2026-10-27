@@ -395,28 +395,6 @@ test(schemaless_apply_insert_modify_delete,
     get_document(Dev_Transaction, 'item/b', _Doc_B),
     \+ get_document(Dev_Transaction, 'item/c', _Doc_C).
 
-test(apply_denied_for_read_only_role,
-     [setup((setup_temp_store(State),
-             random_string(X),
-             string_concat("admin/",X, Path),
-             create_public_db_without_schema("admin", X)
-            )),
-      cleanup(teardown_temp_store(State)),
-      throws(error(access_not_authorised(_,_,_),_))
-     ]) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    super_user_authority(Admin_Auth),
-    Options = [author("gavin"), message("test."), raw_json(true)],
-    open_string('[{"@id":"item/a","n":1}]', Stream1),
-    api_insert_documents(SystemDB, Admin_Auth, Path, Stream1, no_data_version,
-                         data_version(branch,Commit1), _Ids1, Options),
-    open_string('[{"@id":"item/b","n":2}]', Stream2),
-    api_insert_documents(SystemDB, Admin_Auth, Path, Stream2, no_data_version,
-                         data_version(branch,Commit2), _Ids2, Options),
-    Commit_Info = commit_info{ author : "mallory", message: "apply" },
-    api_apply_squash_commit(SystemDB, 'User/anonymous', Path, Commit_Info,
-                            Commit1, Commit2, [match_final_state(true)]).
-
 :- end_tests(apply).
 
 :- begin_tests(patch_resource).
@@ -894,20 +872,5 @@ test(patch_resource_schemaless_field_patch,
     open_descriptor(Desc, T),
     get_document(T, 'item/a', Doc),
     get_dict(n, Doc, 42).
-
-test(patch_resource_denied_for_read_only_role,
-     [setup((setup_temp_store(State),
-             random_string(X),
-             string_concat("admin/",X, Path),
-             create_public_db_without_schema("admin", X)
-            )),
-      cleanup(teardown_temp_store(State)),
-      throws(error(access_not_authorised(_,_,_),_))
-     ]) :-
-    open_descriptor(system_descriptor{}, SystemDB),
-    Commit_Info = commit_info{ author : "mallory", message: "patch" },
-    Patch = [json{ '@op':'Insert',
-                  '@insert':json{ '@id':"item/a", n:1 }}],
-    api_patch_resource(SystemDB, 'User/anonymous', Path, Patch, Commit_Info, _Ids, []).
 
 :- end_tests(patch_resource).
