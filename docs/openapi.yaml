@@ -36,7 +36,7 @@ info:
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 12.0.5
+  version: 12.1.0
 externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.org
