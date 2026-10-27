@@ -62,8 +62,13 @@
             color: var(--muted);
             font-size: 0.9rem;
         }
-        .chip {
+        .chips {
             margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .chip {
             padding: 0.3rem 0.75rem;
             border-radius: 999px;
             border: 1px solid var(--border);
@@ -324,7 +329,10 @@
                 <h1>TerminusDB</h1>
                 <p class="tagline">Knowledge Graph Database with Version Control</p>
             </div>
-            <a class="chip" id="edition" href="https://terminusdb.org/docs/enterprise" hidden></a>
+            <div class="chips">
+                <a class="chip" href="/dashboard/api.html">API</a>
+                <a class="chip" id="edition" href="https://terminusdb.org/docs/enterprise" hidden></a>
+            </div>
         </header>
 
         <h3 class="section">Applications</h3>
