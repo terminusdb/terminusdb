@@ -1772,7 +1772,7 @@ api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
             }.
 api_error_jsonld_(log, error(mutually_exclusive_log_parameters(Provided), _), JSON) :-
     atomic_list_concat(Provided, ", ", Params),
-    format(string(Msg), "Log window parameters are mutually exclusive, only one may be given: ~s", [Params]),
+    format(string(Msg), "Log window parameters may not be combined in one request: ~s", [Params]),
     JSON = _{'@type' : 'api:LogErrorResponse',
              'api:status' : "api:failure",
              'api:message' : Msg,

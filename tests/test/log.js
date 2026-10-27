@@ -202,16 +202,55 @@ describe('log', function () {
     })
 
     it('rejects mutually exclusive log window parameters', async function () {
+      // start and startDateTime both anchor the window's top edge and may
+      // not be combined. endDateTime bounds the oldest edge and combines
+      // with either.
       const iso = toIso(String(Date.now() / 1000))
-      for (const params of [
-        `start=1&startDateTime=${encodeURIComponent(iso)}`,
-        `start=1&endDateTime=${encodeURIComponent(iso)}`,
-        `startDateTime=${encodeURIComponent(iso)}&endDateTime=${encodeURIComponent(iso)}`,
-      ]) {
-        const response = await agent.get(`/api/log/admin/${dbName}?${params}`)
-        expect(response.status).to.equal(400)
-        expect(response.body['api:error']['@type']).to.equal('api:MutuallyExclusiveLogParameters')
+      const response = await agent.get(`/api/log/admin/${dbName}?start=1&startDateTime=${encodeURIComponent(iso)}`)
+      expect(response.status).to.equal(400)
+      expect(response.body['api:error']['@type']).to.equal('api:MutuallyExclusiveLogParameters')
+    })
+
+    it('bounds the log between startDateTime and endDateTime', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id }
+      await document.insert(agent, { schema })
+      for (let i = 0; i < 5; i++) {
+        await document.insert(agent, { instance: { '@type': id, '@id': `terminusdb:///data/${id}/${i}` } })
       }
+
+      const fullRes = await agent.get(`/api/log/admin/${dbName}`)
+      const full = fullRes.body
+      const rawTs = rawTimestamps(fullRes.text)
+
+      const topRaw = rawTs[1]
+      const bottomRaw = rawTs[3]
+      const params = `startDateTime=${encodeURIComponent(toIso(topRaw))}&endDateTime=${encodeURIComponent(toIso(bottomRaw))}`
+      const logRequest = await agent.get(`/api/log/admin/${dbName}?${params}`)
+      const log = logRequest.body
+
+      const expected = full.filter((c, i) => tsLE(rawTs[i], topRaw) && tsGE(rawTs[i], bottomRaw))
+      expect(log.map((c) => c.identifier)).to.deep.equal(expected.map((c) => c.identifier))
+    })
+
+    it('bounds the log between an offset start and endDateTime', async function () {
+      const id = util.randomString()
+      const schema = { '@type': 'Class', '@id': id }
+      await document.insert(agent, { schema })
+      for (let i = 0; i < 5; i++) {
+        await document.insert(agent, { instance: { '@type': id, '@id': `terminusdb:///data/${id}/${i}` } })
+      }
+
+      const fullRes = await agent.get(`/api/log/admin/${dbName}`)
+      const full = fullRes.body
+      const rawTs = rawTimestamps(fullRes.text)
+
+      const bottomRaw = rawTs[3]
+      const logRequest = await agent.get(`/api/log/admin/${dbName}?start=1&endDateTime=${encodeURIComponent(toIso(bottomRaw))}`)
+      const log = logRequest.body
+
+      const expected = full.filter((c, i) => i >= 1 && tsGE(rawTs[i], bottomRaw))
+      expect(log.map((c) => c.identifier)).to.deep.equal(expected.map((c) => c.identifier))
     })
 
     it('rejects a malformed datetime parameter', async function () {

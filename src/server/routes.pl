@@ -182,23 +182,16 @@ log_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
             param_value_search_optional(Search, stream, boolean, false, Stream),
             param_value_search_optional(Search, with_counts, boolean, false, With_Counts),
-            (   Start \= 0 -> S0 = 1 ; S0 = 0 ),
-            (   ground(StartDateTime) -> S1 = 1 ; S1 = 0 ),
-            (   ground(EndDateTime) -> S2 = 1 ; S2 = 0 ),
-            (   S0 + S1 + S2 > 1
-            ->  findall(P, (   (   Start \= 0, P = start )
-                           ;   (   ground(StartDateTime), P = startDateTime )
-                           ;   (   ground(EndDateTime), P = endDateTime )),
-                        Provided),
-                throw(error(mutually_exclusive_log_parameters(Provided), _))
+            %  start and startDateTime both anchor the window's top edge, so
+            %  they conflict. endDateTime bounds the oldest edge independently
+            %  and combines with either to express a range.
+            (   Start \= 0, ground(StartDateTime)
+            ->  throw(error(mutually_exclusive_log_parameters([start, startDateTime]), _))
             ;   true
             ),
-            (   ground(StartDateTime)
-            ->  DateTime_Options = [startDateTime(StartDateTime)]
-            ;   ground(EndDateTime)
-            ->  DateTime_Options = [endDateTime(EndDateTime)]
-            ;   DateTime_Options = []
-            ),
+            findall(O, (   (   ground(StartDateTime), O = startDateTime(StartDateTime) )
+                       ;   (   ground(EndDateTime), O = endDateTime(EndDateTime) )),
+                    DateTime_Options),
             Options = [start(Start), count(Count), verbose(Verbose),
                        with_counts(With_Counts) | DateTime_Options],
             (   Stream = true
