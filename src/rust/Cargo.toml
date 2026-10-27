@@ -5,7 +5,9 @@ members = ["terminusdb-community", "terminusdb-store-prolog", "terminusdb-dylib"
 resolver = "2"
 
 [profile.release]
-debug = true
+# Line tables only — full debuginfo across the dep tree bloats CI builds and
+# the shipped .so is stripped of it anyway (Dockerfile strip --strip-debug).
+debug = 1
 
 [patch.crates-io]
 #tdb-succinct = {path="../../../tdb-succinct"}
