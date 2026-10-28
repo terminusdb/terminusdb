@@ -272,3 +272,6 @@
 :- use_module(api/api_search).
 :- use_module(api/api_merge).
 :- use_module(api/api_changes).
+
+% Loads the write-gate audit suites; no exports needed.
+:- use_module(api/api_write_gates_test, []).
