@@ -937,6 +937,29 @@ paths:
           schema:
             type: string
             example: Person
+        - name: counted
+          in: query
+          required: false
+          description: |
+            Return a count of the documents that the request would list, instead
+            of streaming the documents themselves. The count is computed from
+            the triple-store indexes without enumerating documents, so it is
+            fast even for large collections.
+
+            Counting is supported for the document listing selectors only:
+            all documents, optionally restricted by `type` (including
+            subclasses), in the `instance` or `schema` graph. It cannot be
+            combined with `id`, `ids` or `query`. When `counted=true`, the
+            `skip` and `count` pagination parameters are ignored. Counts follow
+            the same inclusion rules as the corresponding document listing,
+            including `unfold` and subclass expansion.
+
+            The response is a single JSON object:
+            `{"@type": "api:DocumentCountResponse", "api:count": <integer>}`
+          schema:
+            type: boolean
+            default: false
+            example: true
         - name: query
           in: query
           required: false
