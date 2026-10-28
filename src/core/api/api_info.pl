@@ -9,9 +9,8 @@
 
 info(_System_DB, Auth, Info) :-
 
-    do_or_die(
-        Auth \= doc:anonymous,
-        error(access_not_authorized(Auth),_)),
+    % Community serves the full info payload to any caller, anonymous
+    % included; enterprise redacts for anonymous instead.
 
     terminusdb_version(TerminusDB_Version),
     terminus_store_version(TerminusDB_Store_Version),
