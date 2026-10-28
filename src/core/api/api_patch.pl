@@ -32,8 +32,12 @@
 :- use_module(library(apply_macros)).
 :- use_module(library(yall)).
 
-api_patch(_System_DB, _Auth, Patch, Before, After, Options) :-
-    % no auth yet.
+api_patch(System_DB, Auth, Patch, Before, After, Options) :-
+    % No path to scope a descriptor check, so require the caller to
+    % hold instance_read_access somewhere; anonymous qualifies only on
+    % deployments with a public database.
+    assert_auth_action_scope(System_DB, Auth,
+                             '@schema':'Action/instance_read_access', _),
     simple_patch(Patch,Before,After,Options).
 
 patch_id(Patch, Id) :-
@@ -108,8 +112,10 @@ api_patch_resource(System_DB, Auth, Path, Patch, Commit_Info, Ids, Options) :-
         _
     ).
 
-api_diff(_System_DB, _Auth, Before, After, Diff, Options) :-
-    % no auth yet.
+api_diff(System_DB, Auth, Before, After, Diff, Options) :-
+    % Same existential read gate as api_patch/6.
+    assert_auth_action_scope(System_DB, Auth,
+                             '@schema':'Action/instance_read_access', _),
     do_or_die((ground(Before),
                ground(After)),
               error(unground_patch, _)),
@@ -874,3 +880,47 @@ test(patch_resource_schemaless_field_patch,
     get_dict(n, Doc, 42).
 
 :- end_tests(patch_resource).
+
+:- begin_tests(patch_diff_auth).
+
+:- use_module(core(util/test_utils)).
+
+% The pure patch/diff helpers take no path, so they cannot scope a
+% descriptor check. They still burn CPU on request, so require the
+% caller to hold instance_read_access on some resource — the same
+% action class their descriptor-scoped siblings require — which public
+% databases grant to anonymous.
+expect_read_denied(Goal) :-
+    (   catch(Goal, Ball, true)
+    ->  (   Ball = error(access_not_authorised(_,_,_),_)
+        ->  true
+        ;   format(user_error, '~nexpected access_not_authorised, got ~p~n', [Ball]),
+            fail)
+    ;   format(user_error, '~nexpected access_not_authorised, but call succeeded~n', []),
+        fail).
+
+test(deny_caller_without_any_read_access,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","priv"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    forall(member(Goal,
+                  [ api_patch(SystemDB, 'User/unprivileged', json{n:1}, json{n:2}, _After, []),
+                    api_diff(SystemDB, 'User/unprivileged', json{n:1}, json{n:2}, _Diff, [])
+                  ]),
+           expect_read_denied(Goal)).
+
+test(allow_anonymous_on_public_database,
+     [setup((setup_temp_store(State),
+             create_public_db_without_schema("admin","pub"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    api_patch(SystemDB, 'User/anonymous',
+              json{n:json{'@op':'SwapValue','@before':1,'@after':2}},
+              json{n:1}, _After, []),
+    api_diff(SystemDB, 'User/anonymous', json{n:1}, json{n:2}, _Diff,
+             [keep(json{}),unfold(true)]).
+
+:- end_tests(patch_diff_auth).

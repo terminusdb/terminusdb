@@ -7,10 +7,10 @@ listed below.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| >= 11.1  | :white_check_mark: |
-| < 11.0  | :x:                |
+| >= 12.0  | :white_check_mark: |
+| < 12.0  | :x:                |
 
-Report the vulnerability to <security@dfrnt.com> (current maintainers of TerminusDB).
+Report vulnerabilities through Github [TerminusDB Private Security Vulnerability Reporting](https://github.com/terminusdb/terminusdb/security/advisories/new).
 
 > :warning: Please do **not** file a public issue when reporting a
 > vulnerability. This allows us to fix the issue and minimize the impact before
