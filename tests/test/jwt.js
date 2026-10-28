@@ -185,6 +185,45 @@ describe('jwt', function () {
     })
   })
 
+  describe('bearer: malformed claim type confusion (CVE-2026-25537)', function () {
+    // A spec claim with the wrong JSON type (string nbf, numeric iss/aud)
+    // deserializes as FailedToParse in jsonwebtoken, which treated it the same
+    // as an absent claim and skipped validation. A properly signed token with
+    // nbf as a string must be rejected, not waved through.
+    before(function () {
+      if (!jwtEnabled) this.skip()
+    })
+
+    function signedTokenWithPayload (payload) {
+      const crypto = require('crypto')
+      const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'test-jwt-key' })).toString('base64url')
+      const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
+      const signature = crypto.sign('RSA-SHA256', Buffer.from(`${header}.${body}`), keyPair.privateKey).toString('base64url')
+      return `${header}.${body}.${signature}`
+    }
+
+    it('rejects token with string nbf claim', async function () {
+      const token = signedTokenWithPayload({
+        sub: 'admin',
+        nbf: '99999999999',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })
+      const agent = new Agent()
+      agent.set('Authorization', `Bearer ${token}`)
+      await agent.get('/api/').then(api.response.verify(api.response.incorrectAuthentication))
+    })
+
+    it('rejects token with string exp claim', async function () {
+      const token = signedTokenWithPayload({
+        sub: 'admin',
+        exp: '99999999999',
+      })
+      const agent = new Agent()
+      agent.set('Authorization', `Bearer ${token}`)
+      await agent.get('/api/').then(api.response.verify(api.response.incorrectAuthentication))
+    })
+  })
+
   describe('bearer: scope injection regression', function () {
     it('rejects token with forged scope claim and invalid signature', async function () {
       // An attacker forges a token with admin scopes but signs it with a wrong key.
