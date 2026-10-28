@@ -1985,6 +1985,20 @@ find_resources(triple_slice_rev(_,_,_,_,_,Type), Collection, _DRG, _DWG, Read, W
     resolve_filter(Type, DRG),
     Write = [],
     Read = [resource(Collection,DRG)].
+find_resources(triple_count(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_count(_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_range_count(_,_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
+    Write = [],
+    Read = [resource(Collection,DRG)].
+find_resources(triple_range_count(_,_,_,_,_,Type), Collection, _DRG, _DWG, Read, Write) :-
+    resolve_filter(Type, DRG),
+    Write = [],
+    Read = [resource(Collection,DRG)].
 find_resources(triple_next(_,_,_,_), Collection, DRG, _DWG, Read, Write) :-
     Write = [],
     Read = [resource(Collection,DRG)].
@@ -2540,6 +2554,53 @@ compile_wf(triple_slice_rev(X,P,Y,Low,High,G),Goal) -->
     },
     update(filter, Old_Filter, Filter),
     compile_wf(triple_slice_rev(X,P,Y,Low,High), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_count(X,P,Y,N),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(N,NE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_count(XE, PE, YE, NE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_count(X,P,Y,N,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_count(X,P,Y,N), Goal),
+    update(filter, _Filter, Old_Filter).
+compile_wf(triple_range_count(X,P,Low,High,N),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Low,LowE),
+    resolve(High,HighE),
+    resolve(N,NE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_range_count(XE, PE, LowE, HighE, NE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause)
+    }.
+compile_wf(triple_range_count(X,P,Low,High,N,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_range_count(X,P,Low,High,N), Goal),
     update(filter, _Filter, Old_Filter).
 compile_wf(triple_next(X,P,Y,Next),Goal) -->
     resolve(X,XE),
@@ -3841,6 +3902,56 @@ filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Obj
     compile_schema_subject(XE, Transaction_Object, XS),
     compile_schema_predicate(PE, Transaction_Object, PS),
     Goal = xrdf_value_range_rev((Transaction_Object.schema_objects), LowE, HighE, XS, PS, YE).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_count(XE, PE, YE, NE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        compile_instance_object(YE, Transaction_Object, YI),
+        Instance_Goal = xrdf_count(Transaction_Object.instance_objects, XI, PI, YI, N_I)
+    ;   Instance_Goal = (N_I = 0)),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        compile_schema_object(YE, Transaction_Object, YS),
+        Schema_Goal = xrdf_count(Transaction_Object.schema_objects, XS, PS, YS, N_S)
+    ;   Schema_Goal = (N_S = 0)),
+    Goal = (Instance_Goal, Schema_Goal, N is N_I + N_S, unliterally(N, NE)).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_count(XE, PE, YE, NE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    compile_instance_object(YE, Transaction_Object, YI),
+    Goal = (xrdf_count((Transaction_Object.instance_objects), XI, PI, YI, N),
+            unliterally(N, NE)).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_count(XE, PE, YE, NE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    compile_schema_object(YE, Transaction_Object, YS),
+    Goal = (xrdf_count((Transaction_Object.schema_objects), XS, PS, YS, N),
+            unliterally(N, NE)).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_range_count(XE, PE, LowE, HighE, NE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Instance_Goal = xrdf_value_range_count(Transaction_Object.instance_objects, LowE, HighE, XI, PI, N_I)
+    ;   Instance_Goal = (N_I = 0)),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Schema_Goal = xrdf_value_range_count(Transaction_Object.schema_objects, LowE, HighE, XS, PS, N_S)
+    ;   Schema_Goal = (N_S = 0)),
+    Goal = (Instance_Goal, Schema_Goal, N is N_I + N_S, unliterally(N, NE)).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_range_count(XE, PE, LowE, HighE, NE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = (xrdf_value_range_count((Transaction_Object.instance_objects), LowE, HighE, XI, PI, N),
+            unliterally(N, NE)).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_range_count(XE, PE, LowE, HighE, NE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = (xrdf_value_range_count((Transaction_Object.schema_objects), LowE, HighE, XS, PS, N),
+            unliterally(N, NE)).
 
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_next(XE, PE, YE, NextE), Goal) :-
     (   memberchk(instance,Types)
@@ -5467,6 +5578,156 @@ test(metadata_triple_count_json, [
     [Binding] = (JSON.bindings),
 
     (Binding.'Count'.'@value' = 13).
+
+test(metadata_triple_count_pattern, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema("admin", "test"))),
+         cleanup((metadata:unset_current_db_path,
+                  teardown_temp_store(State)))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        (   triple_count(d, e, _, DE_Count_Lit),
+            triple_count(d, e, a, Exact_Count_Lit),
+            triple_count(_, e, _, Pred_Count_Lit),
+            triple_count(_, _, _, All_Count_Lit))),
+    DE_Count_Lit = 2^^xsd:decimal,
+    Exact_Count_Lit = 1^^xsd:decimal,
+    Pred_Count_Lit = 2^^xsd:decimal,
+    All_Count_Lit = 5^^xsd:decimal,
+
+    ask(Descriptor,
+        (   triple_count(d, e, _, Instance_Count_Lit, instance),
+            triple_count(d, e, _, Schema_Count_Lit, schema))),
+    Instance_Count_Lit = 2^^xsd:decimal,
+    Schema_Count_Lit = 0^^xsd:decimal.
+
+test(metadata_triple_range_count, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema("admin", "test"))),
+         cleanup((metadata:unset_current_db_path,
+                  teardown_temp_store(State)))
+     ]
+    ) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, age, 20^^xsd:integer),
+                      insert(b, age, 30^^xsd:integer),
+                      insert(c, age, 40^^xsd:integer),
+                      insert(a, name, "x"^^xsd:string))),
+        _Meta_Data
+    ),
+
+    ask(Descriptor,
+        (   triple_range_count(_, age, 25^^xsd:integer, 45^^xsd:integer, Range_Count_Lit),
+            triple_range_count(b, age, 0^^xsd:integer, 100^^xsd:integer, Subject_Count_Lit),
+            triple_range_count(_, _, 0^^xsd:integer, 100^^xsd:integer, All_Count_Lit),
+            % string-typed range over integer-typed data matches nothing
+            triple_range_count(_, age, "a"^^xsd:string, "z"^^xsd:string, Mismatch_Count_Lit))),
+    Range_Count_Lit = 2^^xsd:decimal,
+    Subject_Count_Lit = 1^^xsd:decimal,
+    All_Count_Lit = 3^^xsd:decimal,
+    Mismatch_Count_Lit = 0^^xsd:decimal.
+
+test(metadata_triple_count_pattern_json, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema("admin", "test"))),
+         cleanup((metadata:unset_current_db_path,
+                  teardown_temp_store(State)))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, b, c),
+                      insert(d, e, f),
+                      insert(d, e, a),
+                      insert(f, g, h),
+                      insert(h, j, k))),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "TripleCount",
+              subject : _{'@type' : "NodeValue",
+                          node : "d"},
+              predicate : _{'@type' : "NodeValue",
+                            node : "e"},
+              object : _{'@type' : "Value",
+                         variable : "O"},
+              count : _{'@type' : "DataValue",
+                        variable : "Count"}},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    [Binding] = (JSON.bindings),
+
+    (Binding.'Count'.'@value' = 2).
+
+test(metadata_triple_range_count_json, [
+         setup((setup_temp_store(State),
+                State = _-Path,
+                metadata:set_current_db_path(Path),
+                create_db_without_schema("admin", "test"))),
+         cleanup((metadata:unset_current_db_path,
+                  teardown_temp_store(State)))
+     ]) :-
+
+    resolve_absolute_string_descriptor("admin/test", Descriptor),
+    Commit_Info = commit_info{ author : "test", message : "testing semantics"},
+    create_context(Descriptor, Commit_Info, Context),
+    with_transaction(
+        Context,
+        ask(Context, (insert(a, age, 20^^xsd:integer),
+                      insert(b, age, 30^^xsd:integer),
+                      insert(c, age, 40^^xsd:integer))),
+        _Meta_Data
+    ),
+
+    Query = _{'@type' : "TripleRangeCount",
+              subject : _{'@type' : "NodeValue",
+                          variable : "S"},
+              predicate : _{'@type' : "NodeValue",
+                            node : "age"},
+              low : _{'@type' : "Value",
+                      data : _{'@type' : "xsd:integer",
+                               '@value' : 25}},
+              high : _{'@type' : "Value",
+                       data : _{'@type' : "xsd:integer",
+                                '@value' : 45}},
+              count : _{'@type' : "DataValue",
+                        variable : "Count"}},
+
+    save_and_retrieve_woql(Query, Query_Out),
+    query_test_response(Descriptor, Query_Out, JSON),
+    [Binding] = (JSON.bindings),
+
+    (Binding.'Count'.'@value' = 2).
 
 
 test(metadata_size_count_json, [

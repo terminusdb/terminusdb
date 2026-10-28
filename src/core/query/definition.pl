@@ -330,6 +330,20 @@ definition(
         types: [collection,decimal]
     }).
 definition(
+    triple_count{
+        name: 'TripleCount',
+        fields: [subject,predicate,object,count,optional(graph)],
+        mode: [?,?,?,?,+],
+        types: [node,node,value,decimal,graph]
+    }).
+definition(
+    triple_range_count{
+        name: 'TripleRangeCount',
+        fields: [subject,predicate,low,high,count,optional(graph)],
+        mode: [?,?,+,+,?,+],
+        types: [node,node,value,value,decimal,graph]
+    }).
+definition(
     size{
         name: 'Size',
         fields: [resource,size],
@@ -838,6 +852,10 @@ operator(hash(_,_,_)).
 operator(idgen_random(_,_,_)).
 operator(idgen_uuid_v7(_,_,_)).
 operator(triple_count(_,_)).
+operator(triple_count(_,_,_,_)).
+operator(triple_count(_,_,_,_,_)).
+operator(triple_range_count(_,_,_,_,_)).
+operator(triple_range_count(_,_,_,_,_,_)).
 operator(size(_,_)).
 
 cost(Term, Cost) :-
