@@ -21,12 +21,6 @@ on:
       mocha_jobs:
         type: string
         default: "4"
-      mocha_parallel:
-        type: boolean
-        default: true
-
-env:
-  NODE_VERSION: '20'
 
 jobs:
 
@@ -35,32 +29,10 @@ jobs:
     runs-on: ${{ inputs.runner }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_ref }}
-
-#      - name: Install swi-prolog 
-#        run: ./.github/install-swi-prolog.sh stable
-
-#      - name: Checkout tus
-#        uses: actions/checkout@v4
-#        with:
-#          repository: terminusdb-org/tus
-#          path: tus
-#          ref: v0.0.17
-
-#      - name: Install tus
-#        run: swipl -g "pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)])"
-
-#      - name: Install Protobuf Compiler
-#        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-#      - name: Build TerminusDB
-#        run: make
-  
- #     - name: Set up Docker Buildx
- #       uses: docker/setup-buildx-action@v3
 
       - name: Download Docker image
         uses: actions/download-artifact@v4
@@ -77,42 +49,41 @@ jobs:
         run: |
           docker rm -f terminusdb || true
         
-      - name: Run server
+      - name: Build test image
+        # The suite runs inside one container: CLI invocations are local
+        # spawns instead of `docker exec` per command. tmpfs mounts put the
+        # server store and per-suite test stores in RAM (no fsync cost).
+        # TERMINUSDB_ENABLE_OPTIMIZER=false: the probabilistic post-commit
+        # optimize/GC breaks tests that assert on deterministic data versions.
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
+          docker build --platform ${{ inputs.image_platform }} \
+            --build-arg TERMINUSDB_IMAGE=terminusdb/terminusdb-server:local \
+            -f tests/Dockerfile.test \
+            -t terminusdb-test:local .
+          mkdir -p test-logs
+          # terminus_config.pl is read by lib/info.js for version checks;
+          # TERMINUSDB_GIT_HASH replaces `git rev-parse` (no .git inside).
           docker run --platform ${{ inputs.image_platform }} \
             --volume "${PWD}/tests:/app/terminusdb/tests" \
-            --workdir /app/terminusdb \
+            --volume "${PWD}/src/config/terminus_config.pl:/app/terminusdb/src/config/terminus_config.pl:ro" \
+            --volume "${PWD}/test-logs:/logs" \
+            --tmpfs /tmp:rw,exec \
+            --tmpfs /app/terminusdb/storage \
             --name=terminusdb \
-            --detach \
             --net=host \
-            -e TERMINUSDB_PLUGINS_PATH=/void \
-            terminusdb/terminusdb-server:local
-
-      # Give the server some time to start up
-      - name: Sleep for 30 seconds
-        run: sleep 30s
-        if: ${{ inputs.image_platform == 'linux/arm64' }}
-
-      - name: Install NodeJS
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Run
-        env:
-          TERMINUSDB_DOCKER_CONTAINER: terminusdb
-          MOCHA_JOBS: ${{ inputs.mocha_jobs }}
-          MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
-          SKIP_MEMORY_MODE_TESTS: 'true'
-        run: |
-            cd tests        
-            npm install-ci-test
+            -e TERMINUSDB_PLUGINS_PATH=/plugins \
+            -e TERMINUSDB_ENABLE_OPTIMIZER=false \
+            -e TERMINUSDB_TEST_TMPDIR=/tmp \
+            -e TERMINUSDB_GIT_HASH=$(git rev-parse HEAD) \
+            -e MOCHA_JOBS=${{ inputs.mocha_jobs }} \
+            terminusdb-test:local \
+            sh /app/terminusdb/tests/run-docker-tests.sh
 
       - name: Capture TerminusDB logs
         if: always()
         run: |
-          docker logs terminusdb > terminusdb-server.log 2>&1 || echo "Failed to capture logs"
+          cp test-logs/server.log terminusdb-server.log 2>/dev/null || echo "Failed to capture logs"
 
       - name: Upload TerminusDB server logs
         if: always()
@@ -121,168 +92,3 @@ jobs:
           name: terminusdb-server-logs-${{ inputs.image_artifact }}
           path: terminusdb-server.log
           retention-days: 7
-
-
-  # integration_tests_non_parallel:
-  #   name: Integration tests (non-parallel)
-  #   runs-on: ${{ inputs.runner }}
-
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         repository: ${{ inputs.test_repository }}
-  #         ref: ${{ inputs.test_ref }}
-
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v2
-
-  #     - name: Download Docker image
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: ${{ inputs.image_artifact }}
-
-  #     - name: Set up QEMU
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-  #       uses: docker/setup-qemu-action@v2
-  #       with:
-  #         platforms: 'arm64'
-
-  #     - name: Run server
-  #       run: |
-  #         docker load < ${{ inputs.image_artifact }}.tar.gz
-  #         docker run --platform ${{ inputs.image_platform }} \
-  #           --volume "${PWD}/tests:/app/terminusdb/tests" \
-  #           --name=terminusdb \
-  #           --detach \
-  #           --net=host \
-  #           terminusdb/terminusdb-server:local
-
-  #     # Give the server some time to start up
-  #     - name: Sleep for 30 seconds
-  #       run: sleep 30s
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-
-  #     - uses: actions/setup-node@v2
-  #       with:
-  #         node-version: '16'
-
-  #     - name: Run tests
-  #       working-directory: tests
-  #       env:
-  #         TERMINUSDB_DOCKER_CONTAINER: terminusdb
-  #         TERMINUSDB_PARALLELIZE_ENABLED: false
-  #         MOCHA_JOBS: ${{ inputs.mocha_jobs }}
-  #         MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
-  #       run: |
-  #         npm install-ci-test
-
-  # integration_tests_header:
-  #   name: Integration tests (header)
-  #   runs-on: ${{ inputs.runner }}
-
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         repository: ${{ inputs.test_repository }}
-  #         ref: ${{ inputs.test_ref }}
-
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v2
-
-  #     - name: Download Docker image
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: ${{ inputs.image_artifact }}
-
-
-  #     - name: Set up QEMU
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-  #       uses: docker/setup-qemu-action@v2
-  #       with:
-  #         platforms: 'arm64'
-
-  #     - name: Run server
-  #       run: |
-  #         docker load < ${{ inputs.image_artifact }}.tar.gz
-  #         docker run --platform ${{ inputs.image_platform }} \
-  #           --volume "${PWD}/tests:/app/terminusdb/tests" \
-  #           --detach \
-  #           --net=host \
-  #           --name=terminusdb \
-  #           -e TERMINUSDB_INSECURE_USER_HEADER_ENABLED=true \
-  #           -e TERMINUSDB_INSECURE_USER_HEADER='X-Forwarded-User' \
-  #           terminusdb/terminusdb-server:local
-
-  #     # Give the server some time to start up
-  #     - name: Sleep for 30 seconds
-  #       run: sleep 30s
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-
-  #     - uses: actions/setup-node@v2
-  #       with:
-  #         node-version: ${{ env.NODE_VERSION }}
-
-  #     - name: Run tests
-  #       working-directory: tests
-  #       env:
-  #         MOCHA_JOBS: ${{ inputs.mocha_jobs }}
-  #         MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
-  #         TERMINUSDB_DOCKER_CONTAINER: terminusdb
-  #         TERMINUSDB_INSECURE_USER_HEADER: X-Forwarded-User
-  #       run: npm install-ci-test
-
-  # integration_tests_jwt:
-  #   name: Integration tests (JWT)
-  #   runs-on: ${{ inputs.runner }}
-
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         repository: ${{ inputs.test_repository }}
-  #         ref: ${{ inputs.test_ref }}
-
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v2
-
-  #     - name: Download Docker image
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: ${{ inputs.image_artifact }}
-
-  #     - name: Set up QEMU
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-  #       uses: docker/setup-qemu-action@v2
-  #       with:
-  #         platforms: 'arm64'
-
-  #     - name: Run server
-  #       run: |
-  #         docker load < ${{ inputs.image_artifact }}.tar.gz
-  #         docker run --platform ${{ inputs.image_platform }} \
-  #           --volume "${PWD}/tests:/app/terminusdb/tests" \
-  #           --detach \
-  #           --net=host \
-  #           --name=terminusdb \
-  #           -e TERMINUSDB_JWT_ENABLED=true \
-  #           -e TERMINUSDB_JWT_AGENT_NAME_PROPERTY='http://terminusdb.com/schema/system#agent_name' \
-  #           -e TERMINUSDB_SERVER_JWKS_ENDPOINT='https://cdn.terminusdb.com/jwks.json' \
-  #           terminusdb/terminusdb-server:local
-
-  #     # Give the server some time to start up
-  #     - name: Sleep for 30 seconds
-  #       run: sleep 30s
-  #       if: ${{ inputs.image_platform == 'linux/arm64' }}
-
-  #     - uses: actions/setup-node@v2
-  #       with:
-  #         node-version: ${{ env.NODE_VERSION }}
-
-  #     - name: Run tests
-  #       working-directory: tests
-  #       env:
-  #         MOCHA_JOBS: ${{ inputs.mocha_jobs }}
-  #         MOCHA_PARALLEL: ${{ inputs.mocha_parallel }}
-  #         TERMINUSDB_DOCKER_CONTAINER: terminusdb
-  #         TERMINUSDB_ACCESS_TOKEN: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3RrZXkifQ.eyJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSNhZ2VudF9uYW1lIjoiYWRtaW4iLCJodHRwOi8vdGVybWludXNkYi5jb20vc2NoZW1hL3N5c3RlbSN1c2VyX2lkZW50aWZpZXIiOiJhZG1pbkB1c2VyLmNvbSIsImlzcyI6Imh0dHBzOi8vdGVybWludXNodWIuZXUuYXV0aDAuY29tLyIsInN1YiI6ImFkbWluIiwiYXVkIjpbImh0dHBzOi8vdGVybWludXNodWIvcmVnaXN0ZXJVc2VyIiwiaHR0cHM6Ly90ZXJtaW51c2h1Yi5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNTkzNzY5MTgzLCJhenAiOiJNSkpuZEdwMHpVZE03bzNQT1RRUG1SSkltWTJobzBhaSIsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwifQ.Ru03Bi6vSIQ57bC41n6fClSdxlb61m0xX6Q34Yh91gql0_CyfYRWTuqzqPMFoCefe53hPC5E-eoSFdID_u6w1ih_pH-lTTqus9OWgi07Qou3QNs8UZBLiM4pgLqcBKs0N058jfg4y6h9GjIBGVhX9Ni2ez3JGNcz1_U45BhnreE
-  #       run: npm install-ci-test
-

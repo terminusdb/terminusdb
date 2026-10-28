@@ -3,11 +3,16 @@ name: ARM64 Image
 
 on:
   workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run image test suite after building"
+        type: boolean
+        default: true
   workflow_call:
-  pull_request:
-    paths: 
-      - ".github/workflows/docker-arm64-build.yml"
-      - ".github/workflows/docker-image-test.yml"
+    inputs:
+      run_tests:
+        type: boolean
+        default: true
 #  schedule:
 #    - cron:  '45 2 * * *'
 
@@ -18,17 +23,39 @@ jobs:
 
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Docker Build
-        run: |
-          docker build \
-            --build-arg TERMINUSDB_GIT_HASH=${{ github.sha }} \
-            -t terminusdb/terminusdb-server:local \
-            .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      - name: Save and compress image
-        run: docker save terminusdb/terminusdb-server:local | gzip > terminusdb-server-snapshot-arm64.tar.gz
+      - name: Build and export
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          tags: terminusdb/terminusdb-server:local
+          outputs: type=docker,dest=terminusdb-server-snapshot-arm64.tar
+          cache-from: type=gha,scope=arm64
+          # Per-arch scope keeps amd64 layers out of this cache. mode=max
+          # exports the rust_deps stage — the compiled dependency tree,
+          # stable while Cargo.lock is unchanged — which is the expensive
+          # half of this build. rust_builder stays thin: target/ is
+          # deleted in the same RUN.
+          cache-to: type=gha,mode=max,scope=arm64
+          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          input: terminusdb-server-snapshot-arm64.tar
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          version: 'v0.76.1'
+
+      - name: Compress image
+        run: gzip terminusdb-server-snapshot-arm64.tar
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
@@ -39,6 +66,7 @@ jobs:
   arm64_tests:
     name: Tests
     needs: arm64_build
+    if: ${{ inputs.run_tests }}
     uses: ./.github/workflows/docker-image-test.yml
     with:
       test_repository: ${{ github.repository }}
@@ -46,4 +74,3 @@ jobs:
       image_artifact: terminusdb-server-snapshot-arm64
       image_platform: linux/arm64
       runner: ubuntu-22.04-arm
-      mocha_parallel: false

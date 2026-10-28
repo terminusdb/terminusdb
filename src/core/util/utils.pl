@@ -963,14 +963,21 @@ datetime_to_internal_datetime(Date,date_time(Y,M,D,HH,MM,SS)) :-
     date_time_stamp(Date,TS),
     stamp_date_time(TS,date(Y, M, D, HH, MM, SS, 0, 'UTC', -), 'UTC').
 
-time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)) :-
-    HHOff is Offset div 3600,
+time_to_internal_time(time(HH,MM,SS,_NS,Offset),time(HN,MN,SN)) :-
+    % Accepts the 5-arg time term produced by the time/5 DCG in xsd_parser.pl.
+    % Offset is already in SWI convention (seconds west of Greenwich — the
+    % parser negates at the boundary), so a +02:00 input arrives as -7200 and
+    % adding it to the local time yields UTC. Nanoseconds are dropped (the
+    % internal time representation has no NS field).
+    HHOff is Offset // 3600,
     Offset1 is Offset - HHOff * 3600,
-    MMOff is Offset1 div 60,
+    MMOff is Offset1 // 60,
     SSOff is Offset1 - MMOff * 60,
-    HN is HH + HHOff mod 24,
-    MN is MM + MMOff mod 60,
-    SN is SS + SSOff mod 60.
+    HN0 is HH + HHOff,
+    HN is (HN0 mod 24 + 24) mod 24,
+    MN0 is MM + MMOff,
+    MN is (MN0 mod 60 + 60) mod 60,
+    SN is SS + SSOff.
 
 % Read a JSON Term from Stream. Fail if no JSON terms are found in Stream.
 json_read_term(Stream, Term) :-

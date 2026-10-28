@@ -68,8 +68,12 @@
               api_class_frame/6,
               api_filled_frame/5,
 
+              % api_jsonschema.pl
+              tdb_class_to_json_schema/3,
+              api_class_jsonschema/5,
+
               % api_woql.pl
-              woql_query_json/8,
+              woql_query_json/9,
               woql_query_streaming_json/5,
 
               % api_squash.pl
@@ -80,6 +84,7 @@
 
               % api_optimize.pl
               api_optimize/3,
+              api_optimize_queued/3,
 
               % api_prefixes
               get_prefixes/4,
@@ -103,6 +108,7 @@
               status_http_code/2,
               status_cli_code/2,
               generic_exception_jsonld/2,
+              generic_exception_jsonld/3,
               json_http_code/2,
               json_cli_code/2,
 
@@ -128,12 +134,16 @@
 
               % api_document.pl
               api_can_read_document/6,
-              api_insert_documents/8,
-              api_delete_documents/8,
-              api_delete_documents_by_type/7,
-              api_delete_document/7,
-              api_replace_documents/8,
-              api_nuke_documents/6,
+              api_check_documents/11,
+              api_check_insert_body/4,
+              api_check_replace_body/4,
+              api_check_delete_body/3,
+              api_insert_documents/9,
+              api_delete_documents/9,
+              api_delete_documents_by_type/8,
+              api_delete_document/8,
+              api_replace_documents/9,
+              api_nuke_documents/7,
               api_generate_document_ids/4,
               api_read_document_selector/12,
               api_generate_document_ids/4,
@@ -147,6 +157,7 @@
               convert_input_to_json_stream/4,
               document_stream_headers/3,
               document_stream_start/3,
+              document_stream_preamble/3,
               document_stream_write/4,
               document_stream_end/2,
 
@@ -200,7 +211,7 @@
               api_db_update/6,
 
               % api_graphql.pl
-              handle_graphql_request/8,
+              handle_graphql_request/11,
 
               % api_history.pl
               api_document_history/6,
@@ -214,7 +225,10 @@
               api_concat/6,
 
               % api_indexer
-              api_index_jobs/8
+              api_index_jobs/8,
+
+              % api_changes.pl
+              api_changes/5
           ]).
 
 :- use_module(api/api_init).
@@ -232,6 +246,7 @@
 :- use_module(api/graph_load).
 :- use_module(api/graph_dump).
 :- use_module(api/api_frame).
+:- use_module(api/api_jsonschema).
 :- use_module(api/api_woql).
 :- use_module(api/api_squash).
 :- use_module(api/api_reset).
@@ -254,7 +269,9 @@
 :- use_module(api/api_history).
 :- use_module(api/api_migration).
 :- use_module(api/api_indexer).
+:- use_module(api/api_search).
 :- use_module(api/api_merge).
+:- use_module(api/api_changes).
 
 % Loads the write-gate audit suites; no exports needed.
 :- use_module(api/api_write_gates_test, []).

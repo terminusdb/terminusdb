@@ -15,7 +15,7 @@
 :- use_module(core(api/api_init), [update_system_graphs/0]).
 :- use_module(core(triple)).
 :- use_module(server(main), [terminus_server/2]).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(core(query)).
 :- use_module(core(transaction), [open_descriptor/2, organization_database_name_uri/4]).
 :- use_module(core(document), [get_document/3]).
@@ -27,7 +27,17 @@
                with_memory_file/1,
                alternate/2,
                with_memory_file_stream/3]).
-:- use_module(core(plugins)).
+% load_plugins/0 is only needed by `serve`; store-touching commands skip it
+% so per-invocation startup stays cheap (hook entry points degrade cleanly —
+% invoked via findall/forall, with shipping defaults in core modules).
+:- use_module(core(plugins), [load_plugins/0]).
+% The mcp entry point lives in the builtin plugin (loaded by load_plugins).
+% Declaring it multifile here keeps qsave's undefined-predicate check from
+% flagging the qualified call, without pulling the plugin into the state.
+:- multifile mcp:run_stdio/1.
+% Likewise the indexer boot detection — picks the embedded vectorlink
+% backend when an OpenAI-compatible endpoint answers at startup.
+:- multifile vectorlink:auto_configure_indexer/0.
 :- use_module(library(prolog_stack), [print_prolog_backtrace/2]).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
@@ -40,10 +50,14 @@
 :- use_module(library(settings)).
 :- use_module(library(terminus_store), [terminus_store_version/1]).
 
-:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0, log_format/1]).
+:- use_module(config(terminus_config), [terminusdb_version/1, check_all_env_vars/0,
+                                       log_format/1, set_memory_mode/0]).
 
-% Commands that never open the store: skipping update_system_graphs and
-% load_plugins keeps them cheap and safe on locked or corrupt stores.
+% Meta-predicate declaration must appear before any caller to satisfy xref.
+:- meta_predicate api_report_errors(?,0).
+
+% Commands that never open the store: skipping update_system_graphs keeps
+% them cheap and safe on locked or corrupt stores.
 store_free_invocation(Argv) :-
     (   Argv = []
     ;   Argv = [Cmd|_],
@@ -54,33 +68,48 @@ store_free_invocation(Argv) :-
 
 cli_toplevel :-
     current_prolog_flag(argv, Argv),
+    % One-shot commands exit right after running — SWI's background
+    % atom-GC daemon buys nothing and can still be collecting at halt,
+    % producing "threads wouldn't die: [gc]" on stderr. Serve and mcp
+    % are long-lived and keep the daemon.
+    (   Argv = [Cmd|_],
+        memberchk(Cmd, [serve, mcp])
+    ->  true
+    ;   catch(set_prolog_flag(gc_thread, false), _, true)),
     initialise_log_settings,
+    % Environment defaults for `terminusdb mcp` must land before the
+    % first db_path/1 resolution anywhere — db_path is tabled, so a
+    % setenv after the first call is a no-op.
+    (   Argv = [mcp|_]
+    ->  apply_mcp_env_defaults
+    ;   true),
     (   store_free_invocation(Argv)
     ->  true
-    ;   update_system_graphs,
-        load_plugins
+    ;   update_system_graphs
     ),
     % Better error handling here...
-    catch_with_backtrace(
-        (   set_prolog_flag(verbose, true),
-            run(Argv),
-            set_prolog_flag(verbose, false),
-            halt(0)
-        ),
-        Exception,
-        (   Exception = unwind(halt(Code))
-        ->  halt(Code)
-        ;   Exception = error(io_error(write,user_output),_)
-        ->  halt(0)
-        ;   Exception = error(rust_io_error('WriteZero',_),_)
-        ->  halt(0)
-        ;   Exception = error(Error,context(prolog_stack(Stack),_)),
-            print_prolog_backtrace(user_error, Stack)
-        ->  format(user_error, "~NError: ~q~n~n", [Error]),
-            halt(1)
-        ;   format(user_error, "~NError: ~q~n~n", [Exception]),
-            halt(1)
-        )).
+    (   catch_with_backtrace(
+            (   set_prolog_flag(verbose, true),
+                run(Argv),
+                set_prolog_flag(verbose, false)
+            ),
+            Exception,
+            (   Exception = unwind(halt(Code))
+            ->  halt(Code)
+            ;   Exception = error(io_error(write,user_output),_)
+            ->  halt(0)
+            ;   Exception = error(rust_io_error('WriteZero',_),_)
+            ->  halt(0)
+            ;   Exception = error(Error,context(prolog_stack(Stack),_)),
+                print_prolog_backtrace(user_error, Stack)
+            ->  format(user_error, "~NError: ~q~n~n", [Error]),
+                halt(1)
+            ;   format(user_error, "~NError: ~q~n~n", [Exception]),
+                halt(1)
+            ))
+    ->  halt(0)
+    ;   halt(1)
+    ).
 
 % commands
 opt_spec(help,'terminusdb help',
@@ -126,6 +155,14 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            meta(password),
            default('_'),
            help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
+opt_spec(mcp,'terminusdb mcp OPTIONS',
+         'Run an MCP (Model Context Protocol) server on stdin/stdout against the local store. No port is opened. Connect a client such as Claude Code with `claude mcp add terminusdb -- terminusdb mcp`. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer — the embedded vectorlink backend is selected automatically at startup when an OpenAI-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink|http_vectorlink|none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in-memory without a persistent store, with the value as admin password — empty means \'root\').',
+         [[opt(help),
+           type(boolean),
+           shortflags([h]),
+           longflags([help]),
+           default(false),
+           help('Print help for `mcp` command')]]).
 opt_spec(list,'terminusdb list OPTIONS',
          'List available databases. [DEPRECATED]',
          [[opt(help),
@@ -974,7 +1011,13 @@ opt_spec(doc,insert,'terminusdb doc insert DATABASE_SPEC OPTIONS',
            longflags([full_replace,'full-replace']),
            shortflags([f]),
            default(false),
-           help('delete all previous documents and substitute these')]]).
+           help('delete all previous documents and substitute these')],
+          [opt(compress_ids),
+           type(boolean),
+           longflags([compress_ids,'compress-ids']),
+           shortflags([z]),
+           default(false),
+           help('return compressed / minimized ids using default prefixes')]]).
 opt_spec(doc,delete,'terminusdb doc delete DATABASE_SPEC OPTIONS',
          'Delete documents.',
          [[opt(help),
@@ -1098,7 +1141,13 @@ opt_spec(doc,replace,'terminusdb doc replace DATABASE_SPEC OPTIONS',
            longflags([create]),
            shortflags([c]),
            default(false),
-           help('create document if it does not exist')]]).
+           help('create document if it does not exist')],
+          [opt(compress_ids),
+           type(boolean),
+           longflags([compress_ids,'compress-ids']),
+           shortflags([z]),
+           default(false),
+           help('return compressed / minimized ids using default prefixes')]]).
 opt_spec(doc,get,'terminusdb doc get DATABASE_SPEC OPTIONS',
          'Query documents.',
          [[opt(help),
@@ -1567,6 +1616,10 @@ assert_system_db_is_accessible :-
             halt(1))).
 
 run(Argv) :-
+    % Idempotent: also applied in cli_toplevel before store probing.
+    (   Argv = [mcp|_]
+    ->  apply_mcp_env_defaults
+    ;   true),
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
     (   Argv = [Cmd|_],
@@ -1574,6 +1627,8 @@ run(Argv) :-
     % Skip db check for in-memory mode - the store will be created on the fly
     ;   member(MemFlag, ['--memory', '-m']),
         member(MemFlag, Argv)
+    % mcp self-provisions its store (default ~/.terminusdb) on first run
+    ;   Argv = [mcp|_]
     ;   assert_system_db_is_accessible),
     run_(Argv).
 
@@ -1620,6 +1675,28 @@ run_(_) :-
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~w~n", [Commands]),
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
 
+%% apply_mcp_env_defaults is det.
+%
+%  Environment defaults for `terminusdb mcp`. Must run before the first
+%  db_path/1 resolution anywhere in the process — db_path is tabled, so
+%  a setenv after the first call is a no-op. cli_toplevel calls this
+%  before update_system_graphs; it is repeated in run_command for
+%  direct invocations that bypass the toplevel.
+apply_mcp_env_defaults :-
+    (   getenv('TERMINUSDB_SERVER_DB_PATH', _)
+    ->  true
+    ;   expand_file_name('~/.terminusdb', [DB_Home]),
+        setenv('TERMINUSDB_SERVER_DB_PATH', DB_Home),
+        % The embedded engine derives its data dir from db_path's parent
+        % — which would be ~/ — so pin it inside the store folder.
+        (   getenv('VECTORLINK_DATA_DIR', _)
+        ->  true
+        ;   expand_file_name('~/.terminusdb/vectorlink', [VL_Dir]),
+            setenv('VECTORLINK_DATA_DIR', VL_Dir))).
+    % TERMINUSDB_INDEXER_BACKEND stays unset when the user hasn't chosen
+    % — auto_configure_indexer probes for a live endpoint after plugins
+    % load and selects the embedded backend when one answers.
+
 % Commands
 run_command(help,_Positional,Opts) :-
     terminusdb_help(Opts).
@@ -1633,10 +1710,37 @@ run_command(test,_Positional,Opts) :-
 run_command(serve,_Positional,Opts) :-
     api_report_errors(
         server,
-        (   option(interactive(true), Opts)
+        (   load_plugins,
+            vectorlink:auto_configure_indexer,
+            option(interactive(true), Opts)
         ->  terminus_server([serve|Opts], false),
             prolog
         ;   terminus_server([serve|Opts], true))
+    ).
+run_command(mcp,_Positional,Opts) :-
+    apply_mcp_env_defaults,
+    api_report_errors(
+        mcp,
+        (   % In-memory store — same init as serve's --memory flag, via
+            % TERMINUSDB_MEMORY_PASSWORD.
+            (   getenv('TERMINUSDB_MEMORY_PASSWORD', Memory_Password)
+            ->  memory_triple_store(Store),
+                global_triple_store(Store),
+                (   Memory_Password = ''
+                ->  Password = root
+                ;   Password = Memory_Password),
+                initialize_database_with_store(Password, Store),
+                set_memory_mode
+            ;   % First run on a persistent store: initialize it in place.
+                catch(open_descriptor(system_descriptor{}, _), _, fail)
+            ->  true
+            ;   config:db_path(DB_Path),
+                initialize_database(root, false),
+                format(user_error, 'Initialized new store at ~w~n', [DB_Path])),
+            load_plugins,
+            vectorlink:auto_configure_indexer,
+            opt_authority(Opts, Auth),
+            mcp:run_stdio(Auth))
     ).
 run_command(list,Databases,Opts) :-
     opt_authority(Opts, Auth),
@@ -1682,7 +1786,7 @@ run_command(query,[Path,Query],Opts) :-
                          data_version: no_data_version,
                          library: Library,
                          all_witnesses: false },
-            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, Response, Options),
+            woql_query_json(System_DB, Auth, some(Path), atom_query(Query), Context, _New_Data_Version, _, Response, Options),
             (   option(json(true), Opts)
             ->  json_write_dict(current_output, Response, [])
             ;   get_dict(prefixes, Context, Context_Prefixes),
@@ -2243,19 +2347,19 @@ run_command(doc,delete, [Path], Opts) :-
     api_report_errors(
         delete_documents,
         (   Nuke = true
-        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, Opts),
+        ->  api_nuke_documents(System_DB, Auth, Path, no_data_version, _, _, Opts),
             format("Documents nuked~n", [])
         ;   (   ground(Id)
-            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, Opts),
+            ->  api_delete_document(System_DB, Auth, Path, Id, no_data_version, _, _, Opts),
                 Ids = [Id]
             ;   ground(Type)
-            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, Opts),
+            ->  api_delete_documents_by_type(System_DB, Auth, Path, Type, no_data_version, _, _, Opts),
                 format(atom(Msg), 'All documents of type ~q', [Type]),
                 Ids = [Msg] % silly
             ;   (   var(Data)
                 ->  with_memory_file(doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts))
                 ;   open_string(Data, Stream),
-                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts)
                 )
             ),
             format(current_output, "Documents deleted:~n", []),
@@ -2272,7 +2376,7 @@ run_command(doc,replace, [Path], Opts) :-
         (   (   var(Data)
             ->  with_memory_file(doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts))
             ;   open_string(Data, Stream),
-                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts)
+                api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts)
             ),
             format(current_output, "Documents replaced:~n", []),
             format_doc_id_list(Ids)
@@ -2710,7 +2814,7 @@ doc_replace_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_replace_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_replace_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
+    api_replace_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts).
 
 doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     % Copy stdin to a memory file.
@@ -2719,7 +2823,7 @@ doc_delete_memory_file(System_DB, Auth, Path, Ids, Opts, Mem_File) :-
     with_memory_file_stream(Mem_File, read, doc_delete_stream(System_DB, Auth, Path, Ids, Opts)).
 
 doc_delete_stream(System_DB, Auth, Path, Ids, Opts, Stream) :-
-    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, Ids, Opts).
+    api_delete_documents(System_DB, Auth, Path, Stream, no_data_version, _, _, Ids, Opts).
 
 doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
     % Copy stdin to a memory file.
@@ -2730,7 +2834,7 @@ doc_insert_memory_file(System_DB, Auth, Path, Ids, Options, Mem_File) :-
 doc_insert_stream(System_DB, Auth, Path, Ids, Options, Stream) :-
     api_insert_documents(
         System_DB, Auth, Path, Stream,
-        no_data_version, _New_Data_Version, Ids, Options).
+        no_data_version, _New_Data_Version, _, Ids, Options).
 
 create_authorization(Opts,Authorization) :-
     option(token(Token), Opts),
@@ -2771,7 +2875,6 @@ report_parse_error(error(syntax_error('disallowed: <shortflag>=<value>'),_), Com
 report_parse_error(error(type_error(flag_value,_),_), _) =>
     true.
 
-:- meta_predicate api_report_errors(?,0).
 api_report_errors(API,Goal) :-
     catch_with_backtrace(
         Goal,
@@ -2910,6 +3013,7 @@ format_help_markdown_opt(Opt) :-
     format(current_output, '  ~s~n~n', [Help]).
 
 format_doc_id_list(Ids) :-
+    is_list(Ids),
     length(Ids, Id_Count),
     (   Id_Count > 0
     ->  Column_Width is floor(log10(Id_Count)) + 2,

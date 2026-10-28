@@ -389,8 +389,8 @@ time_string(time(HN,MN,SN),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(time(HH,MM,SS,_NS,Offset),Codes),
-    time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)).
+    phrase(time(HH,MM,SS,NS,Offset),Codes),
+    time_to_internal_time(time(HH,MM,SS,NS,Offset),time(HN,MN,SN)).
 
 duration_string(Duration,String) :-
     nonvar(Duration),

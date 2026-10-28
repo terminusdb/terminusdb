@@ -1,0 +1,25 @@
+services:
+  terminusdb-stress:
+    image: terminusdb/terminusdb-server:local
+    container_name: terminusdb-stress
+    hostname: terminusdb-stress
+    ports:
+      - 6363:6363
+    environment:
+      - TERMINUSDB_SERVER_PORT=6363
+      - TERMINUSDB_ADMIN_PASS=root
+      - TERMINUSDB_PLUGINS_PATH=/plugins
+      - TERMINUSDB_LOG_LEVEL=DEBUG
+      - TERMINUSDB_LOG_FORMAT=text
+    volumes:
+      - terminusdb-stress-storage:/app/terminusdb/storage
+    deploy:
+      resources:
+        limits:
+          # Throttle the server to create overlap between commits and
+          # optimizations. The original race reproduced reliably at 0.2-0.3
+          # CPUs; adjust upward only if the container becomes unresponsive.
+          cpus: '0.2'
+
+volumes:
+  terminusdb-stress-storage:

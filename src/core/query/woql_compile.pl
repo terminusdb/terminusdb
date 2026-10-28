@@ -1375,11 +1375,11 @@ woql_interval(Start, End, Interval) :-
         IV = date_time_interval(C1,C2,_Dur,_Flag),
         (   nonvar(Start)
         ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
-        ;   interval_component_typed(C1, Start)
+        ;   interval_component_typed_datetime(C1, Start)
         ),
         (   nonvar(End)
         ->  normalise_typed_or_component(End, normalise_interval_end, C2)
-        ;   interval_component_typed(C2, End)
+        ;   interval_component_typed_datetime(C2, End)
         )
     ;   nonvar(Start), nonvar(End)
     ->  Start = D1^^_,
@@ -1397,6 +1397,13 @@ woql_interval(Start, End, Interval) :-
 interval_component_typed(date(Y,M,D,O), Val) :- !,
     Val = date(Y,M,D,O)^^'http://www.w3.org/2001/XMLSchema#date'.
 interval_component_typed(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
+    Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+
+% Date-only components are normalised to midnight UTC dateTime for interval
+% decomposition and relation checks. This keeps the interval API dateTime-only.
+interval_component_typed_datetime(date(Y,M,D,_O), Val) :- !,
+    Val = date_time(Y,M,D,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+interval_component_typed_datetime(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
     Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
 
 /*
@@ -1455,6 +1462,19 @@ stamp_to_component_like(Stamp, date_time(_,_,_,_,_,_,_), date_time(Y,M,D,HH,MM,S
     SSF is floor(SS1),
     NS is floor((SS1 - SSF) * 1000000000).
 
+% Convert seconds difference to xsd:duration term (days/time only).
+seconds_to_duration(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+    (   Secs < 0
+    ->  Sign = -1, AbsSecs is abs(Secs)
+    ;   Sign = 1, AbsSecs = Secs
+    ),
+    Days is floor(AbsSecs) // 86400,
+    Rem1 is floor(AbsSecs) mod 86400,
+    Hours is Rem1 // 3600,
+    Rem2 is Rem1 mod 3600,
+    Mins is Rem2 // 60,
+    SSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60).
+
 % Convert xsd:duration day/time components to seconds (ignores Y/M).
 duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
     Secs is Sign * (D * 86400 + HH * 3600 + MM * 60 + SS).
@@ -1475,7 +1495,7 @@ woql_interval_start_duration(Start, Duration, Interval) :-
         IV = date_time_interval(C1,_C2,Dur,_Flag),
         (   nonvar(Start)
         ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
-        ;   interval_component_typed(C1, Start)
+        ;   interval_component_typed_datetime(C1, Start)
         ),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Start), nonvar(Duration)
@@ -1500,7 +1520,7 @@ woql_interval_duration_end(Duration, End, Interval) :-
         IV = date_time_interval(_C1,C2,Dur,_Flag),
         (   nonvar(End)
         ->  normalise_typed_or_component(End, normalise_interval_end, C2)
-        ;   interval_component_typed(C2, End)
+        ;   interval_component_typed_datetime(C2, End)
         ),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Duration), nonvar(End)
@@ -1585,10 +1605,10 @@ classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
 woql_interval_relation_typed(Rel, X, Y) :-
     X = date_time_interval(Xc1,Xc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
     Y = date_time_interval(Yc1,Yc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-    interval_component_typed(Xc1, Xs),
-    interval_component_typed(Xc2, Xe),
-    interval_component_typed(Yc1, Ys),
-    interval_component_typed(Yc2, Ye),
+    interval_component_typed_datetime(Xc1, Xs),
+    interval_component_typed_datetime(Xc2, Xe),
+    interval_component_typed_datetime(Yc1, Ys),
+    interval_component_typed_datetime(Yc2, Ye),
     woql_interval_relation(Rel, Xs, Xe, Ys, Ye).
 
 /*
@@ -7107,6 +7127,7 @@ test(less_than, [
                     json_query(Query),
                     _,
                     _,
+                    _,
                     JSON,
                     Options),
     [_] = (JSON.bindings).
@@ -7164,6 +7185,7 @@ test(using_resource_works, [
                     Auth,
                     some("TERMINUSQA/test"),
                     json_query(Query),
+                    _,
                     _,
                     _,
                     _JSON,

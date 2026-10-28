@@ -51,7 +51,7 @@
 :- use_module(library(apply)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
-:- use_module(library(http/json), [atom_json_dict/3]).
+:- use_module(library(json), [atom_json_dict/3]).
 
 :- use_module(core(util)).
 :- use_module(core(query)).
@@ -812,8 +812,14 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
     commit_id_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
     Commit_Info = commit_info{author: Author, message: Message},
 
-    ignore(
-        apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_Uri,instance, Instance_Layer_Uri)
+    % A commit that touched only the schema graph has no instance
+    % layer to apply — carry ours forward unchanged instead of
+    % leaving the new commit without an instance link.
+    (   apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_Uri,instance, Instance_Layer_Uri)
+    ->  true
+    ;   layer_uri_for_commit(Us_Repo_Context, Us_Commit_Uri, instance, Instance_Layer_Uri)
+    ->  true
+    ;   true
     ),
 
     apply_layer_change(Us_Repo_Context,Them_Repo_Askable,Us_Commit_Uri,Them_Commit_Uri,schema, Schema_Layer_Uri),
@@ -1035,6 +1041,48 @@ test(apply_nonexisting_removal,
     once(ask(Descriptor1,
              (   t(a,b,c),
                  not(removal(d,e,f))))).
+
+test(apply_schema_only_commit_keeps_instance,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb1"),
+             create_db_without_schema("admin", "testdb2")
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % Them-commit touched only the schema graph and has no instance
+    % layer (e.g. a schema write on a db whose instance graph is
+    % unborn). Applying it must carry our instance layer forward —
+    % not leave the new commit without an instance link.
+    resolve_absolute_string_descriptor("admin/testdb1", Descriptor1),
+    resolve_absolute_string_descriptor("admin/testdb2", Descriptor2),
+
+    create_context(Descriptor1, commit_info{author: "me", message: "commit a"}, Context1),
+    with_transaction(Context1,
+                     ask(Context1, insert(a,b,c)),
+                     _),
+
+    create_context(Descriptor2, commit_info{author: "me", message: "schema commit"}, Context2),
+    with_transaction(Context2,
+                     insert_schema_document(Context2,
+                                            _{ '@id' : "X",
+                                               '@type' : "Class" }),
+                     _),
+
+    create_context(Descriptor1.repository_descriptor, Context3),
+    create_context(Descriptor2.repository_descriptor, Context4),
+
+    branch_head_commit(Context4, "main", Schema_Commit_Uri),
+
+    with_transaction(Context3,
+                     apply_commit_on_branch(Context3, Context4, "main", Schema_Commit_Uri,
+                                            "rebaser",
+                                            12345,
+                                            _New_Commit_Id,
+                                            New_Commit_Uri),
+                     _),
+
+    once(layer_uri_for_commit(Descriptor1.repository_descriptor, New_Commit_Uri, instance, _)),
+    once(ask(Descriptor1, t(a,b,c))).
 
 :- end_tests(commit_application).
 

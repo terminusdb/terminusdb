@@ -1,12 +1,17 @@
 name: AMD64 Image
 
 on:
-  workflow_dispatch:  
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run image test suite after building"
+        type: boolean
+        default: true
   workflow_call:
-  pull_request:
-    paths: 
-      - ".github/workflows/docker-amd64-build.yml"
-      - ".github/workflows/docker-image-test.yml"
+    inputs:
+      run_tests:
+        type: boolean
+        default: true
   
 jobs:
 
@@ -16,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -27,12 +32,16 @@ jobs:
           context: .
           tags: terminusdb/terminusdb-server:local
           outputs: type=docker,dest=terminusdb-server-snapshot-amd64.tar
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=amd64
+          # Per-arch scope keeps arm64 layers out of this cache. mode=max
+          # exports intermediate stages: rust_deps carries the compiled
+          # dependency tree (stable while Cargo.lock is unchanged) and
+          # rust_builder stays thin — target/ is deleted in the same RUN.
+          cache-to: type=gha,mode=max,scope=amd64
           build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           input: terminusdb-server-snapshot-amd64.tar
           format: 'table'
@@ -40,6 +49,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
+          version: 'v0.76.1'
 
       - name: Compress image
         run: gzip terminusdb-server-snapshot-amd64.tar
@@ -53,6 +63,7 @@ jobs:
   amd64_tests:
     name: Tests
     needs: amd64_build
+    if: ${{ inputs.run_tests }}
     uses: ./.github/workflows/docker-image-test.yml
     with:
       test_repository: ${{ github.repository }}
@@ -60,4 +71,3 @@ jobs:
       image_artifact: terminusdb-server-snapshot-amd64
       image_platform: linux/amd64
       runner: ubuntu-latest
-      mocha_parallel: false

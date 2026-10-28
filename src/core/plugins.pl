@@ -1,17 +1,24 @@
 :- module(plugins, [
               pre_commit_hook/2,
               post_commit_hook/2,
+              post_delete_db_hook/2,
               enrich_commit_info/3,
               fast_document_history/6,
               fast_document_history_entries/5,
               pre_server_startup_hook/1,
               post_server_startup_hook/1,
+              readiness_component/1,
               enrich_history/5,
               enrich_history/6,
-              load_plugins/0
+              load_plugins/0,
+              load_foreign_plugins/2,
+              shared_object_extension/1,
+              embedding_for_type/4,
+              embedding_for_type/3
           ]).
 :- use_module(library(lists)).
 :- use_module(library(filesex)).
+:- use_module(library(shlib)).
 :- use_module(library(assoc)).
 :- use_module(library(terminus_store)).
 :- use_module(config(terminus_config)).
@@ -31,6 +38,7 @@
 
 :- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
+:- multifile post_delete_db_hook/2.
 :- multifile enrich_commit_info/3.
 :- multifile fast_document_history/6.
 :- multifile fast_document_history_entries/5.
@@ -38,18 +46,140 @@
 :- multifile enrich_history/6.
 :- multifile pre_server_startup_hook/1.
 :- multifile post_server_startup_hook/1.
+:- multifile readiness_component/1.
+:- multifile embedding_for_type/4.
+:- multifile embedding_for_type/3.
+:- multifile vectorlink_admin_user/1.
+:- multifile vectorlink_admin_secret/1.
+
+%% plugin_dirs(-Dirs) is det.
+%
+%  Ordered list of plugin directories to load: the built-in plugin
+%  directory first (always shipped — search stack, webserver plugins,
+%  auto-optimize), then the user plugin directory (TERMINUSDB_PLUGINS_PATH
+%  or <storage>/plugins). Directories that do not exist are skipped.
+plugin_dirs(Dirs) :-
+    findall(Path,
+            (   plugin_dir_candidate(Path),
+                exists_directory(Path)),
+            Dirs).
+
+plugin_dir_candidate(Path) :-
+    builtin_plugin_path(Path).
+plugin_dir_candidate(Path) :-
+    plugin_path(Path).
 
 load_plugins :-
-    plugin_path(Path),
-    exists_directory(Path),
+    plugin_dirs(Dirs),
+    Dirs \= [],
     !,
-    directory_files(Path, Files),
-    forall((member(File, Files),
-            file_name_extension(_, '.pl', File)),
-
-           (   directory_file_path(Path, File, Full_Path),
-               load_files(Full_Path, [if(not_loaded), must_be_module(false)]))).
+    % Update the plugins file search path at runtime so that plugins
+    % can import each other via use_module(plugins(other_plugin), [...]).
+    % The load_paths.pl directive runs at compile time when
+    % TERMINUSDB_PLUGINS_PATH/TERMINUSDB_BUILTIN_PLUGINS_PATH may not be
+    % set, so it points to directories that may not exist. This corrects
+    % it to the actual plugin directories, built-in first.
+    retractall(user:file_search_path(plugins, _)),
+    forall(member(Dir, Dirs),
+           assertz(user:file_search_path(plugins, Dir))),
+    forall(member(Dir, Dirs),
+           load_plugins_from_dir(Dir)).
 load_plugins.
+
+%% load_plugins_from_dir(+Path) is det.
+%
+%  Loads all .pl plugin files and all foreign shared objects from Path.
+load_plugins_from_dir(Path) :-
+    directory_files(Path, Files),
+    findall(Full_Path,
+            (   member(File, Files),
+                file_name_extension(_, '.pl', File),
+                directory_file_path(Path, File, Full_Path)
+            ),
+            Plugin_Files),
+    forall(member(Full_Path, Plugin_Files),
+           load_plugin_file(Full_Path)),
+    load_foreign_plugins(Path, Files).
+
+%% load_plugin_file(+Full_Path) is det.
+%
+%  Loads a single plugin file with proper error handling.
+%  If the plugin fails to load, prints a helpful error message and
+%  continues instead of killing the server.
+load_plugin_file(Full_Path) :-
+    setup_call_cleanup(
+        (   current_prolog_flag(verbose, OldVerbose),
+            set_prolog_flag(verbose, silent)
+        ),
+        catch(load_files(Full_Path, [if(not_loaded), must_be_module(false)]),
+              Error,
+              print_plugin_error(Full_Path, Error)),
+        set_prolog_flag(verbose, OldVerbose)
+    ),
+    !.
+load_plugin_file(Full_Path) :-
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load (directive failed without exception).~n",
+           [Full_Path]),
+    format(user_error,
+           "       Check the file for syntax errors or failed directives.~n~n", []).
+
+%% print_plugin_error(+Path, +Error) is det.
+%
+%  Print a user-friendly error message for a failed plugin load.
+print_plugin_error(Full_Path, unwind(halt(Code))) :-
+    !,
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load with exit code ~w.~n",
+           [Full_Path, Code]),
+    format(user_error,
+           "       This usually means a syntax error, missing module import,~n", []),
+    format(user_error,
+           "       a failed directive, or singleton variables in a clause head~n", []),
+    format(user_error,
+           "       (prefix unused head variables with _ to fix).~n", []),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+print_plugin_error(Full_Path, error(existence_error(source_sink, Module), _)) :-
+    !,
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load: module ~w not found.~n",
+           [Full_Path, Module]),
+    format(user_error,
+           "       The plugin imports a module that does not exist in this build.~n", []),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+print_plugin_error(Full_Path, error(permission_error(load, http_handler, Path_Spec), _)) :-
+    !,
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load: duplicate HTTP route ~w.~n",
+           [Full_Path, Path_Spec]),
+    format(user_error,
+           "       Another plugin or the core server already registers this route.~n", []),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+print_plugin_error(Full_Path, Error) :-
+    format(user_error,
+           "~n[ERROR] Plugin ~w failed to load:~n", [Full_Path]),
+    format(user_error,
+           "       ~q~n", [Error]),
+    format(user_error,
+           "       The server will continue without this plugin.~n~n", []).
+
+load_foreign_plugins(Path, Files) :-
+    forall((member(File, Files),
+            shared_object_extension(File)),
+           (   directory_file_path(Path, File, Full_Path),
+               catch(load_foreign_library(Full_Path),
+                     Error,
+                     format(user_error,
+                            "[ERROR] Failed to load foreign plugin ~w: ~q~n",
+                            [Full_Path, Error])))).
+
+shared_object_extension(File) :-
+    (   file_name_extension(_, dylib, File)
+    ;   file_name_extension(_, so, File)),
+    !.
 
 %%% ====================================================================
 %%% @shared cascade delete hook
@@ -255,3 +385,106 @@ update_validation_instance_layer(OldValidation, NewValidation) :-
     New_Layer = New_Instance_Obj.read,
     nb_set_dict(read, Old_Instance_Obj, New_Layer),
     nb_set_dict(changed, Old_Instance_Obj, true).
+
+%% embedding_for_type(+GraphSpec, +Type_IRI, +Document, -Markdown) is semidet.
+%
+%  Multifile hook for plugins to provide a default embedding string
+%  for documents of a given type when no embedding query+template
+%  is defined in the schema metadata.
+%
+%  GraphSpec is the data product path (e.g. "admin/testdb").
+%  Type_IRI is the fully expanded type IRI.
+%  Document is the JSON dict of the document.
+%  Markdown is the output string to embed.
+%
+%  The /4 arity tries the graphspec-specific clause first.
+%  The /3 arity is the fallback that ignores the graphspec.
+embedding_for_type(_, _, _, _) :- fail.
+
+%% embedding_for_type(+Type_IRI, +Document, -Markdown) is semidet.
+%
+%  Fallback hook without graphspec. Tried after all /4 clauses fail.
+embedding_for_type(_, _, _) :- fail.
+
+%% vectorlink_admin_user(-User) is semidet.
+%
+%  Multifile hook provided by the vectorlink plugin.
+%  Returns the admin user for HTTP Basic auth to the search backend.
+vectorlink_admin_user(_) :- fail.
+
+%% vectorlink_admin_secret(-Secret) is semidet.
+%
+%  Multifile hook provided by the vectorlink plugin.
+%  Returns the admin secret for HTTP Basic auth to the search backend.
+vectorlink_admin_secret(_) :- fail.
+
+%% readiness_component(-Component) is nondet.
+%
+%  Multifile hook: a plugin declares a component name that participates
+%  in startup readiness. The server marks every declared component
+%  pending before it starts accepting requests; the plugin then reports
+%  readiness via readiness:readiness_ready/1 or
+%  readiness:readiness_failed/2 when its initialization finishes.
+readiness_component(_) :- fail.
+
+:- begin_tests(foreign_plugin_loader, [concurrent(false)]).
+
+test(shared_object_extension_dylib) :-
+    shared_object_extension('libhello_plugin.dylib').
+
+test(shared_object_extension_so) :-
+    shared_object_extension('libhello_plugin.so').
+
+test(shared_object_extension_rejects_pl, [fail]) :-
+    shared_object_extension('webserver_hello.pl').
+
+test(shared_object_extension_rejects_txt, [fail]) :-
+    shared_object_extension('readme.txt').
+
+test(load_foreign_plugins_empty_dir) :-
+    tmp_file(temp, TmpDir),
+    make_directory(TmpDir),
+    call_cleanup(
+        load_foreign_plugins(TmpDir, []),
+        delete_directory(TmpDir)).
+
+test(load_foreign_plugins_no_so_files) :-
+    tmp_file(temp, TmpDir),
+    make_directory(TmpDir),
+    call_cleanup(
+        load_foreign_plugins(TmpDir, ['webserver_hello.pl', 'readme.txt']),
+        delete_directory(TmpDir)).
+
+:- end_tests(foreign_plugin_loader).
+
+:- begin_tests(builtin_plugin_path, [concurrent(false)]).
+
+test(plugin_dirs_only_existing_dirs) :-
+    plugin_dirs(Dirs),
+    forall(member(D, Dirs), exists_directory(D)).
+
+test(plugin_dirs_builtin_precedes_user) :-
+    once((   builtin_plugin_path(Builtin),
+             plugin_path(User),
+             exists_directory(Builtin),
+             exists_directory(User)
+         ->  plugin_dirs(Dirs),
+             nth0(Bi, Dirs, Builtin),
+             nth0(Ui, Dirs, User),
+             assertion(Bi < Ui)
+         ;   true
+         )).
+
+test(builtin_plugin_path_env_override) :-
+    tmp_file(temp, TmpDir),
+    make_directory(TmpDir),
+    setup_call_cleanup(
+        setenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', TmpDir),
+        (   abolish_table_subgoals(config:builtin_plugin_path(_)),
+            builtin_plugin_path(Path)),
+        unsetenv('TERMINUSDB_BUILTIN_PLUGINS_PATH')),
+    abolish_table_subgoals(config:builtin_plugin_path(_)),
+    absolute_file_name(TmpDir, Expected),
+    assertion(Path =@= Expected).
+
+:- end_tests(builtin_plugin_path).

@@ -84,11 +84,36 @@ add_test_path :-
 :- add_test_path.
 
 add_plugin_path :-
-    user:file_search_path(terminus_home, Dir),
-    directory_file_path(Dir,'plugins',Config),
+    (   getenv('TERMINUSDB_PLUGINS_PATH', Value),
+        absolute_file_name(Value, Config)
+    ->  true
+    ;   user:file_search_path(terminus_home, Dir),
+        directory_file_path(Dir,'plugins',Config)
+    ),
     asserta(user:file_search_path(plugins, Config)).
 
 :- add_plugin_path.
+
+% Built-in plugins are always loaded. They live in builtin_plugins/ at the
+% repository root (a sibling of src/) unless TERMINUSDB_BUILTIN_PLUGINS_PATH
+% overrides the location (installed deployments, Docker).
+%
+% The plugins(...) alias resolves built-in plugins FIRST, then user plugins,
+% so that use_module(plugins(name)) inside plugin code finds core modules
+% before user-supplied ones of the same name.
+add_builtin_plugin_path :-
+    (   getenv('TERMINUSDB_BUILTIN_PLUGINS_PATH', Value),
+        absolute_file_name(Value, Config)
+    ->  true
+    ;   user:file_search_path(terminus_home, Dir),
+        directory_file_path(Dir, '..', Parent),
+        directory_file_path(Parent, 'builtin_plugins', Config)
+    ),
+    asserta(user:file_search_path(builtin_plugins, Config)),
+    % asserta puts the built-in dir ahead of the plugins/ entry asserted above.
+    asserta(user:file_search_path(plugins, Config)).
+
+:- add_builtin_plugin_path.
 
 add_ontology_path :-
     user:file_search_path(terminus_home, Dir),
@@ -107,7 +132,12 @@ add_template_path :-
 add_rust_path :-
     user:file_search_path(terminus_home, Dir),
     directory_file_path(Dir, 'rust',Rust),
-    asserta(user:file_search_path(foreign, Rust)).
+    asserta(user:file_search_path(foreign, Rust)),
+    % foreign(no_save) binaries bake these paths at build time and are not
+    % relocatable. Assert each known install location as a candidate, tried
+    % before the build path; the first existing file wins.
+    asserta(user:file_search_path(foreign, '/snap/terminusdb/current/src/rust')),
+    asserta(user:file_search_path(foreign, '/app/terminusdb/src/rust')).
 
 :- add_rust_path.
 
@@ -141,3 +171,64 @@ add_dashboard_path :-
 :- add_enterprise_test_path.
 :- set_prolog_flag(terminusdb_enterprise, true).
 :- endif.
+
+:- multifile user:prolog_load_file/2.
+
+%% user:prolog_load_file(+Module:Spec, +Options) is semidet.
+%
+%  Standalone saved states embed every module loaded at build time but
+%  keep no source-file bookkeeping, so a use_module in a runtime-loaded
+%  plugin always resolves through the filesystem — where the baked
+%  build paths are dead (snap, Docker) and a relocated copy would hit
+%  "no permission to redefine module" on load. When Spec expands to the
+%  very file a module was already loaded from, skip the load and run
+%  only the import wiring, exactly as '$already_loaded' would.
+user:prolog_load_file(Context:Spec, Options) :-
+    compound(Spec),
+    functor(Spec, _, 1),
+    memberchk(if(not_loaded), Options),
+    expand_file_search_path(Spec, Path),
+    file_name_extension(Path, pl, File),
+    module_property(Module, file(File)),
+    !,
+    system:'$import_from_loaded_module'(Module, Context, Options).
+% The exact-path match above fails in relocated deployments where the
+% recorded module file and the expanded spec disagree (snap bakes a dead
+% build path, and SWI version differences in file bookkeeping can shift
+% the recorded form). When no candidate file exists on disk, match the
+% spec's full relative path — alias included — against the recorded file
+% of every loaded module: 'core(triple)' maps to '.../core/triple.pl',
+% never to '.../plugin_api/triple.pl', so same-basename files cannot be
+% picked by enumeration order. This also covers modules whose name
+% differs from the file basename ('document/json', 'config'). A genuinely
+% absent module still falls through to source_sink — not masked.
+user:prolog_load_file(Context:Spec, Options) :-
+    compound(Spec),
+    functor(Spec, _, 1),
+    memberchk(if(not_loaded), Options),
+    \+ absolute_file_name(Spec, _, [file_type(prolog), access(read), file_errors(fail)]),
+    spec_path_tail(Spec, Tail),
+    file_name_extension(Tail, pl, Leaf),
+    atom_concat('/', Leaf, Suffix),
+    module_property(Module, file(ModFile)),
+    atom_concat(_, Suffix, ModFile),
+    !,
+    system:'$import_from_loaded_module'(Module, Context, Options).
+
+%% spec_path_tail(+Spec, -Tail) is det.
+%
+%  Flatten a module spec into its relative path: core(document/json)
+%  becomes 'core/document/json', config(terminus_config) becomes
+%  'config/terminus_config'.
+spec_path_tail(A/B, Tail) :-
+    !,
+    spec_path_tail(A, AT),
+    spec_path_tail(B, BT),
+    atomic_list_concat([AT, BT], '/', Tail).
+spec_path_tail(Spec, Tail) :-
+    Spec =.. [Head, Arg],
+    !,
+    spec_path_tail(Head, HT),
+    spec_path_tail(Arg, AT),
+    atomic_list_concat([HT, AT], '/', Tail).
+spec_path_tail(Atom, Atom).

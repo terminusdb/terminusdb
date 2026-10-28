@@ -4,8 +4,9 @@ mod log;
 #[macro_use]
 mod dict_lookup;
 
-mod changes;
-mod consts;
+mod change_window;
+pub mod changes;
+pub mod consts;
 mod doc;
 mod embedding;
 mod jwt;
@@ -148,8 +149,10 @@ pub fn install() {
     json_preserve::register();
     template::register();
     changes::register();
+    change_window::register();
     embedding::register();
     jwt::register();
+    terminusdb_webserver::install();
 }
 
 #[cfg(test)]

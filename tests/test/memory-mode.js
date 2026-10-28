@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { spawn } = require('child_process')
+const { spawn, execFile } = require('child_process')
 const http = require('http')
 const { util } = require('../lib')
 // Skip these tests when no local binary is available (e.g., Docker-based CI)
@@ -16,7 +16,7 @@ describe('In-Memory Mode', function () {
   const PORT = 9393
   const PASSWORD = 'test_password_123'
   let serverProcess = null
-  async function waitForServer (maxRetries = 40) {
+  async function waitForServer (maxRetries = 200) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const res = await new Promise((resolve, reject) => {
@@ -35,7 +35,7 @@ describe('In-Memory Mode', function () {
       } catch (e) {
         // Server not ready yet
       }
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error('Server did not start in time')
   }
@@ -54,12 +54,12 @@ describe('In-Memory Mode', function () {
       } catch (e) {
         // Endpoint not ready yet
       }
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error('/api/ did not return 200 in time')
   }
 
-  async function waitForJsonEndpoint (path, auth, maxRetries = 10) {
+  async function waitForJsonEndpoint (path, auth, maxRetries = 50) {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const res = await new Promise((resolve, reject) => {
@@ -88,7 +88,7 @@ describe('In-Memory Mode', function () {
       } catch (e) {
         // Endpoint not ready yet
       }
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
     throw new Error(`Endpoint ${path} did not return valid JSON in time`)
   }
@@ -106,14 +106,34 @@ describe('In-Memory Mode', function () {
     })
   }
 
+  function startServer (args) {
+    serverProcess = spawn(util.terminusdbScript(), args, {
+      env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    serverProcess.stdout.on('data', d => process.stdout.write(`[memory-server] ${d}`))
+    serverProcess.stderr.on('data', d => process.stderr.write(`[memory-server] ${d}`))
+    serverProcess.on('error', err => process.stderr.write(`[memory-server] spawn error: ${err}\n`))
+    serverProcess.on('exit', (code, signal) => process.stderr.write(`[memory-server] exited code=${code} signal=${signal}\n`))
+  }
+
   function stopServer (done) {
-    if (serverProcess) {
-      serverProcess.kill('SIGTERM')
+    if (!serverProcess) return done()
+    // snapd re-parents the confined app into its own scope: the spawned launcher
+    // exits early, so the real server survives SIGTERM to the wrapper pid and
+    // stays bound to the port. Reap it by pattern when running under a snap.
+    if ((process.env.TERMINUSDB_EXEC_PATH || '').startsWith('/snap/')) {
+      execFile('pkill', ['-f', 'terminusdb serve (-m|--memory)'], () => {})
+    }
+    if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
       serverProcess = null
-      // Wait a bit for the port to be released
-      setTimeout(done, 2000)
-    } else {
       done()
+    } else {
+      serverProcess.once('exit', () => {
+        serverProcess = null
+        done()
+      })
+      serverProcess.kill('SIGTERM')
     }
   }
 
@@ -123,10 +143,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should start server in memory mode with custom password', async function () {
-      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
-        env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      startServer(['serve', '--memory', PASSWORD])
 
       await waitForServer()
 
@@ -138,10 +155,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should start server in memory mode with default password', async function () {
-      serverProcess = spawn(util.terminusdbScript(), ['serve', '-m'], {
-        env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      startServer(['serve', '-m'])
 
       await waitForServer()
 
@@ -153,10 +167,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should allow database creation in memory mode', async function () {
-      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
-        env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      startServer(['serve', '--memory', PASSWORD])
 
       await waitForServer()
 
@@ -182,10 +193,7 @@ describe('In-Memory Mode', function () {
     })
 
     it('should return info endpoint with version information', async function () {
-      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
-        env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      startServer(['serve', '--memory', PASSWORD])
 
       await waitForServer()
 
@@ -232,10 +240,7 @@ describe('In-Memory Mode', function () {
     let auth
 
     before(async function () {
-      serverProcess = spawn(util.terminusdbScript(), ['serve', '--memory', PASSWORD], {
-        env: { ...process.env, TERMINUSDB_SERVER_PORT: PORT.toString() },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      startServer(['serve', '--memory', PASSWORD])
 
       await waitForServer()
       auth = Buffer.from(`admin:${PASSWORD}`).toString('base64')

@@ -43,7 +43,7 @@ decimal_precision(20).
 :- use_module(library(apply_macros)).
 :- use_module(library(url), [is_absolute_url/1]).
 :- use_module(library(uri), [uri_components/2]).
-:- use_module(library(http/json), [atom_json_dict/3]).
+:- use_module(library(json), [atom_json_dict/3]).
 
 /*
  * string_decimal_to_rational(+String, -Rational) is semidet.
@@ -478,7 +478,7 @@ component_to_parts(date(Y,M,D,_), T, 0) :-
 component_to_parts(date_time(Y,Mo,D,H,Mi,S,NS), T, NS) :-
     date_time_stamp(date(Y,Mo,D,H,Mi,S,0,-,-), T).
 
-interval_component_string(date(Y,M,D,Offset), S) :- !, date_string(date(Y,M,D,Offset), S).
+interval_component_string(date(Y,M,D,_Offset), S) :- !, date_time_string(date_time(Y,M,D,0,0,0,0), S).
 interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
 interval_component_string(DT, S) :- date_time_string(DT, S).
 %%% xsd:string => xdd:integerRange
@@ -1586,6 +1586,60 @@ test(interval_roundtrip_duration_with_hours, []) :-
              S^^'http://www.w3.org/2001/XMLSchema#string'),
     S = "2025-01-01T00:00:00Z/PT1H".
 
+test(dateTimeInterval_string_from_dates, []) :-
+    typecast(date_time_interval(date(2025,1,1,0), date(2025,4,1,0), duration(1,0,0,90,0,0,0.0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_from_datetimes, []) :-
+    typecast(date_time_interval(date_time(2025,1,1,10,30,0,0), date_time(2025,4,1,15,45,0,0), duration(1,0,0,90,5,15,0.0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T10:30:00Z/2025-04-01T15:45:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_mixed_date_datetime, []) :-
+    typecast(date_time_interval(date(2025,1,1,0), date_time(2025,4,1,12,0,0,0), duration(1,0,0,90,12,0,0.0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_from_dates_roundtrip, []) :-
+    typecast("2025-01-01/2025-04-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-02T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_to_next_year, []) :-
+    typecast("2019-01-01/2019-12-31"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2019-01-01T00:00:00Z/2020-01-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_over_leap_day, []) :-
+    typecast("2020-02-01/2020-02-29"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2020-02-01T00:00:00Z/2020-03-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_to_leap_day, []) :-
+    typecast("2020-02-27/2020-02-28"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2020-02-27T00:00:00Z/2020-02-29T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_datetime_end_is_not_bumped, []) :-
+    typecast("2019-01-01T00:00:00/2020-01-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2019-01-01T00:00:00Z/2020-01-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 test(date_range_to_interval_inclusive, []) :-
     % [D1, D2] covers both whole days: the interval end is the exclusive
     % instant at (D2 + 1 day)T00:00:00Z.

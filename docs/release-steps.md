@@ -28,7 +28,7 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v12.0.9`
+`v12.1.0-rc1`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
