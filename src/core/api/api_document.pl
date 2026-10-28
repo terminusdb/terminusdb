@@ -37,6 +37,8 @@
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(account)).
+:- use_module(library(aggregate)).
+:- use_module(library(debug)).
 :- use_module(config(terminus_config)).
 
 :- use_module(library(option)).
