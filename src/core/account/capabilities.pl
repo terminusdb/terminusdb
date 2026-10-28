@@ -128,7 +128,11 @@ auth_action_scope(DB, jwt_scopes(Scopes), Action, Scope_Iri) :-
     !.
 
 auth_action_scope(DB, Auth, Action, Scope_Iri) :-
-    ground(Auth),
+    % Auth is a user URI atom. Compound auth (e.g. jwt_scopes) must not
+    % reach this clause: it can never be a capability subject, and the
+    % triple query crashes on it instead of falling through to the
+    % anonymous-capability clause.
+    atomic(Auth),
     ask(DB,
         (
             t(Auth, capability, Capability),
@@ -735,6 +739,36 @@ test(jwt_scope_unknown_role_denies_all, [
     open_descriptor(system_descriptor{}, SystemDB),
     organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
     \+ catch(auth_action_scope(SystemDB, jwt_scopes([scope_db("Gavin", "test1", "nonexistent_role")]), '@schema':'Action/meta_write_access', DB_Uri), _, fail).
+
+% Denied JWT-scoped auth must fail as access_not_authorised, not crash
+% inside the triple query when the compound auth term is asked as a
+% capability subject.
+
+test(jwt_denied_returns_access_not_authorised, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))
+               ),
+         cleanup(teardown_temp_store(State)),
+         throws(error(access_not_authorised(_,_,_),_))
+     ]) :-
+    Auth = jwt_scopes([scope_db("Gavin", "otherdb", read)]),
+    resolve_absolute_string_descriptor("Gavin/test1", Desc),
+    check_descriptor_auth(system_descriptor{}, Desc, '@schema':'Action/instance_write_access', Auth).
+
+% When JWT scopes deny, the auth falls back to anonymous capabilities,
+% so a public database still grants read.
+
+test(jwt_denied_falls_back_to_anonymous_access, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_public_db_without_schema("Gavin", "pubdb"))
+               ),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    Auth = jwt_scopes([scope_db("Gavin", "otherdb", read)]),
+    resolve_absolute_string_descriptor("Gavin/pubdb", Desc),
+    check_descriptor_auth(system_descriptor{}, Desc, '@schema':'Action/instance_read_access', Auth).
 
 % scope_matches/3 tests — test the pure matching logic
 
