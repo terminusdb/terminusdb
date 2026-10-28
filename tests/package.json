@@ -43,6 +43,6 @@
     "start-server-and-test": "^2.0.3"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.7"
+    "serialize-javascript": "^7.1.4"
   }
 }
