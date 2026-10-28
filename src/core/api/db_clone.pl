@@ -115,6 +115,7 @@ clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predic
 :- use_module(core(triple)).
 :- use_module(core(query)).
 :- use_module(core(plugins)).
+:- use_module(library(yall)).
 
 :- dynamic ff_hook_clause_ref/1.
 

@@ -4532,7 +4532,7 @@ counted_test_schema(System, Auth) :-
                      full_replace(true),
                      graph_type(schema),
                      message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, SchemaOptions),
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
 
     open_string('
 { "@type": "Animal", "name": "Plato" }
@@ -4543,7 +4543,7 @@ counted_test_schema(System, Auth) :-
     InstanceOptions = [author("test"),
                        graph_type(instance),
                        message("test")],
-    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, InstanceOptions).
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, _, InstanceOptions).
 
 counted_config(Unfold, Config) :-
     Config = config{ format: json,
