@@ -611,6 +611,89 @@ describe('plugin-e2e', function () {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
+  // 6b. Clone auto-indexing — a data product whose schema carries
+  //     embedding metadata (store_indices + per-type query/template)
+  //     becomes searchable on clone without any explicit /api/index call.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('clone of indexed data product becomes searchable', function () {
+    let srcAgent
+    let cloneAgent
+
+    before(async function () {
+      srcAgent = makeAgent()
+      cloneAgent = makeAgent()
+      await db.create(srcAgent, { schema: true })
+
+      // Schema with embedding metadata: store_indices opt-in on the
+      // @context plus a query/template on the Article class.
+      const r = await srcAgent
+        .post(`/api/document/${srcAgent.orgName}/${srcAgent.dbName}`)
+        .query({ author: 'e2e-test', message: 'embedding schema', graph_type: 'schema', full_replace: true })
+        .send([
+          {
+            '@type': '@context',
+            '@base': 'terminusdb:///data/',
+            '@schema': 'terminusdb:///schema#',
+            '@metadata': { terminusdb: { options: ['store_indices', 'store_clustering'] } },
+          },
+          {
+            '@type': 'Class',
+            '@id': 'Article',
+            '@key': { '@type': 'Lexical', '@fields': ['title'] },
+            title: 'xsd:string',
+            body: 'xsd:string',
+            '@metadata': {
+              embedding: {
+                query: 'query($id: ID){ Article(id: $id) { title body } }',
+                template: '{{title}} — {{body}}',
+              },
+            },
+          },
+        ])
+      expect(r.status).to.equal(200)
+
+      const d = await srcAgent
+        .post(`/api/document/${srcAgent.orgName}/${srcAgent.dbName}`)
+        .query({ author: 'e2e-test', message: 'docs', graph_type: 'instance' })
+        .send([
+          { '@type': 'Article', title: 'Starship Engineering', body: 'Warp drive assembly and maintenance.' },
+          { '@type': 'Article', title: 'Transporter Safety', body: 'Buffer decoherence and rematerialization checks.' },
+        ])
+      expect(d.status).to.equal(200)
+
+      // Clone the source into a fresh database on the same server (local
+      // clone form, same as tests/test/local-clone.js).
+      const c = await cloneAgent
+        .post(`/api/clone/${cloneAgent.orgName}/${cloneAgent.dbName}`)
+        .send({
+          label: 'cloned',
+          comment: 'clone of indexed source',
+          remote_url: `${srcAgent.orgName}/${srcAgent.dbName}`,
+        })
+      expect(c.status).to.equal(200)
+      expect(c.body['api:status']).to.equal('api:success')
+    })
+
+    after(async function () {
+      try { await db.delete(srcAgent) } catch (_e) { /* ignore */ }
+      try { await db.delete(cloneAgent) } catch (_e) { /* ignore */ }
+    })
+
+    it('GET /api/search on the clone returns results (auto-indexed)', async function () {
+      const result = await waitFor(async () => {
+        const r = await cloneAgent
+          .get(`/api/search/${cloneAgent.orgName}/${cloneAgent.dbName}`)
+          .query({ q: 'warp drive' })
+        if (r.status === 200 && r.body && r.body.length) return r
+        return null
+      }, { timeout: 90000, interval: 5000 })
+
+      expect(result.status).to.equal(200)
+      expect(result.body.length).to.be.gte(1)
+    })
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 7. Legacy_vectorlink index endpoint
   // ─────────────────────────────────────────────────────────────────────────
   describe('legacy_vectorlink index endpoint', function () {

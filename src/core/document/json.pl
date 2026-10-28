@@ -3875,15 +3875,28 @@ schema_class_frame_tabled(Layer, Prefixes, Class_Ex, Frame, Options) :-
 
 schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
     findall(
-        Predicate_Comp-Subframe,
+        Predicate_Comp-(Type_JSON-Subframe),
         (   schema_class_predicate_conjunctive_type(Schema, Class_Ex, Predicate, Type_Desc),
+            type_descriptor_json(Type_Desc, Prefixes, Type_JSON, Options),
             type_descriptor_sub_frame(Type_Desc, Schema, Prefixes, Subframe, Options),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp, Options)
         ),
         Pre_Pairs),
     schema_supermap(Schema, Prefixes, Supermap, Options),
     compress_schema_uri(Class_Ex, Prefixes, Class_Comp, Options),
-    pairs_satisfying_diamond_property(Pre_Pairs, Class_Comp, Supermap, Pairs),
+    % The diamond check compares declared types via type_weaken/3, which
+    % expects type_descriptor_json output: an atomic @class name and
+    % @min_cardinality/@max_cardinality keys. Subframes are renderings —
+    % abstract ranges expand to concrete subclass lists and subdocuments
+    % or enums become dicts — so they cannot be compared directly.
+    findall(Predicate_Comp-Type_JSON,
+            member(Predicate_Comp-(Type_JSON-_Subframe), Pre_Pairs),
+            Compare_Pairs),
+    pairs_satisfying_diamond_property(Compare_Pairs, Class_Comp, Supermap, Surviving),
+    findall(Predicate_Comp-Subframe,
+            (   member(Predicate_Comp-Type_JSON, Surviving),
+                memberchk(Predicate_Comp-(Type_JSON-Subframe), Pre_Pairs)),
+            Pairs),
     % Subdocument
     (   schema_is_subdocument(Schema, Class_Ex)
     ->  Pairs2 = ['@subdocument'-[]|Pairs]
@@ -16775,6 +16788,59 @@ test(diamond_calculated,
                     '@type':'Class',
                     dateTime: _{ '@type': 'Optional', '@class' : 'xsd:dateTime' }
               }.
+
+diamond_abstract_range_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+
+{ "@type" : "Class",
+  "@id" : "DObject",
+  "@abstract" : []
+}
+
+{ "@type" : "Class",
+  "@id" : "DAgent",
+  "@abstract" : [],
+  "@inherits" : "DObject"
+}
+
+{ "@type" : "Class",
+  "@id" : "DXRobot",
+  "@inherits" : "DAgent"
+}
+
+{ "@type" : "Class",
+  "@id" : "DEvent",
+  "hasParticipant" : { "@type" : "Set", "@class" : "DObject" }
+}
+
+{ "@type" : "Class",
+  "@id" : "DAction",
+  "@inherits" : ["DEvent"],
+  "hasParticipant" : { "@type" : "Optional", "@class" : "DAgent" }
+}
+
+').
+
+test(abstract_range_in_diamond,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(diamond_abstract_range_schema,Desc)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % Optional DAgent (child) narrows Set DObject (parent): a legal diamond
+    % since DAgent is subsumed by DObject. The frame expands the abstract
+    % range to its concrete subclasses; the diamond check must compare the
+    % declared types, not the expanded subframe.
+    class_frame(Desc, 'DAction', Frame),
+    Frame = json{ '@inherits':['DEvent'],
+                  '@type':'Class',
+                  hasParticipant: json{ '@type':'Optional',
+                                        '@class':['DXRobot'] }
+                }.
 
 diamond_schema_fails1('
 { "@base": "terminusdb:///data/",

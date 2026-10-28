@@ -2307,10 +2307,14 @@
 }
 {
   "@documentation": {
-    "@comment":"The number of edges in a database.",
+    "@comment":"The number of edges in a database. Two forms exist: with a resource and a count it counts all edges in the given resource. With subject, predicate and object fields it counts the edges matching the partially bound pattern, where unbound (variable) fields match anything.",
     "@properties": {
       "count":"The count of edges.",
-      "resource":"The resource to obtain the edges from."
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "object":"A URI, datatype or variable which is the target or object of the graph edge.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "resource":"The resource to obtain the edges from.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
     }
   },
   "@id":"TripleCount",
@@ -2325,7 +2329,41 @@
   },
   "@type":"Class",
   "count":"DataValue",
-  "resource":"xsd:string"
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "object": {"@class":"Value", "@type":"Optional"},
+  "predicate": {"@class":"NodeValue", "@type":"Optional"},
+  "resource": {"@class":"xsd:string", "@type":"Optional"},
+  "subject": {"@class":"NodeValue", "@type":"Optional"}
+}
+{
+  "@documentation": {
+    "@comment":"Count the edges matching a partially bound subject and/or predicate whose object value falls in the half-open value range [low, high), without enumerating them.",
+    "@properties": {
+      "count":"The count of matching edges.",
+      "graph":"An optional graph (either 'instance' or 'schema')",
+      "high":"The exclusive upper bound of the value range.",
+      "low":"The inclusive lower bound of the value range.",
+      "predicate":"A URI or variable which is the edge-label or predicate of the graph edge.",
+      "subject":"A URI or variable which is the source or subject of the graph edge."
+    }
+  },
+  "@id":"TripleRangeCount",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "low", "high", "count", "optional(graph)" ],
+      "mode": ["?", "?", "+", "+", "?", "+" ],
+      "types": ["node", "node", "value", "value", "decimal", "graph" ]
+    }
+  },
+  "@type":"Class",
+  "count":"DataValue",
+  "graph": {"@class":"xsd:string", "@type":"Optional"},
+  "high":"Value",
+  "low":"Value",
+  "predicate":"NodeValue",
+  "subject":"NodeValue"
 }
 {
   "@documentation": {

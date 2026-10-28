@@ -11,6 +11,7 @@ function commonGetParams (params) {
   result.type = params.string('type')
   result.id = params.string('id')
   result.count = params.integer('count')
+  result.counted = params.boolean('counted')
   result.skip = params.integer('skip')
   result.compress_ids = params.boolean('compress_ids')
   result.prefixed = params.boolean('prefixed')

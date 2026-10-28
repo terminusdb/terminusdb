@@ -1,16 +1,75 @@
-# TerminusDB Server v12.1-rc1 Release Notes
+# TerminusDB Server 12.1.0 Release Candidate 2
+
+* The commit log time is now fully monotonic, and with nano-second resolution if the underlying platform supports it.
+* Ensure cardinality narrowing and strengthened schema inheritance is properly recognized in sets.
+* Support for date time ranges in the commit log API and precise datetime bounds for the log api
+* Add a /dashboard with navigation to the API and user interfaces
+* Support for fast counts of documents and triples
+
+# TerminusDB Server 12.1.0 Release Candidate 1
 
 This is a major release that also builds the core foundation for a reactive future by moving to a scalable webserver foundation in Rust and a streaming commit pipeline.
 
-## Major changes
-* Subscriptions made possible by replacing streaming swipl http server with rust based streaming http server
+This release packs a massive amount of new and important functionality:
+* Hybrid Search is now built in: VectorlLink 2.0 with Full Text Search and Vector Search
+* Moved webserver achitecture to streaming Rust for improved scalability
 * Significantly improve performance and scalability with parallel write document elaboration and processing
 * Standards-compliant fully qualified intervals support
-* Embedded vectorlink search engine: set `TERMINUSDB_INDEXER_BACKEND=vectorlink` to run vectorlink in-process through the Rust webserver — no external endpoint needed (requires `TERMINUSDB_SERVER_BACKEND=rust`). The existing `http_vectorlink` and `http_legacy_vectorlink` remote backends are unchanged.
+* GraphQL Subscriptions (SSE) with support for many listening clients
+* Local MCP Server (use /llms.txt to configure)
+* Support for rendering schema classes as JSON Schema documents
+* Add dashboards for admin (`/app/admin`), and indexing and data processing (`/app/data`)
 * Two plugin paths: `builtin_plugins/` (always loaded, shipped with the server, `TERMINUSDB_BUILTIN_PLUGINS_PATH`) and `plugins/` (operator-installed, `TERMINUSDB_PLUGINS_PATH`). Shipped plugins moved to builtin; auto-optimize runs by default (set `TERMINUSDB_ENABLE_OPTIMIZER=0` to disable; test harnesses do for deterministic data versions).
 
+## New functionality
+* Upgrade patch/diff to preserve high precision, and use the Rust JSON parser for performance [#2468](https://github.com/terminusdb/terminusdb/pull/2468)
+* Fully specified, and accurate, intervals in retrieval path, with nanosecond precision [#2469](https://github.com/terminusdb/terminusdb/pull/2469)
+* Move web server foundation from swipl to rust, enabling live query foundation [#2473](https://github.com/terminusdb/terminusdb/pull/2473)
+* `@shared` change detection [#2479](https://github.com/terminusdb/terminusdb/pull/2479)
+* VectorLink 2.0 integration [#2488](https://github.com/terminusdb/terminusdb/pull/2488)
+* Integrate tdb admin dashboard in `/app/admin` [#2490](https://github.com/terminusdb/terminusdb/pull/2490)
+* GraphQL Subscriptions (SSE) and Native JSON Object Variables [#2497](https://github.com/terminusdb/terminusdb/pull/2497)
+* Schema-driven re-embedding: changed embedding configs ride their own commit [#2564](https://github.com/terminusdb/terminusdb/pull/2564)
+* Canonical ISO8604 interval semantics, timezone offsets, and typecasting with xdd:dateRange [#2574](https://github.com/terminusdb/terminusdb/pull/2574)
+* Add vectorsearch compose setup for the 12.1 release candidate [#2582](https://github.com/terminusdb/terminusdb/pull/2582)
+* Local MCP server for TerminusDB [#2588](https://github.com/terminusdb/terminusdb/pull/2588)
+* Intervals handling improvements [#2569](https://github.com/terminusdb/terminusdb/pull/2569)
+
 ## Bugfixes
+* Fix apply and patch on schemaless (raw_json) documents [#2571](https://github.com/terminusdb/terminusdb/pull/2571)
+* Make sure to map all headers [#2475](https://github.com/terminusdb/terminusdb/pull/2475)
+* Ensure predicate is added correctly to main [#2477](https://github.com/terminusdb/terminusdb/pull/2477)
+* Info should give version infomation only to logged in users [#2482](https://github.com/terminusdb/terminusdb/pull/2482)
+* Ensure there is a parent commit before intersecting [#2485](https://github.com/terminusdb/terminusdb/pull/2485)
+* Compress JSON true by default [#2498](https://github.com/terminusdb/terminusdb/pull/2498)
+* Fix insert performance for 12.1-rc [#2528](https://github.com/terminusdb/terminusdb/pull/2528)
+* Fix worker-pipe race: unregister before close, correlate cancels by request id [#2542](https://github.com/terminusdb/terminusdb/pull/2542)
+* Fix: stray client_disconnected signal must not kill a request worker [#2562](https://github.com/terminusdb/terminusdb/pull/2562)
+* Embedding change detection [#2566](https://github.com/terminusdb/terminusdb/pull/2566)
+* Embed vectorlink as a builtin core plugin via the Rust plugin path [#2556](https://github.com/terminusdb/terminusdb/pull/2556)
+* Neat starting experience: quieter GC plugin logging and JWT opt-in at runtime [#2573](https://github.com/terminusdb/terminusdb/pull/2573)
+* Issue 2576: Hold requests until startup components are ready [#2583](https://github.com/terminusdb/terminusdb/pull/2583)
 * Fix rebase race condition on throttled cpu 
+
+## Maintenance
+* Run engine intensively over a long time [#2553](https://github.com/terminusdb/terminusdb/pull/2553)
+* Scaled commit history listeners plugin example [#2480](https://github.com/terminusdb/terminusdb/pull/2480)
+* Show active engine, and sensitive info only when authenticated [#2474](https://github.com/terminusdb/terminusdb/pull/2474)
+* Parallel and sequential write improvements, with revised elaboration, commit queue, and contract-based verification [#2466](https://github.com/terminusdb/terminusdb/pull/2466)
+* Extend commit queue concept and fix race between rebase and auto-optimizer on _meta graph [#2467](https://github.com/terminusdb/terminusdb/pull/2467)
+* Add missing error message when inserting duplicate id [#2483](https://github.com/terminusdb/terminusdb/pull/2483)
+* GraphQL quality + merge in latest main [#2503](https://github.com/terminusdb/terminusdb/pull/2503)
+* Add doc complexity bound for 12.1 elaboration workers and report timeout outcomes properly [#2537](https://github.com/terminusdb/terminusdb/pull/2537)
+* Build rust faster in 12.1 using a cache [#2558](https://github.com/terminusdb/terminusdb/pull/2558)
+* Pin terminus-store to v0.21.8 for forward-compatible pack import (to prepare for faster intervals) [#2568](https://github.com/terminusdb/terminusdb/pull/2568)
+* Opt out of some tests for enterprise build [#2570](https://github.com/terminusdb/terminusdb/pull/2570)
+* Use the approved one-line description in the README [#2575](https://github.com/terminusdb/terminusdb/pull/2575)
+* Fix `malformed_parameter(id)` blocking non-JSON document input formats [#2578](https://github.com/terminusdb/terminusdb/pull/2578)
+* Bump follow-redirects from 1.16.0 to 1.16.1 in /tests by @dependabot [#2581](https://github.com/terminusdb/terminusdb/pull/2581)
+* Add Trendshift badge to the README [#2580](https://github.com/terminusdb/terminusdb/pull/2580)
+* vectorsearch: remove container_name so two stacks can run side by side [#2584](https://github.com/terminusdb/terminusdb/pull/2584)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.8...v12.1.0-rc1
 
 # TerminusDB Server v12.0.9 Release Notes
 

@@ -6183,7 +6183,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0136791f7c95b1f6dd99f9cc786b91bb81c3800b639b3478e561ddb7be95e5f1"
 dependencies = [
  "fastrand",
- "getrandom 0.4.1",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.60.2",
@@ -6192,7 +6192,7 @@ dependencies = [
 [[package]]
 name = "terminus-store"
 version = "0.21.8"
-source = "git+https://github.com/terminusdb-org/terminusdb-store?tag=v0.21.8#9258b6f30e53dfb96bf0827e48775cfde465d565"
+source = "git+https://github.com/terminusdb-org/terminusdb-store?rev=14110f3#14110f3d72ca6f4cd2a9624b6e805ffa5e8a32fb"
 dependencies = [
  "async-trait",
  "base64 0.13.1",

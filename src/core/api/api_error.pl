@@ -130,7 +130,7 @@ api_global_error_jsonld(error(commit_rejected(Reason), _), Type, JSON) :-
             }.
 api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. This timeout is controlled by TERMINUSDB_COMMIT_QUEUE_TIMEOUT, a test instrument that should be left unset (or 0, meaning infinite) for production workloads", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:server_error",
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout',
@@ -139,7 +139,7 @@ api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :
             }.
 api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state", []),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. This timeout is controlled by TERMINUSDB_COMMIT_QUEUE_TIMEOUT, a test instrument that should be left unset (or 0, meaning infinite) for production workloads", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:server_error",
              'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
@@ -1770,6 +1770,23 @@ api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
              'api:error' : _{ '@type' : "api:ResourceHasNoHistory",
                               'api:absolute_descriptor' : Path}
             }.
+api_error_jsonld_(log, error(mutually_exclusive_log_parameters(Provided), _), JSON) :-
+    atomic_list_concat(Provided, ", ", Params),
+    format(string(Msg), "Log window parameters may not be combined in one request: ~s", [Params]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:MutuallyExclusiveLogParameters",
+                              'api:parameters' : Provided}
+            }.
+api_error_jsonld_(log, error(invalid_log_datetime(DateTime), _), JSON) :-
+    format(string(Msg), "Datetime parameter is not a valid ISO 8601 value: ~w", [DateTime]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InvalidLogDateTime",
+                              'api:datetime' : DateTime}
+            }.
 api_error_jsonld_(migration, error(no_migration_at_commit(Commit_Id), _), JSON) :-
     format(string(Msg), "Unable to find a migration for schema change at commit id: ~q", [Commit_Id]),
     JSON = _{'@type' : 'api:MigrationErrorResponse',
@@ -2279,6 +2296,14 @@ api_document_error_jsonld(Type,error(query_is_only_supported_for_instance_graphs
     JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(counted_not_supported_for_selector,_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The counted parameter is only supported when listing documents, optionally restricted by type; it cannot be combined with id, ids or query", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:CountedNotSupportedForSelector'},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type,error(query_error(unknown_prefix(_Query)),_), JSON) :-

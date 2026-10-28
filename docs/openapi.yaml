@@ -36,7 +36,7 @@ info:
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 12.0.5
+  version: 12.1.0
 externalDocs:
   description: Find out more about TerminusDB
   url: https://terminusdb.org
@@ -989,6 +989,29 @@ paths:
           schema:
             type: string
             example: Person
+        - name: counted
+          in: query
+          required: false
+          description: |
+            Return a count of the documents that the request would list, instead
+            of streaming the documents themselves. The count is computed from
+            the triple-store indexes without enumerating documents, so it is
+            fast even for large collections.
+
+            Counting is supported for the document listing selectors only:
+            all documents, optionally restricted by `type` (including
+            subclasses), in the `instance` or `schema` graph. It cannot be
+            combined with `id`, `ids` or `query`. When `counted=true`, the
+            `skip` and `count` pagination parameters are ignored. Counts follow
+            the same inclusion rules as the corresponding document listing,
+            including `unfold` and subclass expansion.
+
+            The response is a single JSON object:
+            `{"@type": "api:DocumentCountResponse", "api:count": <integer>}`
+          schema:
+            type: boolean
+            default: false
+            example: true
         - name: query
           in: query
           required: false
@@ -2833,17 +2856,59 @@ paths:
       x-python-client: Client::log
       x-js-client: not_implemented
       summary: "Get commits from a specific database or branch"
+      description: |
+        Returns commits newest-to-oldest. The window's top edge is anchored
+        by index (`start`) or by time (`startDateTime`) — the two are
+        mutually exclusive. `endDateTime` bounds the oldest edge
+        independently and combines with either to express a range;
+        `count` then limits the already-filtered result.
+
+        `startDateTime` makes the log begin at the newest commit whose
+        timestamp is at or before the given instant. `endDateTime` drops
+        commits older than the given instant. Both accept ISO 8601 datetimes with
+        sub-second fractions up to nanosecond resolution, matching the
+        exact decimal timestamps stored on commits.
+
+        **Example: commits since a point in time**
+        ```bash
+        curl -u admin:root "http://localhost:6363/api/log/admin/mydb?endDateTime=2026-10-01T00:00:00Z"
+        ```
+
+        With `stream=true` the commits are emitted as newline-delimited
+        JSON (application/x-ndjson) instead of a JSON array, and the
+        `TerminusDB-Log-Start` response header carries the resolved start
+        offset of the window's top commit.
       tags:
         - Change management
       parameters:
         - $ref: '#/components/parameters/branch_path'
         - name: start
-          description: Index to start from
+          description: >-
+            Index to start from. Mutually exclusive with `startDateTime`.
           in: query
           required: false
           schema:
             type: integer
             example: 0
+        - name: startDateTime
+          description: >-
+            ISO 8601 instant; the log starts at the newest commit with a
+            timestamp at or before it. Mutually exclusive with `start`.
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2026-10-01T12:00:00Z"
+        - name: endDateTime
+          description: >-
+            ISO 8601 instant; only commits with a timestamp at or after it
+            are returned. Combines with `start` or `startDateTime` to
+            express a range.
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2026-10-01T00:00:00Z"
         - name: count
           description: Amount of commits to show
           in: query
@@ -2862,9 +2927,27 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: stream
+          description: >-
+            Stream commits as newline-delimited JSON
+            (application/x-ndjson) instead of returning a JSON array.
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: "Successful log request"
+          headers:
+            TerminusDB-Log-Start:
+              description: >-
+                Index (newest-to-oldest, 0-based) of the window's top
+                commit. Only sent when `stream=true`; lets callers page
+                onward with plain `start`.
+              schema:
+                type: integer
+                example: 3
           content:
             application/json:
               schema:
@@ -2892,6 +2975,7 @@ paths:
                       example: layer_data:Layer_4234adfe377fa9563a17ad764ac37f5dcb14de13668ea725ef0748248229a91b
                     "timestamp":
                       type: number
+                      description: Commit time as epoch seconds, a decimal with up to nanosecond resolution
                       example: 1660919664.9129035
                     "added_count":
                       type: integer
@@ -2906,6 +2990,43 @@ paths:
                       description: Number of documents deleted in this commit (only present when with_counts=true)
                       example: 0
                   example: {"@type" : "api:ApplyResponse", "api:status" : "api:success" }
+            application/x-ndjson:
+              schema:
+                type: string
+                description: >-
+                  One commit object per line (same shape as the JSON array
+                  items). Only returned when `stream=true`.
+        400:
+          description: >-
+            Invalid window parameters: `start` and `startDateTime` were
+            combined (api:MutuallyExclusiveLogParameters), or a datetime
+            parameter is not a valid ISO 8601 value
+            (api:InvalidLogDateTime).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "@type":
+                    type: string
+                    example: api:LogErrorResponse
+                  "api:error":
+                    type: object
+                    properties:
+                      "@type":
+                        type: string
+                        example: api:MutuallyExclusiveLogParameters
+                      "api:parameters":
+                        type: array
+                        items:
+                          type: string
+                        example: ["start", "startDateTime"]
+                  "api:message":
+                    type: string
+                    example: "Log window parameters may not be combined in one request: start, startDateTime"
+                  "api:status":
+                    type: string
+                    example: api:failure
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:

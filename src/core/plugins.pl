@@ -2,6 +2,7 @@
               pre_commit_hook/2,
               post_commit_hook/2,
               post_delete_db_hook/2,
+              post_fast_forward_hook/2,
               enrich_commit_info/3,
               fast_document_history/6,
               fast_document_history_entries/5,
@@ -39,6 +40,8 @@
 :- multifile pre_commit_hook/2.
 :- multifile post_commit_hook/2.
 :- multifile post_delete_db_hook/2.
+:- multifile post_fast_forward_hook/2.
+:- dynamic post_fast_forward_hook/2.
 :- multifile enrich_commit_info/3.
 :- multifile fast_document_history/6.
 :- multifile fast_document_history_entries/5.
@@ -417,6 +420,14 @@ vectorlink_admin_user(_) :- fail.
 %  Multifile hook provided by the vectorlink plugin.
 %  Returns the admin secret for HTTP Basic auth to the search backend.
 vectorlink_admin_secret(_) :- fail.
+
+%% post_fast_forward_hook(+Branch_Descriptor, +Applied_Commit_Ids)
+%
+%  Multifile hook fired after commits are applied to a branch outside
+%  the regular transaction commit path — clone and pull apply their
+%  commits via fast_forward_branch/3, which post_commit_hook never sees.
+%  Declared dynamic so tests can assert recorder clauses.
+post_fast_forward_hook(_, _) :- fail.
 
 %% readiness_component(-Component) is nondet.
 %

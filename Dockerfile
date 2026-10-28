@@ -156,7 +156,7 @@ ENV TERMINUSDB_LISTEN_ADDRESS=0.0.0.0
 ENV TERMINUSDB_BUILTIN_PLUGINS_PATH=${TERMINUSDB_BUILTIN_PLUGINS_PATH:-/builtin_plugins}
 COPY builtin_plugins/ ${TERMINUSDB_BUILTIN_PLUGINS_PATH}/
 RUN mkdir -p /app/terminusdb/dashboard/src/assets
-COPY dashboard/src/index.html /app/terminusdb/dashboard/src/
+COPY dashboard/src/index.html dashboard/src/api.html /app/terminusdb/dashboard/src/
 COPY dashboard/src/output.css /app/terminusdb/dashboard/src/assets/
 COPY dashboard/src/assets/scalar-init.js /app/terminusdb/dashboard/src/assets/
 COPY --from=dashboard_build /app/dashboard/src/assets/openapi.json /app/terminusdb/dashboard/src/assets/

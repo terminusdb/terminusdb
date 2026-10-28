@@ -6,12 +6,13 @@ mod dict_lookup;
 
 mod change_window;
 pub mod changes;
+mod clock;
 pub mod consts;
 mod doc;
 mod embedding;
-mod jwt;
 mod graphql;
 mod json_preserve;
+mod jwt;
 mod path;
 mod prefix;
 mod schema;
@@ -30,8 +31,7 @@ use uuid::{ContextV7, Timestamp, Uuid};
 /// Shared v7 counter context: UUIDs stay monotonically ordered across
 /// Prolog threads (12-bit counter per millisecond before the timestamp
 /// is bumped ahead).
-static UUID_V7_CONTEXT: LazyLock<Mutex<ContextV7>> =
-    LazyLock::new(|| Mutex::new(ContextV7::new()));
+static UUID_V7_CONTEXT: LazyLock<Mutex<ContextV7>> = LazyLock::new(|| Mutex::new(ContextV7::new()));
 
 predicates! {
     /// Temporary predicate to demonstrate and test the embedded
@@ -149,6 +149,7 @@ pub fn install() {
     json_preserve::register();
     template::register();
     changes::register();
+    clock::register();
     change_window::register();
     embedding::register();
     jwt::register();

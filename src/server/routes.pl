@@ -176,13 +176,31 @@ log_handler(get, Path, Request, System_DB, Auth) :-
         log,
         Request,
         (   param_value_search_optional(Search, start, integer, 0, Start),
+            param_value_search_optional(Search, startDateTime, text, _, StartDateTime),
+            param_value_search_optional(Search, endDateTime, text, _, EndDateTime),
             param_value_search_optional(Search, count, integer, -1, Count),
             param_value_search_optional(Search, verbose, boolean, false, Verbose),
             param_value_search_optional(Search, stream, boolean, false, Stream),
             param_value_search_optional(Search, with_counts, boolean, false, With_Counts),
-            Options = opts{ start: Start, count: Count, verbose: Verbose, with_counts: With_Counts},
+            %  start and startDateTime both anchor the window's top edge, so
+            %  they conflict. endDateTime bounds the oldest edge independently
+            %  and combines with either to express a range.
+            (   Start \= 0, ground(StartDateTime)
+            ->  throw(error(mutually_exclusive_log_parameters([start, startDateTime]), _))
+            ;   true
+            ),
+            findall(O, (   (   ground(StartDateTime), O = startDateTime(StartDateTime) )
+                       ;   (   ground(EndDateTime), O = endDateTime(EndDateTime) )),
+                    DateTime_Options),
+            Options = [start(Start), count(Count), verbose(Verbose),
+                       with_counts(With_Counts) | DateTime_Options],
             (   Stream = true
-            ->  write_cors_headers(Request),
+            ->  api_log:api_log_streaming_prepare(System_DB, Auth, Path, Options,
+                                                  Resolved_Start, Repo_Transaction,
+                                                  Anchor_Uri, Repository_Descriptor,
+                                                  Effective_Start),
+                write_cors_headers(Request),
+                format('TerminusDB-Log-Start: ~d~n', [Resolved_Start]),
                 format('Status: 200~n'),
                 format('Content-Type: application/x-ndjson~n'),
                 format('Cache-Control: no-cache~n'),
@@ -190,7 +208,9 @@ log_handler(get, Path, Request, System_DB, Auth) :-
                 format('Connection: close~n'),
                 format("Transfer-Encoding: chunked~n~n"),
                 flush_output,
-                api_log:api_log_streaming(System_DB, Auth, Path, Options)
+                api_log:api_log_stream_emit(Repo_Transaction, Anchor_Uri,
+                                            Effective_Start, Count, With_Counts,
+                                            Repository_Descriptor, Options)
             ;   api_log(System_DB, Auth, Path, Log, Options),
                 cors_reply_json(Request, Log)
             )
@@ -542,6 +562,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
             param_value_search_or_json_optional(Search, JSON, skip, nonnegative_integer, 0, Skip),
             param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
+            param_value_search_or_json_optional(Search, JSON, counted, boolean, false, Counted),
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
@@ -573,6 +594,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             Config = config{
                          skip: Skip,
                          count: Count,
+                         counted: Counted,
                          as_list: As_List,
                          compress: Compress_Ids,
                          unfold: Unfold,

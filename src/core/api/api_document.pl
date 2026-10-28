@@ -24,6 +24,7 @@
               api_full_replace_schema/2,
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
+              compress_doc_ids/4,
 
               api_insert_documents_core_string/8,
               api_insert_documents_core_string_with_compress/9,
@@ -94,6 +95,8 @@
 :- use_module(core(account)).
 :- use_module(core(plugins)).
 :- use_module(core(json2markdown)).
+:- use_module(library(aggregate)).
+:- use_module(library(debug)).
 :- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
@@ -245,6 +248,65 @@ api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
+
+/**
+ * api_count_documents(+Transaction, +Graph_Type, ?Type, +Config, -Count) is det.
+ *
+ * Count the documents that the corresponding listing would yield,
+ * mirroring api_generate_document_ids/4 and
+ * api_generate_document_ids_by_type/5, but using index-based triple
+ * counting instead of enumerating document ids. A document typed with
+ * several matching classes is counted once per rdf:type edge, exactly
+ * as the listing would yield it once per match.
+ */
+api_count_documents(Transaction, instance, Type, Config, Count) :-
+    database_instance(Transaction, Instance),
+    (   ground(Type)
+    ->  database_and_default_prefixes(Transaction, Prefixes),
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
+        % Mirrors is_instance_class/3 with ground class argument.
+        (   setof(Class,
+                  (   is_simple_class(Transaction, Class),
+                      class_subsumed(Transaction, Class, Type_Ex)),
+                  Classes)
+        ->  true
+        ;   Classes = []),
+        aggregate_all(sum(Partial),
+                      (   member(Class, Classes),
+                          xrdf_count(Instance, _, rdf:type, Class, Partial)),
+                      Count)
+    ;   (   Config.unfold = true
+        ->  Include_Subdocuments = false
+        ;   Include_Subdocuments = true),
+        % Mirrors get_document_uri/3.
+        aggregate_all(sum(Partial),
+                      (   is_simple_class(Transaction, Class),
+                          (   Include_Subdocuments = true
+                          ->  true
+                          ;   \+ is_subdocument(Transaction, Class)),
+                          xrdf_count(Instance, _, rdf:type, Class, Partial)),
+                      Simple_Count),
+        global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+        xrdf_count(Instance, _, rdf:type, JSON_Document_Class, JSON_Count),
+        Count is Simple_Count + JSON_Count
+    ).
+api_count_documents(Transaction, schema, Type, _Config, Count) :-
+    database_schema(Transaction, Schema),
+    (   ground(Type)
+    ->  default_prefixes(Prefixes),
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
+        % Mirrors get_schema_document_uri_by_type/3.
+        xrdf_count(Schema, _, rdf:type, Type_Ex, Count)
+    ;   % Mirrors get_schema_document_uri/2: '@context' plus every
+        % frame class and foreign type.
+        aggregate_all(sum(Partial),
+                      (   system_frame_class(C),
+                          xrdf_count(Schema, _, rdf:type, C, Partial)),
+                      Frame_Count),
+        global_prefix_expand(sys:'Foreign', Foreign),
+        xrdf_count(Schema, _, rdf:type, Foreign, Foreign_Count),
+        Count is 1 + Frame_Count + Foreign_Count
+    ).
 
 api_document_exists(schema, Transaction, Id) :-
     schema_document_exists(Transaction, Id).
@@ -1962,6 +2024,25 @@ embedding_has_query_for_type(TypeQueryMap, Type_Ex) :-
     !.
 
 % Embedding selector with full pre-flight
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
+                           Query, Config, Requested_Data_Version,
+                           Actual_Data_Version, Initial_Goal) :-
+    get_dict(counted, Config, true),
+    !,
+    die_if((nonvar(Id) ; nonvar(Ids) ; nonvar(Query)),
+           error(counted_not_supported_for_selector, _)),
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type,
+                            Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
+                Transaction),
+    api_count_documents(Transaction, Graph_Type, Type, Config, Count),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_write_dict(current_output,
+                    _{'@type':'api:DocumentCountResponse',
+                      'api:count':Count},
+                    []),
+    nl.
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
                            Query, Config, Requested_Data_Version,
                            Actual_Data_Version, _Initial_Goal) :-
@@ -4415,3 +4496,156 @@ test(check_embedding_report_covers_embedded_class,
     get_dict('api:will_embed', Embedding, true).
 
 :- end_tests(check_documents).
+
+:- begin_tests(document_count, []).
+:- use_module(core(util/test_utils)).
+
+counted_test_schema(System, Auth) :-
+    open_string('
+{ "@type": "@context",
+  "@schema": "http://example.com/schema#",
+  "@base": "http://example.com/data/"
+}
+
+{ "@type": "Class",
+  "@id": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string" }
+
+{ "@type": "Class",
+  "@id": "Dog",
+  "@inherits": "Animal",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string" }
+
+{ "@type": "Class",
+  "@id": "Person",
+  "@key": { "@type": "Lexical", "@fields": ["name"] },
+  "name": "xsd:string",
+  "pet": { "@type": "Optional", "@class": "Pet" } }
+
+{ "@type": "Class",
+  "@id": "Pet",
+  "@subdocument": [],
+  "@key": { "@type": "Random" },
+  "name": "xsd:string" }', SchemaStream),
+    SchemaOptions = [author("test"),
+                     full_replace(true),
+                     graph_type(schema),
+                     message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", SchemaStream, no_data_version, _, _, _, SchemaOptions),
+
+    open_string('
+{ "@type": "Animal", "name": "Plato" }
+{ "@type": "Animal", "name": "Socrates" }
+{ "@type": "Dog", "name": "Rex" }
+{ "@type": "Person", "name": "Ada", "pet": { "@type": "Pet", "name": "Mouse" } }
+', InstanceStream),
+    InstanceOptions = [author("test"),
+                       graph_type(instance),
+                       message("test")],
+    api_insert_documents(System, Auth, "admin/testdb", InstanceStream, no_data_version, _, _, _, InstanceOptions).
+
+counted_config(Unfold, Config) :-
+    Config = config{ format: json,
+                     compress: true,
+                     unfold: Unfold,
+                     skip: 0,
+                     count: unlimited,
+                     counted: true,
+                     as_list: false,
+                     minimized: true,
+                     request: [] }.
+
+counted_response(System, Auth, Graph_Type, Type, Unfold, Count) :-
+    counted_config(Unfold, Config),
+    with_output_to(
+        string(Output),
+        api_read_document_selector(System, Auth, "admin/testdb", Graph_Type,
+                                   _Id, _Ids, Type, _Query, Config,
+                                   no_data_version, _, [_]>>true)),
+    atom_json_dict(Output, JSON, [value_string_as(atom)]),
+    assertion(JSON.'@type' == 'api:DocumentCountResponse'),
+    Count = JSON.'api:count'.
+
+test(counted_by_type_includes_subclasses, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    counted_response(System, Auth, instance, 'Animal', true, Animal_Count),
+    assertion(Animal_Count =:= 3),
+    counted_response(System, Auth, instance, 'Person', true, Person_Count),
+    assertion(Person_Count =:= 1),
+    % by-type counting includes subdocuments, as does the listing
+    counted_response(System, Auth, instance, 'Pet', true, Pet_Count),
+    assertion(Pet_Count =:= 1).
+
+test(counted_all_documents, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    % unfold = true excludes subdocuments, mirroring get_document_uri/3
+    counted_response(System, Auth, instance, _, true, Unfolded_Count),
+    assertion(Unfolded_Count =:= 4),
+    counted_response(System, Auth, instance, _, false, All_Count),
+    assertion(All_Count =:= 5).
+
+test(counted_schema_documents, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    % '@context' plus four frame classes (Animal, Dog, Person, Pet)
+    counted_response(System, Auth, schema, _, true, Schema_Count),
+    assertion(Schema_Count =:= 5),
+    counted_response(System, Auth, schema, 'sys:Class', true, Class_Count),
+    assertion(Class_Count =:= 4).
+
+test(counted_rejects_id_selector, [
+         setup((setup_temp_store(State),
+                create_db_with_empty_schema("admin", "testdb"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    counted_test_schema(System, Auth),
+
+    counted_config(true, Config),
+    catch(api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                     'Animal/Plato', _, _, _,
+                                     Config, no_data_version, _, [_]>>true),
+          Error_Id,
+          true),
+    assertion(nonvar(Error_Id)),
+    assertion(Error_Id = error(counted_not_supported_for_selector, _)),
+    catch(api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                     _, ['Animal/Plato'], _, _,
+                                     Config, no_data_version, _, [_]>>true),
+          Error_Ids,
+          true),
+    assertion(nonvar(Error_Ids)),
+    assertion(Error_Ids = error(counted_not_supported_for_selector, _)),
+    catch(api_read_document_selector(System, Auth, "admin/testdb", instance,
+                                     _, _, _,
+                                     _{'@type':'Animal', name:'Plato'},
+                                     Config, no_data_version, _, [_]>>true),
+          Error_Query,
+          true),
+    assertion(nonvar(Error_Query)),
+    assertion(Error_Query = error(counted_not_supported_for_selector, _)).
+
+:- end_tests(document_count).

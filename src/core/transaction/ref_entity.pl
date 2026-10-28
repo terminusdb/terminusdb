@@ -177,10 +177,21 @@ insert_branch_object(Context, Branch_Name, Branch_Uri) :-
 delete_branch_object(Context, Branch_Uri) :-
     delete_document(Context, Branch_Uri).
 
+%% now_timestamp_rational(-Timestamp) is det.
+%
+%  Current time as an exact nanosecond-resolution decimal epoch. The Rust
+%  $clock:now_nanos/1 predicate returns a strictly-increasing monotonic
+%  nanosecond count for the life of the process, so commits can never share
+%  a timestamp or go backwards on a clock adjustment. The xsd:decimal stored
+%  on commit documents stays clean and exactly comparable.
+now_timestamp_rational(Timestamp) :-
+    '$clock':now_nanos(Nanos),
+    Timestamp is Nanos rdiv 1000000000.
+
 insert_base_commit_object(Context, Commit_Id, Schema_Layer, Instance_Layer, Commit_Uri) :-
     insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Context.commit_info, Commit_Id, Commit_Uri).
 insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Commit_Id, Commit_Uri) :-
-    get_time(Now),
+    now_timestamp_rational(Now),
     insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Now, Commit_Id, Commit_Uri).
 insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
     (   var(Commit_Id)
@@ -241,7 +252,7 @@ insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_La
     insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Context.commit_info, Commit_Id, Commit_Uri).
 
 insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Commit_Id, Commit_Uri) :-
-    get_time(Now),
+    now_timestamp_rational(Now),
     insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Now, Commit_Id, Commit_Uri).
 
 insert_child_commit_object(Context, Parent_Commit_Uri, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Commit_Id, Commit_Uri) :-
@@ -253,7 +264,7 @@ insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Branch_Nam
     insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Context.commit_info, Branch_Name, Commit_Id, Commit_Uri).
 
 insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Branch_Name, Commit_Id, Commit_Uri) :-
-    get_time(Now),
+    now_timestamp_rational(Now),
     insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Now, Branch_Name, Commit_Id, Commit_Uri).
 insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Branch_Name, Commit_Id, Commit_Uri) :-
     branch_name_uri(Context, Branch_Name, Branch_Uri),
@@ -270,7 +281,7 @@ insert_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Inf
     link_commit_object_to_branch(Context, Branch_Uri, Commit_Uri).
 
 insert_initial_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Branch_Uri, Commit_Uri) :-
-    get_time(Now),
+    now_timestamp_rational(Now),
     insert_initial_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Now, Branch_Uri, Commit_Uri).
 insert_initial_commit_object_on_branch(Context, Schema_Layer, Instance_Layer, Commit_Info, Timestamp, Branch_Uri, Commit_Uri) :-
     Initial_Commit_Info = (Commit_Info.put(commit_type, 'InitialCommit')),
@@ -502,6 +513,21 @@ test(commit_on_branch_insert,
     commit_id_to_parent_uri(Descriptor2, Commit2_Id, _).
 
 :- end_tests(commit_objects).
+
+:- begin_tests(commit_timestamp).
+
+test(commit_timestamps_are_strictly_increasing) :-
+    findall(T, (between(1, 50, _), now_timestamp_rational(T)), Stamps),
+    sort(Stamps, Sorted),
+    assertion(Stamps == Sorted),
+    assertion(length(Sorted, 50)).
+
+test(commit_timestamp_is_positive_rational) :-
+    now_timestamp_rational(T),
+    assertion(rational(T)),
+    assertion(T > 0).
+
+:- end_tests(commit_timestamp).
 
 :- begin_tests(commit_layer_objects).
 :- use_module(core(util/test_utils)).
@@ -782,7 +808,7 @@ test(copy_child_commit_that_already_exists,
 :- end_tests(copy_commits).
 
 apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
-    get_time(Now),
+    now_timestamp_rational(Now),
     apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
 
 apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
@@ -803,7 +829,7 @@ apply_commit_on_branch(Us_Repo_Context, Them_Repo_Askable, Us_Branch_Name, Them_
     true.
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, New_Commit_Id, New_Commit_Uri) :-
-    get_time(Now),
+    now_timestamp_rational(Now),
     apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Now, New_Commit_Id, New_Commit_Uri).
 
 apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_Commit_Uri, Author, Timestamp, New_Commit_Id, New_Commit_Uri) :-
