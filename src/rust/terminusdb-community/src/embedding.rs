@@ -284,13 +284,14 @@ impl EmbeddingContext {
                     let msg = e.to_string();
                     let line = e.line_no.unwrap_or(0) as u64;
                     let col = e.column_no.unwrap_or(0) as u64;
-                    return Err(LimitedEmbeddingError::HandlebarsRenderError {
+                    Err(LimitedEmbeddingError::HandlebarsRenderError {
                         type_name: type_name.to_string(),
                         iri: iri.to_string(),
                         msg,
                         line,
                         col,
-                    })?;
+                    }
+                    .into())
                 }
             }
         } else {

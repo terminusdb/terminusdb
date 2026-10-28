@@ -37,7 +37,7 @@ impl User {
         let user_id = info
             .system
             .subject_id(&info.user.to_string())
-            .unwrap_or_else(|| panic!("can't make user id from {}", info.user.to_string()));
+            .unwrap_or_else(|| panic!("can't make user id from {}", info.user));
         required_object_string(
             &info.system,
             user_id,
@@ -49,7 +49,7 @@ impl User {
         let user_id = info
             .system
             .subject_id(&info.user.to_string())
-            .unwrap_or_else(|| panic!("can't make user id from {}", info.user.to_string()));
+            .unwrap_or_else(|| panic!("can't make user id from {}", info.user));
         let predicate_id = info
             .system
             .predicate_id("http://terminusdb.com/schema/system#capability")

@@ -760,7 +760,10 @@ pub fn unify_entry<C: QueryableContextType>(
                 object_term.unify_arg(1, term)?;
                 f.close();
             }
-            object_term.unify_arg(2, atom!("http://terminusdb.com/schema/xdd#dateTimeInterval"))
+            object_term.unify_arg(
+                2,
+                atom!("http://terminusdb.com/schema/xdd#dateTimeInterval"),
+            )
         }
         Datatype::LangString => panic!("Unreachable"),
     }
@@ -788,7 +791,10 @@ fn split_top_level_args(s: &str) -> Vec<&str> {
 }
 
 fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
-    if let Some(inner) = s.strip_prefix("date_time(").and_then(|s| s.strip_suffix(")")) {
+    if let Some(inner) = s
+        .strip_prefix("date_time(")
+        .and_then(|s| s.strip_suffix(")"))
+    {
         let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
         if parts.len() != 7 {
             return Err(format!("invalid date_time arity: {}", parts.len()));
@@ -804,7 +810,11 @@ fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
             .ok_or_else(|| format!("invalid date: {y}-{mo}-{d}"))?
             .and_hms_nano_opt(h, mi, s_val, ns)
             .ok_or_else(|| format!("invalid time: {h}:{mi}:{s_val}.{ns}"))?;
-        Ok((dt.and_utc().timestamp(), dt.and_utc().timestamp_subsec_nanos(), INTERVAL_COMPONENT_DATETIME))
+        Ok((
+            dt.and_utc().timestamp(),
+            dt.and_utc().timestamp_subsec_nanos(),
+            INTERVAL_COMPONENT_DATETIME,
+        ))
     } else if let Some(inner) = s.strip_prefix("date(").and_then(|s| s.strip_suffix(")")) {
         let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
         if parts.len() != 4 {
@@ -877,14 +887,24 @@ fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String
     use chrono::DateTime;
     let dt = DateTime::from_timestamp(seconds, nanos)
         .map(|dt| dt.naive_utc())
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap());
+        .unwrap_or_else(|| {
+            NaiveDate::from_ymd_opt(1970, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+        });
     if component_type == INTERVAL_COMPONENT_DATE {
         format!("date({},{},{},0)", dt.year(), dt.month(), dt.day())
     } else {
         format!(
             "date_time({},{},{},{},{},{},{})",
-            dt.year(), dt.month(), dt.day(),
-            dt.hour(), dt.minute(), dt.second(), dt.nanosecond()
+            dt.year(),
+            dt.month(),
+            dt.day(),
+            dt.hour(),
+            dt.minute(),
+            dt.second(),
+            dt.nanosecond()
         )
     }
 }
@@ -894,8 +914,12 @@ fn format_interval_term(iv: &DateTimeInterval) -> String {
     let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type);
     let dur = format!(
         "duration({},{},{},{},{},{},{})",
-        iv.duration.sign, iv.duration.year, iv.duration.month,
-        iv.duration.day, iv.duration.hour, iv.duration.minute,
+        iv.duration.sign,
+        iv.duration.year,
+        iv.duration.month,
+        iv.duration.day,
+        iv.duration.hour,
+        iv.duration.minute,
         iv.duration.second
     );
     let flag = match iv.flag {

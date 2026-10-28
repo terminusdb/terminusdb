@@ -190,14 +190,14 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
             let s = tde.as_val::<Decimal, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::BigInt => {
             let s = tde.as_val::<Integer, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::GYear => Value::String(tde.as_val::<GYear, String>()),
@@ -231,28 +231,28 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
             let s = tde.as_val::<PositiveInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::NonNegativeInteger => {
             let s = tde.as_val::<NonNegativeInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::NonPositiveInteger => {
             let s = tde.as_val::<NonPositiveInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::NegativeInteger => {
             let s = tde.as_val::<NegativeInteger, String>();
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
-                _ => Value::String(s)
+                _ => Value::String(s),
             }
         }
         Datatype::Date => Value::String(tde.as_val::<Date, String>()),
@@ -264,9 +264,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
         Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
         Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
-        Datatype::DateTimeInterval => {
-            Value::String(tde.as_val::<DateTimeInterval, String>())
-        }
+        Datatype::DateTimeInterval => Value::String(tde.as_val::<DateTimeInterval, String>()),
     }
 }
 
@@ -430,9 +428,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
             tde.as_val::<AnySimpleType, String>(),
         )),
-        Datatype::DateTimeInterval => {
-            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<DateTimeInterval, String>()))
-        }
+        Datatype::DateTimeInterval => juniper::Value::Scalar(DefaultScalarValue::String(
+            tde.as_val::<DateTimeInterval, String>(),
+        )),
     }
 }
 

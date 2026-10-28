@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
-use swipl::prelude::*;
-use swipl::text::PrologText;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use serde_json::Value;
+use swipl::prelude::*;
+use swipl::text::PrologText;
 
 #[derive(Clone)]
 struct JwkKey {
@@ -80,7 +80,8 @@ impl JwksCache {
         {
             return;
         }
-        if self.background_refresh_in_progress
+        if self
+            .background_refresh_in_progress
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
@@ -99,14 +100,18 @@ impl JwksCache {
                             *cache.last_refresh_error.write().unwrap() = None;
                         }
                         Err(e) => {
-                            *cache.last_refresh_error.write().unwrap() = Some(format!("JWT JWKS background refresh failed: {}", e));
+                            *cache.last_refresh_error.write().unwrap() =
+                                Some(format!("JWT JWKS background refresh failed: {}", e));
                         }
                     }
-                    cache.background_refresh_in_progress.store(false, Ordering::SeqCst);
+                    cache
+                        .background_refresh_in_progress
+                        .store(false, Ordering::SeqCst);
                 }
             });
         if spawn_result.is_err() {
-            self.background_refresh_in_progress.store(false, Ordering::SeqCst);
+            self.background_refresh_in_progress
+                .store(false, Ordering::SeqCst);
         }
     }
 }
@@ -167,7 +172,11 @@ fn parse_jwk(jwk: &Jwk) -> Option<JwkKey> {
         }
         _ => return None,
     };
-    Some(JwkKey { kid, algorithm, decoding_key })
+    Some(JwkKey {
+        kid,
+        algorithm,
+        decoding_key,
+    })
 }
 
 fn parse_jwks_response(json: &str) -> Result<Vec<JwkKey>, String> {
@@ -193,11 +202,21 @@ fn fetch_url_blocking(url: &str) -> Result<String, String> {
             Ok(resp) if resp.status().is_success() => {
                 let content_length = resp.content_length().unwrap_or(0) as usize;
                 if content_length > MAX_JWKS_RESPONSE_BYTES {
-                    return Err(format!("JWKS response too large: {} bytes (limit {})", content_length, MAX_JWKS_RESPONSE_BYTES));
+                    return Err(format!(
+                        "JWKS response too large: {} bytes (limit {})",
+                        content_length, MAX_JWKS_RESPONSE_BYTES
+                    ));
                 }
-                let body = resp.bytes().await.map_err(|e| format!("response read error: {}", e))?;
+                let body = resp
+                    .bytes()
+                    .await
+                    .map_err(|e| format!("response read error: {}", e))?;
                 if body.len() > MAX_JWKS_RESPONSE_BYTES {
-                    return Err(format!("JWKS response too large: {} bytes (limit {})", body.len(), MAX_JWKS_RESPONSE_BYTES));
+                    return Err(format!(
+                        "JWKS response too large: {} bytes (limit {})",
+                        body.len(),
+                        MAX_JWKS_RESPONSE_BYTES
+                    ));
                 }
                 String::from_utf8(body.to_vec()).map_err(|e| format!("response UTF-8 error: {}", e))
             }
@@ -219,7 +238,10 @@ fn fetch_oidc_jwks_uri(issuer_url: &str) -> Result<String, String> {
     };
     let body = fetch_url_blocking(&discovery_url)?;
     let doc: Value = serde_json::from_str(&body).map_err(|e| format!("OIDC parse error: {}", e))?;
-    let jwks_uri = doc.get("jwks_uri").and_then(|v| v.as_str()).map(|s| s.to_string())
+    let jwks_uri = doc
+        .get("jwks_uri")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
         .ok_or("OIDC discovery missing jwks_uri".to_string())?;
     if !jwks_uri.starts_with("https://") {
         return Err(format!("OIDC jwks_uri must use HTTPS, got: {}", jwks_uri));
@@ -240,7 +262,8 @@ fn parse_jwt_header(token: &str) -> Result<JwtHeader, String> {
     }
     use base64::Engine;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[0]).map_err(|e| format!("header b64 error: {}", e))?;
+        .decode(parts[0])
+        .map_err(|e| format!("header b64 error: {}", e))?;
     serde_json::from_slice(&bytes).map_err(|e| format!("header json error: {}", e))
 }
 
@@ -273,8 +296,10 @@ struct JwtDecodeOptions {
 
 fn parse_algorithm(alg: &str) -> Option<Algorithm> {
     match alg {
-        "RS256" => Some(Algorithm::RS256), "RS384" => Some(Algorithm::RS384),
-        "RS512" => Some(Algorithm::RS512), "ES256" => Some(Algorithm::ES256),
+        "RS256" => Some(Algorithm::RS256),
+        "RS384" => Some(Algorithm::RS384),
+        "RS512" => Some(Algorithm::RS512),
+        "ES256" => Some(Algorithm::ES256),
         "ES384" => Some(Algorithm::ES384),
         _ => None,
     }
@@ -282,13 +307,18 @@ fn parse_algorithm(alg: &str) -> Option<Algorithm> {
 
 /// Fetch JWKS from endpoint, initialize the global cache, and log the result.
 /// Returns Ok(()) on success, Err(PrologError::Failure) on failure.
-fn init_jwks_cache<C: FrameableContextType>(context: &Context<C>, endpoint: &str) -> Result<(), PrologError> {
+fn init_jwks_cache<C: FrameableContextType>(
+    context: &Context<C>,
+    endpoint: &str,
+) -> Result<(), PrologError> {
     log_info!(context, "JWT: fetching JWKS from {}", endpoint);
     match fetch_jwks_blocking(endpoint) {
         Ok(keys) => {
             let key_count = keys.len();
             log_info!(context, "JWT: loaded {} keys from JWKS", key_count);
-            JWKS_CACHE.get_or_init(|| JwksCache::new(endpoint)).replace_keys(keys);
+            JWKS_CACHE
+                .get_or_init(|| JwksCache::new(endpoint))
+                .replace_keys(keys);
             Ok(())
         }
         Err(e) => {
@@ -445,7 +475,11 @@ mod tests {
             kty: "RSA".to_string(),
             alg: Some("RS384".to_string()),
             r#use: Some("sig".to_string()),
-            n: None, e: None, x: None, y: None, crv: None,
+            n: None,
+            e: None,
+            x: None,
+            y: None,
+            crv: None,
         };
         assert_eq!(infer_algorithm(&jwk), Some(Algorithm::RS384));
     }
@@ -457,7 +491,11 @@ mod tests {
             kty: "RSA".to_string(),
             alg: None,
             r#use: None,
-            n: None, e: None, x: None, y: None, crv: None,
+            n: None,
+            e: None,
+            x: None,
+            y: None,
+            crv: None,
         };
         assert_eq!(infer_algorithm(&jwk), Some(Algorithm::RS256));
     }
@@ -469,7 +507,10 @@ mod tests {
             kty: "EC".to_string(),
             alg: None,
             r#use: None,
-            n: None, e: None, x: None, y: None,
+            n: None,
+            e: None,
+            x: None,
+            y: None,
             crv: Some("P-256".to_string()),
         };
         assert_eq!(infer_algorithm(&jwk), Some(Algorithm::ES256));
@@ -482,7 +523,11 @@ mod tests {
             kty: "OKP".to_string(),
             alg: None,
             r#use: None,
-            n: None, e: None, x: None, y: None, crv: None,
+            n: None,
+            e: None,
+            x: None,
+            y: None,
+            crv: None,
         };
         assert_eq!(infer_algorithm(&jwk), None);
     }
@@ -507,7 +552,11 @@ mod tests {
         let jwks_json = r#"{"keys":[{"kty":"RSA","kid":"confusion-key","alg":"HS256","use":"sig","n":"nBu1v1kpRN9keDGj_94bckliV-80f1Rd1suMUOF0Ie4VywXsQU6C2_X1Q2Au-a_bzBaCSiFnUVSTrIdf1PgSwjudC7zPXEfMBtRbh7RtXea4EOCmLRg8nm9OC1ZlFi-0ne0_otU9yj0vP8xbl9ottv-7i5-WLTf5XXMpQOb8lLoQBdsiDPh7SzWaHZwkSQJFzAUvoBOi0ILl2I3T_ArZMgkoZSTDvd5PU2nHv6bmovvIm82X4hOX8imY3caYAQUL98aSqUEWoDdqBZyQkAJ04ruFTCQAoDUOFBhuZCp9UO0-BIvobhQ1rkUwf78DtGjj-W_2MDu6z-P18Uhxc20o_w","e":"AQAB"}]}"#;
         let result = parse_jwks_response(jwks_json);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 0, "RSA key with HS256 alg must be rejected");
+        assert_eq!(
+            result.unwrap().len(),
+            0,
+            "RSA key with HS256 alg must be rejected"
+        );
     }
 
     #[test]
@@ -526,7 +575,8 @@ mod tests {
 
     #[test]
     fn test_parse_jwks_response_skips_encryption_keys() {
-        let jwks_json = r#"{"keys":[{"kty":"RSA","kid":"enc-key","use":"enc","n":"somen","e":"AQAB"}]}"#;
+        let jwks_json =
+            r#"{"keys":[{"kty":"RSA","kid":"enc-key","use":"enc","n":"somen","e":"AQAB"}]}"#;
         let result = parse_jwks_response(jwks_json);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -534,7 +584,8 @@ mod tests {
 
     #[test]
     fn test_parse_jwks_response_skips_keys_without_kid() {
-        let jwks_json = r#"{"keys":[{"kty":"RSA","alg":"RS256","use":"sig","n":"somen","e":"AQAB"}]}"#;
+        let jwks_json =
+            r#"{"keys":[{"kty":"RSA","alg":"RS256","use":"sig","n":"somen","e":"AQAB"}]}"#;
         let result = parse_jwks_response(jwks_json);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -629,10 +680,11 @@ mod tests {
         // regardless, last_refresh_trigger was just set to now, so the
         // second call within 5 seconds should be rate-limited.
         // We verify by checking that last_refresh_trigger is recent.
-        let elapsed = Instant::now()
-            .duration_since(*cache.last_refresh_trigger.read().unwrap());
-        assert!(elapsed < MIN_REFRESH_INTERVAL,
-            "last_refresh_trigger should be recent after first call");
+        let elapsed = Instant::now().duration_since(*cache.last_refresh_trigger.read().unwrap());
+        assert!(
+            elapsed < MIN_REFRESH_INTERVAL,
+            "last_refresh_trigger should be recent after first call"
+        );
     }
 
     #[test]
