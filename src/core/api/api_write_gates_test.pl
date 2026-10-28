@@ -33,6 +33,7 @@
 :- use_module(core(api/api_migration)).
 :- use_module(core(api/api_access_control)).
 :- use_module(library(yall)).
+:- use_module(library(apply), [foldl/4]).
 :- use_module(library(lists)).
 :- use_module(library(assoc)).
 :- use_module(library(pairs)).
@@ -218,8 +219,11 @@ pred_closure(Index, M-F/A, Depth, Seen0, Seen) :-
                     term_subterm(Call, B),
                     call_target(Index, Call, M2, F2, A2)),
                 Targets),
-        foldl([T,S0,S1]>>pred_closure(Index, T, D1, S0, S1), Targets, Seen1, Seen)
+        foldl(pred_closure_step(Index, D1), Targets, Seen1, Seen)
     ;   Seen = [M-F/A|Seen0]).
+
+pred_closure_step(Index, Depth, M-F/A, Seen0, Seen) :-
+    pred_closure(Index, M-F/A, Depth, Seen0, Seen).
 
 reachable_opens_write(Reachable) :-
     member(M-F/A, Reachable),
