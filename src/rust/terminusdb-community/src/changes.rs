@@ -14,7 +14,6 @@ use crate::{
     types::{transaction_instance_layer, transaction_schema_layer},
 };
 
-
 #[derive(Debug)]
 pub enum ChangeType {
     Added(u64),
@@ -32,10 +31,7 @@ impl ChangeType {
     }
 
     fn is_addition(&self) -> bool {
-        match self {
-            Self::Added(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Added(_))
     }
 }
 
@@ -77,8 +73,8 @@ pub fn changed_document_ids(
     for t in instance.triple_additions()? {
         if t.predicate == rdf_type_id {
             changes.insert(t.subject, ChangeType::Added(t.object));
-        } else if !changes.contains_key(&t.subject) {
-            changes.insert(t.subject, ChangeType::Changed);
+        } else {
+            changes.entry(t.subject).or_insert(ChangeType::Changed);
         }
     }
     for t in instance.triple_removals()? {
@@ -88,8 +84,8 @@ pub fn changed_document_ids(
             } else {
                 changes.insert(t.subject, ChangeType::Deleted(t.object));
             }
-        } else if !changes.contains_key(&t.subject) {
-            changes.insert(t.subject, ChangeType::Changed);
+        } else {
+            changes.entry(t.subject).or_insert(ChangeType::Changed);
         }
     }
 
@@ -142,24 +138,18 @@ pub fn changed_document_ids(
         visited.insert(id);
 
         let mut current = id;
-        loop {
-            if let Some(parent_triple) = instance.triples_o(current).next() {
-                let parent_id = parent_triple.subject;
-                if current != id && visited.contains(&parent_id) {
-                    break;
-                }
-                visited.insert(parent_id);
-                current = parent_id;
+        while let Some(parent_triple) = instance.triples_o(current).next() {
+            let parent_id = parent_triple.subject;
+            if current != id && visited.contains(&parent_id) {
+                break;
+            }
+            visited.insert(parent_id);
+            current = parent_id;
 
-                if let Some(parent_type_triple) =
-                    instance.single_triple_sp(parent_id, rdf_type_id)
-                {
-                    let parent_type = parent_type_triple.object;
-                    if is_document_type(parent_type, json_document_id, &document_type_ids) {
-                        result.entry(current).or_insert(ChangeType::Changed);
-                        break;
-                    }
-                } else {
+            if let Some(parent_type_triple) = instance.single_triple_sp(parent_id, rdf_type_id) {
+                let parent_type = parent_type_triple.object;
+                if is_document_type(parent_type, json_document_id, &document_type_ids) {
+                    result.entry(current).or_insert(ChangeType::Changed);
                     break;
                 }
             } else {
@@ -225,8 +215,7 @@ pub fn changed_document_ids(
 
                     // Only mark document-type referrers (skip Cons cells,
                     // subdocuments, etc. — those are handled by Phase 3).
-                    if let Some(ref_type_triple) =
-                        instance.single_triple_sp(referrer, rdf_type_id)
+                    if let Some(ref_type_triple) = instance.single_triple_sp(referrer, rdf_type_id)
                     {
                         if is_document_type(
                             ref_type_triple.object,

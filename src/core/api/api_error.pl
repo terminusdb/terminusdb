@@ -2298,6 +2298,14 @@ api_document_error_jsonld(Type,error(query_is_only_supported_for_instance_graphs
              'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type,error(counted_not_supported_for_selector,_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The counted parameter is only supported when listing documents, optionally restricted by type; it cannot be combined with id, ids or query", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:CountedNotSupportedForSelector'},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type,error(query_error(unknown_prefix(_Query)),_), JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "Query document used an undefined prefix", []),

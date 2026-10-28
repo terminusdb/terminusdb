@@ -35,7 +35,8 @@ impl<'a> GraphQLName<'a> {
 
 impl<'a> PartialOrd<str> for GraphQLName<'a> {
     fn partial_cmp(&self, other: &str) -> Option<std::cmp::Ordering> {
-      self.0.partial_cmp(&<&str as Into<std::borrow::Cow<'_, str>>>::into(other))
+        self.0
+            .partial_cmp(&<&str as Into<std::borrow::Cow<'_, str>>>::into(other))
     }
 }
 
@@ -446,23 +447,30 @@ impl From<StructuralFieldDefinition> for UncleanFieldDefinition {
                 ComplexFieldDefinition::Optional { class, unfold: _ } => {
                     UncleanFieldDefinition::Optional(class.name())
                 }
-                ComplexFieldDefinition::Set { class, unfold: _ } => UncleanFieldDefinition::Set(class.name()),
+                ComplexFieldDefinition::Set { class, unfold: _ } => {
+                    UncleanFieldDefinition::Set(class.name())
+                }
                 ComplexFieldDefinition::List { class, unfold: _ } => {
                     UncleanFieldDefinition::List(class.name())
                 }
-                ComplexFieldDefinition::Array { class, dimensions, unfold: _ } => {
-                    UncleanFieldDefinition::Array {
-                        class: class.name(),
-                        dimensions,
-                    }
-                }
-                ComplexFieldDefinition::Cardinality { class, min, max, unfold: _ } => {
-                    UncleanFieldDefinition::Cardinality {
-                        class: class.name(),
-                        min,
-                        max,
-                    }
-                }
+                ComplexFieldDefinition::Array {
+                    class,
+                    dimensions,
+                    unfold: _,
+                } => UncleanFieldDefinition::Array {
+                    class: class.name(),
+                    dimensions,
+                },
+                ComplexFieldDefinition::Cardinality {
+                    class,
+                    min,
+                    max,
+                    unfold: _,
+                } => UncleanFieldDefinition::Cardinality {
+                    class: class.name(),
+                    min,
+                    max,
+                },
                 ComplexFieldDefinition::Foreign { class, unfold: _ } => {
                     UncleanFieldDefinition::Required(class.name())
                 }
@@ -560,8 +568,8 @@ impl BaseOrDerived<ShortName> {
 }
 
 pub fn is_base_type(s: &str) -> bool {
-  // TODO this is not good enough
-  s.starts_with("xsd:") || s.starts_with("sys:") || s.starts_with("xdd:")
+    // TODO this is not good enough
+    s.starts_with("xsd:") || s.starts_with("sys:") || s.starts_with("xdd:")
 }
 
 pub fn base_or_derived(c: String) -> BaseOrDerived<ShortName> {

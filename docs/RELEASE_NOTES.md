@@ -4,6 +4,7 @@
 * Ensure cardinality narrowing and strengthened schema inheritance is properly recognized in sets.
 * Support for date time ranges in the commit log API and precise datetime bounds for the log api
 * Add a /dashboard with navigation to the API and user interfaces
+* Support for fast counts of documents and triples
 
 # TerminusDB Server 12.1.0 Release Candidate 1
 
@@ -69,6 +70,28 @@ This release packs a massive amount of new and important functionality:
 * vectorsearch: remove container_name so two stacks can run side by side [#2584](https://github.com/terminusdb/terminusdb/pull/2584)
 
 **Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.8...v12.1.0-rc1
+
+# TerminusDB Server v12.0.9 Release Notes
+
+## New functionality
+* Apply and patch on schemaless (raw_json) documents in [#2571](https://github.com/terminusdb/terminusdb/pull/2571)
+* Canonical ISO8604 interval semantics, timezone offsets, and typecasting with xdd:dateRange [#2574](https://github.com/terminusdb/terminusdb/pull/2574)
+
+## Security
+* Fix an issue (CVSS 7.5/6.5) that allowed users with read access to a database to use apply API, reported by @Santoshkumarpuppala
+* Require read access on at least one database for the path-less `api_patch/6` and `api_diff/6` endpoints, preventing anonymous resource exhaustion
+
+## Bugfixes
+* Intervals handling improvements by @hoijnet in [#2569](https://github.com/terminusdb/terminusdb/pull/2569)
+* Denied JWT-scoped authorization now returns 403 `access_not_authorised` instead of crashing; the caller falls back to anonymous capabilities
+
+## Maintenance
+* Remove dead anonymous guard from `api_info`: community serves the info payload to any caller including anonymous, enterprise redacts it for anonymous instead
+* Pin terminus-store to v0.21.8 for forward-compatible pack import (to prepare for faster intervals) [#2568](https://github.com/terminusdb/terminusdb/pull/2568)
+* Neat starting experience: quieter GC plugin logging and JWT opt-in at runtime [#2573](https://github.com/terminusdb/terminusdb/pull/2573)
+* Bump follow-redirects from 1.16.0 to 1.16.1 in /tests [#2581](https://github.com/terminusdb/terminusdb/pull/2581)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.8...v12.0.9
 
 # TerminusDB Server v12.0.8 Release Notes
 

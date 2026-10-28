@@ -120,14 +120,14 @@ predicates! {
     pub semidet fn squash(context, layer_term, squashed_layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let squashed = context.try_or_die(layer.squash())?;
-        squashed_layer_term.unify(&WrappedLayer(squashed))
+        squashed_layer_term.unify(WrappedLayer(squashed))
     }
 
     pub semidet fn squash_upto(context, layer_term, upto_term, squashed_layer_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let upto: WrappedLayer = upto_term.get_ex()?;
         let squashed = context.try_or_die(layer.squash_upto(&upto))?;
-        squashed_layer_term.unify(&WrappedLayer(squashed))
+        squashed_layer_term.unify(WrappedLayer(squashed))
     }
 
     pub semidet fn rollup(context, layer_term) {
@@ -196,7 +196,7 @@ predicates! {
             let name = context.try_or_die(string_to_name(&id))?;
 
             match context.try_or_die(store.get_layer_from_id(name))? {
-                Some(layer) => layer_term.unify(&WrappedLayer(layer)),
+                Some(layer) => layer_term.unify(WrappedLayer(layer)),
                 None => Err(PrologError::Failure)
             }
         }
@@ -286,8 +286,7 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let subject_id: u64 = subject_id_term.get_ex()?;
         let predicate_id: u64 = predicate_id_term.get_ex()?;
-        let iter = layer.triples_sp(subject_id, predicate_id);
-        let count = iter.count() as u64;
+        let count = layer.count_triples(Some(subject_id), Some(predicate_id), None) as u64;
         count_term.unify(count)
     }
 
@@ -295,9 +294,47 @@ predicates! {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let object_id: u64 = object_id_term.get_ex()?;
         let predicate_id: u64 = predicate_id_term.get_ex()?;
-        let count = layer.triples_o(object_id)
-            .filter(|t| t.predicate == predicate_id)
-            .count() as u64;
+        let count = layer.count_triples(None, Some(predicate_id), Some(object_id)) as u64;
+        count_term.unify(count)
+    }
+
+    pub semidet fn id_triple_count(_context, layer_term, subject_id_term, predicate_id_term, object_id_term, count_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        let subject_id = attempt_opt(subject_id_term.get::<u64>())?;
+        let predicate_id = attempt_opt(predicate_id_term.get::<u64>())?;
+        let object_id = attempt_opt(object_id_term.get::<u64>())?;
+        let count = layer.count_triples(subject_id, predicate_id, object_id) as u64;
+        count_term.unify(count)
+    }
+
+    pub semidet fn id_triple_value_range_count(context, layer_term, low_term, high_term, subject_id_term, predicate_id_term, count_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+
+        let low_inner = context.new_term_ref();
+        let low_ty = context.new_term_ref();
+        let low_entry;
+        if attempt(low_term.unify(term!{context: value(#&low_inner, #&low_ty)}?))? {
+            low_entry = make_entry_from_term(context, &low_inner, &low_ty)?;
+        } else if attempt(low_term.unify(term!{context: lang(#&low_inner, #&low_ty)}?))? {
+            low_entry = make_entry_from_lang_term(context, &low_inner, &low_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #low_term), _)}?);
+        }
+
+        let high_inner = context.new_term_ref();
+        let high_ty = context.new_term_ref();
+        let high_entry;
+        if attempt(high_term.unify(term!{context: value(#&high_inner, #&high_ty)}?))? {
+            high_entry = make_entry_from_term(context, &high_inner, &high_ty)?;
+        } else if attempt(high_term.unify(term!{context: lang(#&high_inner, #&high_ty)}?))? {
+            high_entry = make_entry_from_lang_term(context, &high_inner, &high_ty)?;
+        } else {
+            return context.raise_exception(&term!{context: error(domain_error(oneof([value(), lang()]), #high_term), _)}?);
+        }
+
+        let subject_id = attempt_opt(subject_id_term.get::<u64>())?;
+        let predicate_id = attempt_opt(predicate_id_term.get::<u64>())?;
+        let count = layer.count_triples_value_range(subject_id, predicate_id, &low_entry, &high_entry) as u64;
         count_term.unify(count)
     }
 

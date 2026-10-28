@@ -58,7 +58,8 @@
               schema_subclass_of/3,
               class_super/3,
               supermap/3,
-              schema_read_layer/2
+              schema_read_layer/2,
+              system_frame_class/1
           ]).
 
 /*
