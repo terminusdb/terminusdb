@@ -28,12 +28,12 @@ current_repo_version_link = f'[{current_repo_version}](https://github.com/termin
 
 **Current repository version:** <!--
 [[[cog cog.out(current_repo_version) ]]] -->
-`v12.1.0-rc1`
+`v12.1.0-rc2`
 <!-- [[[end]]] -->
 
 **Changes since last release:** <!--
 [[[cog cog.out(changes_since_last_released_version_link) ]]] -->
-[`12.0.8...main`](https://github.com/terminusdb/terminusdb/compare/v12.0.8...main)
+[`12.0.9...main`](https://github.com/terminusdb/terminusdb/compare/v12.0.9...main)
 <!-- [[[end]]] -->
 
 ---
@@ -86,7 +86,7 @@ After the version bump PR is merged:
 ```bash
 git checkout main
 git pull
-git tag v<VERSION>  # e.g., v11.2.0
+git tag v<VERSION>  # e.g., v12.1.0
 git push origin v<VERSION>
 ```
 
@@ -101,7 +101,7 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 - Builds ARM64 image via `.github/workflows/docker-arm64-build.yml` (BuildJet runner)
 - Runs integration tests on both architectures
 - Publishes multi-arch manifests via `.github/workflows/docker-images-publish.yml`:
-  - **Always:** `terminusdb/terminusdb-server:v<VERSION>` (e.g., `v11.2.0-rc3`)
+  - **Always:** `terminusdb/terminusdb-server:v<VERSION>` (e.g., `v12.1.0-rc3`)
   - **Production only:** `terminusdb/terminusdb-server:v<MAJOR>` (e.g., `v11`)
   - **Production only:** `terminusdb/terminusdb-server:latest`
   - Corresponding `-noroot` variants for all tags
@@ -112,9 +112,9 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
 
 | Release Version | Tags Created |
 |-----------------|--------------|
-| `v11.2.0` | `v11.2.0`, `v11`, `latest`, `v11.2.0-noroot`, `v11-noroot`, `latest-noroot` |
-| `v11.2.0-rc3` | `v11.2.0-rc3`, `v11.2.0-rc3-noroot` (no `latest` or `v11`) |
-| `v11.2.0-beta` | `v11.2.0-beta`, `v11.2.0-beta-noroot` (no `latest` or `v11`) |
+| `v12.1.0` | `v12.1.0`, `v12`, `latest`, `v12.1.0-noroot`, `v12-noroot`, `latest-noroot` |
+| `v12.1.0-rc3` | `v12.1.0-rc3`, `v12.1.0-rc3-noroot` (no `latest` or `v12`) |
+| `v12.1.0-beta` | `v12.1.0-beta`, `v12.1.0-beta-noroot` (no `latest` or `v12`) |
 
 #### Snap Package
 - Builds snap for **AMD64** via `.github/workflows/snap-build.yml`
@@ -136,7 +136,7 @@ After automated builds complete (monitor in Actions tab):
 6. **Set as a pre-release:** Check this for versions with `-rc`, `-beta`, `-alpha` suffixes
 7. Click **Publish release**
 
-> **Note:** RC versions (e.g., `11.2.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
+> **Note:** RC versions (e.g., `12.1.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
 
 ### 6. Verify Release
 
@@ -154,7 +154,7 @@ Confirm successful publication:
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
-- **New version:** e.g., `12.0.1-dev` (when bumping from `12.0.0`)
+- **New version:** e.g., `12.0.9-dev` (when bumping from `12.0.9`)
 
 Then merge the new development version PR (to ensure build images are correctly produced). You may need to close and reopen the PR if the version bump verification build is stuck.
 
