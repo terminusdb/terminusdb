@@ -1024,6 +1024,22 @@ refute_class_oneof(Validation_Object,Class,Witness) :-
                            class: Class,
                            choice: Choice }
     ).
+% Tagged union members live directly on the class rather than under a
+% sys:oneOf choice, so they need their own referential integrity check.
+refute_class_oneof(Validation_Object,Class,Witness) :-
+    database_schema(Validation_Object,Schema),
+    is_schema_tagged_union(Schema, Class),
+    xrdf(Schema, Class, Property, Range),
+    \+ is_built_in(Property),
+    (   is_type_family(Validation_Object, Range)
+    ->  refute_type(Validation_Object, Range, Witness0),
+        Witness = Witness0.put(property, Property)
+    ;   refute_class_or_base_type(Validation_Object, Range, _),
+        Witness = witness{ '@type': oneof_member_references_non_existent_class,
+                           class: Class,
+                           property: Property,
+                           member: Range }
+    ).
 
 refute_property(Validation_Object,Class,Witness) :-
     database_schema(Validation_Object,Schema),

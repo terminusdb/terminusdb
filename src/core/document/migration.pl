@@ -93,12 +93,34 @@ create_class(Class_Document, Before, After) :-
 
 /* move_class(Old_Name, New_Name) */
 move_class_in_complex_target_type(Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
-    get_dict('@class', Before_Target_Type, Old_Class),
-    move_class_in_required_target_type(Before_Class, After_Class, Old_Class, New_Class),
-    put_dict(_{'@class' : New_Class}, Before_Target_Type, After_Target_Type).
+    (   get_dict('@class', Before_Target_Type, Old_Class)
+    ->  move_class_in_required_target_type(Before_Class, After_Class, Old_Class, New_Class),
+        put_dict(_{'@class' : New_Class}, Before_Target_Type, After_Target_Type)
+    ;   After_Target_Type = Before_Target_Type
+    ).
 
-move_class_in_required_target_type(Before_Class, After_Class, Before_Class, After_Class) :-
-    !.
+/*
+ * References materialized from the store arrive as atoms, while the
+ * operation arguments arrive as JSON strings. Compare through the atom
+ * representation, but keep the value's own representation on output so
+ * atoms stay atoms and strings stay strings.
+ */
+move_class_in_required_target_type(Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
+    is_dict(Before_Target_Type),
+    !,
+    move_class_in_complex_target_type(Before_Class, After_Class, Before_Target_Type, After_Target_Type).
+move_class_in_required_target_type(Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
+    (   atom(Before_Target_Type)
+    ;   string(Before_Target_Type)
+    ),
+    atom_string(Before_Atom, Before_Class),
+    atom_string(Before_Target_Atom, Before_Target_Type),
+    Before_Target_Atom == Before_Atom,
+    !,
+    (   atom(Before_Target_Type)
+    ->  atom_string(After_Target_Type, After_Class)
+    ;   After_Target_Type = After_Class
+    ).
 move_class_in_required_target_type(_Before_Class, _After_Class, Target_Type, Target_Type).
 
 move_class_in_target_type('@id', Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
@@ -109,9 +131,17 @@ move_class_in_target_type('@id', Before_Class, After_Class, Before_Target_Type, 
     ).
 move_class_in_target_type('@inherits', Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
     !,
-    (   select(Before_Class, Before_Target_Type, After_Class, After_Target_Type)
-    ->  true
-    ;   Before_Target_Type = After_Target_Type
+    (   is_list(Before_Target_Type)
+    ->  maplist(move_class_in_required_target_type(Before_Class, After_Class),
+                Before_Target_Type, After_Target_Type)
+    ;   move_class_in_required_target_type(Before_Class, After_Class, Before_Target_Type, After_Target_Type)
+    ).
+move_class_in_target_type('@oneOf', Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
+    !,
+    (   is_list(Before_Target_Type)
+    ->  maplist(move_class_in_document(Before_Class, After_Class),
+                Before_Target_Type, After_Target_Type)
+    ;   move_class_in_document(Before_Class, After_Class, Before_Target_Type, After_Target_Type)
     ).
 move_class_in_target_type(Key, _Before_Class, _After_Class, Target_Type, Target_Type) :-
     has_at(Key),
@@ -2267,6 +2297,226 @@ test(move_to_existing_fails,
 					  }
 			}
 	].
+
+
+before_refs('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Ref",
+  "name" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Other",
+  "name" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Linky",
+  "link" : "Ref",
+  "other" : "Other",
+  "st" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "OptLinky",
+  "link" : { "@type" : "Optional", "@class" : "Ref" } }
+
+{ "@type" : "Class",
+  "@id" : "Kid",
+  "@inherits" : ["Ref", "Other"],
+  "k" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Chooser",
+  "@oneOf" : [ { "pick" : "Ref" } ] }
+
+{ "@type" : "Class",
+  "@id" : "Chooser2",
+  "@oneOf" : [ { "pick" : "Ref" }, { "alt" : "xsd:string" } ] }
+
+{ "@type" : "TaggedUnion",
+  "@id" : "TU",
+  "a" : "sys:Unit",
+  "b" : "Ref" }
+
+').
+
+test(move_class_rewrites_property_range,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+
+    interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
+
+    % The range of a plain property follows the rename...
+    get_dict('Linky', After, Linky),
+    get_dict(link, Linky, 'Renamed'),
+    % ...while non-matching references and base types are untouched.
+    get_dict(other, Linky, 'Other'),
+    get_dict(st, Linky, 'xsd:string').
+
+test(move_class_rewrites_complex_property_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+
+    interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
+
+    get_dict('OptLinky', After, OptLinky),
+    get_dict(link, OptLinky, Link_Spec),
+    get_dict('@type', Link_Spec, 'Optional'),
+    get_dict('@class', Link_Spec, 'Renamed').
+
+test(move_class_rewrites_inherits,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+
+    interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
+
+    get_dict('Kid', After, Kid),
+    % @inherits materializes sorted; only the moved class is rewritten.
+    get_dict('@inherits', Kid, ['Other', 'Renamed']).
+
+test(move_class_rewrites_oneof_member,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+
+    interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
+
+    % @oneOf materializes as a dict of members, or a list of dicts when
+    % there is more than one group — cover both shapes.
+    get_dict('Chooser', After, Chooser),
+    get_dict('@oneOf', Chooser, Choices),
+    get_dict(pick, Choices, 'Renamed'),
+
+    get_dict('Chooser2', After, Chooser2),
+    get_dict('@oneOf', Chooser2, Choice_Maps),
+    is_list(Choice_Maps),
+    once((
+        member(Pick_Map, Choice_Maps),
+        get_dict(pick, Pick_Map, 'Renamed'),
+        member(Alt_Map, Choice_Maps),
+        get_dict(alt, Alt_Map, 'xsd:string')
+    )).
+
+test(move_class_rewrites_tagged_union_member,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+
+    interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
+
+    % The member referencing the moved class is rewritten, not dropped.
+    get_dict('TU', After, TU),
+    get_dict(b, TU, 'Renamed'),
+    get_dict(a, TU, 'sys:Unit').
+
+test(move_class_referenced_class_with_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'Ref/1', '@type' : 'Ref',
+                               name : "foo" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'Other/1', '@type' : 'Other',
+                               name : "other" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'Linky/1', '@type' : 'Linky',
+                               link : "Ref/1",
+                               other : "Other/1", st : "x" },
+                            _)
+        )
+    ),
+
+    Term_Ops = [
+        move_class("Ref", "Renamed")
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops,
+                               Result,
+                               []),
+
+    Result = metadata{instance_operations:1,schema_operations:1},
+
+    % The instance was re-keyed and the incoming link followed the rename.
+    get_document(Descriptor, "Renamed/1", _Renamed_Doc),
+    get_document(Descriptor, "Linky/1", Linky_Doc),
+    get_dict(link, Linky_Doc, Link_Target),
+    atom_string(Link_Atom, Link_Target),
+    atom_concat('Renamed/', _, Link_Atom),
+
+    % The TaggedUnion member was rewritten, not dropped.
+    open_descriptor(Descriptor, After_Transaction),
+    create_class_dictionary(After_Transaction, After_Dictionary),
+    get_dict('TU', After_Dictionary, TU_Doc),
+    get_dict(b, TU_Doc, 'Renamed').
+
+
+before_bad_tu('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "TaggedUnion",
+  "@id" : "BadTU",
+  "a" : "sys:Unit",
+  "b" : "Missing" }
+
+').
+
+test(tagged_union_member_references_non_existent_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure(_), _)
+     ]) :-
+    write_schema(before_bad_tu, Descriptor).
 
 
 test(delete_list_property,
