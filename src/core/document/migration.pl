@@ -1532,10 +1532,12 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                 once(
                     (   Value = V^^Old_Type,
                         global_prefix_expand(Old_Type, Old_Type_Ex),
-                        (   typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast)
+                        (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast),
+                                  error(casting_error(_,_),_),
+                                  fail)
                         ->  true
-                        ;   Default_or_Error = default(Default)
-                        ->  Cast = Default^^Simple_Type
+                        ;   member(Default_or_Error, [default(Default), value(Default)])
+                        ->  Cast = Default^^Simple_Type_Ex
                         ;   Value = _^^Old_Type,
                             throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
                         ),
@@ -2793,6 +2795,56 @@ test(cast_to_required_or_error,
     F_Docs = [ json{'@id':'F/1','@type':'F',f:"33.400001525878906"},
 			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
+
+test(cast_bad_value_with_default,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'C/1', c : "abc" }, _)),
+
+    Term_Ops = [
+        cast_class_property("C", "c", "xsd:integer", value(0))
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    % typecast/4 throws casting_error rather than failing; the default
+    % fallback must still apply and store an expanded datatype IRI.
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'C/1', Doc),
+    Doc = json{'@id':'C/1','@type':'C',c:0}.
+
+test(cast_bad_value_error_mode,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(bad_cast_in_schema_migration("C","c",_Old_Type,"xsd:integer"),_)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'C/1', c : "abc" }, _)),
+
+    Term_Ops = [
+        cast_class_property("C", "c", "xsd:integer", error)
+    ],
+    migration_list_to_ast_list(Ops,Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []).
 
 
 test(garbage_op,
