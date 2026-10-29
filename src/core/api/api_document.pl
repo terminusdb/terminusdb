@@ -77,7 +77,8 @@
                   insert_document_expanded/5,
                   replace_document_expanded/5,
                   insert_backlinks/2,
-                  extract_return_ids/2
+                  extract_return_ids/2,
+                  compress_schema_uri/3
               ]).
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
@@ -1220,11 +1221,13 @@ api_check_documents(SystemDB, Auth, Path, Graph_Type, Author, Message,
         post_transaction_tabling).
 
 check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
+    database_prefixes(Transaction, Prefixes),
     catch(
         (   call(Body, Transaction, Extra)
-        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses),
+        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses0),
                       error(check_validation_failed(Context), _)),
             check_embedding_report(Transaction, Touched_Types, Embedding),
+            maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
             (   Witnesses = []
             ->  Result = _{'@type':'api:CheckResponse',
                            'api:valid':true,
@@ -1242,7 +1245,42 @@ check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
                        'api:error':_{'api:message':'check body failed'},
                        'api:embedding':Embedding}),
         Error,
-        check_error_result(Error, Result)).
+        check_error_result(Prefixes, Error, Result)).
+
+%% compress_witness_json(+Prefixes, +Value, -Compressed) is det.
+%
+%  Witness documents carry fully expanded IRIs (terminusdb:///schema#X)
+%  in values and in dict keys. Fold them back through the database
+%  prefixes so api:witnesses reads like the schema itself.
+compress_witness_json(Prefixes, Value, Compressed) :-
+    (   is_dict(Value)
+    ->  dict_pairs(Value, Tag, Pairs),
+        maplist(compress_witness_pair(Prefixes), Pairs, Compressed_Pairs),
+        dict_pairs(Compressed, Tag, Compressed_Pairs)
+    ;   is_list(Value)
+    ->  maplist(compress_witness_json(Prefixes), Value, Compressed)
+    ;   (atom(Value) ; string(Value)),
+        atom_string(Value_Atom, Value),
+        fold_witness_uri(Prefixes, Value_Atom, Folded)
+    ->  Compressed = Folded
+    ;   Compressed = Value).
+
+% Schema vocabulary folds to bare local names (matching compress_ids);
+% anything else folds through the ordinary context prefixes (@base
+% relative, xsd:, sys:, user prefixes) or stays unchanged.
+fold_witness_uri(Prefixes, URI, Folded) :-
+    compress_schema_uri(URI, Prefixes, Schema_Folded),
+    (   Schema_Folded \= URI
+    ->  Folded = Schema_Folded
+    ;   compress_dict_uri(URI, Prefixes, Folded)).
+
+compress_witness_pair(Prefixes, Key-Value, Compressed_Key-Compressed_Value) :-
+    (   (atom(Key) ; string(Key)),
+        atom_string(Key_Atom, Key),
+        fold_witness_uri(Prefixes, Key_Atom, Folded_Key)
+    ->  Compressed_Key = Folded_Key
+    ;   Compressed_Key = Key),
+    compress_witness_json(Prefixes, Value, Compressed_Value).
 
 % On invalid checks the embedding block is still present so callers can
 % read api:embedding.'api:will_embed' unconditionally — nothing embeds
@@ -1250,21 +1288,23 @@ check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
 check_no_embedding(_{'api:will_embed':false,
                      'api:reason':'the write is invalid — fix the witnesses or error first'}).
 
-check_error_result(error(schema_check_failure(Witnesses), _), Result) :-
+check_error_result(Prefixes, error(schema_check_failure(Witnesses0), _), Result) :-
     !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
                'api:witnesses':Witnesses,
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(schema_check_failure(Witnesses), Result) :-
+check_error_result(Prefixes, schema_check_failure(Witnesses0), Result) :-
     !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
                'api:witnesses':Witnesses,
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(error(Formal, _), Result) :-
+check_error_result(_Prefixes, error(Formal, _), Result) :-
     !,
     format(string(Msg), "~w", [Formal]),
     Result = _{'@type':'api:CheckResponse',
@@ -1273,7 +1313,7 @@ check_error_result(error(Formal, _), Result) :-
                'api:error':_{'api:message':Msg},
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(Formal, Result) :-
+check_error_result(_Prefixes, Formal, Result) :-
     format(string(Msg), "~w", [Formal]),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
