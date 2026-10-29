@@ -747,6 +747,8 @@ pub struct UncleanClassDefinition {
     pub one_of: Option<Vec<UncleanOneOf>>,
     #[serde(rename = "@inherits")]
     pub inherits: Option<Vec<ShortName>>,
+    #[serde(rename = "@base")]
+    pub base: Option<String>,
     #[serde(flatten)]
     pub fields: BTreeMap<ShortName, UncleanFieldDefinition>,
 }
@@ -994,7 +996,10 @@ impl EnumDefinition {
 #[serde(tag = "@type")]
 pub enum UncleanTypeDefinition {
     Class(UncleanClassDefinition),
+    TaggedUnion(UncleanClassDefinition),
     Enum(UncleanEnumDefinition),
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(PartialEq, Debug)]
@@ -1075,6 +1080,10 @@ impl UncleanAllFrames {
         let mut frames: BTreeMap<GraphQLName, TypeDefinition> = BTreeMap::new();
         let mut graphql_to_iri_renaming: BiMap<GraphQLName, IriName> = BiMap::new();
         for (class_name, typedef) in self.frames.into_iter() {
+            // e.g. sys:Foreign: present in frames but not a queryable type
+            if let UncleanTypeDefinition::Unknown = typedef {
+                continue;
+            }
             let class_name_ref = &class_name;
             let iri_name = self.context.expand_schema(&class_name_ref.into());
             let sanitized_class = class_name.sanitize();
@@ -1091,10 +1100,12 @@ impl UncleanAllFrames {
                 panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]' and which do not overlap with reserved type names. Please rename your classes to remove the following duplicate pair: ({left},{right}) == ({sanitized_class},{class_name})")
             }
             let new_typedef = match typedef {
-                UncleanTypeDefinition::Class(cd) => {
+                UncleanTypeDefinition::Class(cd)
+                | UncleanTypeDefinition::TaggedUnion(cd) => {
                     TypeDefinition::Class(cd.sanitize(&self.context))
                 }
                 UncleanTypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),
+                UncleanTypeDefinition::Unknown => unreachable!(),
             };
             frames.insert(sanitized_class.clone(), new_typedef);
         }
@@ -1512,6 +1523,7 @@ _{'@type': "Lexical", '@fields': ["foo", "bar"]}
                         ])
                     }
                 ]),
+                base: None,
                 fields: BTreeMap::from([]),
             }),
             typedef
@@ -1534,6 +1546,40 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
         let _frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
 
         // TODO actually test something here
+    }
+
+    #[test]
+    fn deserialize_tagged_union_and_foreign_frames() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{'@context':_27018{'@base':"terminusdb:///data/",
+                       '@schema':"terminusdb:///schema#",
+                       '@type':'Context'},
+      'TU':json{'@type':'TaggedUnion','@base':"tu_",
+                '@key':json{'@type':"ValueHash"},
+                '@oneOf':[json{a:'sys:Unit',b:'xsd:string'}]},
+      'Ext':json{'@type':'Foreign'}}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
+
+        let (types, _restrictions, _to_iri, _to_short, _prefixes) = frames.sanitize();
+        assert_eq!(1, types.len());
+        match &types[&GraphQLName(Cow::Borrowed("TU"))] {
+            TypeDefinition::Class(cd) => {
+                assert_eq!(
+                    1,
+                    cd.one_of
+                        .as_ref()
+                        .expect("tagged union members under @oneOf")
+                        .len()
+                );
+            }
+            other => panic!("tagged union must remain a class definition: {other:?}"),
+        }
     }
 
     #[test]

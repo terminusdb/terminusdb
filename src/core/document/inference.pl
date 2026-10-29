@@ -237,12 +237,20 @@ _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
     check_enum(Enum_Value,Type,Enums,Annotated).
 check_frame_(Frame,Schema,Prefixes,Value,_Type,Annotated,Captures),
 is_dict(Frame),
-get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
+get_dict('@type', Frame, Frame_Type),
+memberchk(Frame_Type, ['http://terminusdb.com/schema/sys#Class',
+                       'http://terminusdb.com/schema/sys#TaggedUnion']) =>
     dict_pairs(Frame,json,Pairs),
     (   is_dict(Value)
     ->  expand_dictionary_keys(Value,Schema,Expanded)
     ;   Value = Expanded),
     check_type_pairs_(Pairs,Schema,Prefixes,success(Expanded),Annotated,Captures).
+check_frame_(Frame,_Schema,_Prefixes,Value,_Type,Annotated,Captures),
+is_dict(Frame),
+_{'@type' : 'http://terminusdb.com/schema/sys#Foreign'} :< Frame =>
+    % Foreign classes have no local properties to check against.
+    no_captures(Captures),
+    Annotated = success(Value).
 
 expand_dictionary_pairs([],_Schema,[]).
 expand_dictionary_pairs([Key-Value|Pairs],Schema,[Key_Ex-Value_Ex|Expanded_Pairs]) :-

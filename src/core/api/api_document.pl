@@ -299,14 +299,12 @@ api_count_documents(Transaction, schema, Type, _Config, Count) :-
         % Mirrors get_schema_document_uri_by_type/3.
         xrdf_count(Schema, _, rdf:type, Type_Ex, Count)
     ;   % Mirrors get_schema_document_uri/2: '@context' plus every
-        % frame class and foreign type.
+        % frame class (which includes foreign types).
         aggregate_all(sum(Partial),
                       (   system_frame_class(C),
                           xrdf_count(Schema, _, rdf:type, C, Partial)),
                       Frame_Count),
-        global_prefix_expand(sys:'Foreign', Foreign),
-        xrdf_count(Schema, _, rdf:type, Foreign, Foreign_Count),
-        Count is 1 + Frame_Count + Foreign_Count
+        Count is 1 + Frame_Count
     ).
 
 api_document_exists(schema, Transaction, Id) :-

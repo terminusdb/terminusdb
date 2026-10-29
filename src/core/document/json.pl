@@ -1938,9 +1938,23 @@ json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
     ;   throw(error(missing_field('@id', JSON), _))
     ),
     Path = [type(ID)|Old_Path],
+    % Frames wrap tagged union members under @oneOf; stored docs keep them as
+    % flat properties. Unfold the groups so a frame PUT restores members.
+    (   Type = 'TaggedUnion',
+        select('@oneOf'-OneOf, Pairs, Pairs_No_OneOf)
+    ->  (   is_dict(OneOf)
+        ->  Groups = [OneOf]
+        ;   Groups = OneOf),
+        findall(P-V,
+                (   member(Group, Groups),
+                    dict_pairs(Group, _, Group_Pairs),
+                    member(P-V, Group_Pairs)),
+                Member_Pairs),
+        append(Member_Pairs, Pairs_No_OneOf, Final_Pairs)
+    ;   Final_Pairs = Pairs),
     findall(
         Prop-Value,
-        (   member(P-V,Pairs),
+        (   member(P-V,Final_Pairs),
             json_schema_predicate_value(P,V,Context,Path,Prop,Value)
         ),
         PVs),
@@ -2949,8 +2963,6 @@ get_schema_document_uri(Desc, ID) :-
 get_schema_document_uri(_DB, '@context').
 get_schema_document_uri(DB, Uri) :-
     is_frame_class(DB, Uri).
-get_schema_document_uri(DB, Uri) :-
-    is_foreign(DB, Uri).
 
 get_schema_document(Query_Context, Id, Document) :-
     is_query_context(Query_Context),
@@ -3930,7 +3942,11 @@ schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
     (   schema_metadata_descriptor(Schema, Class_Ex, metadata(Metadata))
     ->  Pairs7 = ['@metadata'-Metadata|Pairs6]
     ;   Pairs7 = Pairs6),
-    % enum
+    % base (id prefix used for key generation)
+    (   xrdf(Schema, Class_Ex, sys:base, Base^^xsd:string)
+    ->  Pairs8a = ['@base'-Base|Pairs7]
+    ;   Pairs8a = Pairs7),
+    % enum, tagged union, foreign
     (   is_schema_enum(Schema,Class_Ex)
     ->  schema_type_descriptor(Schema, Class_Ex, enum(Class_Ex,List)),
         (   option(compress_ids(true), Options)
@@ -3939,9 +3955,15 @@ schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
         ;   List = Enum_List
         ),
         expand_system_uri(sys:'Enum', Enum, Options),
-        Pairs8 = ['@type'-Enum,'@values'-Enum_List|Pairs7]
+        Pairs8 = ['@type'-Enum,'@values'-Enum_List|Pairs8a]
+    ;   is_schema_tagged_union(Schema,Class_Ex)
+    ->  expand_system_uri(sys:'TaggedUnion', TU, Options),
+        Pairs8 = ['@type'-TU|Pairs8a]
+    ;   is_schema_foreign(Schema,Class_Ex)
+    ->  expand_system_uri(sys:'Foreign', F, Options),
+        Pairs8 = ['@type'-F|Pairs8a]
     ;   expand_system_uri(sys:'Class', C, Options),
-        Pairs8 = ['@type'-C|Pairs7]
+        Pairs8 = ['@type'-C|Pairs8a]
     ),
     % inherits
     (   findall(Subsuming,
@@ -11442,6 +11464,88 @@ test(all_class_frames_simple, [
 		   },
       'Team':json{'@type':'Enum','@values':['IT','Marketing']}
     }.
+
+all_kinds_schema('
+{ "@type" : "@context",
+  "@base" : "http://i/",
+  "@schema" : "http://s/" }
+
+{ "@id": "TU",
+  "@type": "TaggedUnion",
+  "@base": "tu_",
+  "@key": {"@type": "ValueHash"},
+  "a": "sys:Unit",
+  "b": "xsd:string"}
+
+{ "@id": "Ext",
+  "@type": "Foreign"}
+
+{ "@id": "C",
+  "@key": {"@type": "Random"},
+  "@type": "Class",
+  "link": "TU"}
+
+{ "@id": "E",
+  "@type": "Enum",
+  "@value": ["x", "y"]}
+').
+
+test(all_class_frames_tagged_union_and_foreign, [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(all_kinds_schema,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )]) :-
+
+    open_descriptor(Desc, DB),
+    all_class_frames(DB,  Frames),
+
+    Frames = json{ '@context':_{ '@base':"http://i/",
+						         '@schema':"http://s/",
+						         '@type':'Context'
+						       },
+				   'C':json{ '@key':json{'@type':"Random"},
+							 '@type':'Class',
+							 link:'TU'
+						   },
+				   'E':json{ '@type':'Enum',
+							 '@values':[x,y]
+						   },
+				   'Ext':json{ '@type':'Foreign'
+							 },
+				   'TU':json{ '@base':"tu_",
+							  '@key':json{'@type':"ValueHash"},
+							  '@oneOf':[json{a:'sys:Unit',b:'xsd:string'}],
+							  '@type':'TaggedUnion'
+							}
+				 }.
+
+test(tagged_union_frame_shape_elaborates_members, []) :-
+
+    % The frame shape wraps members under @oneOf; storing it again must
+    % restore flat member properties, not a spurious choice class.
+    Doc = json{ '@id' : 'TU',
+                '@type' : 'TaggedUnion',
+                '@base' : "tu_",
+                '@key' : json{ '@type' : 'ValueHash' },
+                '@oneOf' : [ json{ a : 'sys:Unit',
+                                   b : 'xsd:string' } ]
+              },
+
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+
+    json_schema_elaborate(Doc, Context, Elaborated),
+
+    global_prefix_expand(sys:oneOf, OneOf_P),
+    \+ get_dict(OneOf_P, Elaborated, _),
+    Elaborated.'https://s/a' = json{ '@id' : 'http://terminusdb.com/schema/sys#Unit',
+                                     '@type' : "@id" },
+    Elaborated.'https://s/b' = json{ '@id' : 'http://www.w3.org/2001/XMLSchema#string',
+                                     '@type' : "@id" }.
 
 test(doc_frame, [
          setup(

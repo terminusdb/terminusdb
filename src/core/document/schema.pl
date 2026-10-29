@@ -9,6 +9,7 @@
               is_frame_class/2,
               is_json_class/2,
               is_tagged_union/2,
+              is_schema_tagged_union/2,
               is_foreign/2,
               is_schema_foreign/2,
               is_base_type/1,
@@ -199,7 +200,8 @@ is_system_frame_class(Class) :-
         [
             sys:'Class',
             sys:'TaggedUnion',
-            sys:'Enum'
+            sys:'Enum',
+            sys:'Foreign'
         ], List),
     memberchk(Class,List).
 
@@ -208,7 +210,8 @@ system_frame_class(Class) :-
         [
             sys:'Class',
             sys:'TaggedUnion',
-            sys:'Enum'
+            sys:'Enum',
+            sys:'Foreign'
         ], List),
     member(Class,List).
 

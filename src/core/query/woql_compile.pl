@@ -4380,7 +4380,7 @@ test(datavalue_frame, [
 						             }
 					           ],
 				      '@subdocument':[],
-				      '@type':'Class'
+				      '@type':'TaggedUnion'
 				    }.
 
 test(join, [
