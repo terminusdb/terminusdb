@@ -116,6 +116,42 @@ fn empty<T>() -> OneOrMore<T> {
     OneOrMore::More(vec![])
 }
 
+// Prolog [] buffers as a unit value through serde's internally-tagged enum
+// path; treat it as the empty sequence it is so Vec fields accept [].
+fn unit_or_seq<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct UnitOrSeq<T>(std::marker::PhantomData<T>);
+    impl<'de, T> serde::de::Visitor<'de> for UnitOrSeq<T>
+    where
+        T: Deserialize<'de>,
+    {
+        type Value = Vec<T>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a sequence")
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(vec![])
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut elements = vec![];
+            while let Some(element) = seq.next_element()? {
+                elements.push(element);
+            }
+            Ok(elements)
+        }
+    }
+    deserializer.deserialize_any(UnitOrSeq(std::marker::PhantomData))
+}
+
 #[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct UncleanRestrictionDefinition {
     #[serde(rename = "_id")]
@@ -671,11 +707,11 @@ pub enum UncleanKeyDefinition {
     Random,
     UuidV7,
     Lexical {
-        #[serde(rename = "@fields")]
+        #[serde(rename = "@fields", deserialize_with = "unit_or_seq")]
         fields: Vec<ShortName>,
     },
     Hash {
-        #[serde(rename = "@fields")]
+        #[serde(rename = "@fields", deserialize_with = "unit_or_seq")]
         fields: Vec<ShortName>,
     },
     ValueHash,
@@ -931,7 +967,7 @@ pub struct UncleanEnumDefinition {
     pub documentation: OneOrMore<UncleanEnumDocumentationDefinition>,
     #[serde(rename = "@metadata")]
     pub metadata: Option<serde_json::Value>,
-    #[serde(rename = "@values")]
+    #[serde(rename = "@values", deserialize_with = "unit_or_seq")]
     pub values: Vec<ShortName>,
 }
 
@@ -1579,6 +1615,38 @@ json{'@context':_27018{'@base':"terminusdb:///data/",
                 );
             }
             other => panic!("tagged union must remain a class definition: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn deserialize_empty_lists_in_frames() {
+        // Prolog [] reaches serde's internally-tagged buffering as a unit
+        // value, which cannot feed a Vec field: one empty @values (or empty
+        // @fields on a key) must not poison every query for the database.
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+json{'@context':_27018{'@base':"terminusdb:///data/",
+                       '@schema':"terminusdb:///schema#",
+                       '@type':'Context'},
+      'Min':json{'@type':'Enum','@values':[]},
+      'Sub':json{'@type':'Class','@subdocument':[],
+                 '@key':json{'@type':"Lexical",'@fields':[]},
+                 value:'xsd:string'}}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let frames: UncleanAllFrames = context.deserialize_from_term(&term).unwrap();
+
+        let (types, _restrictions, _to_iri, _to_short, _prefixes) = frames.sanitize();
+        match &types[&GraphQLName(Cow::Borrowed("Min"))] {
+            TypeDefinition::Enum(ed) => assert!(ed.values.is_empty()),
+            other => panic!("empty enum must remain an enum definition: {other:?}"),
+        }
+        match &types[&GraphQLName(Cow::Borrowed("Sub"))] {
+            TypeDefinition::Class(_) => {}
+            other => panic!("subdocument class must remain a class definition: {other:?}"),
         }
     }
 
