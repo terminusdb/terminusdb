@@ -1217,7 +1217,7 @@ delete_value(_, Before, Value) =>
 create_class_property_default_operation(Class, Property, Type, Default, After, Count) :-
     (   is_dict(Type),
         get_dict('@type', Type, "List")
-    ->  database_prefixes(After, Prefixes),
+    ->  database_and_default_prefixes(After, Prefixes),
         get_dict('@class', Type, List_Class),
         prefix_expand_schema(List_Class, Prefixes, List_Class_Ex),
         prefix_expand_schema(Property, Prefixes, P),
@@ -1238,27 +1238,40 @@ create_class_property_default_operation(Class, Property, Type, Default, After, C
         )
     ;   is_dict(Type),
         get_dict('@type', Type, "Array")
-    ->  get_dict('@dimensions', Type, Dimensions),
+    ->  database_and_default_prefixes(After, Prefixes),
+        get_dict('@dimensions', Type, Dimensions),
         get_dict('@class', Type, Array_Class),
         prefix_expand_schema(Array_Class, Prefixes, Array_Class_Ex),
-        database_prefixes(After, Prefixes),
         prefix_expand_schema(Property, Prefixes, P),
         count_solutions(
             (   ask(After,
                     isa(X, Class)),
-                forall(
-                    'document/json':array_id_key_context_triple(
-                        Default,
-                        object{'@type' : Array_Class_Ex},
-                        Dimensions,
-                        X,
-                        P,
-                        Prefixes,
-                        t(ListS,ListP,ListO)),
-                    ask(After,
-                        insert(ListS, ListP, ListO)))),
+                (   Default = []
+                ->  true % an empty array stores no triples; the property is absent
+                ;   elaborate_array_default(Default, Array_Class_Ex, Prefixes, Default_Dicts),
+                    forall(
+                        'document/json':array_id_key_context_triple(
+                            Default_Dicts,
+                            object{'@type' : Array_Class_Ex},
+                            Dimensions,
+                            X,
+                            P,
+                            Prefixes,
+                            t(ListS,ListP,ListO)),
+                        ask(After,
+                            insert(ListS, ListP, ListO)))
+                )),
             Count
         )
+    ;   is_dict(Type),
+        get_dict('@type', Type, "Foreign")
+    ->  database_and_default_prefixes(After, Prefixes),
+        prefix_expand(Default, Prefixes, Default_Id),
+        count_solutions(
+            ask(After,
+                (   isa(X, Class),
+                    insert(X, Property, Default_Id))),
+            Count)
     ;   is_dict(Type),
         get_dict('@type', Type, Family),
         memberchk(Family, ["Set", "Optional", "Cardinality"])
@@ -1291,6 +1304,23 @@ create_class_property_default_operation(Class, Property, Type, Default, After, C
             error(
                 not_irrefutable_property_creation(Class,Property,Type)))
     ).
+
+% array_id_key_context_triple expects elements in their elaborated
+% document form: literals as {"@value":V,"@type":T} and references as
+% {"@id":I}. Raw migration defaults arrive unelaborated, so wrap atomic
+% leaf values accordingly and leave dicts (references, subdocuments)
+% untouched.
+elaborate_array_default([], _, _, []).
+elaborate_array_default([H|T], Class_Ex, Prefixes, [HE|TE]) :-
+    (   is_list(H)
+    ->  elaborate_array_default(H, Class_Ex, Prefixes, HE)
+    ;   is_dict(H)
+    ->  HE = H
+    ;   is_base_type(Class_Ex)
+    ->  HE = json{'@value' : H, '@type' : Class_Ex}
+    ;   prefix_expand(H, Prefixes, H_Ex),
+        HE = json{'@id' : H_Ex}),
+    elaborate_array_default(T, Class_Ex, Prefixes, TE).
 
 create_class_property_operation(Class, Property, Type, After, Count) :-
     (   is_dict(Type),
@@ -2344,6 +2374,19 @@ before_refs('
 
 ').
 
+before_ccp('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Tgt" }
+
+{ "@type" : "Foreign",
+  "@id" : "ExtDoc" }
+
+').
+
 test(move_class_rewrites_property_range,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
@@ -2845,6 +2888,153 @@ test(cast_bad_value_error_mode,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops, _Result, []).
+
+test(create_class_property_mandatory_spec,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_ccp,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@type' : "Tgt", '@id' : 'Tgt/1' }, _)),
+
+    % {"@type":"Mandatory","@class":C} is an irrefutable alias for bare C;
+    % the schema document must store the canonical bare form.
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "req",
+             type : _{'@type' : "Mandatory", '@class' : "xsd:string"},
+             default : "dflt"}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+    get_dict('Tgt', Dictionary, Tgt),
+    get_dict(req, Tgt, 'xsd:string'),
+
+    get_document(Descriptor, 'Tgt/1', Doc),
+    get_dict(req, Doc, "dflt").
+
+test(create_class_property_array_default_empty,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_ccp,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@type' : "Tgt", '@id' : 'Tgt/1' }, _)),
+
+    % An empty array stores no triples, mirroring document insertion of
+    % an empty array value; the property reads back as absent.
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "arr",
+             type : _{'@type' : "Array", '@class' : "xsd:string", '@dimensions' : 1},
+             default : []}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'Tgt/1', Doc),
+    \+ get_dict(arr, Doc, _).
+
+test(create_class_property_array_default_values,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_ccp,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@type' : "Tgt", '@id' : 'Tgt/1' }, _)),
+
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "arr",
+             type : _{'@type' : "Array", '@class' : "xsd:string", '@dimensions' : 1},
+             default : ["a", "b"]}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'Tgt/1', Doc),
+    get_dict(arr, Doc, ["a", "b"]).
+
+test(create_class_property_foreign_default,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_ccp,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@type' : "Tgt", '@id' : 'Tgt/1' }, _)),
+
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "f",
+             type : _{'@type' : "Foreign", '@class' : "ExtDoc", '@id' : "ExtDoc"},
+             default : "x"}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'Tgt/1', Doc),
+    get_dict(f, Doc, _).
+
+test(foreign_property_spec_round_trips_in_schema,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_ccp,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "f",
+             type : _{'@type' : "Foreign", '@class' : "ExtDoc", '@id' : "ExtDoc"},
+             default : "x"}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []),
+
+    % The schema document must read back with the foreign class id so it
+    % re-elaborates to the same node when a later migration rewrites it.
+    get_schema_document(Descriptor, 'Tgt', Tgt_Doc),
+    get_dict(f, Tgt_Doc, F_Spec),
+    get_dict('@id', F_Spec, 'ExtDoc'),
+
+    % A subsequent migration on an unrelated class rewrites the class
+    % dictionary; the foreign spec must survive re-elaboration.
+    Ops2 = [_{'@type' : "DeleteClassProperty",
+              class : "Tgt",
+              property : "f"}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops2, _Result2, []).
 
 
 test(garbage_op,

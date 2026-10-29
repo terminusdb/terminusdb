@@ -17,6 +17,17 @@ default_or_error(json{ '@type' : "Error"}, error).
 default_or_error(json{ '@type' : "Default",
                        value: Value}, value(Value)).
 
+% {"@type":"Mandatory","@class":C} is an irrefutable alias for the bare
+% type C. Normalize it here so the schema document and instance
+% operations only ever see the canonical form. Deterministic in both
+% directions: translating an AST back into a dict yields the bare type.
+normalize_create_type(Type_In, Type_Out) :-
+    (   nonvar(Type_In),
+        is_dict(Type_In),
+        get_dict('@type', Type_In, "Mandatory")
+    ->  get_dict('@class', Type_In, Type_Out)
+    ;   Type_Out = Type_In).
+
 migration_dict_to_ast(json{ '@type' : "DeleteClass",
                             class : Class },
                       delete_class(Class)).
@@ -63,16 +74,18 @@ migration_dict_to_ast(json{ '@type' : "DeleteClassProperty",
 migration_dict_to_ast(json{ '@type' : "CreateClassProperty",
                             class: Class,
                             property: Property,
-                            type: Type,
+                            type: Type_In,
                             default: Default
                           },
-                      create_class_property(Class, Property, Type, Default)).
+                      create_class_property(Class, Property, Type, Default)) :-
+    normalize_create_type(Type_In, Type).
 migration_dict_to_ast(json{ '@type' : "CreateClassProperty",
                             class: Class,
                             property: Property,
-                            type: Type
+                            type: Type_In
                           },
-                      create_class_property(Class, Property, Type)).
+                      create_class_property(Class, Property, Type)) :-
+    normalize_create_type(Type_In, Type).
 migration_dict_to_ast(json{'@type' : "MoveClassProperty",
                            class: Class,
                            from: From,

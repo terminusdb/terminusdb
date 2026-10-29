@@ -2829,7 +2829,8 @@ type_descriptor_json(unit, _Prefix, Unit, Options) :-
 type_descriptor_json(class(C), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(foreign(C), Prefixes, json{ '@type' : Foreign,
-                                                 '@class' : Class_Comp }, Options) :-
+                                                 '@class' : Class_Comp,
+                                                 '@id' : Class_Comp }, Options) :-
     expand_system_uri(sys:'Foreign', Foreign, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(base_class(C), Prefixes, Class_Comp, Options) :-
