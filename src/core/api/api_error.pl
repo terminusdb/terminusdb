@@ -32,6 +32,8 @@
 % error(Inner, _) so the existing API-specific clauses match.
 api_error_jsonld(API, error(error(Inner, _), _), JSON) :- !,
     api_error_jsonld(API, error(Inner, _), JSON).
+api_error_jsonld(API, error(Inner), JSON) :- !,
+    api_error_jsonld(API, error(Inner, _), JSON).
 api_error_jsonld(API, Error, JSON) :- !,
     (   api_global_error_jsonld(Error, API, JSON)
     ->  true
@@ -2018,6 +2020,36 @@ api_error_jsonld_(migration, error(casting_error(Value, Type), _), JSON) :-
                               'api:type' : Type
                             }
             }.
+% Schema document elaboration failures surface inside migrations when a
+% CreateClassProperty spec uses an unknown or malformed family.
+api_error_jsonld_(migration, error(schema_type_unknown(Schema_Type), _), JSON) :-
+    format(string(Msg), "The '@type' field referred to an unimplemented schema type.", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnknownSchemaType',
+                              'api:type' : Schema_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(unable_to_elaborate_schema_document(Document), _), JSON) :-
+    format(string(Msg), "The submitted schema document could not be elaborated due to an unknown syntax error.", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:DocumentElaborationImpossible',
+                              'api:document' : Document
+                            }
+            }.
+api_error_jsonld_(migration, error(missing_field(Field, Document), _), JSON) :-
+    format(string(Msg), "Missing '~s' field in submitted document.", [Field]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:MissingField',
+                              'api:field' : Field,
+                              'api:document' : Document
+                            }
+            }.
 api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)), JSON) :-
     JSON = _{'@type' : 'api:IndexErrorResponse',
              'api:status' : "api:failure",
@@ -3476,9 +3508,10 @@ test(server_not_ready_is_retryable_503, []) :-
     json_http_code(JSON, 503).
 
 test(migration_unknown_irrefutable_property_creation, []) :-
-    % Thrown when a non-simple family reaches create_class_property_operation.
+    % Thrown as a bare error/1 (no context) when a non-simple family reaches
+    % create_class_property_operation.
     once(api_error_jsonld(migration,
-                     error(unknown_irrefutable_property_creation("C","p","xsd:string"), _),
+                     error(unknown_irrefutable_property_creation("C","p","xsd:string")),
                      JSON)),
     get_dict('@type', JSON, 'api:MigrationErrorResponse'),
     get_dict('api:error', JSON, Error),
@@ -3598,6 +3631,40 @@ test(migration_casting_error_is_bad_cast, []) :-
     get_dict('@type', Error, 'api:BadCast'),
     get_dict('api:value', Error, "abc"),
     get_dict('api:type', Error, 'http://www.w3.org/2001/XMLSchema#integer'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_schema_type_unknown, []) :-
+    % Schema document elaboration errors surface inside migrations too —
+    % an unknown property spec family is a client error, not a 500.
+    once(api_error_jsonld(migration,
+                     error(schema_type_unknown('Foreign'), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnknownSchemaType'),
+    get_dict('api:type', Error, 'Foreign'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_unable_to_elaborate_schema_document, []) :-
+    once(api_error_jsonld(migration,
+                     error(unable_to_elaborate_schema_document(_{'@type':"Array"}), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentElaborationImpossible'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_missing_field, []) :-
+    once(api_error_jsonld(migration,
+                     error(missing_field('@id', _{foo:bar}), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:MissingField'),
+    get_dict('api:field', Error, '@id'),
     get_dict('api:status', JSON, "api:failure"),
     json_http_code(JSON, 400).
 
