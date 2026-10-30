@@ -1733,7 +1733,7 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
                               'api:user' : User,
                               'api:scope' : Scope }
             }.
-api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
+api_error_jsonld_(patch,error(patch_conflicts(Conflicts), _), JSON) :-
     format(string(Msg), "The patch did not apply cleanly because of the attached conflicts", []),
     JSON = _{'@type' : 'api:PatchResponse',
              'api:status' : "api:conflict",
