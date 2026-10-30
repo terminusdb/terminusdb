@@ -57,6 +57,8 @@ Op := delete_class(Name)
     | expand_enum(Class,Values)
     | replace_class_metadata(Class,Metadata)
     | replace_class_documentation(Class,Documentation)
+    | replace_class_base(Class,Base)
+    | delete_class_base(Class)
     | delete_class_property(Class,Property)
     | create_class_property(Class,Property,Type)  % for option or set
     | create_class_property(Class,Property,Type,Default)
@@ -80,16 +82,295 @@ operation_string(Term,String) :-
     migration_dict_to_ast(Dict, Term),
     atom_json_dict(String, Dict, []).
 
+/*
+ * Dictionary keys and the references inside documents are stored in
+ * the form they render under default prefixes only — database IRIs
+ * fully expanded, xsd:/sys: forms compressed. The dictionary context
+ * merged with the defaults supplies expansion; compression under the
+ * defaults alone supplies the stored form. Expand, operate, contract.
+ */
+context_prefixes(Context, Prefixes, Defaults) :-
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes).
+
+normalize_schema_name(Name, Prefixes, Defaults, Normal) :-
+    atom_string(Name_Atom, Name),
+    prefix_expand_schema(Name_Atom, Prefixes, Expanded),
+    compress_schema_uri(Expanded, Defaults, Compressed),
+    atom_string(Normal, Compressed).
+
+schema_name_key(Name, Dictionary, Key) :-
+    atom_string(Name_Atom, Name),
+    (   get_dict(Name_Atom, Dictionary, _)
+    ->  Key = Name_Atom
+    ;   get_dict('@context', Dictionary, Context)
+    ->  context_prefixes(Context, Prefixes, Defaults),
+        normalize_schema_name(Name_Atom, Prefixes, Defaults, Key)
+    ;   Key = Name_Atom
+    ).
+
+/*
+ * Normalize class references inside a property type specification:
+ * bare names and @class / @elements / @oneOf values; family tags,
+ * cardinalities and literal fields pass through untouched.
+ */
+expand_migration_type(Type, Context, Type_Ex) :-
+    context_prefixes(Context, Prefixes, Defaults),
+    expand_migration_type_(Type, Prefixes, Defaults, Type_Ex).
+
+expand_migration_type_(Type, Prefixes, Defaults, Type_Ex) :-
+    (   atom(Type) ; string(Type) ),
+    !,
+    normalize_schema_name(Type, Prefixes, Defaults, Type_Ex).
+expand_migration_type_(Type, Prefixes, Defaults, Type_Ex) :-
+    is_dict(Type),
+    !,
+    dict_pairs(Type, Tag, Pairs),
+    maplist(
+        {Prefixes, Defaults}/[K-V, K-V_Ex]>>(
+            K = '@class'
+        ->  (   is_list(V)
+            ->  maplist({Prefixes, Defaults}/[V0, V0_Ex]>>expand_migration_type_(V0, Prefixes, Defaults, V0_Ex),
+                        V, V_Ex)
+            ;   expand_migration_type_(V, Prefixes, Defaults, V_Ex)
+            )
+        ;   V_Ex = V
+        ),
+        Pairs,
+        Pairs_Ex),
+    dict_pairs(Type_Ex, Tag, Pairs_Ex).
+expand_migration_type_(Type, _Prefixes, _Defaults, Type).
+
+/*
+ * Normalize every IRI inside a class document destined for the
+ * dictionary: '@id', '@inherits', '@key' fields, '@oneOf' members,
+ * property keys, and type-spec values. Literal fields ('@type',
+ * '@base', '@documentation', '@metadata', '@value', '@values') keep
+ * their form.
+ */
+expand_class_document(Document, Context, Document_Ex) :-
+    context_prefixes(Context, Prefixes, Defaults),
+    expand_class_document_(Document, Prefixes, Defaults, Document_Ex).
+
+expand_class_document_(Document, Prefixes, Defaults, Document_Ex) :-
+    dict_pairs(Document, Tag, Pairs),
+    maplist(
+        {Prefixes, Defaults}/[K-V, K_Ex-V_Ex]>>(
+            (   K = '@id'
+            ->  K_Ex = K,
+                (   has_at(V)
+                ->  V_Ex = V
+                ;   normalize_schema_name(V, Prefixes, Defaults, V_Ex)
+                )
+            ;   K = '@inherits'
+            ->  K_Ex = K,
+                (   is_list(V)
+                ->  maplist({Prefixes, Defaults}/[V0, V0_Ex]>>normalize_schema_name(V0, Prefixes, Defaults, V0_Ex),
+                            V, V_Ex)
+                ;   normalize_schema_name(V, Prefixes, Defaults, V_Ex)
+                )
+            ;   K = '@key'
+            ->  K_Ex = K,
+                (   is_dict(V),
+                    get_dict('@fields', V, Fields)
+                ->  maplist({Prefixes, Defaults}/[F, F_Ex]>>normalize_schema_name(F, Prefixes, Defaults, F_Ex),
+                            Fields, Fields_Ex),
+                    put_dict('@fields', V, Fields_Ex, V_Ex)
+                ;   V_Ex = V
+                )
+            ;   K = '@oneOf'
+            ->  K_Ex = K,
+                (   is_list(V)
+                ->  maplist({Prefixes, Defaults}/[Member, Member_Ex]>>expand_class_document_(Member, Prefixes, Defaults, Member_Ex),
+                            V, V_Ex)
+                ;   expand_class_document_(V, Prefixes, Defaults, V_Ex)
+                )
+            ;   has_at(K)
+            ->  K_Ex = K,
+                V_Ex = V
+            ;   normalize_schema_name(K, Prefixes, Defaults, K_Ex),
+                expand_migration_type_(V, Prefixes, Defaults, V_Ex)
+            )
+        ),
+        Pairs,
+        Pairs_Ex),
+    dict_pairs(Document_Ex, Tag, Pairs_Ex).
+
+/*
+ * The contract side of expand-operate-contract: names stored expanded
+ * in the dictionary compress back under the target context merged with
+ * the defaults — the form the user submitted. Names that cannot
+ * compress stay fully expanded, which is still faithful: elaboration
+ * re-expands either way. Contracting is required at two edges —
+ * write-back, because '@key' fields, '@oneOf' member keys and
+ * '@properties'/'@values' documentation keys mint their node IRIs
+ * verbatim, and witnesses, because errors should name things the way
+ * the user named them.
+ */
+/* Keep the input's representation: dict keys and IRIs stay atoms,
+ * literal strings (messages, documentation) stay strings. */
+contract_schema_name(Name, Prefixes, Contracted) :-
+    atom_string(Name_Atom, Name),
+    compress_schema_uri(Name_Atom, Prefixes, Compressed),
+    atom_string(Compressed_Atom, Compressed),
+    (   atom(Name)
+    ->  Contracted = Compressed_Atom
+    ;   atom_string(Compressed_Atom, Contracted)).
+
+contract_migration_type_(Type, Prefixes, Type_C) :-
+    (   atom(Type) ; string(Type) ),
+    !,
+    contract_schema_name(Type, Prefixes, Type_C).
+contract_migration_type_(Type, Prefixes, Type_C) :-
+    is_dict(Type),
+    !,
+    dict_pairs(Type, Tag, Pairs),
+    maplist(
+        {Prefixes}/[K-V, K-V_C]>>(
+            K = '@class'
+        ->  (   is_list(V)
+            ->  maplist({Prefixes}/[V0, V0_C]>>contract_migration_type_(V0, Prefixes, V0_C),
+                        V, V_C)
+            ;   contract_migration_type_(V, Prefixes, V_C)
+            )
+        ;   V_C = V
+        ),
+        Pairs,
+        Pairs_C),
+    dict_pairs(Type_C, Tag, Pairs_C).
+contract_migration_type_(Type, _Prefixes, Type).
+
+contract_class_document(Document, Prefixes, Document_C) :-
+    dict_pairs(Document, Tag, Pairs),
+    maplist(
+        {Prefixes}/[K-V, K_C-V_C]>>(
+            (   K = '@id'
+            ->  K_C = K,
+                (   has_at(V)
+                ->  V_C = V
+                ;   contract_schema_name(V, Prefixes, V_C)
+                )
+            ;   K = '@inherits'
+            ->  K_C = K,
+                (   is_list(V)
+                ->  maplist({Prefixes}/[V0, V0_C]>>contract_schema_name(V0, Prefixes, V0_C),
+                            V, V_C)
+                ;   contract_schema_name(V, Prefixes, V_C)
+                )
+            ;   K = '@key'
+            ->  K_C = K,
+                (   is_dict(V),
+                    get_dict('@fields', V, Fields)
+                ->  maplist({Prefixes}/[F, F_C]>>contract_schema_name(F, Prefixes, F_C),
+                            Fields, Fields_C),
+                    put_dict('@fields', V, Fields_C, V_C)
+                ;   V_C = V
+                )
+            ;   K = '@oneOf'
+            ->  K_C = K,
+                (   is_list(V)
+                ->  maplist({Prefixes}/[Member, Member_C]>>contract_class_document(Member, Prefixes, Member_C),
+                            V, V_C)
+                ;   contract_class_document(V, Prefixes, V_C)
+                )
+            ;   has_at(K)
+            ->  K_C = K,
+                V_C = V
+            ;   contract_schema_name(K, Prefixes, K_C),
+                contract_migration_type_(V, Prefixes, V_C)
+            )
+        ),
+        Pairs,
+        Pairs_C),
+    dict_pairs(Document_C, Tag, Pairs_C).
+
+contract_class_dictionary(Dictionary, Prefixes, Dictionary_C) :-
+    dict_pairs(Dictionary, Tag, Pairs),
+    maplist(
+        {Prefixes}/[K-V, K_C-V_C]>>(
+            K = '@context'
+        ->  K_C = K, V_C = V
+        ;   contract_schema_name(K, Prefixes, K_C),
+            contract_class_document(V, Prefixes, V_C)
+        ),
+        Pairs,
+        Pairs_C),
+    dict_pairs(Dictionary_C, Tag, Pairs_C).
+
+/*
+ * Compress every compressible atom inside a witness payload — dict
+ * keys, scalar values, nested documents and lists. Terms that match no
+ * prefix (message strings, reason tags, cardinalities) pass through
+ * untouched, so a single walk contracts any witness shape.
+ */
+contract_witness_json(Value, Prefixes, Contracted) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist({Prefixes}/[K-V, K_C-V_C]>>(
+                contract_witness_json(K, Prefixes, K_C),
+                contract_witness_json(V, Prefixes, V_C)),
+            Pairs, Pairs_C),
+    dict_pairs(Contracted, Tag, Pairs_C).
+contract_witness_json(Value, Prefixes, Contracted) :-
+    is_list(Value),
+    !,
+    maplist({Prefixes}/[V0, V0_C]>>contract_witness_json(V0, Prefixes, V0_C),
+            Value, Contracted).
+contract_witness_json(Value, Prefixes, Contracted) :-
+    (   atom(Value)
+    ;   string(Value)
+    ),
+    !,
+    contract_schema_name(Value, Prefixes, Contracted).
+contract_witness_json(Value, _Prefixes, Value).
+
+/*
+ * Recorded operations name classes and properties the way the user
+ * would, so a migration replayed against another context re-expands
+ * under that context. 'from'/'to'/'class'/'enum'/'property' are
+ * schema-minted names; 'parents'/'fields' are lists of them;
+ * 'properties' carries per-property defaults; 'type' is a type spec;
+ * 'class_document' a whole class document. Everything else is literal.
+ */
+contract_operation_json(Operation, Prefixes, Operation_C) :-
+    dict_pairs(Operation, Tag, Pairs),
+    maplist(
+        {Prefixes}/[K-V, K-V_C]>>(
+            (   memberchk(K, [class, enum, from, to, property])
+            ->  contract_schema_name(V, Prefixes, V_C)
+            ;   memberchk(K, [parents, fields])
+            ->  maplist({Prefixes}/[V0, V0_C]>>contract_schema_name(V0, Prefixes, V0_C),
+                        V, V_C)
+            ;   K = properties
+            ->  maplist({Prefixes}/[D, D_C]>>(
+                            get_dict(property, D, P),
+                            contract_schema_name(P, Prefixes, P_C),
+                            put_dict(property, D, P_C, D_C)),
+                        V, V_C)
+            ;   K = type
+            ->  contract_migration_type_(V, Prefixes, V_C)
+            ;   K = class_document
+            ->  contract_class_document(V, Prefixes, V_C)
+            ;   V_C = V
+            )
+        ),
+        Pairs,
+        Pairs_C),
+    dict_pairs(Operation_C, Tag, Pairs_C).
+
 /* delete_class(Name) */
 delete_class(Name, Before, After) :-
-    atom_string(Name_Key, Name),
+    schema_name_key(Name, Before, Name_Key),
     del_dict(Name_Key, Before, _, After).
 
 /* create_class(Class_Document) */
 create_class(Class_Document, Before, After) :-
-    get_dict('@id', Class_Document, Name),
+    get_dict('@context', Before, Context),
+    expand_class_document(Class_Document, Context, Expanded_Document),
+    get_dict('@id', Expanded_Document, Name),
     atom_string(Name_Key, Name),
-    put_dict(Name_Key, Before, Class_Document, After).
+    put_dict(Name_Key, Before, Expanded_Document, After).
 
 /* move_class(Old_Name, New_Name) */
 move_class_in_complex_target_type(Before_Class, After_Class, Before_Target_Type, After_Target_Type) :-
@@ -161,26 +442,27 @@ move_class_in_document(Before_Class, After_Class, Before_Document, After_Documen
         Pairs),
     dict_create(After_Document, json, Pairs).
 
-move_class(Before_Class, After_Class, Before, After) :-
-    atom_string(After_Name, After_Class),
+move_class(Before_Class_Arg, After_Class_Arg, Before, After) :-
+    schema_name_key(After_Class_Arg, Before, After_Name),
     die_if(
         get_dict(After_Name,Before,_),
-        error(class_already_exists(After_Class), _)
+        error(class_already_exists(After_Class_Arg), _)
     ),
+    schema_name_key(Before_Class_Arg, Before, Before_Class),
     findall(
         Class-After_Document,
         (   get_dict(Name,Before,Before_Document),
-            (   atom_string(Name,Before_Class)
-            ->  atom_string(Class,After_Class)
-            ;   atom_string(Class,Name)
+            (   Name = Before_Class
+            ->  Class = After_Name
+            ;   Class = Name
             ),
-            move_class_in_document(Before_Class, After_Class, Before_Document, After_Document)
+            move_class_in_document(Before_Class, After_Name, Before_Document, After_Document)
         ),
         Pairs),
     dict_create(After, json, Pairs).
 
 change_key(Class, Key_Type, Properties, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     atom_string(Key_Type_Key, Key_Type),
     do_or_die(
         get_dict(Class_Key, Before, Before_Class_Document),
@@ -190,15 +472,18 @@ change_key(Class, Key_Type, Properties, Before, After) :-
     ->  put_dict('@key', Before_Class_Document,
                  _{ '@type' : Key_Type }, After_Class_Document)
     ;   memberchk(Key_Type_Key, ['Lexical', 'Hash'])
-    ->  put_dict('@key', Before_Class_Document,
+    ->  get_dict('@context', Before, Context),
+        maplist({Context}/[P, P_Ex]>>expand_migration_type(P, Context, P_Ex),
+                Properties, Properties_Ex),
+        put_dict('@key', Before_Class_Document,
                  _{ '@type' : Key_Type,
-                    '@fields' : Properties }, After_Class_Document)
+                    '@fields' : Properties_Ex }, After_Class_Document)
     ;   throw(error(bad_key_type(Key_Type), _))
     ),
     put_dict(Class_Key, Before, After_Class_Document, After).
 
 expand_enum(Class, Values, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     get_dict('@value', Class_Document, Old_Values),
     list_to_ord_set(Old_Values, Old_Set),
@@ -209,50 +494,65 @@ expand_enum(Class, Values, Before, After) :-
 
 /* replace_class_metadata(Class,Metadata) */
 replace_class_metadata(Class, Metadata, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@metadata', Class_Document, Metadata, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* replace_class_documentation(Class,Documentation) */
 replace_class_documentation(Class, Documentation, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@documentation', Class_Document, Documentation, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* abstract(Class) */
 abstract(Class, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@abstract', Class_Document, [], Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* not_abstract(Class) */
 not_abstract(Class, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     del_dict('@abstract', Class_Document, [], Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* unfoldable(Class) */
 unfoldable(Class, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     put_dict('@unfoldable', Class_Document, [], Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* not_unfoldable(Class) */
 not_unfoldable(Class, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
     get_dict(Class_Key, Before, Class_Document),
     del_dict('@unfoldable', Class_Document, [], Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* replace_class_base(Class, Base) — sets or replaces the class @base;
+ * minting-only, no stored IRI moves. */
+replace_class_base(Class, Base, Before, After) :-
+    schema_name_key(Class, Before, Class_Key),
+    get_dict(Class_Key, Before, Class_Document),
+    put_dict('@base', Class_Document, Base, Final_Document),
+    put_dict(Class_Key, Before, Final_Document, After).
+
+/* delete_class_base(Class) — drops the class @base, reverting to
+ * default minting; minting-only, no stored IRI moves. */
+delete_class_base(Class, Before, After) :-
+    schema_name_key(Class, Before, Class_Key),
+    get_dict(Class_Key, Before, Class_Document),
+    del_dict('@base', Class_Document, _Old, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 
 /* replace_context(Context) */
 replace_context(Context, Before, After) :-
-    throw(error(not_implemented('replace_context'), _)),
     put_dict(_{'@context' : Context}, Before, After).
 
 
@@ -272,37 +572,41 @@ replace_context_documentation(Documentation, Before, After) :-
 
 /* delete_class_property(Class,Property) */
 delete_class_property(Class, Property, Before, After) :-
-    atom_string(Class_Key, Class),
-    atom_string(Property_Key, Property),
+    schema_name_key(Class, Before, Class_Key),
+    schema_name_key(Property, Before, Property_Key),
     get_dict(Class_Key, Before, Class_Document),
     del_dict(Property_Key, Class_Document, _, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After).
 
 /* create_class_property(Class,Property,Type) */
 create_class_property(Class, Property, Type, Before, After) :-
-    atom_string(Class_Key, Class),
-    atom_string(Property_Key, Property),
+    schema_name_key(Class, Before, Class_Key),
+    schema_name_key(Property, Before, Property_Key),
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
-    put_dict(Property_Key, Class_Document, Type, Final_Document),
+    get_dict('@context', Before, Context),
+    expand_migration_type(Type, Context, Type_Ex),
+    put_dict(Property_Key, Class_Document, Type_Ex, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After),
     class_children_valid_properties(Class_Key, After).
 
 /* create_class_property(Class,Property,Type,Default) */
 create_class_property(Class, Property, Type, _Default, Before, After) :-
-    atom_string(Class_Key, Class),
-    atom_string(Property_Key, Property),
+    schema_name_key(Class, Before, Class_Key),
+    schema_name_key(Property, Before, Property_Key),
     get_dict(Class_Key, Before, Class_Document),
     \+ get_dict(Property_Key, Class_Document, _),
-    put_dict(Property_Key, Class_Document, Type, Final_Document),
+    get_dict('@context', Before, Context),
+    expand_migration_type(Type, Context, Type_Ex),
+    put_dict(Property_Key, Class_Document, Type_Ex, Final_Document),
     put_dict(Class_Key, Before, Final_Document, After),
     class_children_valid_properties(Class_Key, After).
 
 /* move_class_property(Class, Old_Property, New_Property) */
 move_class_property(Class, Old_Property, New_Property, Before, After) :-
-    atom_string(Class_Key, Class),
-    atom_string(Old_Property_Key, Old_Property),
-    atom_string(New_Property_Key, New_Property),
+    schema_name_key(Class, Before, Class_Key),
+    schema_name_key(Old_Property, Before, Old_Property_Key),
+    schema_name_key(New_Property, Before, New_Property_Key),
     get_dict(Class_Key, Before, Before_Class_Document),
     del_dict(Old_Property_Key, Before_Class_Document, Type_Definition, Class_Document0),
     put_dict(New_Property_Key, Class_Document0, Type_Definition, After_Class_Document),
@@ -317,9 +621,13 @@ ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, After) :-
 
 ensure_properties_not_defined_elsewhere(Class_Key, Old_Property, Supermap, Childmap, After) :-
     class_properties_valid_properties(Class_Key, Supermap, After, Properties),
+    get_dict('@context', After, Context),
+    context_prefixes(Context, Witness_Prefixes, _Defaults),
+    contract_schema_name(Old_Property, Witness_Prefixes, Property_W),
+    contract_schema_name(Class_Key, Witness_Prefixes, Class_W),
     die_if(
         get_dict(Old_Property,Properties, _),
-        error(immovable_property(Old_Property, Class_Key), _)
+        error(immovable_property(Property_W, Class_W), _)
     ),
     (   get_dict(Class_Key, Childmap, Children)
     ->  maplist({Old_Property, Supermap, Childmap, After}/[Child]>>(
@@ -479,6 +787,11 @@ class_property_weakened('@documentation', Original, Weakening, Class, _SuperMap,
     get_dict('@documentation',Weakening, New_Docs),
     \+ Old_Docs = New_Docs,
     Operation = replace_class_documentation(Class,New_Docs).
+class_property_weakened('@base', Original, Weakening, Class, _SuperMap, Operation) =>
+    get_dict('@base',Original, Old_Base),
+    get_dict('@base',Weakening, New_Base),
+    \+ Old_Base = New_Base,
+    Operation = replace_class_base(Class,New_Base).
 class_property_weakened(Property, Original, Weakening, _Class, _SuperMap, _Operation),
 get_dict(Property,Weakening,New_Value),
 get_dict(Property,Original,Old_Value),
@@ -531,6 +844,10 @@ class_property_optional('@documentation',Weakening,Class,Operation) :-
     get_dict('@documentation',Weakening,Docs),
     !,
     Operation = replace_class_documentation(Class,Docs).
+class_property_optional('@base',Weakening,Class,Operation) :-
+    get_dict('@base',Weakening,Base),
+    !,
+    Operation = replace_class_base(Class,Base).
 class_property_optional(Property,Weakening,Class,Operation) :-
     get_dict(Property,Weakening,Type),
     do_or_die(
@@ -546,12 +863,20 @@ class_weakened(Class, Definition, Weakening, Supermap, Operations) :-
     dict_keys(Weakening, New),
     dict_keys(Definition, Old),
     ord_subtract(Old,New,Dropped),
+    % A dropped @base reverts the class to default minting — future
+    % instance IRIs only — so it weakens like any other @base change.
+    % Every other deletion still rejects.
+    (   select('@base', Dropped, Dropped_Rest)
+    ->  Base_Ops = [delete_class_base(Class)]
+    ;   Dropped_Rest = Dropped,
+        Base_Ops = []
+    ),
     % deleted
     do_or_die(
-        Dropped = [],
+        Dropped_Rest = [],
         error(weakening_failure(json{ reason: class_property_deletion_not_a_weakening,
                                       message: "Deletion of a class property is never a weakening",
-                                      dropped: Dropped,
+                                      dropped: Dropped_Rest,
                                       definition: Definition,
                                       candidate: Weakening}),_)
     ),
@@ -569,7 +894,7 @@ class_weakened(Class, Definition, Weakening, Supermap, Operations) :-
                 class_property_weakened(Property,Definition,Weakening,Class,Supermap,Operation1)
             ),
             Operations1),
-    append(Operations0,Operations1,Operations).
+    append([Operations0,Operations1,Base_Ops],Operations).
 
 immediate_class_supers(Class, Schema, Immediate) :-
     get_dict(Class, Schema, Record),
@@ -601,24 +926,26 @@ frame_supermap(Schema,Supermap) :-
 /*
  * context_weakened(+Old_Context, +New_Context, -Operations) is semidet.
  *
- * True when the only differences between Old_Context and New_Context
- * are in @metadata and/or @documentation. Changes to @base or @schema
- * affect interpretation of instance data URIs and are not yet weakening.
+ * Emits the operations for a changed context. @metadata/@documentation
+ * changes map to their dedicated ops; @base/@schema changes emit
+ * replace_context/1, which is weakening because stored IRIs are
+ * immutable — the new values steer only future IRI minting.
  */
-context_weakened(Old_Context, New_Context, _Operations) :-
+context_weakened(Old_Context, New_Context, Operations) :-
     (   Old_Context = New_Context
     ->  !, fail
     ;   true
     ),
-    % Extract the structural fields that affect instance data
+    % Structural fields steer only future IRI minting — stored IRIs are
+    % immutable — so a changed @base or @schema is still a weakening
+    % change carried out as a plain context replacement.
     context_structural_fields(Old_Context, Old_Base, Old_Schema),
     context_structural_fields(New_Context, New_Base, New_Schema),
     (   Old_Base \= New_Base
     ;   Old_Schema \= New_Schema
     ),
     !,
-    throw(error(weakening_failure(json{ reason: not_a_weakening_context_changed,
-                                        message: "The change of context may cause changes of instance data"}), _)).
+    Operations = [replace_context(New_Context)].
 
 context_weakened(Old_Context, New_Context, Operations) :-
     findall(Op,
@@ -651,7 +978,24 @@ context_documentation_changed(Old_Context, New_Context, replace_context_document
     ;   true
     ).
 
+/*
+ * Witnesses inside weakening failures name the user's classes and
+ * properties — contract them back under the context before the error
+ * surfaces, since the dictionary carries expanded IRIs internally.
+ */
 schema_weakening(Schema,Weakened,Operations) :-
+    (   get_dict('@context', Schema, Context)
+    ->  context_prefixes(Context, Witness_Prefixes, _Defaults)
+    ;   default_prefixes(Witness_Prefixes)
+    ),
+    catch(
+        schema_weakening_(Schema, Weakened, Operations),
+        error(weakening_failure(Witness0), Ctx),
+        (   contract_witness_json(Witness0, Witness_Prefixes, Witness),
+            throw(error(weakening_failure(Witness), Ctx)))
+    ).
+
+schema_weakening_(Schema,Weakened,Operations) :-
     dict_keys(Schema,Old),
     dict_keys(Weakened,New),
     ord_subtract(Old,New,Deleted),
@@ -776,7 +1120,16 @@ infer_migration(Rule, [Validation], [New_Validation], Meta_Data) :-
     create_class_dictionary(Before_Transaction, Before),
     create_class_dictionary(After_Transaction, After),
     schema_inference_rule(Rule, Before, After, Operations),
-    migration_list_to_ast_list(Operations_List, Operations),
+    migration_list_to_ast_list(Operations_List_Ex, Operations),
+    /* Ops re-expand under the new context when replayed, so contract
+     * under it here: the record stays portable and the perform path
+     * sees the same vocabulary a user would submit. */
+    (   get_dict('@context', After, After_Context)
+    ->  context_prefixes(After_Context, Op_Prefixes, _Op_Defaults),
+        maplist({Op_Prefixes}/[Op_Ex, Op_C]>>contract_operation_json(Op_Ex, Op_Prefixes, Op_C),
+                Operations_List_Ex, Operations_List)
+    ;   Operations_List = Operations_List_Ex
+    ),
     !,
     perform_migration_rule(Rule, Before_Transaction, After_Transaction, Operations_List, Validation0, Meta_Data),
     atom_json_dict(Migration, Operations_List, [default_tag(json), width(0)]),
@@ -809,21 +1162,24 @@ infer_arbitrary_migration(Validations,New_Validations, Meta_Data) :-
 
 /* upcast_class_property(Class, Property, New_Type) */
 upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
-    atom_string(Class_Key, Class),
-    atom_string(Property_Key, Property),
+    schema_name_key(Class, Before, Class_Key),
+    schema_name_key(Property, Before, Property_Key),
 
     % Backward compatible fix for bug https://github.com/terminusdb/terminusdb/issues/1853
     (   is_dict(New_Type_Candidate),
         get_dict('@type', New_Type_Candidate, 'Class')
-    ->  get_dict(Property_Key, New_Type_Candidate, New_Type)
+    ->  atom_string(Raw_Property_Key, Property),
+        get_dict(Raw_Property_Key, New_Type_Candidate, New_Type)
     ;   New_Type = New_Type_Candidate
     ),
+    get_dict('@context', Before, Context),
+    expand_migration_type(New_Type, Context, New_Type_Ex),
 
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, Type_Definition),
     frame_supermap(Before, Supermap),
     do_or_die(
-        type_weaken(Type_Definition, New_Type, Supermap),
+        type_weaken(Type_Definition, New_Type_Ex, Supermap),
         error(not_an_irrefutable_weakening_operation(
                   upcast_class_property,
                   Class,
@@ -831,27 +1187,32 @@ upcast_class_property(Class, Property, New_Type_Candidate, Before, After) :-
                   New_Type),
               _)
     ),
-    put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
+    put_dict(Property_Key, Before_Class_Document, New_Type_Ex, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
     class_children_valid_properties(Class_Key, After).
 
 /* cast_class_property(Class, Property, New_Type, Default_Or_Error) */
 cast_class_property(Class, Property, New_Type, _Default_Or_Error, Before, After) :-
-    atom_string(Class_Key, Class),
-    atom_string(Property_Key, Property),
+    schema_name_key(Class, Before, Class_Key),
+    schema_name_key(Property, Before, Property_Key),
 
     get_dict(Class_Key, Before, Before_Class_Document),
     get_dict(Property_Key, Before_Class_Document, _Type_Definition),
-    put_dict(Property_Key, Before_Class_Document, New_Type, After_Class_Document),
+    get_dict('@context', Before, Context),
+    expand_migration_type(New_Type, Context, New_Type_Ex),
+    put_dict(Property_Key, Before_Class_Document, New_Type_Ex, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
     class_children_valid_properties(Class_Key, After).
 
 /* change_parents(Class, [Parent1,...ParentN], [property_default(Property1, Default1)])
  */
 change_parents(Class, Parent_List, Property_Defaults, Before, After) :-
-    atom_string(Class_Key, Class),
+    schema_name_key(Class, Before, Class_Key),
+    get_dict('@context', Before, Context),
+    maplist({Context}/[P, P_Ex]>>expand_migration_type(P, Context, P_Ex),
+            Parent_List, Parent_List_Ex),
     get_dict(Class_Key, Before, Before_Class_Document),
-    put_dict(_{ '@inherits' : Parent_List}, Before_Class_Document, After_Class_Document),
+    put_dict(_{ '@inherits' : Parent_List_Ex}, Before_Class_Document, After_Class_Document),
     put_dict(Class_Key, Before, After_Class_Document, After),
     check_children_property_defaults(Before, After, Class_Key, Property_Defaults).
 
@@ -864,6 +1225,14 @@ check_children_property_defaults(Before, After, Class_Key, Property_Defaults) :-
 check_children_property_defaults(Before, After, Class_Key, Before_Supermap, After_Supermap, Childmap, Property_Defaults) :-
     class_properties_valid_properties(Class_Key, After_Supermap, After, After_Properties),
     class_properties_valid_properties(Class_Key, Before_Supermap, Before, Before_Properties),
+    get_dict('@context', Before, Context),
+    context_prefixes(Context, Witness_Prefixes, _Defaults),
+    maplist(
+        {Context}/[property_default(P, D), property_default(P_Ex, D)]>>(
+            expand_migration_type(P, Context, P_Ex)
+        ),
+        Property_Defaults,
+        Property_Defaults_Ex),
     findall(
         Property-Type,
         (   get_dict(Property, After_Properties, Type),
@@ -877,10 +1246,11 @@ check_children_property_defaults(Before, After, Class_Key, Before_Supermap, Afte
         ;   is_dict(Type),
             get_dict('@type', Type, "List")
         ->  true
-        ;   atom_string(Property, Property_String),
+        ;   contract_schema_name(Class_Key, Witness_Prefixes, Class_W),
+            contract_schema_name(Property, Witness_Prefixes, Property_W),
             do_or_die(
-                member(property_default(Property_String, _), Property_Defaults),
-                error(required_property_has_no_default(Class_Key,Property_String), _)
+                member(property_default(Property, _), Property_Defaults_Ex),
+                error(required_property_has_no_default(Class_W,Property_W), _)
             )
         )
     ),
@@ -888,18 +1258,23 @@ check_children_property_defaults(Before, After, Class_Key, Before_Supermap, Afte
         (   get_dict(Property, After_Properties, Type2),
             get_dict(Property, Before_Properties, Type1)
         ),
-        (   do_or_die(
+        (   contract_schema_name(Class_Key, Witness_Prefixes, Class_W2),
+            contract_schema_name(Property, Witness_Prefixes, Property_W2),
+            contract_migration_type_(Type1, Witness_Prefixes, Type1_W),
+            contract_migration_type_(Type2, Witness_Prefixes, Type2_W),
+            do_or_die(
                 Type1 = Type2,
-                error(property_type_changed_due_to_parent_change(Class_Key, Property, Type1, Type2), _)
+                error(property_type_changed_due_to_parent_change(Class_W2, Property_W2, Type1_W, Type2_W), _)
             )
         )
     ),
     forall(
-        member(property_default(Property_String, _), Property_Defaults),
-        (   atom_string(Property, Property_String),
+        member(property_default(Property_Atom, _), Property_Defaults_Ex),
+        (   contract_schema_name(Class_Key, Witness_Prefixes, Class_W3),
+            contract_schema_name(Property_Atom, Witness_Prefixes, Property_W3),
             do_or_die(
-                memberchk(Property-_, Added),
-                error(unused_property_default(Class_Key, Property), _)
+                memberchk(Property_Atom-_, Added),
+                error(unused_property_default(Class_W3, Property_W3), _)
             )
         )
     ),
@@ -912,13 +1287,6 @@ check_children_property_defaults(Before, After, Class_Key, Before_Supermap, Afte
         )
     ;   true
     ).
-
-check_property_defaults([], _Properties).
-check_property_defaults([property_default(Property, _Default)|Rest], Properties) :-
-    atom_string(Prop_Key, Property),
-    % The actual data should probably be checked to be of the appropriate type here.
-    get_dict(Prop_Key, Properties, _),
-    check_property_defaults(Rest, Properties).
 
 invert_supermap(Supermap, Childmap) :-
     findall(
@@ -999,6 +1367,19 @@ check_class_document_pairs(Class_Document, Pairs) :-
  *  The schema update interpreter  *
  *                                 *
  ***********************************/
+/*
+ * The operation witness echoes the dictionary it ran against —
+ * contract it back to the user's names before it surfaces.
+ */
+schema_operation_failed_error(Op, Before, Error) :-
+    operation_string(Op, Op_String),
+    (   get_dict('@context', Before, Context)
+    ->  context_prefixes(Context, Witness_Prefixes, _Defaults)
+    ;   default_prefixes(Witness_Prefixes)
+    ),
+    contract_class_dictionary(Before, Witness_Prefixes, Before_C),
+    Error = error(schema_operation_failed(Op_String, Before_C), _).
+
 interpret_schema_operation_(Op, Before, After) :-
     Op =.. [OpName|Args],
     append(Args, [Before, After], Args1),
@@ -1006,14 +1387,14 @@ interpret_schema_operation_(Op, Before, After) :-
     catch(
         call(Pred),
         error(existence_error(procedure,_), _),
-        (   operation_string(Op, Op_String),
-            throw(error(schema_operation_failed(Op_String, Before), _))
+        (   schema_operation_failed_error(Op, Before, Error),
+            throw(Error)
         )
     ),
     !.
 interpret_schema_operation_(Op, Before, _After) :-
-    operation_string(Op, Op_String),
-    throw(error(schema_operation_failed(Op_String, Before), _)).
+    schema_operation_failed_error(Op, Before, Error),
+    throw(Error).
 
 interpret_schema_operations([], Schema, Schema).
 interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
@@ -1078,6 +1459,14 @@ refute_foreign_schema_operation(Before, Operation) :-
     refute_foreign_class_mutation(Before, Name).
 refute_foreign_schema_operation(_, _).
 
+/* A context replacement swaps only the context node. The generic
+ * path would re-elaborate every class under the new @base/@schema,
+ * re-minting their IRIs and orphaning stored instance references —
+ * minting must steer only new identifiers.
+ */
+interpret_schema_operation(replace_context(Context), Before, Before) :-
+    !,
+    replace_context_document(Before, Context).
 interpret_schema_operation(Operation, Before, After) :-
     calculate_schema_migration(Before, [Operation], Schema),
     replace_schema(Before, Schema, After).
@@ -1140,31 +1529,6 @@ is_list(Document) =>
             Document, New_Document).
 rewrite_document_ids(Value, _Class_A, _Class_B, New_Value) =>
     Value = New_Value.
-
-rewrite_uri(Old_Context, New_Context, URI, New_URI) :-
-    atom(URI),
-    get_dict('@base', Old_Context, Old_Base),
-    string_length(Old_Base, Base_Length),
-    sub_atom(URI, 0, Base_Length, _, Old_Base),
-    !,
-    sub_atom(URI, Base_Length, _, 0, Branch),
-    get_dict('@base', New_Context, New_Base),
-    atomic_concat(New_Base, Branch, New_URI).
-rewrite_uri(Old_Context, New_Context, URI, New_URI) :-
-    atom(URI),
-    get_dict('@schema', Old_Context, Old_Schema),
-    string_length(Old_Schema, Schema_Length),
-    sub_atom(URI, 0, Schema_Length, _, Old_Schema),
-    !,
-    sub_atom(URI, Schema_Length, _, 0, Branch),
-    get_dict('@schema', New_Context, New_Schema),
-    atomic_concat(New_Schema, Branch, New_URI).
-rewrite_uri(_Old_Context, _New_Context, URI, URI).
-
-rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO) :-
-    rewrite_uri(Old_Context,New_Context,S,NS),
-    rewrite_uri(Old_Context,New_Context,P,NP),
-    rewrite_uri(Old_Context,New_Context,O,NO).
 
 delete_document_ids_key_value('@id',_,_,_) =>
     fail.
@@ -1463,22 +1827,14 @@ interpret_instance_operation_(unfoldable(_), _Before, _After, 0).
 interpret_instance_operation_(not_unfoldable(_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_metadata(_,_), _Before, _After, 0).
 interpret_instance_operation_(replace_class_documentation(_,_), _Before, _After, 0).
+interpret_instance_operation_(replace_class_base(_,_), _Before, _After, 0).
+interpret_instance_operation_(delete_class_base(_), _Before, _After, 0).
 interpret_instance_operation_(replace_context_metadata(_), _Before, _After, 0).
 interpret_instance_operation_(replace_context_documentation(_), _Before, _After, 0).
-interpret_instance_operation_(replace_context(New_Context), Before, After, Count) :-
-    (   database_context_object(Before,Old_Context)
-    ->  count_solutions(
-            (   ask(Before,
-                    (   t(S, P, O),
-                        delete(S, P, O)),
-                    [compress_prefixes(false)]),
-                rewrite_triple(Old_Context,New_Context,S,P,O,NS,NP,NO),
-                ask(After,
-                    insert(NS,NP,NO))),
-            Count
-        )
-    ;   Count = 0
-    ).
+/* A context @base/@schema change is minting-only: stored IRIs are
+ * immutable and references remain valid, so no instance triple moves.
+ */
+interpret_instance_operation_(replace_context(_), _Before, _After, 0).
 interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
 interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
@@ -1879,6 +2235,11 @@ create_class_dictionary(Transaction, Dictionary) :-
     !,
     Dictionary = json{}.
 create_class_dictionary(Transaction, Dictionary) :-
+    % The dictionary is the operate layer: documents are normalized to
+    % the default-prefix rendering — database IRIs fully expanded,
+    % xsd:/sys: forms compressed — so identity survives a context swap.
+    % Rendering under the transaction's own context would make a context
+    % change look like every class was deleted and recreated.
     Config = config{
                  skip: 0,
                  count: unlimited,
@@ -1887,12 +2248,13 @@ create_class_dictionary(Transaction, Dictionary) :-
                  unfold: true,
                  minimized: true
              },
-    %test_utils:print_all_triples(Transaction, schema),
     database_context_object(Transaction, Context),
+    context_prefixes(Context, Prefixes, Defaults),
     findall(
-        Class-Class_Document,
+        Class-Expanded_Document,
         (   api_document:api_get_documents(Transaction, schema, Config, Class_Document),
-            get_dict('@id',Class_Document, Class_String),
+            expand_class_document_(Class_Document, Prefixes, Defaults, Expanded_Document),
+            get_dict('@id',Expanded_Document, Class_String),
             atom_string(Class,Class_String)
         ),
         Pairs
@@ -1902,8 +2264,9 @@ create_class_dictionary(Transaction, Dictionary) :-
 class_dictionary_to_schema(Dictionary, [Context|Schema]) :-
     del_dict('@context', Dictionary, Context0, Class_Dictionary),
     put_dict(_{ '@type' : "@context"}, Context0, Context),
+    context_prefixes(Context0, Merged_Prefixes, _Defaults),
     dict_pairs(Class_Dictionary, _, Pairs),
-    maplist([_-Class,Class]>>true, Pairs, Schema).
+    maplist({Merged_Prefixes}/[_-Class,Contracted]>>contract_class_document(Class, Merged_Prefixes, Contracted), Pairs, Schema).
 
 calculate_schema_migration(Transaction, Ops, Schema) :-
     create_class_dictionary(Transaction, Dictionary),
@@ -1975,6 +2338,8 @@ operation_is_weakening(create_class_property(_,_,_)).
 operation_is_weakening(upcast_class_property(_,_,_)).
 operation_is_weakening(replace_class_metadata(_,_)).
 operation_is_weakening(replace_class_documentation(_,_)).
+operation_is_weakening(replace_class_base(_,_)).
+operation_is_weakening(delete_class_base(_)).
 operation_is_weakening(replace_context_metadata(_)).
 operation_is_weakening(replace_context_documentation(_)).
 
@@ -2015,27 +2380,27 @@ test(weaken_enum_failure, [
     schema_weakening(json{'@context':_1124{'@base':"http://i/",
                                            '@schema':"http://s/",
                                            '@type':'Context'},
-                      'Team':json{'@id':'Team', '@type':'Enum',
+                      'http://s/Team':json{'@id':'http://s/Team', '@type':'Enum',
                                   '@value':['IT', 'Marketing']}},
                      json{'@context':_1580{'@base':"http://i/",
                                            '@schema':"http://s/",
                                            '@type':'Context'},
-                      'Team':json{'@id':'Team', '@type':'Enum',
+                      'http://s/Team':json{'@id':'http://s/Team', '@type':'Enum',
                                   '@value':['Information Technology', 'Amazing Marketing']}}, _8856).
 
 test(weaken_enum_success, []) :-
     schema_weakening(json{'@context':_1124{'@base':"http://i/",
                                            '@schema':"http://s/",
                                            '@type':'Context'},
-                          'Team':json{'@id':'Team', '@type':'Enum',
+                          'http://s/Team':json{'@id':'http://s/Team', '@type':'Enum',
                                       '@value':['IT', 'Marketing']}},
                      json{'@context':_1580{'@base':"http://i/",
                                            '@schema':"http://s/",
                                            '@type':'Context'},
-                          'Team':json{'@id':'Team', '@type':'Enum',
+                          'http://s/Team':json{'@id':'http://s/Team', '@type':'Enum',
                                       '@value':['IT', 'Marketing', 'Finance']}}, Operations),
 
-    Operations = [  expand_enum('Team',['Finance']) ].
+    Operations = [  expand_enum('http://s/Team',['Finance']) ].
 
 test(context_metadata_only_change_is_weakening, []) :-
     schema_weakening(
@@ -2063,6 +2428,55 @@ test(context_documentation_only_change_is_weakening, []) :-
         Operations),
     Operations = [replace_context_documentation(json{'@title':"New"})].
 
+test(class_base_change_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'},
+             'http://s/F':json{'@id':'http://s/F', '@type':'Class',
+                      '@base':"things/",
+                      'http://s/f':'xsd:string'}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'},
+             'http://s/F':json{'@id':'http://s/F', '@type':'Class',
+                      '@base':"objects/",
+                      'http://s/f':'xsd:string'}},
+        Operations),
+    Operations = [replace_class_base('http://s/F',"objects/")].
+
+test(class_base_addition_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'},
+             'http://s/F':json{'@id':'http://s/F', '@type':'Class',
+                      'http://s/f':'xsd:string'}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'},
+             'http://s/F':json{'@id':'http://s/F', '@type':'Class',
+                      '@base':"objects/",
+                      'http://s/f':'xsd:string'}},
+        Operations),
+    Operations = [replace_class_base('http://s/F',"objects/")].
+
+test(class_base_removal_is_weakening, []) :-
+    schema_weakening(
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'},
+             'http://s/F':json{'@id':'http://s/F', '@type':'Class',
+                      '@base':"things/",
+                      'http://s/f':'xsd:string'}},
+        json{'@context':json{'@base':"http://i/",
+                             '@schema':"http://s/",
+                             '@type':'Context'},
+             'http://s/F':json{'@id':'http://s/F', '@type':'Class',
+                      'http://s/f':'xsd:string'}},
+        Operations),
+    Operations = [delete_class_base('http://s/F')].
+
 test(context_metadata_and_documentation_change_is_weakening, []) :-
     schema_weakening(
         json{'@context':json{'@base':"http://i/",
@@ -2079,10 +2493,7 @@ test(context_metadata_and_documentation_change_is_weakening, []) :-
     msort(Operations, [replace_context_documentation(json{'@title':"New"}),
                        replace_context_metadata(json{foo:2})]).
 
-test(context_base_change_is_not_weakening, [
-         error(weakening_failure(json{reason:not_a_weakening_context_changed,
-                                      message:"The change of context may cause changes of instance data"}), _)
-     ]) :-
+test(context_base_change_is_weakening, []) :-
     schema_weakening(
         json{'@context':json{'@base':"http://i/",
                              '@schema':"http://s/",
@@ -2090,12 +2501,12 @@ test(context_base_change_is_not_weakening, [
         json{'@context':json{'@base':"http://j/",
                              '@schema':"http://s/",
                              '@type':'Context'}},
-        _Operations).
+        Operations),
+    Operations = [replace_context(json{'@base':"http://j/",
+                                       '@schema':"http://s/",
+                                       '@type':'Context'})].
 
-test(context_schema_change_is_not_weakening, [
-         error(weakening_failure(json{reason:not_a_weakening_context_changed,
-                                      message:"The change of context may cause changes of instance data"}), _)
-     ]) :-
+test(context_schema_change_is_weakening, []) :-
     schema_weakening(
         json{'@context':json{'@base':"http://i/",
                              '@schema':"http://s/",
@@ -2103,7 +2514,10 @@ test(context_schema_change_is_not_weakening, [
         json{'@context':json{'@base':"http://i/",
                              '@schema':"http://t/",
                              '@type':'Context'}},
-        _Operations).
+        Operations),
+    Operations = [replace_context(json{'@base':"http://i/",
+                                       '@schema':"http://t/",
+                                       '@type':'Context'})].
 
 test(context_metadata_added_is_weakening, []) :-
     schema_weakening(
@@ -2159,14 +2573,18 @@ test(add_remove_classes,
     Dictionary = json{'@context':json{'@base':"terminusdb:///data/",
                                       '@schema':"terminusdb:///schema#",
                                       '@type':'Context'},
-                      'A':json{'@id':'A', '@type':'Class', a:'xsd:string'}},
+                      'terminusdb:///schema#A':json{'@id':'terminusdb:///schema#A',
+                                                    '@type':'Class',
+                                                    'terminusdb:///schema#a':'xsd:string'}},
 
     interpret_schema_operations(Ops, Dictionary, After),
 
     After = json{'@context':json{'@base':"terminusdb:///data/",
                                  '@schema':"terminusdb:///schema#",
                                  '@type':'Context'},
-                 'C':json{'@id':"C", '@type':"Class", c:"xsd:string"}}.
+                 'terminusdb:///schema#C':json{'@id':'terminusdb:///schema#C',
+                                               '@type':"Class",
+                                               'terminusdb:///schema#c':'xsd:string'}}.
 
 
 before_foreign('
@@ -2534,13 +2952,15 @@ test(move_and_weaken,
     open_descriptor(Before, Transaction),
     create_class_dictionary(Transaction, Dictionary),
 
-    json{'A':json{'@id':'A','@type':'Class',a:'xsd:string'}} :< Dictionary,
+    json{'terminusdb:///schema#A':json{'@id':'terminusdb:///schema#A',
+                                       '@type':'Class',
+                                       'terminusdb:///schema#a':'xsd:string'}} :< Dictionary,
 
     interpret_schema_operations(Term_Ops, Dictionary, After),
 
-    json{ 'B': json{ '@id':"B",
+    json{ 'terminusdb:///schema#B': json{ '@id':'terminusdb:///schema#B',
 					 '@type':'Class',
-					 a:_{ '@class':"xsd:string",
+					 'terminusdb:///schema#a':_{ '@class':'xsd:string',
 						  '@type':"Optional"
 						}
 				   }
@@ -2890,11 +3310,11 @@ test(move_class_rewrites_property_range,
     interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
 
     % The range of a plain property follows the rename...
-    get_dict('Linky', After, Linky),
-    get_dict(link, Linky, 'Renamed'),
+    get_dict('terminusdb:///schema#Linky', After, Linky),
+    get_dict('terminusdb:///schema#link', Linky, 'terminusdb:///schema#Renamed'),
     % ...while non-matching references and base types are untouched.
-    get_dict(other, Linky, 'Other'),
-    get_dict(st, Linky, 'xsd:string').
+    get_dict('terminusdb:///schema#other', Linky, 'terminusdb:///schema#Other'),
+    get_dict('terminusdb:///schema#st', Linky, 'xsd:string').
 
 test(move_class_rewrites_complex_property_class,
      [setup((setup_temp_store(State),
@@ -2909,10 +3329,10 @@ test(move_class_rewrites_complex_property_class,
 
     interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
 
-    get_dict('OptLinky', After, OptLinky),
-    get_dict(link, OptLinky, Link_Spec),
+    get_dict('terminusdb:///schema#OptLinky', After, OptLinky),
+    get_dict('terminusdb:///schema#link', OptLinky, Link_Spec),
     get_dict('@type', Link_Spec, 'Optional'),
-    get_dict('@class', Link_Spec, 'Renamed').
+    get_dict('@class', Link_Spec, 'terminusdb:///schema#Renamed').
 
 test(move_class_rewrites_inherits,
      [setup((setup_temp_store(State),
@@ -2927,9 +3347,9 @@ test(move_class_rewrites_inherits,
 
     interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
 
-    get_dict('Kid', After, Kid),
+    get_dict('terminusdb:///schema#Kid', After, Kid),
     % @inherits materializes sorted; only the moved class is rewritten.
-    get_dict('@inherits', Kid, ['Other', 'Renamed']).
+    get_dict('@inherits', Kid, ['terminusdb:///schema#Other', 'terminusdb:///schema#Renamed']).
 
 test(move_class_rewrites_oneof_member,
      [setup((setup_temp_store(State),
@@ -2946,18 +3366,18 @@ test(move_class_rewrites_oneof_member,
 
     % @oneOf materializes as a dict of members, or a list of dicts when
     % there is more than one group — cover both shapes.
-    get_dict('Chooser', After, Chooser),
+    get_dict('terminusdb:///schema#Chooser', After, Chooser),
     get_dict('@oneOf', Chooser, Choices),
-    get_dict(pick, Choices, 'Renamed'),
+    get_dict('terminusdb:///schema#pick', Choices, 'terminusdb:///schema#Renamed'),
 
-    get_dict('Chooser2', After, Chooser2),
+    get_dict('terminusdb:///schema#Chooser2', After, Chooser2),
     get_dict('@oneOf', Chooser2, Choice_Maps),
     is_list(Choice_Maps),
     once((
         member(Pick_Map, Choice_Maps),
-        get_dict(pick, Pick_Map, 'Renamed'),
+        get_dict('terminusdb:///schema#pick', Pick_Map, 'terminusdb:///schema#Renamed'),
         member(Alt_Map, Choice_Maps),
-        get_dict(alt, Alt_Map, 'xsd:string')
+        get_dict('terminusdb:///schema#alt', Alt_Map, 'xsd:string')
     )).
 
 test(move_class_rewrites_tagged_union_member,
@@ -2974,9 +3394,9 @@ test(move_class_rewrites_tagged_union_member,
     interpret_schema_operations([move_class("Ref", "Renamed")], Dictionary, After),
 
     % The member referencing the moved class is rewritten, not dropped.
-    get_dict('TU', After, TU),
-    get_dict(b, TU, 'Renamed'),
-    get_dict(a, TU, 'sys:Unit').
+    get_dict('terminusdb:///schema#TU', After, TU),
+    get_dict('terminusdb:///schema#b', TU, 'terminusdb:///schema#Renamed'),
+    get_dict('terminusdb:///schema#a', TU, 'sys:Unit').
 
 test(move_class_referenced_class_with_instances,
      [setup((setup_temp_store(State),
@@ -3027,8 +3447,41 @@ test(move_class_referenced_class_with_instances,
     % The TaggedUnion member was rewritten, not dropped.
     open_descriptor(Descriptor, After_Transaction),
     create_class_dictionary(After_Transaction, After_Dictionary),
-    get_dict('TU', After_Dictionary, TU_Doc),
-    get_dict(b, TU_Doc, 'Renamed').
+    get_dict('terminusdb:///schema#TU', After_Dictionary, TU_Doc),
+    get_dict('terminusdb:///schema#b', TU_Doc, 'terminusdb:///schema#Renamed').
+
+% The dictionary expands @oneOf member names for identity, but the
+% Choice node IRI mints verbatim from the member keys. Write-back must
+% contract them again or a schema reinsert re-mints percent-encoded
+% Choice IRIs — silent schema drift on every migration.
+test(oneof_choice_ids_survive_schema_reinsert,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_refs,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    global_prefix_expand(sys:oneOf, OneOf_Ex),
+    open_descriptor(Descriptor, T0),
+    database_schema(T0, S0),
+    findall(O, xrdf(S0, _S, OneOf_Ex, O), Before_Ids),
+    sort(Before_Ids, Before_Sorted),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "meta" },
+                               [json{ '@type' : "ReplaceClassMetadata",
+                                      class: "Ref",
+                                      metadata: json{ tag: "x" }}],
+                               _Result,
+                               []),
+
+    open_descriptor(Descriptor, T3),
+    database_schema(T3, S3),
+    findall(O, xrdf(S3, _S2, OneOf_Ex, O), After_Ids),
+    sort(After_Ids, After_Sorted),
+
+    After_Sorted = Before_Sorted.
 
 
 before_bad_tu('
@@ -3405,8 +3858,8 @@ test(create_class_property_mandatory_spec,
 
     open_descriptor(Descriptor, Transaction),
     create_class_dictionary(Transaction, Dictionary),
-    get_dict('Tgt', Dictionary, Tgt),
-    get_dict(req, Tgt, 'xsd:string'),
+    get_dict('terminusdb:///schema#Tgt', Dictionary, Tgt),
+    get_dict('terminusdb:///schema#req', Tgt, 'xsd:string'),
 
     get_document(Descriptor, 'Tgt/1', Doc),
     get_dict(req, Doc, "dflt").
@@ -3629,17 +4082,19 @@ test(weakening_inference,
 							   '@schema':"terminusdb:///schema#",
 							   '@type':'Context'
 						     },
-                 'A':json{'@id':'A','@type':'Class', a:json{ '@type' : "Optional",
-                                                             '@class' : 'xsd:string'}},
-                 'B':json{'@id': 'B', '@type':'Class', b: 'xsd:integer'}},
+                 'terminusdb:///schema#A':json{'@id':'terminusdb:///schema#A','@type':'Class',
+                                             'terminusdb:///schema#a':json{ '@type' : "Optional",
+                                                                            '@class' : 'xsd:string'}},
+                 'terminusdb:///schema#B':json{'@id':'terminusdb:///schema#B','@type':'Class',
+                                             'terminusdb:///schema#b':'xsd:integer'}},
     schema_weakening(Before, After, Operations),
 
-    Operations = [ create_class(json{ '@id':'B',
+    Operations = [ create_class(json{ '@id':'terminusdb:///schema#B',
 							          '@type':'Class',
-							          b:'xsd:integer'
+							          'terminusdb:///schema#b':'xsd:integer'
 							        }),
-				   upcast_class_property('A',
-								         a,
+				   upcast_class_property('terminusdb:///schema#A',
+								         'terminusdb:///schema#a',
 								         json{ '@class':'xsd:string',
 									           '@type':"Optional"
 									         })
@@ -3684,7 +4139,7 @@ test(weakening_inference_property_missing,
 							    '@schema':"terminusdb:///schema#",
 							    '@type':'Context'
 							  },
-                  'A':json{'@id':'A','@type':'Class'}},
+                  'terminusdb:///schema#A':json{'@id':'terminusdb:///schema#A','@type':'Class'}},
     schema_weakening(Before, After, _Operations).
 
 test(dry_run,
@@ -3781,13 +4236,16 @@ test(verbose,
 			   json{'@id':'F/2','@type':'F',f:"44.29999923706055"}
 			 ].
 
-test(change_context,
+% A context @base/@schema change is minting-only: it steers where new
+% identifiers are created and never rebases stored IRIs — a minted IRI
+% is immutable even across class changes, stored references always
+% remain valid, and no instance triple is rewritten.
+test(change_context_mints_only,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
              write_schema(before2,Descriptor)
             )),
-      cleanup(teardown_temp_store(State)),
-      blocked('Not yet implemented')
+      cleanup(teardown_temp_store(State))
      ]) :-
 
     with_test_transaction(
@@ -3801,19 +4259,126 @@ test(change_context,
                             _)
         )
     ),
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"yes"},
+        [json{ '@type' : "ReplaceContext",
+               context: _{ '@type' : "@context",
+                           '@base' : "http://a/",
+                           '@schema' : "http://a#"}}],
+        _Result,
+        []),
+
+    % Minted documents keep their original IRIs and content — the old
+    % base is immutable, so they are addressed by their full minted IRI
+    % rather than by the new context's @base.
     create_context(Descriptor, commit_info{author:"me",
-                                           message:"yes"}, C2),
+                                           message:"yes"}, C3),
+    once(get_document_by_type(C3, 'terminusdb:///schema#F', _)),
+    get_document(C3, 'terminusdb:///data/F/1', Doc1),
+    get_document(C3, 'terminusdb:///data/F/2', Doc2),
+    Doc1.'@id' = 'terminusdb:///data/F/1',
+    Doc2.'@id' = 'terminusdb:///data/F/2',
+    Doc1.'terminusdb:///schema#f' = 33.400001525878906,
+    Doc2.'terminusdb:///schema#f' = 44.29999923706055,
+
+    % The context itself reflects the replacement.
+    database_context_object(C3, New_Context),
+    New_Context.'@base' = "http://a/",
+    New_Context.'@schema' = "http://a#",
+
+    % A class outside the @schema namespace roots its instances at its
+    % own IRI — the same rule prefixed classes already follow, since
+    % @base only expands segments that can compress under @schema.
+    with_test_transaction(
+        Descriptor,
+        C4,
+        insert_document(C4,
+                        _{ '@type' : 'terminusdb:///schema#F',
+                           'terminusdb:///schema#f' : 55.5 },
+                        Id)
+    ),
+    atom_concat('terminusdb:///schema#F/', _, Id).
+
+% A class @base change is minting-only too: stored documents keep their
+% IRIs and content, and only future mints root at the new class base.
+test(change_class_base_mints_only,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'F/1', f : 33.4 },
+                        _)
+    ),
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"yes"},
+        [json{ '@type' : "ReplaceClassBase",
+               class: 'F',
+               base: "http://b/"}],
+        _Result,
+        []),
+
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, C3),
+    get_document(C3, 'terminusdb:///data/F/1', Doc1),
+    Doc1.'@id' = 'F/1',
+    Doc1.f = 33.400001525878906,
+
+    % The schema document carries the new base.
+    get_schema_document(C3, 'F', FDoc),
+    FDoc.'@base' = "http://b/",
+
+    % New documents mint under the class's new base.
+    with_test_transaction(
+        Descriptor,
+        C4,
+        insert_document(C4, _{ '@type' : 'F', f : 55.5 }, Id)
+    ),
+    atom_concat('http://b/', _, Id).
+
+% Replacing the @context document through the document API must infer
+% the same weakening migration — stored documents and links survive.
+test(change_context_via_document_api_preserves_data,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before2,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'F/1', f : 33.4 },
+                        _)
+    ),
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"ctx"}, C2),
     with_transaction(
         C2,
-        (   replace_context_document(C2,
-                                     _{ '@type' : "@context",
-                                        '@base' : "http://a/",
-                                        '@schema' : "http://a#"
-                                      })
-        ),
+        replace_context_document(C2,
+                                 _{ '@type' : "@context",
+                                    '@base' : "http://a/",
+                                    '@schema' : "http://a#"}),
         _Meta_Data,
-        [require_migration(true), allow_destructive_migration(true)]
-    ).
+        [require_migration(true)]
+    ),
+
+    create_context(Descriptor, commit_info{author:"me",
+                                           message:"yes"}, C3),
+    once(get_document_by_type(C3, 'terminusdb:///schema#F', _)),
+    get_document(C3, 'terminusdb:///data/F/1', Doc1),
+    Doc1.'@id' = 'terminusdb:///data/F/1',
+    Doc1.'terminusdb:///schema#f' = 33.400001525878906.
 
 test(infer_destructive_migration,
      [setup((setup_temp_store(State),
@@ -4605,10 +5170,10 @@ test(not_unfoldable,
 				   }.
 
 test(class_weakened_metadata, []) :-
-    Before = json{'@id':'A', '@type':'Class', a:'xsd:string'},
-    After = json{'@id':'A', '@metadata':json{embeddings:json{}}, '@type':'Class', a:'xsd:string'},
-    class_weakened('A', Before, After, supermap{'@context':[], 'A':[]}, Ops),
-    Ops = [ replace_class_metadata('A',
+    Before = json{'@id':'terminusdb:///schema#A', '@type':'Class', 'terminusdb:///schema#a':'xsd:string'},
+    After = json{'@id':'terminusdb:///schema#A', '@metadata':json{embeddings:json{}}, '@type':'Class', 'terminusdb:///schema#a':'xsd:string'},
+    class_weakened('terminusdb:///schema#A', Before, After, supermap{'@context':[], 'terminusdb:///schema#A':[]}, Ops),
+    Ops = [ replace_class_metadata('terminusdb:///schema#A',
 								   json{ embeddings:json{}
 									   })
 		  ].
@@ -4618,18 +5183,18 @@ test(metadata_schema_inference_rule,
     Before = json{'@context':_{'@base':"http://somewhere.for.now/document/",
                                '@schema':"http://somewhere.for.now/schema#",
                                '@type':'Context'},
-                  'A':json{'@id':'A',
+                  'http://somewhere.for.now/schema#A':json{'@id':'http://somewhere.for.now/schema#A',
                            '@type':'Class',
-                           a:'xsd:string'}},
+                           'http://somewhere.for.now/schema#a':'xsd:string'}},
     After = json{'@context':_{'@base':"http://somewhere.for.now/document/",
                               '@schema':"http://somewhere.for.now/schema#",
                               '@type':'Context'},
-                 'A':json{'@id':'A',
+                 'http://somewhere.for.now/schema#A':json{'@id':'http://somewhere.for.now/schema#A',
                           '@metadata':json{embeddings:json{}},
                           '@type':'Class',
-                          a:'xsd:string'}},
+                          'http://somewhere.for.now/schema#a':'xsd:string'}},
     schema_inference_rule(weakening, Before, After, Operations),
-    Operations = [ replace_class_metadata('A',
+    Operations = [ replace_class_metadata('http://somewhere.for.now/schema#A',
 								          json{ embeddings:json{}
 									          })
 		         ].
