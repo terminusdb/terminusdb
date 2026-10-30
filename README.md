@@ -19,10 +19,6 @@
 
 TerminusDB allows you to link JSON and JSON-LD documents in a semantic knowledge graph through a powerful [document API](https://terminusdb.com/docs/document-insertion). It's designed as a system of record, making data management collaborative, versioned, and queryable.
 
-Please consider **starring our repo** ⭐ to come back easily!
-
-Join us on **[Discord](https://discord.gg/yTJKAma)** to engage in our graph building community!
-
 ### Key Features
 
 - **Revision Control**: Commits for every update — track changes over time
@@ -32,6 +28,10 @@ Join us on **[Discord](https://discord.gg/yTJKAma)** to engage in our graph buil
 - **Document + Knowledge Graph**: Link JSON documents in a knowledge graph using JSON-LD
 - **Multimodal**: Support for REST API, GraphQL, WOQL and using RDF semantics
 - **Goal seeking**: Built in unification, path queries, and a datalog logic engine
+
+### Join the community
+
+If TerminusDB looks useful to you, please **star the repo** ⭐ so you can find it again. Questions or ideas? Talk with us and other graph builders on **[Discord](https://discord.gg/yTJKAma)**.
 
 ## Getting Started
 
@@ -176,6 +176,11 @@ Found a bug? Have a feature request? Please [open an issue](https://github.com/t
 ### Recognition
 
 <a href="https://trendshift.io/repositories/125203?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-125203" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/125203/monthly?language=Prolog" alt="terminusdb/terminusdb | #1 Prolog Repository Of The Month on Trendshift" width="250" height="55"/></a>
+
+## Community
+
+- ⭐ **Star the repo** so you can find it again.
+- 💬 **Join us on [Discord](https://discord.gg/yTJKAma)** to ask questions and share what you build.
 
 ## License and copyright
 
