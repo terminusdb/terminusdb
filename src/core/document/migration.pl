@@ -4380,6 +4380,355 @@ test(change_context_via_document_api_preserves_data,
     Doc1.'@id' = 'terminusdb:///data/F/1',
     Doc1.'terminusdb:///schema#f' = 33.400001525878906.
 
+/* Data-preservation matrix for inferred migrations (the require_migration
+ * surface): every weakening op must leave the instance graph untouched.
+ * Each test replaces a schema document through the document API, asserts
+ * the commit performed schema operations but zero instance operations,
+ * and asserts every stored document is identical before and after. */
+preservation_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Doc",
+  "@documentation" : { "@comment" : "a doc" },
+  "@metadata" : { "embedding" : { "graphql" : "query { Doc { name } }" } },
+  "name" : "xsd:string",
+  "shade" : { "@type" : "Optional", "@class" : "Colour" } }
+
+{ "@type" : "Class",
+  "@id" : "Based",
+  "@base" : "terminusdb:///based/",
+  "b" : "xsd:string" }
+
+{ "@type" : "Enum",
+  "@id" : "Colour",
+  "@value" : ["red", "blue"] }
+').
+
+instance_snapshot(Descriptor, Snapshot) :-
+    create_context(Descriptor, commit_info{author:"me", message:"snap"}, C),
+    findall(
+        Id-Doc,
+        (   get_document_uri(Descriptor, false, Id),
+            get_document(C, Id, Doc)),
+        Pairs),
+    sort(Pairs, Snapshot).
+
+test(metadata_change_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo", shade : "red" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Doc",
+               '@documentation' : _{ '@comment' : "a doc" },
+               '@metadata' : _{ embedding : _{ graphql : "query { Doc { name shade } }" } },
+               name : "xsd:string",
+               shade : _{ '@type' : "Optional", '@class' : "Colour" }}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(documentation_change_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Doc",
+               '@documentation' : _{ '@comment' : "a better doc" },
+               '@metadata' : _{ embedding : _{ graphql : "query { Doc { name } }" } },
+               name : "xsd:string",
+               shade : _{ '@type' : "Optional", '@class' : "Colour" }}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(class_base_addition_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Doc",
+               '@documentation' : _{ '@comment' : "a doc" },
+               '@metadata' : _{ embedding : _{ graphql : "query { Doc { name } }" } },
+               '@base' : "terminusdb:///elsewhere/",
+               name : "xsd:string",
+               shade : _{ '@type' : "Optional", '@class' : "Colour" }}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(class_base_change_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : 'Based', b : "foo" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Based",
+               '@base' : "terminusdb:///rebased/",
+               b : "xsd:string"}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(class_base_removal_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@type' : 'Based', b : "foo" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Based",
+               b : "xsd:string"}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(optional_property_addition_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Doc",
+               '@documentation' : _{ '@comment' : "a doc" },
+               '@metadata' : _{ embedding : _{ graphql : "query { Doc { name } }" } },
+               name : "xsd:string",
+               shade : _{ '@type' : "Optional", '@class' : "Colour" },
+               extra : _{ '@type' : "Optional", '@class' : "xsd:integer" }}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(enum_expansion_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo", shade : "red" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Enum",
+               '@id' : "Colour",
+               '@value' : ["red", "blue", "green"]}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+test(cardinality_weakening_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo" },
+                        _)
+    ),
+    instance_snapshot(Descriptor, Before),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_schema_document(
+            C2,
+            _{ '@type' : "Class",
+               '@id' : "Doc",
+               '@documentation' : _{ '@comment' : "a doc" },
+               '@metadata' : _{ embedding : _{ graphql : "query { Doc { name } }" } },
+               name : _{ '@type' : "Optional", '@class' : "xsd:string" },
+               shade : _{ '@type' : "Optional", '@class' : "Colour" }}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    instance_snapshot(Descriptor, Before).
+
+% The document rendering vocabulary follows the context, so after a
+% context swap the same instance triples render under different names —
+% snapshot equality is the wrong shape here. The preservation guarantee is
+% zero instance operations plus the documents still answering to their
+% immutable minted IRIs.
+test(context_change_preserves_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'Doc/1', name : "foo" },
+                        _)
+    ),
+    findall(
+        Id,
+        get_document_uri(Descriptor, false, Id),
+        Before_Ids),
+    create_context(Descriptor, commit_info{author:"me", message:"m"}, C2),
+    with_transaction(
+        C2,
+        replace_context_document(
+            C2,
+            _{ '@type' : "@context",
+               '@base' : "http://a/",
+               '@schema' : "http://a#"}),
+        Meta_Data,
+        [require_migration(true)]
+    ),
+    get_dict(schema_operations, Meta_Data, Schema_Count),
+    Schema_Count > 0,
+    get_dict(instance_operations, Meta_Data, 0),
+    findall(
+        Id2,
+        get_document_uri(Descriptor, false, Id2),
+        After_Ids),
+    Before_Ids = After_Ids,
+    create_context(Descriptor, commit_info{author:"me", message:"chk"}, C3),
+    forall(
+        member(Id, Before_Ids),
+        get_document(C3, Id, _Doc)).
+
 test(infer_destructive_migration,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
