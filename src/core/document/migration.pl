@@ -2252,8 +2252,9 @@ cast_node_value(Before, After, Class_Ex, Property_Ex, Value_Ex, Target_Ex, Cast)
         schema_type_descriptor(After_Schema, Target_Ex, enum(Target_Ex, Members)),
         cast_source_enum(Before, Class_Ex, Property_Ex, Enum_Ex),
         enum_value(Enum_Ex, Lexical, Value_Ex),
-        enum_value(Target_Ex, Lexical, Cast),
-        memberchk(Cast, Members)
+        member(Cast, Members),
+        enum_value(_, Cast_Lexical, Cast),
+        atom_string(Cast_Lexical, Lexical)
     ).
 
 /* The old spec's innermost type resolves to an enum when the property
@@ -2289,8 +2290,9 @@ cast_base_descriptor(Desc, Desc).
 enum_from_string_literal(After, Target_Ex, Value, Cast) :-
     database_schema(After, After_Schema),
     schema_type_descriptor(After_Schema, Target_Ex, enum(Target_Ex, Members)),
-    enum_value(Target_Ex, Value, Cast),
-    memberchk(Cast, Members).
+    member(Cast, Members),
+    enum_value(_, Lexical, Cast),
+    atom_string(Lexical, Value).
 
 object_type(instance,instance_objects).
 object_type(schema,schema_objects).

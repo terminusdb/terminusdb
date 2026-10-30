@@ -967,6 +967,8 @@ pub struct UncleanEnumDefinition {
     pub documentation: OneOrMore<UncleanEnumDocumentationDefinition>,
     #[serde(rename = "@metadata")]
     pub metadata: Option<serde_json::Value>,
+    #[serde(rename = "@base")]
+    pub base: Option<String>,
     #[serde(rename = "@values", deserialize_with = "unit_or_seq")]
     pub values: Vec<ShortName>,
 }
@@ -975,6 +977,7 @@ pub struct UncleanEnumDefinition {
 pub struct EnumDefinition {
     pub documentation: OneOrMore<EnumDocumentationDefinition>,
     pub metadata: Option<serde_json::Value>,
+    pub base: Option<String>,
     pub values: Vec<GraphQLName<'static>>,
     pub values_renaming: BiMap<GraphQLName<'static>, ShortName>,
 }
@@ -1001,6 +1004,7 @@ impl UncleanEnumDefinition {
         EnumDefinition {
             documentation: OneOrMore::More(documentation),
             metadata: self.metadata,
+            base: self.base,
             values,
             values_renaming,
         }
@@ -1274,7 +1278,15 @@ impl AllFrames {
         let enum_type_expanded = self.graphql_to_iri_name(enum_type);
         let enum_type_definition = self.frames[enum_type].as_enum_definition();
         let value = enum_type_definition.value_name(value);
-        IriName(format!("{enum_type_expanded}/{value}"))
+        // Members mint under the enum's @base resolved under @schema,
+        // or under the enum IRI itself by default.
+        match &enum_type_definition.base {
+            Some(base) => {
+                let expanded = self.context.expand_schema(&node_variety(base));
+                IriName(format!("{expanded}{value}"))
+            }
+            None => IriName(format!("{enum_type_expanded}/{value}")),
+        }
     }
 
     pub fn reverse_link<'a>(
@@ -1722,6 +1734,7 @@ json{ '@documentation':json{ '@comment':"The exhaustive list of actions which ar
         assert_eq!(
             UncleanTypeDefinition::Enum(UncleanEnumDefinition {
                 metadata: None,
+                base: None,
                 documentation: OneOrMore::One(UncleanEnumDocumentationDefinition {
                     label: None,
                     values: None,

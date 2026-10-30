@@ -1190,12 +1190,26 @@ enum_value(Type,Value,ID) :-
     ;   encode_id_fragment(Value, Encoded_Value),
         atomic_list_concat([Type, '/', Encoded_Value], ID)
     ).
-enum_value(Type,Value,ID) :-
-    ground(Type),
+enum_value(_Type,Value,ID) :-
+    ground(ID),
     !,
-    atom_concat(Type,'/',Prefix),
-    atom_concat(Prefix,Encoded_Value,ID),
+    % The lexical is always the last encoded segment — members may live
+    % under the enum's @base rather than its @id. Encoded segments can
+    % never contain a raw '/', so the last-slash split is exact.
+    atomic_list_concat(Parts,'/',ID),
+    last(Parts,Encoded_Value),
     encode_id_fragment(Value, Encoded_Value).
+
+/* Mints a member node IRI under a base prefix. The base is either the
+ * enum's own IRI with a trailing slash (default) or its @base resolved
+ * under @schema. */
+enum_member_value(Base_Prefix,Value,ID) :-
+    atom_string(Value_Atom, Value),
+    (   atom_concat(Base_Prefix, _, Value_Atom)
+    ->  ID = Value_Atom
+    ;   encode_id_fragment(Value, Encoded_Value),
+        atom_concat(Base_Prefix, Encoded_Value, ID)
+    ).
 
 /* Pairs each enum member's node IRI with its lexical value, for every
  * enum in the schema. Used wherever a surface renders a bound member
@@ -1303,7 +1317,9 @@ key_id(JSON,Context,Path,ID) :-
 
 property_part(JSON,Keys) :-
     dict_pairs(JSON, _, Pairs),
-    convlist([Key-_,Key]>>(\+ memberchk(Key, ['@id', '@type'])), Pairs, Keys).
+    convlist([Key-_,Key]>>(\+ memberchk(Key, ['@id', '@type',
+                                             '@member_base'])),
+             Pairs, Keys).
 
 property_id(JSON,Context,Path,ID) :-
     path_component(Path,Context,Component),
@@ -1622,7 +1638,14 @@ json_schema_elaborate_property_documentation(Context, Path, Dict, Out) :-
 json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
     global_prefix_expand(sys:'EnumDocumentation',Enum_Ex),
     property_id(Dict, Context, Path, Id),
-    dict_pairs(Dict, json, In_Pairs),
+    dict_pairs(Dict, json, In_Pairs0),
+    % @member_base carries the enum's resolved member prefix when the
+    % enum declares @base; lexical keys then mint under it.
+    (   select('@member_base'-Member_Base, In_Pairs0, In_Pairs)
+    ->  true
+    ;   In_Pairs = In_Pairs0,
+        Member_Base = none
+    ),
     reverse(Path,[type(Type)|_]),
     findall(
         Key-Value,
@@ -1635,23 +1658,33 @@ json_schema_elaborate_enum_documentation(Context, Path, Dict, Out) :-
             ;   is_dict(V),
                 (   get_dict('@comment', V, _)
                 ;   get_dict('@label', V, _))
-            ->  enum_value(Type,K,Enum_Value),
-                prefix_expand_schema(Enum_Value, Context, Key),
+            ->  enum_member_doc_key(Type,Member_Base,K,Context,Key),
                 json_schema_elaborate_documentation_value(Context,
                                                           [property(Key)
                                                            |Path],
                                                           V, Value)
             ;   is_dict(V)
-            ->  enum_value(Type,K,Enum_Value),
-                prefix_expand_schema(Enum_Value, Context, Key),
+            ->  enum_member_doc_key(Type,Member_Base,K,Context,Key),
                 Value = V
-            ;   enum_value(Type,K,Enum_Value),
-                prefix_expand_schema(Enum_Value, Context, Key),
+            ;   enum_member_doc_key(Type,Member_Base,K,Context,Key),
                 wrap_text(V,Value)
             )
         ),
         Pairs),
     dict_pairs(Out, json, ['@id'-Id,'@type'-Enum_Ex|Pairs]).
+
+% Member documentation predicates are member node IRIs. With a member
+% base the lexical mints under it; without, under the enum's own IRI.
+enum_member_doc_key(_Type,Member_Base,K,_Context,Key) :-
+    Member_Base \== none,
+    !,
+    enum_member_value(Member_Base,K,Key).
+enum_member_doc_key(_Type,_,K,_Context,K) :-
+    uri_has_protocol(K),
+    !.
+enum_member_doc_key(Type,_,K,Context,Key) :-
+    enum_value(Type,K,Enum_Value),
+    prefix_expand_schema(Enum_Value, Context, Key).
 
 json_schema_elaborate_documentation_value(Context, Path, V, Value2) :-
     global_prefix_expand(sys:'DocumentationLabelComment',Doc_Ex),
@@ -1909,11 +1942,17 @@ json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
     prefix_expand_schema(ID,Context,ID_Ex),
     get_dict('@type', JSON, Type),
     maybe_expand_schema_type(Type,Expanded),
+    % Members mint under the enum's @base resolved under @schema, or
+    % under the enum's own IRI by default.
+    (   get_dict('@base', JSON, Base_String),
+        check_json_string('@base', Base_String)
+    ->  prefix_expand_schema(Base_String,Context,Member_Base)
+    ;   atom_concat(ID_Ex,'/',Member_Base)),
     do_or_die(
         (   get_dict('@value', JSON, List),
-            maplist({ID_Ex}/[Elt,json{'@type' : "@id",
+            maplist({Member_Base}/[Elt,json{'@type' : "@id",
                                       '@id' : V}]>>(
-                        enum_value(ID_Ex,Elt,V)
+                        enum_member_value(Member_Base,Elt,V)
                     ),List,New_List)
         ),
         error(invalid_enum_values(JSON),_)),
@@ -1921,8 +1960,20 @@ json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
     Type_ID = json{ '@id' : ID_Ex,
                     '@type' : Expanded
                   },
-    (   get_dict('@documentation', JSON, Documentation)
-    ->  json_schema_predicate_value('@documentation', Documentation,
+    (   get_dict('@documentation', JSON, Documentation0)
+    ->  % Member documentation predicates are member IRIs — the
+        % elaborator mints them under Member_Base. The marker keeps the
+        % lexical keys (they feed the doc node's @id) while carrying the
+        % base down.
+        (   get_dict('@base', JSON, _),
+            get_dict('@values', Documentation0, Values_Doc),
+            is_dict(Values_Doc)
+        ->  put_dict('@member_base', Values_Doc, Member_Base,
+                     Values_Doc2),
+            put_dict('@values', Documentation0, Values_Doc2,
+                     Documentation)
+        ;   Documentation = Documentation0),
+        json_schema_predicate_value('@documentation', Documentation,
                                     Context,[type(ID_Ex)|Old_Path],
                                     Doc_Prop,Elaborated_Docs),
         put_dict(Doc_Prop, Type_ID, Elaborated_Docs, Schema_Obj0)
@@ -1936,11 +1987,18 @@ json_schema_elaborate_('Enum',JSON,Context,Old_Path,Elaborated) :-
         put_dict(Metadata_Prop, Schema_Obj0, Elaborated_Metadata, Schema_Obj)
     ;   Schema_Obj = Schema_Obj0),
 
+    (   get_dict('@base', JSON, Base)
+    ->  json_schema_predicate_value('@base', Base,
+                                    Context,Old_Path,
+                                    Base_Prop,Elaborated_Base),
+        put_dict(Base_Prop, Schema_Obj, Elaborated_Base, Schema_Obj2)
+    ;   Schema_Obj2 = Schema_Obj),
+
     global_prefix_expand(sys:value, Sys_Value),
-    Elaborated = (Schema_Obj.put(Sys_Value,
-                                 json{ '@container' : "@list",
-                                       '@type' : "@id",
-                                       '@value' : New_List })).
+    Elaborated = (Schema_Obj2.put(Sys_Value,
+                                  json{ '@container' : "@list",
+                                        '@type' : "@id",
+                                        '@value' : New_List })).
 json_schema_elaborate_(Type,JSON,Context,Old_Path,Elaborated) :-
     memberchk(Type,['Class','TaggedUnion',
                     'Set','List','Optional','Array', 'Cardinality',
@@ -9731,6 +9789,116 @@ test(enum_documentation,
                   json{'@comment':"What kind of pet?",
                        '@values':json{cat:"A kitty",
                                       dog:"A doggie"}},
+                  '@id':'Pet',
+                  '@type':'Enum',
+                  '@value':[dog,cat]}.
+
+test(enum_base_elaborate,[]) :-
+    Schema = _{ '@id': 'Colour',
+                '@type': 'Enum',
+                '@base': "Hues/",
+                '@value' : ["red","blue"]
+              },
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+    json_schema_elaborate(Schema, Context, Elaborate),
+
+    Elaborate =
+    json{ '@id':'https://s/Colour',
+          '@type':'http://terminusdb.com/schema/sys#Enum',
+          'http://terminusdb.com/schema/sys#base':
+          json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
+                '@value':"Hues/"},
+          'http://terminusdb.com/schema/sys#value':
+          json{ '@container':"@list",
+                '@type':"@id",
+                '@value':[json{'@id':'https://s/Hues/red','@type':"@id"},
+                          json{'@id':'https://s/Hues/blue','@type':"@id"}]}}.
+
+test(enum_base_absolute_elaborate,[]) :-
+    Schema = _{ '@id': 'Colour',
+                '@type': 'Enum',
+                '@base': "https://h/",
+                '@value' : ["red"]
+              },
+    default_prefixes(Prefixes),
+    Context = (Prefixes.put('@schema', 'https://s/')),
+    json_schema_elaborate(Schema, Context, Elaborate),
+
+    get_dict('http://terminusdb.com/schema/sys#value', Elaborate, Value_Obj),
+    get_dict('@value', Value_Obj,
+             [json{'@id':'https://h/red','@type':"@id"}]).
+
+test(enum_base_instance_round_trip,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo",Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    Enum = _{ '@id': 'Colour',
+              '@type': 'Enum',
+              '@base': "Hues/",
+              '@value' : ["red","blue"] },
+    Class = _{ '@id': 'Holder',
+               '@type': 'Class',
+               '@key': _{'@type': 'Random'},
+               shade: 'Colour' },
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Enum)),
+    with_test_transaction(
+        Desc,
+        C2,
+        insert_schema_document(C2, Class)),
+
+    Doc = json{ '@type': 'Holder',
+                shade: "red" },
+    run_insert_document(Desc,
+                        commit_info{ author: "Luke Skywalker",
+                                     message: "foo" },
+                        Doc, Id),
+
+    open_descriptor(Desc, DB),
+    get_document(DB, Id, Out),
+    Out = json{ '@id': _,
+                '@type': 'Holder',
+                shade: red },
+
+    % the stored member node lives under the enum's @base, not its @id
+    database_schema(DB, Schema_Graph),
+    schema_enum_member_lexicals(Schema_Graph, Members),
+    memberchk('http://somewhere.for.now/schema#Hues/red'-red, Members),
+
+    database_instance(DB, Instance),
+    xrdf(Instance, _, 'http://somewhere.for.now/schema#shade',
+         'http://somewhere.for.now/schema#Hues/red').
+
+test(enum_base_member_docs,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema("admin","foo"),
+             resolve_absolute_string_descriptor("admin/foo",Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    Schema = _{ '@id': 'Pet',
+                '@type': 'Enum',
+                '@base': "Hues/",
+                '@value' : ["dog","cat"],
+                '@documentation' : _{ '@comment' : "What kind of pet?",
+                                      '@values' : _{dog : "A doggie",
+                                                    cat : "A kitty" }
+                                    }
+              },
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)),
+
+    open_descriptor(Desc, Trans),
+    get_schema_document(Trans, 'Pet', Result),
+    Result = json{'@documentation':
+                  json{'@comment':"What kind of pet?",
+                       '@values':json{cat:"A kitty",
+                                      dog:"A doggie"}},
+                  '@base':"Hues/",
                   '@id':'Pet',
                   '@type':'Enum',
                   '@value':[dog,cat]}.

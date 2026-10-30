@@ -197,8 +197,11 @@ no_captures(captures(C,T-T,S-S,C)).
 
 check_enum(Enum_Value,Type,Enums,Annotated),
 text(Enum_Value) =>
-    (   enum_value(Type,Enum_Value,Value),
-        memberchk(Value, Enums)
+    (   member(Value, Enums),
+        (   atom_string(Value, Enum_Value)
+        ;   enum_value(_,Lexical,Value),
+            atom_string(Lexical, Enum_Value)
+        )
     ->  Annotated = success(json{ '@type' : "@id", '@id' : Value})
     ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
                                   enum : Type,

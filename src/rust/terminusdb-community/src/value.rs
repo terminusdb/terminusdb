@@ -434,11 +434,12 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
     }
 }
 
-pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> String {
-    let enum_list: Vec<&str> = enum_uri.split(enum_type).collect();
-    // 1.. is from slash on
-    let enum_value = &(enum_list[1])[1..];
-    enum_value.to_string()
+pub fn enum_node_to_value(_enum_type: &str, enum_uri: &str) -> String {
+    // the lexical is always the last encoded segment — members may live
+    // under the enum's @base rather than its own IRI
+    let pos = enum_uri.rfind('/').unwrap();
+    let encoded = &enum_uri[pos + 1..];
+    urlencoding::decode(encoded).unwrap().to_string()
 }
 
 /// TODO: Generic scalar input value type for future GraphQL input handling.
