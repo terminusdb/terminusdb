@@ -1284,6 +1284,7 @@ compress_witness_pair(Prefixes, Key-Value, Compressed_Key-Compressed_Value) :-
 % read api:embedding.'api:will_embed' unconditionally — nothing embeds
 % when the write itself cannot commit.
 check_no_embedding(_{'api:will_embed':false,
+                     'api:relevant':false,
                      'api:reason':'the write is invalid — fix the witnesses or error first'}).
 
 check_error_result(Prefixes, error(schema_check_failure(Witnesses0), _), Result) :-
@@ -1340,43 +1341,85 @@ check_validation_witnesses(Context, Options, Witnesses) :-
 %% check_embedding_report(+Transaction, +Touched_Types, -Report) is det.
 %
 %  Reports whether the touched classes would be embedded by the indexer
-%  after such a commit: the indexer backend must be configured and every
-%  touched class must carry @metadata.embedding in the (post-write)
-%  schema.
+%  after such a commit. Relevance is a property of the classes, not the
+%  engine: the report fires whenever a touched class carries
+%  @metadata.embedding (a query and/or a template), whether or not an
+%  indexer backend is configured. will_embed additionally requires a
+%  configured backend and an embedding query on every touched class —
+%  a template without a query does not embed.
 check_embedding_report(_Transaction, [], _{
         'api:will_embed':false,
+        'api:relevant':false,
         'api:reason':'no documents touched'}) :-
     !.
 check_embedding_report(Transaction, Touched_Types, Report) :-
-    (   catch(indexer_backend(Backend), _, fail),
+    database_schema(Transaction, Schema),
+    database_prefixes(Transaction, Prefixes),
+    convlist(class_embedding_mark(Transaction, Schema, Prefixes),
+             Touched_Types, Marks),
+    pairs_keys(Marks, Marked_Unsorted),
+    sort(Marked_Unsorted, Marked),
+    sort(Touched_Types, Touched_Sorted),
+    (   Marked = []
+    ->  Report = _{'api:will_embed':false,
+                   'api:relevant':false,
+                   'api:reason':'no touched class carries @metadata.embedding'}
+    ;   catch(indexer_backend(Backend), _, fail),
         Backend \= none
-    ->  database_schema(Transaction, Schema),
-        database_prefixes(Transaction, Prefixes),
-        convlist(class_with_embedding_metadata(Transaction, Schema,
-                                               Prefixes), Touched_Types,
-                 Covered),
-        sort(Covered, Covered_Sorted),
-        sort(Touched_Types, Touched_Sorted),
-        (   Covered_Sorted == Touched_Sorted
+    ->  include([_-Mark]>>(Mark = embeddable), Marks, Embeddable_Pairs),
+        pairs_keys(Embeddable_Pairs, Embeddable_Unsorted),
+        sort(Embeddable_Unsorted, Embeddable),
+        subtract(Touched_Sorted, Embeddable, Not_Embedded),
+        (   Not_Embedded = []
         ->  Report = _{'api:will_embed':true,
+                       'api:relevant':true,
                        'api:reason':'all touched classes have embedding metadata'}
-        ;   subtract(Touched_Sorted, Covered_Sorted, Missing),
-            atomic_list_concat(Missing, ', ', Missing_Text),
-            format(string(Reason),
-                   'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Missing_Text]),
+        ;   subtract(Touched_Sorted, Marked, Unmarked),
+            subtract(Marked, Embeddable, Template_Only),
+            embedding_reason_parts(Unmarked, Template_Only, Parts),
+            atomic_list_concat(Parts, ' ', Reason),
             Report = _{'api:will_embed':false,
+                       'api:relevant':true,
                        'api:reason':Reason})
-    ;   Report = _{'api:will_embed':false,
-                   'api:reason':'indexer backend is none or not configured — no documents are embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)'}).
+    ;   atomic_list_concat(Marked, ', ', Marked_Text),
+        format(string(Reason),
+               'indexer backend is none or not configured — classes with embedding metadata (~s) will NOT be embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)', [Marked_Text]),
+        Report = _{'api:will_embed':false,
+                   'api:relevant':true,
+                   'api:reason':Reason}).
 
-class_with_embedding_metadata(Transaction, Schema, Prefixes, Type, Type) :-
+%% embedding_reason_parts(+Unmarked, +Template_Only, -Parts) is det.
+embedding_reason_parts(Unmarked, Template_Only, Parts) :-
+    (   Unmarked = []
+    ->  Unmarked_Parts = []
+    ;   atomic_list_concat(Unmarked, ', ', Unmarked_Text),
+        format(string(Unmarked_Reason),
+               'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Unmarked_Text]),
+        Unmarked_Parts = [Unmarked_Reason]),
+    (   Template_Only = []
+    ->  Parts = Unmarked_Parts
+    ;   atomic_list_concat(Template_Only, ', ', Template_Text),
+        format(string(Template_Reason),
+               'classes with an embedding template but no query: ~s — they will NOT be embedded; add an embedding query', [Template_Text]),
+        append(Unmarked_Parts, [Template_Reason], Parts)).
+
+%% class_embedding_mark(+Transaction, +Schema, +Prefixes, +Type, -Type-Mark)
+%
+%  Mark = embeddable when the class has an embedding query (what the
+%  indexer actually consumes), template_only when it carries an
+%  embedding template without a query.
+class_embedding_mark(Transaction, Schema, Prefixes, Type, Type-Mark) :-
     atom_string(Type_Atom, Type),
     prefix_expand(Type_Atom, Prefixes, Expanded),
     normalize_document_type(Transaction, Expanded, Normalized),
     xrdf(Schema, Normalized, sys:metadata, _),
     schema_metadata_descriptor(Schema, Normalized, metadata(Metadata)),
     get_dict(embedding, Metadata, Embedding),
-    get_dict(query, Embedding, _).
+    (   get_dict(query, Embedding, _)
+    ->  Mark = embeddable
+    ;   get_dict(template, Embedding, _),
+        Mark = template_only
+    ).
 
 %% api_check_insert_body(+Stream, +Graph_Type, +Options, -Body) is det.
 %
@@ -4421,10 +4464,14 @@ test(check_delete_of_referenced_document_fails,
                         Body, [], options{}, Result),
     get_dict('api:valid', Result, false).
 
-test(check_embedding_report_no_backend,
+test(check_embedding_report_unmarked_class_is_irrelevant,
      [setup((setup_temp_store(State),
              create_db_with_test_schema(admin, checkdb4))),
       cleanup(teardown_temp_store(State))]) :-
+    % Relevance belongs to the touched classes, not the engine: City has
+    % no @metadata.embedding, so the report must not mention indexer
+    % configuration at all — that warning only makes sense when a class
+    % actually asks to be embedded.
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Auth),
     open_string('{ "@type": "City", "name": "Checktown" }', Stream),
@@ -4434,7 +4481,33 @@ test(check_embedding_report_no_backend,
                         Body, ['City'], options{}, Result),
     Embedding = Result.'api:embedding',
     get_dict('api:will_embed', Embedding, false),
-    once(sub_string(Embedding.get('api:reason'), _, _, _, "indexer")).
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "no touched class")),
+    \+ sub_string(Reason, _, _, _, "indexer").
+
+test(check_embedding_report_unmarked_class_with_backend_still_irrelevant,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb4b),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % A configured backend does not make an unmarked class relevant —
+    % the report is identical to the no-backend case.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, "admin/checkdb4b", instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    \+ sub_string(Reason, _, _, _, "indexer").
 
 test(check_body_failure_still_reports_embedding_block,
      [setup((setup_temp_store(State),
@@ -4450,7 +4523,8 @@ test(check_body_failure_still_reports_embedding_block,
                         [_Transaction, _Extra]>>fail, [], options{}, Result),
     get_dict('api:valid', Result, false),
     get_dict('api:embedding', Result, Embedding),
-    get_dict('api:will_embed', Embedding, false).
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
 
 test(check_bad_path_throws,
      [setup(setup_temp_store(State)),
@@ -4531,7 +4605,171 @@ test(check_embedding_report_covers_embedded_class,
                         "checker", "dry run", no_data_version,
                         Body, ['EmbedMe'], options{}, Result),
     Embedding = Result.'api:embedding',
-    get_dict('api:will_embed', Embedding, true).
+    get_dict('api:will_embed', Embedding, true),
+    get_dict('api:relevant', Embedding, true).
+
+test(check_embedding_report_marked_class_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb8),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % The marked class asks to be embedded but no indexer backend is
+    % configured — now the backend warning is the point of the report,
+    % and it names the class that misses out.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb8",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "indexer backend is none or not configured")),
+    once(sub_string(Reason, _, _, _, "EmbedMe")).
+
+test(check_embedding_report_mixed_touched_names_unmarked,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb9),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend configured and a mixed touched set, the report is
+    % relevant and names exactly the classes that will not be embedded.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb9",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    \+ sub_string(Reason, _, _, _, "indexer backend is none").
+
+test(check_embedding_report_template_only_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb11),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % A template without a query still marks the class — the report
+    % fires even though nothing could ever embed.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb11",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    once(sub_string(Embedding.get('api:reason'), _, _, _, "Templated")).
+
+test(check_embedding_report_template_only_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb12),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend the template-only class is marked but cannot
+    % embed — the reason must say the query is missing, not that the
+    % metadata is missing.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb12",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "template but no query")),
+    once(sub_string(Reason, _, _, _, "Templated")),
+    \+ sub_string(Reason, _, _, _, "without embedding metadata").
+
+test(check_embedding_report_mixed_marks_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb13),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % One query-marked, one template-only, one unmarked class touched:
+    % the reason names each failure group with its own cause.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb13",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'Templated', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    once(sub_string(Reason, _, _, _, "template but no query: Templated")).
+
+test(check_embedding_report_no_touched_types,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb10))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Deletes and other bodies that touch no class report a stable,
+    % irrelevant embedding block.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb10", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, Extra]>>(Extra = _{ids:[]}), [],
+                        options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
 
 :- end_tests(check_documents).
 
