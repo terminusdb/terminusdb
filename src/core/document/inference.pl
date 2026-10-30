@@ -454,11 +454,21 @@ _{ '@unfoldable' : [], '@class' : Type} :< Range =>
 
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
-  '@max':Max,'@min':Min,'@class': Type} :< Range =>
+  '@min':Min,'@class': Type} :< Range =>
+    % @max is omitted when the bound is unbounded
+    (   get_dict('@max', Range, Max)
+    ->  true
+    ;   Max = inf
+    ),
     check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures).
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Set',
-  '@max':Max,'@min':Min,'@class': Type} :< Range =>
+  '@min':Min,'@class': Type} :< Range =>
+    % @max is omitted when the bound is unbounded
+    (   get_dict('@max', Range, Max)
+    ->  true
+    ;   Max = inf
+    ),
     check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures).
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>

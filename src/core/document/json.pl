@@ -2843,13 +2843,15 @@ type_descriptor_json(set(C), Prefixes, json{ '@type' : Set,
                                              '@class' : Class_Comp }, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_json(set(C,Min,Max), Prefixes, json{ '@type' : Set,
-                                                      '@class' : Class_Comp,
-                                                      '@min_cardinality' : Min,
-                                                      '@max_cardinality' : Max
-                                                    }, Options) :-
+type_descriptor_json(set(C,Min,Max), Prefixes, JSON, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
-    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+    compress_schema_uri(C, Prefixes, Class_Comp, Options),
+    Base = json{ '@type' : Set,
+                 '@class' : Class_Comp,
+                 '@min_cardinality' : Min },
+    (   Max == inf
+    ->  JSON = Base
+    ;   JSON = Base.put('@max_cardinality', Max)).
 type_descriptor_json(array(C,D), Prefixes, json{ '@type' : Array,
                                                  '@dimensions' : D,
                                                  '@class' : Class_Comp }, Options) :-
@@ -2863,13 +2865,15 @@ type_descriptor_json(tagged_union(C,_), Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
 type_descriptor_json(enum(C,_),Prefixes, Class_Comp, Options) :-
     compress_schema_uri(C, Prefixes, Class_Comp, Options).
-type_descriptor_json(cardinality(C,Min,Max), Prefixes, json{ '@type' : Card,
-                                                             '@class' : Class_Comp,
-                                                             '@min_cardinality' : Min,
-                                                             '@max_cardinality' : Max
-                                                           }, Options) :-
+type_descriptor_json(cardinality(C,Min,Max), Prefixes, JSON, Options) :-
     expand_system_uri(sys:'Cardinality', Card, Options),
-    compress_schema_uri(C, Prefixes, Class_Comp, Options).
+    compress_schema_uri(C, Prefixes, Class_Comp, Options),
+    Base = json{ '@type' : Card,
+                 '@class' : Class_Comp,
+                 '@min_cardinality' : Min },
+    (   Max == inf
+    ->  JSON = Base
+    ;   JSON = Base.put('@max_cardinality', Max)).
 
 schema_subject_predicate_object_key_value(_,_,_Id,P,O^^_,'@base',O) :-
     global_prefix_expand(sys:base,P),
@@ -3770,14 +3774,16 @@ type_descriptor_sub_frame(set(C), Schema, Prefixes, json{ '@type' : Set,
     expand_system_uri(sys:'Set', Set, Options),
     schema_type_descriptor(Schema, C, Desc),
     type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
-type_descriptor_sub_frame(set(C,Min,Max), Schema, Prefixes, json{ '@type' : Set,
-                                                              '@class' : Frame,
-                                                              '@min' : Min,
-                                                              '@max' : Max
-                                                            }, Options) :-
+type_descriptor_sub_frame(set(C,Min,Max), Schema, Prefixes, JSON, Options) :-
     expand_system_uri(sys:'Set', Set, Options),
     schema_type_descriptor(Schema, C, Desc),
-    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options),
+    Base = json{ '@type' : Set,
+                 '@class' : Frame,
+                 '@min' : Min },
+    (   Max == inf
+    ->  JSON = Base
+    ;   JSON = Base.put('@max', Max)).
 type_descriptor_sub_frame(array(C,Dim), Schema, Prefixes, json{ '@type' : Array,
                                                             '@dimensions' : Dim,
                                                             '@class' : Frame }, Options) :-
@@ -3789,14 +3795,16 @@ type_descriptor_sub_frame(list(C), Schema, Prefixes, json{ '@type' : List,
     expand_system_uri(sys:'List', List, Options),
     schema_type_descriptor(Schema, C, Desc),
     type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
-type_descriptor_sub_frame(cardinality(C,Min,Max), Schema, Prefixes, json{ '@type' : Card,
-                                                                      '@class' : Frame,
-                                                                      '@min' : Min,
-                                                                      '@max' : Max
-                                                                    }, Options) :-
+type_descriptor_sub_frame(cardinality(C,Min,Max), Schema, Prefixes, JSON, Options) :-
     expand_system_uri(sys:'Cardinality', Card, Options),
     schema_type_descriptor(Schema, C, Desc),
-    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options).
+    type_descriptor_sub_frame(Desc, Schema, Prefixes, Frame, Options),
+    Base = json{ '@type' : Card,
+                 '@class' : Frame,
+                 '@min' : Min },
+    (   Max == inf
+    ->  JSON = Base
+    ;   JSON = Base.put('@max', Max)).
 type_descriptor_sub_frame(enum(C,List), _Schema, Prefixes, SubFrame, Options) :-
     (   option(simple(true),Options)
     ->  compress_schema_uri(C, Prefixes, Class_Comp, Options),
@@ -14573,7 +14581,6 @@ test(check_min_max_field,
     Min = json{ '@id':'Min',
 			    '@type':'Class',
 				a:json{ '@class':'xsd:integer',
-						'@max_cardinality':inf,
 						'@min_cardinality':1,
 						'@type':'Cardinality'
 					  }

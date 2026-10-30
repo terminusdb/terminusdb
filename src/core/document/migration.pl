@@ -360,10 +360,8 @@ type_weaken(Type1, Type2, SuperMap) :-
     ->  true
     ;   Family1 = 'Cardinality',
         Family2 = 'Cardinality'
-    ->  get_dict('@min_cardinality', Type1, Min1),
-        get_dict('@max_cardinality', Type1, Max1),
-        get_dict('@min_cardinality', Type2, Min2),
-        get_dict('@max_cardinality', Type2, Max2),
+    ->  card_bounds(Type1, Min1, Max1),
+        card_bounds(Type2, Min2, Max2),
         Min2 =< Min1,
         Max2 >= Max1
     ;   Family1 = 'Array',
@@ -412,10 +410,24 @@ type_is_optional(Type) :-
     (   memberchk(Family, ['Set', 'Optional'])
     ->  true
     ;   Family = 'Cardinality'
-    ->  get_dict('@min_cardinality', Type, Min),
-        get_dict('@max_cardinality', Type, Max),
+    ->  card_bounds(Type, Min, Max),
         Min =< 1,
         Max >= 1
+    ).
+
+% An absent bound means the bound is unset: minimum 0, maximum
+% unbounded (inf), matching type_family_parts/2 defaults. The
+% @cardinality shorthand sets both bounds to the same value.
+card_bounds(Type, Min, Max) :-
+    (   get_dict('@cardinality', Type, Cardinality)
+    ->  Min = Cardinality,
+        Max = Cardinality
+    ;   (   get_dict('@min_cardinality', Type, Min)
+        ->  true
+        ;   Min = 0),
+        (   get_dict('@max_cardinality', Type, Max)
+        ->  true
+        ;   Max = inf)
     ).
 
 one_of_subsumed(OriginalOneOf, WeakeningOneOf) :-
@@ -2387,6 +2399,22 @@ before_ccp('
 
 ').
 
+before_unbounded('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Min",
+  "a" : { "@type" : "Cardinality",
+          "@class" : "xsd:integer",
+          "@min_cardinality" : 1 } }
+
+{ "@type" : "Class",
+  "@id" : "Tgt" }
+
+').
+
 test(move_class_rewrites_property_range,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
@@ -3035,6 +3063,51 @@ test(foreign_property_spec_round_trips_in_schema,
     perform_instance_migration(Descriptor, commit_info{ author: "me",
                                                         message: "Fancy" },
                                Ops2, _Result2, []).
+
+test(unbounded_cardinality_spec_round_trips_in_schema,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_unbounded,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    % An unbounded Cardinality spec omits the max key, matching the
+    % form a client submits; emitting the internal inf sentinel would
+    % fail re-elaboration with a type error on the next rewrite.
+    get_schema_document(Descriptor, 'Min', Min_Doc),
+    get_dict(a, Min_Doc, A_Spec),
+    \+ get_dict('@max_cardinality', A_Spec, _),
+
+    % A migration on an unrelated class rewrites the class dictionary;
+    % the unbounded spec must survive re-elaboration.
+    Ops = [_{'@type' : "CreateClassProperty",
+             class : "Tgt",
+             property : "m",
+             type : _{'@type' : "Optional", '@class' : "xsd:string"}}],
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "Fancy" },
+                               Ops, _Result, []).
+
+test(type_weaken_unbounded_cardinality, []) :-
+    type_weaken(json{'@type' : 'Cardinality',
+                     '@class' : 'xsd:integer',
+                     '@min_cardinality' : 0},
+                json{'@type' : 'Cardinality',
+                     '@class' : 'xsd:integer',
+                     '@min_cardinality' : 0},
+                supermap{}).
+
+test(cardinality_shorthand_is_not_optional, []) :-
+    % @cardinality:N means min=max=N; an absent @min_cardinality must
+    % not collapse the lower bound to 0 and fake optionality.
+    \+ type_is_optional(json{'@type' : 'Cardinality',
+                             '@class' : 'xsd:integer',
+                             '@cardinality' : 2}),
+    type_is_optional(json{'@type' : 'Cardinality',
+                          '@class' : 'xsd:integer',
+                          '@cardinality' : 1}).
 
 
 test(garbage_op,
