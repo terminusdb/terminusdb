@@ -35,6 +35,7 @@
 :- use_module(core(account)).
 :- use_module(core(triple)).
 :- use_module(core(triple/casting), [normalise_interval_start/2, normalise_interval_end/2]).
+:- use_module(core(document/json), [schema_enum_member_lexicals/2]).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
 :- use_module(core(api), [call_catch_document_mutation/2]).
@@ -2791,8 +2792,19 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
             throw(error(M)))
     }.
 compile_wf(typecast(Val,Type,Cast),
-           (   typecast(ValE, TypeE, [prefixes(Prefixes)], CastE))) -->
+           (   typecast(ValE, TypeE, [prefixes(Prefixes), enum_members(Enum_Members)], CastE))) -->
     view(prefixes,Prefixes),
+    view(default_collection,Collection_Descriptor),
+    view(transaction_objects,Transaction_Objects),
+    {   % A bound enum member casts to its lexical value, so the member
+        % map rides along as a hint. Empty where no schema is reachable.
+        (   collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            database_schema(Transaction_Object, Schema)
+        ->  schema_enum_member_lexicals(Schema, Enum_Members)
+        ;   Enum_Members = []
+        )
+    },
     resolve(Val,ValE),
     resolve(Type,TypeE),
     resolve(Cast,CastE).
@@ -11396,13 +11408,19 @@ test(enum_binding_renders_lexical,
         insert_document(C2, _{ '@id' : 'WCls/one', name : "one", p : "red" }, _),
         _),
 
-    Query = _{ '@type' : "Triple",
-               subject : _{ '@type' : "NodeValue", variable : "X"},
-               predicate : _{ '@type' : "NodeValue", node : "p"},
-               object : _{ '@type' : "Value", variable : "V"}},
+    Query = _{ '@type' : "And",
+               and : [_{ '@type' : "Triple",
+                         subject : _{ '@type' : "NodeValue", variable : "X"},
+                         predicate : _{ '@type' : "NodeValue", node : "p"},
+                         object : _{ '@type' : "Value", variable : "V"}},
+                      _{ '@type' : "Typecast",
+                         value : _{ '@type' : "Value", variable : "V"},
+                         type : _{ '@type' : "NodeValue", node : "xsd:string"},
+                         result : _{ '@type' : "Value", variable : "S"}}]},
     query_test_response(Descriptor, Query, JSON),
     [B] = (JSON.bindings),
-    B.'V' = red.
+    B.'V' = red,
+    B.'S' = _{'@type': 'xsd:string', '@value': red}.
 
 % A Set of enum members binds a list of member nodes — each renders
 % its lexical value.

@@ -160,12 +160,7 @@ binding_term_jsonld(Enum_Members, Term, Prefixes, JSON) :-
 enum_member_lexicals(Context, Members) :-
     (   query_default_collection(Context, Transaction),
         database_schema(Transaction, Schema)
-    ->  findall(URI-Lexical,
-                (   is_schema_enum(Schema, Enum),
-                    schema_type_descriptor(Schema, Enum, enum(Enum, URIs)),
-                    member(URI, URIs),
-                    enum_value(Enum, Lexical, URI)),
-                Members)
+    ->  schema_enum_member_lexicals(Schema, Members)
     ;   Members = []).
 
 field_separator(true,"",_Size).

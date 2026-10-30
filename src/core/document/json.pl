@@ -72,6 +72,7 @@
               prefix_expand_schema/3,
               type_context/4,
               enum_value/3,
+              schema_enum_member_lexicals/2,
               update_id_field/3,
               update_captures/3,
               update_captures_with_id/4,
@@ -1195,6 +1196,18 @@ enum_value(Type,Value,ID) :-
     atom_concat(Type,'/',Prefix),
     atom_concat(Prefix,Encoded_Value,ID),
     encode_id_fragment(Value, Encoded_Value).
+
+/* Pairs each enum member's node IRI with its lexical value, for every
+ * enum in the schema. Used wherever a surface renders a bound member
+ * as its lexical form — WOQL bindings, WOQL typecast to xsd:string.
+ */
+schema_enum_member_lexicals(Schema, Members) :-
+    findall(URI-Lexical,
+            (   is_schema_enum(Schema, Enum),
+                schema_type_descriptor(Schema, Enum, enum(Enum, URIs)),
+                member(URI, URIs),
+                enum_value(Enum, Lexical, URI)),
+            Members).
 
 oneof_value(Val,Context,NewPath,Transformed) :-
     findall(
