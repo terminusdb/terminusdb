@@ -3904,7 +3904,14 @@ schema_class_frame_compute(Schema, Prefixes, Class_Ex, Frame, Options) :-
         Predicate_Comp-(Type_JSON-Subframe),
         (   schema_class_predicate_conjunctive_type(Schema, Class_Ex, Predicate, Type_Desc),
             type_descriptor_json(Type_Desc, Prefixes, Type_JSON, Options),
-            type_descriptor_sub_frame(Type_Desc, Schema, Prefixes, Subframe, Options),
+            type_descriptor_sub_frame(Type_Desc, Schema, Prefixes, Subframe0, Options),
+            % sys:unfold sits on the property's family node; fold it into the
+            % rendered subframe like the document serializer does.
+            (   schema_property_is_unfold(Schema, Class_Ex, Predicate, true)
+            ->  (   is_dict(Subframe0)
+                ->  Subframe = Subframe0.put('@unfold', true)
+                ;   Subframe = json{ '@class': Subframe0, '@unfold': true })
+            ;   Subframe = Subframe0),
             compress_schema_uri(Predicate, Prefixes, Predicate_Comp, Options)
         ),
         Pre_Pairs),
@@ -7675,6 +7682,60 @@ test(field_level_unfold_schema_roundtrip,
      get_dict(customer, Retrieved, CustomerField),
      get_dict('@unfold', CustomerField, true),
      get_dict(items, Retrieved, ItemsField),
+     get_dict('@unfold', ItemsField, true).
+
+test(field_level_unfold_frame_roundtrip,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     % The frame serializer feeds GET /api/schema; it must emit @unfold like
+     % the document serializer does, or schema consumers lose the flag.
+     DocumentOrder =
+     _{ '@id' : "Order",
+        '@type' : "Class",
+        customer : _{ '@type' : "Optional",
+                      '@class' : "Customer",
+                      '@unfold' : true },
+        items : _{ '@type' : "Set",
+                   '@class' : "Product",
+                   '@unfold' : true }
+      },
+
+     DocumentCustomer =
+     _{ '@id' : "Customer",
+        '@type' : "Class",
+        name : "xsd:string"
+      },
+
+     DocumentProduct =
+     _{ '@id' : "Product",
+        '@type' : "Class",
+        name : "xsd:string"
+      },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentOrder),
+             insert_schema_document(Context, DocumentCustomer),
+             insert_schema_document(Context, DocumentProduct)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     all_class_frames(DB, Frames),
+     Order = Frames.get('Order'),
+     get_dict(customer, Order, CustomerField),
+     get_dict('@unfold', CustomerField, true),
+     get_dict(items, Order, ItemsField),
      get_dict('@unfold', ItemsField, true).
 
 test(field_level_unfold_property_lookup,
