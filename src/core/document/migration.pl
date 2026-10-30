@@ -1020,6 +1020,33 @@ interpret_schema_operations([Op|Operations], Before_Schema, After_Schema) :-
     interpret_schema_operation_(Op, Before_Schema, Middle_Schema),
     interpret_schema_operations(Operations, Middle_Schema, After_Schema).
 
+/*
+ * Deleting a foreign class while a bare Foreign spec still points at it
+ * cannot succeed: re-elaborating the spec on write re-materializes the
+ * sys:Foreign stub, silently undoing the delete. Reject with the same
+ * witness a deleted normal class yields when references remain.
+ */
+refute_delete_referenced_foreign(Before, Name) :-
+    database_schema(Before, Schema),
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Name, Prefixes, Name_Ex),
+    global_prefix_expand(sys:'Foreign', Foreign),
+    xrdf(Schema, Name_Ex, rdf:type, Foreign),
+    global_prefix_expand(rdf:type, RDFType),
+    global_prefix_expand(sys:class, SysClass),
+    xrdf(Schema, _S, P_Ex, Name_Ex),
+    \+ memberchk(P_Ex, [RDFType, SysClass]),
+    !,
+    throw(error(schema_check_failure([witness{ '@type': not_a_class_or_base_type,
+                                             class: Name_Ex,
+                                             property: P_Ex }]),_)).
+refute_delete_referenced_foreign(_, _).
+
+interpret_schema_operation(delete_class(Name), Before, After) :-
+    !,
+    refute_delete_referenced_foreign(Before, Name),
+    calculate_schema_migration(Before, [delete_class(Name)], Schema),
+    replace_schema(Before, Schema, After).
 interpret_schema_operation(Operation, Before, After) :-
     calculate_schema_migration(Before, [Operation], Schema),
     replace_schema(Before, Schema, After).
@@ -2016,6 +2043,63 @@ test(add_remove_classes,
                                  '@schema':"terminusdb:///schema#",
                                  '@type':'Context'},
                  'C':json{'@id':"C", '@type':"Class", c:"xsd:string"}}.
+
+
+before_foreign('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Foreign",
+  "@id" : "ExtDoc" }
+
+{ "@type" : "Foreign",
+  "@id" : "Alone" }
+
+{ "@type" : "Class",
+  "@id" : "Host",
+  "@key" : { "@type" : "Random" },
+  "ext" : { "@type" : "Foreign", "@class" : "Host", "@id" : "ExtDoc" } }
+
+').
+
+test(delete_unreferenced_foreign_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_foreign,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    Ops = [json{ '@type' : "DeleteClass", 'class' : "Alone" }],
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "drop" },
+                               Ops,
+                               Result,
+                               []),
+    Result = metadata{instance_operations:0,schema_operations:1},
+
+    open_descriptor(Descriptor, Transaction),
+    create_class_dictionary(Transaction, Dictionary),
+    \+ get_dict('Alone', Dictionary, _).
+
+test(delete_referenced_foreign_class,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_foreign,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':not_a_class_or_base_type,
+                                          class:_,
+                                          property:_}]),_)
+     ]) :-
+
+    Ops = [json{ '@type' : "DeleteClass", 'class' : "ExtDoc" }],
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "drop" },
+                               Ops,
+                               _Result,
+                               []).
 
 
 before2('
