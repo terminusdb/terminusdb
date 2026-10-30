@@ -1623,7 +1623,14 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
             (   default_prefixes(Prefixes),
-                prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex),
+                prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex0),
+                (   sub_atom(Simple_Type_Ex0, _, _, _, ':')
+                ->  Simple_Type_Ex = Simple_Type_Ex0
+                ;   % A bare name refers into the schema namespace —
+                    % default_prefixes cannot see it, the database can.
+                    database_prefixes(Before, DB_Prefixes),
+                    prefix_expand_schema(Simple_Type_Ex0, DB_Prefixes, Simple_Type_Ex)
+                ),
                 ask(Before,
                     (   t(X, rdf:type, '@schema':Class),
                         t(X, Property, Value),
@@ -1633,24 +1640,35 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                     (   (   Value = V^^Old_Type
                         ->  global_prefix_expand(Old_Type, Old_Type_Ex),
                             (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast),
-                                      error(casting_error(_,_),_),
-                                      fail)
+                                      error(E,_),
+                                      (   (   E = casting_error(_,_)
+                                          ;   E = unknown_type_casting_error(_,_) )
+                                      ->  fail
+                                      ;   throw(error(E,_))))
+                            ->  true
+                            ;   % A string literal casts into an enum
+                                % range when it names a member.
+                                enum_from_string_literal(After, Simple_Type_Ex, V, Cast)
                             ->  true
                             ;   member(Default_or_Error, [default(Default), value(Default)])
                             ->  Cast = Default^^Simple_Type_Ex
                             ;   Value = _^^Old_Type,
                                 throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
                             )
-                        ;   % A reference, not a typed literal — the
-                            % stored node id is the roundtrip-legal
-                            % form: expand it to the uncompressed IRI.
-                            % xsd:string is the only target that can
-                            % hold it; anything else rejects.
-                            atomic(Value),
-                            global_prefix_expand(xsd:string, Simple_Type_Ex)
-                        ->  database_context_object(Before, Data_Context),
-                            prefix_expand(Value, Data_Context, Value_Ex),
-                            Cast = Value_Ex^^Simple_Type_Ex
+                        ;   % A reference, not a typed literal —
+                            % conversion depends on the target.
+                            atomic(Value)
+                        ->  (   database_context_object(Before, Data_Context),
+                                prefix_expand(Value, Data_Context, Value_Ex),
+                                database_prefixes(Before, DB_Prefixes),
+                                prefix_expand_schema(Class, DB_Prefixes, Class_Ex),
+                                prefix_expand_schema(Property, DB_Prefixes, Property_Ex),
+                                cast_node_value(Before, After, Class_Ex, Property_Ex, Value_Ex, Simple_Type_Ex, Cast)
+                            ->  true
+                            ;   member(Default_or_Error, [default(Default), value(Default)])
+                            ->  Cast = Default^^Simple_Type_Ex
+                            ;   throw(error(bad_cast_in_schema_migration(Class,Property,node,New_Type), _))
+                            )
                         ;   member(Default_or_Error, [default(Default), value(Default)])
                         ->  Cast = Default^^Simple_Type_Ex
                         ;   throw(error(bad_cast_in_schema_migration(Class,Property,node,New_Type), _))
@@ -1708,6 +1726,64 @@ interpret_instance_operation(Op, Before, After, Count) :-
 interpret_instance_operation(Op, _Before, _After, _Count) :-
     operation_string(Op, Op_String),
     throw(error(instance_operation_failed(Op_String), _)).
+
+/* Casting stored node references. The lexical value is an enum
+ * member's canonical string form — it roundtrips into any enum whose
+ * range contains it, so it is also what remaps a member across
+ * enum→enum casts. Other references (documents, subdocuments) keep
+ * their uncompressed IRI. Non-string, non-enum targets cannot hold
+ * either form and reject.
+ */
+cast_node_value(Before, After, Class_Ex, Property_Ex, Value_Ex, Target_Ex, Cast) :-
+    (   global_prefix_expand(xsd:string, Target_Ex)
+    ->  (   cast_source_enum(Before, Class_Ex, Property_Ex, Enum_Ex),
+            enum_value(Enum_Ex, Lexical, Value_Ex)
+        ->  Cast = Lexical^^Target_Ex
+        ;   Cast = Value_Ex^^Target_Ex
+        )
+    ;   database_schema(After, After_Schema),
+        schema_type_descriptor(After_Schema, Target_Ex, enum(Target_Ex, Members)),
+        cast_source_enum(Before, Class_Ex, Property_Ex, Enum_Ex),
+        enum_value(Enum_Ex, Lexical, Value_Ex),
+        enum_value(Target_Ex, Lexical, Cast),
+        memberchk(Cast, Members)
+    ).
+
+/* The old spec's innermost type resolves to an enum when the property
+ * being cast was enum-typed — the discrimination between a member
+ * node and a document link.
+ */
+cast_source_enum(Before, Class_Ex, Property_Ex, Enum_Ex) :-
+    class_predicate_type(Before, Class_Ex, Property_Ex, Desc),
+    cast_base_descriptor(Desc, Base),
+    (   Base = enum(Enum_Ex, _)
+    ->  true
+    ;   atomic(Base),
+        database_schema(Before, Schema),
+        schema_type_descriptor(Schema, Base, enum(Enum_Ex, _))
+    ).
+
+cast_base_descriptor(optional(Desc), Base) :-
+    !,
+    cast_base_descriptor(Desc, Base).
+cast_base_descriptor(set(Desc), Base) :-
+    !,
+    cast_base_descriptor(Desc, Base).
+cast_base_descriptor(set(Desc,_,_), Base) :-
+    !,
+    cast_base_descriptor(Desc, Base).
+cast_base_descriptor(cardinality(Desc,_,_), Base) :-
+    !,
+    cast_base_descriptor(Desc, Base).
+cast_base_descriptor(Desc, Desc).
+
+/* A string literal naming a member of the target enum casts to that
+ * member's node — the symmetric direction of enum→string. */
+enum_from_string_literal(After, Target_Ex, Value, Cast) :-
+    database_schema(After, After_Schema),
+    schema_type_descriptor(After_Schema, Target_Ex, enum(Target_Ex, Members)),
+    enum_value(Target_Ex, Value, Cast),
+    memberchk(Cast, Members).
 
 object_type(instance,instance_objects).
 object_type(schema,schema_objects).
@@ -2213,10 +2289,23 @@ before_cast_link('
   "@id" : "CE",
   "@value" : ["x", "y"] }
 
+{ "@type" : "Enum",
+  "@id" : "CE2",
+  "@value" : ["x", "z"] }
+
+{ "@type" : "Enum",
+  "@id" : "CE3",
+  "@value" : ["z"] }
+
 { "@type" : "Class",
   "@id" : "CEU",
   "@key" : { "@type" : "Random" },
   "p" : "CE" }
+
+{ "@type" : "Class",
+  "@id" : "CS",
+  "@key" : { "@type" : "Random" },
+  "s" : "xsd:string" }
 
 ').
 
@@ -2254,10 +2343,9 @@ test(cast_link_to_string_converts_values,
     get_document(Descriptor, 'LKA/2', Doc2),
     get_dict(oref, Doc2, "terminusdb:///data/LKB/b1").
 
-% An enum member is stored as a schema node; casting to xsd:string
-% yields the member's uncompressed IRI — the stored form that
-% roundtrips back into the enum.
-test(cast_enum_to_string_converts_to_member_iri,
+% An enum member's canonical string form is its lexical value — that
+% form roundtrips back into any enum containing the member.
+test(cast_enum_to_string_converts_to_lexical,
      [setup((setup_temp_store(State),
              test_document_label_descriptor(database,Descriptor),
              write_schema(before_cast_link,Descriptor)
@@ -2280,7 +2368,88 @@ test(cast_enum_to_string_converts_to_member_iri,
                                Ops, _Result, []),
 
     get_document(Descriptor, 'CEU/1', Doc),
-    get_dict(p, Doc, "terminusdb:///schema#CE/x").
+    get_dict(p, Doc, "x").
+
+% Casting an enum property to another enum remaps members by lexical
+% value: CE/x becomes CE2/x. The cast is legal exactly when every stored
+% member exists in the target range.
+test(cast_enum_to_enum_remaps_members,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_link,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'CEU/1', p : "x" }, _)),
+
+    Term_Ops = [
+        cast_class_property("CEU", "p", "CE2", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'CEU/1', Doc),
+    get_dict(p, Doc, x).
+
+% A stored member with no counterpart in the target enum cannot
+% roundtrip — the cast rejects rather than inventing a member.
+test(cast_enum_to_enum_rejects_stray_member,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_link,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(bad_cast_in_schema_migration("CEU","p",_,"CE3"),_)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'CEU/1', p : "x" }, _)),
+
+    Term_Ops = [
+        cast_class_property("CEU", "p", "CE3", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []).
+
+% The lexical form is canonical, so a string literal casts into an enum
+% range when it names a member — the symmetric direction of
+% enum→string.
+test(cast_string_to_enum_coerces_member,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_link,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'CS/1', s : "x" }, _)),
+
+    Term_Ops = [
+        cast_class_property("CS", "s", "CE2", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'CS/1', Doc),
+    get_dict(s, Doc, x).
 
 % A link cannot roundtrip into a non-string primitive — the IRI is not a
 % number — so the cast must fail with a bad_cast witness, not drop data.
