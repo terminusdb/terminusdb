@@ -316,7 +316,8 @@ transaction_object_database_key(Transaction_Object, Key) :-
 run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     transaction_objects_to_validation_objects(Transactions, Validations),
     (   option(inside_migration(true), Options)
-    ->  Validations=Validations0,
+    ->  maplist([V, V0]>>put_dict(_{inside_migration:true}, V, V0),
+                Validations, Validations0),
         Inference_Metadata=_{}
     ;   infer_migrations_for_commit(Validations,Validations0,Inference_Metadata,Options)
     ),

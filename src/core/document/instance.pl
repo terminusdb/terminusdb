@@ -405,7 +405,11 @@ subject_deleted(Validation_Object, S_Id) :-
     instance_layer(Validation_Object, Layer),
     global_prefix_expand(rdf:type, Rdf_Type),
     terminus_store:predicate_id(Layer, Rdf_Type, Rdf_Type_Id),
-    terminus_store:id_triple_removal(Layer, S_Id, Rdf_Type_Id, _).
+    terminus_store:id_triple_removal(Layer, S_Id, Rdf_Type_Id, _),
+    % A type removal paired with a type addition is a retype, not a
+    % deletion — leave it to refute_subject_type_change so the witness
+    % names the actual change.
+    \+ terminus_store:id_triple_addition(Layer, S_Id, Rdf_Type_Id, _).
 
 
 subject_predicate_changed(Validation_Object, S_Id, P_Id) :-
@@ -469,7 +473,13 @@ refute_existing_object_keys(Validation_Object,Class,Witness) :-
     terminus_store:subject_id(Layer, Subject_String, S_Id),
 
     memberchk(Desc, [lexical(_,_), hash(_,_), value_hash]),
-    'document/json':get_document(Validation_Object, Subject_String, Document),
+    % A subdocument's @id is minted under its parent's path, so the
+    % standalone node can never re-elaborate — check the root document.
+    (   is_subdocument(Validation_Object, Class)
+    ->  atom_string(Subject_Atom, Subject_String),
+        root_document_uri(Validation_Object, Subject_Atom, Check_Uri)
+    ;   Check_Uri = Subject_String),
+    'document/json':get_document(Validation_Object, Check_Uri, Document),
     catch(
         'document/json':json_elaborate(Validation_Object, Document, _),
         error(submitted_id_does_not_match_generated_id(Submitted,Generated),_),
@@ -481,6 +491,26 @@ refute_existing_object_keys(Validation_Object,Class,Witness) :-
     (   var(Witness)
     ->  fail
     ;   true).
+
+%% root_document_uri(+DB, +Uri, -Root_Uri)
+%% Follow back-links from a subdocument URI upward to its root document.
+%% Mirrors document/migration's find_root_document — kept local because
+%% migration already depends on this module, so importing would cycle.
+%% A node with no parent (corrupt data) makes the caller fail instead of
+%% elaborating a standalone subdocument, which always throws.
+root_document_uri(DB, Uri, Root_Uri) :-
+    root_document_uri_(DB, Uri, [Uri], Root_Uri).
+
+root_document_uri_(DB, Uri, Visited, Root_Uri) :-
+    database_instance(DB, Instance),
+    xrdf(Instance, Parent, _P, Uri),
+    Parent \= Uri,
+    \+ memberchk(Parent, Visited),
+    xrdf(Instance, Parent, rdf:type, Parent_Type),
+    (   is_subdocument(DB, Parent_Type)
+    ->  root_document_uri_(DB, Parent, [Parent|Visited], Root_Uri)
+    ;   Root_Uri = Parent
+    ).
 
 refute_subject_deletion(Validation_Object, S_Id, Witness) :-
     subject_deleted(Validation_Object, S_Id),
@@ -511,6 +541,13 @@ refute_subject_deletion_(Validation_Object, S_Id,Witness) :-
                         predicate : Predicate,
                         object : Subject }).
 
+/* Retyping is legal inside a migration transaction: operations such as
+ * RebaseIRIPrefix rewrite class IRIs in place and are preflighted
+ * before they run. Outside a migration the refutation still holds. */
+refute_subject_type_change(Validation_Object, _S_Id, _Witness) :-
+    get_dict(inside_migration, Validation_Object, true),
+    !,
+    fail.
 refute_subject_type_change(Validation_Object,S_Id,Witness) :-
     instance_layer(Validation_Object, Layer),
 
