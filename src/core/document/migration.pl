@@ -1042,11 +1042,42 @@ refute_delete_referenced_foreign(Before, Name) :-
                                              property: P_Ex }]),_)).
 refute_delete_referenced_foreign(_, _).
 
-interpret_schema_operation(delete_class(Name), Before, After) :-
+/* A sys:Foreign class is a stub whose real definition lives in another
+ * database. Property-level ops on it would store phantom fields on the
+ * stub, so reject them before the class dictionary is rebuilt.
+ */
+property_mutation_operation(create_class_property(Class,_,_), Class).
+property_mutation_operation(create_class_property(Class,_,_,_), Class).
+property_mutation_operation(delete_class_property(Class,_), Class).
+property_mutation_operation(move_class_property(Class,_,_), Class).
+property_mutation_operation(upcast_class_property(Class,_,_), Class).
+property_mutation_operation(cast_class_property(Class,_,_,_), Class).
+
+refute_foreign_class_mutation(Before, Name) :-
+    database_schema(Before, Schema),
+    database_prefixes(Before, Prefixes),
+    prefix_expand_schema(Name, Prefixes, Name_Ex),
+    global_prefix_expand(sys:'Foreign', Foreign),
+    xrdf(Schema, Name_Ex, rdf:type, Foreign),
     !,
-    refute_delete_referenced_foreign(Before, Name),
-    calculate_schema_migration(Before, [delete_class(Name)], Schema),
-    replace_schema(Before, Schema, After).
+    throw(error(schema_check_failure([witness{ '@type': cannot_modify_foreign_class,
+                                             class: Name_Ex }]),_)).
+refute_foreign_class_mutation(_, _).
+
+/* Both foreign-class guards must run on the parsed ops before
+ * calculate_schema_migration interprets them on the class dictionary:
+ * the dictionary path fails generically (delete of a missing property)
+ * or silently resurrects foreign stubs, losing the typed witness.
+ */
+refute_foreign_schema_operation(Before, delete_class(Name)) :-
+    !,
+    refute_delete_referenced_foreign(Before, Name).
+refute_foreign_schema_operation(Before, Operation) :-
+    property_mutation_operation(Operation, Name),
+    !,
+    refute_foreign_class_mutation(Before, Name).
+refute_foreign_schema_operation(_, _).
+
 interpret_schema_operation(Operation, Before, After) :-
     calculate_schema_migration(Before, [Operation], Schema),
     replace_schema(Before, Schema, After).
@@ -1599,16 +1630,30 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                         delete(X, Property, Value)
                     )),
                 once(
-                    (   Value = V^^Old_Type,
-                        global_prefix_expand(Old_Type, Old_Type_Ex),
-                        (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast),
-                                  error(casting_error(_,_),_),
-                                  fail)
-                        ->  true
+                    (   (   Value = V^^Old_Type
+                        ->  global_prefix_expand(Old_Type, Old_Type_Ex),
+                            (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast),
+                                      error(casting_error(_,_),_),
+                                      fail)
+                            ->  true
+                            ;   member(Default_or_Error, [default(Default), value(Default)])
+                            ->  Cast = Default^^Simple_Type_Ex
+                            ;   Value = _^^Old_Type,
+                                throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
+                            )
+                        ;   % A reference, not a typed literal — the
+                            % stored node id is the roundtrip-legal
+                            % form: expand it to the uncompressed IRI.
+                            % xsd:string is the only target that can
+                            % hold it; anything else rejects.
+                            atomic(Value),
+                            global_prefix_expand(xsd:string, Simple_Type_Ex)
+                        ->  database_context_object(Before, Data_Context),
+                            prefix_expand(Value, Data_Context, Value_Ex),
+                            Cast = Value_Ex^^Simple_Type_Ex
                         ;   member(Default_or_Error, [default(Default), value(Default)])
                         ->  Cast = Default^^Simple_Type_Ex
-                        ;   Value = _^^Old_Type,
-                            throw(error(bad_cast_in_schema_migration(Class,Property,Old_Type,New_Type), _))
+                        ;   throw(error(bad_cast_in_schema_migration(Class,Property,node,New_Type), _))
                         ),
                         ask(After,
                             (   insert(X, Property, Cast)))
@@ -1620,6 +1665,7 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
         operation_string(cast_class_property(Class, Property, New_Type, Default_or_Error), Op_String),
         throw(error(not_implemented(Op_String), _))
     ).
+
 interpret_instance_operation_(move_class_property(Class,Old_Property,New_Property), _Before, After, Count) :-
     count_solutions(
         ask(After,
@@ -1703,6 +1749,8 @@ interpret_operations([Operation|Operations], Before, After, Instance_Count_In, I
 
 interpret_operations(JSONOps, Before, After, Instance_Count) :-
     migration_list_to_ast_list(JSONOps, Ops),
+    % Foreign-class guards before the dictionary preflight.
+    maplist(refute_foreign_schema_operation(Before), Ops),
     % Preflight to test that everything is ok...
     calculate_schema_migration(Before, Ops, _),
     interpret_operations(Ops, Before, Intermediate, 0, Instance_Count),
@@ -2100,6 +2148,166 @@ test(delete_referenced_foreign_class,
                                Ops,
                                _Result,
                                []).
+
+% A sys:Foreign class is a stub for a definition living in another
+% database — mutating its local property set is meaningless, so the
+% property ops must reject it rather than store phantom fields.
+test(create_property_on_foreign_rejected,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_foreign,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':cannot_modify_foreign_class,
+                                          class:_}]),_)
+     ]) :-
+
+    Ops = [json{ '@type' : "CreateClassProperty",
+                 'class' : "Alone",
+                 'property' : "x",
+                 'type' : json{ '@type' : "Optional",
+                                '@class' : "xsd:string" } }],
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "mutate" },
+                               Ops,
+                               _Result,
+                               []).
+
+test(delete_property_on_foreign_rejected,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_foreign,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':cannot_modify_foreign_class,
+                                          class:_}]),_)
+     ]) :-
+
+    Ops = [json{ '@type' : "DeleteClassProperty",
+                 'class' : "Alone",
+                 'property' : "x" }],
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "mutate" },
+                               Ops,
+                               _Result,
+                               []).
+
+
+before_cast_link('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "LKB",
+  "@key" : { "@type" : "Lexical", "@fields" : ["n"] },
+  "n" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "LKA",
+  "@key" : { "@type" : "Random" },
+  "ref" : "LKB",
+  "oref" : { "@type" : "Optional", "@class" : "LKB" } }
+
+{ "@type" : "Enum",
+  "@id" : "CE",
+  "@value" : ["x", "y"] }
+
+{ "@type" : "Class",
+  "@id" : "CEU",
+  "@key" : { "@type" : "Random" },
+  "p" : "CE" }
+
+').
+
+% A cast to xsd:string of a link-typed property must convert each stored
+% reference into its uncompressed IRI string — the only form that
+% roundtrips — instead of dropping it.
+test(cast_link_to_string_converts_values,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_link,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1, _{ '@id' : 'LKB/b1', n : "b1" }, _),
+            insert_document(C1, _{ '@id' : 'LKA/1', ref : 'LKB/b1' }, _),
+            insert_document(C1, _{ '@id' : 'LKA/2', ref : 'LKB/b1', oref : 'LKB/b1' }, _)
+        )),
+
+    Term_Ops = [
+        cast_class_property("LKA", "ref", "xsd:string", error),
+        cast_class_property("LKA", "oref", "xsd:string", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'LKA/1', Doc1),
+    get_dict(ref, Doc1, "terminusdb:///data/LKB/b1"),
+    get_document(Descriptor, 'LKA/2', Doc2),
+    get_dict(oref, Doc2, "terminusdb:///data/LKB/b1").
+
+% An enum member is stored as a schema node; casting to xsd:string
+% yields the member's uncompressed IRI — the stored form that
+% roundtrips back into the enum.
+test(cast_enum_to_string_converts_to_member_iri,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_link,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'CEU/1', p : "x" }, _)),
+
+    Term_Ops = [
+        cast_class_property("CEU", "p", "xsd:string", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'CEU/1', Doc),
+    get_dict(p, Doc, "terminusdb:///schema#CE/x").
+
+% A link cannot roundtrip into a non-string primitive — the IRI is not a
+% number — so the cast must fail with a bad_cast witness, not drop data.
+test(cast_link_to_integer_rejected,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_link,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(bad_cast_in_schema_migration("LKA","ref",_,"xsd:integer"),_)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1, _{ '@id' : 'LKB/b1', n : "b1" }, _),
+            insert_document(C1, _{ '@id' : 'LKA/1', ref : 'LKB/b1' }, _)
+        )),
+
+    Term_Ops = [
+        cast_class_property("LKA", "ref", "xsd:integer", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []).
 
 
 before2('
