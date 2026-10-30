@@ -1910,6 +1910,24 @@ api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation)
                               'api:operation' : Operation
                             }
             }.
+api_error_jsonld_(migration, error(destructive_migration_requires_opt_in(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q rewrites stored identifiers and requires allow_destructive_migration to be set to true", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DestructiveMigrationRequiresOptIn",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(rebase_prefix_unchanged(Prefix), _), JSON) :-
+    format(string(Msg), "The rebase source and target prefixes are identical: ~q", [Prefix]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RebasePrefixUnchanged",
+                              'api:prefix' : Prefix
+                            }
+            }.
 api_error_jsonld_(migration, error(unknown_irrefutable_property_creation(Class, Property, Type), _), JSON) :-
     format(string(Msg), "The property ~q on class ~q could not be created with type ~q, as no irrefutable default could be constructed for it", [Property, Class, Type]),
     JSON = _{'@type' : 'api:MigrationErrorResponse',

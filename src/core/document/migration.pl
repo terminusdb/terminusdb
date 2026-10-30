@@ -556,6 +556,136 @@ replace_context(Context, Before, After) :-
     put_dict(_{'@context' : Context}, Before, After).
 
 
+/* RebaseIRIPrefix{from,to} — the explicit destructive counterpart to
+ * minting-only context changes: every stored IRI under `from` is
+ * rewritten to `to` across the instance, schema and inference graphs.
+ * Only atom positions are IRIs — minting prefixes ('@base', context
+ * '@schema') and documentation text are strings and stay untouched.
+ * Pair with ReplaceContext/ReplaceClassBase to also move the minting
+ * prefixes. Never inferred; requires allow_destructive_migration.
+ */
+
+/* `from`/`to` may name a declared prefix ('myclass:') or give a literal
+ * IRI prefix. Anything carrying a scheme is already absolute; other
+ * forms expand under the dictionary's context. */
+resolve_rebase_prefix(Name, Prefixes, Prefix_Ex) :-
+    atom_string(Name_Atom, Name),
+    (   sub_atom(Name_Atom, _, _, _, '://')
+    ->  Prefix_Ex = Name_Atom
+    ;   prefix_expand_schema(Name_Atom, Prefixes, Prefix_Ex)
+    ->  true
+    ;   Prefix_Ex = Name_Atom
+    ).
+
+/* rewrite one atom-position IRI under `from` to `to`; non-atoms and
+ * non-matching atoms pass through */
+rebase_atom_prefix(From, To, Atom, Out) :-
+    (   atom(Atom),
+        atom_concat(From, Suffix, Atom)
+    ->  atom_concat(To, Suffix, Out)
+    ;   Out = Atom).
+
+/* recursively rewrite atom IRIs inside dictionaries and lists. Minting
+ * declarations (@base/@schema) hold strings, so they take the
+ * string-aware path — a class @base left at the old namespace would
+ * keep minting under dead IRIs. */
+rebase_iri_value(From, To, Value, Out) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist({From,To}/[K-V, K_Ex-V_Ex]>>(
+                rebase_atom_prefix(From, To, K, K_Ex),
+                (   memberchk(K_Ex, ['@base', '@schema'])
+                ->  rebase_context_value(From, To, V, V_Ex)
+                ;   rebase_iri_value(From, To, V, V_Ex))),
+            Pairs, Pairs_Ex),
+    dict_pairs(Out, Tag, Pairs_Ex).
+rebase_iri_value(From, To, Value, Out) :-
+    is_list(Value),
+    !,
+    maplist({From,To}/[V,V_Ex]>>rebase_iri_value(From, To, V, V_Ex),
+            Value, Out).
+rebase_iri_value(From, To, Atom, Out) :-
+    rebase_atom_prefix(From, To, Atom, Out).
+
+/* rebase_iri_prefix(From, To) — dictionary-level op: every expanded
+ * IRI in the class dictionary under `from` is rewritten to `to`. The
+ * write-back re-elaborates all schema documents, so minted node IRIs
+ * (key, documentation, @oneOf choice nodes) follow their class. */
+rebase_iri_prefix(From, To, Before, After) :-
+    get_dict('@context', Before, Context),
+    context_prefixes(Context, Prefixes, _Defaults),
+    resolve_rebase_prefix(From, Prefixes, From_Ex),
+    resolve_rebase_prefix(To, Prefixes, To_Ex),
+    do_or_die(
+        From_Ex \= To_Ex,
+        error(rebase_prefix_unchanged(From), _)),
+    rebase_dictionary_iris(From_Ex, To_Ex, Before, After).
+
+rebase_dictionary_iris(From, To, Before, After) :-
+    dict_pairs(Before, Tag, Pairs),
+    maplist({From,To}/[K-V, K_Ex-V_Ex]>>(
+                rebase_atom_prefix(From, To, K, K_Ex),
+                (   K_Ex == '@context'
+                ->  rebase_context_value(From, To, V, V_Ex)
+                ;   rebase_iri_value(From, To, V, V_Ex))),
+            Pairs, Pairs_Ex),
+    dict_pairs(After, Tag, Pairs_Ex).
+
+/* @context values are strings — prefix declarations, @base and @schema
+ * are not atoms. The rebase must move them too: left pointing at the
+ * old namespace, write-back contraction cannot compress the new IRIs
+ * and minted node names (type-spec, key and choice nodes) percent-
+ * encode. */
+rebase_context_value(From, To, Value, Out) :-
+    is_dict(Value),
+    !,
+    dict_pairs(Value, Tag, Pairs),
+    maplist({From,To}/[K-V, K-V_Ex]>>(
+                rebase_context_value(From, To, V, V_Ex)),
+            Pairs, Pairs_Ex),
+    dict_pairs(Out, Tag, Pairs_Ex).
+rebase_context_value(From, To, Value, Out) :-
+    is_list(Value),
+    !,
+    maplist({From,To}/[V, V_Ex]>>rebase_context_value(From, To, V, V_Ex),
+            Value, Out).
+rebase_context_value(From, To, Value, Out) :-
+    (   string(Value)
+    ->  atom_string(Atom, Value),
+        rebase_atom_prefix(From, To, Atom, Atom_Ex),
+        atom_string(Atom_Ex, Out)
+    ;   rebase_atom_prefix(From, To, Value, Out)
+    ).
+
+/* One triple-level rewrite; fails when nothing changes so callers can
+ * skip untouched triples. Literals (V^^T, V@L) are not IRI positions —
+ * including the datatype slot — and are never rewritten. */
+rebase_triple(From, To, t(S,P,O), t(S_Ex,P_Ex,O_Ex)) :-
+    rebase_atom_prefix(From, To, S, S_Ex),
+    rebase_atom_prefix(From, To, P, P_Ex),
+    rebase_iri_value(From, To, O, O_Ex),
+    \+ (S = S_Ex, P = P_Ex, O = O_Ex).
+
+/* Raw rewrite of a list of read_write_obj graphs over xrdf, which
+ * yields canonical expanded IRIs — ask/2 would compress them through
+ * the context and prefix matching would miss. Delete and insert land
+ * on the same graph the triple was read from. Counts rewritten
+ * triples. */
+rebase_graph_iris(From, To, Graphs, Count) :-
+    findall(G-t(S,P,O),
+            (   member(G, Graphs),
+                xrdf([G], S, P, O)),
+            Triples),
+    count_solutions(
+        (   member(G-t(S,P,O), Triples),
+            rebase_triple(From, To, t(S,P,O), t(S_Ex,P_Ex,O_Ex)),
+            delete(G, S, P, O, _),
+            insert(G, S_Ex, P_Ex, O_Ex, _)
+        ),
+        Count).
+
+
 /* replace_context_metadata(Metadata) */
 replace_context_metadata(Metadata, Before, After) :-
     get_dict('@context', Before, Context),
@@ -1462,10 +1592,14 @@ refute_foreign_schema_operation(_, _).
 /* A context replacement swaps only the context node. The generic
  * path would re-elaborate every class under the new @base/@schema,
  * re-minting their IRIs and orphaning stored instance references —
- * minting must steer only new identifiers.
- */
-interpret_schema_operation(replace_context(Context), Before, Before) :-
+ * minting must steer only new identifiers. The op's context field is
+ * unambiguous, so a missing '@type' means "@context". */
+interpret_schema_operation(replace_context(Context_In), Before, Before) :-
     !,
+    (   get_dict('@type', Context_In, "@context")
+    ->  Context = Context_In
+    ;   put_dict('@type', Context_In, "@context", Context)
+    ),
     replace_context_document(Before, Context).
 interpret_schema_operation(Operation, Before, After) :-
     calculate_schema_migration(Before, [Operation], Schema),
@@ -1836,6 +1970,23 @@ interpret_instance_operation_(replace_context_documentation(_), _Before, _After,
  */
 interpret_instance_operation_(replace_context(_), _Before, _After, 0).
 interpret_instance_operation_(expand_enum(_Class, _Values), _Before, _After, 0).
+/* Instance side of RebaseIRIPrefix: rewrite every triple whose
+ * subject, predicate or object IRI starts with `from` — which includes
+ * rdf:type class references, property predicates, document and
+ * subdocument links, captured backlinks and list cons cells. Literal
+ * objects are untouched (they are values, not IRI positions). The
+ * schema graph is rewritten separately by the dictionary op;
+ * inference graphs are rewritten here because no document layer owns
+ * them. Counts rewritten triples. */
+interpret_instance_operation_(rebase_iri_prefix(From, To), Before, _After, Count) :-
+    database_prefixes(Before, DB_Prefixes),
+    default_prefixes(Defaults),
+    Prefixes = (Defaults.put(DB_Prefixes)),
+    resolve_rebase_prefix(From, Prefixes, From_Ex),
+    resolve_rebase_prefix(To, Prefixes, To_Ex),
+    rebase_graph_iris(From_Ex, To_Ex, Before.instance_objects, Instance_Count),
+    rebase_graph_iris(From_Ex, To_Ex, Before.inference_objects, Inference_Count),
+    Count is Instance_Count + Inference_Count.
 interpret_instance_operation_(move_class(Old_Class, New_Class), Before, After, Count) :-
     database_prefixes(Before, Prefixes),
     prefix_expand_schema(Old_Class, Prefixes, Old_Class_Ex),
@@ -2314,6 +2465,7 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, Result
 perform_instance_migration_on_transaction(Before_Transaction, Operations, After_Transaction, Result, Options) :-
     ensure_transaction_has_builder(instance, Before_Transaction),
     ensure_transaction_has_builder(schema, Before_Transaction),
+    refute_ungated_rebase(Operations, Options),
     interpret_operations(Operations,Before_Transaction,After_Transaction,Count),
     length(Operations, Op_Count),
     % run logic here.
@@ -2332,6 +2484,16 @@ perform_instance_migration_on_transaction(Before_Transaction, Operations, After_
                            instance_operations: Count }
     ).
 
+
+/* RebaseIRIPrefix rewrites every stored IRI under `from` — destructive
+ * enough that even as an explicit operation it requires opt-in. */
+refute_ungated_rebase(Operations, Options) :-
+    (   member(Operation, Operations),
+        is_dict(Operation),
+        get_dict('@type', Operation, "RebaseIRIPrefix"),
+        \+ option(allow_destructive_migration(true), Options)
+    ->  throw(error(destructive_migration_requires_opt_in("RebaseIRIPrefix"), _))
+    ;   true).
 
 operation_is_weakening(create_class(_)).
 operation_is_weakening(create_class_property(_,_,_)).
@@ -4728,6 +4890,238 @@ test(context_change_preserves_instances,
     forall(
         member(Id, Before_Ids),
         get_document(C3, Id, _Doc)).
+
+/* A ReplaceContext op whose context omits '@type' still writes a
+ * sys:Context node — the field is already named 'context'. */
+test(replace_context_accepts_bare_context_object,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(preservation_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"ctx"},
+        [json{ '@type' : "ReplaceContext",
+               context : _{ '@base' : "http://a/",
+                            '@schema' : "http://a#" } }],
+        _Result,
+        []),
+    create_context(Descriptor, commit_info{author:"me", message:"chk"}, C2),
+    database_context_object(C2, New_Context),
+    New_Context.'@base' = "http://a/".
+
+/* RebaseIRIPrefix — the explicit destructive op: rewrites every stored
+ * IRI under `from` to `to` in instance, schema and inference graphs.
+ * Strings (minting prefixes, documentation) never move — a paired
+ * ReplaceContext moves the minting prefixes so the new namespace
+ * compresses again. */
+rebase_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "Parent",
+  "p" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Child",
+  "@inherits" : "Parent",
+  "c" : "xsd:string" }
+
+{ "@type" : "Class",
+  "@id" : "Holder",
+  "sub" : { "@type" : "Optional", "@class" : "SubDoc" },
+  "shade" : { "@type" : "Optional", "@class" : "Colour" } }
+
+{ "@type" : "Class",
+  "@id" : "SubDoc",
+  "@subdocument" : [],
+  "@key" : { "@type" : "Lexical", "@fields" : ["v"] },
+  "v" : "xsd:string" }
+
+{ "@type" : "Enum",
+  "@id" : "Colour",
+  "@value" : ["red", "blue"] }
+
+{ "@type" : "TaggedUnion",
+  "@id" : "Shape",
+  "circle" : "xsd:decimal",
+  "sub"    : "SubDoc" }
+
+{ "@type" : "Class",
+  "@id" : "Pinned",
+  "@base" : "terminusdb:///schema#pinned/" }
+').
+
+test(rebase_prefix_rewrites_schema_and_instances,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(rebase_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1,
+                            _{ '@id' : 'Holder/1',
+                               sub : _{ v : "x" },
+                               shade : "red" },
+                            _),
+            insert_document(C1,
+                            _{ '@id' : 'Child/1', p : "a", c : "b" },
+                            _)
+        )
+    ),
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"rebase"},
+        [json{ '@type' : "RebaseIRIPrefix",
+               from : "terminusdb:///schema#",
+               to : "http://example.com/schema#" },
+         json{ '@type' : "ReplaceContext",
+               context : _{ '@type' : "@context",
+                            '@base' : "terminusdb:///data/",
+                            '@schema' : "http://example.com/schema#" }}],
+        _Result,
+        [allow_destructive_migration(true)]),
+
+    % Schema side: class, inherits and enum member nodes now live under
+    % the new namespace — nothing under the old one remains.
+    ask(Descriptor,
+        t('http://example.com/schema#Child', rdf:type, sys:'Class', schema)),
+    ask(Descriptor,
+        t('http://example.com/schema#Child', sys:inherits, 'http://example.com/schema#Parent', schema)),
+    ask(Descriptor,
+        t(_, rdf:first, 'http://example.com/schema#Colour/red', schema)),
+    ask(Descriptor,
+        t('http://example.com/schema#SubDoc/key/Lexical/v', _, _, schema)),
+    % TaggedUnion member predicates and targets, and a class @base
+    % minting prefix, follow the namespace too — nothing under the old
+    % one remains.
+    ask(Descriptor,
+        t('http://example.com/schema#Shape', 'http://example.com/schema#sub',
+          'http://example.com/schema#SubDoc', schema)),
+    ask(Descriptor,
+        t('http://example.com/schema#Pinned', sys:base,
+          "http://example.com/schema#pinned/"^^xsd:string, schema)),
+    \+ ask(Descriptor,
+           t('terminusdb:///schema#Child', _, _, schema)),
+    \+ ask(Descriptor,
+           t('terminusdb:///schema#Colour/red', _, _, schema)),
+    \+ ( ask(Descriptor, t(Old_Subject, _, _, schema)),
+         sub_atom(Old_Subject, 0, _, _, 'terminusdb:///schema#') ),
+
+    % Instance side: document IRIs are immutable (data prefix
+    % untouched), but every schema-IRI position moved — rdf:type,
+    % property predicates, the enum member object and the subdocument's
+    % type reference.
+    ask(Descriptor,
+        t('terminusdb:///data/Child/1', rdf:type, 'http://example.com/schema#Child')),
+    ask(Descriptor,
+        t('terminusdb:///data/Child/1', 'http://example.com/schema#p',
+          "a"^^xsd:string)),
+    ask(Descriptor,
+        t('terminusdb:///data/Holder/1', 'http://example.com/schema#shade',
+          'http://example.com/schema#Colour/red')),
+    ask(Descriptor,
+        t('terminusdb:///data/Holder/1', 'http://example.com/schema#sub', Sub_Id)),
+    ask(Descriptor,
+        t(Sub_Id, rdf:type, 'http://example.com/schema#SubDoc')),
+    sub_atom(Sub_Id, 0, _, _, 'Holder/1/sub/'),
+    \+ ask(Descriptor,
+           t(_, 'terminusdb:///schema#shade', _)),
+    \+ ask(Descriptor,
+           t(_, _, 'terminusdb:///schema#SubDoc')),
+
+    % Under the paired context the documents read back with compressed
+    % names again.
+    create_context(Descriptor, commit_info{author:"me", message:"chk"}, C2),
+    get_document(C2, 'terminusdb:///data/Holder/1', Holder),
+    Holder.shade = red,
+    get_dict(sub, Holder, Sub),
+    get_dict(v, Sub, "x"),
+    once(get_schema_document(C2, 'Child', _)).
+
+test(rebase_prefix_requires_destructive_opt_in,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(rebase_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(destructive_migration_requires_opt_in("RebaseIRIPrefix"), _)
+     ]) :-
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"rebase"},
+        [json{ '@type' : "RebaseIRIPrefix",
+               from : "terminusdb:///schema#",
+               to : "http://example.com/schema#" }],
+        _Result,
+        []).
+
+/* from = to is rejected in the dictionary preflight, before any triple
+ * moves — the op list aborts atomically. */
+test(rebase_prefix_unchanged_is_an_error,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(rebase_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(rebase_prefix_unchanged("terminusdb:///schema#"), _)
+     ]) :-
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"rebase"},
+        [json{ '@type' : "RebaseIRIPrefix",
+               from : "terminusdb:///schema#",
+               to : "terminusdb:///schema#" }],
+        _Result,
+        [allow_destructive_migration(true)]).
+
+rebase_prefixed_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "myns" : "http://myns.example/",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "myns:Widget",
+  "w" : "xsd:string" }
+').
+
+/* `from` may name a declared prefix — it resolves under the context
+ * before matching stored IRIs. */
+test(rebase_prefix_accepts_declared_prefix,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(rebase_prefixed_schema,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1,
+                        _{ '@id' : 'myns:Widget/1', w : "x" },
+                        _)
+    ),
+    perform_instance_migration(
+        Descriptor,
+        commit_info{author:"me", message:"rebase"},
+        [json{ '@type' : "RebaseIRIPrefix",
+               from : "myns:",
+               to : "http://newns.example/" }],
+        _Result,
+        [allow_destructive_migration(true)]),
+
+    ask(Descriptor,
+        t('http://newns.example/Widget/1', rdf:type, 'http://newns.example/Widget')),
+    \+ ask(Descriptor,
+           t('http://myns.example/Widget/1', _, _)).
 
 test(infer_destructive_migration,
      [setup((setup_temp_store(State),

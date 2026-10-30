@@ -61,6 +61,10 @@ migration_dict_to_ast(json{ '@type' : "ExpandEnum",
 migration_dict_to_ast(json{ '@type' : "ReplaceContext",
                             context : Context },
                       replace_context(Context)).
+migration_dict_to_ast(json{ '@type' : "RebaseIRIPrefix",
+                            from : From,
+                            to : To },
+                      rebase_iri_prefix(From, To)).
 migration_dict_to_ast(json{ '@type' : "ReplaceContextMetadata",
                             metadata : Metadata },
                       replace_context_metadata(Metadata)).
