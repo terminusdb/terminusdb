@@ -1815,6 +1815,11 @@ json_schema_predicate_value('@unfoldable',[],_,_,P,[]) :-
 json_schema_predicate_value('@unfold',true,_,_,P,[]) :-
     !,
     global_prefix_expand(sys:unfold, P).
+json_schema_predicate_value('@unfold',V,_,_,_,_) :-
+    % Non-true value for @unfold — reject with bad_unfold_value witness
+    !,
+    throw(error(schema_check_failure([witness{ '@type': bad_unfold_value,
+                                               value: V }]),_)).
 json_schema_predicate_value('@shared',[],_,_,P,[]) :-
     !,
     global_prefix_expand(sys:shared, P).
@@ -9655,6 +9660,26 @@ test(enum_documentation,
                   '@id':'Pet',
                   '@type':'Enum',
                   '@value':[dog,cat]}.
+
+test(unfold_rejects_non_true_value,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(Desc),
+             write_schema(schema1,Desc)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(schema_check_failure([witness{'@type':bad_unfold_value,
+                                          value:_}]),_)
+     ]) :-
+    Schema = _{ '@id': "UnfBad",
+                '@type': "Class",
+                '@key': _{'@type': "Random"},
+                u: _{'@type': "Optional", '@class': "xsd:string", '@unfold': []}
+              },
+    with_test_transaction(
+        Desc,
+        C1,
+        insert_schema_document(C1, Schema)
+    ).
 
 :- end_tests(json).
 
