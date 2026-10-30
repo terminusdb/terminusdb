@@ -11366,6 +11366,130 @@ test(sequence_gmonthday_crosses_month, [
     get_dict('v:i', B1, V1), V1.'@value' = "-02-28",
     get_dict('v:i', B2, V2), V2.'@value' = "-03-01".
 
+% An enum member in a binding is the member itself, whose surface form
+% is the lexical value — not the compressed schema node id.
+test(enum_binding_renders_lexical,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin,test))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    make_branch_descriptor('admin','test',Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    create_context(Descriptor, Commit_Info, C1),
+    with_transaction(
+        C1,
+        (   insert_schema_document(C1, _{ '@type' : "Enum",
+                                        '@id' : "WEn",
+                                        '@value' : ["red", "green"]}),
+            insert_schema_document(C1, _{ '@type' : "Class",
+                                        '@id' : "WCls",
+                                        '@key' : _{ '@type' : "Lexical",
+                                                    '@fields' : ["name"]},
+                                        name : "xsd:string",
+                                        p : "WEn"})
+        ),
+        _),
+    create_context(Descriptor, Commit_Info, C2),
+    with_transaction(
+        C2,
+        insert_document(C2, _{ '@id' : 'WCls/one', name : "one", p : "red" }, _),
+        _),
+
+    Query = _{ '@type' : "Triple",
+               subject : _{ '@type' : "NodeValue", variable : "X"},
+               predicate : _{ '@type' : "NodeValue", node : "p"},
+               object : _{ '@type' : "Value", variable : "V"}},
+    query_test_response(Descriptor, Query, JSON),
+    [B] = (JSON.bindings),
+    B.'V' = red.
+
+% A Set of enum members binds a list of member nodes — each renders
+% its lexical value.
+test(enum_set_binding_renders_lexical,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin,test))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    make_branch_descriptor('admin','test',Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    create_context(Descriptor, Commit_Info, C1),
+    with_transaction(
+        C1,
+        (   insert_schema_document(C1, _{ '@type' : "Enum",
+                                        '@id' : "WEn",
+                                        '@value' : ["red", "green"]}),
+            insert_schema_document(C1, _{ '@type' : "Class",
+                                        '@id' : "WSet",
+                                        '@key' : _{ '@type' : "Lexical",
+                                                    '@fields' : ["name"]},
+                                        name : "xsd:string",
+                                        ps : _{ '@type' : "Set",
+                                                '@class' : "WEn"}})
+        ),
+        _),
+    create_context(Descriptor, Commit_Info, C2),
+    with_transaction(
+        C2,
+        insert_document(C2, _{ '@id' : 'WSet/one', name : "one",
+                             ps : ["red", "green"] }, _),
+        _),
+
+    Query = _{ '@type' : "Triple",
+               subject : _{ '@type' : "NodeValue", variable : "X"},
+               predicate : _{ '@type' : "NodeValue", node : "ps"},
+               object : _{ '@type' : "Value", variable : "V"}},
+    query_test_response(Descriptor, Query, JSON),
+    Bindings = (JSON.bindings),
+    maplist([B,V]>>get_dict('V', B, V), Bindings, Vs),
+    sort(Vs, [green, red]).
+
+% A grouped binding collects members into a list — each element still
+% renders its lexical value.
+test(enum_grouped_binding_renders_lexical,
+     [setup((setup_temp_store(State),
+             create_db_without_schema(admin,test))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    make_branch_descriptor('admin','test',Descriptor),
+    Commit_Info = commit_info{author: "a", message: "m"},
+    create_context(Descriptor, Commit_Info, C1),
+    with_transaction(
+        C1,
+        (   insert_schema_document(C1, _{ '@type' : "Enum",
+                                        '@id' : "WEn",
+                                        '@value' : ["red", "green"]}),
+            insert_schema_document(C1, _{ '@type' : "Class",
+                                        '@id' : "WSet",
+                                        '@key' : _{ '@type' : "Lexical",
+                                                    '@fields' : ["name"]},
+                                        name : "xsd:string",
+                                        ps : _{ '@type' : "Set",
+                                                '@class' : "WEn"}})
+        ),
+        _),
+    create_context(Descriptor, Commit_Info, C2),
+    with_transaction(
+        C2,
+        insert_document(C2, _{ '@id' : 'WSet/one', name : "one",
+                             ps : ["red", "green"] }, _),
+        _),
+
+    Query = _{ '@type' : "GroupBy",
+               group_by : ["X"],
+               template : _{ '@type' : 'Value', variable : "V"},
+               grouped : _{ '@type' : 'Value', variable : "Vs"},
+               query : _{ '@type' : "Triple",
+                          subject : _{ '@type' : "NodeValue", variable : "X"},
+                          predicate : _{ '@type' : "NodeValue", node : "ps"},
+                          object : _{ '@type' : "Value", variable : "V"}}},
+    query_test_response(Descriptor, Query, JSON),
+    [B] = (JSON.bindings),
+    Vs = (B.'Vs'),
+    sort(Vs, [green, red]).
+
 :- end_tests(woql).
 
 :- begin_tests(store_load_data, [concurrent(true)]).
