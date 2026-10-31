@@ -44,6 +44,25 @@ predicates! {
         }
     }
 
+    pub nondet fn subject_with_prefix<Peekable<Box<dyn Iterator<Item=(u64,String)>+Send>>>(context, layer_term, prefix_term, id_term, subject_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+            let prefix: PrologText = prefix_term.get_ex()?;
+            let iter = layer.subjects_with_prefix(&*prefix).peekable();
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some((id, name)) = iter.next() {
+                id_term.unify(id)?;
+                subject_term.unify(name)?;
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
     pub semidet fn predicate_to_id(_context, layer_term, predicate_term, id_term) {
         let layer: WrappedLayer = layer_term.get_ex()?;
         let predicate: PrologText = predicate_term.get_ex()?;

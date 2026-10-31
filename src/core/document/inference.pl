@@ -197,8 +197,11 @@ no_captures(captures(C,T-T,S-S,C)).
 
 check_enum(Enum_Value,Type,Enums,Annotated),
 text(Enum_Value) =>
-    (   enum_value(Type,Enum_Value,Value),
-        memberchk(Value, Enums)
+    (   member(Value, Enums),
+        (   atom_string(Value, Enum_Value)
+        ;   enum_value(_,Lexical,Value),
+            atom_string(Lexical, Enum_Value)
+        )
     ->  Annotated = success(json{ '@type' : "@id", '@id' : Value})
     ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
                                   enum : Type,
@@ -237,12 +240,20 @@ _{'@type' : 'http://terminusdb.com/schema/sys#Enum',
     check_enum(Enum_Value,Type,Enums,Annotated).
 check_frame_(Frame,Schema,Prefixes,Value,_Type,Annotated,Captures),
 is_dict(Frame),
-get_dict('@type', Frame, 'http://terminusdb.com/schema/sys#Class') =>
+get_dict('@type', Frame, Frame_Type),
+memberchk(Frame_Type, ['http://terminusdb.com/schema/sys#Class',
+                       'http://terminusdb.com/schema/sys#TaggedUnion']) =>
     dict_pairs(Frame,json,Pairs),
     (   is_dict(Value)
     ->  expand_dictionary_keys(Value,Schema,Expanded)
     ;   Value = Expanded),
     check_type_pairs_(Pairs,Schema,Prefixes,success(Expanded),Annotated,Captures).
+check_frame_(Frame,_Schema,_Prefixes,Value,_Type,Annotated,Captures),
+is_dict(Frame),
+_{'@type' : 'http://terminusdb.com/schema/sys#Foreign'} :< Frame =>
+    % Foreign classes have no local properties to check against.
+    no_captures(Captures),
+    Annotated = success(Value).
 
 expand_dictionary_pairs([],_Schema,[]).
 expand_dictionary_pairs([Key-Value|Pairs],Schema,[Key_Ex-Value_Ex|Expanded_Pairs]) :-
@@ -446,11 +457,21 @@ _{ '@unfoldable' : [], '@class' : Type} :< Range =>
 
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Cardinality',
-  '@max':Max,'@min':Min,'@class': Type} :< Range =>
+  '@min':Min,'@class': Type} :< Range =>
+    % @max is omitted when the bound is unbounded
+    (   get_dict('@max', Range, Max)
+    ->  true
+    ;   Max = inf
+    ),
     check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures).
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{'@type':'http://terminusdb.com/schema/sys#Set',
-  '@max':Max,'@min':Min,'@class': Type} :< Range =>
+  '@min':Min,'@class': Type} :< Range =>
+    % @max is omitted when the bound is unbounded
+    (   get_dict('@max', Range, Max)
+    ->  true
+    ;   Max = inf
+    ),
     check_bounded_set_type_(Key,Min,Max,Type,Schema,Prefixes,Dictionary,Annotated,Captures).
 check_type_pair_(Key,Range,Schema,Prefixes,success(Dictionary),Annotated,Captures),
 _{ '@type' : 'http://terminusdb.com/schema/sys#Set', '@class' : Type} :< Range =>

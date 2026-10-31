@@ -570,6 +570,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             % Default flips to false in 12.1.
             param_value_search_or_json_optional(Search, JSON, raw_id, boolean, true, Raw_Id),
             param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
+            param_value_search_or_json_optional(Search, JSON, id_prefix, non_empty_atom, _, Id_Prefix),
             param_value_search_or_json_optional(Search, JSON, type, non_empty_atom, _, Type),
 
             % Use new compress_ids but still support old prefixed.
@@ -601,6 +602,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          minimized: Minimized,
                          raw_id: Raw_Id,
                          format: OutputFormat,
+                         id_prefix: Id_Prefix,
                          request: Request
                      },
 
@@ -3448,6 +3450,7 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
             param_value_search_or_json_required(Search, JSON, message, text, Message),
             param_value_search_or_json_optional(Search, JSON, dry_run, boolean, false, Dry_Run),
             param_value_search_or_json_optional(Search, JSON, verbose, boolean, false, Verbose),
+            param_value_search_or_json_optional(Search, JSON, allow_destructive_migration, boolean, false, Allow_Destructive),
             Commit_Info = commit_info{
                               author: Author,
                               message: Message
@@ -3455,14 +3458,16 @@ migration_handler(post,Path,Request,System_DB,Auth) :-
             (   param_value_search_or_json(Search, JSON, operations, list, Operations)
             ->  api_migrate_resource(System_DB, Auth,Path,Commit_Info, Operations, Result,
                                      [dry_run(Dry_Run),
-                                      verbose(Verbose)]),
+                                      verbose(Verbose),
+                                      allow_destructive_migration(Allow_Destructive)]),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),
                 cors_reply_json(Request, Response)
             ;   param_value_search_or_json(Search, JSON, target, text, Target)
             ->  api_migrate_resource_to(System_DB, Auth,Path,Target,Commit_Info, Result,
                                         [dry_run(Dry_Run),
-                                         verbose(Verbose)]),
+                                         verbose(Verbose),
+                                         allow_destructive_migration(Allow_Destructive)]),
                 put_dict(_{ '@type' : "api:MigrationResponse", 'api:status' : "api:success"},
                          Result, Response),
                 cors_reply_json(Request, Response)

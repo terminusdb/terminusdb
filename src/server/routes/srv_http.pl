@@ -138,7 +138,24 @@ capture_http_output_raw(Request, Goal, OctetBytes) :-
 %%  behavior, enabling HTTP keep-alive for regular JSON responses while
 %%  preserving chunked transfer encoding for streaming responses (NDJSON,
 %%  WOQL streaming).
+%% When the handler declares Transfer-Encoding, switch the CGI stream to
+%% event_stream mode: send_header fires immediately and subsequent writes
+%% pass through raw. The Rust transport reads unframed bytes from the pipe
+%% and re-encodes chunked for the client, so CGI-level `chunked` framing
+%% must NOT be used here.
+cgi_capture_hook(header, CGI) :-
+    cgi_property(CGI, header_codes(HeadCodes)),
+    text_to_string(HeadCodes, HeadText),
+    (   header_has_field(HeadText, 'transfer-encoding')
+    ->  cgi_set(CGI, transfer_encoding(event_stream))
+    ;   true
+    ),
+    !.
 cgi_capture_hook(send_header, CGI) :-
+    %% send_header fires both when transfer_encoding is set (header hook)
+    %% and again at close — emit the headers only once.
+    \+ cgi_property(CGI, header(sent)),
+    cgi_set(CGI, header(sent)),
     cgi_property(CGI, header_codes(HeadCodes)),
     cgi_property(CGI, client(Out)),
     %% header_codes may return a list of codes or a string depending on
@@ -615,6 +632,23 @@ test(cgi_capture_hook_no_content_length_when_transfer_encoding_present) :-
     sub_string(Text, _, _, _, 'Transfer-Encoding: chunked'),
     !,
     %% Content-Length should NOT be inserted
+    \+ sub_string(Text, _, _, _, 'Content-Length').
+
+test(cgi_capture_hook_streams_raw_body_for_chunked_handlers) :-
+    %% A handler declaring Transfer-Encoding must get event_stream mode:
+    %% the body is passed through unframed (the Rust transport re-chunks).
+    %% If the CGI stream used `chunked` framing instead, the body would
+    %% contain chunk-size lines and a 0-length terminator.
+    StreamGoal = (format(current_output, 'Status: 200 OK~n', []),
+                  format(current_output, 'Content-Type: application/x-ndjson~n', []),
+                  format(current_output, 'Transfer-Encoding: chunked~n~n', []),
+                  format(current_output, '"id/one"~n"id/two"~n', [])),
+    capture_http_output([], StreamGoal, Text),
+    sub_string(Text, _, _, _, 'Transfer-Encoding: chunked'),
+    !,
+    %% Raw body at end of output — no chunk framing.
+    sub_string(Text, _, _, 0, '"id/one"\n"id/two"\n'),
+    \+ sub_string(Text, _, _, _, '0\r\n\r\n'),
     \+ sub_string(Text, _, _, _, 'Content-Length').
 
 test(is_skip_header_content_length) :-

@@ -198,7 +198,14 @@ typecast(Val, Type, Hint, Cast) :-
             typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
         ->  true
         ;   atom(Val)
-        ->  typecast_switch(Expanded_Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
+        ->  (   % An enum member's canonical string form is its lexical
+                % value, not the schema node IRI it is stored as.
+                Expanded_Type = 'http://www.w3.org/2001/XMLSchema#string',
+                option(enum_members(Members), Hint),
+                memberchk(Val-Lexical, Members)
+            ->  Cast = Lexical^^'http://www.w3.org/2001/XMLSchema#string'
+            ;   typecast_switch(Expanded_Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
+            )
         ;   string(Val)
         ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Val,Hint,Cast)
         ;   is_dict(Val)

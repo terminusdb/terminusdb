@@ -77,7 +77,9 @@
                   insert_document_expanded/5,
                   replace_document_expanded/5,
                   insert_backlinks/2,
-                  extract_return_ids/2
+                  extract_return_ids/2,
+                  compress_schema_uri/3,
+                  path_component/3
               ]).
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
@@ -127,6 +129,7 @@
 
 document_input_format(json).
 document_output_format(json).
+document_output_format(ids).
 document_output_format(embedding).
 document_output_format(markdown).
 
@@ -228,6 +231,60 @@ api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document) :-
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
 
+/**
+ * api_generate_document_ids_by_id_prefix(+Graph_Type, +Transaction, ?Type,
+ *                                        +Id_Prefix, +Config, -Id) is nondet
+ *
+ * Yield the document ids whose expanded IRI starts with Id_Prefix. The
+ * succinct node dictionary keeps subject names in lexicographic order, so
+ * the matching ids live in a contiguous range that
+ * terminus_store:subject_with_prefix/3 seeks and streams directly instead
+ * of scanning every subject in the graph.
+ *
+ * Candidates are then filtered to actual documents — dictionary entries
+ * are append-only, so names of deleted documents and of nodes that only
+ * ever appear in object position are skipped here. Type restricts matches
+ * the same way as api_generate_document_ids_by_type/5.
+ */
+api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   Type_Ex = Type),
+    database_instance(Transaction, Instance),
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+    (   Config.unfold = true
+    ->  Include_Subdocuments = false
+    ;   Include_Subdocuments = true),
+    skip_generate_nsols(
+        (   terminus_store:subject_with_prefix(Layer, Id_Prefix_Ex, Name),
+            id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name)),
+        Config.skip,
+        Config.count),
+    Id = Name.
+api_generate_document_ids_by_id_prefix(schema, _Transaction, _Type, _Id_Prefix, _Config, _Id) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+% id_prefix_candidate(+Transaction, +Instance, +Include_Subdocuments,
+%                     ?Type_Ex, +Name) is semidet
+%
+% Name is a candidate document id (expanded IRI) if it carries an rdf:type
+% edge satisfying the same conditions as get_document_uri/3, or the
+% requested Type with the same class subsumption as is_instance_class/3.
+id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name) :-
+    (   ground(Type_Ex)
+    ->  once(   is_instance_class(Transaction, Name, Type_Ex)
+            ;   xrdf(Instance, Name, rdf:type, Type_Ex))
+    ;   global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+        once((   xrdf(Instance, Name, rdf:type, Class),
+                (   Class == JSON_Document_Class
+                ;   is_simple_class(Transaction, Class),
+                    (   Include_Subdocuments = true
+                    ;   \+ is_subdocument(Transaction, Class)))))).
+
+
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id) :-
     skip_generate_nsols(
         match_expanded_query_document_uri(Transaction, Type, Query, Id),
@@ -259,6 +316,34 @@ api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Documen
  * several matching classes is counted once per rdf:type edge, exactly
  * as the listing would yield it once per match.
  */
+% Local id-namespace segment of a class IRI — the text after the last '/'
+% or '#'. Document ids are minted as <Base><Local>/<key>.
+class_iri_local_name(IRI, Local) :-
+    atomic_list_concat(Slash_Parts, '/', IRI),
+    last(Slash_Parts, Last_Slash),
+    atomic_list_concat(Hash_Parts, '#', Last_Slash),
+    last(Hash_Parts, Local).
+
+api_count_documents(Transaction, instance, Type, Config, Count) :-
+    get_dict(id_prefix, Config, Id_Prefix),
+    ground(Id_Prefix),
+    !,
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    (   % A class mints document ids under its own <Local>/ namespace, so
+        % when the prefix is exactly the requested type's namespace every
+        % subject in the range already has that type — no probing needed.
+        ground(Type_Ex),
+        class_iri_local_name(Type_Ex, Type_Local),
+        atom_concat(Type_Local, '/', Type_NS_Rel),
+        prefix_expand(Type_NS_Rel, Prefixes, Type_NS),
+        Type_NS == Id_Prefix_Ex
+    ->  '$doc':count_subjects_by_prefix(Context, Id_Prefix_Ex, Count)
+    ;   '$doc':count_documents_by_prefix(Context, Id_Prefix_Ex, Type_Ex, (Config.unfold), Count)).
 api_count_documents(Transaction, instance, Type, Config, Count) :-
     database_instance(Transaction, Instance),
     (   ground(Type)
@@ -268,9 +353,12 @@ api_count_documents(Transaction, instance, Type, Config, Count) :-
         (   setof(Class,
                   (   is_simple_class(Transaction, Class),
                       class_subsumed(Transaction, Class, Type_Ex)),
-                  Classes)
+                  Classes0)
         ->  true
-        ;   Classes = []),
+        ;   Classes0 = []),
+        % Type itself counts its own rdf:type edges even when it is not a
+        % schema-declared simple class (e.g. sys:JSONDocument).
+        ord_union([Type_Ex], Classes0, Classes),
         aggregate_all(sum(Partial),
                       (   member(Class, Classes),
                           xrdf_count(Instance, _, rdf:type, Class, Partial)),
@@ -298,14 +386,12 @@ api_count_documents(Transaction, schema, Type, _Config, Count) :-
         % Mirrors get_schema_document_uri_by_type/3.
         xrdf_count(Schema, _, rdf:type, Type_Ex, Count)
     ;   % Mirrors get_schema_document_uri/2: '@context' plus every
-        % frame class and foreign type.
+        % frame class (which includes foreign types).
         aggregate_all(sum(Partial),
                       (   system_frame_class(C),
                           xrdf_count(Schema, _, rdf:type, C, Partial)),
                       Frame_Count),
-        global_prefix_expand(sys:'Foreign', Foreign),
-        xrdf_count(Schema, _, rdf:type, Foreign, Foreign_Count),
-        Count is 1 + Frame_Count + Foreign_Count
+        Count is 1 + Frame_Count
     ).
 
 api_document_exists(schema, Transaction, Id) :-
@@ -363,6 +449,74 @@ api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :
     (   parallelize_enabled
     ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
     ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+
+% Documents selected by an id prefix, printed as full documents. The Rust
+% writer streams the sorted subject-dictionary range for the prefix and
+% materializes each document inline — no Prolog-side id list.
+api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    (   parallelize_enabled
+    ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+    ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Type, _Stream_Started) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+/**
+ * api_print_document_ids(+Graph_Type, +Transaction, ?Id, ?Ids, ?Type,
+ *                        ?Query, +Config, +Stream_Started) is det
+ *
+ * The format=ids output: stream the document ids selected by the usual
+ * selectors instead of the documents themselves. Ids are compressed when
+ * compress_ids is on, matching the shape accepted by the ids parameter.
+ */
+% Instance listings stream ids straight from the Rust document context:
+% a name prefix uses the sorted subject-dictionary range, a bare or typed
+% listing enumerates the allowed types' subjects — no per-id Prolog
+% round-trips. Query and explicit-id selectors stay on the Prolog path.
+api_print_document_ids(instance, Transaction, Id, Ids, Type, Query, Config, _Stream_Started) :-
+    \+ (nonvar(Query) ; ground(Id) ; ground(Ids)),
+    !,
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    (   get_dict(id_prefix, Config, Id_Prefix), ground(Id_Prefix)
+    ->  prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex)
+    ;   true),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    '$doc':print_document_ids_json(current_output, Context, Id_Prefix_Ex, Type_Ex,
+                                  (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold)).
+api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started) :-
+    (   nonvar(Query)
+    ->  die_if(Graph_Type \= instance,
+               error(query_is_only_supported_for_instance_graphs, _)),
+        expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+        Goal = api_generate_document_ids_by_query(Graph_Type, Transaction, Type_Ex, Query_Ex, Config, Doc_Id)
+    ;   ground(Id)
+    ->  Goal = (Doc_Id = Id)
+    ;   ground(Ids)
+    ->  Goal = member(Doc_Id, Ids)
+    ;   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  Goal = api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, Config, Doc_Id)
+    ;   ground(Type)
+    ->  Goal = api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Config, Doc_Id)
+    ;   Goal = api_generate_document_ids(Graph_Type, Transaction, Config, Doc_Id)),
+    database_prefixes(Transaction, Prefixes),
+    forall(Goal,
+           (   compress_id_for_output(Config, Prefixes, Doc_Id, Out_Id),
+               json_stream_write(Config, Stream_Started, Out_Id))).
+
+compress_id_for_output(Config, Prefixes, Id, Out_Id) :-
+    (   Config.compress = true,
+        catch(compress_dict_uri(Id, Prefixes, Out_Id), _, fail)
+    ->  true
+    ;   Out_Id = Id).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
     Raw_Id = Config.get(raw_id, true),
@@ -1220,11 +1374,13 @@ api_check_documents(SystemDB, Auth, Path, Graph_Type, Author, Message,
         post_transaction_tabling).
 
 check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
+    database_prefixes(Transaction, Prefixes),
     catch(
         (   call(Body, Transaction, Extra)
-        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses),
+        ->  do_or_die(check_validation_witnesses(Context, Options, Witnesses0),
                       error(check_validation_failed(Context), _)),
             check_embedding_report(Transaction, Touched_Types, Embedding),
+            maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
             (   Witnesses = []
             ->  Result = _{'@type':'api:CheckResponse',
                            'api:valid':true,
@@ -1242,29 +1398,67 @@ check_run(Context, Transaction, Body, Touched_Types, Options, Result) :-
                        'api:error':_{'api:message':'check body failed'},
                        'api:embedding':Embedding}),
         Error,
-        check_error_result(Error, Result)).
+        check_error_result(Prefixes, Error, Result)).
+
+%% compress_witness_json(+Prefixes, +Value, -Compressed) is det.
+%
+%  Witness documents carry fully expanded IRIs (terminusdb:///schema#X)
+%  in values and in dict keys. Fold them back through the database
+%  prefixes so api:witnesses reads like the schema itself.
+compress_witness_json(Prefixes, Value, Compressed) :-
+    (   is_dict(Value)
+    ->  dict_pairs(Value, Tag, Pairs),
+        maplist(compress_witness_pair(Prefixes), Pairs, Compressed_Pairs),
+        dict_pairs(Compressed, Tag, Compressed_Pairs)
+    ;   is_list(Value)
+    ->  maplist(compress_witness_json(Prefixes), Value, Compressed)
+    ;   (atom(Value) ; string(Value)),
+        atom_string(Value_Atom, Value),
+        fold_witness_uri(Prefixes, Value_Atom, Folded)
+    ->  Compressed = Folded
+    ;   Compressed = Value).
+
+% Schema vocabulary folds to bare local names (matching compress_ids);
+% anything else folds through the ordinary context prefixes (@base
+% relative, xsd:, sys:, user prefixes) or stays unchanged.
+fold_witness_uri(Prefixes, URI, Folded) :-
+    compress_schema_uri(URI, Prefixes, Schema_Folded),
+    (   Schema_Folded \= URI
+    ->  Folded = Schema_Folded
+    ;   compress_dict_uri(URI, Prefixes, Folded)).
+
+compress_witness_pair(Prefixes, Key-Value, Compressed_Key-Compressed_Value) :-
+    (   (atom(Key) ; string(Key)),
+        atom_string(Key_Atom, Key),
+        fold_witness_uri(Prefixes, Key_Atom, Folded_Key)
+    ->  Compressed_Key = Folded_Key
+    ;   Compressed_Key = Key),
+    compress_witness_json(Prefixes, Value, Compressed_Value).
 
 % On invalid checks the embedding block is still present so callers can
 % read api:embedding.'api:will_embed' unconditionally — nothing embeds
 % when the write itself cannot commit.
 check_no_embedding(_{'api:will_embed':false,
+                     'api:relevant':false,
                      'api:reason':'the write is invalid — fix the witnesses or error first'}).
 
-check_error_result(error(schema_check_failure(Witnesses), _), Result) :-
+check_error_result(Prefixes, error(schema_check_failure(Witnesses0), _), Result) :-
     !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
                'api:witnesses':Witnesses,
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(schema_check_failure(Witnesses), Result) :-
+check_error_result(Prefixes, schema_check_failure(Witnesses0), Result) :-
     !,
+    maplist(compress_witness_json(Prefixes), Witnesses0, Witnesses),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
                'api:witnesses':Witnesses,
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(error(Formal, _), Result) :-
+check_error_result(_Prefixes, error(Formal, _), Result) :-
     !,
     format(string(Msg), "~w", [Formal]),
     Result = _{'@type':'api:CheckResponse',
@@ -1273,7 +1467,7 @@ check_error_result(error(Formal, _), Result) :-
                'api:error':_{'api:message':Msg},
                'api:embedding':Embedding},
     check_no_embedding(Embedding).
-check_error_result(Formal, Result) :-
+check_error_result(_Prefixes, Formal, Result) :-
     format(string(Msg), "~w", [Formal]),
     Result = _{'@type':'api:CheckResponse',
                'api:valid':false,
@@ -1302,43 +1496,85 @@ check_validation_witnesses(Context, Options, Witnesses) :-
 %% check_embedding_report(+Transaction, +Touched_Types, -Report) is det.
 %
 %  Reports whether the touched classes would be embedded by the indexer
-%  after such a commit: the indexer backend must be configured and every
-%  touched class must carry @metadata.embedding in the (post-write)
-%  schema.
+%  after such a commit. Relevance is a property of the classes, not the
+%  engine: the report fires whenever a touched class carries
+%  @metadata.embedding (a query and/or a template), whether or not an
+%  indexer backend is configured. will_embed additionally requires a
+%  configured backend and an embedding query on every touched class —
+%  a template without a query does not embed.
 check_embedding_report(_Transaction, [], _{
         'api:will_embed':false,
+        'api:relevant':false,
         'api:reason':'no documents touched'}) :-
     !.
 check_embedding_report(Transaction, Touched_Types, Report) :-
-    (   catch(indexer_backend(Backend), _, fail),
+    database_schema(Transaction, Schema),
+    database_prefixes(Transaction, Prefixes),
+    convlist(class_embedding_mark(Transaction, Schema, Prefixes),
+             Touched_Types, Marks),
+    pairs_keys(Marks, Marked_Unsorted),
+    sort(Marked_Unsorted, Marked),
+    sort(Touched_Types, Touched_Sorted),
+    (   Marked = []
+    ->  Report = _{'api:will_embed':false,
+                   'api:relevant':false,
+                   'api:reason':'no touched class carries @metadata.embedding'}
+    ;   catch(indexer_backend(Backend), _, fail),
         Backend \= none
-    ->  database_schema(Transaction, Schema),
-        database_prefixes(Transaction, Prefixes),
-        convlist(class_with_embedding_metadata(Transaction, Schema,
-                                               Prefixes), Touched_Types,
-                 Covered),
-        sort(Covered, Covered_Sorted),
-        sort(Touched_Types, Touched_Sorted),
-        (   Covered_Sorted == Touched_Sorted
+    ->  include([_-Mark]>>(Mark = embeddable), Marks, Embeddable_Pairs),
+        pairs_keys(Embeddable_Pairs, Embeddable_Unsorted),
+        sort(Embeddable_Unsorted, Embeddable),
+        subtract(Touched_Sorted, Embeddable, Not_Embedded),
+        (   Not_Embedded = []
         ->  Report = _{'api:will_embed':true,
+                       'api:relevant':true,
                        'api:reason':'all touched classes have embedding metadata'}
-        ;   subtract(Touched_Sorted, Covered_Sorted, Missing),
-            atomic_list_concat(Missing, ', ', Missing_Text),
-            format(string(Reason),
-                   'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Missing_Text]),
+        ;   subtract(Touched_Sorted, Marked, Unmarked),
+            subtract(Marked, Embeddable, Template_Only),
+            embedding_reason_parts(Unmarked, Template_Only, Parts),
+            atomic_list_concat(Parts, ' ', Reason),
             Report = _{'api:will_embed':false,
+                       'api:relevant':true,
                        'api:reason':Reason})
-    ;   Report = _{'api:will_embed':false,
-                   'api:reason':'indexer backend is none or not configured — no documents are embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)'}).
+    ;   atomic_list_concat(Marked, ', ', Marked_Text),
+        format(string(Reason),
+               'indexer backend is none or not configured — classes with embedding metadata (~s) will NOT be embedded; enable it with TERMINUSDB_INDEXER_BACKEND (and a running Ollama with the embedding model)', [Marked_Text]),
+        Report = _{'api:will_embed':false,
+                   'api:relevant':true,
+                   'api:reason':Reason}).
 
-class_with_embedding_metadata(Transaction, Schema, Prefixes, Type, Type) :-
+%% embedding_reason_parts(+Unmarked, +Template_Only, -Parts) is det.
+embedding_reason_parts(Unmarked, Template_Only, Parts) :-
+    (   Unmarked = []
+    ->  Unmarked_Parts = []
+    ;   atomic_list_concat(Unmarked, ', ', Unmarked_Text),
+        format(string(Unmarked_Reason),
+               'classes without embedding metadata: ~s — their documents will NOT be embedded; add @metadata.embedding to the class or pass indexing:{query} on the write', [Unmarked_Text]),
+        Unmarked_Parts = [Unmarked_Reason]),
+    (   Template_Only = []
+    ->  Parts = Unmarked_Parts
+    ;   atomic_list_concat(Template_Only, ', ', Template_Text),
+        format(string(Template_Reason),
+               'classes with an embedding template but no query: ~s — they will NOT be embedded; add an embedding query', [Template_Text]),
+        append(Unmarked_Parts, [Template_Reason], Parts)).
+
+%% class_embedding_mark(+Transaction, +Schema, +Prefixes, +Type, -Type-Mark)
+%
+%  Mark = embeddable when the class has an embedding query (what the
+%  indexer actually consumes), template_only when it carries an
+%  embedding template without a query.
+class_embedding_mark(Transaction, Schema, Prefixes, Type, Type-Mark) :-
     atom_string(Type_Atom, Type),
     prefix_expand(Type_Atom, Prefixes, Expanded),
     normalize_document_type(Transaction, Expanded, Normalized),
     xrdf(Schema, Normalized, sys:metadata, _),
     schema_metadata_descriptor(Schema, Normalized, metadata(Metadata)),
     get_dict(embedding, Metadata, Embedding),
-    get_dict(query, Embedding, _).
+    (   get_dict(query, Embedding, _)
+    ->  Mark = embeddable
+    ;   get_dict(template, Embedding, _),
+        Mark = template_only
+    ).
 
 %% api_check_insert_body(+Stream, +Graph_Type, +Options, -Body) is det.
 %
@@ -1842,6 +2078,12 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
                 api_get_document(Graph_Type, Transaction, OneId, ConfigWithCtx, Document)
             ),
             document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   get_dict(id_prefix, ConfigWithCtx, Id_Prefix),
+        ground(Id_Prefix)
+    ->  forall(
+            (   api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, ConfigWithCtx, Doc_Id),
+                api_get_document(Graph_Type, Transaction, Doc_Id, ConfigWithCtx, Document)),
+            document_stream_write(Format, ConfigWithCtx, StreamState, Document))
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, ConfigWithCtx, Document),
                document_stream_write(Format, ConfigWithCtx, StreamState, Document))
@@ -2092,6 +2334,17 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
     format_read_documents(markdown, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
 
+% ids format — stream the matching document ids instead of the documents
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    get_dict(format, Config, ids),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_stream_start(Config, Stream_Started),
+    api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started),
+    json_stream_end(Config).
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, _Initial_Goal) :-
     get_dict(format, Config, Format),
@@ -2192,7 +2445,10 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
-    (   ground(Type)
+    (   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  api_print_documents_by_id_prefix(Graph_Type, Transaction, Config, Id_Prefix, Type, Stream_Started)
+    ;   ground(Type)
     ->  api_print_documents_by_type(Graph_Type, Transaction, Config, Type, Stream_Started)
     ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
     ),
@@ -4383,10 +4639,14 @@ test(check_delete_of_referenced_document_fails,
                         Body, [], options{}, Result),
     get_dict('api:valid', Result, false).
 
-test(check_embedding_report_no_backend,
+test(check_embedding_report_unmarked_class_is_irrelevant,
      [setup((setup_temp_store(State),
              create_db_with_test_schema(admin, checkdb4))),
       cleanup(teardown_temp_store(State))]) :-
+    % Relevance belongs to the touched classes, not the engine: City has
+    % no @metadata.embedding, so the report must not mention indexer
+    % configuration at all — that warning only makes sense when a class
+    % actually asks to be embedded.
     open_descriptor(system_descriptor{}, System),
     super_user_authority(Auth),
     open_string('{ "@type": "City", "name": "Checktown" }', Stream),
@@ -4396,7 +4656,33 @@ test(check_embedding_report_no_backend,
                         Body, ['City'], options{}, Result),
     Embedding = Result.'api:embedding',
     get_dict('api:will_embed', Embedding, false),
-    once(sub_string(Embedding.get('api:reason'), _, _, _, "indexer")).
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "no touched class")),
+    \+ sub_string(Reason, _, _, _, "indexer").
+
+test(check_embedding_report_unmarked_class_with_backend_still_irrelevant,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb4b),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % A configured backend does not make an unmarked class relevant —
+    % the report is identical to the no-backend case.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    open_string('{ "@type": "City", "name": "Checktown" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, "admin/checkdb4b", instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['City'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false),
+    get_dict('api:reason', Embedding, Reason),
+    \+ sub_string(Reason, _, _, _, "indexer").
 
 test(check_body_failure_still_reports_embedding_block,
      [setup((setup_temp_store(State),
@@ -4412,7 +4698,8 @@ test(check_body_failure_still_reports_embedding_block,
                         [_Transaction, _Extra]>>fail, [], options{}, Result),
     get_dict('api:valid', Result, false),
     get_dict('api:embedding', Result, Embedding),
-    get_dict('api:will_embed', Embedding, false).
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
 
 test(check_bad_path_throws,
      [setup(setup_temp_store(State)),
@@ -4493,7 +4780,171 @@ test(check_embedding_report_covers_embedded_class,
                         "checker", "dry run", no_data_version,
                         Body, ['EmbedMe'], options{}, Result),
     Embedding = Result.'api:embedding',
-    get_dict('api:will_embed', Embedding, true).
+    get_dict('api:will_embed', Embedding, true),
+    get_dict('api:relevant', Embedding, true).
+
+test(check_embedding_report_marked_class_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb8),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % The marked class asks to be embedded but no indexer backend is
+    % configured — now the backend warning is the point of the report,
+    % and it names the class that misses out.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb8",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "indexer backend is none or not configured")),
+    once(sub_string(Reason, _, _, _, "EmbedMe")).
+
+test(check_embedding_report_mixed_touched_names_unmarked,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb9),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend configured and a mixed touched set, the report is
+    % relevant and names exactly the classes that will not be embedded.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb9",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    \+ sub_string(Reason, _, _, _, "indexer backend is none").
+
+test(check_embedding_report_template_only_no_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb11),
+             unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               clear_indexer_backend_config))]) :-
+    % A template without a query still marks the class — the report
+    % fires even though nothing could ever embed.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb11",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    once(sub_string(Embedding.get('api:reason'), _, _, _, "Templated")).
+
+test(check_embedding_report_template_only_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb12),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % With a backend the template-only class is marked but cannot
+    % embed — the reason must say the query is missing, not that the
+    % metadata is missing.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb12",
+    open_string('{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "Templated", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['Templated'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "template but no query")),
+    once(sub_string(Reason, _, _, _, "Templated")),
+    \+ sub_string(Reason, _, _, _, "without embedding metadata").
+
+test(check_embedding_report_mixed_marks_with_backend,
+     [setup((setup_temp_store(State),
+             create_db_with_empty_schema(admin, checkdb13),
+             setenv('TERMINUSDB_INDEXER_BACKEND', vectorlink),
+             clear_indexer_backend_config)),
+      cleanup((teardown_temp_store(State),
+               unsetenv('TERMINUSDB_INDEXER_BACKEND'),
+               clear_indexer_backend_config))]) :-
+    % One query-marked, one template-only, one unmarked class touched:
+    % the reason names each failure group with its own cause.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    Path = "admin/checkdb13",
+    open_string('{ "@id": "EmbedMe", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "query": "query($id: ID){ EmbedMe(id:$id) { name } }" } } }
+{ "@id": "Templated", "@type": "Class", "name": "xsd:string", "@metadata": { "embedding": { "template": "{{name}}" } } }
+{ "@id": "PlainDoc", "@type": "Class", "name": "xsd:string" }', Schema_Stream),
+    api_insert_documents(System, Auth, Path, Schema_Stream, no_data_version,
+                         _DV, _MD, _Ids,
+                         [graph_type(schema), author("a"), message("m")]),
+    open_string('{ "@type": "EmbedMe", "name": "x" }', Stream),
+    check_insert_body(Stream, instance, Body),
+    api_check_documents(System, Auth, Path, instance,
+                        "checker", "dry run", no_data_version,
+                        Body, ['EmbedMe', 'Templated', 'PlainDoc'], options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, true),
+    get_dict('api:reason', Embedding, Reason),
+    once(sub_string(Reason, _, _, _, "PlainDoc")),
+    once(sub_string(Reason, _, _, _, "template but no query: Templated")).
+
+test(check_embedding_report_no_touched_types,
+     [setup((setup_temp_store(State),
+             create_db_with_test_schema(admin, checkdb10))),
+      cleanup(teardown_temp_store(State))]) :-
+    % Deletes and other bodies that touch no class report a stable,
+    % irrelevant embedding block.
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    api_check_documents(System, Auth, "admin/checkdb10", instance,
+                        "checker", "dry run", no_data_version,
+                        [_Transaction, Extra]>>(Extra = _{ids:[]}), [],
+                        options{}, Result),
+    Embedding = Result.'api:embedding',
+    get_dict('api:will_embed', Embedding, false),
+    get_dict('api:relevant', Embedding, false).
 
 :- end_tests(check_documents).
 

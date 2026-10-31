@@ -916,9 +916,10 @@ paths:
             - `json` (default): Standard JSON document representation
             - `embedding`: Text/plain rendered embedding string using schema-defined GraphQL query and Handlebars template. Requires the document type to have an embedding query defined in `@metadata.embedding`. No indexer backend is needed.
             - `markdown`: Document rendered as markdown (text/markdown).
+            - `ids`: Document IDs only, streamed under the same `as_list` framing — a fast way to enumerate large collections without fetching document bodies.
           schema:
             type: string
-            enum: [json, embedding, markdown]
+            enum: [json, embedding, markdown, ids]
             default: json
         - name: skip
           in: query
@@ -989,6 +990,19 @@ paths:
           schema:
             type: string
             example: Person
+        - name: id_prefix
+          in: query
+          required: false
+          description: |
+            List documents whose ID starts with the given IRI prefix. Accepts
+            both compressed (`Person/`) and full IRIs. Combined with `type`,
+            returns only documents of that type under the prefix. May be
+            combined with `format=ids` and `counted=true` for fast
+            enumeration. Currently supported for instance graphs only.
+            Example: `Person/` or `terminusdb:///data/Person/`
+          schema:
+            type: string
+            example: Person/
         - name: counted
           in: query
           required: false
@@ -1000,7 +1014,9 @@ paths:
 
             Counting is supported for the document listing selectors only:
             all documents, optionally restricted by `type` (including
-            subclasses), in the `instance` or `schema` graph. It cannot be
+            subclasses) or `id_prefix`, in the `instance` or `schema` graph.
+            `id_prefix` counting is supported for instance graphs only. It
+            cannot be
             combined with `id`, `ids` or `query`. When `counted=true`, the
             `skip` and `count` pagination parameters are ignored. Counts follow
             the same inclusion rules as the corresponding document listing,
@@ -1056,6 +1072,15 @@ paths:
             **Array mode** (`as_list=true`):
             - Content-Type: `application/json; charset=UTF-8`
             - Standard JSON array `[{...}, {...}]`
+            
+            **Counted mode** (`counted=true`):
+            - Content-Type: `application/json; charset=UTF-8`
+            - Single object `{"@type": "api:DocumentCountResponse", "api:count": <integer>}`
+            
+            **IDs format** (`format=ids`):
+            - Same `as_list` framing, but items are document ID strings instead
+            of document objects: `"Person/Alice"` per line, or
+            `["Person/Alice", ...]`
           content:
             application/json; stream=true; charset=UTF-8:
               schema:
@@ -1071,25 +1096,48 @@ paths:
                 additionalProperties: true
             application/json; charset=UTF-8:
               schema:
-                type: array
-                description: Array of documents (array mode, as_list=true)
-                items:
-                  type: object
-                  properties:
-                    "@id":
+                oneOf:
+                  - type: array
+                    description: Array of documents (array mode, as_list=true)
+                    items:
+                      type: object
+                      properties:
+                        "@id":
+                          type: string
+                        "@type":
+                          type: string
+                      additionalProperties: true
+                  - type: array
+                    description: Array of document ID strings (format=ids)
+                    items:
                       type: string
-                    "@type":
-                      type: string
-                  additionalProperties: true
-              example:
-                - "@id": "Person/Alice"
-                  "@type": "Person"
-                  "name": "Alice"
-                  "age": 30
-                - "@id": "Person/Bob"
-                  "@type": "Person"
-                  "name": "Bob"
-                  "age": 25
+                      example: Person/Alice
+                  - type: object
+                    description: Document count response (counted=true)
+                    properties:
+                      "@type":
+                        type: string
+                        enum: ["api:DocumentCountResponse"]
+                      "api:count":
+                        type: integer
+                    required: ["@type", "api:count"]
+              examples:
+                documents:
+                  value:
+                    - "@id": "Person/Alice"
+                      "@type": "Person"
+                      "name": "Alice"
+                      "age": 30
+                    - "@id": "Person/Bob"
+                      "@type": "Person"
+                      "name": "Bob"
+                      "age": 25
+                ids:
+                  value: ["Person/Alice", "Person/Bob"]
+                counted:
+                  value:
+                    "@type": "api:DocumentCountResponse"
+                    "api:count": 2
         400:
           description: Bad Request
         401:

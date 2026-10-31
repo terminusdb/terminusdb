@@ -32,6 +32,8 @@
 % error(Inner, _) so the existing API-specific clauses match.
 api_error_jsonld(API, error(error(Inner, _), _), JSON) :- !,
     api_error_jsonld(API, error(Inner, _), JSON).
+api_error_jsonld(API, error(Inner), JSON) :- !,
+    api_error_jsonld(API, error(Inner, _), JSON).
 api_error_jsonld(API, Error, JSON) :- !,
     (   api_global_error_jsonld(Error, API, JSON)
     ->  true
@@ -1731,7 +1733,7 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
                               'api:user' : User,
                               'api:scope' : Scope }
             }.
-api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
+api_error_jsonld_(patch,error(patch_conflicts(Conflicts), _), JSON) :-
     format(string(Msg), "The patch did not apply cleanly because of the attached conflicts", []),
     JSON = _{'@type' : 'api:PatchResponse',
              'api:status' : "api:conflict",
@@ -1906,6 +1908,164 @@ api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation)
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:UnknownSchemaMigrationOperation",
                               'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(destructive_migration_requires_opt_in(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q rewrites stored identifiers and requires allow_destructive_migration to be set to true", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DestructiveMigrationRequiresOptIn",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(rebase_prefix_unchanged(Prefix), _), JSON) :-
+    format(string(Msg), "The rebase source and target prefixes are identical: ~q", [Prefix]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RebasePrefixUnchanged",
+                              'api:prefix' : Prefix
+                            }
+            }.
+api_error_jsonld_(migration, error(unknown_irrefutable_property_creation(Class, Property, Type), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q could not be created with type ~q, as no irrefutable default could be constructed for it", [Property, Class, Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnknownIrrefutablePropertyCreation',
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : Type
+                            }
+            }.
+api_error_jsonld_(migration, error(required_property_has_no_default(Class, Property), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q is required, but no default was supplied for it", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:RequiredPropertyHasNoDefault',
+                              'api:class' : Class,
+                              'api:property' : Property
+                            }
+            }.
+api_error_jsonld_(migration, error(property_type_changed_due_to_parent_change(Class, Property, Type1, Type2), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q cannot change type from ~q to ~q as a result of a change of parents", [Property, Class, Type1, Type2]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:PropertyTypeChangedDueToParentChange',
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:old_type' : Type1,
+                              'api:new_type' : Type2
+                            }
+            }.
+api_error_jsonld_(migration, error(unused_property_default(Class, Property), _), JSON) :-
+    format(string(Msg), "A default was supplied for property ~q on class ~q, but this property was not introduced by the change of parents", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnusedPropertyDefault',
+                              'api:class' : Class,
+                              'api:property' : Property
+                            }
+            }.
+api_error_jsonld_(migration, error(schema_check_failure(Witnesses), _), JSON) :-
+    format(string(Msg), "There was an error when schema checking", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:SchemaCheckFailure',
+                              'api:witnesses' : Witnesses
+                            }
+            }.
+api_error_jsonld_(migration, error(class_does_not_exist(Class), _), JSON) :-
+    format(string(Msg), "The class ~q does not exist", [Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:ClassDoesNotExist',
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(bad_key_type(Key_Type), _), JSON) :-
+    format(string(Msg), "The key type ~q is not one of Random, ValueHash, UuidV7, Lexical or Hash", [Key_Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:BadKeyType',
+                              'api:key_type' : Key_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(immovable_property(Property, Class), _), JSON) :-
+    format(string(Msg), "The property ~q cannot be moved on class ~q as it is defined by a parent or child class", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:ImmovableProperty',
+                              'api:property' : Property,
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(violation_of_diamond_property(Class, Property), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q is not provided uniformly by all parents, violating the diamond property constraint", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:DiamondPropertyViolation',
+                              'api:class' : Class,
+                              'api:property' : Property
+                            }
+            }.
+api_error_jsonld_(migration, error(id_overlap_after_key_change(Duplicates), _), JSON) :-
+    format(string(Msg), "Changing the key would produce duplicate document ids: ~q", [Duplicates]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:IdOverlapAfterKeyChange',
+                              'api:duplicates' : Duplicates
+                            }
+            }.
+api_error_jsonld_(migration, error(casting_error(Value, Type), _), JSON) :-
+    format(string(Value_String), "~w", [Value]),
+    format(string(Msg), "The value ~s could not be cast as ~q", [Value_String, Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : Value_String,
+                              'api:type' : Type
+                            }
+            }.
+% Schema document elaboration failures surface inside migrations when a
+% CreateClassProperty spec uses an unknown or malformed family.
+api_error_jsonld_(migration, error(schema_type_unknown(Schema_Type), _), JSON) :-
+    format(string(Msg), "The '@type' field referred to an unimplemented schema type.", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnknownSchemaType',
+                              'api:type' : Schema_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(unable_to_elaborate_schema_document(Document), _), JSON) :-
+    format(string(Msg), "The submitted schema document could not be elaborated due to an unknown syntax error.", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:DocumentElaborationImpossible',
+                              'api:document' : Document
+                            }
+            }.
+api_error_jsonld_(migration, error(missing_field(Field, Document), _), JSON) :-
+    format(string(Msg), "Missing '~s' field in submitted document.", [Field]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:MissingField',
+                              'api:field' : Field,
+                              'api:document' : Document
                             }
             }.
 api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)), JSON) :-
@@ -2296,6 +2456,14 @@ api_document_error_jsonld(Type,error(query_is_only_supported_for_instance_graphs
     JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(id_prefix_is_only_supported_for_instance_graphs,_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The id_prefix parameter is currently only supported for instance graphs", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:IdPrefixOnlySupportedForInstanceGraphs'},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type,error(counted_not_supported_for_selector,_), JSON) :-
@@ -3364,5 +3532,166 @@ test(server_not_ready_is_retryable_503, []) :-
     get_dict('@type', JSON, 'api:NotReadyErrorResponse'),
     get_dict('api:status', JSON, 'api:service_unavailable'),
     json_http_code(JSON, 503).
+
+test(migration_unknown_irrefutable_property_creation, []) :-
+    % Thrown as a bare error/1 (no context) when a non-simple family reaches
+    % create_class_property_operation.
+    once(api_error_jsonld(migration,
+                     error(unknown_irrefutable_property_creation("C","p","xsd:string")),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnknownIrrefutablePropertyCreation'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_required_property_has_no_default, []) :-
+    once(api_error_jsonld(migration,
+                     error(required_property_has_no_default("C","p"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:RequiredPropertyHasNoDefault'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_property_type_changed_due_to_parent_change, []) :-
+    once(api_error_jsonld(migration,
+                     error(property_type_changed_due_to_parent_change("C","p","xsd:string","xsd:integer"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:PropertyTypeChangedDueToParentChange'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_unused_property_default, []) :-
+    once(api_error_jsonld(migration,
+                     error(unused_property_default("C","p"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnusedPropertyDefault'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_schema_check_failure_has_error_envelope, []) :-
+    % The generic schema_check_failure fallback emits bare system:witnesses
+    % with no api:error; the migration context must carry a typed envelope
+    % alongside the witness list.
+    once(api_error_jsonld(migration,
+                     error(schema_check_failure([witness{property:p,message:m}]), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:SchemaCheckFailure'),
+    get_dict('api:witnesses', Error, [_|_]),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_class_does_not_exist, []) :-
+    once(api_error_jsonld(migration,
+                     error(class_does_not_exist("C"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ClassDoesNotExist'),
+    get_dict('api:class', Error, "C"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_bad_key_type, []) :-
+    once(api_error_jsonld(migration,
+                     error(bad_key_type("Bogus"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:BadKeyType'),
+    get_dict('api:key_type', Error, "Bogus"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_immovable_property, []) :-
+    once(api_error_jsonld(migration,
+                     error(immovable_property("p","C"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ImmovableProperty'),
+    get_dict('api:property', Error, "p"),
+    get_dict('api:class', Error, "C"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_violation_of_diamond_property, []) :-
+    once(api_error_jsonld(migration,
+                     error(violation_of_diamond_property("C","p"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DiamondPropertyViolation'),
+    get_dict('api:class', Error, "C"),
+    get_dict('api:property', Error, "p"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_id_overlap_after_key_change, []) :-
+    once(api_error_jsonld(migration,
+                     error(id_overlap_after_key_change(["C/1","C/2"]), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:IdOverlapAfterKeyChange'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_casting_error_is_bad_cast, []) :-
+    % typecast/4 throws casting_error rather than failing; any site that lets
+    % it escape (e.g. default insertion on create/change_parents) must still
+    % surface as a typed cast failure, not a 500.
+    once(api_error_jsonld(migration,
+                     error(casting_error("abc",'http://www.w3.org/2001/XMLSchema#integer'), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:BadCast'),
+    get_dict('api:value', Error, "abc"),
+    get_dict('api:type', Error, 'http://www.w3.org/2001/XMLSchema#integer'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_schema_type_unknown, []) :-
+    % Schema document elaboration errors surface inside migrations too —
+    % an unknown property spec family is a client error, not a 500.
+    once(api_error_jsonld(migration,
+                     error(schema_type_unknown('Foreign'), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnknownSchemaType'),
+    get_dict('api:type', Error, 'Foreign'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_unable_to_elaborate_schema_document, []) :-
+    once(api_error_jsonld(migration,
+                     error(unable_to_elaborate_schema_document(_{'@type':"Array"}), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentElaborationImpossible'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_missing_field, []) :-
+    once(api_error_jsonld(migration,
+                     error(missing_field('@id', _{foo:bar}), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:MissingField'),
+    get_dict('api:field', Error, '@id'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
 
 :- end_tests(error_reporting).

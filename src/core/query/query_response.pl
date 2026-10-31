@@ -12,6 +12,8 @@
 :- use_module(core(api)).
 :- use_module(core(util)).
 :- use_module(core(transaction)).
+:- use_module(core(document/schema)).
+:- use_module(core(triple/database_utils)).
 :- use_module(core(triple/literals)).
 
 :- use_module(library(apply)).
@@ -125,15 +127,41 @@ context_variable_names(Context, Header) :-
 json_transform_binding_set(Context, Binding, JSON) :-
     % TODO: We probably want to "compress" the URIs using the context
     Prefixes = (Context.prefixes),
-    maplist({Prefixes}/[Record,Var_Name=Term]>>(
+    enum_member_lexicals(Context, Enum_Members),
+    maplist({Enum_Members, Prefixes}/[Record,Var_Name=Term]>>(
                 get_dict(var_name, Record, Var_Name),
                 get_dict(woql_var, Record, Prolog_Var),
                 (   var(Prolog_Var)
                 ->  Term = null
-                ;   term_jsonld(Prolog_Var, Prefixes, Term))),
+                ;   binding_term_jsonld(Enum_Members, Prolog_Var, Prefixes, Term))),
             Binding,
             Data),
     dict_create(JSON, json, Data).
+
+/* A bound enum member renders as its lexical value — the member's
+ * surface form everywhere else — instead of the compressed schema
+ * node id it is stored as.
+ */
+binding_term_jsonld(Enum_Members, Term, Prefixes, JSON) :-
+    (   is_list(Term)
+    ->  maplist({Enum_Members, Prefixes}/[Elt,Json]>>
+                binding_term_jsonld(Enum_Members, Elt, Prefixes, Json),
+                Term, JSON)
+    ;   atom(Term),
+        memberchk(Term-Lexical, Enum_Members)
+    ->  JSON = Lexical
+    ;   term_jsonld(Term, Prefixes, JSON)
+    ).
+
+/* member IRIs paired with their lexical form, for every enum in the
+ * schema the query ran against. Empty when the context exposes no
+ * schema (e.g. system queries).
+ */
+enum_member_lexicals(Context, Members) :-
+    (   query_default_collection(Context, Transaction),
+        database_schema(Transaction, Schema)
+    ->  schema_enum_member_lexicals(Schema, Members)
+    ;   Members = []).
 
 field_separator(true,"",_Size).
 field_separator(false,Sep,Size) :-

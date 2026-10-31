@@ -58,6 +58,13 @@ ignore_predicate("print_all_documents_json_by_type/9").
 ignore_predicate("par_print_all_documents_json_by_type/9").
 ignore_predicate("print_documents_json_by_id/9").
 ignore_predicate("par_print_documents_json_by_id/9").
+ignore_predicate("print_document_ids_json/9").
+ignore_predicate("print_documents_json_by_prefix/10").
+ignore_predicate("par_print_documents_json_by_prefix/10").
+ignore_predicate("count_documents_by_prefix/5").
+
+% library(ordsets) is autoloaded at runtime; the linter can't follow it
+ignore_predicate("ord_union/3").
 
 % Re-exported FFI predicates: plugin_api re-exports from plugin_api/indexer
 % which calls '$appserver':indexer_*. The linter cannot follow reexport chains.
