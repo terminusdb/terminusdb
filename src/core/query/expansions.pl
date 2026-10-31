@@ -82,6 +82,39 @@ user:goal_expansion(xrdf_added(G,X,Y,L),xrdf_added(G,X,Y,Object)) :-
     once(L = _@_ ; L = _^^_),
     literal_expand(L,Object).
 
+% xrdf_count/5
+user:goal_expansion(xrdf_count(G,A,Y,Z,N),xrdf_count(G,X,Y,Z,N)) :-
+    nonvar(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(xrdf_count(G,X,B,Z,N),xrdf_count(G,X,Y,Z,N)) :-
+    nonvar(B),
+    global_prefix_expand(B,Y).
+user:goal_expansion(xrdf_count(G,X,Y,C,N),xrdf_count(G,X,Y,Z,N)) :-
+    nonvar(C),
+    C \= _@_,
+    C \= _^^_,
+    global_prefix_expand(C,Z).
+user:goal_expansion(xrdf_count(G,X,Y,L,N),xrdf_count(G,X,Y,Object,N)) :-
+    nonvar(L),
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Object).
+
+% xrdf_value_range_count/6
+user:goal_expansion(xrdf_value_range_count(G,L,H,X,Y,N),xrdf_value_range_count(G,Low,H,X,Y,N)) :-
+    nonvar(L),
+    once(L = _@_ ; L = _^^_),
+    literal_expand(L,Low).
+user:goal_expansion(xrdf_value_range_count(G,Low,H,X,Y,N),xrdf_value_range_count(G,Low,High,X,Y,N)) :-
+    nonvar(H),
+    once(H = _@_ ; H = _^^_),
+    literal_expand(H,High).
+user:goal_expansion(xrdf_value_range_count(G,Low,High,A,Y,N),xrdf_value_range_count(G,Low,High,X,Y,N)) :-
+    nonvar(A),
+    global_prefix_expand(A,X).
+user:goal_expansion(xrdf_value_range_count(G,Low,High,X,B,N),xrdf_value_range_count(G,Low,High,X,Y,N)) :-
+    nonvar(B),
+    global_prefix_expand(B,Y).
+
 % xrdf_deleted/4
 user:goal_expansion(xrdf_deleted(G,A,Y,Z),xrdf_deleted(G,X,Y,Z)) :-
     nonvar(A),

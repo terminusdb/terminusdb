@@ -264,7 +264,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         }
     }
 
-    fn get_field<'a, 'b>(
+    fn get_field<'a>(
         &'a self,
         object: u64,
         compress: bool,
@@ -299,7 +299,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
         } else {
             key.to_string()
         };
-        
+
         // add a field, but if the field is already there, make it a collection
         match obj.entry(&actual_key) {
             map::Entry::Vacant(e) => {
@@ -347,7 +347,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             let t = it.peek().unwrap();
             let subject = t.subject;
             let predicate = t.predicate;
-            return ArrayIterator {
+            ArrayIterator {
                 layer: self.layer(),
                 it,
                 subject,
@@ -355,7 +355,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
                 last_index: None,
                 sys_index_ids: &self.sys_index_ids,
                 sys_value_id: self.sys.value(),
-            };
+            }
         } else {
             panic!("array is not a field of a document");
         }
@@ -414,9 +414,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
                 let should_unfold = self.unfoldables.contains(&t.object) || field_level_unfold;
 
                 if terminate
-                    && (!unfold
-                        || (self.document_types.contains(&t.object)
-                            && !should_unfold))
+                    && (!unfold || (self.document_types.contains(&t.object) && !should_unfold))
                 {
                     return Err(Value::String(id_name_contracted));
                 }
@@ -474,7 +472,9 @@ impl<L: Layer + Clone> DocumentContext<L> {
 
         let mut stack = Vec::new();
 
-        if let Ok((doc, type_id, fields, json)) = self.get_doc_stub(id, false, compress, unfold, None, None) {
+        if let Ok((doc, type_id, fields, json)) =
+            self.get_doc_stub(id, false, compress, unfold, None, None)
+        {
             stack.push(StackEntry::Document {
                 id,
                 doc,
@@ -657,16 +657,12 @@ pub fn retrieve_all_index_ids<L: Layer>(instance: &L) -> Vec<u64> {
     let mut index_str = SYS_INDEX.to_string();
     let orig_len = index_str.len();
     let mut ix = 1;
-    loop {
-        if let Some(index_id) = instance.predicate_id(&index_str) {
-            sys_index_ids.push(index_id);
-            ix += 1;
-            let ix_s = ix.to_string();
-            index_str.truncate(orig_len);
-            index_str.push_str(&ix_s);
-        } else {
-            break;
-        }
+    while let Some(index_id) = instance.predicate_id(&index_str) {
+        sys_index_ids.push(index_id);
+        ix += 1;
+        let ix_s = ix.to_string();
+        index_str.truncate(orig_len);
+        index_str.push_str(&ix_s);
     }
 
     sys_index_ids
@@ -806,7 +802,7 @@ impl<'a, L: Layer + Clone> StackEntry<'a, L> {
                     // Check if this is a sys:JSON primitive/array with @value wrapper
                     // Primitives and arrays have @value key (and possibly only @value and @id)
                     let is_primitive_or_array = doc.contains_key("@value") && doc.len() <= 2;
-                    
+
                     if is_primitive_or_array {
                         // For primitives and arrays, extract just the @value content
                         let mut doc = doc;
@@ -818,7 +814,7 @@ impl<'a, L: Layer + Clone> StackEntry<'a, L> {
                 } else {
                     Value::Object(doc)
                 }
-            },
+            }
             Self::List { collect, .. } => Value::Array(collect),
             Self::Array { .. } => panic!("cannot directly turn array into a value"),
         }
@@ -921,7 +917,7 @@ fn collect_array(mut elements: Vec<(Vec<usize>, Value)>) -> Value {
             if expected < index[d] {
                 // any less significant dimension will need to be gathered up, provided anything was collected to begin with.
                 for n in (d + 1..dimensions).rev() {
-                    if collect[n].len() != 0 {
+                    if !collect[n].is_empty() {
                         let mut x = Vec::new();
                         std::mem::swap(&mut x, &mut collect[n]);
                         collect[n - 1].push(Value::Array(x));
@@ -1199,7 +1195,7 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static
         .collect::<Result<_, _>>()?;
     let iter = iris
         .into_iter()
-        .filter(move |iri| doc_context3.document_exists(&iri))
+        .filter(move |iri| doc_context3.document_exists(iri))
         .skip(skip as usize);
     let iter = match count {
         Some(count) => itertools::Either::Left(iter.take(count as usize)),

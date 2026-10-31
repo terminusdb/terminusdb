@@ -426,13 +426,8 @@ impl GraphQLValue for TerminusTypeCollection {
                 for (name, typedef) in info.allframes.frames.iter() {
                     if let TypeDefinition::Class(_) = typedef {
                         if let Some(filter) = arguments.get::<FilterInputObject>(name.as_str()) {
-                            let count = run_count_query(
-                                context,
-                                instance,
-                                &filter,
-                                name,
-                                &info.allframes,
-                            );
+                            let count =
+                                run_count_query(context, instance, &filter, name, &info.allframes);
                             return Ok(Value::scalar(count));
                         }
                     }
@@ -1171,7 +1166,7 @@ fn extract_json_fragment(
         // Primitives and arrays have @value key (and possibly only @value)
         // Objects have actual field keys without @value wrapper
         let is_primitive_or_array = doc.contains_key("@value") && doc.len() <= 2;
-        
+
         let json = if is_primitive_or_array {
             // For primitives and arrays, extract just the @value content
             doc.remove("@value").unwrap()
@@ -1458,7 +1453,7 @@ impl GraphQLValue for TerminusOrderBy {
     type TypeInfo = TerminusOrderingInfo;
 
     fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
-        Some(&info.ordering_name.as_str())
+        Some(info.ordering_name.as_str())
     }
 
     fn resolve_field(

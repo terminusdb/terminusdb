@@ -145,7 +145,7 @@ impl GraphQLExecutionContext {
             request_document,
             operation,
             &self.root_node,
-            &variables,
+            variables,
             &self.context,
         )
     }
@@ -225,7 +225,7 @@ predicates! {
                                                     let processed = post_process_graphql_numbers(r);
                                                     response_term.unify(processed)
                                                 },
-                                                Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
+                                                Err(_) => context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
                                             }
                                         })
     }
@@ -246,7 +246,7 @@ predicates! {
         let user: Atom = auth_term.get_ex()?;
         let system = transaction_instance_layer(context, system_term)?.unwrap();
 
-        let root_node = RootNode::new_with_info(SystemRoot::default(),
+        let root_node = RootNode::new_with_info(SystemRoot,
                                                 EmptyMutation::new(),
                                                 EmptySubscription::new(),
                                                 (),
@@ -260,7 +260,7 @@ predicates! {
                 let processed = post_process_graphql_numbers(r);
                 response_term.unify(processed)
             },
-            Err(_) => return context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
+            Err(_) => context.raise_exception(&term!{context: error(json_serialize_error, _)}?),
         }
     }
 }

@@ -23,30 +23,34 @@ pub fn delete_id_document<L: Layer + Clone>(
             builder.remove_id_triple(triple);
             // Check if the object node should be recursively deleted
             if let Some(true) = layer.id_object_is_node(triple.object) {
-                if rdf_type.is_some() && !visited.contains(&triple.object) {
-                    let type_triple = layer.single_triple_sp(triple.object, rdf_type.unwrap());
-                    if let Some(type_triple) = type_triple {
-                        if !context.document_types.contains(&type_triple.object)
-                            && !context.value_hashes.contains(&type_triple.object)
-                        {
-                            // Only apply reference counting for content-addressed JSON objects
-                            // (shared Cons lists and JSON objects with SHA1 hashes)
-                            let object_iri = layer.id_subject(triple.object).unwrap_or_default();
-                            let is_content_addressed = object_iri.starts_with("terminusdb:///json/Cons/SHA1/") 
-                                || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
-                            let is_json_type = Some(type_triple.object) == context.sys.json() 
-                                || Some(type_triple.object) == context.rdf.list();
-                            
-                            let should_recurse = if is_content_addressed && is_json_type {
-                                // Content-addressed JSON objects: check for other references
-                                !has_other_link(context, triple.object, id, &visited)
-                            } else {
-                                // Non-content-addressed objects: recurse unconditionally
-                                true
-                            };
-                            
-                            if should_recurse {
-                                visit_next.push(triple.object);
+                if let Some(rdf_type) = rdf_type {
+                    if !visited.contains(&triple.object) {
+                        let type_triple = layer.single_triple_sp(triple.object, rdf_type);
+                        if let Some(type_triple) = type_triple {
+                            if !context.document_types.contains(&type_triple.object)
+                                && !context.value_hashes.contains(&type_triple.object)
+                            {
+                                // Only apply reference counting for content-addressed JSON objects
+                                // (shared Cons lists and JSON objects with SHA1 hashes)
+                                let object_iri =
+                                    layer.id_subject(triple.object).unwrap_or_default();
+                                let is_content_addressed = object_iri
+                                    .starts_with("terminusdb:///json/Cons/SHA1/")
+                                    || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
+                                let is_json_type = Some(type_triple.object) == context.sys.json()
+                                    || Some(type_triple.object) == context.rdf.list();
+
+                                let should_recurse = if is_content_addressed && is_json_type {
+                                    // Content-addressed JSON objects: check for other references
+                                    !has_other_link(context, triple.object, id, &visited)
+                                } else {
+                                    // Non-content-addressed objects: recurse unconditionally
+                                    true
+                                };
+
+                                if should_recurse {
+                                    visit_next.push(triple.object);
+                                }
                             }
                         }
                     }
@@ -124,15 +128,17 @@ pub fn delete_json_id_document<L: Layer + Clone>(
                         rdf_list,
                         sys_json_document,
                         sys_json,
-                    ).unwrap_or(false);
-                    
+                    )
+                    .unwrap_or(false);
+
                     if json_exists {
                         // Only apply reference counting for content-addressed JSON objects
                         // (shared Cons lists and JSON objects with SHA1 hashes)
                         let object_iri = layer.id_subject(triple.object).unwrap_or_default();
-                        let is_content_addressed = object_iri.starts_with("terminusdb:///json/Cons/SHA1/") 
+                        let is_content_addressed = object_iri
+                            .starts_with("terminusdb:///json/Cons/SHA1/")
                             || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
-                        
+
                         let should_recurse = if is_content_addressed {
                             // Content-addressed JSON objects: check for other references
                             !has_other_link(context, triple.object, id, &visited)
@@ -140,7 +146,7 @@ pub fn delete_json_id_document<L: Layer + Clone>(
                             // Non-content-addressed JSON objects: recurse unconditionally
                             true
                         };
-                        
+
                         if should_recurse {
                             visit_next.push(triple.object);
                         }
@@ -264,8 +270,14 @@ pub fn cascade_shared_deletes<L: Layer + Clone>(
 
         // Liveness check with memoisation
         let mut visited: HashSet<u64> = HashSet::new();
-        let is_live =
-            is_shared_target_live_memo(layer, context, rdf_type, candidate_id, &mut visited, &mut memo);
+        let is_live = is_shared_target_live_memo(
+            layer,
+            context,
+            rdf_type,
+            candidate_id,
+            &mut visited,
+            &mut memo,
+        );
 
         // Cache the result for this candidate
         memo.insert(candidate_id, is_live);
@@ -336,7 +348,9 @@ fn is_shared_target_live_memo<L: Layer + Clone>(
         }
 
         // Determine the type of the source
-        let source_type = layer.single_triple_sp(source_id, rdf_type).map(|t| t.object);
+        let source_type = layer
+            .single_triple_sp(source_id, rdf_type)
+            .map(|t| t.object);
 
         match source_type {
             Some(type_id) if context.shared_types.contains(&type_id) => {
@@ -423,7 +437,7 @@ pub fn delete_all_triples<L: Layer + Clone>(layer: &L, builder: &mut dyn LayerBu
 /// This properly handles:
 /// 1. Regular typed subdocuments (recurse into non-document, non-value-hash types)
 /// 2. sys:JSON content-addressed structures (reference counting for shared content)
-/// 
+///
 /// Uses the same logic as delete_id_document but with bulk-aware reference counting.
 /// For content-addressed JSON, uses backward traversal (like has_other_link) to check
 /// if other documents (not being deleted) still reference the node.
@@ -460,11 +474,11 @@ pub fn delete_multiple_documents_with_roots<L: Layer + Clone>(
         let object_iri = layer.id_subject(object_id).unwrap_or_default();
         let is_content_addressed = object_iri.starts_with("terminusdb:///json/Cons/SHA1/")
             || object_iri.starts_with("terminusdb:///json/JSON/SHA1/");
-        
+
         if is_content_addressed {
             // Verify it's actually a JSON type
             if let Some(type_triple) = layer.single_triple_sp(object_id, rdf_type) {
-                return Some(type_triple.object) == sys_json 
+                return Some(type_triple.object) == sys_json
                     || Some(type_triple.object) == rdf_list;
             }
         }
