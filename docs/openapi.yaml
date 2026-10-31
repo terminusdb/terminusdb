@@ -1072,6 +1072,15 @@ paths:
             **Array mode** (`as_list=true`):
             - Content-Type: `application/json; charset=UTF-8`
             - Standard JSON array `[{...}, {...}]`
+            
+            **Counted mode** (`counted=true`):
+            - Content-Type: `application/json; charset=UTF-8`
+            - Single object `{"@type": "api:DocumentCountResponse", "api:count": <integer>}`
+            
+            **IDs format** (`format=ids`):
+            - Same `as_list` framing, but items are document ID strings instead
+            of document objects: `"Person/Alice"` per line, or
+            `["Person/Alice", ...]`
           content:
             application/json; stream=true; charset=UTF-8:
               schema:
@@ -1087,25 +1096,48 @@ paths:
                 additionalProperties: true
             application/json; charset=UTF-8:
               schema:
-                type: array
-                description: Array of documents (array mode, as_list=true)
-                items:
-                  type: object
-                  properties:
-                    "@id":
+                oneOf:
+                  - type: array
+                    description: Array of documents (array mode, as_list=true)
+                    items:
+                      type: object
+                      properties:
+                        "@id":
+                          type: string
+                        "@type":
+                          type: string
+                      additionalProperties: true
+                  - type: array
+                    description: Array of document ID strings (format=ids)
+                    items:
                       type: string
-                    "@type":
-                      type: string
-                  additionalProperties: true
-              example:
-                - "@id": "Person/Alice"
-                  "@type": "Person"
-                  "name": "Alice"
-                  "age": 30
-                - "@id": "Person/Bob"
-                  "@type": "Person"
-                  "name": "Bob"
-                  "age": 25
+                      example: Person/Alice
+                  - type: object
+                    description: Document count response (counted=true)
+                    properties:
+                      "@type":
+                        type: string
+                        enum: ["api:DocumentCountResponse"]
+                      "api:count":
+                        type: integer
+                    required: ["@type", "api:count"]
+              examples:
+                documents:
+                  value:
+                    - "@id": "Person/Alice"
+                      "@type": "Person"
+                      "name": "Alice"
+                      "age": 30
+                    - "@id": "Person/Bob"
+                      "@type": "Person"
+                      "name": "Bob"
+                      "age": 25
+                ids:
+                  value: ["Person/Alice", "Person/Bob"]
+                counted:
+                  value:
+                    "@type": "api:DocumentCountResponse"
+                    "api:count": 2
         400:
           description: Bad Request
         401:
