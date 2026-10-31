@@ -853,14 +853,38 @@ fn parse_duration_fields(s: &str) -> Result<Duration, String> {
     })
 }
 
+/// Parse a `tz(Seconds)` or `none` term into the stored i16 minutes offset.
+/// The Prolog side follows the SWI convention of seconds *west* of
+/// Greenwich, so a +02:00 zone arrives as tz(-7200) → 120 minutes.
+fn parse_interval_tz(s: &str) -> Result<i16, String> {
+    if s == "none" {
+        return Ok(INTERVAL_NO_ZONE);
+    }
+    let secs: i64 = s
+        .strip_prefix("tz(")
+        .and_then(|s| s.strip_suffix(")"))
+        .ok_or_else(|| format!("invalid tz term: {s}"))?
+        .parse()
+        .map_err(|e| format!("invalid tz offset: {e}"))?;
+    Ok((-secs / 60) as i16)
+}
+
+fn format_interval_tz(tz: i16) -> String {
+    if tz == INTERVAL_NO_ZONE {
+        "none".to_string()
+    } else {
+        format!("tz({})", -(tz as i64) * 60)
+    }
+}
+
 fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     let inner = s
         .strip_prefix("date_time_interval(")
         .and_then(|s| s.strip_suffix(")"))
         .ok_or_else(|| format!("invalid interval term: {s}"))?;
     let args = split_top_level_args(inner);
-    if args.len() != 4 {
-        return Err(format!("expected 4 args, got {}", args.len()));
+    if args.len() != 6 {
+        return Err(format!("expected 6 args, got {}", args.len()));
     }
     let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0])?;
     let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1])?;
@@ -871,6 +895,8 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
         "duration_end" => INTERVAL_FLAG_DURATION_END,
         other => return Err(format!("unknown flag: {other}")),
     };
+    let start_tz = parse_interval_tz(args[4])?;
+    let end_tz = parse_interval_tz(args[5])?;
     Ok(DateTimeInterval::make_entry(&DateTimeInterval {
         start_seconds,
         start_nanos,
@@ -880,6 +906,8 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
         end_type,
         flag,
         duration,
+        start_tz,
+        end_tz,
     }))
 }
 
@@ -927,5 +955,13 @@ fn format_interval_term(iv: &DateTimeInterval) -> String {
         INTERVAL_FLAG_DURATION_END => "duration_end",
         _ => "explicit",
     };
-    format!("date_time_interval({},{},{},{})", start, end, dur, flag)
+    format!(
+        "date_time_interval({},{},{},{},{},{})",
+        start,
+        end,
+        dur,
+        flag,
+        format_interval_tz(iv.start_tz),
+        format_interval_tz(iv.end_tz)
+    )
 }

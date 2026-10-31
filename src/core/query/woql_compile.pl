@@ -1373,7 +1373,7 @@ normalise_typed_or_component(Value, Normaliser, Component) :-
 woql_interval(Start, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(C1,C2,_Dur,_Flag),
+        IV = date_time_interval(C1,C2,_Dur,_Flag,_,_),
         (   nonvar(Start)
         ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
         ;   interval_component_typed_datetime(C1, Start)
@@ -1391,7 +1391,7 @@ woql_interval(Start, End, Interval) :-
         interval_component_stamp_ns(N2, NS2),
         DiffNanos is NS2 - NS1,
         nanoseconds_to_duration(DiffNanos, Dur),
-        Interval = date_time_interval(N1,N2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        Interval = date_time_interval(N1,N2,Dur,explicit,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval), _))
     ).
 
@@ -1481,7 +1481,7 @@ duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
     Secs is Sign * (D * 86400 + HH * 3600 + MM * 60 + SS).
 
 % Extract the stored duration from an arity-4 interval.
-interval_extract_duration(date_time_interval(_,_,Dur,_), Dur).
+interval_extract_duration(date_time_interval(_,_,Dur,_,_,_), Dur).
 
 /*
  * woql_interval_start_duration(Start, Duration, Interval) is det.
@@ -1493,7 +1493,7 @@ interval_extract_duration(date_time_interval(_,_,Dur,_), Dur).
 woql_interval_start_duration(Start, Duration, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(C1,_C2,Dur,_Flag),
+        IV = date_time_interval(C1,_C2,Dur,_Flag,_,_),
         (   nonvar(Start)
         ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
         ;   interval_component_typed_datetime(C1, Start)
@@ -1504,7 +1504,7 @@ woql_interval_start_duration(Start, Duration, Interval) :-
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
         normalise_interval_start(D1, N1),
         add_duration_to_component(N1, Dur, N2),
-        Interval = date_time_interval(N1,N2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        Interval = date_time_interval(N1,N2,Dur,start_duration,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_start_duration), _))
     ).
 
@@ -1518,7 +1518,7 @@ woql_interval_start_duration(Start, Duration, Interval) :-
 woql_interval_duration_end(Duration, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(_C1,C2,Dur,_Flag),
+        IV = date_time_interval(_C1,C2,Dur,_Flag,_,_),
         (   nonvar(End)
         ->  normalise_typed_or_component(End, normalise_interval_end, C2)
         ;   interval_component_typed_datetime(C2, End)
@@ -1533,7 +1533,7 @@ woql_interval_duration_end(Duration, End, Interval) :-
         normalise_interval_start(D2, D2N),
         subtract_duration_from_component(D2N, Dur, N1),
         normalise_interval_end(D2, N2),
-        Interval = date_time_interval(N1,N2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        Interval = date_time_interval(N1,N2,Dur,duration_end,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_duration_end), _))
     ).
 
@@ -1604,8 +1604,8 @@ classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
  * to woql_interval_relation/5.
  */
 woql_interval_relation_typed(Rel, X, Y) :-
-    X = date_time_interval(Xc1,Xc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-    Y = date_time_interval(Yc1,Yc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    X = date_time_interval(Xc1,Xc2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    Y = date_time_interval(Yc1,Yc2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
     interval_component_typed_datetime(Xc1, Xs),
     interval_component_typed_datetime(Xc2, Xe),
     interval_component_typed_datetime(Yc1, Ys),

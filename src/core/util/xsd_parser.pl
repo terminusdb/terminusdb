@@ -451,10 +451,41 @@ dateTimeInterval(Start,End,Duration) -->
 dateTimeInterval(Start,End) -->
     dateTimeIntervalComponent(Start), "/" , dateTimeIntervalComponent(End).
 
+%% Zone-presence-aware rules for xdd:dateTimeInterval endpoints only.
+%% Unlike optional_time_offset (which maps absence to 0), these emit the
+%% atom 'none' for a zone-less endpoint — local-time-ness is meaningful in
+%% XBRL OIM and must survive to storage. Numeric offsets keep the SWI
+%% convention (seconds west of Greenwich).
+interval_time_offset(Offset) -->
+    time_offset(Offset).
+interval_time_offset(none) -->
+    "".
+
+interval_time(H,M,S,NS,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	".", digits(D),
+    { length(L, 9),
+      atom_codes(D,Codes),
+      append(Codes, Tail, L),
+      maplist([0'0]>>true, Tail),
+      atom_codes(Number,L),
+      atom_number(Number, NS)
+    },
+    interval_time_offset(Offset).
+interval_time(H,M,S,0,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), ":", twoDigitNatural(S),
+	interval_time_offset(Offset) .
+interval_time(H,M,0,0,Offset) -->
+    twoDigitNatural(H), ":", twoDigitNatural(M), interval_time_offset(Offset).
+
+intervalDateTime(SY,Mo,D,H,M,S,NS,Offset) -->
+    year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
+    time_separator, interval_time(H,M,S,NS,Offset).
+
 dateTimeIntervalComponent(duration(Sign,Y,Mo,D,H,M,S)) -->
     duration(Sign,Y,Mo,D,H,M,S), !.
 dateTimeIntervalComponent(date_time(Y,Mo,D,H,M,S,NS,Offset)) -->
-    dateTime(Y,Mo,D,H,M,S,NS,Offset), !.
+    intervalDateTime(Y,Mo,D,H,M,S,NS,Offset), !.
 dateTimeIntervalComponent(date(Y,M,D,Offset)) -->
     date(Y,M,D,Offset).
 

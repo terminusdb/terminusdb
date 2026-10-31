@@ -319,7 +319,7 @@ is_date_range(date_range(Date1,Date2)) :-
     is_date(Date1),
     is_date(Date2).
 
-is_date_time_interval(date_time_interval(C1,C2,D,Flag)) :-
+is_date_time_interval(date_time_interval(C1,C2,D,Flag,_,_)) :-
     is_interval_component(C1),
     is_interval_component(C2),
     is_duration(D),
