@@ -85,7 +85,8 @@
               pairs_satisfying_diamond_property/4,
               tabled_get_document_context/2,
               json_write_options/1,
-              extract_sys_json_value/2
+              extract_sys_json_value/2,
+              path_component/3
           ]).
 
 :- use_module(instance).

@@ -570,6 +570,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             % Default flips to false in 12.1.
             param_value_search_or_json_optional(Search, JSON, raw_id, boolean, true, Raw_Id),
             param_value_search_or_json_optional(Search, JSON, id, non_empty_atom, _, Id),
+            param_value_search_or_json_optional(Search, JSON, id_prefix, non_empty_atom, _, Id_Prefix),
             param_value_search_or_json_optional(Search, JSON, type, non_empty_atom, _, Type),
 
             % Use new compress_ids but still support old prefixed.
@@ -601,6 +602,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          minimized: Minimized,
                          raw_id: Raw_Id,
                          format: OutputFormat,
+                         id_prefix: Id_Prefix,
                          request: Request
                      },
 

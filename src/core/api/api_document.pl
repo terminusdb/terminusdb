@@ -78,7 +78,8 @@
                   replace_document_expanded/5,
                   insert_backlinks/2,
                   extract_return_ids/2,
-                  compress_schema_uri/3
+                  compress_schema_uri/3,
+                  path_component/3
               ]).
 :- use_module(core(document/parallel_elaboration), [
                   elaborate_insert_request_db/4,
@@ -128,6 +129,7 @@
 
 document_input_format(json).
 document_output_format(json).
+document_output_format(ids).
 document_output_format(embedding).
 document_output_format(markdown).
 
@@ -229,6 +231,60 @@ api_get_documents_by_type(Transaction, Graph_Type, Type, Config, Document) :-
     api_document:api_get_document(Graph_Type, Transaction, Id, Config, Document).
 
 
+/**
+ * api_generate_document_ids_by_id_prefix(+Graph_Type, +Transaction, ?Type,
+ *                                        +Id_Prefix, +Config, -Id) is nondet
+ *
+ * Yield the document ids whose expanded IRI starts with Id_Prefix. The
+ * succinct node dictionary keeps subject names in lexicographic order, so
+ * the matching ids live in a contiguous range that
+ * terminus_store:subject_with_prefix/3 seeks and streams directly instead
+ * of scanning every subject in the graph.
+ *
+ * Candidates are then filtered to actual documents — dictionary entries
+ * are append-only, so names of deleted documents and of nodes that only
+ * ever appear in object position are skipped here. Type restricts matches
+ * the same way as api_generate_document_ids_by_type/5.
+ */
+api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   Type_Ex = Type),
+    database_instance(Transaction, Instance),
+    member(G, Instance),
+    read_write_obj_reader(G, Layer),
+    (   Config.unfold = true
+    ->  Include_Subdocuments = false
+    ;   Include_Subdocuments = true),
+    skip_generate_nsols(
+        (   terminus_store:subject_with_prefix(Layer, Id_Prefix_Ex, Name),
+            id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name)),
+        Config.skip,
+        Config.count),
+    Id = Name.
+api_generate_document_ids_by_id_prefix(schema, _Transaction, _Type, _Id_Prefix, _Config, _Id) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+% id_prefix_candidate(+Transaction, +Instance, +Include_Subdocuments,
+%                     ?Type_Ex, +Name) is semidet
+%
+% Name is a candidate document id (expanded IRI) if it carries an rdf:type
+% edge satisfying the same conditions as get_document_uri/3, or the
+% requested Type with the same class subsumption as is_instance_class/3.
+id_prefix_candidate(Transaction, Instance, Include_Subdocuments, Type_Ex, Name) :-
+    (   ground(Type_Ex)
+    ->  once(   is_instance_class(Transaction, Name, Type_Ex)
+            ;   xrdf(Instance, Name, rdf:type, Type_Ex))
+    ;   global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+        once((   xrdf(Instance, Name, rdf:type, Class),
+                (   Class == JSON_Document_Class
+                ;   is_simple_class(Transaction, Class),
+                    (   Include_Subdocuments = true
+                    ;   \+ is_subdocument(Transaction, Class)))))).
+
+
 api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id) :-
     skip_generate_nsols(
         match_expanded_query_document_uri(Transaction, Type, Query, Id),
@@ -260,6 +316,34 @@ api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Documen
  * several matching classes is counted once per rdf:type edge, exactly
  * as the listing would yield it once per match.
  */
+% Local id-namespace segment of a class IRI — the text after the last '/'
+% or '#'. Document ids are minted as <Base><Local>/<key>.
+class_iri_local_name(IRI, Local) :-
+    atomic_list_concat(Slash_Parts, '/', IRI),
+    last(Slash_Parts, Last_Slash),
+    atomic_list_concat(Hash_Parts, '#', Last_Slash),
+    last(Hash_Parts, Local).
+
+api_count_documents(Transaction, instance, Type, Config, Count) :-
+    get_dict(id_prefix, Config, Id_Prefix),
+    ground(Id_Prefix),
+    !,
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    (   % A class mints document ids under its own <Local>/ namespace, so
+        % when the prefix is exactly the requested type's namespace every
+        % subject in the range already has that type — no probing needed.
+        ground(Type_Ex),
+        class_iri_local_name(Type_Ex, Type_Local),
+        atom_concat(Type_Local, '/', Type_NS_Rel),
+        prefix_expand(Type_NS_Rel, Prefixes, Type_NS),
+        Type_NS == Id_Prefix_Ex
+    ->  '$doc':count_subjects_by_prefix(Context, Id_Prefix_Ex, Count)
+    ;   '$doc':count_documents_by_prefix(Context, Id_Prefix_Ex, Type_Ex, (Config.unfold), Count)).
 api_count_documents(Transaction, instance, Type, Config, Count) :-
     database_instance(Transaction, Instance),
     (   ground(Type)
@@ -269,9 +353,12 @@ api_count_documents(Transaction, instance, Type, Config, Count) :-
         (   setof(Class,
                   (   is_simple_class(Transaction, Class),
                       class_subsumed(Transaction, Class, Type_Ex)),
-                  Classes)
+                  Classes0)
         ->  true
-        ;   Classes = []),
+        ;   Classes0 = []),
+        % Type itself counts its own rdf:type edges even when it is not a
+        % schema-declared simple class (e.g. sys:JSONDocument).
+        ord_union([Type_Ex], Classes0, Classes),
         aggregate_all(sum(Partial),
                       (   member(Class, Classes),
                           xrdf_count(Instance, _, rdf:type, Class, Partial)),
@@ -362,6 +449,74 @@ api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :
     (   parallelize_enabled
     ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
     ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+
+% Documents selected by an id prefix, printed as full documents. The Rust
+% writer streams the sorted subject-dictionary range for the prefix and
+% materializes each document inline — no Prolog-side id list.
+api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, _Stream_Started) :-
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    (   parallelize_enabled
+    ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+    ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Type, _Stream_Started) :-
+    throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
+
+/**
+ * api_print_document_ids(+Graph_Type, +Transaction, ?Id, ?Ids, ?Type,
+ *                        ?Query, +Config, +Stream_Started) is det
+ *
+ * The format=ids output: stream the document ids selected by the usual
+ * selectors instead of the documents themselves. Ids are compressed when
+ * compress_ids is on, matching the shape accepted by the ids parameter.
+ */
+% Instance listings stream ids straight from the Rust document context:
+% a name prefix uses the sorted subject-dictionary range, a bare or typed
+% listing enumerates the allowed types' subjects — no per-id Prolog
+% round-trips. Query and explicit-id selectors stay on the Prolog path.
+api_print_document_ids(instance, Transaction, Id, Ids, Type, Query, Config, _Stream_Started) :-
+    \+ (nonvar(Query) ; ground(Id) ; ground(Ids)),
+    !,
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    database_and_default_prefixes(Transaction, Prefixes),
+    (   get_dict(id_prefix, Config, Id_Prefix), ground(Id_Prefix)
+    ->  prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex)
+    ;   true),
+    (   ground(Type)
+    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+    ;   true),
+    '$doc':print_document_ids_json(current_output, Context, Id_Prefix_Ex, Type_Ex,
+                                  (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold)).
+api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started) :-
+    (   nonvar(Query)
+    ->  die_if(Graph_Type \= instance,
+               error(query_is_only_supported_for_instance_graphs, _)),
+        expand_query_document(Transaction, Type, Query, Query_Ex, Type_Ex),
+        Goal = api_generate_document_ids_by_query(Graph_Type, Transaction, Type_Ex, Query_Ex, Config, Doc_Id)
+    ;   ground(Id)
+    ->  Goal = (Doc_Id = Id)
+    ;   ground(Ids)
+    ->  Goal = member(Doc_Id, Ids)
+    ;   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  Goal = api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, Config, Doc_Id)
+    ;   ground(Type)
+    ->  Goal = api_generate_document_ids_by_type(Graph_Type, Transaction, Type, Config, Doc_Id)
+    ;   Goal = api_generate_document_ids(Graph_Type, Transaction, Config, Doc_Id)),
+    database_prefixes(Transaction, Prefixes),
+    forall(Goal,
+           (   compress_id_for_output(Config, Prefixes, Doc_Id, Out_Id),
+               json_stream_write(Config, Stream_Started, Out_Id))).
+
+compress_id_for_output(Config, Prefixes, Id, Out_Id) :-
+    (   Config.compress = true,
+        catch(compress_dict_uri(Id, Prefixes, Out_Id), _, fail)
+    ->  true
+    ;   Out_Id = Id).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
     Raw_Id = Config.get(raw_id, true),
@@ -1923,6 +2078,12 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
                 api_get_document(Graph_Type, Transaction, OneId, ConfigWithCtx, Document)
             ),
             document_stream_write(Format, ConfigWithCtx, StreamState, Document))
+    ;   get_dict(id_prefix, ConfigWithCtx, Id_Prefix),
+        ground(Id_Prefix)
+    ->  forall(
+            (   api_generate_document_ids_by_id_prefix(Graph_Type, Transaction, Type, Id_Prefix, ConfigWithCtx, Doc_Id),
+                api_get_document(Graph_Type, Transaction, Doc_Id, ConfigWithCtx, Document)),
+            document_stream_write(Format, ConfigWithCtx, StreamState, Document))
     ;   ground(Type)
     ->  forall(api_get_documents_by_type(Transaction, Graph_Type, Type, ConfigWithCtx, Document),
                document_stream_write(Format, ConfigWithCtx, StreamState, Document))
@@ -2173,6 +2334,17 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
     format_read_documents(markdown, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
 
+% ids format — stream the matching document ids instead of the documents
+api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, Initial_Goal) :-
+    get_dict(format, Config, ids),
+    !,
+    resolve_descriptor_auth(read, System_DB, Auth, Path, Graph_Type, Descriptor),
+    before_read(Descriptor, Requested_Data_Version, Actual_Data_Version, Transaction),
+    get_dict(as_list, Config, As_List),
+    call(Initial_Goal, As_List),
+    json_stream_start(Config, Stream_Started),
+    api_print_document_ids(Graph_Type, Transaction, Id, Ids, Type, Query, Config, Stream_Started),
+    json_stream_end(Config).
 :- meta_predicate api_read_document_selector(+,+,+,+,+,+,+,+,+,+,+,1).
 api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type, Query, Config, Requested_Data_Version, Actual_Data_Version, _Initial_Goal) :-
     get_dict(format, Config, Format),
@@ -2273,7 +2445,10 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, _Id, _Ids, Type, _
     call(Initial_Goal, As_List),
     json_stream_start(Config, Stream_Started),
 
-    (   ground(Type)
+    (   get_dict(id_prefix, Config, Id_Prefix),
+        ground(Id_Prefix)
+    ->  api_print_documents_by_id_prefix(Graph_Type, Transaction, Config, Id_Prefix, Type, Stream_Started)
+    ;   ground(Type)
     ->  api_print_documents_by_type(Graph_Type, Transaction, Config, Type, Stream_Started)
     ;   api_print_documents(Graph_Type, Transaction, Config, Stream_Started)
     ),

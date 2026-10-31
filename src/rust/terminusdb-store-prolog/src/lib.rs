@@ -35,6 +35,7 @@ pub fn install(module: Option<&str>) {
     layer::register_predicate_count_in_module(module);
     layer::register_subject_to_id_in_module(module);
     layer::register_id_to_subject_in_module(module);
+    layer::register_subject_with_prefix_in_module(module);
     layer::register_predicate_to_id_in_module(module);
     layer::register_id_to_predicate_in_module(module);
     layer::register_object_to_id_in_module(module);

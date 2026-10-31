@@ -1264,6 +1264,160 @@ fn par_print_documents_by_id<C: QueryableContextType, L: Layer + Clone + 'static
     Ok(())
 }
 
+/// Whether `subject` carries an rdf:type edge to any of `allowed_types`.
+fn id_is_document_of_types<L: Layer + Clone>(
+    doc_context: &DocumentContext<L>,
+    allowed_types: &HashSet<u64>,
+    subject: u64,
+) -> bool {
+    match doc_context.rdf.type_() {
+        Some(rdf_type) => doc_context
+            .layer()
+            .triples_sp(subject, rdf_type)
+            .any(|t| allowed_types.contains(&t.object)),
+        None => false,
+    }
+}
+
+/// The set of type ids a listing may draw documents from: the requested
+/// type with its subtypes, or the full document-type set — the same
+/// unfold/type selection as print_all_documents_json.
+fn listing_type_ids<L: Layer + Clone>(
+    doc_context: &DocumentContext<L>,
+    type_name: Option<&str>,
+    unfold: bool,
+) -> HashSet<u64> {
+    match type_name {
+        Some(type_name) => doc_context
+            .get_subtypes_for(type_name)
+            .into_iter()
+            .collect(),
+        None => match unfold {
+            true => doc_context.document_types.clone(),
+            false => doc_context.types.clone(),
+        },
+    }
+}
+
+/// Iterate the subjects a document listing covers: a name-prefix range when
+/// `prefix` is given, otherwise every subject of the allowed types (sorted
+/// and deduplicated — a subject may carry several rdf:type edges).
+///
+/// The prefix path stays lazy end-to-end — the store streams the merged
+/// dictionary range, so skip/count pages hold only the page. Membership
+/// comes from the band-sliced type∩prefix set, which costs a handful of
+/// per-band seeks plus a decode per matching member regardless of page
+/// size.
+fn listing_subjects<'a, L: Layer + Clone>(
+    doc_context: &'a DocumentContext<L>,
+    allowed_types: &'a HashSet<u64>,
+    prefix: Option<&'a str>,
+) -> Box<dyn Iterator<Item = (u64, String)> + 'a> {
+    let layer = doc_context.layer();
+    match prefix {
+        Some(prefix) => match doc_context.rdf.type_() {
+            // The member slices merge by subject id and then by name, so
+            // the typed listing streams without materializing a
+            // membership set.
+            Some(rdf_type) => {
+                layer.triple_subjects_with_prefix(prefix, rdf_type, allowed_types)
+            }
+            None => Box::new(std::iter::empty()),
+        },
+        None => {
+            // Each type's member edges arrive outer-id sorted; merge them
+            // lazily so a page only holds the per-type iterators. A
+            // subject with edges to several allowed types dedups to one
+            // emission.
+            let rdf_type = doc_context.rdf.type_();
+            let mut iters: Vec<_> = allowed_types
+                .iter()
+                .map(|typ| {
+                    layer
+                        .triples_o(*typ)
+                        .filter(move |t| rdf_type == Some(t.predicate))
+                        .map(|t| t.subject)
+                        .peekable()
+                })
+                .collect();
+            Box::new(
+                std::iter::from_fn(move || {
+                    let mut min = None;
+                    for it in iters.iter_mut() {
+                        if let Some(&s) = it.peek() {
+                            min = Some(min.map_or(s, |m: u64| m.min(s)));
+                        }
+                    }
+                    let min = min?;
+                    for it in iters.iter_mut() {
+                        while it.peek() == Some(&min) {
+                            it.next();
+                        }
+                    }
+                    Some(min)
+                })
+                .filter_map(move |subject| layer.id_subject(subject).map(|name| (subject, name))),
+            )
+        }
+    }
+}
+
+/// Count subjects in a prefix range that carry an rdf:type edge to any of
+/// `allowed_types` — the intersection of a name-sorted dict range with
+/// outer-id sorted member lists.
+fn count_type_prefix<L: Layer + Clone>(
+    doc_context: &DocumentContext<L>,
+    allowed_types: &HashSet<u64>,
+    prefix: &str,
+) -> usize {
+    let layer = doc_context.layer();
+    let rdf_type = match doc_context.rdf.type_() {
+        Some(t) => t,
+        None => return 0,
+    };
+    let est_range = layer.count_subjects_with_prefix(prefix);
+
+    // The band-sliced intersection resolves type∩prefix numerically inside
+    // each band's subject-sorted member run: a handful of per-band seeks
+    // plus ~0.3us per matching member. Per-candidate probing (~46us each)
+    // only wins on tiny prefixes.
+    if est_range <= 64 {
+        layer
+            .subjects_with_prefix(prefix)
+            .filter(|(subject, _)| id_is_document_of_types(doc_context, allowed_types, *subject))
+            .count()
+    } else {
+        layer.count_triple_subjects_with_prefix(prefix, rdf_type, allowed_types)
+    }
+}
+
+fn write_id_json<C: QueryableContextType, L: Layer + Clone>(
+    context: &Context<C>,
+    doc_context: &DocumentContext<L>,
+    stream: &mut WritablePrologStream,
+    name: &str,
+    compress: bool,
+    as_list: bool,
+    stream_started: &mut bool,
+) -> PrologResult<()> {
+    if as_list && *stream_started {
+        context.try_or_die_generic(stream.write_all(b",\n"))?;
+    }
+    *stream_started = true;
+
+    let id = match compress {
+        true => doc_context.compress_instance_id(name),
+        false => name.to_string(),
+    };
+    context.try_or_die_generic(serde_json::to_writer(&mut *stream, &Value::String(id)))?;
+
+    if !as_list {
+        context.try_or_die(stream.write_all(b"\n"))?;
+    }
+
+    Ok(())
+}
+
 use super::types::*;
 predicates! {
     #[module("$doc")]
@@ -1414,6 +1568,202 @@ predicates! {
 
         par_print_documents_by_id(context, &doc_context.0, stream_term, skip_term, count_term, as_list_term, ids_term, compress, unfold, minimize)
     }
+
+    #[module("$doc")]
+    semidet fn print_document_ids_json(context, stream_term, get_context_term, prefix_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term) {
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+        let prefix: Option<PrologText> = attempt_opt(prefix_term.get())?;
+        let type_name: Option<PrologText> = attempt_opt(type_term.get())?;
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+        let mut skip: u64 = skip_term.get_ex()?;
+        let mut count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
+        let mut started = false;
+
+        let allowed = listing_type_ids(&doc_context, type_name.as_deref().map(|t| t.as_str()), unfold);
+        for (_subject, name) in listing_subjects(&doc_context, &allowed, prefix.as_deref().map(|p| p.as_str())) {
+            if skip != 0 {
+                skip -= 1;
+                continue;
+            }
+            if let Some(count) = count.as_mut() {
+                if *count == 0 {
+                    break;
+                }
+                *count -= 1;
+            }
+            write_id_json(context, &doc_context, &mut stream, &name, compress, as_list, &mut started)?;
+        }
+        context.try_or_die(stream.flush())?;
+
+        Ok(())
+    }
+
+    #[module("$doc")]
+    semidet fn print_documents_json_by_prefix(context, stream_term, get_context_term, prefix_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+        let prefix: Option<PrologText> = attempt_opt(prefix_term.get())?;
+        let type_name: Option<PrologText> = attempt_opt(type_term.get())?;
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
+
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+        let mut skip: u64 = skip_term.get_ex()?;
+        let mut count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
+        let mut started = false;
+
+        let allowed = listing_type_ids(&doc_context, type_name.as_deref().map(|t| t.as_str()), unfold);
+        for (subject, _name) in listing_subjects(&doc_context, &allowed, prefix.as_deref().map(|p| p.as_str())) {
+            if skip != 0 {
+                skip -= 1;
+                continue;
+            }
+            if let Some(count) = count.as_mut() {
+                if *count == 0 {
+                    break;
+                }
+                *count -= 1;
+            }
+            let map = context
+                .try_or_die(doc_context.get_id_document(subject, compress, unfold))?
+                .expect("expected document lookup to succeed as ids were prefetched");
+            print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
+        }
+
+        Ok(())
+    }
+
+    #[module("$doc")]
+    semidet fn par_print_documents_json_by_prefix(context, stream_term, get_context_term, prefix_term, type_term, skip_term, count_term, as_list_term, compress_term, unfold_term, minimize_term) {
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
+        if doc_context.layer.is_none() {
+            return Ok(());
+        }
+        let prefix: Option<PrologText> = attempt_opt(prefix_term.get())?;
+        let type_name: Option<PrologText> = attempt_opt(type_term.get())?;
+        let compress: bool = compress_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let minimize: bool = minimize_term.get()?;
+
+        let mut stream: WritablePrologStream = stream_term.get_ex()?;
+        let skip: u64 = skip_term.get_ex()?;
+        let count: Option<u64> = attempt_opt(count_term.get())?;
+        let as_list: bool = as_list_term.get_ex()?;
+        let mut started = false;
+
+        let allowed = listing_type_ids(&doc_context, type_name.as_deref().map(|t| t.as_str()), unfold);
+        let subjects: Vec<u64> = listing_subjects(&doc_context, &allowed, prefix.as_deref().map(|p| p.as_str()))
+            .map(|(subject, _)| subject)
+            .skip(skip as usize)
+            .take(count.map(|c| c as usize).unwrap_or(usize::MAX))
+            .collect();
+
+        let channel_size = rayon::current_num_threads() * 2;
+        let (sender, receiver) = mpsc::sync_channel(channel_size);
+
+        let doc_context2: Arc<_> = doc_context.0.clone();
+        rayon::spawn(move || {
+            let _result = subjects
+                .iter()
+                .enumerate()
+                .par_bridge()
+                .try_for_each_with(sender, |sender, (ix, subject)| {
+                    let map = doc_context2.get_id_document(*subject, compress, unfold);
+                    sender.send((ix, map)) // failure will kill the task
+                });
+        });
+
+        let mut result = BinaryHeap::new();
+        let mut cur = 0;
+        while let Ok((ix, map)) = receiver.recv() {
+            let map = context
+                .try_or_die(map)?
+                .expect("expected parallel document lookup by prefix to succeed as ids were prefetched");
+            if ix == cur {
+                print_document(context, &mut stream, map, as_list, minimize, &mut started)?;
+
+                cur += 1;
+                while result
+                    .peek()
+                    .map(|HeapEntry { index, .. }| index == &cur)
+                    .unwrap_or(false)
+                {
+                    let HeapEntry {
+                        index: _index,
+                        value,
+                    } = result.pop().unwrap();
+
+                    print_document(context, &mut stream, value, as_list, minimize, &mut started)?;
+
+                    cur += 1;
+                }
+            } else {
+                result.push(HeapEntry {
+                    index: ix,
+                    value: map,
+                });
+            }
+        }
+
+        assert!(result.is_empty());
+
+        Ok(())
+    }
+
+    #[module("$doc")]
+    semidet fn count_documents_by_prefix(_context, get_context_term, prefix_term, type_term, unfold_term, count_term) {
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
+        let unfold: bool = unfold_term.get()?;
+        let prefix: Option<PrologText> = attempt_opt(prefix_term.get())?;
+        let type_name: Option<PrologText> = attempt_opt(type_term.get())?;
+
+        let mut count: u64 = 0;
+        if doc_context.layer.is_some() {
+            match (prefix.as_deref(), type_name.as_deref()) {
+                (Some(prefix), type_name) => {
+                    // Untyped prefix counts still restrict to document-
+                    // typed subjects so the count matches the listing —
+                    // dict names can include object-only nodes that were
+                    // never documents.
+                    let allowed = listing_type_ids(&doc_context, type_name.map(|t| t.as_str()), unfold);
+                    count = count_type_prefix(&doc_context, &allowed, prefix) as u64;
+                }
+                (None, type_name) => {
+                    let allowed = listing_type_ids(&doc_context, type_name.map(|t| t.as_str()), unfold);
+                    count = listing_subjects(&doc_context, &allowed, None).count() as u64;
+                }
+            }
+        }
+
+        count_term.unify(count)
+    }
+
+    #[module("$doc")]
+    semidet fn count_subjects_by_prefix(_context, get_context_term, prefix_term, count_term) {
+        let doc_context: DocumentContextBlob = get_context_term.get()?;
+        let prefix: Option<PrologText> = attempt_opt(prefix_term.get())?;
+
+        let mut count: u64 = 0;
+        if doc_context.layer.is_some() {
+            count = doc_context
+                .layer()
+                .count_subjects_with_prefix(prefix.as_deref().map_or("", |p| p))
+                as u64;
+        }
+
+        count_term.unify(count)
+    }
 }
 
 struct HeapEntry {
@@ -1450,6 +1800,11 @@ pub fn register() {
     register_par_print_all_documents_json_by_type();
     register_print_documents_json_by_id();
     register_par_print_documents_json_by_id();
+    register_print_document_ids_json();
+    register_print_documents_json_by_prefix();
+    register_par_print_documents_json_by_prefix();
+    register_count_documents_by_prefix();
+    register_count_subjects_by_prefix();
 
     delete::register();
     elaboration::register();
