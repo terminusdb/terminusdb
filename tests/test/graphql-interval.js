@@ -152,7 +152,7 @@ describe('GraphQL dateTimeInterval', function () {
 
     it('rejects an unknown relation', async function () {
       const result = await client.query({ query: gql(rel('nonsense', '2025-01-01/2025-02-01')) }).catch(e => e)
-      expect(result.graphQLErrors ?? result.networkError ? true : false).to.be.true
+      expect(result.graphQLErrors?.length || result.networkError).to.be.ok
     })
   })
 })

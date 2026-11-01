@@ -1477,13 +1477,13 @@
     "https://terminusdb.com": {
       "fields": ["subject", "predicate", "object", "relation", "value"],
       "mode": ["?", "?", "?", "+", "+"],
-      "types": ["node", "node", "data_value", "data_value", "data_value"]
+      "types": ["node", "node", "value", "data_value", "data_value"]
     }
   },
   "@type":"Class",
-  "subject":"Node",
-  "predicate":"Node",
-  "object":"DataValue",
+  "subject":"NodeValue",
+  "predicate":"NodeValue",
+  "object":"Value",
   "relation":"DataValue",
   "value":"DataValue"
 }

@@ -2449,12 +2449,30 @@ compile_wf(interval_relation_typed(R,X,Y),woql_interval_relation_typed(RE,XE,YE)
     resolve(R,RE),
     resolve(X,XE),
     resolve(Y,YE).
-compile_wf(triple_relation(X,P,Y,Rel,Val),(TGoal,RelGoal)) -->
-    compile_wf(t(X,P,Y),TGoal),
+compile_wf(triple_relation(X,P,Y,Rel,Val),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
     resolve(Rel,RelE),
     resolve(Val,ValE),
-    resolve(Y,YE),
-    { RelGoal = woql_interval_relation_typed(RelE,YE,ValE) }.
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause,woql_interval_relation_typed(RelE,YE,ValE))
+    }.
+compile_wf(triple_relation(X,P,Y,Rel,Val,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_relation(X,P,Y,Rel,Val),Goal),
+    update(filter, _Filter, Old_Filter).
 compile_wf(weekday(D,W),woql_weekday(DE,WE)) -->
     resolve(D,DE),
     resolve(W,WE).
@@ -3924,6 +3942,28 @@ filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Obj
     compile_schema_predicate(PE, Transaction_Object, PS),
     compile_schema_object(YE, Transaction_Object, YS),
     Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Search_1 = [xrdf_interval_relation(Transaction_Object.instance_objects, RelE, ValE, XI, PI, YE)]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Search_2 = [xrdf_interval_relation(Transaction_Object.schema_objects, RelE, ValE, XS, PS, YE)]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = xrdf_interval_relation((Transaction_Object.instance_objects), RelE, ValE, XI, PI, YE).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = xrdf_interval_relation((Transaction_Object.schema_objects), RelE, ValE, XS, PS, YE).
 
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
     (   memberchk(instance,Types)

@@ -2,7 +2,9 @@ use super::value::*;
 use crate::store::*;
 use std::io::{self, Write};
 use std::iter::Peekable;
+use std::str::FromStr;
 use swipl::prelude::*;
+use tdb_succinct::tfc::lexical_interval::{entry_relation_bounds, AllenRelation};
 use tdb_succinct::TypedDictEntry;
 use terminus_store::layer::{IdTriple, ObjectType};
 use terminus_store::storage::{name_to_string, string_to_name};
@@ -576,6 +578,56 @@ predicates! {
             }
 
             let iter = layer.triples_value_range_rev(&low_entry, &high_entry).peekable();
+
+            Ok(Some(iter))
+        },
+        call(iter) => {
+            if let Some(triple) = iter.next() {
+                subject_id_term.unify(triple.subject)?;
+                predicate_id_term.unify(triple.predicate)?;
+                object_id_term.unify(triple.object)?;
+
+                Ok(iter.peek().is_some())
+            }
+            else {
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
+    pub nondet fn id_triple_interval_relation<Peekable<Box<dyn Iterator<Item=IdTriple>+Send>>>(context, layer_term, rel_term, ref_term, subject_id_term, predicate_id_term, object_id_term) {
+        setup => {
+            let layer: WrappedLayer = layer_term.get_ex()?;
+
+            let rel_inner = context.new_term_ref();
+            let rel_name: String = if attempt(rel_term.unify(term!{context: value(#&rel_inner, _)}?))? {
+                let s: PrologText = rel_inner.get_ex()?;
+                s.into_inner()
+            } else {
+                rel_term.get_ex()?
+            };
+            let rel = match AllenRelation::from_str(&rel_name) {
+                Ok(r) => r,
+                Err(_) => {
+                    return context.raise_exception(&term!{context: error(domain_error(allen_relation, #rel_term), _)}?)
+                }
+            };
+
+            let ref_inner = context.new_term_ref();
+            let ref_ty = context.new_term_ref();
+            let ref_entry;
+            if attempt(ref_term.unify(term!{context: value(#&ref_inner, #&ref_ty)}?))? {
+                ref_entry = make_entry_from_term(context, &ref_inner, &ref_ty)?;
+            } else {
+                return context.raise_exception(&term!{context: error(domain_error(value(), #ref_term), _)}?);
+            }
+
+            let Some(reference) = entry_relation_bounds(&ref_entry) else {
+                // a reference with no interval reading satisfies nothing
+                return Err(PrologError::Failure);
+            };
+
+            let iter = layer.triples_interval_relation(rel, &reference).peekable();
 
             Ok(Some(iter))
         },

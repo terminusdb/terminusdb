@@ -366,6 +366,15 @@ test(instant_operand_coerces_to_point_during, []) :-
                            date_time(2025,7,1,0,0,0,0),0,explicit,tz(0),tz(0))
             ^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
 
+test(contains_point_at_interval_start, []) :-
+    % [Apr1, Jul1) contains the seam instant [Apr1,Apr1) — start-inclusive
+    woql_compile:woql_interval_relation_typed(
+        "contains"^^'http://www.w3.org/2001/XMLSchema#string',
+        date_time_interval(date(2025,4,1,0),
+                           date(2025,7,1,0),0,explicit,tz(0),tz(0))
+            ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+        date_time(2025,4,1,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTime').
+
 test(point_at_end_boundary_not_during, [fail]) :-
     % [Apr1,Apr1) is not during [Jan1,Apr1) — it belongs to the successor
     woql_compile:woql_interval_relation_typed(

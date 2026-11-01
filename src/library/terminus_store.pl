@@ -53,6 +53,9 @@
               id_triple_value_range_count/6,
               triple_value_range_count/6,
 
+              id_triple_interval_relation/6,
+              triple_interval_relation/6,
+
               id_triple_sp_value_next/5,
               id_triple_sp_value_previous/5,
               triple_value_next/5,
@@ -711,6 +714,49 @@ triple_value_range(Layer, Low, High, Subject, Predicate, Object) :-
 
 triple_value_range_rev(Layer, Low, High, Subject, Predicate, Object) :-
     id_triple_value_range_rev(Layer, Low, High, S_Id, P_Id, O_Id),
+
+    (   ground(Subject)
+    ->  true
+    ;   subject_id(Layer, Subject, S_Id)),
+
+    (   ground(Predicate)
+    ->  true
+    ;   predicate_id(Layer, Predicate, P_Id)),
+
+    (   ground(Object)
+    ->  true
+    ;   object_id(Layer, Object, O_Id)).
+
+/**
+ * triple_interval_relation(+Layer, +Rel, +Reference, ?Subject, ?Predicate, ?Object) is nondet.
+ *
+ * Triples whose object value can satisfy the Allen relation Rel against
+ * Reference. The object ids come from the interval indexes and are a
+ * superset of the true hits — callers verify each object semantically.
+ */
+triple_interval_relation(Layer, Rel, Reference, Subject, Predicate, Object) :-
+    (   nonvar(Subject)
+    ->  (   Subject = id(S_Id)
+        ->  true
+        ;   subject_id(Layer, Subject, S_Id)
+        )
+    ;   true),
+
+    (   nonvar(Predicate)
+    ->  (   Predicate = id(P_Id)
+        ->  true
+        ;   predicate_id(Layer, Predicate, P_Id)
+        )
+    ;   true),
+
+    (   nonvar(Object),
+        Object = id(O_Id)
+    ->  true
+    ;   ground(Object)
+    ->  object_id(Layer, Object, O_Id)
+    ;   true),
+
+    id_triple_interval_relation(Layer, Rel, Reference, S_Id, P_Id, O_Id),
 
     (   ground(Subject)
     ->  true

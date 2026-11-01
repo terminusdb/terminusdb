@@ -4,9 +4,10 @@ use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
 use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
-use tdb_succinct::tfc::interval::parse_iso_interval;
-use tdb_succinct::tfc::lexical_interval::{interval_relation, literal_as_interval, AllenRelation};
-use tdb_succinct::{DateTimeInterval, Decimal, TdbDataType, TypedDictEntry};
+use tdb_succinct::tfc::lexical_interval::{
+    interval_relation, lexical_interval_entry, literal_as_interval, AllenRelation,
+};
+use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -729,11 +730,13 @@ fn object_type_filter<'a>(
             let op = *op;
             let val = val.clone();
             let g = g.clone();
-            // Use TypedDictEntry ordering for dateTimeInterval (binary sorts chronologically)
+            // Use TypedDictEntry ordering for dateTimeInterval (lexical
+            // entries sort semantically: chronological endpoints, open and
+            // unknown classes at the extremes)
             let interval_entry = if type_str == "dateTimeInterval" {
-                parse_iso_interval(&val)
+                literal_as_interval(&val)
                     .ok()
-                    .map(|iv| DateTimeInterval::make_entry(&iv))
+                    .map(|iv| lexical_interval_entry(&iv))
             } else {
                 None
             };
@@ -754,13 +757,21 @@ fn object_type_filter<'a>(
                 .expect("unknown relation name in relationship filter");
             let reference = literal_as_interval(val)
                 .expect("relationship value must be an interval or instant literal");
+            // index candidates — a superset; the literal check below keeps
+            // the verdict exact on members only
+            let candidates: std::collections::HashSet<u64> = g
+                .interval_relation_object_ids(relation, &reference)
+                .into_iter()
+                .collect();
             let g = g.clone();
             ClonableIterator::new(iter.filter(move |object| {
-                let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let object_string = value_to_string(&object_value);
-                literal_as_interval(&object_string)
-                    .map(|iv| interval_relation(&iv, relation, &reference))
-                    .unwrap_or(false)
+                candidates.contains(object) && {
+                    let object_value = g.id_object_value(*object).expect("Object value must exist");
+                    let object_string = value_to_string(&object_value);
+                    literal_as_interval(&object_string)
+                        .map(|iv| interval_relation(&iv, relation, &reference))
+                        .unwrap_or(false)
+                }
             }))
         }
         FilterValue::Enum { op, value } => {

@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
+use tdb_succinct::tfc::lexical_interval::{decode_lexical_entry, lexical_interval_to_legacy};
 use tdb_succinct::*;
 
 pub fn make_entry_from_term<C: QueryableContextType>(
@@ -752,7 +753,19 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#hexBinary"))
         }
         Datatype::DateTimeInterval => {
-            let iv = entry.as_val::<DateTimeInterval, DateTimeInterval>();
+            let bytes = entry.to_bytes();
+            let iv = match bytes.len() {
+                INTERVAL_LEGACY_ENCODED_WIDTH => {
+                    DateTimeInterval::from_legacy_lexical(bytes)
+                }
+                INTERVAL_ENCODED_WIDTH => DateTimeInterval::from_lexical(bytes),
+                _ => decode_lexical_entry(&bytes)
+                    .ok()
+                    .and_then(|iv| lexical_interval_to_legacy(&iv))
+                    .unwrap_or_else(|| {
+                        panic!("undecodable DateTimeInterval entry: {} bytes", bytes.len())
+                    }),
+            };
             let term_string = format_interval_term(&iv);
             {
                 let f = context.open_frame();

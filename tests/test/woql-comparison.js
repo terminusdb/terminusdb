@@ -1874,5 +1874,29 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, trQuery('during', '2025-05-15T00:00:00Z', 'xsd:dateTime'))
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
+    // full Allen table — same fixture and expectations as the GraphQL
+    // relationship suite, so both surfaces must agree relation-for-relation
+    const cases = [
+      ['equals', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q2']],
+      ['before', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2024-H1', 'ev-2024-H2']],
+      ['after', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', []],
+      ['meets', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q1']],
+      ['met_by', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q3']],
+      ['overlaps', '2025-03-15T00:00:00Z/2025-05-15T00:00:00Z', ['ev-2025-Q1']],
+      ['overlapped_by', '2025-03-15T00:00:00Z/2025-05-15T00:00:00Z', ['ev-2025-Q2']],
+      ['starts', '2025-04-01T00:00:00Z/2025-12-31T00:00:00Z', ['ev-2025-Q2']],
+      ['started_by', '2025-04-01T00:00:00Z/2025-05-01T00:00:00Z', ['ev-2025-Q2']],
+      ['during', '2025-01-01T00:00:00Z/2025-10-01T00:00:00Z', ['ev-2025-Q2']],
+      ['contains', '2025-04-05T00:00:00Z/2025-06-15T00:00:00Z', ['ev-2025-Q2']],
+      ['finishes', '2025-01-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q2']],
+      ['finished_by', '2025-06-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q2']],
+    ]
+    for (const [relation, value, names] of cases) {
+      it(`relation ${relation}`, async function () {
+        const r = await woql.post(agent, trQuery(relation, value))
+        expect(namesOf(r.body.bindings)).to.deep.equal(names)
+      })
+    }
   })
 })
