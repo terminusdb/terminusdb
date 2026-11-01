@@ -6,18 +6,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use juniper::{
-    parser::parse_document_source, DefaultScalarValue, Definition,
-};
+use juniper::{parser::parse_document_source, DefaultScalarValue, Definition};
 use lazy_init::Lazy;
 use sha2::{Digest, Sha256};
 
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
 use crate::doc::DocumentContext;
-use crate::graphql::schema::{
-    TerminusResolveContext, TerminusTypeCollectionInfo,
-};
+use crate::graphql::schema::{TerminusResolveContext, TerminusTypeCollectionInfo};
 
 /// Context for resolving GraphQL subscription events outside of Juniper.
 ///
@@ -223,13 +219,18 @@ pub fn parse_subscription_query(
         "No subscription operation found in query. Expected `subscription { ... }`".to_string()
     })?;
 
-    let first_field = op.selection_set.first().ok_or_else(|| {
-        "Subscription operation has an empty selection set".to_string()
-    })?;
+    let first_field = op
+        .selection_set
+        .first()
+        .ok_or_else(|| "Subscription operation has an empty selection set".to_string())?;
 
     let field = match first_field {
         juniper::Selection::Field(spanning_field) => &spanning_field.item,
-        _ => return Err("Subscription top-level selection must be a field, not a fragment".to_string()),
+        _ => {
+            return Err(
+                "Subscription top-level selection must be a field, not a fragment".to_string(),
+            )
+        }
     };
 
     let field_name = field.name.item.to_string();
@@ -250,10 +251,12 @@ pub fn parse_subscription_query(
 
         match operation.as_str() {
             "added" | "changed" | "deleted" => {}
-            _ => return Err(format!(
-                "Unknown subscription operation '{}'. Must be one of: added, changed, deleted",
-                operation
-            )),
+            _ => {
+                return Err(format!(
+                    "Unknown subscription operation '{}'. Must be one of: added, changed, deleted",
+                    operation
+                ))
+            }
         }
 
         (class_name, operation)
@@ -279,7 +282,9 @@ pub fn parse_subscription_query(
     // This must be done before hashing so that subscriptions with different
     // include_children values get different cohort keys.
     let include_children = if let Some(args) = &field.arguments {
-        args.item.items.iter()
+        args.item
+            .items
+            .iter()
             .find(|(k, _)| k.item == "include_children")
             .and_then(|(_, v)| match &v.item {
                 juniper::InputValue::Scalar(juniper::DefaultScalarValue::Boolean(b)) => Some(*b),
@@ -292,7 +297,10 @@ pub fn parse_subscription_query(
 
     // Include include_children in the hash to ensure different values
     // produce different cohort keys.
-    let hash_input = format!("{}|include_children={}", selection_set_str, include_children);
+    let hash_input = format!(
+        "{}|include_children={}",
+        selection_set_str, include_children
+    );
     let hash = Sha256::digest(hash_input.as_bytes());
     let selection_set_hash = format!("{:x}", hash);
 
@@ -338,9 +346,9 @@ fn input_value_to_json(val: &juniper::InputValue<DefaultScalarValue>) -> serde_j
         InputValue::Null => serde_json::Value::Null,
         InputValue::Scalar(s) => match s {
             DefaultScalarValue::Int(i) => serde_json::Value::Number((*i).into()),
-            DefaultScalarValue::Float(f) => {
-                serde_json::Number::from_f64(*f).map(serde_json::Value::Number).unwrap_or(serde_json::Value::Null)
-            }
+            DefaultScalarValue::Float(f) => serde_json::Number::from_f64(*f)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null),
             DefaultScalarValue::String(s) => serde_json::Value::String(s.clone()),
             DefaultScalarValue::Boolean(b) => serde_json::Value::Bool(*b),
         },
@@ -372,18 +380,32 @@ fn input_value_to_graphql(val: &juniper::InputValue<DefaultScalarValue>) -> Stri
         InputValue::Enum(name) => name.clone(),
         InputValue::Variable(name) => format!("${}", name),
         InputValue::List(items) => {
-            format!("[{}]", items.iter().map(|i| input_value_to_graphql(&i.item)).collect::<Vec<_>>().join(", "))
+            format!(
+                "[{}]",
+                items
+                    .iter()
+                    .map(|i| input_value_to_graphql(&i.item))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
         InputValue::Object(entries) => {
-            format!("{{{}}}", entries.iter()
-                .map(|(k, v)| format!("{}: {}", k.item, input_value_to_graphql(&v.item)))
-                .collect::<Vec<_>>().join(", "))
+            format!(
+                "{{{}}}",
+                entries
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k.item, input_value_to_graphql(&v.item)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
     }
 }
 
 /// Deterministic string for hashing. Fields are sorted recursively.
-fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>) -> String {
+fn selection_set_to_string(
+    selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>,
+) -> String {
     match selection_set {
         Some(items) => {
             let mut field_strings: Vec<String> = Vec::new();
@@ -394,8 +416,13 @@ fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<Default
                         let alias = f.item.alias.as_ref().map(|a| a.item.to_string());
                         let nested = selection_set_to_string(&f.item.selection_set);
                         let args_str = if let Some(args) = &f.item.arguments {
-                            let mut arg_parts: Vec<String> = args.item.items.iter()
-                                .map(|(k, v)| format!("{}={}", k.item, input_value_to_json(&v.item)))
+                            let mut arg_parts: Vec<String> = args
+                                .item
+                                .items
+                                .iter()
+                                .map(|(k, v)| {
+                                    format!("{}={}", k.item, input_value_to_json(&v.item))
+                                })
                                 .collect();
                             arg_parts.sort();
                             if arg_parts.is_empty() {
@@ -416,7 +443,12 @@ fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<Default
                         field_strings.push(format!("...{}", fs.item.name.item));
                     }
                     juniper::Selection::InlineFragment(ifr) => {
-                        let type_cond = ifr.item.type_condition.as_ref().map(|t| t.item.to_string()).unwrap_or_default();
+                        let type_cond = ifr
+                            .item
+                            .type_condition
+                            .as_ref()
+                            .map(|t| t.item.to_string())
+                            .unwrap_or_default();
                         let nested = selection_set_to_string(&Some(ifr.item.selection_set.clone()));
                         field_strings.push(format!("...on {}{{{}}}", type_cond, nested));
                     }
@@ -430,7 +462,9 @@ fn selection_set_to_string(selection_set: &Option<Vec<juniper::Selection<Default
 }
 
 /// Query-ready GraphQL text preserving field order, for Query-root resolution.
-fn selection_set_to_graphql(selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>) -> String {
+fn selection_set_to_graphql(
+    selection_set: &Option<Vec<juniper::Selection<DefaultScalarValue>>>,
+) -> String {
     match selection_set {
         Some(items) => {
             let mut parts: Vec<String> = Vec::new();
@@ -441,8 +475,13 @@ fn selection_set_to_graphql(selection_set: &Option<Vec<juniper::Selection<Defaul
                         let alias = f.item.alias.as_ref().map(|a| a.item.to_string());
                         let nested = selection_set_to_graphql(&f.item.selection_set);
                         let args_str = if let Some(args) = &f.item.arguments {
-                            let arg_parts: Vec<String> = args.item.items.iter()
-                                .map(|(k, v)| format!("{}: {}", k.item, input_value_to_graphql(&v.item)))
+                            let arg_parts: Vec<String> = args
+                                .item
+                                .items
+                                .iter()
+                                .map(|(k, v)| {
+                                    format!("{}: {}", k.item, input_value_to_graphql(&v.item))
+                                })
                                 .collect();
                             if arg_parts.is_empty() {
                                 String::new()
@@ -454,7 +493,9 @@ fn selection_set_to_graphql(selection_set: &Option<Vec<juniper::Selection<Defaul
                         };
                         let field_str = match (alias, nested.is_empty()) {
                             (Some(a), true) => format!("{}: {}{}", a, name, args_str),
-                            (Some(a), false) => format!("{}: {}{} {{ {} }}", a, name, args_str, nested),
+                            (Some(a), false) => {
+                                format!("{}: {}{} {{ {} }}", a, name, args_str, nested)
+                            }
                             (None, true) => format!("{}{}", name, args_str),
                             (None, false) => format!("{}{} {{ {} }}", name, args_str, nested),
                         };
@@ -464,8 +505,14 @@ fn selection_set_to_graphql(selection_set: &Option<Vec<juniper::Selection<Defaul
                         parts.push(format!("...{}", fs.item.name.item));
                     }
                     juniper::Selection::InlineFragment(ifr) => {
-                        let type_cond = ifr.item.type_condition.as_ref().map(|t| t.item.to_string()).unwrap_or_default();
-                        let nested = selection_set_to_graphql(&Some(ifr.item.selection_set.clone()));
+                        let type_cond = ifr
+                            .item
+                            .type_condition
+                            .as_ref()
+                            .map(|t| t.item.to_string())
+                            .unwrap_or_default();
+                        let nested =
+                            selection_set_to_graphql(&Some(ifr.item.selection_set.clone()));
                         if type_cond.is_empty() {
                             parts.push(format!("... {{ {} }}", nested));
                         } else {
@@ -574,10 +621,7 @@ mod tests {
     #[test]
     fn parse_basic_subscription() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added { _id } }",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person_added { _id } }", &tc);
         assert!(result.is_ok(), "parse failed: {:?}", result.err());
         let parsed = result.unwrap();
         assert_eq!(parsed.field_name, "Person_added");
@@ -588,10 +632,7 @@ mod tests {
     #[test]
     fn parse_changed_operation() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_changed { _id } }",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person_changed { _id } }", &tc);
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation, "changed");
@@ -600,10 +641,7 @@ mod tests {
     #[test]
     fn parse_deleted_operation() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_deleted { _id } }",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person_deleted { _id } }", &tc);
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.operation, "deleted");
@@ -612,22 +650,20 @@ mod tests {
     #[test]
     fn parse_unknown_operation_rejected() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_foo { _id } }",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person_foo { _id } }", &tc);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("Unknown subscription operation"), "got: {}", err);
+        assert!(
+            err.contains("Unknown subscription operation"),
+            "got: {}",
+            err
+        );
     }
 
     #[test]
     fn parse_no_underscore_in_field_name_rejected() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person { _id } }",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person { _id } }", &tc);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("does not contain '_'"), "got: {}", err);
@@ -636,10 +672,7 @@ mod tests {
     #[test]
     fn parse_no_subscription_operation_rejected() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "{ Person { _id } }",
-            &tc,
-        );
+        let result = parse_subscription_query("{ Person { _id } }", &tc);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("No subscription operation"), "got: {}", err);
@@ -648,10 +681,7 @@ mod tests {
     #[test]
     fn parse_empty_selection_set_rejected() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added }",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person_added }", &tc);
         // Juniper may parse this as a scalar field with no selection set.
         let result = result;
         if let Ok(parsed) = result {
@@ -663,42 +693,29 @@ mod tests {
     #[test]
     fn parse_different_selection_sets_different_hashes() {
         let tc = person_type_collection();
-        let r1 = parse_subscription_query(
-            "subscription { Person_added { _id } }",
-            &tc,
-        ).unwrap();
-        let r2 = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
+        let r1 = parse_subscription_query("subscription { Person_added { _id } }", &tc).unwrap();
+        let r2 =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
         assert_ne!(r1.selection_set_hash, r2.selection_set_hash);
     }
 
     #[test]
     fn parse_same_selection_sets_same_hash() {
         let tc = person_type_collection();
-        let r1 = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
-        let r2 = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
+        let r1 =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
+        let r2 =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
         assert_eq!(r1.selection_set_hash, r2.selection_set_hash);
     }
 
     #[test]
     fn parse_reordered_fields_same_hash() {
         let tc = person_type_collection();
-        let r1 = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
-        let r2 = parse_subscription_query(
-            "subscription { Person_added { name _id } }",
-            &tc,
-        ).unwrap();
+        let r1 =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
+        let r2 =
+            parse_subscription_query("subscription { Person_added { name _id } }", &tc).unwrap();
         assert_eq!(r1.selection_set_hash, r2.selection_set_hash);
     }
 
@@ -709,8 +726,7 @@ mod tests {
             "subscription { Person_added(filter: {name: {eq: \"Alice\"}}) { _id } }",
             &tc,
         );
-        let parsed = result
-            .expect("filter parse should succeed with filter argument in schema");
+        let parsed = result.expect("filter parse should succeed with filter argument in schema");
         assert_eq!(parsed.field_name, "Person_added");
         assert_ne!(parsed.filter_canonical_json, "{}");
     }
@@ -718,20 +734,16 @@ mod tests {
     #[test]
     fn parse_no_filter_empty_json() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added { _id } }",
-            &tc,
-        ).unwrap();
+        let result =
+            parse_subscription_query("subscription { Person_added { _id } }", &tc).unwrap();
         assert_eq!(result.filter_canonical_json, "{}");
     }
 
     #[test]
     fn parse_returns_selection_set_string() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
+        let result =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
         assert!(!result.selection_set.is_empty());
         assert!(result.selection_set.contains("_id"));
         assert!(result.selection_set.contains("name"));
@@ -740,34 +752,26 @@ mod tests {
     #[test]
     fn parse_returns_selection_set_graphql_flat_fields() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
+        let result =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
         assert_eq!(result.selection_set_graphql, "_id name");
     }
 
     #[test]
     fn parse_returns_selection_set_graphql_id_only() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added { _id } }",
-            &tc,
-        ).unwrap();
+        let result =
+            parse_subscription_query("subscription { Person_added { _id } }", &tc).unwrap();
         assert_eq!(result.selection_set_graphql, "_id");
     }
 
     #[test]
     fn parse_returns_selection_set_graphql_preserves_order() {
         let tc = person_type_collection();
-        let r1 = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
-        let r2 = parse_subscription_query(
-            "subscription { Person_added { name _id } }",
-            &tc,
-        ).unwrap();
+        let r1 =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
+        let r2 =
+            parse_subscription_query("subscription { Person_added { name _id } }", &tc).unwrap();
         assert_eq!(r1.selection_set_graphql, "_id name");
         assert_eq!(r2.selection_set_graphql, "name _id");
         assert_eq!(r1.selection_set_hash, r2.selection_set_hash);
@@ -776,24 +780,16 @@ mod tests {
     #[test]
     fn parse_different_selection_sets_different_strings() {
         let tc = person_type_collection();
-        let r1 = parse_subscription_query(
-            "subscription { Person_added { _id } }",
-            &tc,
-        ).unwrap();
-        let r2 = parse_subscription_query(
-            "subscription { Person_added { _id name } }",
-            &tc,
-        ).unwrap();
+        let r1 = parse_subscription_query("subscription { Person_added { _id } }", &tc).unwrap();
+        let r2 =
+            parse_subscription_query("subscription { Person_added { _id name } }", &tc).unwrap();
         assert_ne!(r1.selection_set, r2.selection_set);
     }
 
     #[test]
     fn parse_invalid_syntax_rejected() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { Person_added { ",
-            &tc,
-        );
+        let result = parse_subscription_query("subscription { Person_added { ", &tc);
         assert!(result.is_err());
     }
 
@@ -806,27 +802,35 @@ mod tests {
         );
         assert!(result.is_ok(), "parse failed: {:?}", result.err());
         let parsed = result.unwrap();
-        assert!(parsed.selection_set_graphql.contains("...PersonFields"),
-                "selection_set_graphql should contain fragment spread: {}",
-                parsed.selection_set_graphql);
-        assert!(parsed.selection_set_graphql.contains("fragment PersonFields on Person"),
-                "selection_set_graphql should contain fragment definition: {}",
-                parsed.selection_set_graphql);
-        assert!(parsed.selection_set_graphql.contains("_id"),
-                "selection_set_graphql should contain _id from fragment: {}",
-                parsed.selection_set_graphql);
-        assert!(parsed.selection_set_graphql.contains("name"),
-                "selection_set_graphql should contain name from fragment: {}",
-                parsed.selection_set_graphql);
+        assert!(
+            parsed.selection_set_graphql.contains("...PersonFields"),
+            "selection_set_graphql should contain fragment spread: {}",
+            parsed.selection_set_graphql
+        );
+        assert!(
+            parsed
+                .selection_set_graphql
+                .contains("fragment PersonFields on Person"),
+            "selection_set_graphql should contain fragment definition: {}",
+            parsed.selection_set_graphql
+        );
+        assert!(
+            parsed.selection_set_graphql.contains("_id"),
+            "selection_set_graphql should contain _id from fragment: {}",
+            parsed.selection_set_graphql
+        );
+        assert!(
+            parsed.selection_set_graphql.contains("name"),
+            "selection_set_graphql should contain name from fragment: {}",
+            parsed.selection_set_graphql
+        );
     }
 
     #[test]
     fn parse_change_set_basic() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { _ChangeSet { Person_added { _id } } }",
-            &tc,
-        );
+        let result =
+            parse_subscription_query("subscription { _ChangeSet { Person_added { _id } } }", &tc);
         assert!(result.is_ok(), "parse failed: {:?}", result.err());
         let parsed = result.unwrap();
         assert_eq!(parsed.field_name, "_ChangeSet");
@@ -855,14 +859,14 @@ mod tests {
     #[test]
     fn parse_change_set_different_selection_sets_different_hashes() {
         let tc = person_type_collection();
-        let r1 = parse_subscription_query(
-            "subscription { _ChangeSet { Person_added { _id } } }",
-            &tc,
-        ).unwrap();
+        let r1 =
+            parse_subscription_query("subscription { _ChangeSet { Person_added { _id } } }", &tc)
+                .unwrap();
         let r2 = parse_subscription_query(
             "subscription { _ChangeSet { Person_added { _id name } } }",
             &tc,
-        ).unwrap();
+        )
+        .unwrap();
         assert_ne!(r1.selection_set_hash, r2.selection_set_hash);
     }
 
@@ -894,13 +898,14 @@ mod tests {
     #[test]
     fn parse_change_set_include_children_default_true() {
         let tc = person_type_collection();
-        let result = parse_subscription_query(
-            "subscription { _ChangeSet { Person_added { _id } } }",
-            &tc,
-        );
+        let result =
+            parse_subscription_query("subscription { _ChangeSet { Person_added { _id } } }", &tc);
         assert!(result.is_ok(), "parse failed: {:?}", result.err());
         let parsed = result.unwrap();
-        assert!(parsed.include_children, "include_children should default to true");
+        assert!(
+            parsed.include_children,
+            "include_children should default to true"
+        );
     }
 
     #[test]
@@ -935,32 +940,44 @@ mod tests {
         let tc = person_type_collection();
         let root_node = crate::graphql::get_or_create_subscription_root_node(&tc);
 
-        let sub_type = root_node.schema.concrete_subscription_type()
+        let sub_type = root_node
+            .schema
+            .concrete_subscription_type()
             .expect("Schema should have a subscription type");
 
-        let field = sub_type.field_by_name("Person_added")
+        let field = sub_type
+            .field_by_name("Person_added")
             .expect("Person_added field should exist");
 
         match &field.field_type {
             juniper::Type::Named(name) | juniper::Type::NonNullNamed(name) => {
-                assert_eq!(name.as_ref(), "Person",
-                    "Person_added should return type Person, not String");
+                assert_eq!(
+                    name.as_ref(),
+                    "Person",
+                    "Person_added should return type Person, not String"
+                );
             }
             other => panic!("Unexpected field type for Person_added: {:?}", other),
         }
 
-        let args = field.arguments.as_ref()
+        let args = field
+            .arguments
+            .as_ref()
             .expect("Person_added should have arguments");
         let has_filter = args.iter().any(|a| a.name == "filter");
         assert!(has_filter, "Person_added should have a filter argument");
 
         for op in ["Person_changed", "Person_deleted"] {
-            let f = sub_type.field_by_name(op)
+            let f = sub_type
+                .field_by_name(op)
                 .expect(&format!("{op} field should exist"));
             match &f.field_type {
                 juniper::Type::Named(name) | juniper::Type::NonNullNamed(name) => {
-                    assert_eq!(name.as_ref(), "Person",
-                        "{op} should return type Person, not String");
+                    assert_eq!(
+                        name.as_ref(),
+                        "Person",
+                        "{op} should return type Person, not String"
+                    );
                 }
                 other => panic!("Unexpected field type for {op}: {:?}", other),
             }

@@ -1140,8 +1140,7 @@ impl UncleanAllFrames {
                 panic!("This schema has name collisions under TerminusDB's automatic GraphQL sanitation renaming. GraphQL requires class names match the following Regexp: '^[^_a-zA-Z][_a-zA-Z0-9]' and which do not overlap with reserved type names. Please rename your classes to remove the following duplicate pair: ({left},{right}) == ({sanitized_class},{class_name})")
             }
             let new_typedef = match typedef {
-                UncleanTypeDefinition::Class(cd)
-                | UncleanTypeDefinition::TaggedUnion(cd) => {
+                UncleanTypeDefinition::Class(cd) | UncleanTypeDefinition::TaggedUnion(cd) => {
                     TypeDefinition::Class(cd.sanitize(&self.context))
                 }
                 UncleanTypeDefinition::Enum(ed) => TypeDefinition::Enum(ed.sanitize()),

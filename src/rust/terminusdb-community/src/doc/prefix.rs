@@ -8,8 +8,8 @@ use swipl::prelude::*;
 use terminusdb_store_prolog::layer::WrappedLayer;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 
-use crate::consts::SysIds;
 use super::DocumentContext;
+use crate::consts::SysIds;
 
 const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
 
@@ -67,16 +67,43 @@ lazy_static! {
 /// Default global prefixes used in TerminusDB schemas and documents.
 fn default_prefixes() -> HashMap<String, String> {
     let mut prefixes = HashMap::new();
-    prefixes.insert("sys".to_string(), "http://terminusdb.com/schema/sys#".to_string());
-    prefixes.insert("xdd".to_string(), "http://terminusdb.com/schema/xdd#".to_string());
-    prefixes.insert("vio".to_string(), "http://terminusdb.com/schema/vio#".to_string());
-    prefixes.insert("woql".to_string(), "http://terminusdb.com/schema/woql#".to_string());
+    prefixes.insert(
+        "sys".to_string(),
+        "http://terminusdb.com/schema/sys#".to_string(),
+    );
+    prefixes.insert(
+        "xdd".to_string(),
+        "http://terminusdb.com/schema/xdd#".to_string(),
+    );
+    prefixes.insert(
+        "vio".to_string(),
+        "http://terminusdb.com/schema/vio#".to_string(),
+    );
+    prefixes.insert(
+        "woql".to_string(),
+        "http://terminusdb.com/schema/woql#".to_string(),
+    );
     prefixes.insert("xsd".to_string(), XSD_PREFIX.to_string());
-    prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-    prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-    prefixes.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-    prefixes.insert("api".to_string(), "http://terminusdb.com/schema/api#".to_string());
-    prefixes.insert("json".to_string(), "http://terminusdb.com/schema/json#".to_string());
+    prefixes.insert(
+        "rdf".to_string(),
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+    );
+    prefixes.insert(
+        "rdfs".to_string(),
+        "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+    );
+    prefixes.insert(
+        "owl".to_string(),
+        "http://www.w3.org/2002/07/owl#".to_string(),
+    );
+    prefixes.insert(
+        "api".to_string(),
+        "http://terminusdb.com/schema/api#".to_string(),
+    );
+    prefixes.insert(
+        "json".to_string(),
+        "http://terminusdb.com/schema/json#".to_string(),
+    );
     prefixes
 }
 
@@ -110,9 +137,7 @@ fn build_prefix_map_for_layer<L: Layer + Clone>(
                 for t in schema.triples_sp(context_id, prefix_pair_id) {
                     let contraction_id = schema.single_triple_sp(t.object, prefix_id);
                     let expansion_id = schema.single_triple_sp(t.object, url_id);
-                    if let (Some(contraction), Some(expansion)) =
-                        (contraction_id, expansion_id)
-                    {
+                    if let (Some(contraction), Some(expansion)) = (contraction_id, expansion_id) {
                         if let (
                             Some(ObjectType::Value(contraction_v)),
                             Some(ObjectType::Value(expansion_v)),
@@ -134,7 +159,9 @@ fn build_prefix_map_for_layer<L: Layer + Clone>(
 }
 
 /// Build a prefix expansion map from a `DocumentContext`.
-pub fn build_prefix_map<L: Layer + Clone>(doc_context: &DocumentContext<L>) -> HashMap<String, String> {
+pub fn build_prefix_map<L: Layer + Clone>(
+    doc_context: &DocumentContext<L>,
+) -> HashMap<String, String> {
     match doc_context.schema.as_ref() {
         Some(schema) => build_prefix_map_for_layer(schema, &doc_context.schema_sys),
         None => default_prefixes(),
@@ -352,7 +379,10 @@ fn hashmap_prefix_expand_with_base(
         let base = base_override
             .or_else(|| prefixes.get("@base").map(|s| s.as_str()))
             .unwrap_or_default();
-        let vocab = prefixes.get("@vocab").map(|s| s.as_str()).unwrap_or_default();
+        let vocab = prefixes
+            .get("@vocab")
+            .map(|s| s.as_str())
+            .unwrap_or_default();
         Ok(Some((format!("{}{}{}", base, vocab, name), true)))
     }
 }
@@ -452,8 +482,7 @@ fn parse_prefix_context<'a, C: QueryableContextType>(
     }
 
     // Build the map and fingerprint in a single dict iteration.
-    let mut map: smallvec::SmallVec<[(String, String); 32]> =
-        smallvec::SmallVec::new();
+    let mut map: smallvec::SmallVec<[(String, String); 32]> = smallvec::SmallVec::new();
     let mut fp: u64 = 0;
     let mut count: usize = 0;
     for (key, val_term) in context.dict_entries(dict_term) {
@@ -492,11 +521,7 @@ fn parse_prefix_context<'a, C: QueryableContextType>(
 /// Unify an expanded prefix result with the output term.  The `output_is_atom`
 /// flag is computed by `prefix_expand_raw` to match Prolog's
 /// `atomic_list_concat` behavior.
-fn unify_expanded(
-    expanded: &str,
-    output_is_atom: bool,
-    expanded_term: &Term,
-) -> PrologResult<()> {
+fn unify_expanded(expanded: &str, output_is_atom: bool, expanded_term: &Term) -> PrologResult<()> {
     if output_is_atom {
         let expanded_atom = Atom::new(expanded);
         expanded_term.unify(expanded_atom)

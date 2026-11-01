@@ -258,9 +258,8 @@ impl<L: Layer + Clone> DocumentContext<L> {
     }
 
     fn prefix_map(&self) -> &HashMap<String, String> {
-        self.prefix_map.get_or_create(|| {
-            prefix::build_prefix_map(self)
-        })
+        self.prefix_map
+            .get_or_create(|| prefix::build_prefix_map(self))
     }
 
     pub fn get_document(
@@ -1319,9 +1318,7 @@ fn listing_subjects<'a, L: Layer + Clone>(
             // The member slices merge by subject id and then by name, so
             // the typed listing streams without materializing a
             // membership set.
-            Some(rdf_type) => {
-                layer.triple_subjects_with_prefix(prefix, rdf_type, allowed_types)
-            }
+            Some(rdf_type) => layer.triple_subjects_with_prefix(prefix, rdf_type, allowed_types),
             None => Box::new(std::iter::empty()),
         },
         None => {

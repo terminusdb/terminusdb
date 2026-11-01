@@ -2,10 +2,10 @@ use rand::{rng, Rng};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
-use crate::consts::*;
+use super::prefix::{expand_prefixed_name, expand_prefixed_name_data};
 use super::DocumentContext;
 use super::DocumentContextBlob;
-use super::prefix::{expand_prefixed_name, expand_prefixed_name_data};
+use crate::consts::*;
 
 use crate::terminus_store::layer::*;
 use swipl::prelude::*;
@@ -98,7 +98,11 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(
         }
         Value::Bool(b) => {
             let term = context.new_term_ref();
-            let atom = if *b { Atom::new("true") } else { Atom::new("false") };
+            let atom = if *b {
+                Atom::new("true")
+            } else {
+                Atom::new("false")
+            };
             term.unify(atom)?;
             Ok(term)
         }
@@ -204,8 +208,9 @@ fn elaborate_simple_document<L: Layer + Clone>(
         .and_then(Value::as_str)
         .ok_or_else(|| ElaborationError::Ineligible("missing @type".to_string()))?;
 
-    let type_full = expand_prefixed_name(doc_context, type_short)
-        .map_err(|e| ElaborationError::SchemaError(format!("unknown prefix in type {}: {}", type_short, e)))?;
+    let type_full = expand_prefixed_name(doc_context, type_short).map_err(|e| {
+        ElaborationError::SchemaError(format!("unknown prefix in type {}: {}", type_short, e))
+    })?;
 
     let class_id = schema
         .subject_id(&type_full)
@@ -308,19 +313,19 @@ fn elaborate_simple_document<L: Layer + Clone>(
     };
 
     // Capture an explicit submitted @id (if any) for the contract.
-    let submitted_id = obj.get("@id").and_then(Value::as_str).map(|s| s.to_string());
+    let submitted_id = obj
+        .get("@id")
+        .and_then(Value::as_str)
+        .map(|s| s.to_string());
 
     // Determine the document ID. Use an explicit @id if present,
     // otherwise generate a random suffix.
     let id = if let Some(id_value) = obj.get("@id") {
-        let id_short = id_value.as_str().ok_or_else(|| {
-            ElaborationError::Ineligible("@id must be a string".to_string())
-        })?;
+        let id_short = id_value
+            .as_str()
+            .ok_or_else(|| ElaborationError::Ineligible("@id must be a string".to_string()))?;
         expand_prefixed_name_data(doc_context, id_short).map_err(|e| {
-            ElaborationError::SchemaError(format!(
-                "unknown prefix in @id {}: {}",
-                id_short, e
-            ))
+            ElaborationError::SchemaError(format!("unknown prefix in @id {}: {}", id_short, e))
         })?
     } else {
         format!("{}{}", base, random_id_suffix(16))
@@ -348,11 +353,9 @@ fn elaborate_simple_document<L: Layer + Clone>(
             Some(ObjectType::Node(_)) => {
                 // Range types such as xsd:string are often stored as nodes
                 // in the schema layer.
-                schema
-                    .id_object_node(triple.object)
-                    .ok_or_else(|| ElaborationError::SchemaError(
-                        "invalid range node object".to_string(),
-                    ))?
+                schema.id_object_node(triple.object).ok_or_else(|| {
+                    ElaborationError::SchemaError("invalid range node object".to_string())
+                })?
             }
             None => {
                 return Err(ElaborationError::SchemaError(
@@ -360,10 +363,12 @@ fn elaborate_simple_document<L: Layer + Clone>(
                 ))
             }
         };
-        let range_type = expand_prefixed_name(doc_context, &range_type_short)
-            .map_err(|e| ElaborationError::SchemaError(format!(
-                "unknown prefix in range type {}: {}", range_type_short, e
-            )))?;
+        let range_type = expand_prefixed_name(doc_context, &range_type_short).map_err(|e| {
+            ElaborationError::SchemaError(format!(
+                "unknown prefix in range type {}: {}",
+                range_type_short, e
+            ))
+        })?;
 
         properties.insert(predicate, range_type);
     }
@@ -378,11 +383,12 @@ fn elaborate_simple_document<L: Layer + Clone>(
         if key == "@type" || key == "@id" {
             continue;
         }
-        let expanded_key = expand_prefixed_name(doc_context, key)
-            .map_err(|e| ElaborationError::SchemaError(format!("unknown prefix in property key {}: {}", key, e)))?;
-        let range_type = properties.get(&expanded_key).ok_or_else(|| {
-            ElaborationError::Ineligible(format!("unknown property {}", key))
+        let expanded_key = expand_prefixed_name(doc_context, key).map_err(|e| {
+            ElaborationError::SchemaError(format!("unknown prefix in property key {}: {}", key, e))
         })?;
+        let range_type = properties
+            .get(&expanded_key)
+            .ok_or_else(|| ElaborationError::Ineligible(format!("unknown property {}", key)))?;
         let converted = convert_value(value, range_type)?;
         let wrapped = {
             let mut m = Map::new();
