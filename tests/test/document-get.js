@@ -216,6 +216,54 @@ describe('document-get', function () {
     }
   })
 
+  describe('returns document counts for counted=true', function () {
+    const options = [
+      [{ query: { counted: true, type: 'Person' } }, 3],
+      [{ body: { counted: true, type: 'Person' } }, 3],
+      [{ query: { counted: true } }, 3],
+      [{ body: { counted: true } }, 3],
+      [{ query: { counted: true, graph_type: 'schema' } }, 2],
+      [{ query: { counted: true, graph_type: 'schema', type: 'sys:Class' } }, 1],
+      // counted ignores skip and count pagination
+      [{ query: { counted: true, skip: 2, count: 1 } }, 3],
+    ]
+    for (const [option, expectedCount] of options) {
+      it(JSON.stringify(option), async function () {
+        const r = await document.get(agent, option)
+        expect(r.body).to.deep.equal({
+          '@type': 'api:DocumentCountResponse',
+          'api:count': expectedCount,
+        })
+      })
+    }
+  })
+
+  describe('fails counted combined with document selectors', function () {
+    it('with id as query parameter', async function () {
+      await document
+        .get(agent, { query: { counted: true, id: personId(plato) } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+
+    it('with id in body', async function () {
+      await document
+        .get(agent, { body: { counted: true, id: personId(plato) } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+
+    it('with query selector in body', async function () {
+      await document
+        .get(agent, { query: { counted: true }, body: { query: { '@type': 'Person', name: 'Plato' } } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+
+    it('with counted and query in body', async function () {
+      await document
+        .get(agent, { body: { counted: true, query: { '@type': 'Person', name: 'Plato' } } })
+        .fails({ '@type': 'api:CountedNotSupportedForSelector' })
+    })
+  })
+
   describe('returns expected for prefixed=false ("prefixed" is not supported yet)', function () {
     const options = [
       { query: { graph_type: 'schema', as_list: true, prefixed: false } },

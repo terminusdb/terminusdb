@@ -107,8 +107,7 @@ impl<'a, L: Layer + Clone> SchemaQueryContext<'a, L> {
     pub fn get_shared_ids_from_schema(&self) -> HashSet<u64> {
         let mut result = HashSet::new();
         let inheritance = self.get_reverse_inheritance_graph();
-        let mut work: Vec<_> =
-            get_direct_shared_ids_from_schema(self.layer, self.sys).collect();
+        let mut work: Vec<_> = get_direct_shared_ids_from_schema(self.layer, self.sys).collect();
         while let Some(cur) = work.pop() {
             if !result.insert(cur) {
                 // we already found this type.

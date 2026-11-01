@@ -542,6 +542,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, graph_type, graph, instance, Graph_Type),
             param_value_search_or_json_optional(Search, JSON, skip, nonnegative_integer, 0, Skip),
             param_value_search_or_json_optional(Search, JSON, count, nonnegative_integer, unlimited, Count),
+            param_value_search_or_json_optional(Search, JSON, counted, boolean, false, Counted),
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
@@ -573,6 +574,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             Config = config{
                          skip: Skip,
                          count: Count,
+                         counted: Counted,
                          as_list: As_List,
                          compress: Compress_Ids,
                          unfold: Unfold,

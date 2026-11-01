@@ -393,7 +393,7 @@ fn compile_edges_to_filter(
     class_name: &GraphQLName,
     all_frames: &AllFrames,
     class_definition: &ClassDefinition,
-    edges: &Vec<(juniper::Spanning<String>, juniper::Spanning<InputValue>)>,
+    edges: &[(juniper::Spanning<String>, juniper::Spanning<InputValue>)],
 ) -> FilterObject {
     let mut result: Vec<(String, FilterScope)> = Vec::with_capacity(edges.len());
     let mut restriction = None;
@@ -723,13 +723,14 @@ fn object_type_filter<'a>(
             let g = g.clone();
             // Use TypedDictEntry ordering for dateTimeInterval (binary sorts chronologically)
             let interval_entry = if type_str == "dateTimeInterval" {
-                parse_iso_interval(&val).ok().map(|iv| DateTimeInterval::make_entry(&iv))
+                parse_iso_interval(&val)
+                    .ok()
+                    .map(|iv| DateTimeInterval::make_entry(&iv))
             } else {
                 None
             };
             ClonableIterator::new(iter.filter(move |object| {
-                let object_value =
-                    g.id_object_value(*object).expect("Object value must exist");
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
                 let cmp = if let Some(ref entry) = interval_entry {
                     object_value.cmp(entry)
                 } else {
@@ -1033,7 +1034,7 @@ fn generate_iterator_from_filter<'a>(
                     ) => {
                         let kind = e.1.kind().unwrap();
                         path.push(PathEdgeType::new(&e.0, kind));
-                        visit_next.push_back((path, &next_f))
+                        visit_next.push_back((path, next_f))
                     }
                     FilterScope::And(next_fs) => {
                         for next_f in next_fs.iter() {
@@ -1377,6 +1378,23 @@ pub fn run_count_query<'a, C: TerminusResolveContext>(
     class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
 ) -> i32 {
+    // An empty filter reduces _count to summing rdf:type edge counts over
+    // the class and its subclasses, which the store computes from its
+    // indexes without enumerating documents.
+    if filter_input.edges.is_empty() {
+        if let Some(rdf_type_id) = g.predicate_id(RDF_TYPE) {
+            let count: usize = all_frames
+                .subsumed(class_name)
+                .into_iter()
+                .map(|sub_class| all_frames.graphql_to_iri_name(&sub_class))
+                .filter_map(|sub_class_iri| g.object_node_id(sub_class_iri.as_str()))
+                .map(|object_id| g.count_triples(None, Some(rdf_type_id), Some(object_id)))
+                .sum();
+            return count as i32;
+        }
+        return 0;
+    }
+
     // Compile filter object from input
     let filter = compile_filter_object(class_name, all_frames, filter_input);
 
@@ -1387,8 +1405,8 @@ pub fn run_count_query<'a, C: TerminusResolveContext>(
         class_name,
         all_frames,
         Some(filter),
-        None,  // no zero_iter
-        true,  // include_children (matches default query behavior)
+        None, // no zero_iter
+        true, // include_children (matches default query behavior)
     )
     .count();
 

@@ -10,8 +10,10 @@
               xrdf_db/4,
               xrdf_deleted/4,
               xrdf_added/4,
+              xrdf_count/5,
               xrdf_value_range/6,
               xquad_value_range/7,
+              xrdf_value_range_count/6,
               xrdf_value_range_rev/6,
               xquad_value_range_rev/7,
               xrdf_value_next/5,
@@ -43,6 +45,7 @@
 
 :- use_module(config(terminus_config), [db_path/1, grpc_label_endpoint/1, lru_cache_size/1]).
 
+:- use_module(library(aggregate)).
 :- use_module(library(apply)).
 :- use_module(library(debug)).
 :- use_module(library(error)).
@@ -371,6 +374,44 @@ xquad(Gs,G,X,Y,Z) :-
     read_write_obj_reader(G, Layer),
     xrdf_db(Layer,X,Y,Z).
 
+/**
+ * xrdf_count(+Gs:list(read_write_obj),?X,?Y,?Z,-Count) is det.
+ *
+ * Count the triples matching a partially bound pattern in the given
+ * graphs, without enumerating them. The count is the sum over all
+ * graphs, consistent with xrdf/4 which may yield a triple once per
+ * graph it appears in.
+ */
+/**
+ * count_expand_arg(?In, ?Out) is det.
+ *
+ * Expand prefixed compounds (P:X) and literal types (D^^P:T) the way the
+ * xrdf/4 goal expansions do at compile time. Counting may be invoked from
+ * within meta-goals such as aggregate_all/3, which goal expansion does
+ * not reach, so these predicates normalise their arguments at run time.
+ * Vars and already-expanded arguments pass through unchanged.
+ */
+count_expand_arg(X, E) :-
+    (   nonvar(X)
+    ->  (   literal_expand(X, E)
+        ->  true
+        ;   global_prefix_expand_safe(X, E))
+    ;   E = X).
+
+xrdf_count(Gs,X,Y,Z,Count) :-
+    assertion(is_list(Gs)),
+    count_expand_arg(X, XE),
+    count_expand_arg(Y, YE),
+    count_expand_arg(Z, ZE),
+    aggregate_all(sum(Partial),
+                  (   member(G,Gs),
+                      read_write_obj_reader(G, Layer),
+                      pre_convert_node(XE,A),
+                      pre_convert_node(YE,B),
+                      object_storage(ZE,S),
+                      triple_count(Layer,A,B,S,Partial)),
+                  Count).
+
 unlink_object(Gs, ID) :-
     global_prefix_expand(rdf:first, First),
     forall(
@@ -404,6 +445,29 @@ xquad_value_range(Gs, G, Low, High, X, Y, Z) :-
     post_convert_node(A, X),
     post_convert_node(B, Y),
     storage_object(S, Z).
+
+/**
+ * xrdf_value_range_count(+Gs:list(read_write_obj),+Low,+High,?X,?Y,-Count) is det.
+ *
+ * Count the triples whose object value falls in the half-open range
+ * [Low, High) in the given graphs, optionally restricted by a subject
+ * and/or predicate, without enumerating them.
+ */
+xrdf_value_range_count(Gs, Low, High, X, Y, Count) :-
+    assertion(is_list(Gs)),
+    count_expand_arg(Low, LowE),
+    count_expand_arg(High, HighE),
+    ground_object_storage(LowE, LowS),
+    ground_object_storage(HighE, HighS),
+    count_expand_arg(X, XE),
+    count_expand_arg(Y, YE),
+    aggregate_all(sum(Partial),
+                  (   member(G,Gs),
+                      read_write_obj_reader(G, Layer),
+                      pre_convert_node(XE,A),
+                      pre_convert_node(YE,B),
+                      triple_value_range_count(Layer, LowS, HighS, A, B, Partial)),
+                  Count).
 
 xrdf_value_range_rev(Gs, Low, High, X, Y, Z) :-
     assertion(is_list(Gs)),

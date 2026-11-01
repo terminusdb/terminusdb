@@ -270,6 +270,86 @@ json_type_to_woql_ast('TripleCount',JSON,WOQL,Path) :-
                            [count
                             |Path]),
     WOQL = triple_count(Resource_Atom,WOQL_Count).
+json_type_to_woql_ast('TripleCount',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      count : Count,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
+    json_value_to_woql_ast(Count,WQN,[count
+                                      |Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = triple_count(WQA,WQB,WQC,WQN,Graph_String).
+json_type_to_woql_ast('TripleCount',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      count : Count
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Object,WQC,[object
+                                       |Path]),
+    json_value_to_woql_ast(Count,WQN,[count
+                                      |Path]),
+    WOQL = triple_count(WQA,WQB,WQC,WQN).
+json_type_to_woql_ast('TripleRangeCount',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      low : Low,
+      high : High,
+      count : Count,
+      graph : Graph
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Low,WQL,[low
+                                    |Path]),
+    json_value_to_woql_ast(High,WQH,[high
+                                     |Path]),
+    json_value_to_woql_ast(Count,WQN,[count
+                                      |Path]),
+    json_data_to_woql_ast(Graph,WG),
+    do_or_die(
+        (WG = Graph_String^^_),
+        error(woql_syntax_error(JSON,
+                                [graph|Path],
+                                Graph), _)),
+    WOQL = triple_range_count(WQA,WQB,WQL,WQH,WQN,Graph_String).
+json_type_to_woql_ast('TripleRangeCount',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      low : Low,
+      high : High,
+      count : Count
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WQA,[subject
+                                        |Path]),
+    json_value_to_woql_ast(Predicate,WQB,[predicate
+                                          |Path]),
+    json_value_to_woql_ast(Low,WQL,[low
+                                    |Path]),
+    json_value_to_woql_ast(High,WQH,[high
+                                     |Path]),
+    json_value_to_woql_ast(Count,WQN,[count
+                                      |Path]),
+    WOQL = triple_range_count(WQA,WQB,WQL,WQH,WQN).
 json_type_to_woql_ast('Size',JSON,WOQL,Path) :-
     _{  resource : Resource,
         size : Size

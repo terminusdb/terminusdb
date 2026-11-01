@@ -15,8 +15,8 @@ use crate::graphql::schema::NodeOrValue;
 use crate::terminus_store::layer::*;
 use crate::terminus_store::store::sync::SyncStoreLayer;
 
-pub fn path_to_class<'a, 'b>(
-    path_string: &'b str,
+pub fn path_to_class<'a>(
+    path_string: &str,
     g: &'a SyncStoreLayer,
     to_class: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
@@ -110,7 +110,7 @@ pub fn compile_path<'a>(
             })),
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&node_variety(&pred));
-                if let Some(p_id) = g.predicate_id(&pred.as_str()) {
+                if let Some(p_id) = g.predicate_id(pred.as_str()) {
                     ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(g.triples_sp(object, p_id).map(|t| t.object))
                     }))
@@ -125,7 +125,7 @@ pub fn compile_path<'a>(
             })),
             Pred::Named(pred) => {
                 let pred = prefixes.expand_schema(&node_variety(&pred));
-                if let Some(p_id) = g.predicate_id(&pred.as_str()) {
+                if let Some(p_id) = g.predicate_id(pred.as_str()) {
                     ClonableIterator::new(iter.flat_map(move |object| {
                         CachedClonableIterator::new(
                             g.triples_o(object)
@@ -162,7 +162,7 @@ impl<'a> Iterator for ManySearchIterator<'a> {
 
     fn next(&mut self) -> Option<u64> {
         loop {
-            if self.stop.map_or(false, |x| self.current >= x) {
+            if self.stop.is_some_and(|x| self.current >= x) {
                 return None;
             }
             let result = self.iterator.next();

@@ -69,6 +69,9 @@
 
               % schema.pl
               class_subsumed/3,
+              is_simple_class/2,
+              is_subdocument/2,
+              system_frame_class/1,
               class_frame/3,
               class_frame/4,
               all_class_frames/2,

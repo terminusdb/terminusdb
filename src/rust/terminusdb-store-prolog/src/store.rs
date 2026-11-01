@@ -46,7 +46,12 @@ fn get_process_rss_bytes() -> Option<usize> {
     unsafe {
         let mut info: MachTaskBasicInfo = std::mem::zeroed();
         let mut count = MACH_TASK_BASIC_INFO_COUNT;
-        let result = task_info(mach_task_self(), MACH_TASK_BASIC_INFO, &mut info, &mut count);
+        let result = task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            &mut info,
+            &mut count,
+        );
         if result == 0 {
             Some(info.resident_size as usize)
         } else {
@@ -80,26 +85,26 @@ fn get_process_rss_bytes() -> Option<usize> {
 predicates! {
     pub semidet fn open_memory_store(_context, term) {
         let store = open_sync_memory_store();
-        term.unify(&WrappedStore(store))
+        term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_directory_store(_context, dir_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let store = open_sync_directory_store(&*dir);
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_raw_archive_store(_context, dir_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let store = open_sync_raw_archive_store(&*dir);
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_archive_store(_context, dir_term, cache_size_term, out_term) {
         let dir: PrologText = dir_term.get_ex()?;
         let cache_size: usize = cache_size_term.get_ex::<u64>()? as usize;
         let store = open_sync_archive_store(&*dir, cache_size);
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_grpc_store(context, dir_term, address_term, initial_pool_term, cache_size_term, out_term) {
@@ -119,7 +124,7 @@ predicates! {
             .with_lru_used_bytes(move || lru_ref.used_bytes())
             .with_lru_evict(move |fraction| lru_evict_ref.evict_to_target(fraction)));
 
-        out_term.unify(&WrappedStore(store))
+        out_term.unify(WrappedStore(store))
     }
 
     pub semidet fn open_write(context, store_or_graph_or_layer_term, builder_term) {
