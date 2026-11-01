@@ -488,6 +488,14 @@ dateTimeIntervalComponent(date_time(Y,Mo,D,H,M,S,NS,Offset)) -->
     intervalDateTime(Y,Mo,D,H,M,S,NS,Offset), !.
 dateTimeIntervalComponent(date(Y,M,D,Offset)) -->
     date(Y,M,D,Offset).
+%% ISO 8601-2 open endpoint (`..`): unbounded past as start, unbounded
+%% future as end. Position decides direction at normalise time.
+dateTimeIntervalComponent(open) -->
+    "..", !.
+%% ISO 8601-2 unknown endpoint (empty): an endpoint exists but is
+%% unspecified. Must stay last — it consumes nothing.
+dateTimeIntervalComponent(unknown) -->
+    "", !.
 
 terminal([],_S).
 

@@ -790,7 +790,16 @@ fn split_top_level_args(s: &str) -> Vec<&str> {
     parts
 }
 
-fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
+fn parse_component_timestamp(s: &str, is_start: bool) -> Result<(i64, u32, u8), String> {
+    match s {
+        "neg_infinity" if is_start => return Ok((INTERVAL_NEG_INF, 0, INTERVAL_COMPONENT_OPEN)),
+        "infinity" if !is_start => return Ok((INTERVAL_POS_INF, 0, INTERVAL_COMPONENT_OPEN)),
+        "unknown" if is_start => {
+            return Ok((INTERVAL_UNKNOWN_START, 0, INTERVAL_COMPONENT_UNKNOWN))
+        }
+        "unknown" => return Ok((INTERVAL_UNKNOWN_END, 0, INTERVAL_COMPONENT_UNKNOWN)),
+        _ => {}
+    }
     if let Some(inner) = s
         .strip_prefix("date_time(")
         .and_then(|s| s.strip_suffix(")"))
@@ -886,8 +895,8 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     if args.len() != 6 {
         return Err(format!("expected 6 args, got {}", args.len()));
     }
-    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0])?;
-    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1])?;
+    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0], true)?;
+    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1], false)?;
     let duration = parse_duration_fields(args[2])?;
     let flag = match args[3] {
         "explicit" => INTERVAL_FLAG_EXPLICIT,
@@ -911,8 +920,15 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     }))
 }
 
-fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String {
+fn format_component_term(seconds: i64, nanos: u32, component_type: u8, is_start: bool) -> String {
     use chrono::DateTime;
+    match component_type {
+        INTERVAL_COMPONENT_OPEN => {
+            return if is_start { "neg_infinity" } else { "infinity" }.to_string()
+        }
+        INTERVAL_COMPONENT_UNKNOWN => return "unknown".to_string(),
+        _ => {}
+    }
     let dt = DateTime::from_timestamp(seconds, nanos)
         .map(|dt| dt.naive_utc())
         .unwrap_or_else(|| {
@@ -938,8 +954,8 @@ fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String
 }
 
 fn format_interval_term(iv: &DateTimeInterval) -> String {
-    let start = format_component_term(iv.start_seconds, iv.start_nanos, iv.start_type);
-    let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type);
+    let start = format_component_term(iv.start_seconds, iv.start_nanos, iv.start_type, true);
+    let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type, false);
     let dur = format!(
         "duration({},{},{},{},{},{},{})",
         iv.duration.sign,

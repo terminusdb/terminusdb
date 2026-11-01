@@ -1399,6 +1399,8 @@ interval_component_typed(date(Y,M,D,O), Val) :- !,
     Val = date(Y,M,D,O)^^'http://www.w3.org/2001/XMLSchema#date'.
 interval_component_typed(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
     Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+interval_component_typed(Atom, Atom) :- !,
+    memberchk(Atom, [neg_infinity, infinity, unknown]).
 
 % Date-only components are normalised to midnight UTC dateTime for interval
 % decomposition and relation checks. This keeps the interval API dateTime-only.
@@ -1406,6 +1408,8 @@ interval_component_typed_datetime(date(Y,M,D,_O), Val) :- !,
     Val = date_time(Y,M,D,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
 interval_component_typed_datetime(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
     Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+interval_component_typed_datetime(Atom, Atom) :- !,
+    memberchk(Atom, [neg_infinity, infinity, unknown]).
 
 /*
  * Duration computation helpers for xdd:dateTimeInterval.
@@ -1415,6 +1419,12 @@ interval_component_typed_datetime(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
  */
 
 % Convert an interval component to a Unix timestamp in nanoseconds.
+% Open endpoints map to float infinities so comparisons behave like
+% real bounds; unknown has no stamp (no clause) so comparisons on it fail.
+interval_component_stamp_ns(neg_infinity, StampNanos) :- !,
+    StampNanos is -inf.
+interval_component_stamp_ns(infinity, StampNanos) :- !,
+    StampNanos is inf.
 interval_component_stamp_ns(date(Y,M,D,_O), StampNanos) :-
     date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
     StampNanos is floor(Stamp * 1000000000).
@@ -1527,12 +1537,11 @@ woql_interval_duration_end(Duration, End, Interval) :-
     ;   nonvar(Duration), nonvar(End)
     ->  End = D2^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        % Compute start from the unbumped end so that "P3M/2025-03-31"
-        % yields a start of 2024-12-31 (3 months before Mar 31), then
-        % bump the end for the exclusive endpoint.
-        normalise_interval_start(D2, D2N),
-        subtract_duration_from_component(D2N, Dur, N1),
+        % Anchor the duration on the exclusive (bumped) end so that
+        % "P3M/2025-03-31" yields the quarter [Jan 1, Apr 1) — matching
+        % parse_two_component_interval and the Rust parser.
         normalise_interval_end(D2, N2),
+        subtract_duration_from_component(N2, Dur, N1),
         Interval = date_time_interval(N1,N2,Dur,duration_end,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_duration_end), _))
     ).

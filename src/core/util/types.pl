@@ -330,7 +330,11 @@ is_interval_flag(start_duration).
 is_interval_flag(duration_end).
 
 is_interval_component(C) :- is_date(C), !.
-is_interval_component(C) :- is_date_time(C).
+is_interval_component(C) :- is_date_time(C), !.
+%% ISO 8601-2 non-finite endpoints stored in component positions
+is_interval_component(neg_infinity).
+is_interval_component(infinity).
+is_interval_component(unknown).
 
 is_integer_range(integer_range(Integer1,Integer2)) :-
     integer(Integer1),
