@@ -1082,6 +1082,19 @@ json_type_to_woql_ast('IntervalRelationTyped',JSON,WOQL,Path) :-
     json_value_to_woql_ast(X,WX,[x|Path]),
     json_value_to_woql_ast(Y,WY,[y|Path]),
     WOQL = interval_relation_typed(WR,WX,WY).
+json_type_to_woql_ast('TripleRelation',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      relation : Relation,
+      value : Value
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WS,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WP,[predicate|Path]),
+    json_value_to_woql_ast(Object,WO,[object|Path]),
+    json_value_to_woql_ast(Relation,WR,[relation|Path]),
+    json_value_to_woql_ast(Value,WV,[value|Path]),
+    WOQL = triple_relation(WS,WP,WO,WR,WV).
 json_type_to_woql_ast('Weekday',JSON,WOQL,Path) :-
     _{date : D,
       weekday : W

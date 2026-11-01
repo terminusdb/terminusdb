@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, woql } = require('../lib')
+const { Agent, db, woql, document } = require('../lib')
 
 describe('woql-comparison', function () {
   let agent
@@ -1800,6 +1800,79 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, rangeQuery('RangeMin', [intVal(3), intVal(3), intVal(3)], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal(3)
+    })
+  })
+
+  describe('TripleRelation (Allen relations over stored triples)', function () {
+    const schema = [{
+      '@id': 'Event',
+      '@type': 'Class',
+      '@key': { '@type': 'Lexical', '@fields': ['name'] },
+      name: 'xsd:string',
+      interval: 'xdd:dateTimeInterval',
+    }]
+
+    const events = [
+      { '@type': 'Event', name: 'ev-2024-H1', interval: '2024-01-01/2024-06-30' },
+      { '@type': 'Event', name: 'ev-2024-H2', interval: '2024-07-01/2024-12-31' },
+      { '@type': 'Event', name: 'ev-2025-Q1', interval: '2025-01-01/2025-03-31' },
+      { '@type': 'Event', name: 'ev-2025-Q2', interval: '2025-04-01/2025-06-30' },
+      { '@type': 'Event', name: 'ev-2025-Q3', interval: '2025-07-01/2025-09-30' },
+    ]
+
+    before(async function () {
+      await document.insert(agent, { schema })
+      await document.insert(agent, { instance: events })
+    })
+
+    // stored spans (date ends bump): H1[..,24-07-01) H2[..,25-01-01)
+    //   Q1 [25-01-01,25-04-01) Q2 [25-04-01,25-07-01) Q3 [25-07-01,25-10-01)
+    function trQuery (relation, value, valueType = 'xdd:dateTimeInterval') {
+      return {
+        '@type': 'TripleRelation',
+        subject: { '@type': 'NodeValue', variable: 'v:doc' },
+        predicate: { '@type': 'NodeValue', node: 'terminusdb:///schema#interval' },
+        object: { '@type': 'Value', variable: 'v:iv' },
+        relation: { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': relation } },
+        value: { '@type': 'DataValue', data: { '@type': valueType, '@value': value } },
+      }
+    }
+
+    const namesOf = bindings => bindings.map(b => b['v:doc'].split('/').pop()).sort()
+
+    it('meets: events ending when reference starts', async function () {
+      const r = await woql.post(agent, trQuery('meets', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+    })
+
+    it('during: events strictly inside reference', async function () {
+      const r = await woql.post(agent, trQuery('during', '2025-01-01T00:00:00Z/2025-10-01T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+    })
+
+    it('overlaps: event overlapping reference from the left', async function () {
+      const r = await woql.post(agent, trQuery('overlaps', '2025-03-15T00:00:00Z/2025-05-15T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+    })
+
+    it('before: events before reference', async function () {
+      const r = await woql.post(agent, trQuery('before', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2024-H1', 'ev-2024-H2'])
+    })
+
+    it('contains: as-of instant lands in exactly one period at a seam', async function () {
+      const r = await woql.post(agent, trQuery('contains', '2025-04-01T00:00:00Z', 'xsd:dateTime'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+    })
+
+    it('contains: mid-period instant', async function () {
+      const r = await woql.post(agent, trQuery('contains', '2025-05-15T00:00:00Z', 'xsd:dateTime'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+    })
+
+    it('during: interval is never during a point', async function () {
+      const r = await woql.post(agent, trQuery('during', '2025-05-15T00:00:00Z', 'xsd:dateTime'))
+      expect(r.body.bindings).to.have.lengthOf(0)
     })
   })
 })

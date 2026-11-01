@@ -1586,7 +1586,14 @@ check_interval_relation("before", _Xs, Xe, Ys, _Ye)    :- woql_less(Xe, Ys).
 check_interval_relation("meets", _Xs, Xe, Ys, _Ye)     :- woql_equal(Xe, Ys).
 check_interval_relation("overlaps", Xs, Xe, Ys, Ye)     :- woql_less(Xs, Ys), woql_greater(Xe, Ys), woql_less(Xe, Ye).
 check_interval_relation("starts", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_less(Xe, Ye).
-check_interval_relation("during", Xs, Xe, Ys, Ye)       :- woql_greater(Xs, Ys), woql_less(Xe, Ye).
+% Point operand [t,t): membership is start-inclusive, so the seam point
+% belongs to the interval it starts (the i1, t, i2 sort) — as-of queries
+% land in exactly one consecutive interval.
+check_interval_relation("during", Xs, Xe, Ys, Ye) :-
+    woql_equal(Xs, Xe), !,
+    once((woql_less(Ys, Xs) ; woql_equal(Ys, Xs))),
+    woql_less(Xs, Ye).
+check_interval_relation("during", Xs, Xe, Ys, Ye) :- woql_greater(Xs, Ys), woql_less(Xe, Ye).
 check_interval_relation("finishes", Xs, Xe, Ys, Ye)     :- woql_greater(Xs, Ys), woql_equal(Xe, Ye).
 check_interval_relation("equals", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_equal(Xe, Ye).
 % 6 inverses: swap X and Y
@@ -1613,13 +1620,24 @@ classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
  * to woql_interval_relation/5.
  */
 woql_interval_relation_typed(Rel, X, Y) :-
-    X = date_time_interval(Xc1,Xc2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-    Y = date_time_interval(Yc1,Yc2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-    interval_component_typed_datetime(Xc1, Xs),
-    interval_component_typed_datetime(Xc2, Xe),
-    interval_component_typed_datetime(Yc1, Ys),
-    interval_component_typed_datetime(Yc2, Ye),
+    woql_relation_bounds(X, Xs, Xe),
+    woql_relation_bounds(Y, Ys, Ye),
+    \+ memberchk(unknown, [Xs, Xe, Ys, Ye]),
     woql_interval_relation(Rel, Xs, Xe, Ys, Ye).
+
+/*
+ * woql_relation_bounds(+Value, -Start, -End) is det.
+ *
+ * Coerce a value to interval bounds for relation checks: an
+ * xdd:dateTimeInterval decomposes into its components; any other literal
+ * (e.g. xsd:dateTime) compares as the zero-duration point [t,t).
+ */
+woql_relation_bounds(V, S, E) :-
+    (   V = date_time_interval(C1,C2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+    ->  interval_component_typed_datetime(C1, S),
+        interval_component_typed_datetime(C2, E)
+    ;   S = V, E = V
+    ).
 
 /*
  * woql_range_min(+List, -Result) is semidet.
@@ -2184,6 +2202,7 @@ find_resources(month_start_dates(_,_,_),_, _, _, [], []).
 find_resources(month_end_dates(_,_,_),_, _, _, [], []).
 find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
 find_resources(interval_relation_typed(_,_,_),_, _, _, [], []).
+find_resources(triple_relation(_,_,_,_,_),_, _, _, [], []).
 find_resources(weekday(_,_),_, _, _, [], []).
 find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
 find_resources(iso_week(_,_,_),_, _, _, [], []).
@@ -2430,6 +2449,12 @@ compile_wf(interval_relation_typed(R,X,Y),woql_interval_relation_typed(RE,XE,YE)
     resolve(R,RE),
     resolve(X,XE),
     resolve(Y,YE).
+compile_wf(triple_relation(X,P,Y,Rel,Val),(TGoal,RelGoal)) -->
+    compile_wf(t(X,P,Y),TGoal),
+    resolve(Rel,RelE),
+    resolve(Val,ValE),
+    resolve(Y,YE),
+    { RelGoal = woql_interval_relation_typed(RelE,YE,ValE) }.
 compile_wf(weekday(D,W),woql_weekday(DE,WE)) -->
     resolve(D,DE),
     resolve(W,WE).

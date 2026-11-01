@@ -336,3 +336,54 @@ test(greater_than_with_explicit_types_json, [
     [] = (JSON.bindings).
 
 :- end_tests(comparison_json_integration).
+
+/*
+ * triple_relation and instant coercion under Allen relations.
+ * Point semantics: the i1, t, i2 sort — a point at a meeting boundary
+ * belongs to the interval it starts.
+ */
+:- begin_tests(triple_relation_intervals, [concurrent(true)]).
+
+test(triple_relation_json_compiles, []) :-
+    json_woql:json_woql(_{ '@type' : "TripleRelation",
+                 subject   : _{ '@type' : "NodeValue", variable : "v:s" },
+                 predicate : _{ '@type' : "NodeValue", node : "scm:interval" },
+                 object    : _{ '@type' : "Value", variable : "v:o" },
+                 relation  : _{ '@type' : "DataValue",
+                               data : _{ '@type' : "xsd:string", '@value' : "meets" }},
+                 value     : _{ '@type' : "DataValue",
+                               data : _{ '@type' : "xdd:dateTimeInterval",
+                                         '@value' : "2025-01-01/2025-04-01" }}},
+             AST),
+    AST = triple_relation(_,_,_,_,_).
+
+test(instant_operand_coerces_to_point_during, []) :-
+    % [t,t) during [Jan1, Jul1) — seam membership
+    woql_compile:woql_interval_relation_typed(
+        "during"^^'http://www.w3.org/2001/XMLSchema#string',
+        date_time(2025,4,1,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTime',
+        date_time_interval(date_time(2025,1,1,0,0,0,0),
+                           date_time(2025,7,1,0,0,0,0),0,explicit,tz(0),tz(0))
+            ^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
+
+test(point_at_end_boundary_not_during, [fail]) :-
+    % [Apr1,Apr1) is not during [Jan1,Apr1) — it belongs to the successor
+    woql_compile:woql_interval_relation_typed(
+        "during"^^'http://www.w3.org/2001/XMLSchema#string',
+        date_time(2025,4,1,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTime',
+        date_time_interval(date_time(2025,1,1,0,0,0,0),
+                           date_time(2025,4,1,0,0,0,0),0,explicit,tz(0),tz(0))
+            ^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
+
+test(unknown_endpoint_null_semantics, [fail]) :-
+    % any unknown endpoint makes every relation false
+    woql_compile:woql_interval_relation_typed(
+        "equals"^^'http://www.w3.org/2001/XMLSchema#string',
+        date_time_interval(unknown,
+                           date_time(2025,4,1,0,0,0,0),0,explicit,tz(0),tz(0))
+            ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+        date_time_interval(unknown,
+                           date_time(2025,4,1,0,0,0,0),0,explicit,tz(0),tz(0))
+            ^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
+
+:- end_tests(triple_relation_intervals).
