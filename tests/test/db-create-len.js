@@ -4,6 +4,7 @@ const { Agent, db, util } = require('../lib')
 describe('db-create-len', function () {
   const totalAllowed = 246 // This is the longest a combination of user and dbname can be. Together with '.label' and the separator '%7c' (encoded '/') this adds up to 255 characters, the maximum file name length on posix systems
   let agent
+
   before(async function () {
     agent = new Agent().auth()
   })
