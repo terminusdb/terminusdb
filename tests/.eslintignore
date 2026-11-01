@@ -1,5 +1,0 @@
-!.eslintrc.js
-!.mocharc.js
-package-lock.json
-storage/
-.terminusdb-test-storage/

@@ -11,7 +11,7 @@ on:
         required: true
 
 env:
-  NODE_VERSION: '16'
+  NODE_VERSION: '24'
 
 jobs:
 

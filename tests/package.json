@@ -11,8 +11,8 @@
   "author": "Sean Leather <sean@terminusdb.com>",
   "scripts": {
     "bench": "node bench.js",
-    "check": "eslint --ext .js,.json .",
-    "lint": "eslint --ext .js,.json --fix .",
+    "check": "eslint .",
+    "lint": "eslint . --fix",
     "start-server": "http-server ./served -c-1 --port 7474",
     "test": "npm run check && npm run test-local && npm run test-served",
     "test-cli": "MOCHA_PARALLEL=true mocha 'test/cli-*.js'",
@@ -29,24 +29,23 @@
     "decimal.js": "^10.6.0",
     "fast-glob": "^3.2.11",
     "jsonwebtoken": "^9.0.3",
-    "mocha": "^10.8.2",
+    "mocha": "^12.0.3",
     "optionator": "^0.9.1",
     "stream-json": "^3.7.0",
     "superagent": "^7.1.1"
   },
   "devDependencies": {
+    "@eslint/json": "^2.1.1",
     "ajv": "^6.15.0",
-    "eslint": "^8.31.0",
-    "eslint-config-standard": "^17.0.0",
-    "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-json-format": "^2.0.1",
-    "eslint-plugin-mocha": "^10.0.4",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^6.0.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-mocha": "^12.0.2",
     "http-server": "^14.1.0",
+    "neostandard": "^0.14.1",
     "start-server-and-test": "^2.0.3"
   },
   "overrides": {
-    "serialize-javascript": "^7.1.4"
+    "serialize-javascript": "^7.1.4",
+    "minimatch": "^11.0.2",
+    "glob": "^14.0.3"
   }
 }
