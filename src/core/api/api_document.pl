@@ -4947,7 +4947,6 @@ test(check_embedding_report_no_touched_types,
     get_dict('api:relevant', Embedding, false).
 
 :- end_tests(check_documents).
-
 :- begin_tests(document_count, []).
 :- use_module(core(util/test_utils)).
 
