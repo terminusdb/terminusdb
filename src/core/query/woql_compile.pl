@@ -2203,6 +2203,7 @@ find_resources(month_end_dates(_,_,_),_, _, _, [], []).
 find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
 find_resources(interval_relation_typed(_,_,_),_, _, _, [], []).
 find_resources(triple_relation(_,_,_,_,_),_, _, _, [], []).
+find_resources(triple_relation(_,_,_,_,_,_),_, _, _, [], []).
 find_resources(weekday(_,_),_, _, _, [], []).
 find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
 find_resources(iso_week(_,_,_),_, _, _, [], []).
@@ -9234,7 +9235,8 @@ test(interval_typecast_timezone_string, [
     cleanup(teardown_temp_store(State))
 ]) :-
     %% Typecasting a timezone-shifted interval string to
-    %% xdd:dateTimeInterval normalises both endpoints to UTC.
+    %% xdd:dateTimeInterval preserves the original lexical spelling of
+    %% both endpoints (timezone information is retained, not normalised).
     Query = _{ '@type' : "Typecast",
                value : _{'@type' : "Value",
                          'data' : _{'@type': 'xsd:string', '@value': "2025-01-31T09:00:00+02:00/2025-03-31T09:00:00-05:00"}},
@@ -9245,7 +9247,7 @@ test(interval_typecast_timezone_string, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-31T07:00:00Z/2025-03-31T14:00:00Z"}.
+    Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-31T09:00:00+02:00/2025-03-31T09:00:00-05:00"}.
 
 test(interval_mixed_date_timezone_datetime, [
     setup((setup_temp_store(State),
