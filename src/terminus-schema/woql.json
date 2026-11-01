@@ -1467,6 +1467,28 @@
 }
 {
   "@documentation": {
+    "@comment":"Finds triples whose object stands in a typed relation to a reference value. Allen interval relations on xdd:dateTimeInterval objects; instant operands (xsd:dateTime) compare as zero-duration points. Supported relations: before, after, meets, met_by, overlaps, overlapped_by, starts, started_by, during, contains, finishes, finished_by, equals.",
+    "@properties": {"subject":"The subject, or variable to bind it.", "predicate":"The predicate, or variable to bind it.", "object":"The interval or instant object, or variable to bind it.", "relation":"The Allen relation name (string).", "value":"The reference interval or instant literal."}
+  },
+  "@id":"TripleRelation",
+  "@inherits":"Query",
+  "@key": {"@type":"Random"},
+  "@metadata": {
+    "https://terminusdb.com": {
+      "fields": ["subject", "predicate", "object", "relation", "value"],
+      "mode": ["?", "?", "?", "+", "+"],
+      "types": ["node", "node", "value", "data_value", "data_value"]
+    }
+  },
+  "@type":"Class",
+  "subject":"NodeValue",
+  "predicate":"NodeValue",
+  "object":"Value",
+  "relation":"DataValue",
+  "value":"DataValue"
+}
+{
+  "@documentation": {
     "@comment":"Computes the ISO 8601 weekday number (Monday=1, Sunday=7) for a date. Accepts xsd:date or xsd:dateTime. Date must be ground.",
     "@properties": {"date":"The input date or dateTime.", "weekday":"The ISO weekday number (1=Monday, 7=Sunday)."}
   },

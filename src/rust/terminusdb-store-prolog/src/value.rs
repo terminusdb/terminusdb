@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
+use tdb_succinct::tfc::lexical_interval::{decode_lexical_entry, lexical_interval_to_legacy};
 use tdb_succinct::*;
 
 pub fn make_entry_from_term<C: QueryableContextType>(
@@ -752,7 +753,19 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#hexBinary"))
         }
         Datatype::DateTimeInterval => {
-            let iv = entry.as_val::<DateTimeInterval, DateTimeInterval>();
+            let bytes = entry.to_bytes();
+            let iv = match bytes.len() {
+                INTERVAL_LEGACY_ENCODED_WIDTH => {
+                    DateTimeInterval::from_legacy_lexical(bytes)
+                }
+                INTERVAL_ENCODED_WIDTH => DateTimeInterval::from_lexical(bytes),
+                _ => decode_lexical_entry(&bytes)
+                    .ok()
+                    .and_then(|iv| lexical_interval_to_legacy(&iv))
+                    .unwrap_or_else(|| {
+                        panic!("undecodable DateTimeInterval entry: {} bytes", bytes.len())
+                    }),
+            };
             let term_string = format_interval_term(&iv);
             {
                 let f = context.open_frame();
@@ -790,7 +803,16 @@ fn split_top_level_args(s: &str) -> Vec<&str> {
     parts
 }
 
-fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
+fn parse_component_timestamp(s: &str, is_start: bool) -> Result<(i64, u32, u8), String> {
+    match s {
+        "neg_infinity" if is_start => return Ok((INTERVAL_NEG_INF, 0, INTERVAL_COMPONENT_OPEN)),
+        "infinity" if !is_start => return Ok((INTERVAL_POS_INF, 0, INTERVAL_COMPONENT_OPEN)),
+        "unknown" if is_start => {
+            return Ok((INTERVAL_UNKNOWN_START, 0, INTERVAL_COMPONENT_UNKNOWN))
+        }
+        "unknown" => return Ok((INTERVAL_UNKNOWN_END, 0, INTERVAL_COMPONENT_UNKNOWN)),
+        _ => {}
+    }
     if let Some(inner) = s
         .strip_prefix("date_time(")
         .and_then(|s| s.strip_suffix(")"))
@@ -853,17 +875,41 @@ fn parse_duration_fields(s: &str) -> Result<Duration, String> {
     })
 }
 
+/// Parse a `tz(Seconds)` or `none` term into the stored i16 minutes offset.
+/// The Prolog side follows the SWI convention of seconds *west* of
+/// Greenwich, so a +02:00 zone arrives as tz(-7200) → 120 minutes.
+fn parse_interval_tz(s: &str) -> Result<i16, String> {
+    if s == "none" {
+        return Ok(INTERVAL_NO_ZONE);
+    }
+    let secs: i64 = s
+        .strip_prefix("tz(")
+        .and_then(|s| s.strip_suffix(")"))
+        .ok_or_else(|| format!("invalid tz term: {s}"))?
+        .parse()
+        .map_err(|e| format!("invalid tz offset: {e}"))?;
+    Ok((-secs / 60) as i16)
+}
+
+fn format_interval_tz(tz: i16) -> String {
+    if tz == INTERVAL_NO_ZONE {
+        "none".to_string()
+    } else {
+        format!("tz({})", -(tz as i64) * 60)
+    }
+}
+
 fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     let inner = s
         .strip_prefix("date_time_interval(")
         .and_then(|s| s.strip_suffix(")"))
         .ok_or_else(|| format!("invalid interval term: {s}"))?;
     let args = split_top_level_args(inner);
-    if args.len() != 4 {
-        return Err(format!("expected 4 args, got {}", args.len()));
+    if args.len() != 6 {
+        return Err(format!("expected 6 args, got {}", args.len()));
     }
-    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0])?;
-    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1])?;
+    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0], true)?;
+    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1], false)?;
     let duration = parse_duration_fields(args[2])?;
     let flag = match args[3] {
         "explicit" => INTERVAL_FLAG_EXPLICIT,
@@ -871,6 +917,8 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
         "duration_end" => INTERVAL_FLAG_DURATION_END,
         other => return Err(format!("unknown flag: {other}")),
     };
+    let start_tz = parse_interval_tz(args[4])?;
+    let end_tz = parse_interval_tz(args[5])?;
     Ok(DateTimeInterval::make_entry(&DateTimeInterval {
         start_seconds,
         start_nanos,
@@ -880,11 +928,20 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
         end_type,
         flag,
         duration,
+        start_tz,
+        end_tz,
     }))
 }
 
-fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String {
+fn format_component_term(seconds: i64, nanos: u32, component_type: u8, is_start: bool) -> String {
     use chrono::DateTime;
+    match component_type {
+        INTERVAL_COMPONENT_OPEN => {
+            return if is_start { "neg_infinity" } else { "infinity" }.to_string()
+        }
+        INTERVAL_COMPONENT_UNKNOWN => return "unknown".to_string(),
+        _ => {}
+    }
     let dt = DateTime::from_timestamp(seconds, nanos)
         .map(|dt| dt.naive_utc())
         .unwrap_or_else(|| {
@@ -910,8 +967,8 @@ fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String
 }
 
 fn format_interval_term(iv: &DateTimeInterval) -> String {
-    let start = format_component_term(iv.start_seconds, iv.start_nanos, iv.start_type);
-    let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type);
+    let start = format_component_term(iv.start_seconds, iv.start_nanos, iv.start_type, true);
+    let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type, false);
     let dur = format!(
         "duration({},{},{},{},{},{},{})",
         iv.duration.sign,
@@ -927,5 +984,13 @@ fn format_interval_term(iv: &DateTimeInterval) -> String {
         INTERVAL_FLAG_DURATION_END => "duration_end",
         _ => "explicit",
     };
-    format!("date_time_interval({},{},{},{})", start, end, dur, flag)
+    format!(
+        "date_time_interval({},{},{},{},{},{})",
+        start,
+        end,
+        dur,
+        flag,
+        format_interval_tz(iv.start_tz),
+        format_interval_tz(iv.end_tz)
+    )
 }

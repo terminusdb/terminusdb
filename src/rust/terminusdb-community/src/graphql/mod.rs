@@ -33,9 +33,13 @@ pub fn post_process_graphql_numbers(json_str: String) -> String {
             Regex::new(r"__TERMINUS_NUM__([0-9.eE+-]+)").unwrap();
     }
     // First replace quoted marker strings with unquoted numbers (JSON path)
-    let intermediate = QUOTED_NUM_MARKER_RE.replace_all(&json_str, "$1").to_string();
+    let intermediate = QUOTED_NUM_MARKER_RE
+        .replace_all(&json_str, "$1")
+        .to_string();
     // Then replace any remaining unquoted markers (Handlebars text path)
-    UNQUOTED_NUM_MARKER_RE.replace_all(&intermediate, "$1").to_string()
+    UNQUOTED_NUM_MARKER_RE
+        .replace_all(&intermediate, "$1")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -44,14 +48,16 @@ mod tests {
 
     #[test]
     fn test_quoted_marker_in_json() {
-        let input = r#"{"category_code":"__TERMINUS_NUM__100","level":"__TERMINUS_NUM__3"}"#.to_string();
+        let input =
+            r#"{"category_code":"__TERMINUS_NUM__100","level":"__TERMINUS_NUM__3"}"#.to_string();
         let expected = r#"{"category_code":100,"level":3}"#;
         assert_eq!(post_process_graphql_numbers(input), expected);
     }
 
     #[test]
     fn test_unquoted_marker_in_handlebars_output() {
-        let input = "Category code: __TERMINUS_NUM__100. Taxonomy level: __TERMINUS_NUM__3.".to_string();
+        let input =
+            "Category code: __TERMINUS_NUM__100. Taxonomy level: __TERMINUS_NUM__3.".to_string();
         let expected = "Category code: 100. Taxonomy level: 3.";
         assert_eq!(post_process_graphql_numbers(input), expected);
     }
@@ -80,7 +86,10 @@ mod tests {
     #[test]
     fn test_no_markers_unchanged() {
         let input = "No markers here, just text.".to_string();
-        assert_eq!(post_process_graphql_numbers(input), "No markers here, just text.");
+        assert_eq!(
+            post_process_graphql_numbers(input),
+            "No markers here, just text."
+        );
     }
 
     #[test]
@@ -112,7 +121,8 @@ mod tests {
         // Use from_str instead of json! macro, since json! parses number
         // literals as f64 first, losing precision before arbitrary_precision
         // can preserve the original text.
-        let json: serde_json::Value = serde_json::from_str("123456789.12345678901234567891").unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str("123456789.12345678901234567891").unwrap();
         let result = json_value_to_input_value(json).unwrap();
         let s = result.as_string_value().expect("expected string scalar");
         assert_eq!(s, "123456789.12345678901234567891");
@@ -160,8 +170,12 @@ mod tests {
     #[test]
     fn test_full_request_deserialization() {
         let body = r#"{"query":"mutation($input: JSON!){_insertDocuments(json:$input)}","variables":{"input":{"@type":"Product","price":19.99}}}"#;
-        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
-        assert_eq!(req.query, "mutation($input: JSON!){_insertDocuments(json:$input)}");
+        let req: VariablesPreservingRequest =
+            serde_json::from_str(body).expect("deserialization failed");
+        assert_eq!(
+            req.query,
+            "mutation($input: JSON!){_insertDocuments(json:$input)}"
+        );
         assert!(req.variables.is_some());
         let vars = req.variables.unwrap();
         let obj = vars.to_object_value().expect("expected object value");
@@ -174,21 +188,24 @@ mod tests {
     #[test]
     fn test_request_with_null_variables() {
         let body = r#"{"query":"query { Foo { _id } }","variables":null}"#;
-        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        let req: VariablesPreservingRequest =
+            serde_json::from_str(body).expect("deserialization failed");
         assert!(req.variables.is_none());
     }
 
     #[test]
     fn test_request_with_absent_variables() {
         let body = r#"{"query":"query { Foo { _id } }"}"#;
-        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        let req: VariablesPreservingRequest =
+            serde_json::from_str(body).expect("deserialization failed");
         assert!(req.variables.is_none());
     }
 
     #[test]
     fn test_request_with_empty_object_variables() {
         let body = r#"{"query":"query { Foo { _id } }","variables":{}}"#;
-        let req: VariablesPreservingRequest = serde_json::from_str(body).expect("deserialization failed");
+        let req: VariablesPreservingRequest =
+            serde_json::from_str(body).expect("deserialization failed");
         assert!(req.variables.is_some());
         let vars = req.variables.unwrap();
         let obj = vars.to_object_value().expect("expected object value");
@@ -268,12 +285,8 @@ where
                 let obj: Result<Vec<_>, _> = map
                     .into_iter()
                     .map(|(k, v)| {
-                        json_value_to_input_value(v).map(|iv| {
-                            (
-                                Spanning::unlocated(k),
-                                Spanning::unlocated(iv),
-                            )
-                        })
+                        json_value_to_input_value(v)
+                            .map(|iv| (Spanning::unlocated(k), Spanning::unlocated(iv)))
                     })
                     .collect();
                 obj.map(InputValue::Object)
@@ -297,7 +310,11 @@ struct VariablesPreservingRequest {
 /// Parse JSON bytes into a `GraphQLRequest`, preserving variable precision.
 fn parse_graphql_request(buf: &[u8]) -> Result<GraphQLRequest, serde_json::Error> {
     let req: VariablesPreservingRequest = serde_json::from_slice(buf)?;
-    Ok(GraphQLRequest::new(req.query, req.operation_name, req.variables))
+    Ok(GraphQLRequest::new(
+        req.query,
+        req.operation_name,
+        req.variables,
+    ))
 }
 
 /// Serialize a GraphQL response, post-processing number markers.
@@ -324,8 +341,8 @@ use self::{
     frame::{AllFrames, UncleanAllFrames},
     mutation::TerminusMutationRoot,
     schema::{
-        TerminusContext, TerminusTypeCollection,
-        TerminusTypeCollectionFor, TerminusTypeCollectionInfo,
+        TerminusContext, TerminusTypeCollection, TerminusTypeCollectionFor,
+        TerminusTypeCollectionInfo,
     },
     subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot},
     system::{SystemData, SystemRoot},
@@ -364,10 +381,7 @@ pub struct GraphQLExecutionContext<'a> {
 }
 
 impl<'a> GraphQLExecutionContext<'a> {
-    pub fn new(
-        type_collection: TerminusTypeCollectionInfo,
-        context: TerminusContext<'a>,
-    ) -> Self {
+    pub fn new(type_collection: TerminusTypeCollectionInfo, context: TerminusContext<'a>) -> Self {
         let root_node = RootNode::new_with_info(
             TerminusTypeCollectionFor::<'a>::default(),
             TerminusMutationRoot::<'a>::default(),

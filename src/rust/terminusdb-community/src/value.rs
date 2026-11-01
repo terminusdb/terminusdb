@@ -1,4 +1,7 @@
 use chrono::{NaiveDateTime, NaiveTime};
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval,
+};
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
@@ -7,6 +10,25 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
+
+/// String render of a DateTimeInterval entry across storage formats:
+/// variable-width lexical entries render through the lexical decoder;
+/// un-upgraded fixed-width entries (legacy 48 and branch 52) decode via the
+/// legacy layout so archived layers still render.
+fn interval_entry_to_string(tde: &TypedDictEntry) -> String {
+    let bytes = tde.to_bytes();
+    match bytes.len() {
+        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(
+            &legacy_interval_to_lexical(&DateTimeInterval::from_legacy_lexical(bytes)),
+        ),
+        INTERVAL_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
+            &DateTimeInterval::from_lexical(bytes),
+        )),
+        _ => decode_lexical_entry(&bytes)
+            .map(|iv| render_lexical_interval(&iv))
+            .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).into_owned()),
+    }
+}
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
     let result = match tde.datatype() {
@@ -39,7 +61,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
         Datatype::DayTimeDuration => tde.as_val::<DayTimeDuration, String>(),
         Datatype::Base64Binary => tde.as_val::<Base64Binary, String>(),
         Datatype::HexBinary => tde.as_val::<HexBinary, String>(),
-        Datatype::DateTimeInterval => tde.as_val::<DateTimeInterval, String>(),
+        Datatype::DateTimeInterval => interval_entry_to_string(tde),
         x => panic!("not a stringy type: {:?}", x),
     };
 
@@ -264,7 +286,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
         Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
         Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
-        Datatype::DateTimeInterval => Value::String(tde.as_val::<DateTimeInterval, String>()),
+        Datatype::DateTimeInterval => Value::String(interval_entry_to_string(tde)),
     }
 }
 
@@ -429,7 +451,7 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             tde.as_val::<AnySimpleType, String>(),
         )),
         Datatype::DateTimeInterval => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<DateTimeInterval, String>(),
+            interval_entry_to_string(tde),
         )),
     }
 }

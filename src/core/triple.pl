@@ -109,6 +109,8 @@
               xrdf_value_range_count/6,
               xrdf_value_range_rev/6,
               xquad_value_range_rev/7,
+              xrdf_interval_relation/6,
+              xquad_interval_relation/7,
               xrdf_value_next/5,
               xquad_value_next/6,
               xrdf_value_previous/5,

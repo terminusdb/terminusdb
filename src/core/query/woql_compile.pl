@@ -1373,7 +1373,7 @@ normalise_typed_or_component(Value, Normaliser, Component) :-
 woql_interval(Start, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(C1,C2,_Dur,_Flag),
+        IV = date_time_interval(C1,C2,_Dur,_Flag,_,_),
         (   nonvar(Start)
         ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
         ;   interval_component_typed_datetime(C1, Start)
@@ -1391,7 +1391,7 @@ woql_interval(Start, End, Interval) :-
         interval_component_stamp_ns(N2, NS2),
         DiffNanos is NS2 - NS1,
         nanoseconds_to_duration(DiffNanos, Dur),
-        Interval = date_time_interval(N1,N2,Dur,explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        Interval = date_time_interval(N1,N2,Dur,explicit,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval), _))
     ).
 
@@ -1399,6 +1399,8 @@ interval_component_typed(date(Y,M,D,O), Val) :- !,
     Val = date(Y,M,D,O)^^'http://www.w3.org/2001/XMLSchema#date'.
 interval_component_typed(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
     Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+interval_component_typed(Atom, Atom) :- !,
+    memberchk(Atom, [neg_infinity, infinity, unknown]).
 
 % Date-only components are normalised to midnight UTC dateTime for interval
 % decomposition and relation checks. This keeps the interval API dateTime-only.
@@ -1406,6 +1408,8 @@ interval_component_typed_datetime(date(Y,M,D,_O), Val) :- !,
     Val = date_time(Y,M,D,0,0,0,0)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
 interval_component_typed_datetime(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
     Val = date_time(Y,M,D,HH,MM,SS,NS)^^'http://www.w3.org/2001/XMLSchema#dateTime'.
+interval_component_typed_datetime(Atom, Atom) :- !,
+    memberchk(Atom, [neg_infinity, infinity, unknown]).
 
 /*
  * Duration computation helpers for xdd:dateTimeInterval.
@@ -1415,6 +1419,12 @@ interval_component_typed_datetime(date_time(Y,M,D,HH,MM,SS,NS), Val) :- !,
  */
 
 % Convert an interval component to a Unix timestamp in nanoseconds.
+% Open endpoints map to float infinities so comparisons behave like
+% real bounds; unknown has no stamp (no clause) so comparisons on it fail.
+interval_component_stamp_ns(neg_infinity, StampNanos) :- !,
+    StampNanos is -inf.
+interval_component_stamp_ns(infinity, StampNanos) :- !,
+    StampNanos is inf.
 interval_component_stamp_ns(date(Y,M,D,_O), StampNanos) :-
     date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
     StampNanos is floor(Stamp * 1000000000).
@@ -1481,7 +1491,7 @@ duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
     Secs is Sign * (D * 86400 + HH * 3600 + MM * 60 + SS).
 
 % Extract the stored duration from an arity-4 interval.
-interval_extract_duration(date_time_interval(_,_,Dur,_), Dur).
+interval_extract_duration(date_time_interval(_,_,Dur,_,_,_), Dur).
 
 /*
  * woql_interval_start_duration(Start, Duration, Interval) is det.
@@ -1493,7 +1503,7 @@ interval_extract_duration(date_time_interval(_,_,Dur,_), Dur).
 woql_interval_start_duration(Start, Duration, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(C1,_C2,Dur,_Flag),
+        IV = date_time_interval(C1,_C2,Dur,_Flag,_,_),
         (   nonvar(Start)
         ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
         ;   interval_component_typed_datetime(C1, Start)
@@ -1504,7 +1514,7 @@ woql_interval_start_duration(Start, Duration, Interval) :-
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
         normalise_interval_start(D1, N1),
         add_duration_to_component(N1, Dur, N2),
-        Interval = date_time_interval(N1,N2,Dur,start_duration)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        Interval = date_time_interval(N1,N2,Dur,start_duration,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_start_duration), _))
     ).
 
@@ -1518,7 +1528,7 @@ woql_interval_start_duration(Start, Duration, Interval) :-
 woql_interval_duration_end(Duration, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(_C1,C2,Dur,_Flag),
+        IV = date_time_interval(_C1,C2,Dur,_Flag,_,_),
         (   nonvar(End)
         ->  normalise_typed_or_component(End, normalise_interval_end, C2)
         ;   interval_component_typed_datetime(C2, End)
@@ -1527,13 +1537,12 @@ woql_interval_duration_end(Duration, End, Interval) :-
     ;   nonvar(Duration), nonvar(End)
     ->  End = D2^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        % Compute start from the unbumped end so that "P3M/2025-03-31"
-        % yields a start of 2024-12-31 (3 months before Mar 31), then
-        % bump the end for the exclusive endpoint.
-        normalise_interval_start(D2, D2N),
-        subtract_duration_from_component(D2N, Dur, N1),
+        % Anchor the duration on the exclusive (bumped) end so that
+        % "P3M/2025-03-31" yields the quarter [Jan 1, Apr 1) — matching
+        % parse_two_component_interval and the Rust parser.
         normalise_interval_end(D2, N2),
-        Interval = date_time_interval(N1,N2,Dur,duration_end)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        subtract_duration_from_component(N2, Dur, N1),
+        Interval = date_time_interval(N1,N2,Dur,duration_end,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_duration_end), _))
     ).
 
@@ -1577,7 +1586,14 @@ check_interval_relation("before", _Xs, Xe, Ys, _Ye)    :- woql_less(Xe, Ys).
 check_interval_relation("meets", _Xs, Xe, Ys, _Ye)     :- woql_equal(Xe, Ys).
 check_interval_relation("overlaps", Xs, Xe, Ys, Ye)     :- woql_less(Xs, Ys), woql_greater(Xe, Ys), woql_less(Xe, Ye).
 check_interval_relation("starts", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_less(Xe, Ye).
-check_interval_relation("during", Xs, Xe, Ys, Ye)       :- woql_greater(Xs, Ys), woql_less(Xe, Ye).
+% Point operand [t,t): membership is start-inclusive, so the seam point
+% belongs to the interval it starts (the i1, t, i2 sort) — as-of queries
+% land in exactly one consecutive interval.
+check_interval_relation("during", Xs, Xe, Ys, Ye) :-
+    woql_equal(Xs, Xe), !,
+    once((woql_less(Ys, Xs) ; woql_equal(Ys, Xs))),
+    woql_less(Xs, Ye).
+check_interval_relation("during", Xs, Xe, Ys, Ye) :- woql_greater(Xs, Ys), woql_less(Xe, Ye).
 check_interval_relation("finishes", Xs, Xe, Ys, Ye)     :- woql_greater(Xs, Ys), woql_equal(Xe, Ye).
 check_interval_relation("equals", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_equal(Xe, Ye).
 % 6 inverses: swap X and Y
@@ -1604,13 +1620,24 @@ classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
  * to woql_interval_relation/5.
  */
 woql_interval_relation_typed(Rel, X, Y) :-
-    X = date_time_interval(Xc1,Xc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-    Y = date_time_interval(Yc1,Yc2,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-    interval_component_typed_datetime(Xc1, Xs),
-    interval_component_typed_datetime(Xc2, Xe),
-    interval_component_typed_datetime(Yc1, Ys),
-    interval_component_typed_datetime(Yc2, Ye),
+    woql_relation_bounds(X, Xs, Xe),
+    woql_relation_bounds(Y, Ys, Ye),
+    \+ memberchk(unknown, [Xs, Xe, Ys, Ye]),
     woql_interval_relation(Rel, Xs, Xe, Ys, Ye).
+
+/*
+ * woql_relation_bounds(+Value, -Start, -End) is det.
+ *
+ * Coerce a value to interval bounds for relation checks: an
+ * xdd:dateTimeInterval decomposes into its components; any other literal
+ * (e.g. xsd:dateTime) compares as the zero-duration point [t,t).
+ */
+woql_relation_bounds(V, S, E) :-
+    (   V = date_time_interval(C1,C2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+    ->  interval_component_typed_datetime(C1, S),
+        interval_component_typed_datetime(C2, E)
+    ;   S = V, E = V
+    ).
 
 /*
  * woql_range_min(+List, -Result) is semidet.
@@ -2175,6 +2202,8 @@ find_resources(month_start_dates(_,_,_),_, _, _, [], []).
 find_resources(month_end_dates(_,_,_),_, _, _, [], []).
 find_resources(interval_relation(_,_,_,_,_),_, _, _, [], []).
 find_resources(interval_relation_typed(_,_,_),_, _, _, [], []).
+find_resources(triple_relation(_,_,_,_,_),_, _, _, [], []).
+find_resources(triple_relation(_,_,_,_,_,_),_, _, _, [], []).
 find_resources(weekday(_,_),_, _, _, [], []).
 find_resources(weekday_sunday_start(_,_),_, _, _, [], []).
 find_resources(iso_week(_,_,_),_, _, _, [], []).
@@ -2421,6 +2450,30 @@ compile_wf(interval_relation_typed(R,X,Y),woql_interval_relation_typed(RE,XE,YE)
     resolve(R,RE),
     resolve(X,XE),
     resolve(Y,YE).
+compile_wf(triple_relation(X,P,Y,Rel,Val),Goal) -->
+    resolve(X,XE),
+    resolve_predicate(P,PE),
+    resolve(Y,YE),
+    resolve(Rel,RelE),
+    resolve(Val,ValE),
+    view(default_collection, Collection_Descriptor),
+    view(transaction_objects, Transaction_Objects),
+    view(filter, Filter),
+    {
+        do_or_die(
+            collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            error(unresolvable_absolute_descriptor(Collection_Descriptor), _)),
+        filter_transaction_object_goal(Filter, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Search_Clause),
+        Goal = (not_literal(XE),not_literal(PE),Search_Clause,woql_interval_relation_typed(RelE,YE,ValE))
+    }.
+compile_wf(triple_relation(X,P,Y,Rel,Val,G),Goal) -->
+    {
+        resolve_filter(G,Filter)
+    },
+    update(filter, Old_Filter, Filter),
+    compile_wf(triple_relation(X,P,Y,Rel,Val),Goal),
+    update(filter, _Filter, Old_Filter).
 compile_wf(weekday(D,W),woql_weekday(DE,WE)) -->
     resolve(D,DE),
     resolve(W,WE).
@@ -3890,6 +3943,28 @@ filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Obj
     compile_schema_predicate(PE, Transaction_Object, PS),
     compile_schema_object(YE, Transaction_Object, YS),
     Goal = xrdf((Transaction_Object.schema_objects), XS, PS, YS).
+
+filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Goal) :-
+    (   memberchk(instance,Types)
+    ->  compile_instance_subject(XE, Transaction_Object, XI),
+        compile_instance_predicate(PE, Transaction_Object, PI),
+        Search_1 = [xrdf_interval_relation(Transaction_Object.instance_objects, RelE, ValE, XI, PI, YE)]
+    ;   Search_1 = []),
+    (   memberchk(schema,Types)
+    ->  compile_schema_subject(XE, Transaction_Object, XS),
+        compile_schema_predicate(PE, Transaction_Object, PS),
+        Search_2 = [xrdf_interval_relation(Transaction_Object.schema_objects, RelE, ValE, XS, PS, YE)]
+    ;   Search_2 = []),
+    append([Search_1,Search_2], Searches),
+    list_disjunction(Searches,Goal).
+filter_transaction_object_goal(type_name_filter{ type : instance}, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Goal) :-
+    compile_instance_subject(XE, Transaction_Object, XI),
+    compile_instance_predicate(PE, Transaction_Object, PI),
+    Goal = xrdf_interval_relation((Transaction_Object.instance_objects), RelE, ValE, XI, PI, YE).
+filter_transaction_object_goal(type_name_filter{ type : schema}, Transaction_Object, triple_relation(XE, PE, YE, RelE, ValE), Goal) :-
+    compile_schema_subject(XE, Transaction_Object, XS),
+    compile_schema_predicate(PE, Transaction_Object, PS),
+    Goal = xrdf_interval_relation((Transaction_Object.schema_objects), RelE, ValE, XS, PS, YE).
 
 filter_transaction_object_goal(type_filter{ types : Types }, Transaction_Object, triple_slice(XE, PE, YE, LowE, HighE), Goal) :-
     (   memberchk(instance,Types)
@@ -9160,7 +9235,8 @@ test(interval_typecast_timezone_string, [
     cleanup(teardown_temp_store(State))
 ]) :-
     %% Typecasting a timezone-shifted interval string to
-    %% xdd:dateTimeInterval normalises both endpoints to UTC.
+    %% xdd:dateTimeInterval preserves the original lexical spelling of
+    %% both endpoints (timezone information is retained, not normalised).
     Query = _{ '@type' : "Typecast",
                value : _{'@type' : "Value",
                          'data' : _{'@type': 'xsd:string', '@value': "2025-01-31T09:00:00+02:00/2025-03-31T09:00:00-05:00"}},
@@ -9171,7 +9247,7 @@ test(interval_typecast_timezone_string, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-31T07:00:00Z/2025-03-31T14:00:00Z"}.
+    Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-31T09:00:00+02:00/2025-03-31T09:00:00-05:00"}.
 
 test(interval_mixed_date_timezone_datetime, [
     setup((setup_temp_store(State),

@@ -741,12 +741,8 @@ mod tests {
     }
 
     fn decode_hs256(token: &str, validation: &Validation) -> bool {
-        jsonwebtoken::decode::<Value>(
-            token,
-            &DecodingKey::from_secret(b"test-secret"),
-            validation,
-        )
-        .is_ok()
+        jsonwebtoken::decode::<Value>(token, &DecodingKey::from_secret(b"test-secret"), validation)
+            .is_ok()
     }
 
     fn now() -> u64 {
@@ -776,7 +772,9 @@ mod tests {
     fn test_validation_rejects_string_nbf() {
         // The CVE-2026-25537 PoC: nbf as a string must not silently skip the
         // not-before check.
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": "99999999999"}));
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": "99999999999"}),
+        );
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -784,7 +782,8 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_null_nbf() {
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": null}));
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": null}));
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -792,7 +791,9 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_future_nbf() {
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 7200, "nbf": now() + 3600}));
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 7200, "nbf": now() + 3600}),
+        );
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -800,7 +801,8 @@ mod tests {
 
     #[test]
     fn test_validation_accepts_past_nbf() {
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": now() - 60}));
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": now() - 60}));
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(decode_hs256(&token, &validation));
@@ -808,15 +810,22 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_numeric_iss() {
-        let opts = JwtDecodeOptions { iss: Some("expected-issuer".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": 123}));
+        let opts = JwtDecodeOptions {
+            iss: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": 123}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
     }
 
     #[test]
     fn test_validation_rejects_missing_iss_when_configured() {
-        let opts = JwtDecodeOptions { iss: Some("expected-issuer".to_string()), ..Default::default() };
+        let opts = JwtDecodeOptions {
+            iss: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
         let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -824,23 +833,35 @@ mod tests {
 
     #[test]
     fn test_validation_accepts_correct_iss() {
-        let opts = JwtDecodeOptions { iss: Some("expected-issuer".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": "expected-issuer"}));
+        let opts = JwtDecodeOptions {
+            iss: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": "expected-issuer"}),
+        );
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(decode_hs256(&token, &validation));
     }
 
     #[test]
     fn test_validation_rejects_numeric_aud() {
-        let opts = JwtDecodeOptions { aud: Some("expected-aud".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": 123}));
+        let opts = JwtDecodeOptions {
+            aud: Some("expected-aud".to_string()),
+            ..Default::default()
+        };
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": 123}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
     }
 
     #[test]
     fn test_validation_rejects_missing_aud_when_configured() {
-        let opts = JwtDecodeOptions { aud: Some("expected-aud".to_string()), ..Default::default() };
+        let opts = JwtDecodeOptions {
+            aud: Some("expected-aud".to_string()),
+            ..Default::default()
+        };
         let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -848,8 +869,13 @@ mod tests {
 
     #[test]
     fn test_validation_accepts_correct_aud() {
-        let opts = JwtDecodeOptions { aud: Some("expected-aud".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": "expected-aud"}));
+        let opts = JwtDecodeOptions {
+            aud: Some("expected-aud".to_string()),
+            ..Default::default()
+        };
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": "expected-aud"}),
+        );
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(decode_hs256(&token, &validation));
     }

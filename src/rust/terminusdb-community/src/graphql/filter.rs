@@ -390,11 +390,23 @@ pub struct CollectionStringFilterInputObject {
 }
 
 #[derive(GraphQLInputObject)]
+#[graphql(name = "RelationshipFilter")]
+pub struct RelationshipFilterInputObject {
+    /// Relation name — extensible. Allen interval relations: before, meets,
+    /// overlaps, starts, during, finishes, equals, and the six inverses
+    /// (after, met_by, overlapped_by, started_by, contains, finished_by).
+    pub rel: String,
+    /// Interval or instant literal; instants compare as zero-duration points.
+    pub value: String,
+}
+
+#[derive(GraphQLInputObject)]
 #[allow(non_snake_case)]
 #[graphql(name = "StringFilter")]
 pub struct StringFilterInputObject {
     pub eq: Option<String>,
     pub ne: Option<String>,
+    pub relationship: Option<RelationshipFilterInputObject>,
     pub lt: Option<String>,
     pub le: Option<String>,
     pub gt: Option<String>,
@@ -509,6 +521,7 @@ pub struct CollectionDateTimeFilterInputObject {
 pub struct DateTimeFilterInputObject {
     pub eq: Option<DateTime>,
     pub ne: Option<DateTime>,
+    pub relationship: Option<RelationshipFilterInputObject>,
     pub lt: Option<DateTime>,
     pub le: Option<DateTime>,
     pub gt: Option<DateTime>,
