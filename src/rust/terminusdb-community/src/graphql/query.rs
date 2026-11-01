@@ -5,6 +5,7 @@ use ordered_float::OrderedFloat;
 use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
 use tdb_succinct::tfc::interval::parse_iso_interval;
+use tdb_succinct::tfc::lexical_interval::{interval_relation, literal_as_interval, AllenRelation};
 use tdb_succinct::{DateTimeInterval, Decimal, TdbDataType, TypedDictEntry};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
@@ -27,8 +28,8 @@ use super::frame::{
     Prefixes, TypeDefinition,
 };
 use super::schema::{
-    TerminusResolveContext, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
-    TerminusOrderBy, TerminusOrdering,
+    BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue, TerminusOrderBy, TerminusOrdering,
+    TerminusResolveContext,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
@@ -108,6 +109,8 @@ enum FilterValue {
     BigFloat(GenericOperation, BigFloat, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
+    // typed relation: rel atom + interval-or-instant literal
+    Relation(String, String),
     Enum { op: EnumOperation, value: IriName },
     Foreign(IdOperation, String),
 }
@@ -168,8 +171,11 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
         FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.relationship {
+        FilterValue::Relation(val.rel, val.value)
     } else if let Some(val) = value.regex {
-        let regex = compile_safe_regex(&val).expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
+        let regex = compile_safe_regex(&val)
+            .expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
         FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
     } else if let Some(val) = value.startsWith {
         FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
@@ -216,6 +222,8 @@ fn compile_datetime_input_value(
         FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::DateTime(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.relationship {
+        FilterValue::Relation(val.rel, val.value)
     } else {
         panic!("Unable to compile string input value to a filter")
     }
@@ -740,6 +748,21 @@ fn object_type_filter<'a>(
                 ordering_matches_op(cmp, op)
             }))
         }
+        FilterValue::Relation(rel, val) => {
+            let relation = rel
+                .parse::<AllenRelation>()
+                .expect("unknown relation name in relationship filter");
+            let reference = literal_as_interval(val)
+                .expect("relationship value must be an interval or instant literal");
+            let g = g.clone();
+            ClonableIterator::new(iter.filter(move |object| {
+                let object_value = g.id_object_value(*object).expect("Object value must exist");
+                let object_string = value_to_string(&object_value);
+                literal_as_interval(&object_string)
+                    .map(|iv| interval_relation(&iv, relation, &reference))
+                    .unwrap_or(false)
+            }))
+        }
         FilterValue::Enum { op, value } => {
             let op = *op;
             match g.object_node_id(value.as_str()) {
@@ -790,7 +813,8 @@ fn compile_query<'a, C: TerminusResolveContext>(
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
-            context.id_matches_restriction(restriction_name, *id)
+            context
+                .id_matches_restriction(restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -1534,7 +1558,10 @@ mod regex_tests {
         let evil = "a".repeat(10_000);
         let pattern = format!("({})+", evil);
         let re = compile_safe_regex(&pattern);
-        assert!(re.is_err(), "Huge NFA pattern should be rejected by size_limit");
+        assert!(
+            re.is_err(),
+            "Huge NFA pattern should be rejected by size_limit"
+        );
     }
 
     #[test]
