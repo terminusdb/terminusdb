@@ -211,6 +211,7 @@ initialize_database_with_store(Key, Store, Force) :-
 current_woql_version("v1.0.3").
 current_repository_version("v1.0.1").
 current_ref_version("v1.0.2").
+current_system_version("v1.0.1").
 
 has_no_store :-
     catch(
@@ -220,6 +221,8 @@ has_no_store :-
         true
     ).
 
+current_schema_version(system_schema, Version) :-
+    current_system_version(Version).
 current_schema_version(repo_schema, Version) :-
     current_repository_version(Version).
 current_schema_version(ref_schema, Version) :-
@@ -228,6 +231,9 @@ current_schema_version(woql_schema, Version) :-
     current_woql_version(Version).
 
 update_system_graph(Label, Path, Predicate, Initialization) :-
+    update_system_graph(Label, Path, Predicate, Initialization, _).
+
+update_system_graph(Label, Path, Predicate, Initialization, Changed) :-
     Descriptor = label_descriptor{
                      schema:Label,
                      variety:repository_descriptor
@@ -242,15 +248,123 @@ update_system_graph(Label, Path, Predicate, Initialization) :-
         get_dict('schema_version', Metadata, Version),
         current_schema_version(Predicate, Version)
     % already current
-    ->  true
+    ->  Changed = false
     % needs an upgrade
     ;   json_log_notice_formatted("Upgrading ~s",[Label]),
         file_to_predicate(Path, Predicate),
         triple_store(Store),
         call(Initialization, Store, true),
         % remove anything already pinned
-        abolish_all_tables
+        abolish_all_tables,
+        Changed = true
     ).
+
+initialize_system_schema_for_update(Store, Force) :-
+    initialize_system_schema(Store, Force, _).
+
+/**
+ * update_system_schema_graph(-Changed) is det.
+ *
+ * Upgrade the system schema graph (capabilities, users, organisations,
+ * the Action enum) when its schema_version lags the bundled
+ * system_schema.json. Reports Changed=true so callers can run
+ * dependent instance-data migrations (built-in roles).
+ */
+update_system_schema_graph(Changed) :-
+    system_schema_name(System_Label),
+    system_schema_json(System_Path),
+    update_system_graph(System_Label,
+                        System_Path,
+                        system_schema,
+                        api_init:initialize_system_schema_for_update,
+                        Changed).
+
+/**
+ * update_system_roles is det.
+ *
+ * Exact-match migration of built-in role documents, run only when the
+ * system schema was upgraded. A built-in role whose action set still
+ * matches its OLD definition exactly is upgraded to the new
+ * definition; a customised role is left untouched, so deliberate
+ * restrictions persist. Roles absent from an older store
+ * (executor) are created with their action list.
+ */
+update_system_roles :-
+    create_context(system_descriptor{},
+                   commit_info{author: "system",
+                               message: "Built-in role update"},
+                   System_Context),
+    with_transaction(
+        System_Context,
+        forall(builtin_role_update(Role_Id, Role_Name, Old, New),
+               ensure_builtin_role(System_Context, Role_Id, Role_Name, Old, New)),
+        _).
+
+%  A built-in role is migrated only when its action set still matches
+%  the OLD definition exactly — an unmodified install gets the new
+%  definition wholesale, a customised role is left untouched. Absent
+%  built-ins (executor on older stores) are created.
+ensure_builtin_role(Context, Role_Id, _Role_Name, Old, New) :-
+    ask(Context, get_document(Role_Id, Role)),
+    !,
+    (   get_dict(action, Role, Existing0)
+    ->  true
+    ;   Existing0 = []),
+    (   is_list(Existing0)
+    ->  Existing1 = Existing0
+    ;   Existing1 = [Existing0]),
+    maplist(action_string, Existing1, Existing),
+    maplist(action_string, Old, Old_Strings),
+    (   ord_same_set(Existing, Old_Strings)
+    ->  put_dict(action, Role, New, New_Role),
+        replace_document(Context, New_Role)
+    ;   true).
+ensure_builtin_role(Context, Role_Id, Role_Name, _Old, New) :-
+    insert_document(Context,
+                    json{'@id': Role_Id,
+                         '@type': "Role",
+                         name: Role_Name,
+                         action: New},
+                    _).
+
+action_string(A, S) :-
+    (   atom(A)
+    ->  atom_string(A, S)
+    ;   A = S).
+
+ord_same_set(A, B) :-
+    sort(A, Sorted),
+    sort(B, Sorted).
+
+builtin_role_update('Role/admin', "Admin Role", [
+    "create_database", "delete_database", "class_frame", "clone",
+    "fetch", "push", "branch", "rebase",
+    "instance_read_access", "instance_write_access",
+    "schema_read_access", "schema_write_access",
+    "meta_read_access", "meta_write_access",
+    "commit_read_access", "commit_write_access",
+    "manage_capabilities"], [
+    "create_database", "delete_database", "class_frame", "clone",
+    "fetch", "push", "branch", "rebase",
+    "instance_read_access", "instance_write_access",
+    "schema_read_access", "schema_write_access",
+    "meta_read_access", "meta_write_access",
+    "commit_read_access", "commit_write_access",
+    "manage_capabilities",
+    "search", "search_snippets", "reindex_write",
+    "woql_main_exec", "woql_logic_exec", "woql_logic_read",
+    "woql_logic_write", "woql_other_exec", "woql_search",
+    "woql_instance_read", "woql_instance_write",
+    "woql_schema_read", "woql_schema_write"]).
+builtin_role_update('Role/consumer', "Consumer Role", [
+    "class_frame", "clone", "fetch", "meta_read_access",
+    "commit_read_access", "instance_read_access",
+    "schema_read_access"], [
+    "class_frame", "clone", "fetch", "meta_read_access",
+    "commit_read_access", "instance_read_access",
+    "schema_read_access", "search", "search_snippets"]).
+builtin_role_update('Role/executor', "Executor Role", _, [
+    "search", "woql_logic_exec"]).
 
 update_repository_graph :-
     repository_ontology(Repo_Label),
@@ -279,7 +393,11 @@ update_woql_graph :-
 update_system_graphs :-
     (   has_no_store
     ->  true
-    ;   update_repository_graph,
+    ;   update_system_schema_graph(System_Schema_Changed),
+        (   System_Schema_Changed = true
+        ->  update_system_roles
+        ;   true),
+        update_repository_graph,
         update_commit_graph,
         update_woql_graph
     ).
@@ -430,6 +548,81 @@ test("TERMINUSDB_LISTEN_ADDRESS=0.0.0.0",
     listen_address(Addr).
 
 :- end_tests(env_vars).
+
+:- begin_tests(system_migration).
+
+/**
+ * downgrade_builtin_roles is det.
+ *
+ * Simulate a pre-migration store: strip the new actions from
+ * Role/admin and delete Role/executor.
+ */
+downgrade_builtin_roles :-
+    create_context(system_descriptor{},
+                   commit_info{author:"test", message:"test"},
+                   Context),
+    with_transaction(
+        Context,
+        (   ask(Context, get_document('Role/admin', Admin)),
+            builtin_role_update('Role/admin', _, Old_Admin, _),
+            put_dict(action, Admin, Old_Admin, Admin2),
+            replace_document(Context, Admin2),
+            delete_document(Context, 'Role/executor')
+        ),
+        _).
+
+test(update_system_graphs_is_idempotent, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    update_system_graphs,
+    update_system_graphs.
+
+test(update_system_roles_restores_builtin_roles, [
+         setup((setup_temp_store(State),
+                downgrade_builtin_roles)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    update_system_roles,
+    create_context(system_descriptor{},
+                   commit_info{author:"test", message:"test"},
+                   Context),
+    ask(Context, get_document('Role/executor', _)),
+    ask(Context, get_document('Role/admin', Admin)),
+    role_actions(Admin, Actions),
+    memberchk("search", Actions),
+    memberchk("manage_capabilities", Actions).
+
+test(update_system_roles_leaves_customised_role, [
+         setup((setup_temp_store(State),
+                create_context(system_descriptor{},
+                               commit_info{author:"t", message:"t"},
+                               Context),
+                with_transaction(
+                    Context,
+                    (   ask(Context, get_document('Role/consumer', Consumer)),
+                        put_dict(action, Consumer, ["fetch"], Consumer2),
+                        replace_document(Context, Consumer2)),
+                    _))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    update_system_roles,
+    create_context(system_descriptor{},
+                   commit_info{author:"test", message:"test"},
+                   Context),
+    ask(Context, get_document('Role/consumer', Consumer)),
+    role_actions(Consumer, ["fetch"]).
+
+role_actions(Role, Actions) :-
+    (   get_dict(action, Role, A0)
+    ->  true
+    ;   A0 = []),
+    (   is_list(A0)
+    ->  A1 = A0
+    ;   A1 = [A0]),
+    maplist(action_string, A1, Actions).
+
+:- end_tests(system_migration).
 
 % ==========================================================================
 % The following test suites have been moved to plugins/vectorlink.pl:
