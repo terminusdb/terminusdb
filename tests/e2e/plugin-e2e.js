@@ -38,6 +38,7 @@
 
 const { expect } = require('chai')
 const superagent = require('superagent')
+const crypto = require('node:crypto')
 const { Agent, db } = require('../lib')
 
 const TDB_URL = process.env.TERMINUSDB_BASE_URL || 'http://localhost:6370'
@@ -51,7 +52,7 @@ function makeAgent () {
   return new Agent({
     baseUrl: TDB_URL,
     orgName: 'admin',
-    dbName: 'e2e-' + Math.random().toString(36).slice(2, 10),
+    dbName: 'e2e-' + crypto.randomBytes(4).toString('hex'),
   }).auth()
 }
 
