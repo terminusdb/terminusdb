@@ -206,6 +206,15 @@ encode_id_fragment(Fragment, Encoded) :-
 encode_id_fragment(_, _) :-
     throw(error(instantiation_error, _)).
 
+% shortcut: this value_json path has no context parameter, so expanded names
+% render via the global default prefixes — a database-context-bound prefix
+% renders as Clark (always a legal output). Upgrade: thread the context if a
+% caller needs db-local contraction here. Document GET and query binding
+% renders use the context-aware paths instead.
+value_type_to_json_type(X, T, S, T) :-
+    expanded_name_datatype(T),
+    !,
+    typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
 value_type_to_json_type(X, T, X, T) :-
     number(X),
     !.

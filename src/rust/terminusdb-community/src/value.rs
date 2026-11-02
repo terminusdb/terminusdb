@@ -42,6 +42,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
         Datatype::NCName => tde.as_val::<NCName, String>(),
         Datatype::Notation => tde.as_val::<Notation, String>(),
         Datatype::QName => tde.as_val::<QName, String>(),
+        Datatype::SQName => tde.as_val::<SQName, String>(),
         Datatype::ID => tde.as_val::<ID, String>(),
         Datatype::IDRef => tde.as_val::<IDRef, String>(),
         Datatype::Entity => tde.as_val::<Entity, String>(),
@@ -246,6 +247,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::NCName => Value::String(tde.as_val::<NCName, String>()),
         Datatype::Notation => Value::String(tde.as_val::<Notation, String>()),
         Datatype::QName => Value::String(tde.as_val::<QName, String>()),
+        Datatype::SQName => Value::String(tde.as_val::<SQName, String>()),
         Datatype::ID => Value::String(tde.as_val::<ID, String>()),
         Datatype::IDRef => Value::String(tde.as_val::<IDRef, String>()),
         Datatype::Entity => Value::String(tde.as_val::<Entity, String>()),
@@ -385,6 +387,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         }
         Datatype::QName => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<QName, String>()))
+        }
+        Datatype::SQName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<SQName, String>()))
         }
         Datatype::ID => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<ID, String>()))

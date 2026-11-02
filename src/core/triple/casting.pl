@@ -43,6 +43,7 @@ decimal_precision(20).
 :- use_module(library(apply_macros)).
 :- use_module(library(url), [is_absolute_url/1]).
 :- use_module(library(uri), [uri_components/2]).
+:- use_module(core(query/global_prefixes), [default_prefixes/1]).
 :- use_module(library(json), [atom_json_dict/3]).
 
 /*
@@ -1114,6 +1115,51 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#NCName', 'http://www.w3.org/20
 %%% xsd:NCName => xsd:string (downcast)
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#NCName', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
     !.
+
+/*
+ * Expanded names: xsd:QName and xbrl:SQName.
+ *
+ * Stored form is always Clark notation `{uri}local`; the active prefix map
+ * only affects the `prefix:local` edge form. The `prefixes(Dict)` hint option
+ * overrides the global defaults (used by WOQL Typecast's `prefixes` field);
+ * when absent the global defaults apply, which always bind xsd:/xbrl:.
+ */
+qname_prefixes(Hint, Prefixes) :-
+    (   option(prefixes(Prefixes), Hint)
+    ->  true
+    ;   default_prefixes(Prefixes)
+    ).
+
+%%% xsd:string => xsd:QName (lexical or Clark in, Clark stored)
+typecast_switch('http://www.w3.org/2001/XMLSchema#QName', 'http://www.w3.org/2001/XMLSchema#string', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    lexical_to_clark(Val, Prefixes, 'http://www.w3.org/2001/XMLSchema#QName', Cast).
+%%% xsd:QName => xsd:string (Clark => prefix:local, Clark verbatim if unbound)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#QName', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    clark_to_lexical(Val, Prefixes, Cast).
+%%% xsd:string => xbrl:SQName (OIM §3.1: any non-whitespace localname)
+typecast_switch('https://xbrl.org/2021SQName', 'http://www.w3.org/2001/XMLSchema#string', Val, Hint, Cast^^'https://xbrl.org/2021SQName') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    lexical_to_clark(Val, Prefixes, 'https://xbrl.org/2021SQName', Cast).
+%%% xbrl:SQName => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'https://xbrl.org/2021SQName', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    clark_to_lexical(Val, Prefixes, Cast).
+%%% xsd:QName => xbrl:SQName (QName names are SQName names — retag only)
+typecast_switch('https://xbrl.org/2021SQName', 'http://www.w3.org/2001/XMLSchema#QName', Val, _, Val^^'https://xbrl.org/2021SQName') :-
+    !.
+%%% xbrl:SQName => xsd:QName (only when the localname is an NCName)
+typecast_switch('http://www.w3.org/2001/XMLSchema#QName', 'https://xbrl.org/2021SQName', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    (   (qname_local(Val, Local), is_ncname(Local))
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#QName'),_))).
+
 %%% xsd:string => rdf:PlainLiteral
 typecast_switch('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val@'') :-
     !,
@@ -1880,5 +1926,104 @@ test(interval_roundtrip_mixed_timezones, []) :-
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
     S = "2025-01-31T09:00:00-05:00/2025-03-31T18:30:00+05:30".
+
+% --- Expanded names: xsd:QName / xbrl:SQName (Clark storage) ---
+
+test(string_to_qname_expands_bound_prefix, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns#}foo'.
+
+test(string_to_sqname_first_colon_split, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:a:b:c"^^'http://www.w3.org/2001/XMLSchema#string',
+             'https://xbrl.org/2021SQName', [prefixes(P)],
+             Cast^^'https://xbrl.org/2021SQName'),
+    Cast = '{http://example.org/ns#}a:b:c'.
+
+test(string_to_qname_clark_passthrough, []) :-
+    typecast("{http://unbound.example/}x"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = "{http://unbound.example/}x".
+
+test(string_to_qname_unbound_prefix, [error(casting_error("no:foo",_),_)]) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("no:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)], _).
+
+test(string_to_qname_malformed, []) :-
+    forall(member(Bad, ["nocolon", ":x", "p:", "{}x", "{ns"]),
+           (   catch(typecast(Bad^^'http://www.w3.org/2001/XMLSchema#string',
+                              'http://www.w3.org/2001/XMLSchema#QName', [], _),
+                     E, true),
+               E = error(casting_error(_,_),_)
+           )).
+
+test(string_to_sqname_rejects_whitespace_local, [error(casting_error(_,_),_)]) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:a b"^^'http://www.w3.org/2001/XMLSchema#string',
+             'https://xbrl.org/2021SQName', [prefixes(P)], _).
+
+test(string_to_qname_rejects_non_ncname_local, [error(casting_error(_,_),_)]) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:a:b"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)], _).
+
+test(qname_to_string_exact_match, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("{http://example.org/ns#}foo"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "eg:foo".
+
+test(qname_to_string_unbound_keeps_clark, []) :-
+    typecast("{http://unbound.example/}x"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "{http://unbound.example/}x".
+
+test(qname_to_string_no_substring_match, []) :-
+    % eg -> http://example.org/ns# must not contract http://example.org/ns#sub
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("{http://example.org/ns#sub}foo"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "{http://example.org/ns#sub}foo".
+
+test(qname_to_string_smallest_prefix_on_tie, []) :-
+    P = _{zz: 'http://dup.example/ns', aa: 'http://dup.example/ns'},
+    typecast("{http://dup.example/ns}x"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "aa:x".
+
+test(qname_to_sqname_retag, []) :-
+    typecast('{http://ns/}foo'^^'http://www.w3.org/2001/XMLSchema#QName',
+             'https://xbrl.org/2021SQName', [],
+             Cast^^'https://xbrl.org/2021SQName'),
+    Cast = '{http://ns/}foo'.
+
+test(sqname_to_qname_ncname_local_ok, []) :-
+    typecast('{http://ns/}foo'^^'https://xbrl.org/2021SQName',
+             'http://www.w3.org/2001/XMLSchema#QName', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://ns/}foo'.
+
+test(sqname_to_qname_rejects_non_ncname_local, [error(casting_error(_,_),_)]) :-
+    typecast('{http://ns/}a:b'^^'https://xbrl.org/2021SQName',
+             'http://www.w3.org/2001/XMLSchema#QName', [], _).
+
+test(sqname_to_string_lexical_round_trip, []) :-
+    P = _{xbrl: 'https://xbrl.org/2021'},
+    typecast("xbrl:a:b}c"^^'http://www.w3.org/2001/XMLSchema#string',
+             'https://xbrl.org/2021SQName', [prefixes(P)],
+             Clark^^'https://xbrl.org/2021SQName'),
+    typecast(Clark^^'https://xbrl.org/2021SQName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "xbrl:a:b}c".
 
 :- end_tests(typecast).

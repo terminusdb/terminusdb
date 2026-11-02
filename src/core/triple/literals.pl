@@ -22,6 +22,13 @@
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3,
+              expanded_name_datatype/1,
+              split_clark/3,
+              qname_local/2,
+              is_ncname/1,
+              non_whitespace/1,
+              lexical_to_clark/4,
+              clark_to_lexical/3,
               uri_eq/3,
               add_duration_to_component/3,
               subtract_duration_from_component/3
@@ -39,6 +46,7 @@
 :- use_module(library(lists), [reverse/2]).
 :- use_module(library(sort)).
 :- use_module(core(util)).
+:- use_module(core(util/xsd_parser), [ncname//0]).
 :- use_module(core(triple/casting), [typecast/4, decimal_precision/1, rational_to_decimal_string/3]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
@@ -797,6 +805,97 @@ prefixed_to_property(Term, Ctx, URI) :-
     get_dict('@schema', Ctx, Schema),
     put_dict('@base', Ctx, Schema, New_Ctx),
     prefixed_to_uri(Term, New_Ctx, URI).
+
+/*
+ * Expanded names: xsd:QName and xbrl:SQName.
+ *
+ * The storage form is always Clark notation `{uri}local`. The lexical edge
+ * form is `prefix:local` (OIM §3.1: split on the FIRST colon; the prefix is
+ * an NCName bound in the active prefix map; the localname is any
+ * non-whitespace string, colons included — xsd:QName additionally requires
+ * an NCName localname).
+ *
+ * Rendering performs an exact whole-namespace URI->prefix lookup only.
+ * Longest-prefix substring matching (as uri_to_prefixed uses for IRIs) must
+ * NOT be used here: it would corrupt a namespace that merely shares a
+ * leading substring with a bound URI.
+ */
+
+expanded_name_datatype('http://www.w3.org/2001/XMLSchema#QName').
+expanded_name_datatype('https://xbrl.org/2021SQName').
+
+is_ncname(S) :-
+    atom_codes(S,C),
+    phrase(xsd_parser:ncname,C,[]).
+
+non_whitespace(S) :-
+    \+ (sub_atom(S,_,1,_,C), char_type(C,white)).
+
+% split_clark(+Clark, -Ns, -Local) is semidet.
+% Namespace is delimited by the first '}' (SQName locals may contain '}').
+split_clark(Clark, Ns, Local) :-
+    sub_atom(Clark, 0, 1, _, '{'),
+    once(sub_atom(Clark, Before, 1, _, '}')),
+    Ns_Length is Before - 1,
+    Ns_Length > 0,
+    sub_atom(Clark, 1, Ns_Length, _, Ns),
+    Local_Before is Before + 1,
+    sub_atom(Clark, Local_Before, Local_Length, 0, Local),
+    Local_Length > 0.
+
+qname_local(Clark, Local) :-
+    split_clark(Clark, _, Local).
+
+% Localname grammar beyond the shared non-whitespace rule: xsd:QName
+% requires an NCName; xbrl:SQName accepts anything non-whitespace.
+expanded_name_local_ok(Local, 'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    is_ncname(Local).
+expanded_name_local_ok(_, _).
+
+% lexical_to_clark(+Lexical, +Prefixes:dict, +TypeURI, -Clark) is det.
+% Accepts `prefix:local` (expanded via Prefixes) or `{uri}local` Clark input
+% (validated, kept verbatim). Throws casting_error on malformed input or an
+% unbound prefix.
+lexical_to_clark(Lexical, Prefixes, TypeURI, Clark) :-
+    (   split_clark(Lexical, _Ns, Local)
+    ->  (   non_whitespace(Local),
+            expanded_name_local_ok(Local, TypeURI)
+        ->  Clark = Lexical
+        ;   throw(error(casting_error(Lexical, TypeURI), _)))
+    ;   (   sub_atom(Lexical, Before, 1, _, ':'), % leftmost ':'
+            sub_atom(Lexical, 0, Before, _, Prefix),
+            Local_Before is Before + 1,
+            sub_atom(Lexical, Local_Before, _, 0, Local),
+            Prefix \= '',
+            is_ncname(Prefix),
+            Local \= '',
+            non_whitespace(Local),
+            expanded_name_local_ok(Local, TypeURI),
+            get_dict(Prefix, Prefixes, URI)
+        ->  atomic_list_concat(['{', URI, '}', Local], Clark)
+        ;   throw(error(casting_error(Lexical, TypeURI), _)))
+    ).
+
+% clark_to_lexical(+Clark, +Prefixes:dict, -Lexical) is det.
+% Exact-match URI->prefix lookup; smallest prefix on ties; Clark verbatim
+% when the namespace is unbound or the input is not Clark-shaped.
+% Output is always a string, matching the xsd:string cast convention.
+clark_to_lexical(Clark, Prefixes, Lexical) :-
+    (   split_clark(Clark, Ns, Local)
+    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings
+        findall(P, (get_dict(P, Prefixes, Ns), \+ sub_atom(P, 0, 1, _, '@')), Candidates),
+        (   Candidates = []
+        ->  Lexical0 = Clark
+        ;   sort(Candidates, [Prefix|_]),
+            atomic_list_concat([Prefix, Local], ':', Lexical0)
+        )
+    ;   Lexical0 = Clark
+    ),
+    (   atom(Lexical0)
+    ->  atom_string(Lexical0, Lexical)
+    ;   Lexical = Lexical0
+    ).
 
 :- begin_tests(turtle_literal_marshalling).
 

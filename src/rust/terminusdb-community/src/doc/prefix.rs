@@ -104,6 +104,7 @@ fn default_prefixes() -> HashMap<String, String> {
         "json".to_string(),
         "http://terminusdb.com/schema/json#".to_string(),
     );
+    prefixes.insert("xbrl".to_string(), "https://xbrl.org/2021".to_string());
     prefixes
 }
 
@@ -189,7 +190,7 @@ lazy_static! {
 /// for a given layer builds the map from the layer triples; subsequent calls
 /// reuse the cached flat vector.  This is the fast path for the common case
 /// where the caller has a schema layer rather than a custom context dict.
-fn get_layer_prefix_map(layer: &SyncStoreLayer) -> Arc<PrefixMap> {
+pub(crate) fn get_layer_prefix_map(layer: &SyncStoreLayer) -> Arc<PrefixMap> {
     let name = name_to_string(layer.name());
     {
         let cache = LAYER_PREFIX_MAP_CACHE.lock().unwrap();
@@ -211,6 +212,38 @@ fn get_layer_prefix_map(layer: &SyncStoreLayer) -> Arc<PrefixMap> {
     }
     cache.insert(name, map.clone());
     map
+}
+
+lazy_static! {
+    /// Lifecycle-bound cache of URI→prefix (reverse) maps per schema layer,
+    /// used for exact-match Clark `{ns}local` → `prefix:local` rendering of
+    /// `xsd:QName` / `xbrl:SQName` literals outside the `DocumentContext` path.
+    static ref LAYER_REVERSE_PREFIX_MAP_CACHE: Mutex<HashMap<String, Arc<HashMap<String, String>>>> =
+        Mutex::new(HashMap::with_capacity(LAYER_PREFIX_MAP_CACHE_CAPACITY));
+}
+
+/// Cached URI→prefix reverse map for a schema layer.  Same lifecycle contract
+/// as `get_layer_prefix_map` — layer names are content-addressed.
+pub(crate) fn get_layer_reverse_prefix_map(
+    layer: &SyncStoreLayer,
+) -> Arc<HashMap<String, String>> {
+    let name = name_to_string(layer.name());
+    {
+        let cache = LAYER_REVERSE_PREFIX_MAP_CACHE.lock().unwrap();
+        if let Some(cached) = cache.get(&name) {
+            return cached.clone();
+        }
+    }
+
+    let forward = build_prefix_map_from_sync_layer(layer);
+    let rev = Arc::new(crate::expanded_name::reverse_prefix_map(&forward));
+
+    let mut cache = LAYER_REVERSE_PREFIX_MAP_CACHE.lock().unwrap();
+    if cache.len() >= LAYER_PREFIX_MAP_CACHE_CAPACITY {
+        cache.clear();
+    }
+    cache.insert(name, rev.clone());
+    rev
 }
 
 /// Expand a prefixed name using a prefix map.  Mirrors Prolog `prefix_expand`.

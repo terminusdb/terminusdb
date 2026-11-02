@@ -480,6 +480,10 @@ xsd_json_schema(_, "xsd:gYearMonth", json{type:"string",
 xsd_json_schema(_, "xsd:gMonthDay", json{type:"string",
                                         'x-terminusdb':json{xsd_type:"xsd:gMonthDay"}}) :- !.
 xsd_json_schema(_, "xsd:anyURI", json{type:"string", format:"uri"}) :- !.
+xsd_json_schema(_, "xsd:QName", json{type:"string",
+                                    'x-terminusdb':json{xsd_type:"xsd:QName"}}) :- !.
+xsd_json_schema(_, "xbrl:SQName", json{type:"string",
+                                     'x-terminusdb':json{xsd_type:"xbrl:SQName"}}) :- !.
 xsd_json_schema(_, "xsd:base64Binary", json{type:"string", contentEncoding:"base64"}) :- !.
 xsd_json_schema(_, "xsd:hexBinary", json{type:"string", contentEncoding:"hex"}) :- !.
 xsd_json_schema(_, "xsd:anySimpleType", json{}) :- !.
@@ -918,7 +922,7 @@ test(unknown_xsd_type,
       cleanup(teardown_temp_store(State))]) :-
     tdb_class_to_json_schema(Desc, 'JsOdd', JSON),
     % unmapped xsd type degrades to a permissive schema with a note
-    assertion(JSON.properties.odd.'x-terminusdb'.xsd_type == "xsd:QName"),
+    assertion(JSON.properties.odd.'x-terminusdb'.xsd_type == "xsd:ID"),
     Odd_Limitations = JSON.properties.odd.'x-terminusdb'.limitations,
     assertion(memberchk("unmapped xsd type", Odd_Limitations)).
 
@@ -930,7 +934,31 @@ jsonschema_unknown_xsd_schema('
 
 { "@id" : "JsOdd",
   "@type" : "Class",
-  "odd" : "xsd:QName" }
+  "odd" : "xsd:ID" }
+').
+
+test(expanded_name_types,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(jsonschema_names, Desc),
+             write_schema(jsonschema_expanded_name_schema, Desc))),
+      cleanup(teardown_temp_store(State))]) :-
+    tdb_class_to_json_schema(Desc, 'JsNames', JSON),
+    assertion(JSON.properties.qname.type == "string"),
+    assertion(JSON.properties.qname.'x-terminusdb'.xsd_type == "xsd:QName"),
+    assertion(JSON.properties.sqname.type == "string"),
+    assertion(JSON.properties.sqname.'x-terminusdb'.xsd_type == "xbrl:SQName").
+
+jsonschema_expanded_name_schema('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "@type": "@context",
+  "xsd" : "http://www.w3.org/2001/XMLSchema#",
+  "xbrl" : "https://xbrl.org/2021" }
+
+{ "@id" : "JsNames",
+  "@type" : "Class",
+  "qname" : "xsd:QName",
+  "sqname" : "xbrl:SQName" }
 ').
 
 :- end_tests(jsonschema).

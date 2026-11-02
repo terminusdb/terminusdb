@@ -27,7 +27,7 @@
 :- use_module(core(util/syntax)).
 :- use_module(core(triple)).
 :- use_module(core(document/schema), [schema_read_layer/2]).
-:- use_module(core(triple/literals), [object_storage/2]).
+:- use_module(core(triple/literals), [object_storage/2, expanded_name_datatype/1]).
 :- use_module(core(transaction/descriptor), [collection_descriptor_prefixes/2]).
 :- use_module(core(document)).
 
@@ -574,6 +574,9 @@ value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
         ->  V is truncate(D)
         ;   V = D
         )
+    ;   expanded_name_datatype(T)
+    ->  % Expanded names render as prefix:local via the active map
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
     ;   compound(D)
     ->  % Other compound types: convert to string
         typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
@@ -685,6 +688,9 @@ term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
         ->  V is truncate(D)
         ;   V = D
         )
+    ;   expanded_name_datatype(T)
+    ->  % Expanded names render as prefix:local via the query context map
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [prefixes(Prefixes)], V^^_)
     ;   compound(D)
     ->  % Other compound types: convert to string
         typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)

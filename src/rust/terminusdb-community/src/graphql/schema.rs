@@ -9,18 +9,19 @@ use juniper::{
 };
 use lazy_init::Lazy;
 use swipl::prelude::*;
-use tdb_succinct::TypedDictEntry;
+use tdb_succinct::{Datatype, TypedDictEntry};
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
 use terminusdb_store_prolog::terminus_store::{IdTriple, Layer, ObjectType};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, RDF_TYPE, SYS_VALUE};
 use crate::doc::{retrieve_all_index_ids, ArrayIterator, DocumentContext};
+use crate::expanded_name::clark_to_lexical;
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
 use crate::schema::RdfListIterator;
 use crate::types::{transaction_instance_layer, transaction_schema_layer};
 use crate::value::{
     enum_node_to_value, type_is_big_integer, type_is_bool, type_is_datetime, type_is_decimal,
-    type_is_float, type_is_json, type_is_small_integer, value_to_graphql,
+    type_is_float, type_is_json, type_is_small_integer, value_to_graphql, value_to_string,
 };
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
@@ -1469,7 +1470,15 @@ fn extract_fragment<C: TerminusResolveContext>(
         let obj = instance.id_object(object_id)?;
         match obj {
             ObjectType::Node(n) => Some(Ok(n.into())),
-            ObjectType::Value(v) => Some(Ok(value_to_graphql(&v))),
+            ObjectType::Value(v) => Some(Ok(match v.datatype() {
+                Datatype::QName | Datatype::SQName => {
+                    juniper::Value::Scalar(DefaultScalarValue::String(clark_to_lexical(
+                        &value_to_string(&v),
+                        &crate::doc::prefix::get_layer_reverse_prefix_map(instance),
+                    )))
+                }
+                _ => value_to_graphql(&v),
+            })),
         }
     }
 }
@@ -1723,7 +1732,15 @@ fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
         let vals: Vec<_> = object_ids
             .map(|o| match instance.id_object(o).unwrap() {
                 ObjectType::Node(n) => graphql_value!(n),
-                ObjectType::Value(v) => value_to_graphql(&v),
+                ObjectType::Value(v) => match v.datatype() {
+                    Datatype::QName | Datatype::SQName => {
+                        juniper::Value::Scalar(DefaultScalarValue::String(clark_to_lexical(
+                            &value_to_string(&v),
+                            &crate::doc::prefix::get_layer_reverse_prefix_map(instance),
+                        )))
+                    }
+                    _ => value_to_graphql(&v),
+                },
             })
             .collect();
         Some(Ok(Value::List(vals)))

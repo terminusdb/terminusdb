@@ -2175,6 +2175,7 @@ find_resources(with(_,_,P), Collection, DRG, DWG, Read, Write) :-
 find_resources(call(_,_), _, _, _, [], []).
 find_resources(get(_,_,_), _, _, _, [], []).
 find_resources(typecast(_,_,_), _, _, _, [], []).
+find_resources(typecast(_,_,_,_), _, _, _, [], []).
 find_resources(hash(_,_,_), _, _, _, [], []).
 find_resources(idgen_random(_,_,_), _, _, _, [], []).
 find_resources(idgen_uuid_v7(_,_,_), _, _, _, [], []).
@@ -2844,6 +2845,25 @@ compile_wf(get(Spec,resource(Resource,Format,Options),Has_Header), Prog) -->
         ;   format(atom(M), 'Unknown file type for "get" processing: ~q', [Resource]),
             throw(error(M)))
     }.
+compile_wf(typecast(Val,Type,Cast,PrefixSpec),
+           (   typecast(ValE, TypeE, [prefixes(Prefixes), enum_members(Enum_Members)], CastE))) -->
+    view(default_collection,Collection_Descriptor),
+    view(transaction_objects,Transaction_Objects),
+    {   % A bound enum member casts to its lexical value, so the member
+        % map rides along as a hint. Empty where no schema is reachable.
+        (   collection_descriptor_transaction_object(Collection_Descriptor,Transaction_Objects,
+                                                     Transaction_Object),
+            database_schema(Transaction_Object, Schema)
+        ->  schema_enum_member_lexicals(Schema, Enum_Members)
+        ;   Enum_Members = []
+        )
+    },
+    resolve(Val,ValE),
+    resolve(Type,TypeE),
+    resolve(Cast,CastE),
+    % prefixes(Prefixes) overrides the context default: a literal dict or a
+    % variable (e.g. bound via dot) carrying the prefix map.
+    resolve(PrefixSpec,Prefixes).
 compile_wf(typecast(Val,Type,Cast),
            (   typecast(ValE, TypeE, [prefixes(Prefixes), enum_members(Enum_Members)], CastE))) -->
     view(prefixes,Prefixes),
@@ -9151,6 +9171,81 @@ test(interval_typecast_datetime_string, [
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
     Binding.iv = _{'@type': 'xdd:dateTimeInterval', '@value': "2025-01-01T09:00:00Z/2025-04-01T17:30:00Z"}.
+
+test(typecast_qname_literal_prefixes, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Typecast",
+               value : _{'@type' : "Value",
+                         'data' : _{'@type': 'xsd:string', '@value': "eg:foo"}},
+               type : _{'@type' : "NodeValue",
+                         node : 'xsd:QName'},
+               result : _{'@type' : "Value",
+                           variable : "q"},
+               prefixes : _{'@type' : "Value",
+                            'data' : _{eg: 'http://example.org/ns#'}}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.q = _{'@type': 'xsd:QName', '@value': "{http://example.org/ns#}foo"}.
+
+test(typecast_sqname_first_colon, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "Typecast",
+               value : _{'@type' : "Value",
+                         'data' : _{'@type': 'xsd:string', '@value': "xbrl:a:b"}},
+               type : _{'@type' : "NodeValue",
+                         node : 'xbrl:SQName'},
+               result : _{'@type' : "Value",
+                           variable : "s"}
+             },
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.s = _{'@type': 'xbrl:SQName', '@value': "xbrl:a:b"}.
+
+test(typecast_qname_var_prefixes, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State))
+]) :-
+    Query = _{ '@type' : "And",
+               and : [_{ '@type' : "Equals",
+                         left : _{'@type' : "Value", variable : "P"},
+                         right : _{'@type' : "DataValue",
+                                   'data' : _{eg: 'http://example.org/ns#'}}},
+                      _{ '@type' : "Typecast",
+                         value : _{'@type' : "Value",
+                                   'data' : _{'@type': 'xsd:string', '@value': "eg:foo"}},
+                         type : _{'@type' : "NodeValue",
+                                   node : 'xsd:QName'},
+                         result : _{'@type' : "Value",
+                                     variable : "q"},
+                         prefixes : _{'@type' : "Value",
+                                      variable : "P"}}]},
+    query_test_response_test_branch(Query, JSON),
+    [Binding] = JSON.bindings,
+    Binding.q = _{'@type': 'xsd:QName', '@value': "{http://example.org/ns#}foo"}.
+
+test(typecast_qname_unbound_prefix_errors, [
+    setup((setup_temp_store(State),
+           create_db_without_schema(admin,test))),
+    cleanup(teardown_temp_store(State)),
+    throws(error(casting_error("unbound:foo",_),_))
+]) :-
+    Query = _{ '@type' : "Typecast",
+               value : _{'@type' : "Value",
+                         'data' : _{'@type': 'xsd:string', '@value': "unbound:foo"}},
+               type : _{'@type' : "NodeValue",
+                         node : 'xsd:QName'},
+               result : _{'@type' : "Value",
+                           variable : "q"}
+             },
+    query_test_response_test_branch(Query, _JSON).
 
 test(interval_construct_timezone_shift, [
     setup((setup_temp_store(State),

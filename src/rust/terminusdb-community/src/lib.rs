@@ -10,6 +10,7 @@ mod clock;
 pub mod consts;
 mod doc;
 mod embedding;
+mod expanded_name;
 mod graphql;
 mod json_preserve;
 mod jwt;

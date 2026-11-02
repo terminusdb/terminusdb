@@ -2129,7 +2129,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4988,7 +4988,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5434,7 +5434,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6155,7 +6155,7 @@ dependencies = [
 [[package]]
 name = "tdb-succinct"
 version = "0.1.4"
-source = "git+https://github.com/terminusdb-org/tdb-succinct#c8e41073b952c2a7513edaeadece2e76d0d0ee8f"
+source = "git+https://github.com/terminusdb-org/tdb-succinct?tag=v0.1.4#470362ba7b00f0a7f8fb0cc829a3f092c1c195dc"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -6186,13 +6186,12 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "terminus-store"
-version = "0.21.8"
-source = "git+https://github.com/terminusdb-org/terminusdb-store?branch=main#626767cffe09cca80195b83b830e8893493721a0"
+version = "0.21.10"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -7294,7 +7293,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

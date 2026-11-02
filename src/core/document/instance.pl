@@ -1715,6 +1715,26 @@ refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#NCName',S^^_,Reason) :-
                      'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:NCName'}
                  }
     ).
+refute_basetype_elt_('http://www.w3.org/2001/XMLSchema#QName',S^^_,Reason) :-
+    (   \+  (split_clark(S,_Ns,Local), is_ncname(Local)),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xsd:QName',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xsd:QName'}
+                 }
+    ).
+refute_basetype_elt_('https://xbrl.org/2021SQName',S^^_,Reason) :-
+    (   \+  (split_clark(S,_Ns,Local), non_whitespace(Local)),
+        term_to_atom(S,A)
+    ->  Reason = json{
+                     '@type' : 'vio:ViolationWithDatatypeObject',
+                     'vio:message' : 'Not a well formed xbrl:SQName',
+                     'vio:literal' : json{ '@type' : 'xsd:anySimpleType', '@value' : A},
+                     'vio:base_type' : json{ '@type' : 'xsd:string', '@value' : 'xbrl:SQName'}
+                 }
+    ).
 refute_basetype_elt_('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral',T,Reason) :-
     (   \+ (atom(T) ; string(T)),
         term_to_atom(T,A)
