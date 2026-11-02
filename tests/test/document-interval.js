@@ -57,6 +57,21 @@ describe('document-interval', function () {
     })
   })
 
+  describe('bare date roundtrip (as-of instant)', function () {
+    it('inserts a single date and reads it back as a single date', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'as-of',
+        interval: '2025-04-01',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/as-of', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-04-01')
+    })
+  })
+
   describe('start+duration roundtrip', function () {
     it('inserts and reads back start+duration interval', async function () {
       const doc = {
