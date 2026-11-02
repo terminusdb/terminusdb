@@ -14,7 +14,7 @@ rollup_metadata_experimental = ["terminus-store/rollup_metadata_experimental"]
 swipl = {version="0.3.16", features=["serde"]}
 #terminus-store = {version="0.21.5", features=[]}
 #terminus-store = {path="../../../../terminusdb-store"}
-terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store", tag="v0.21.11"}
+terminus-store = "0.21.12"
 sha-1 = "0.9.1"
 hex = "0.4.2"
 encoding_rs = "0.8.24"
@@ -25,4 +25,4 @@ rug = {version="1.16", default-features=false, features=["integer","rational"]}
 base64 = "0.13"
 
 terminusdb-grpc-labelstore-client = { git="https://github.com/terminusdb-labs/terminusdb-grpc-labelstore", rev="cb8cf29" }
-tdb-succinct = "0.1.4"
+tdb-succinct = "0.1.6"

@@ -10,10 +10,7 @@ resolver = "2"
 debug = 1
 
 [patch.crates-io]
-#tdb-succinct = {path="../../../tdb-succinct"}
-tdb-succinct = {git="https://github.com/terminusdb-org/tdb-succinct", tag="v0.1.5"}
-#terminus-store = {path="../../../terminusdb-store"}
-terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store", tag="v0.21.11"}
+swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 #swipl = {path="../../../swipl-rs/swipl"}
 
