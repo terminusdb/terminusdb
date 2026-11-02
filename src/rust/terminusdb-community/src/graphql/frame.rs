@@ -605,12 +605,15 @@ impl BaseOrDerived<ShortName> {
 
 pub fn is_base_type(s: &str) -> bool {
     // TODO this is not good enough
-    s.starts_with("xsd:") || s.starts_with("sys:") || s.starts_with("xdd:")
+    s.starts_with("xsd:") || s.starts_with("sys:") || s.starts_with("xdd:") || s.starts_with("xbrl:")
 }
 
 pub fn base_or_derived(c: String) -> BaseOrDerived<ShortName> {
     if is_base_type(&c) {
-        BaseOrDerived::Base(c[4..].to_string())
+        // strip the namespace prefix ("xbrl:" is five chars — a fixed [4..]
+        // slice would keep the colon)
+        let local = c.split(':').nth(1).unwrap();
+        BaseOrDerived::Base(local.to_string())
     } else {
         BaseOrDerived::Derived(ShortName(c))
     }
