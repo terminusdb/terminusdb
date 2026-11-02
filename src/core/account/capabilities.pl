@@ -21,7 +21,8 @@
               check_descriptor_auth/4,
               is_super_user/1,
               is_super_user/2,
-              resolve_descriptor_auth/6
+              resolve_descriptor_auth/6,
+              resolve_descriptor_action_auth/5
           ]).
 
 /** <module> Capabilities
@@ -273,15 +274,17 @@ assert_write_access(Context) :-
             },
             repository_name : _Repo
         },
-        branch_name : _Branch_Name
+        branch_name : Branch_Name
     }:< Context.default_collection,
     !,
     Auth = (Context.authorization),
     DB = (Context.system),
-    WG = (Context.write_graph),
-    write_type_access(WG.type,Access),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(DB, Auth, Access, Scope_Iri).
+    (   Branch_Name = "logic"
+    ->  assert_auth_action_scope(DB, Auth, '@schema':'Action/woql_logic_write', Scope_Iri)
+    ;   WG = (Context.write_graph),
+        write_type_access(WG.type,Access),
+        assert_auth_action_scope(DB, Auth, Access, Scope_Iri)).
 assert_write_access(Context) :-
     system_descriptor{} :< Context.default_collection,
     !,
@@ -327,12 +330,14 @@ assert_write_access(System, Auth, Collection, Filter) :-
             },
             repository_name : _Repo
         },
-        branch_name : _Branch_Name
+        branch_name : Branch_Name
     }:< Collection,
     !,
-    write_type_access(Filter.type,Access),
     organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
-    assert_auth_action_scope(System, Auth, Access, Scope_Iri).
+    (   Branch_Name = "logic"
+    ->  assert_auth_action_scope(System, Auth, '@schema':'Action/woql_logic_write', Scope_Iri)
+    ;   write_type_access(Filter.type,Access),
+        assert_auth_action_scope(System, Auth, Access, Scope_Iri)).
 assert_write_access(System, Auth, Collection, _Filter) :-
     system_descriptor{} :< Collection,
     !,
@@ -418,17 +423,19 @@ assert_read_access(Context) :-
             },
             repository_name : _Repo
         },
-        branch_name : _Branch_Name
+        branch_name : Branch_Name
     } :< Context.default_collection,
     !,
     Auth = (Context.authorization),
     DB = (Context.system),
-    Filter = (Context.filter),
-    filter_types(Filter,Types),
     organization_database_name_uri(DB, Organization_Name, Database_Name, Scope_Iri),
-    forall(member(Type,Types),
-           (   read_type_access(Type,Access),
-               assert_auth_action_scope(DB, Auth, Access, Scope_Iri))).
+    (   Branch_Name = "logic"
+    ->  assert_auth_action_scope(DB, Auth, '@schema':'Action/woql_logic_read', Scope_Iri)
+    ;   Filter = (Context.filter),
+        filter_types(Filter,Types),
+        forall(member(Type,Types),
+               (   read_type_access(Type,Access),
+                   assert_auth_action_scope(DB, Auth, Access, Scope_Iri)))).
 assert_read_access(Context) :-
     commit_descriptor{
         repository_descriptor:
@@ -489,14 +496,16 @@ assert_read_access(System, Auth, Collection, Filter) :-
             },
             repository_name : _Repo
         },
-        branch_name : _Branch_Name
+        branch_name : Branch_Name
     } :< Collection,
     !,
-    filter_types(Filter,Types),
     organization_database_name_uri(System, Organization_Name, Database_Name, Scope_Iri),
-    forall(member(Type,Types),
-           (   read_type_access(Type,Access),
-               assert_auth_action_scope(System, Auth, Access, Scope_Iri))).
+    (   Branch_Name = "logic"
+    ->  assert_auth_action_scope(System, Auth, '@schema':'Action/woql_logic_read', Scope_Iri)
+    ;   filter_types(Filter,Types),
+        forall(member(Type,Types),
+               (   read_type_access(Type,Access),
+                   assert_auth_action_scope(System, Auth, Access, Scope_Iri)))).
 assert_read_access(System, Auth, Collection, Filter) :-
     commit_descriptor{
         repository_descriptor:
@@ -677,13 +686,57 @@ document_auth_action_type_(branch_descriptor, schema, write, '@schema':'Action/s
 document_auth_action_type_(commit_descriptor, instance, read, '@schema':'Action/instance_read_access').
 document_auth_action_type_(commit_descriptor, schema, read, '@schema':'Action/schema_read_access').
 
+/**
+ * logic_branch_descriptor(+Descriptor) is semidet.
+ *
+ * The reserved `logic` branch holds stored WOQL for executable data
+ * products. It is gated by woql_logic_read / woql_logic_write instead
+ * of the normal instance/schema read/write actions — read and write
+ * on the logic branch are prevented by default even for users who can
+ * read and write the product's data.
+ */
+logic_branch_descriptor(Descriptor) :-
+    branch_descriptor{branch_name : "logic"} :< Descriptor.
+
+/**
+ * descriptor_access_action(+Descriptor, +Graph_Type, +ReadWrite,
+ *                          -Action) is semidet.
+ *
+ * The action required for Graph_Type/ReadWrite access to Descriptor,
+ * including the logic-branch carve-out.
+ */
+descriptor_access_action(Descriptor, _Graph_Type, ReadWrite, Action) :-
+    logic_branch_descriptor(Descriptor),
+    !,
+    (   ReadWrite = read
+    ->  Action = '@schema':'Action/woql_logic_read'
+    ;   Action = '@schema':'Action/woql_logic_write').
+descriptor_access_action(Descriptor, Graph_Type, ReadWrite, Action) :-
+    Descriptor_Type{} :< Descriptor,
+    document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action).
+
 resolve_descriptor_auth(ReadWrite, SystemDB, Auth, Path, Graph_Type, Descriptor) :-
     do_or_die(
         resolve_absolute_string_descriptor(Path, Descriptor),
         error(invalid_path(Path), _)),
-    Descriptor_Type{} :< Descriptor,
-    do_or_die(document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action),
+    do_or_die(descriptor_access_action(Descriptor, Graph_Type, ReadWrite, Action),
               error(document_access_impossible(Descriptor, Graph_Type, ReadWrite), _)),
+    check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
+
+/**
+ * resolve_descriptor_action_auth(+Action, +SystemDB, +Auth, +Path,
+ *                                -Descriptor) is det.
+ *
+ * Resolve Path to a descriptor and assert that Auth holds Action on the
+ * descriptor's scope. Unlike resolve_descriptor_auth/6 the action is
+ * supplied directly rather than derived from graph type and
+ * read/write — for endpoints gated on capability actions outside the
+ * read/write matrix (search, search_snippets, reindex_write).
+ */
+resolve_descriptor_action_auth(Action, SystemDB, Auth, Path, Descriptor) :-
+    do_or_die(
+        resolve_absolute_string_descriptor(Path, Descriptor),
+        error(invalid_path(Path), _)),
     check_descriptor_auth(SystemDB, Descriptor, Action, Auth).
 
 
@@ -951,5 +1004,154 @@ test(jwt_scope_org_admin_subsumes_all_databases, [
     open_descriptor(system_descriptor{}, SystemDB),
     organization_database_name_uri(SystemDB, "Gavin", "test1", DB_Uri),
     auth_action_scope(SystemDB, jwt_scopes([scope_org("Gavin", admin)]), '@schema':'Action/commit_write_access', DB_Uri).
+
+% logic branch carve-out tests
+
+test(logic_branch_descriptor_detects_logic, []) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/logic", Desc),
+    logic_branch_descriptor(Desc).
+
+test(logic_branch_descriptor_ignores_other_branches, []) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    \+ logic_branch_descriptor(Desc).
+
+test(descriptor_access_action_logic_branch_read, []) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/logic", Desc),
+    descriptor_access_action(Desc, instance, read, '@schema':'Action/woql_logic_read'),
+    descriptor_access_action(Desc, schema, read, '@schema':'Action/woql_logic_read').
+
+test(descriptor_access_action_logic_branch_write, []) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/logic", Desc),
+    descriptor_access_action(Desc, instance, write, '@schema':'Action/woql_logic_write'),
+    descriptor_access_action(Desc, schema, write, '@schema':'Action/woql_logic_write').
+
+test(descriptor_access_action_normal_branch_unchanged, []) :-
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    descriptor_access_action(Desc, instance, read, '@schema':'Action/instance_read_access'),
+    descriptor_access_action(Desc, schema, write, '@schema':'Action/schema_write_access').
+
+add_test_role(Actions, Role_Id) :-
+    create_context(system_descriptor{},
+                   commit_info{author:"test", message:"test"},
+                   Context),
+    with_transaction(
+        Context,
+        insert_document(Context,
+                        json{'@type': "Role",
+                             name: "test role",
+                             action: Actions},
+                        Role_Id),
+        _).
+
+% Grant Username a capability carrying Role_Id on Org/DB, and return the
+% user's auth URI — needed for assert_* access checks, which do not
+% accept jwt_scopes(...) auth.
+add_test_capability(SystemDB, Username, Role_Id, Org, DB, Auth) :-
+    organization_database_name_uri(SystemDB, Org, DB, Scope_Uri),
+    ask(SystemDB,
+        (   t(Auth, name, Username^^xsd:string),
+            t(Auth, rdf:type, '@schema':'User'))),
+    create_context(system_descriptor{},
+                   commit_info{author:"test", message:"test"},
+                   Context),
+    with_transaction(
+        Context,
+        (   insert_document(Context,
+                            json{'@type': "Capability",
+                                 scope: Scope_Uri,
+                                 role: [Role_Id]},
+                            Cap_Id),
+            ask(Context, insert(Auth, capability, Cap_Id))),
+        _).
+
+test(logic_branch_read_denied_for_instance_read_role, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                add_user("Bob", some('password'), _),
+                create_db_without_schema("Gavin", "test1"),
+                add_test_role(["instance_read_access"], Role_Id))),
+         cleanup(teardown_temp_store(State)),
+         throws(error(access_not_authorised(_, '@schema':'Action/woql_logic_read', _), _))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    add_test_capability(SystemDB, "Bob", Role_Id, "Gavin", "test1", Auth),
+    resolve_absolute_string_descriptor("Gavin/test1/local/branch/logic", Desc),
+    assert_read_access(SystemDB, Auth, Desc, type_filter{types:[instance]}).
+
+test(logic_branch_read_allowed_with_woql_logic_read, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                add_user("Bob", some('password'), _),
+                create_db_without_schema("Gavin", "test1"),
+                add_test_role(["woql_logic_read"], Role_Id))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    add_test_capability(SystemDB, "Bob", Role_Id, "Gavin", "test1", Auth),
+    resolve_absolute_string_descriptor("Gavin/test1/local/branch/logic", Desc),
+    assert_read_access(SystemDB, Auth, Desc, type_filter{types:[instance]}).
+
+test(logic_branch_write_denied_for_instance_write_role, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                add_user("Bob", some('password'), _),
+                create_db_without_schema("Gavin", "test1"),
+                add_test_role(["instance_write_access"], Role_Id))),
+         cleanup(teardown_temp_store(State)),
+         throws(error(access_not_authorised(_, '@schema':'Action/woql_logic_write', _), _))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    add_test_capability(SystemDB, "Bob", Role_Id, "Gavin", "test1", Auth),
+    resolve_absolute_string_descriptor("Gavin/test1/local/branch/logic", Desc),
+    assert_write_access(SystemDB, Auth, Desc, filter{type:instance}).
+
+test(logic_branch_write_allowed_with_woql_logic_write, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                add_user("Bob", some('password'), _),
+                create_db_without_schema("Gavin", "test1"),
+                add_test_role(["woql_logic_write"], Role_Id))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    add_test_capability(SystemDB, "Bob", Role_Id, "Gavin", "test1", Auth),
+    resolve_absolute_string_descriptor("Gavin/test1/local/branch/logic", Desc),
+    assert_write_access(SystemDB, Auth, Desc, filter{type:instance}).
+
+test(logic_branch_resolve_descriptor_auth_denied, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                add_user("Bob", some('password'), _),
+                create_db_without_schema("Gavin", "test1"),
+                add_test_role(["instance_read_access"], Role_Id))),
+         cleanup(teardown_temp_store(State)),
+         throws(error(access_not_authorised(_, '@schema':'Action/woql_logic_read', _), _))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    add_test_capability(SystemDB, "Bob", Role_Id, "Gavin", "test1", Auth),
+    resolve_descriptor_auth(read, SystemDB, Auth,
+                            "Gavin/test1/local/branch/logic", instance, _Desc).
+
+test(consumer_role_has_search_actions, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    role_id_allows_action(SystemDB, consumer, '@schema':'Action/search'),
+    role_id_allows_action(SystemDB, consumer, '@schema':'Action/search_snippets').
+
+test(executor_role_has_exec_and_search_only, [
+         setup((setup_temp_store(State),
+                add_user("Gavin", some('password'), _),
+                create_db_without_schema("Gavin", "test1"))),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    role_id_allows_action(SystemDB, executor, '@schema':'Action/woql_logic_exec'),
+    role_id_allows_action(SystemDB, executor, '@schema':'Action/search'),
+    \+ role_id_allows_action(SystemDB, executor, '@schema':'Action/instance_read_access'),
+    \+ role_id_allows_action(SystemDB, executor, '@schema':'Action/search_snippets').
 
 :- end_tests(capabilities).
