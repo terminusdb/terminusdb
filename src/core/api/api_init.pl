@@ -610,9 +610,9 @@ test(update_system_roles_leaves_customised_role, [
     update_system_roles,
     create_context(system_descriptor{},
                    commit_info{author:"test", message:"test"},
-                   Context),
-    ask(Context, get_document('Role/consumer', Consumer)),
-    role_actions(Consumer, ["fetch"]).
+                   Check_Context),
+    ask(Check_Context, get_document('Role/consumer', Stored)),
+    role_actions(Stored, ["fetch"]).
 
 role_actions(Role, Actions) :-
     (   get_dict(action, Role, A0)
