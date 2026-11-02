@@ -50,13 +50,13 @@ describe('GraphQL dateTimeInterval', function () {
     const cache = new InMemoryCache({ addTypename: false })
     client = new ApolloClient({ cache, link: ComposedLink })
 
-    await db.create(agent)
-    await document.insert(agent, { schema })
-    await document.insert(agent, { instance: events })
+    await db.create(agent) // NOSONAR tests/lib helpers return thenables, not Promises
+    await document.insert(agent, { schema }) // NOSONAR
+    await document.insert(agent, { instance: events }) // NOSONAR
   })
 
   after(async function () {
-    await db.delete(agent)
+    await db.delete(agent) // NOSONAR
   })
 
   it('queries all events via GraphQL', async function () {
