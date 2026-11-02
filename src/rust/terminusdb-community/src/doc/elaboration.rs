@@ -389,7 +389,7 @@ fn elaborate_simple_document<L: Layer + Clone>(
         let range_type = properties
             .get(&expanded_key)
             .ok_or_else(|| ElaborationError::Ineligible(format!("unknown property {}", key)))?;
-        let converted = convert_value(value, range_type)?;
+        let converted = convert_value(value, range_type, doc_context.prefix_map())?;
         let wrapped = {
             let mut m = Map::new();
             m.insert("@type".to_string(), Value::String(range_type.clone()));
@@ -415,8 +415,26 @@ fn elaborate_simple_document<L: Layer + Clone>(
     Ok((submitted_id, Value::Object(elaborated)))
 }
 
-fn convert_value(value: &Value, range_type: &str) -> Result<Value, ElaborationError> {
+fn convert_value(
+    value: &Value,
+    range_type: &str,
+    prefix_map: &HashMap<String, String>,
+) -> Result<Value, ElaborationError> {
     match range_type {
+        "http://www.w3.org/2001/XMLSchema#QName"
+        | "https://xbrl.org/2021SQName" => match value {
+            Value::String(s) => crate::expanded_name::lexical_to_clark(
+                s,
+                prefix_map,
+                range_type == "http://www.w3.org/2001/XMLSchema#QName",
+            )
+            .map(Value::String)
+            .map_err(ElaborationError::ValueError),
+            _ => Err(ElaborationError::ValueError(format!(
+                "expected string for {}: {}",
+                range_type, value
+            ))),
+        },
         "http://www.w3.org/2001/XMLSchema#string" => match value {
             Value::String(s) => Ok(Value::String(s.clone())),
             Value::Number(n) => Ok(Value::String(n.to_string())),

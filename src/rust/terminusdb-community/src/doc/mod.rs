@@ -1,6 +1,6 @@
 mod delete;
 mod elaboration;
-mod prefix;
+pub(crate) mod prefix;
 mod verify;
 
 use std::cmp::Ordering;
@@ -25,6 +25,7 @@ use super::value::*;
 use lazy_static::lazy_static;
 use rayon::prelude::*;
 use swipl::prelude::*;
+use tdb_succinct::Datatype;
 
 pub struct DocumentContext<L: Layer + Clone> {
     schema: Option<L>,
@@ -32,6 +33,7 @@ pub struct DocumentContext<L: Layer + Clone> {
     prefixes: Lazy<PrefixContracter>,
     default_prefixes: Lazy<PrefixContracter>,
     prefix_map: Lazy<HashMap<String, String>>,
+    reverse_prefix_map: Lazy<HashMap<String, String>>,
     types: HashSet<u64>,
     subtypes: HashMap<String, HashSet<u64>>,
     document_types: HashSet<u64>,
@@ -193,6 +195,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             prefixes: Lazy::new(),
             default_prefixes: Lazy::new(),
             prefix_map: Lazy::new(),
+            reverse_prefix_map: Lazy::new(),
             types,
             subtypes,
             document_types,
@@ -219,6 +222,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             default_prefixes: Lazy::new(),
             prefixes: Lazy::new(),
             prefix_map: Lazy::new(),
+            reverse_prefix_map: Lazy::new(),
             types: HashSet::with_capacity(0),
             subtypes: HashMap::with_capacity(0),
             document_types: HashSet::with_capacity(0),
@@ -260,6 +264,14 @@ impl<L: Layer + Clone> DocumentContext<L> {
     fn prefix_map(&self) -> &HashMap<String, String> {
         self.prefix_map
             .get_or_create(|| prefix::build_prefix_map(self))
+    }
+
+    /// URI→prefix map for exact-match Clark `{ns}local` → `prefix:local`
+    /// rendering of `xsd:QName` / `xbrl:SQName` literals.  Built once per
+    /// document context from the same prefix map as expansion.
+    fn reverse_prefix_map(&self) -> &HashMap<String, String> {
+        self.reverse_prefix_map
+            .get_or_create(|| crate::expanded_name::reverse_prefix_map(self.prefix_map()))
     }
 
     pub fn get_document(
@@ -396,7 +408,15 @@ impl<L: Layer + Clone> DocumentContext<L> {
         let id_name = self.layer().id_object(id).unwrap();
         if let Some(v) = id_name.value_ref() {
             // this is not actually a document but a value
-            return Err(value_to_json(v));
+            return Err(match v.datatype() {
+                Datatype::QName | Datatype::SQName => Value::String(
+                    crate::expanded_name::clark_to_lexical(
+                        &value_to_string(v),
+                        self.reverse_prefix_map(),
+                    ),
+                ),
+                _ => value_to_json(v),
+            });
         }
 
         // we know id_name is properly a node
