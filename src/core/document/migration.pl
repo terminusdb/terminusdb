@@ -2129,13 +2129,14 @@ interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Ca
 interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
-            (   default_prefixes(Prefixes),
-                prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex0),
+            (   % DB prefixes override defaults — (S)QName casts split on
+                % the namespaces this database actually binds.
+                database_and_default_prefixes(Before, DB_Prefixes),
+                prefix_expand_schema(Simple_Type, DB_Prefixes, Simple_Type_Ex0),
                 (   sub_atom(Simple_Type_Ex0, _, _, _, ':')
                 ->  Simple_Type_Ex = Simple_Type_Ex0
                 ;   % A bare name refers into the schema namespace —
                     % default_prefixes cannot see it, the database can.
-                    database_prefixes(Before, DB_Prefixes),
                     prefix_expand_schema(Simple_Type_Ex0, DB_Prefixes, Simple_Type_Ex)
                 ),
                 ask(Before,
@@ -2146,7 +2147,7 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                 once(
                     (   (   Value = V^^Old_Type
                         ->  global_prefix_expand(Old_Type, Old_Type_Ex),
-                            (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast),
+                            (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [prefixes(DB_Prefixes)], Cast),
                                       error(E,_),
                                       (   (   E = casting_error(_,_)
                                           ;   E = unknown_type_casting_error(_,_) )

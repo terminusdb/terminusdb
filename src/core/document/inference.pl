@@ -785,11 +785,11 @@ Type = 'http://terminusdb.com/schema/sys#JSON',
     no_captures(Captures),
     Annotated = success(json{'@type' : Type,
                              '@value' : Value }).
-check_value_type_(Schema,_Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
     catch(
-        (   json_value_cast_type(Value,Type,_),
+        (   json_value_cast_type(Value,Type,[prefixes(Prefixes)],_),
             Annotated = success(json{'@type' : Type,
                                      '@value' : Value })
         ),
@@ -797,9 +797,13 @@ is_base_type(Type) =>
         (   schemaless_shape_check_disabled(Schema)
         ->  Annotated = success(json{'@type': 'http://www.w3.org/2001/XMLSchema#string',
                                     '@value': Val })
-        ;   Annotated = witness(json{'@type':could_not_interpret_as_type,
+        ;   uri_to_prefixed(Type, Prefixes, Type_Prefixed),
+            (   Type_Prefixed = P:S
+            ->  format(string(Type_Str), '~w:~w', [P, S])
+            ;   Type_Str = Type),
+            Annotated = witness(json{'@type':could_not_interpret_as_type,
                                       'value': Val,
-                                      'type' : Type })
+                                      'type' : Type_Str })
         )
     ).
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
