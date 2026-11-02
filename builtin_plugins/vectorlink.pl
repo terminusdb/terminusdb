@@ -52,6 +52,7 @@ Activates when TERMINUSDB_VECTORLINK_ENDPOINT is set. Provides:
 :- use_module(core(api/api_indexer),
              [commit_ops_begin/0, commit_op/8,
               embedding_refresh_purge_types/6]).
+:- use_module(core(api/api_access_control), [api_add_role/4]).
 :- use_module(core(util)).
 :- use_module(library(base64)).
 :- use_module(library(json)).
@@ -811,7 +812,8 @@ io_index_branch(System_DB, Auth, Path) :-
     do_or_die(
         vectorlink_endpoint(_Endpoint),
         error(vectorlink_endpoint_not_configured(io_index_branch), _)),
-    plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+    plugin_api:resolve_descriptor_action_auth(
+        '@schema':'Action/reindex_write', System_DB, Auth, Path, Descriptor),
     do_or_die(
         (   branch_descriptor{branch_name: Branch_Name} :< Descriptor
         ->  true
@@ -1682,7 +1684,8 @@ search_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(search_handler), _)),
             do_or_die(
@@ -1699,6 +1702,7 @@ search_handler(post, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:search_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             catch(
                 (   vectorlink:io_search_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
@@ -1725,7 +1729,8 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
         suggest,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(suggest_handler), _)),
             do_or_die(
@@ -1741,6 +1746,7 @@ suggest_handler(get, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:search_extra_params(Search, _{}, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             catch(
                 (   vectorlink:io_suggest_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                       Extra_Params, Response_Body, Data_Version_Header),
@@ -1768,7 +1774,8 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(similar_handler), _)),
             do_or_die(
@@ -1785,6 +1792,7 @@ similar_handler(post, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:similar_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             (   memberchk(text=Text, Extra_Params),
                 vectorlink:search_scalar_present(Text)
             ->  Post_Body = _{text: Text},
@@ -1831,7 +1839,8 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(duplicates_handler), _)),
             do_or_die(
@@ -1847,6 +1856,7 @@ duplicates_handler(get, Path, Request, System_DB, Auth) :-
             vectorlink:compress_flag(Search, Compress),
             vectorlink:maybe_prefixes(Compress, Descriptor, Prefixes),
             vectorlink:duplicates_extra_params(Search, Body, Prefixes, Extra_Params),
+            vectorlink:assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params),
             catch(
                 (   vectorlink:io_duplicates_forward(Endpoint, Domain, Search_Ref, Ancestors,
                                           Extra_Params, Response_Body, Data_Version_Header),
@@ -1872,7 +1882,8 @@ resolve_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(resolve_handler), _)),
             do_or_die(
@@ -2016,6 +2027,27 @@ search_request_body(Request, Body) :-
 search_scalar_present(V) :- string(V), !, V \== "".
 search_scalar_present(V) :- number(V), !.
 search_scalar_present(V) :- atom(V), !, V \== '', V \== null.
+
+%% assert_snippets_authorized(+System_DB, +Auth, +Descriptor,
+%%                            +Extra_Params) is det.
+%
+%  Snippets disclose document contents — a separate disclosure tier
+%  from search admission. A request carrying a snippet parameter that
+%  asks for content (any value except false/0/empty) requires the
+%  search_snippets action on the descriptor's scope.
+assert_snippets_authorized(System_DB, Auth, Descriptor, Extra_Params) :-
+    (   member(snippet=Value, Extra_Params),
+        snippet_value_requests_content(Value)
+    ->  plugin_api:check_descriptor_auth(
+            System_DB, Descriptor, '@schema':'Action/search_snippets', Auth)
+    ;   true).
+
+snippet_value_requests_content(Value) :-
+    search_scalar_present(Value),
+    Value \== false,
+    Value \== 'false',
+    Value \== "false",
+    Value \== 0.
 
 merged_scalar_param(Key, Body, Search, Value) :-
     (   get_dict(Key, Body, Body_Value),
@@ -2297,7 +2329,8 @@ index_handler(get, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+        (   plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(index_handler), _)),
             do_or_die(
@@ -2355,7 +2388,8 @@ index_handler(post, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, _Descriptor),
+        (   plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/reindex_write', System_DB, Auth, Path, _Descriptor),
             catch(
                 (   vectorlink:io_index_branch(System_DB, Auth, Path),
                     plugin_api:write_cors_headers(Request),
@@ -2383,7 +2417,8 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+        (   plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/reindex_write', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(index_handler), _)),
             vectorlink:descriptor_domain(Descriptor, Domain),
@@ -2648,7 +2683,8 @@ embeddings_handler(get, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
@@ -2694,7 +2730,8 @@ embeddings_handler(post, Path, Request, System_DB, Auth) :-
         search,
         Request,
         (
-            plugin_api:resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+            plugin_api:resolve_descriptor_action_auth(
+                '@schema':'Action/search', System_DB, Auth, Path, Descriptor),
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(embeddings_handler), _)),
             do_or_die(
@@ -4009,7 +4046,7 @@ test("authz parity: denied caller cannot search (resolve_descriptor_auth throws)
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     user_key_user_id(System_DB, 'UnprivUser', 'pass123', Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/secretdb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/secretdb", _Descriptor).
 
 test("authz parity: authorised caller passes resolve_descriptor_auth",
      [ setup((setup_temp_store(State),
@@ -4019,7 +4056,7 @@ test("authz parity: authorised caller passes resolve_descriptor_auth",
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     super_user_authority(Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/opendb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/opendb", _Descriptor).
 
 test("authz parity: denied caller search never reaches engine stub",
      [ setup((setup_temp_store(State),
@@ -4037,8 +4074,8 @@ test("authz parity: denied caller search never reaches engine stub",
     once(( open_descriptor(system_descriptor{}, System_DB),
            user_key_user_id(System_DB, 'DeniedUser', 'pass456', Auth),
            catch(
-               (   resolve_descriptor_auth(read, System_DB, Auth,
-                                           "admin/guardeddb", instance, _Desc),
+               (   resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                           "admin/guardeddb", _Desc),
                    vectorlink:vectorlink_endpoint(Endpoint),
                    io_search_forward(Endpoint, "admin/guardeddb", commit("fake_commit"),
                                      [], [], _Response, _DV)
@@ -4058,7 +4095,7 @@ test("authz parity: denied caller cannot get statistics (resolve_descriptor_auth
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     user_key_user_id(System_DB, 'StatsBlockedUser', 'pass789', Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/statsdb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/statsdb", _Descriptor).
 
 test("authz parity: denied caller statistics never reaches engine stub",
      [ setup((setup_temp_store(State),
@@ -4076,8 +4113,8 @@ test("authz parity: denied caller statistics never reaches engine stub",
     once(( open_descriptor(system_descriptor{}, System_DB),
            user_key_user_id(System_DB, 'StatsDeniedUser', 'pass012', Auth),
            catch(
-               (   resolve_descriptor_auth(read, System_DB, Auth,
-                                           "admin/guardedstatsdb", instance, _Desc),
+               (   resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                           "admin/guardedstatsdb", _Desc),
                    vectorlink:vectorlink_endpoint(Endpoint),
                    io_statistics_forward(Endpoint, "admin/guardedstatsdb", commit("fake_commit"),
                                          [], _Response, _DV)
@@ -4115,7 +4152,7 @@ test("authz parity: denied caller cannot resolve (resolve_descriptor_auth throws
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     user_key_user_id(System_DB, 'ResolveDeniedUser', 'pass321', Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/resolvedb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/resolvedb", _Descriptor).
 
 test("authz parity: authorised caller passes resolve for resolve endpoint",
      [ setup((setup_temp_store(State),
@@ -4125,7 +4162,7 @@ test("authz parity: authorised caller passes resolve for resolve endpoint",
      ]) :-
     open_descriptor(system_descriptor{}, System_DB),
     super_user_authority(Auth),
-    resolve_descriptor_auth(read, System_DB, Auth, "admin/resolveopendb", instance, _Descriptor).
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth, "admin/resolveopendb", _Descriptor).
 
 test("authz parity: denied caller resolve never reaches engine stub",
      [ setup((setup_temp_store(State),
@@ -4143,8 +4180,8 @@ test("authz parity: denied caller resolve never reaches engine stub",
     once(( open_descriptor(system_descriptor{}, System_DB),
            user_key_user_id(System_DB, 'ResolveBlockedUser', 'pass654', Auth),
            catch(
-               (   resolve_descriptor_auth(read, System_DB, Auth,
-                                           "admin/guardedresolvedb", instance, _Desc),
+               (   resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                           "admin/guardedresolvedb", _Desc),
                    vectorlink:vectorlink_endpoint(Endpoint),
                    io_resolve_forward(Endpoint, "admin/guardedresolvedb", commit("fake_commit"),
                                       [], _{}, _Response, _DV)
@@ -4163,6 +4200,36 @@ test("commit_timestamp throws search_served_commit_not_found for non-existent co
     resolve_absolute_string_descriptor("admin/timestampdb", Descriptor),
     get_dict(repository_descriptor, Descriptor, Repo_Desc),
     vectorlink:commit_timestamp(Repo_Desc, "nonexistent_commit_id", _Timestamp).
+
+%% add_searcher_role is det.
+%
+%  Insert a Role/searcher document granting only the search action —
+%  a caller who may search but not read.
+add_searcher_role :-
+    super_user_authority(Auth),
+    api_access_control:api_add_role(
+        _, Auth,
+        json{'@id': "Role/searcher",
+             name: "searcher",
+             action: ["search"]},
+        _).
+
+test("authz parity: search-only caller passes search gate but not document read",
+     [ setup((setup_temp_store(State),
+              create_db_without_schema("admin", "searchonlydb"),
+              add_searcher_role)),
+       cleanup(teardown_temp_store(State))
+     ]) :-
+    open_descriptor(system_descriptor{}, System_DB),
+    Auth = jwt_scopes([scope_db("admin", "searchonlydb", searcher)]),
+    % search gate passes — search != read
+    resolve_descriptor_action_auth('@schema':'Action/search', System_DB, Auth,
+                                   "admin/searchonlydb", _Descriptor),
+    % but direct document read is denied
+    catch(resolve_descriptor_auth(read, System_DB, Auth,
+                                  "admin/searchonlydb", instance, _),
+          error(access_not_authorised(_, _, _), _),
+          true).
 
 :- end_tests(vectorlink_search_fronting).
 
