@@ -1976,5 +1976,40 @@ describe('woql-comparison', function () {
         expect(namesOf(r.body.bindings)).to.deep.equal(names)
       })
     }
+
+    describe('date coercion: bare date is an instant, date/date is a day', function () {
+      // A bare xsd:date coerces to the as-of point [t,t) at local day-start —
+      // the financial-reporting instant — while the explicit date/date pair
+      // keeps whole-local-day semantics (end inclusive → next day start).
+      it('bare date: met_by matches the interval it starts (point, not day)', async function () {
+        const r = await woql.post(agent, trQuery('met_by', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+      })
+
+      it('bare date: after sees the point at day-start (Q2,Q3 — a day would give only Q3)', async function () {
+        const r = await woql.post(agent, trQuery('after', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2', 'ev-2025-Q3'])
+      })
+
+      it('bare date: finished_by matches the interval ending at the point', async function () {
+        const r = await woql.post(agent, trQuery('finished_by', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+      })
+
+      it('date/date: met_by matches nothing (day interval, no start at its end)', async function () {
+        const r = await woql.post(agent, trQuery('met_by', '2025-04-01/2025-04-01'))
+        expect(r.body.bindings).to.have.lengthOf(0)
+      })
+
+      it('date/date: after skips the interval the day sits in', async function () {
+        const r = await woql.post(agent, trQuery('after', '2025-04-01/2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q3'])
+      })
+
+      it('date/date: an interval contains the whole day', async function () {
+        const r = await woql.post(agent, trQuery('contains', '2025-04-01/2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+      })
+    })
   })
 })
