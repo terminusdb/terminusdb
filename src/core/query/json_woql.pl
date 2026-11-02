@@ -1491,7 +1491,13 @@ json_type_to_woql_ast('Typecast',JSON,WOQL,Path) :-
                                        |Path]),
     json_value_to_woql_ast(Var,WVar,[result
                                      |Path]),
-    WOQL = typecast(WVal,WType,WVar).
+    (   get_dict(prefixes, JSON, Prefixes)
+    ->  % Optional prefix map for expanded-name casts: literal dictionary or
+        % a variable bound elsewhere (e.g. via dot to a stored namespaces map).
+        json_value_to_woql_ast(Prefixes,WPrefixes,[prefixes
+                                                 |Path]),
+        WOQL = typecast(WVal,WType,WVar,WPrefixes)
+    ;   WOQL = typecast(WVal,WType,WVar)).
 json_type_to_woql_ast('Not',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

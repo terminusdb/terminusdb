@@ -735,9 +735,9 @@ definition(
 definition(
     typecast{
         name: 'Typecast',
-        fields: [value,type,result],
-        mode:  [+,+,?],
-        types: [value,node,value]
+        fields: [value,type,result,optional(prefixes)],
+        mode:  [+,+,?,+],
+        types: [value,node,value,json]
     }).
 definition(
     typeof{
@@ -1420,6 +1420,9 @@ cost_(day_before(_,_), Cost, _Polarity) =>
     Cost = 1.
 
 cost_(typecast(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(typecast(_,_,_,_), Cost, _Polarity) =>
     Cost = 1.
 
 cost_(typeof(_,_), Cost, _Polarity) =>

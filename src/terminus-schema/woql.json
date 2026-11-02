@@ -2149,6 +2149,7 @@
   "@documentation": {
     "@comment":"Casts one type as another if possible.",
     "@properties": {
+      "prefixes":"An optional prefix map (dictionary value or variable) used to expand or contract expanded names (xsd:QName, xbrl:SQName) during the cast. When absent, the database context prefixes apply.",
       "result":"The resulting value after cast.",
       "type":"The type to which to cast.",
       "value":"The value to cast."
@@ -2159,12 +2160,13 @@
   "@key": {"@type":"Random"},
   "@metadata": {
     "https://terminusdb.com": {
-      "fields": ["value", "type", "result" ],
-      "mode": ["+", "+", "?" ],
-      "types": ["value", "node", "value" ]
+      "fields": ["value", "type", "result", "optional(prefixes)" ],
+      "mode": ["+", "+", "?", "+" ],
+      "types": ["value", "node", "value", "json" ]
     }
   },
   "@type":"Class",
+  "prefixes":{"@class":"Value", "@type":"Optional"},
   "result":"Value",
   "type":"NodeValue",
   "value":"Value"
