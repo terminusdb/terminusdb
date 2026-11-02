@@ -3237,7 +3237,7 @@ write_json_stream_to_builder(Stream, Builder, schema) :-
         )
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
-    database_prefixes(DB,Context),
+    database_and_default_prefixes(DB,Context),
     empty_assoc(Captures_In),
     write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
     do_or_die(ground(Captures_Out),
@@ -3616,13 +3616,12 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     ;   throw(error(type_error(atom_or_string, ID0), _))
     ),
     database_instance(Transaction, [Instance]),
-    database_prefixes(Transaction, Prefixes),
     % (S)QName lexicals resolve against this database's own prefix map —
     % validation already used it, so storage must too.
     database_and_default_prefixes(Transaction, Cast_Prefixes),
     % insert
     forall(
-        json_triple_(Elaborated, Prefixes, t(S,P,O)),
+        json_triple_(Elaborated, Cast_Prefixes, t(S,P,O)),
         (   json_to_database_type(O, [prefixes(Cast_Prefixes)], OC),
             insert(Instance, S, P, OC, _))
     ).
