@@ -1,4 +1,5 @@
 { "@type" : "@context",
+  "@metadata" : { "schema_version" : "v1.0.1" },
   "@documentation" : {
       "@title" : "The System schema",
       "@description" : "This is the System schema in which resides all information regarding capabilities, users, organizations, databases and available actions.",
@@ -92,7 +93,20 @@
                "meta_write_access",
                "commit_read_access",
                "commit_write_access",
-               "manage_capabilities" ] }
+               "manage_capabilities",
+               "search",
+               "search_snippets",
+               "reindex_write",
+               "woql_main_exec",
+               "woql_logic_exec",
+               "woql_logic_read",
+               "woql_logic_write",
+               "woql_other_exec",
+               "woql_search",
+               "woql_instance_read",
+               "woql_instance_write",
+               "woql_schema_read",
+               "woql_schema_write" ] }
 
 { "@id" : "Database",
   "@type" : "Class",
