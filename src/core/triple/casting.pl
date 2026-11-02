@@ -461,6 +461,21 @@ parse_date_time_interval(Val, Cast) :-
     phrase(dateTimeInterval(X, Y), Codes),
     !,
     parse_two_component_interval(X, Y, Cast).
+% A bare finite component is an as-of point [T,T): a date anchors at local
+% day-start (zoneless), a dateTime at itself. Matches parse_lexical_interval.
+parse_date_time_interval(Val, Cast) :-
+    atom_codes(Val, Codes),
+    phrase(dateTimeIntervalComponent(X), Codes),
+    X \= open,
+    X \= unknown,
+    \+ is_duration(X),
+    !,
+    normalise_interval_start(X, NX),
+    (   X = date(_,_,_,_)
+    ->  Tz = none
+    ;   component_tz(X, Tz)),
+    compute_duration_between(NX, NX, Dur),
+    Cast = date_time_interval(NX, NX, Dur, explicit, Tz, Tz).
 
 parse_two_component_interval(X, Y, date_time_interval(NX, NY, X, duration_end, TzY, TzY)) :-
     is_duration(X),
@@ -504,6 +519,15 @@ interval_to_string(Interval, S) :-
     Interval = date_time_interval(_,_,_,Flag,_,_),
     interval_to_string_as(Interval, Flag, S).
 
+% A zoneless zero-length explicit interval is the as-of point spelling —
+% the dict entry cannot distinguish it from a supplied t/t pair, and the
+% value is the same instant either way. Zoned points keep the pair, and
+% so do unknown/unknown ('/').
+interval_to_string_as(date_time_interval(C,C,_Dur,explicit,none,none), explicit, S) :-
+    (   C = date(_,_,_,_)
+    ;   C = date_time(_,_,_,_,_,_,_)),
+    !,
+    interval_point_string(C, none, S).
 interval_to_string_as(date_time_interval(C1,C2,_Dur,_Flag,Tz1,Tz2), explicit, S) :-
     !,
     interval_component_string(C1,Tz1,Val1),
@@ -584,6 +608,15 @@ interval_component_string(unknown, _Tz, "") :- !.
 interval_component_string(date(Y,M,D,_Offset), _Tz, S) :- !, date_time_string(date_time(Y,M,D,0,0,0,0), S).
 interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), _Tz, S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
 interval_component_string(DT, Tz, S) :- interval_date_time_string(DT, Tz, S).
+
+interval_point_string(date(Y,M,D,_Offset), _Tz, S) :-
+    !,
+    format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
+interval_point_string(date_time(Y,M,D,0,0,0,0), none, S) :-
+    !,
+    format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
+interval_point_string(C, Tz, S) :-
+    interval_component_string(C, Tz, S).
 
 %% Extract the supplied zone from a parsed interval component into term tz
 %% form: tz(OffsetSeconds) | none (zone-less local time).

@@ -1,6 +1,7 @@
 use chrono::{NaiveDateTime, NaiveTime};
 use tdb_succinct::tfc::lexical_interval::{
-    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval,
+    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
+    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
 };
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
@@ -25,9 +26,30 @@ fn interval_entry_to_string(tde: &TypedDictEntry) -> String {
             &DateTimeInterval::from_lexical(bytes),
         )),
         _ => decode_lexical_entry(&bytes)
-            .map(|iv| render_lexical_interval(&iv))
+            .map(|iv| render_point_aware(&iv))
             .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).into_owned()),
     }
+}
+
+/// A stored zoneless [t,t) is the as-of point spelling: the entry cannot
+/// distinguish a supplied pair from a bare component, and the value is the
+/// same instant either way. A day-aligned instant is the bare date. Zoned
+/// points keep the pair spelling.
+fn render_point_aware(iv: &LexicalInterval) -> String {
+    if iv.flag == FLAG_EXPLICIT && iv.start == iv.end {
+        if let Component::Finite(f) = &iv.start {
+            if f.tz_class == TZ_ZONELESS {
+                let mut single = iv.clone();
+                single.canonical = f.canonical.clone();
+                let s = render_lexical_interval(&single);
+                return match s.strip_suffix("T00:00:00") {
+                    Some(date) => date.to_string(),
+                    None => s,
+                };
+            }
+        }
+    }
+    render_lexical_interval(iv)
 }
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
