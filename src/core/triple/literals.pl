@@ -884,8 +884,14 @@ lexical_to_clark(Lexical, Prefixes, TypeURI, Clark) :-
 % Output is always a string, matching the xsd:string cast convention.
 clark_to_lexical(Clark, Prefixes, Lexical) :-
     (   split_clark(Clark, Ns, Local)
-    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings
-        findall(P, (get_dict(P, Prefixes, Ns), \+ sub_atom(P, 0, 1, _, '@')), Candidates),
+    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings.
+        % Dict values may be atoms or strings — compare textually like
+        % anyuri_expansion_split does, or a string-valued map misses.
+        findall(P, (get_dict(P, Prefixes, Ns0),
+                    \+ sub_atom(P, 0, 1, _, '@'),
+                    atomic(Ns0),
+                    atom_string(Ns0, Ns)),
+                Candidates),
         (   Candidates = []
         ->  Lexical0 = Clark
         ;   sort(Candidates, [Prefix|_]),

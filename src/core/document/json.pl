@@ -2645,8 +2645,8 @@ type_id_predicate_iri_value_(base_class(C),_,_,Elt,_Schema,Instance,Prefixes,_Op
         )
     ;   Elt = X^^T
     ->  (   C = T
-        ->  value_type_json_type(X,T,V,_)
-        ;   value_type_json_type(X,T,D,T2),
+        ->  value_type_json_type(X,T,V,_,[prefixes(Prefixes)])
+        ;   value_type_json_type(X,T,D,T2,[prefixes(Prefixes)]),
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
