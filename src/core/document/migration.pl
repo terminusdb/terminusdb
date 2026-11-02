@@ -2129,13 +2129,14 @@ interpret_instance_operation_(upcast_class_property(Class, Property, New_Type_Ca
 interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Default_or_Error), Before, After, Count) :-
     (   extract_simple_type(New_Type, Simple_Type)
     ->  count_solutions(
-            (   default_prefixes(Prefixes),
-                prefix_expand_schema(Simple_Type, Prefixes, Simple_Type_Ex0),
+            (   % DB prefixes override defaults — (S)QName casts split on
+                % the namespaces this database actually binds.
+                database_and_default_prefixes(Before, DB_Prefixes),
+                prefix_expand_schema(Simple_Type, DB_Prefixes, Simple_Type_Ex0),
                 (   sub_atom(Simple_Type_Ex0, _, _, _, ':')
                 ->  Simple_Type_Ex = Simple_Type_Ex0
                 ;   % A bare name refers into the schema namespace —
                     % default_prefixes cannot see it, the database can.
-                    database_prefixes(Before, DB_Prefixes),
                     prefix_expand_schema(Simple_Type_Ex0, DB_Prefixes, Simple_Type_Ex)
                 ),
                 ask(Before,
@@ -2146,7 +2147,7 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                 once(
                     (   (   Value = V^^Old_Type
                         ->  global_prefix_expand(Old_Type, Old_Type_Ex),
-                            (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [], Cast),
+                            (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [prefixes(DB_Prefixes)], Cast),
                                       error(E,_),
                                       (   (   E = casting_error(_,_)
                                           ;   E = unknown_type_casting_error(_,_) )
@@ -2167,7 +2168,6 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                             atomic(Value)
                         ->  (   database_context_object(Before, Data_Context),
                                 prefix_expand(Value, Data_Context, Value_Ex),
-                                database_prefixes(Before, DB_Prefixes),
                                 prefix_expand_schema(Class, DB_Prefixes, Class_Ex),
                                 prefix_expand_schema(Property, DB_Prefixes, Property_Ex),
                                 cast_node_value(Before, After, Class_Ex, Property_Ex, Value_Ex, Simple_Type_Ex, Cast)
@@ -4993,23 +4993,23 @@ test(rebase_prefix_rewrites_schema_and_instances,
 
     % Schema side: class, inherits and enum member nodes now live under
     % the new namespace — nothing under the old one remains.
-    ask(Descriptor,
-        t('http://example.com/schema#Child', rdf:type, sys:'Class', schema)),
-    ask(Descriptor,
-        t('http://example.com/schema#Child', sys:inherits, 'http://example.com/schema#Parent', schema)),
-    ask(Descriptor,
-        t(_, rdf:first, 'http://example.com/schema#Colour/red', schema)),
-    ask(Descriptor,
-        t('http://example.com/schema#SubDoc/key/Lexical/v', _, _, schema)),
+    once(ask(Descriptor,
+        t('http://example.com/schema#Child', rdf:type, sys:'Class', schema))),
+    once(ask(Descriptor,
+        t('http://example.com/schema#Child', sys:inherits, 'http://example.com/schema#Parent', schema))),
+    once(ask(Descriptor,
+        t(_, rdf:first, 'http://example.com/schema#Colour/red', schema))),
+    once(ask(Descriptor,
+        t('http://example.com/schema#SubDoc/key/Lexical/v', _, _, schema))),
     % TaggedUnion member predicates and targets, and a class @base
     % minting prefix, follow the namespace too — nothing under the old
     % one remains.
-    ask(Descriptor,
+    once(ask(Descriptor,
         t('http://example.com/schema#Shape', 'http://example.com/schema#sub',
-          'http://example.com/schema#SubDoc', schema)),
-    ask(Descriptor,
+          'http://example.com/schema#SubDoc', schema))),
+    once(ask(Descriptor,
         t('http://example.com/schema#Pinned', sys:base,
-          "http://example.com/schema#pinned/"^^xsd:string, schema)),
+          "http://example.com/schema#pinned/"^^xsd:string, schema))),
     \+ ask(Descriptor,
            t('terminusdb:///schema#Child', _, _, schema)),
     \+ ask(Descriptor,
@@ -5021,18 +5021,18 @@ test(rebase_prefix_rewrites_schema_and_instances,
     % untouched), but every schema-IRI position moved — rdf:type,
     % property predicates, the enum member object and the subdocument's
     % type reference.
-    ask(Descriptor,
-        t('terminusdb:///data/Child/1', rdf:type, 'http://example.com/schema#Child')),
-    ask(Descriptor,
+    once(ask(Descriptor,
+        t('terminusdb:///data/Child/1', rdf:type, 'http://example.com/schema#Child'))),
+    once(ask(Descriptor,
         t('terminusdb:///data/Child/1', 'http://example.com/schema#p',
-          "a"^^xsd:string)),
-    ask(Descriptor,
+          "a"^^xsd:string))),
+    once(ask(Descriptor,
         t('terminusdb:///data/Holder/1', 'http://example.com/schema#shade',
-          'http://example.com/schema#Colour/red')),
-    ask(Descriptor,
-        t('terminusdb:///data/Holder/1', 'http://example.com/schema#sub', Sub_Id)),
-    ask(Descriptor,
-        t(Sub_Id, rdf:type, 'http://example.com/schema#SubDoc')),
+          'http://example.com/schema#Colour/red'))),
+    once(ask(Descriptor,
+        t('terminusdb:///data/Holder/1', 'http://example.com/schema#sub', Sub_Id))),
+    once(ask(Descriptor,
+        t(Sub_Id, rdf:type, 'http://example.com/schema#SubDoc'))),
     sub_atom(Sub_Id, 0, _, _, 'Holder/1/sub/'),
     \+ ask(Descriptor,
            t(_, 'terminusdb:///schema#shade', _)),
@@ -6295,5 +6295,218 @@ test(change_key_fixes_nonconforming_subdoc_id,
     % Data must be intact
     get_dict(name, After_Doc, "dave"),
     get_dict(value, After_Child, "original").
+
+before_cast_qname('
+{ "@base": "terminusdb:///data/",
+  "@schema": "terminusdb:///schema#",
+  "iso4217": "http://www.xbrl.org/2003/iso4217",
+  "@type": "@context"}
+
+{ "@type" : "Class",
+  "@id" : "UR",
+  "@key" : { "@type" : "Random" },
+  "u" : "xsd:anyURI" }
+
+{ "@type" : "Class",
+  "@id" : "DT",
+  "@key" : { "@type" : "Random" },
+  "d" : "xsd:date" }
+
+{ "@type" : "Class",
+  "@id" : "DTC",
+  "@key" : { "@type" : "Random" },
+  "t" : "xsd:dateTime" }
+
+{ "@type" : "Class",
+  "@id" : "IV",
+  "@key" : { "@type" : "Random" },
+  "i" : "xdd:dateTimeInterval" }
+
+').
+
+% An anyURI value decomposes through the database's own prefix map: the
+% longest bound expansion becomes the (S)QName namespace, the rest the
+% localname. The cast writes Clark {ns}local; rendering contracts back to
+% the bound prefix.
+test(cast_anyuri_to_sqname_uses_db_prefixes,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        (   insert_document(C1, _{ '@id' : 'UR/1', u : "http://www.xbrl.org/2003/iso4217EUR" }, _),
+            insert_document(C1, _{ '@id' : 'UR/2', u : "iso4217:CHF" }, _)
+        )),
+
+    Term_Ops = [
+        cast_class_property("UR", "u", "xbrl:SQName", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'UR/1', Doc1),
+    get_dict(u, Doc1, "iso4217:EUR"),
+    get_document(Descriptor, 'UR/2', Doc2),
+    get_dict(u, Doc2, "iso4217:CHF").
+
+% Same decomposition into xsd:QName — requires an NCName localname.
+test(cast_anyuri_to_qname_uses_db_prefixes,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'UR/1', u : "http://www.xbrl.org/2003/iso4217EUR" }, _)),
+
+    Term_Ops = [
+        cast_class_property("UR", "u", "xsd:QName", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'UR/1', Doc),
+    get_dict(u, Doc, "iso4217:EUR").
+
+% A namespace the database does not bind cannot be decomposed — the cast
+% fails rather than guessing a boundary.
+test(cast_anyuri_to_sqname_unbound_namespace_fails,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(bad_cast_in_schema_migration("UR","u",_,"xbrl:SQName"),_)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'UR/1', u : "https://unbound.example/x#foo" }, _)),
+
+    Term_Ops = [
+        cast_class_property("UR", "u", "xbrl:SQName", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []).
+
+% A date folds into the [midnight, next midnight) interval that covers it.
+test(cast_date_to_datetimeinterval,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'DT/1', d : "2020-01-15" }, _)),
+
+    Term_Ops = [
+        cast_class_property("DT", "d", "xdd:dateTimeInterval", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'DT/1', Doc),
+    get_dict(d, Doc, "2020-01-15T00:00:00Z/2020-01-16T00:00:00Z").
+
+% A dateTime becomes the zero-length point interval [T, T).
+test(cast_datetime_to_datetimeinterval,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'DTC/1', t : "2020-01-15T12:30:45Z" }, _)),
+
+    Term_Ops = [
+        cast_class_property("DTC", "t", "xdd:dateTimeInterval", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'DTC/1', Doc),
+    get_dict(t, Doc, "2020-01-15T12:30:45Z/2020-01-15T12:30:45Z").
+
+% Only a zero-length interval names an instant on the way back.
+test(cast_datetimeinterval_point_to_datetime,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'IV/1', i : "2020-01-15T12:30:45Z/2020-01-15T12:30:45Z" }, _)),
+
+    Term_Ops = [
+        cast_class_property("IV", "i", "xsd:dateTime", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []),
+
+    get_document(Descriptor, 'IV/1', Doc),
+    get_dict(i, Doc, "2020-01-15T12:30:45Z").
+
+test(cast_datetimeinterval_nonzero_to_datetime_fails,
+     [setup((setup_temp_store(State),
+             test_document_label_descriptor(database,Descriptor),
+             write_schema(before_cast_qname,Descriptor)
+            )),
+      cleanup(teardown_temp_store(State)),
+      error(bad_cast_in_schema_migration("IV","i",_,"xsd:dateTime"),_)
+     ]) :-
+
+    with_test_transaction(
+        Descriptor,
+        C1,
+        insert_document(C1, _{ '@id' : 'IV/1', i : "2020-01-15T00:00:00Z/2020-01-16T00:00:00Z" }, _)),
+
+    Term_Ops = [
+        cast_class_property("IV", "i", "xsd:dateTime", error)
+    ],
+    migration_list_to_ast_list(Ops, Term_Ops),
+
+    perform_instance_migration(Descriptor, commit_info{ author: "me",
+                                                        message: "cast" },
+                               Ops, _Result, []).
 
 :- end_tests(migration).

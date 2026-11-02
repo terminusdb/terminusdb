@@ -785,11 +785,11 @@ Type = 'http://terminusdb.com/schema/sys#JSON',
     no_captures(Captures),
     Annotated = success(json{'@type' : Type,
                              '@value' : Value }).
-check_value_type_(Schema,_Prefixes,Value,Type,Annotated,Captures),
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
     catch(
-        (   json_value_cast_type(Value,Type,_),
+        (   json_value_cast_type(Value,Type,[prefixes(Prefixes)],_),
             Annotated = success(json{'@type' : Type,
                                      '@value' : Value })
         ),

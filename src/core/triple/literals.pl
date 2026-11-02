@@ -29,6 +29,7 @@
               non_whitespace/1,
               lexical_to_clark/4,
               clark_to_lexical/3,
+              anyuri_to_clark/4,
               uri_eq/3,
               add_duration_to_component/3,
               subtract_duration_from_component/3
@@ -883,8 +884,14 @@ lexical_to_clark(Lexical, Prefixes, TypeURI, Clark) :-
 % Output is always a string, matching the xsd:string cast convention.
 clark_to_lexical(Clark, Prefixes, Lexical) :-
     (   split_clark(Clark, Ns, Local)
-    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings
-        findall(P, (get_dict(P, Prefixes, Ns), \+ sub_atom(P, 0, 1, _, '@')), Candidates),
+    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings.
+        % Dict values may be atoms or strings — compare textually like
+        % anyuri_expansion_split does, or a string-valued map misses.
+        findall(P, (get_dict(P, Prefixes, Ns0),
+                    \+ sub_atom(P, 0, 1, _, '@'),
+                    atomic(Ns0),
+                    atom_string(Ns0, Ns)),
+                Candidates),
         (   Candidates = []
         ->  Lexical0 = Clark
         ;   sort(Candidates, [Prefix|_]),
@@ -896,6 +903,61 @@ clark_to_lexical(Clark, Prefixes, Lexical) :-
     ->  atom_string(Lexical0, Lexical)
     ;   Lexical = Lexical0
     ).
+
+/*
+ * anyuri_to_clark(+AnyURI, +Prefixes:dict, +TypeURI, -Clark) is det.
+ *
+ * xsd:anyURI carries a raw IRI, not a `prefix:local` lexical, so the split
+ * resolves against the prefix map in the other direction: an expansion that
+ * prefixes the IRI (longest wins) gives the namespace. `prefix:local` input
+ * and `{uri}local` input are still honoured. An IRI whose namespace is not
+ * bound in the map raises casting_error — the namespace boundary is not
+ * guessable without ambiguity, so the prefix must be declared first.
+ */
+anyuri_to_clark(AnyURI, Prefixes, TypeURI, Clark) :-
+    (   split_clark(AnyURI, _Ns, Local)
+    ->  (   expanded_name_local_ok(Local, TypeURI)
+        ->  Clark = AnyURI
+        ;   throw(error(casting_error(AnyURI, TypeURI), _)))
+    ;   anyuri_expansion_split(AnyURI, Prefixes, Ns, Local)
+    ->  clark_or_error(AnyURI, Ns, Local, TypeURI, Clark)
+    ;   anyuri_lexical_split(AnyURI, Prefixes, Ns, Local)
+    ->  clark_or_error(AnyURI, Ns, Local, TypeURI, Clark)
+    ;   throw(error(casting_error(AnyURI, TypeURI), _))
+    ).
+
+% Longest bound expansion that is a prefix of the IRI wins.
+anyuri_expansion_split(AnyURI, Prefixes, Ns, Local) :-
+    findall(Len-Ns0,
+            (   get_dict(_P, Prefixes, Ns0),
+                atomic(Ns0),
+                atom_string(Ns0, Ns_String),
+                string_length(Ns_String, Len),
+                Len > 0,
+                sub_atom(AnyURI, 0, Len, _, Ns_String)),
+            Matches),
+    Matches \= [],
+    sort(0, @>=, Matches, [Len-Ns|_]),
+    atom_string(Ns, Ns_String),
+    sub_atom(AnyURI, Len, Local_Len, 0, Local),
+    Local_Len > 0.
+
+% `prefix:local` input: leftmost colon, NCName prefix bound in the map.
+anyuri_lexical_split(AnyURI, Prefixes, Ns, Local) :-
+    sub_atom(AnyURI, Before, 1, _, ':'),
+    Before > 0,
+    sub_atom(AnyURI, 0, Before, _, Prefix),
+    is_ncname(Prefix),
+    get_dict(Prefix, Prefixes, Ns),
+    Local_Before is Before + 1,
+    sub_atom(AnyURI, Local_Before, Local_Len, 0, Local),
+    Local_Len > 0.
+
+clark_or_error(AnyURI, Ns, Local, TypeURI, Clark) :-
+    (   non_whitespace(Local),
+        expanded_name_local_ok(Local, TypeURI)
+    ->  atomic_list_concat(['{', Ns, '}', Local], Clark)
+    ;   throw(error(casting_error(AnyURI, TypeURI), _))).
 
 :- begin_tests(turtle_literal_marshalling).
 

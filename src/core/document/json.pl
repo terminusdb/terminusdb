@@ -212,23 +212,27 @@ encode_id_fragment(_, _) :-
 % caller needs db-local contraction here. Document GET and query binding
 % renders use the context-aware paths instead.
 value_type_to_json_type(X, T, S, T) :-
+    value_type_to_json_type(X, T, S, T, []).
+value_type_to_json_type(X, T, S, T, Hint) :-
     expanded_name_datatype(T),
     !,
-    typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
-value_type_to_json_type(X, T, X, T) :-
+    typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', Hint, S^^_).
+value_type_to_json_type(X, T, X, T, _Hint) :-
     number(X),
     !.
-value_type_to_json_type(X, T, S, T) :-
+value_type_to_json_type(X, T, S, T, _Hint) :-
     string(X),
     !,
     atom_string(X, S).
-value_type_to_json_type(X, T, X, T) :-
+value_type_to_json_type(X, T, X, T, _Hint) :-
     T = 'http://www.w3.org/2001/XMLSchema#boolean',
     !.
-value_type_to_json_type(X, T, S, T) :-
-    typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', [], S^^_).
+value_type_to_json_type(X, T, S, T, Hint) :-
+    typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', Hint, S^^_).
 
-json_type_to_value_type(J, T, X, T) :-
+json_type_to_value_type(J,T,X,T) :-
+    json_type_to_value_type(J,T,X,T,[]).
+json_type_to_value_type(J, T, X, T, _Hint) :-
     number(J),
     !,
     % CRITICAL FIX: Convert integers to floats for xsd:double/xsd:float types
@@ -242,29 +246,31 @@ json_type_to_value_type(J, T, X, T) :-
     ->  X is float(J)  % Convert integer to float
     ;   X = J          % Keep as-is for other numeric types
     ).
-json_type_to_value_type(J, T, J, T) :-
+json_type_to_value_type(J, T, J, T, _Hint) :-
     memberchk(J, [false, true]),
     !,
     do_or_die(
         T = 'http://www.w3.org/2001/XMLSchema#boolean',
         error(unexpected_boolean_value(J, T), _)).
-json_type_to_value_type(J, T, X, T) :-
+json_type_to_value_type(J, T, X, T, Hint) :-
     % Guard: Reject strings starting with reserved marker prefix before typecasting
     (   string(J),
         sub_string(J, 0, 16, _, "__TERMINUS_NUM__")
     ->  throw(error(reserved_marker_in_string('value', '__TERMINUS_NUM__'), _))
     ;   true
     ),
-    typecast(J^^'http://www.w3.org/2001/XMLSchema#string', T, [], X^^_).
+    typecast(J^^'http://www.w3.org/2001/XMLSchema#string', T, Hint, X^^_).
 
 
 value_type_json_type(V,T,JV,JT) :-
+    value_type_json_type(V,T,JV,JT,[]).
+value_type_json_type(V,T,JV,JT,Hint) :-
     ground(V),
     ground(T),
     !,
-    value_type_to_json_type(V,T,JV,JT).
-value_type_json_type(V,T,JV,JT) :-
-    json_type_to_value_type(JV,JT,V,T).
+    value_type_to_json_type(V,T,JV,JT,Hint).
+value_type_json_type(V,T,JV,JT,Hint) :-
+    json_type_to_value_type(JV,JT,V,T,Hint).
 
 value_json(X,O) :-
     O = json{
@@ -310,6 +316,14 @@ value_json(X@Lang,O) :-
         error(unknown_language_tag(Lang),_)).
 value_json(X,X) :-
     atom(X).
+
+% Context-aware variant: (S)QName typed literals resolve their `prefix:local`
+% lexical against this context's prefix map; other forms ignore it.
+value_json(V^^T,json{ '@value' : JV, '@type' : JT},Context) :-
+    value_type_json_type(V,T,JV,JT,[prefixes(Context)]),
+    !.
+value_json(X,O,_) :-
+    value_json(X,O).
 
 get_all_path_values(JSON,Path_Values) :-
     findall(Path-Value,
@@ -2175,7 +2189,7 @@ json_triple_(JSON,Context,Triple) :-
         ;   is_json_datatype(Value)
         ->  del_dict('@type', Value, _, Pure),
             json_subdocument_triple(ID,Key,Pure,Triple)
-        ;   value_json(Lit,Value),
+        ;   value_json(Lit,Value,Context),
             Triple = t(ID,Key,Lit)
         )
     ).
@@ -2214,7 +2228,7 @@ array_id_key_context_triple(List,Object,Dimensions,ID,Key,Context,Triple) :-
     ;   (   is_json_datatype(Object)
         ->  del_dict('@type', Elt, _, Pure),
             json_subdocument_triple(New_ID,SYS_Value,Pure,Triple)
-        ;   reference(Elt,Ref),
+        ;   reference(Elt,Ref,Context),
             Triple = t(New_ID, SYS_Value, Ref)
         ;   json_triple_(Elt,Context,Triple)
         )
@@ -2249,18 +2263,18 @@ set_id_key_context_triple([H|T],Object,ID,Key,Context,Triple) :-
     (   (   is_json_datatype(Object)
         ->  del_dict('@type', H, _, Pure),
             json_subdocument_triple(ID,Key,Pure,Triple)
-        ;   reference(H,HRef),
+        ;   reference(H,HRef,Context),
             Triple = t(ID,Key,HRef)
         ;   json_triple_(H,Context,Triple)
         )
     ;   set_id_key_context_triple(T,Object,ID,Key,Context,Triple)
     ).
 
-reference(Dict,ID) :-
+reference(Dict,ID,_Context) :-
     get_dict('@id',Dict, ID),
     !.
-reference(Elt,V) :-
-    value_json(V,Elt).
+reference(Elt,V,Context) :-
+    value_json(V,Elt,Context).
 
 list_id_key_context_triple([],_Object,ID,Key,_Context,t(ID,Key,RDF_Nil)) :-
     global_prefix_expand(rdf:nil, RDF_Nil).
@@ -2276,7 +2290,7 @@ list_id_key_context_triple([H|T],Object,ID,Key,Context,Triple) :-
         (   is_json_datatype(Object)
         ->  del_dict('@type', H, _, Pure),
             json_subdocument_triple(New_ID,RDF_First,Pure,Triple)
-        ;   reference(H,HRef),
+        ;   reference(H,HRef,Context),
             Triple = t(New_ID,RDF_First,HRef)
         ;   json_triple_(H,Context,Triple)
         )
@@ -2631,8 +2645,8 @@ type_id_predicate_iri_value_(base_class(C),_,_,Elt,_Schema,Instance,Prefixes,_Op
         )
     ;   Elt = X^^T
     ->  (   C = T
-        ->  value_type_json_type(X,T,V,_)
-        ;   value_type_json_type(X,T,D,T2),
+        ->  value_type_json_type(X,T,V,_,[prefixes(Prefixes)])
+        ;   value_type_json_type(X,T,D,T2,[prefixes(Prefixes)]),
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
@@ -3223,7 +3237,7 @@ write_json_stream_to_builder(Stream, Builder, schema) :-
         )
     ).
 write_json_stream_to_builder(JSON_Stream, Builder, instance(DB)) :-
-    database_prefixes(DB,Context),
+    database_and_default_prefixes(DB,Context),
     empty_assoc(Captures_In),
     write_json_instance_stream_to_builder(JSON_Stream, Builder, DB, Context, Captures_In, Captures_Out),
     do_or_die(ground(Captures_Out),
@@ -3278,19 +3292,22 @@ write_json_string_to_instance(Context, String) :-
     open_string(String, Stream),
     write_json_stream_to_instance(Context, Stream).
 
-json_to_database_type(D^^T, _) :-
+json_to_database_type(D^^T, OC) :-
+    json_to_database_type(D^^T, [], OC).
+
+json_to_database_type(D^^T, _, _) :-
     is_list(D),
     !,
     throw(error(unexpected_array_value(D,T),_)).
-json_to_database_type(D^^T, OC) :-
+json_to_database_type(D^^T, Hint, OC) :-
     string(D),
     !,
-    typecast(D^^'http://www.w3.org/2001/XMLSchema#string', T, [], OC).
-json_to_database_type(D^^T, OC) :-
+    typecast(D^^'http://www.w3.org/2001/XMLSchema#string', T, Hint, OC).
+json_to_database_type(D^^T, Hint, OC) :-
     number(D),
     !,
-    typecast(D^^'http://www.w3.org/2001/XMLSchema#decimal', T, [], OC).
-json_to_database_type(O, O).
+    typecast(D^^'http://www.w3.org/2001/XMLSchema#decimal', T, Hint, OC).
+json_to_database_type(O, _, O).
 
 %% Document insert / delete / update
 % NOTE: Removed tabling to fix layer stacking bug where cached context 
@@ -3599,11 +3616,13 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     ;   throw(error(type_error(atom_or_string, ID0), _))
     ),
     database_instance(Transaction, [Instance]),
-    database_prefixes(Transaction, Prefixes),
+    % (S)QName lexicals resolve against this database's own prefix map —
+    % validation already used it, so storage must too.
+    database_and_default_prefixes(Transaction, Cast_Prefixes),
     % insert
     forall(
-        json_triple_(Elaborated, Prefixes, t(S,P,O)),
-        (   json_to_database_type(O,OC),
+        json_triple_(Elaborated, Cast_Prefixes, t(S,P,O)),
+        (   json_to_database_type(O, [prefixes(Cast_Prefixes)], OC),
             insert(Instance, S, P, OC, _))
     ).
 
