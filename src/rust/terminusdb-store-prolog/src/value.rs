@@ -45,6 +45,9 @@ pub fn make_entry_from_term<C: QueryableContextType>(
     } else if atom!("http://www.w3.org/2001/XMLSchema#QName") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(QName::make_entry(&inner_string.into_inner()))
+    } else if atom!("https://xbrl.org/2021SQName") == ty {
+        let inner_string: PrologText = inner_term.get_ex()?;
+        Ok(SQName::make_entry(&inner_string.into_inner()))
     } else if atom!("http://www.w3.org/2001/XMLSchema#ID") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(ID::make_entry(&inner_string.into_inner()))
@@ -381,6 +384,11 @@ pub fn unify_entry<C: QueryableContextType>(
             let val = entry.as_val::<QName, String>();
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#QName"))
+        }
+        Datatype::SQName => {
+            let val = entry.as_val::<SQName, String>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("https://xbrl.org/2021SQName"))
         }
         Datatype::ID => {
             let val = entry.as_val::<ID, String>();
