@@ -38,6 +38,7 @@
 
 const { expect } = require('chai')
 const superagent = require('superagent')
+const crypto = require('node:crypto')
 const { Agent, db } = require('../lib')
 
 const TDB_URL = process.env.TERMINUSDB_BASE_URL || 'http://localhost:6370'
@@ -51,7 +52,7 @@ function makeAgent () {
   return new Agent({
     baseUrl: TDB_URL,
     orgName: 'admin',
-    dbName: 'e2e-' + Math.random().toString(36).slice(2, 10),
+    dbName: 'e2e-' + crypto.randomBytes(4).toString('hex'),
   }).auth()
 }
 
@@ -73,7 +74,7 @@ async function waitFor (fn, { timeout = 60000, interval = 2000 } = {}) {
       const result = await fn()
       if (result) return result
     } catch (_e) { /* keep polling */ }
-    await new Promise((_resolve) => setTimeout(_resolve, interval))
+    await new Promise((_resolve) => setTimeout(_resolve, interval)) // NOSONAR sequential polling is the intent
   }
   throw new Error(`Condition not met within ${timeout}ms`)
 }
@@ -89,7 +90,7 @@ describe('plugin-e2e', function () {
 
   after(async function () {
     if (agent) {
-      try { await db.delete(agent) } catch (_e) { /* ignore */ }
+      try { await db.delete(agent) } catch (_e) { /* ignore */ } // NOSONAR thenable
     }
   })
 
@@ -219,7 +220,7 @@ describe('plugin-e2e', function () {
   describe('full data flow with vectorlink', function () {
     before(async function () {
       // Create a database without schema (schema documents need a schema first).
-      await db.create(agent, { schema: false })
+      await db.create(agent, { schema: false }) // NOSONAR thenable
 
       // Insert a few documents as arbitrary JSON (no schema required).
       const docs = [
@@ -229,7 +230,7 @@ describe('plugin-e2e', function () {
       ]
 
       for (const doc of docs) {
-        const r = await agent
+        const r = await agent // NOSONAR sequential commits required
           .post(`/api/document/${agent.orgName}/${agent.dbName}`)
           .query({ author: 'e2e-test', message: 'insert test doc', graph_type: 'instance', raw_json: true })
           .send([doc])
@@ -238,7 +239,7 @@ describe('plugin-e2e', function () {
     })
 
     after(async function () {
-      try { await db.delete(agent) } catch (_e) { /* ignore */ }
+      try { await db.delete(agent) } catch (_e) { /* ignore */ } // NOSONAR thenable
     })
 
     it('GET /api/search returns search results after indexing', async function () {
@@ -367,7 +368,7 @@ describe('plugin-e2e', function () {
   // ─────────────────────────────────────────────────────────────────────────
   describe('entity resolution', function () {
     before(async function () {
-      await db.create(agent, { schema: false })
+      await db.create(agent, { schema: false }) // NOSONAR thenable
 
       // Insert documents that can be resolved against each other.
       const docs = [

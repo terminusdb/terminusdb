@@ -308,7 +308,8 @@ io_index_branch(System_DB, Auth, Path) :-
     do_or_die(
         push_indexer_backend,
         error(indexer_backend_not_vectorlink(io_index_branch), _)),
-    resolve_descriptor_auth(read, System_DB, Auth, Path, instance, Descriptor),
+    resolve_descriptor_action_auth('@schema':'Action/reindex_write',
+                                   System_DB, Auth, Path, Descriptor),
     do_or_die(
         branch_descriptor{branch_name: Branch_Name} :< Descriptor,
         error(push_requires_branch_descriptor(Path), _)),

@@ -6,6 +6,8 @@
     write_cors_headers/1,
     api_report_errors/3,
     resolve_descriptor_auth/6,
+    resolve_descriptor_action_auth/5,
+    check_descriptor_auth/4,
     descriptor_to_path/2,
     validate_db_path/1,
     encode_query_value/2,
