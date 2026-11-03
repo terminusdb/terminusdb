@@ -6154,8 +6154,8 @@ dependencies = [
 
 [[package]]
 name = "tdb-succinct"
-version = "0.1.6"
-source = "git+https://github.com/terminusdb-org/tdb-succinct?tag=v0.1.6#d2d5a65cdc8f7c657a82fe7939eb20267cfcd992"
+version = "0.2.0"
+source = "git+https://github.com/terminusdb-org/tdb-succinct?tag=v0.2.0#4de348e09f1a28c68027bc4c45e36ec73881e051"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
@@ -6191,8 +6191,8 @@ dependencies = [
 
 [[package]]
 name = "terminus-store"
-version = "0.21.12"
-source = "git+https://github.com/terminusdb-org/terminusdb-store?tag=v0.21.12#8c7eb95e6eea15d830de11225e08f9439f536d17"
+version = "0.22.0"
+source = "git+https://github.com/terminusdb-org/terminusdb-store?tag=v0.22.0#c72841d6db6045d9b79d8ec1d5cbbe7feac0e962"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -6278,7 +6278,7 @@ dependencies = [
 [[package]]
 name = "terminusdb-grpc-labelstore-client"
 version = "0.1.0"
-source = "git+https://github.com/terminusdb-labs/terminusdb-grpc-labelstore?rev=cb8cf29#cb8cf292d4289d7c62c28631748ac4af47f48654"
+source = "git+https://github.com/terminusdb-labs/terminusdb-grpc-labelstore?rev=b419d2c#b419d2cc71b39d4a559facc5728a2dde581ad333"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6291,7 +6291,7 @@ dependencies = [
 [[package]]
 name = "terminusdb-grpc-labelstore-proto"
 version = "0.1.0"
-source = "git+https://github.com/terminusdb-labs/terminusdb-grpc-labelstore?rev=cb8cf29#cb8cf292d4289d7c62c28631748ac4af47f48654"
+source = "git+https://github.com/terminusdb-labs/terminusdb-grpc-labelstore?rev=b419d2c#b419d2cc71b39d4a559facc5728a2dde581ad333"
 dependencies = [
  "prost 0.11.9",
  "tonic",

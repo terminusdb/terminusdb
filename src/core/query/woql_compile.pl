@@ -1433,7 +1433,7 @@ interval_component_stamp_ns(date_time(Y,M,D,HH,MM,SS,NS), StampNanos) :-
     StampNanos is floor(Stamp * 1000000000) + NS.
 
 % Convert a nanoseconds difference to an xsd:duration term (days/time only).
-nanoseconds_to_duration(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+nanoseconds_to_duration(Nanos, duration(Sign,0,0,0,Days,Hours,Mins,SSec)) :-
     (   Nanos < 0
     ->  Sign = -1, AbsNanos is abs(Nanos)
     ;   Sign = 1, AbsNanos = Nanos),
@@ -1446,7 +1446,7 @@ nanoseconds_to_duration(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
     SSec is Rem3 / 1000000000.
 
 % Convert a nanoseconds difference to an xsd:duration term, omitting zero time components.
-nanoseconds_to_duration_significant(Nanos, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+nanoseconds_to_duration_significant(Nanos, duration(Sign,0,0,0,Days,Hours,Mins,SSec)) :-
     (   Nanos < 0
     ->  Sign = -1, AbsNanos is abs(Nanos)
     ;   Sign = 1, AbsNanos = Nanos),
@@ -1474,7 +1474,7 @@ stamp_to_component_like(Stamp, date_time(_,_,_,_,_,_,_), date_time(Y,M,D,HH,MM,S
     NS is floor((SS1 - SSF) * 1000000000).
 
 % Convert seconds difference to xsd:duration term (days/time only).
-seconds_to_duration(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
+seconds_to_duration(Secs, duration(Sign,0,0,0,Days,Hours,Mins,SSec)) :-
     (   Secs < 0
     ->  Sign = -1, AbsSecs is abs(Secs)
     ;   Sign = 1, AbsSecs = Secs
@@ -1486,9 +1486,10 @@ seconds_to_duration(Secs, duration(Sign,0,0,Days,Hours,Mins,SSec)) :-
     Mins is Rem2 // 60,
     SSec is AbsSecs - (Days * 86400 + Hours * 3600 + Mins * 60).
 
-% Convert xsd:duration day/time components to seconds (ignores Y/M).
-duration_day_time_seconds(duration(Sign,_Y,_M,D,HH,MM,SS), Secs) :-
-    Secs is Sign * (D * 86400 + HH * 3600 + MM * 60 + SS).
+% Convert xsd:duration day/time components to seconds (ignores Y/M; weeks
+% count as seven days each).
+duration_day_time_seconds(duration(Sign,W,_Y,_M,D,HH,MM,SS), Secs) :-
+    Secs is Sign * (W * 604800 + D * 86400 + HH * 3600 + MM * 60 + SS).
 
 % Extract the stored duration from an arity-4 interval.
 interval_extract_duration(date_time_interval(_,_,Dur,_,_,_), Dur).
@@ -1597,17 +1598,30 @@ check_interval_relation("during", Xs, Xe, Ys, Ye) :- woql_greater(Xs, Ys), woql_
 check_interval_relation("finishes", Xs, Xe, Ys, Ye)     :- woql_greater(Xs, Ys), woql_equal(Xe, Ye).
 check_interval_relation("equals", Xs, Xe, Ys, Ye)       :- woql_equal(Xs, Ys), woql_equal(Xe, Ye).
 % 6 inverses: swap X and Y
+% Point query operand [t,t): on-or-after — an interval starting at the
+% instant counts, as the point belongs to the interval it starts.
+check_interval_relation("after", Xs, _Xe, Ys, Ye) :-
+    woql_equal(Ys, Ye), !,
+    once((woql_less(Ye, Xs) ; woql_equal(Ye, Xs))).
 check_interval_relation("after", Xs, Xe, Ys, Ye)        :- check_interval_relation("before", Ys, Ye, Xs, Xe).
 check_interval_relation("met_by", Xs, Xe, Ys, Ye)       :- check_interval_relation("meets", Ys, Ye, Xs, Xe).
 check_interval_relation("overlapped_by", Xs, Xe, Ys, Ye):- check_interval_relation("overlaps", Ys, Ye, Xs, Xe).
 check_interval_relation("started_by", Xs, Xe, Ys, Ye)   :- check_interval_relation("starts", Ys, Ye, Xs, Xe).
-check_interval_relation("contains", Xs, Xe, Ys, Ye)     :- check_interval_relation("during", Ys, Ye, Xs, Xe).
+% Point query operand [t,t): delegate to during's start-inclusive arm.
+check_interval_relation("contains", Xs, Xe, Ys, Ye) :-
+    woql_equal(Ys, Ye), !,
+    check_interval_relation("during", Ys, Ye, Xs, Xe).
+% Coverage semantics: a boundary-sharing span still counts as contained —
+% contains answers "covers", not strict Allen-during.
+check_interval_relation("contains", Xs, Xe, Ys, Ye) :-
+    once((woql_less(Xs, Ys) ; woql_equal(Xs, Ys))),
+    once((woql_less(Ye, Xe) ; woql_equal(Ye, Xe))).
 check_interval_relation("finished_by", Xs, Xe, Ys, Ye)  :- check_interval_relation("finishes", Ys, Ye, Xs, Xe).
 
 % classify: when Rel is unbound, find THE one matching relation (deterministic)
 classify_interval_relation(Rel, Xs, Xe, Ys, Ye) :-
     member(R, ["before","meets","overlaps","starts","during","finishes","equals",
-               "after","met_by","overlapped_by","started_by","contains","finished_by"]),
+               "after","met_by","overlapped_by","started_by","finished_by","contains"]),
     check_interval_relation(R, Xs, Xe, Ys, Ye),
     !,
     Rel = R^^'http://www.w3.org/2001/XMLSchema#string'.
@@ -1892,13 +1906,13 @@ eom_add_months(date_time(Y,M,D,HH,MM,SS,NS), Sign, DY, DMo, date_time(Y2,M2,D2,H
  * components, applies EOM preservation for the month part first,
  * then adds any day/time components via timestamp arithmetic.
  */
-eom_add_duration(Component, duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+eom_add_duration(Component, duration(Sign,W,DY,DMo,DD,DH,DMi,DS), End) :-
     (   (DY =:= 0, DMo =:= 0)
-    ->  add_duration_to_component(Component, duration(Sign,0,0,DD,DH,DMi,DS), End)
+    ->  add_duration_to_component(Component, duration(Sign,W,0,0,DD,DH,DMi,DS), End)
     ;   eom_add_months(Component, Sign, DY, DMo, Intermediate),
-        (   DD =:= 0, DH =:= 0, DMi =:= 0, DS =:= 0
+        (   W =:= 0, DD =:= 0, DH =:= 0, DMi =:= 0, DS =:= 0
         ->  End = Intermediate
-        ;   add_duration_to_component(Intermediate, duration(Sign,0,0,DD,DH,DMi,DS), End)
+        ;   add_duration_to_component(Intermediate, duration(Sign,W,0,0,DD,DH,DMi,DS), End)
         )
     ).
 
@@ -1908,9 +1922,9 @@ eom_add_duration(Component, duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
  * EOM-aware duration subtraction. Negates the sign and applies
  * EOM-aware addition, preserving end-of-month symmetry.
  */
-eom_subtract_duration(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
+eom_subtract_duration(Component, duration(Sign,W,Y,Mo,D,H,M,S), Start) :-
     NSign is Sign * -1,
-    eom_add_duration(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
+    eom_add_duration(Component, duration(NSign,W,Y,Mo,D,H,M,S), Start).
 
 /*
  * term_literal(Value, Value_Cast) is det.
@@ -11154,7 +11168,7 @@ test(date_duration_zero, [
              },
     query_test_response_test_branch(Query, JSON),
     [Binding] = JSON.bindings,
-    Binding.d = _{'@type': 'xsd:duration', '@value': "P0D"}.
+    Binding.d = _{'@type': 'xsd:duration', '@value': "PT0S"}.
 
 % Start + Duration → End (EOM-aware addition)
 test(date_duration_add_jan31_p1m_leap, [
@@ -11896,10 +11910,10 @@ test(date) :-
 
 test(duration_year) :-
 
-    test_lit(duration(1,10,0,0,0,0,0.0)^^xsd:duration, duration(1,10,0,0,0,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
+    test_lit(duration(1,0,10,0,0,0,0,0.0)^^xsd:duration, duration(1,0,10,0,0,0,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
 
 test(duration_hour) :-
-    test_lit(duration(-1,0,0,0,1,0,0.0)^^xsd:duration, duration(-1,0,0,0,1,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
+    test_lit(duration(-1,0,0,0,0,1,0,0.0)^^xsd:duration, duration(-1,0,0,0,0,1,0,0.0)^^'http://www.w3.org/2001/XMLSchema#duration').
 
 :- end_tests(store_load_data).
 

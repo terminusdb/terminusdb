@@ -333,4 +333,73 @@ describe('document-interval', function () {
       expect(r.status).to.equal(400)
     })
   })
+
+  describe('wide day counts (beyond legacy u8)', function () {
+    it('inserts and reads back a duration longer than 255 days', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'P300D',
+        interval: '2025-01-01/P300D',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/P300D', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P300D')
+    })
+
+    it('inserts and reads back an explicit interval spanning more than 255 days', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'long-span',
+        interval: '2025-01-20/2025-10-31',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/long-span', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      // Date-only end bumps to start of next day (exclusive)
+      expect(r.body[0].interval).to.equal('2025-01-20T00:00:00Z/2025-11-01T00:00:00Z')
+    })
+
+    it('rejects a malformed interval instead of dropping the field', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'bad-interval',
+        interval: '2025-01-01/Fnord',
+      }
+      const r = await document.insert(agent, { instance: doc }).unverified()
+      expect(r.status).to.equal(400)
+    })
+  })
+
+  describe('ISO 8601 week durations', function () {
+    // P2W and P14D are equal durations but distinct values — the supplied
+    // denomination is part of the literal and must survive end to end.
+    it('inserts and reads back a week-denominated duration', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'P2W',
+        interval: '2025-01-01/P2W',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/P2W', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P2W')
+    })
+
+    it('keeps a day-denominated equivalent distinct', async function () {
+      const doc = {
+        '@type': 'Event',
+        name: 'P14D',
+        interval: '2025-01-01/P14D',
+      }
+      await document.insert(agent, { instance: doc })
+
+      const r = await document.get(agent, { query: { id: 'Event/P14D', as_list: true } })
+      expect(r.body).to.have.lengthOf(1)
+      expect(r.body[0].interval).to.equal('2025-01-01T00:00:00Z/P14D')
+    })
+  })
 })

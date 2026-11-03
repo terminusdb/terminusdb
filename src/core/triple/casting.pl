@@ -504,7 +504,7 @@ parse_two_component_interval(X, Y, date_time_interval(NX, NY, Dur, explicit, TzX
     normalise_interval_start(X, NX),
     normalise_interval_end(Y, NY),
     (   (NX == neg_infinity ; NX == unknown ; NY == infinity ; NY == unknown)
-    ->  Dur = duration(1,0,0,0,0,0,0.0)
+    ->  Dur = duration(1,0,0,0,0,0,0,0.0)
     ;   compute_duration_between(NX, NY, Dur)).
 
 %%% xdd:dateTimeInterval => xsd:string
@@ -554,7 +554,7 @@ normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS), date_time(Y,Mo,D,H,M,S,NS))
 normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS,none), date_time(Y,Mo,D,H,M,S,NS)) :- !.
 normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
-normalise_interval_start(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
+normalise_interval_start(duration(Sign,W,Y,Mo,D,H,M,S), duration(Sign,W,Y,Mo,D,H,M,S)) :- !.
 
 %% Normalise an end component: dates become date_time at 00:00:00 UTC on the
 %% following day (the "day-after bump"), so that a date-only end is exclusive.
@@ -571,9 +571,9 @@ normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS), date_time(Y,Mo,D,H,M,S,NS)) :
 normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,none), date_time(Y,Mo,D,H,M,S,NS)) :- !.
 normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
-normalise_interval_end(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
+normalise_interval_end(duration(Sign,W,Y,Mo,D,H,M,S), duration(Sign,W,Y,Mo,D,H,M,S)) :- !.
 
-compute_duration_between(Start, End, duration(Sign, 0, 0, Days, Hours, Minutes, Seconds)) :-
+compute_duration_between(Start, End, duration(Sign, 0, 0, 0, Days, Hours, Minutes, Seconds)) :-
     component_to_parts(Start, T1, NS1),
     component_to_parts(End, T2, NS2),
     % Whole seconds as an exact float difference, nanoseconds as integers —
@@ -606,7 +606,7 @@ interval_component_string(neg_infinity, _Tz, "..") :- !.
 interval_component_string(infinity, _Tz, "..") :- !.
 interval_component_string(unknown, _Tz, "") :- !.
 interval_component_string(date(Y,M,D,_Offset), _Tz, S) :- !, date_time_string(date_time(Y,M,D,0,0,0,0), S).
-interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), _Tz, S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
+interval_component_string(duration(Sign,W,Y,Mo,D,H,M,SS), _Tz, S) :- !, duration_string(duration(Sign,W,Y,Mo,D,H,M,SS), S).
 interval_component_string(DT, Tz, S) :- interval_date_time_string(DT, Tz, S).
 
 interval_point_string(date(Y,M,D,_Offset), _Tz, S) :-
@@ -623,7 +623,7 @@ interval_point_string(C, Tz, S) :-
 component_tz(date(_,_,_,Offset), tz(Offset)) :- !.
 component_tz(date_time(_,_,_,_,_,_,_,none), none) :- !.
 component_tz(date_time(_,_,_,_,_,_,_,Offset), tz(Offset)) :- !.
-component_tz(duration(_,_,_,_,_,_,_), none) :- !.
+component_tz(duration(_,_,_,_,_,_,_,_), none) :- !.
 component_tz(open, none) :- !.
 component_tz(unknown, none) :- !.
 
@@ -963,14 +963,14 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#duration', 'http://www.w3.org/
 typecast_switch('http://www.w3.org/2001/XMLSchema#yearMonthDuration', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#yearMonthDuration') :-
     !,
     (   duration_string(Cast,Val),
-        Cast = duration(_Sign,_Y,_M,_D,0,0,0)
+        Cast = duration(_Sign,0,_Y,_M,0,0,0,0)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#yearMonthduration'),_))).
 %%% xsd:string => xsd:dayTimeDuration
 typecast_switch('http://www.w3.org/2001/XMLSchema#dayTimeDuration', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dayTimeDuration') :-
     !,
     (   duration_string(Cast,Val),
-        Cast = duration(_Sign,0,0,_D,_H,_M,_S)
+        Cast = duration(_Sign,_W,0,0,_D,_H,_M,_S)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dayTimeDuration'),_))).
 %%% xsd:duration => xsd:string
@@ -1752,7 +1752,7 @@ test(interval_start_duration_date_normalizes, []) :-
                              date_time_interval(Start, End, Dur, start_duration, Tz1, Tz2)),
     Start = date_time(2025,1,1,0,0,0,0),
     End = date_time(2025,4,1,0,0,0,0),
-    Dur = duration(1,0,3,0,0,0,0),
+    Dur = duration(1,0,0,3,0,0,0,0),
     Tz1 = tz(0),
     Tz2 = tz(0).
 
@@ -1761,7 +1761,7 @@ test(interval_duration_end_date_normalizes_with_bump, []) :-
                              date_time_interval(Start, End, Dur, duration_end, Tz1, Tz2)),
     Start = date_time(2025,1,1,0,0,0,0),
     End = date_time(2025,4,1,0,0,0,0),
-    Dur = duration(1,0,3,0,0,0,0),
+    Dur = duration(1,0,0,3,0,0,0,0),
     Tz1 = tz(0),
     Tz2 = tz(0).
 
@@ -1775,7 +1775,7 @@ test(interval_open_end_parse, []) :-
                              date_time_interval(Start, End, Dur, explicit, Tz1, Tz2)),
     Start = date_time(2025,1,1,0,0,0,0),
     End = infinity,
-    Dur = duration(1,0,0,0,0,0,0.0),
+    Dur = duration(1,0,0,0,0,0,0,0.0),
     Tz1 = tz(0),
     Tz2 = none.
 
@@ -1794,7 +1794,7 @@ test(interval_unknown_end_parse, []) :-
                              date_time_interval(Start, End, Dur, explicit, _, _)),
     Start = date_time(2025,1,1,0,0,0,0),
     End = unknown,
-    Dur = duration(1,0,0,0,0,0,0.0).
+    Dur = duration(1,0,0,0,0,0,0,0.0).
 
 test(interval_unknown_start_parse, []) :-
     parse_date_time_interval('/2025-01-01',
@@ -1911,17 +1911,17 @@ test(interval_roundtrip_duration_with_hours, []) :-
     S = "2025-01-01T00:00:00Z/PT1H".
 
 test(dateTimeInterval_string_from_dates, []) :-
-    typecast(date_time_interval(date(2025,1,1,0), date(2025,4,1,0), duration(1,0,0,90,0,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date(2025,1,1,0), date(2025,4,1,0), duration(1,0,0,0,90,0,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_string_from_datetimes, []) :-
-    typecast(date_time_interval(date_time(2025,1,1,10,30,0,0), date_time(2025,4,1,15,45,0,0), duration(1,0,0,90,5,15,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date_time(2025,1,1,10,30,0,0), date_time(2025,4,1,15,45,0,0), duration(1,0,0,0,90,5,15,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              "2025-01-01T10:30:00Z/2025-04-01T15:45:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_string_mixed_date_datetime, []) :-
-    typecast(date_time_interval(date(2025,1,1,0), date_time(2025,4,1,12,0,0,0), duration(1,0,0,90,12,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date(2025,1,1,0), date_time(2025,4,1,12,0,0,0), duration(1,0,0,0,90,12,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 
@@ -1974,13 +1974,13 @@ test(date_range_to_interval_inclusive, []) :-
 test(interval_to_date_range_exclusive_end, []) :-
     % An exclusive end at exactly midnight belongs to the next day, so the
     % last included date is the day before it.
-    typecast(date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), duration(1,0,0,90,0,0,0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), duration(1,0,0,0,90,0,0,0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://terminusdb.com/schema/xdd#dateRange', [],
              date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
 
 test(interval_to_date_range_midday_end, []) :-
     % An end instant inside a day includes that day's date.
-    typecast(date_time_interval(date_time(2025,1,1,9,30,0,0), date_time(2025,3,31,17,15,0,0), duration(1,0,0,0,0,0,0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date_time(2025,1,1,9,30,0,0), date_time(2025,3,31,17,15,0,0), duration(1,0,0,0,0,0,0,0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://terminusdb.com/schema/xdd#dateRange', [],
              date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
 
@@ -2217,7 +2217,7 @@ test(date_to_datetimeinterval_covers_day, []) :-
              Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
     Cast = date_time_interval(date_time(2020,1,15,0,0,0,0),
                               date_time(2020,1,16,0,0,0,0),
-                              duration(1,0,0,1,0,0,0.0),
+                              duration(1,0,0,0,1,0,0,0.0),
                               explicit, tz(0), tz(0)).
 
 test(datetime_to_datetimeinterval_zero_point, []) :-
@@ -2225,12 +2225,12 @@ test(datetime_to_datetimeinterval_zero_point, []) :-
     typecast(T^^'http://www.w3.org/2001/XMLSchema#dateTime',
              'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
              Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
-    Cast = date_time_interval(T, T, duration(1,0,0,0,0,0,0.0),
+    Cast = date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
                               explicit, tz(0), tz(0)).
 
 test(datetimeinterval_point_to_datetime, []) :-
     T = date_time(2020,1,15,12,30,45,0),
-    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0.0),
+    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
                                 explicit, tz(0), tz(0))
              ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#dateTime', [],
@@ -2241,14 +2241,14 @@ test(datetimeinterval_nonzero_to_datetime_fails,
      [error(casting_error(_,_),_)]) :-
     typecast(date_time_interval(date_time(2020,1,15,0,0,0,0),
                                 date_time(2020,1,16,0,0,0,0),
-                                duration(1,0,0,1,0,0,0.0),
+                                duration(1,0,0,0,1,0,0,0.0),
                                 explicit, tz(0), tz(0))
              ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#dateTime', [], _).
 
 test(datetimeinterval_midnight_point_to_date, []) :-
     T = date_time(2020,1,15,0,0,0,0),
-    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0.0),
+    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
                                 explicit, tz(0), tz(0))
              ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#date', [],
@@ -2258,7 +2258,7 @@ test(datetimeinterval_midnight_point_to_date, []) :-
 test(datetimeinterval_noon_point_to_date_fails,
      [error(casting_error(_,_),_)]) :-
     T = date_time(2020,1,15,12,0,0,0),
-    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0.0),
+    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
                                 explicit, tz(0), tz(0))
              ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#date', [], _).

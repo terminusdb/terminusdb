@@ -20,7 +20,7 @@
                        gMonth//2,
                        gMonthDay//3,
                        gDay//2,
-                       duration//7,
+                       duration//8,
                        yearMonthDuration//3,
                        dayTimeDuration//5,
                        string/3,
@@ -304,8 +304,18 @@ maybeTime(H,M,S) --> time_separator, maybeHour(MH), maybeMinute(MM), maybeSecond
 maybeTime(0,0,0) --> "" .
 
 
-duration(Sign,Y,Mo,D,H,M,S) --> sign(Sign), "P", maybeYear(Y), maybeMonth(Mo), maybeDay(D),
-				maybeTime(H,M,S) .
+duration(Sign,W,Y,Mo,D,H,M,S) -->
+	sign(Sign), "P",
+	(   weeks(W),
+	    {Y = 0, Mo = 0, D = 0, H = 0, M = 0, S = 0}
+	;   maybeYear(Y), maybeMonth(Mo), maybeDay(D),
+	    maybeTime(H,M,S),
+	    {W = 0}
+	) .
+
+% The ISO 8601 week form is exclusive: `PnW` never combines with the
+% year/month/day/time fields.
+weeks(W) --> natural(W), "W" .
 
 yearMonthDuration(Sign,Y,Mo) --> sign(Sign), "P", maybeYear(Y), maybeMonth(Mo) .
 
@@ -483,8 +493,8 @@ intervalDateTime(SY,Mo,D,H,M,S,NS,Offset) -->
     year(SY), "-", twoDigitNatural(Mo), "-", twoDigitNatural(D),
     time_separator, interval_time(H,M,S,NS,Offset).
 
-dateTimeIntervalComponent(duration(Sign,Y,Mo,D,H,M,S)) -->
-    duration(Sign,Y,Mo,D,H,M,S), !.
+dateTimeIntervalComponent(duration(Sign,W,Y,Mo,D,H,M,S)) -->
+    duration(Sign,W,Y,Mo,D,H,M,S), !.
 dateTimeIntervalComponent(date_time(Y,Mo,D,H,M,S,NS,Offset)) -->
     intervalDateTime(Y,Mo,D,H,M,S,NS,Offset), !.
 dateTimeIntervalComponent(date(Y,M,D,Offset)) -->

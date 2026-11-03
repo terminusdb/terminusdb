@@ -188,7 +188,7 @@
               gMonth//2,
               gMonthDay//3,
               gDay//2,
-              duration//7,
+              duration//8,
               yearMonthDuration//3,
               dayTimeDuration//5,
               string/3,

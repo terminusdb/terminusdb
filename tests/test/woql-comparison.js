@@ -1458,6 +1458,44 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T07:00:00Z')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT0.123456789S')
     })
+
+    it('constructs interval from start + P2W duration, keeping the denomination', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        duration: { '@type': 'DataValue', data: durVal('P2W') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      // The week resolves to 14 days at the endpoint but keeps its
+      // supplied denomination — P2W and P14D are distinct values.
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('2025-01-01T00:00:00Z/P2W')
+    })
+
+    it('extracts the supplied P2W spelling from a stored interval', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        interval: { '@type': 'DataValue', data: intervalVal('2025-01-01/P2W') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('P2W')
+    })
+
+    it('relates a week-denominated interval by resolved endpoints', async function () {
+      const q = {
+        '@type': 'IntervalRelationTyped',
+        x: { '@type': 'DataValue', data: intervalVal('2025-01-01/P2W') },
+        y: { '@type': 'DataValue', data: intervalVal('2025-01-15/2025-01-20') },
+        relation: { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': 'meets' } },
+      }
+      const r = await woql.post(agent, q)
+      // 2025-01-01 + P2W ends at 2025-01-15 — meets holds.
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
   })
 
   describe('IntervalDurationEnd', function () {
