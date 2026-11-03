@@ -55,12 +55,13 @@ get_db_version(Path, Version) :-
             close(Stream)
         )
     ;   (   \+ exists_directory(Path)
-        ->  throw(error(storage_path_does_not_exist(Path), _))
+        ->  Reason = storage_path_does_not_exist(Path)
         ;   directory_files(Path, Entries),
             subtract(Entries, ['.', '..'], [])
-        ->  throw(error(storage_path_empty(Path), _))
-        ;   throw(error(no_database_store_version, _))
-        )
+        ->  Reason = storage_path_empty(Path)
+        ;   Reason = uninitialized
+        ),
+        throw(error(no_database_store_version, Reason))
     ).
 
 
@@ -110,14 +111,16 @@ store_test_dir(Dir) :-
     atomic_list_concat([Path, '-dir'], Dir).
 
 test(missing_path_errors_distinctly, [
-         throws(error(storage_path_does_not_exist('/definitely/not/a/store-path'), _))
+         throws(error(no_database_store_version,
+                      storage_path_does_not_exist('/definitely/not/a/store-path')))
      ]) :-
     get_db_version('/definitely/not/a/store-path', _).
 
 test(empty_directory_errors_distinctly, [
          setup((store_test_dir(Dir), make_directory_path(Dir))),
          cleanup(delete_directory_and_contents(Dir)),
-         throws(error(storage_path_empty(Dir), _))
+         throws(error(no_database_store_version,
+                      storage_path_empty(Dir)))
      ]) :-
     get_db_version(Dir, _).
 
@@ -128,7 +131,7 @@ test(uninitialized_directory_errors_distinctly, [
                 open(F, write, S),
                 close(S))),
          cleanup(delete_directory_and_contents(Dir)),
-         throws(error(no_database_store_version, _))
+         throws(error(no_database_store_version, uninitialized))
      ]) :-
     get_db_version(Dir, _).
 
