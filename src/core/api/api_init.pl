@@ -290,8 +290,8 @@ update_system_schema_graph(Changed) :-
         sub_atom(V, _, _, 0, woql_logic_exec)
     ->  Changed = false
     ;   json_log_notice_formatted("Upgrading ~s",[System_Label]),
-        system_schema_json(System_Path),
-        file_to_predicate(System_Path, system_schema),
+        %  system_schema/1 is compiled into the binary — never read
+        %  the JSON file at runtime (snap packages do not ship it).
         triple_store(Store),
         initialize_system_schema(Store, true, _Layer),
         abolish_all_tables,
