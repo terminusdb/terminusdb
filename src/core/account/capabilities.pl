@@ -749,7 +749,7 @@ descriptor_access_action(Descriptor, _Graph_Type, ReadWrite, Action) :-
     ->  Action = '@schema':'Action/woql_logic_read'
     ;   Action = '@schema':'Action/woql_logic_write').
 descriptor_access_action(Descriptor, Graph_Type, ReadWrite, Action) :-
-    once(Descriptor_Type{} :< Descriptor),
+    dict_pairs(Descriptor, Descriptor_Type, _),
     document_auth_action_type(Descriptor_Type, Graph_Type, ReadWrite, Action).
 
 resolve_descriptor_auth(ReadWrite, SystemDB, Auth, Path, Graph_Type, Descriptor) :-
