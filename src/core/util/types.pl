@@ -392,8 +392,9 @@ is_time(time(HH,MM,SS)) :-
 is_boolean(true).
 is_boolean(false).
 
-is_duration(duration(Sign,Y,M,D,HH,MM,SS)) :-
+is_duration(duration(Sign,W,Y,M,D,HH,MM,SS)) :-
     member(Sign, [1,-1]),
+    number(W),
     number(Y),
     number(M),
     number(D),

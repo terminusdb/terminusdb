@@ -174,7 +174,8 @@ remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_F
  * calendar arithmetic and day/time via seconds. Result type matches
  * input unless sub-day time components are added to a date.
  */
-add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+add_duration_to_component(date(Y,M,D,O), duration(Sign,W,DY,DMo,DD0,DH,DMi,DS), End) :-
+    DD is DD0 + 7 * W,
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
@@ -194,7 +195,8 @@ add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End
     ->  End = date(EY,EM,ED,O)
     ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS)
     ).
-add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,W,DY,DMo,DD0,DH,DMi,DS), End) :-
+    DD is DD0 + 7 * W,
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
@@ -223,9 +225,9 @@ add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,
  *
  * Negate the duration sign and add.
  */
-subtract_duration_from_component(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
+subtract_duration_from_component(Component, duration(Sign,W,Y,Mo,D,H,M,S), Start) :-
     NSign is Sign * -1,
-    add_duration_to_component(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
+    add_duration_to_component(Component, duration(NSign,W,Y,Mo,D,H,M,S), Start).
 
 % Normalize month overflow/underflow: e.g. month 0 or 13.
 % Uses floored division so that month 0 wraps to December of the previous year.
@@ -404,10 +406,13 @@ time_string(time(HN,MN,SN),String) :-
 duration_string(Duration,String) :-
     nonvar(Duration),
     !,
-    Duration = duration(S,Y,M,D,HH,MM,SS),
+    Duration = duration(S,W,Y,M,D,HH,MM,SS),
     (   S = 1
     ->  SP = ''
     ;   SP = '-'),
+    (   W \= 0
+    ->  format(atom(WP),'~wW',[W])
+    ;   WP = ''),
     (   Y \= 0
     ->  format(atom(YP),'~wY',[Y])
     ;   YP = ''),
@@ -429,18 +434,19 @@ duration_string(Duration,String) :-
     (   SS =\= 0
     ->  format(atom(SSP),'~wS',[SS])
     ;   SSP = ''),
-    atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
-    % Zero duration: "P" alone is not valid ISO 8601, use "P0D"
+    atomic_list_concat([SP,'P',WP,YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
+    % Zero duration: "P" alone is not valid ISO 8601. The canonical zero is
+    % "PT0S" — seconds precision is the maximum-precision spelling.
     (   (Atom0 == 'P' ; Atom0 == '-P')
-    ->  atom_concat(Atom0, '0D', Atom)
+    ->  atom_concat(Atom0, 'T0S', Atom)
     ;   Atom = Atom0
     ),
     atom_string(Atom,String).
-duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
+duration_string(duration(Sign,W,Y,M,D,HH,MM,SS),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(duration(Sign,Y,M,D,HH,MM,SS),Codes).
+    phrase(duration(Sign,W,Y,M,D,HH,MM,SS),Codes).
 
 current_xsd_date_time(XSD) :-
     get_time(Unix),
