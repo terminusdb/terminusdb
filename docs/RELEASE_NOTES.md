@@ -37,8 +37,6 @@ Notice that migration will be performed automatically to the new system schema o
 * Preparations for 12.1.0-rc2 [#2615](https://github.com/terminusdb/terminusdb/pull/2615)
 
 ## Security
-
-
 * New action capabilities for search, reindex, and stored WOQL (security) [#2617](https://github.com/terminusdb/terminusdb/pull/2617)
 
 **Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.9...v12.1.0-rc2
