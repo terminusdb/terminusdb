@@ -1064,8 +1064,8 @@ test(descriptor_access_action_logic_branch_write, []) :-
 
 test(descriptor_access_action_normal_branch_unchanged, []) :-
     resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
-    descriptor_access_action(Desc, instance, read, '@schema':'Action/instance_read_access'),
-    descriptor_access_action(Desc, schema, write, '@schema':'Action/schema_write_access').
+    once(descriptor_access_action(Desc, instance, read, '@schema':'Action/instance_read_access')),
+    once(descriptor_access_action(Desc, schema, write, '@schema':'Action/schema_write_access')).
 
 add_test_role(Actions, Role_Id) :-
     create_context(system_descriptor{},
