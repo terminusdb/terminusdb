@@ -2,13 +2,10 @@ DIST ?= community
 # Default was 9.2.9
 SWIPL_VERSION ?= 10.0.2
 
-# Version-tagged release of tdb-admin to download for the embedded admin panel.
-# Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
-TDB_ADMIN_VERSION ?= v0.1.2
-
-# Version-tagged release of tdb-data to download for the embedded data explorer.
-# Must match a tag in https://github.com/terminusdb-org/tdb-data/releases
-TDB_DATA_VERSION ?= v0.1.2
+# Embedded web UI versions (tdb-admin / tdb-data) are pinned in UI_VERSIONS,
+# the single source of truth also read by CI — see docs/release-steps.md.
+# Override on the command line: make docker TDB_ADMIN_VERSION=vX.Y.Z
+include UI_VERSIONS
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
