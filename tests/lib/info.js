@@ -9,6 +9,11 @@ async function terminusdbVersion () {
 }
 
 async function gitHash () {
+  // Tests running inside a container have no .git; the workflow passes the
+  // tested commit as TERMINUSDB_GIT_HASH.
+  if (process.env.TERMINUSDB_GIT_HASH) {
+    return process.env.TERMINUSDB_GIT_HASH
+  }
   const { stdout: result } = await exec('git rev-parse --verify HEAD')
   return result.toString().trim()
 }

@@ -4,15 +4,20 @@
                       json_cli_code/2,
                       status_http_code/2,
                       status_cli_code/2,
-                      generic_exception_jsonld/2
+                      generic_exception_jsonld/2,
+                      generic_exception_jsonld/3
                      ]).
 
 :- use_module(core(util)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(apply)).
 :- use_module(library(lists)).
 :- use_module(library(yall)).
 :- use_module(library(plunit)).
+:- use_module(library(prolog_stack), [get_prolog_backtrace/2, print_prolog_backtrace/2]).
+
+:- discontiguous generic_exception_jsonld/2.
+:- discontiguous generic_exception_jsonld/3.
 
 :- use_module(core(query)).
 
@@ -22,7 +27,14 @@
  * Binds JSON to an appropriate JSON-LD object for the given error and API.
  *
  */
-api_error_jsonld(API, Error, JSON) :-
+% The queued parallel-elaboration path can deliver errors wrapped as
+% error(error(Inner, _), Context). Unwrap one level and re-wrap as
+% error(Inner, _) so the existing API-specific clauses match.
+api_error_jsonld(API, error(error(Inner, _), _), JSON) :- !,
+    api_error_jsonld(API, error(Inner, _), JSON).
+api_error_jsonld(API, error(Inner), JSON) :- !,
+    api_error_jsonld(API, error(Inner, _), JSON).
+api_error_jsonld(API, Error, JSON) :- !,
     (   api_global_error_jsonld(Error, API, JSON)
     ->  true
     ;   api_error_jsonld_(API, Error, JSON)
@@ -107,6 +119,76 @@ api_global_error_jsonld(error(bad_data_version(Data_Version),_),Type,JSON) :-
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadDataVersion',
                               'api:data_version' : Data_Version_String },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_rejected(Reason), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Commit could not be applied: ~w", [Reason]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:conflict",
+             'api:error' : _{ '@type' : 'api:CommitRejected',
+                              'api:reason' : Reason },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_queue_timeout(RequestId), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. This timeout is controlled by TERMINUSDB_COMMIT_QUEUE_TIMEOUT, a test instrument that should be left unset (or 0, meaning infinite) for production workloads", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueTimeout',
+                              'api:request_id' : RequestId },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_queue_timeout, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out waiting for the commit queue to acknowledge the request; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. This timeout is controlled by TERMINUSDB_COMMIT_QUEUE_TIMEOUT, a test instrument that should be left unset (or 0, meaning infinite) for production workloads", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueTimeout' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(worker_exited(WorkerId), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The commit queue worker processing this request exited unexpectedly; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. Schödingers cat. This should not be possible in production.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueWorkerExited',
+                              'api:worker_id' : WorkerId },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(commit_failed_without_error, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The commit queue job ended without completing; the commit may or may not have been applied and the outcome can only be confirmed by checking server state. Schrödingers cat. This should not be possible in production.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:CommitQueueIncomplete' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_timeout(_RequestId, Outstanding, Timeout), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Timed out after ~w seconds waiting for ~w outstanding elaboration chunks; the request was not committed and is safe to retry. If this happens under sustained write load, raise the worker message timeout via TERMINUSDB_ELABORATION_TIMEOUT.", [Timeout, Outstanding]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:service_unavailable",
+             'api:error' : _{ '@type' : 'api:ElaborationTimeout',
+                              'api:timeout_seconds' : Timeout,
+                              'api:outstanding_chunks' : Outstanding },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_failed, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document elaboration failed without a detailed error", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:ElaborationFailed' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(parallel_elaboration_failed(chunk(Index, _Docs)), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "Document elaboration failed for chunk ~w without a detailed error", [Index]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:server_error",
+             'api:error' : _{ '@type' : 'api:ElaborationFailed',
+                              'api:chunk' : Index },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(data_version_mismatch(
@@ -263,6 +345,64 @@ api_global_error_jsonld(error(document_not_found(Id, Document), _), Type, JSON) 
                               'api:document': Document },
              'api:message' : Msg
             }.
+% Search-family handler received a non-branch descriptor path.
+% Returns a structured 400 response.
+api_global_error_jsonld(error(search_requires_branch_descriptor(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search operations require a branch descriptor path, got: ~w",
+           [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:SearchRequiresBranchDescriptor',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+% Search-family handler received 404 from engine (not indexed yet).
+% Returns a structured 404 response instead of an unhandled 500.
+api_global_error_jsonld(error(search_not_indexed(Path, _Engine_Body), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "No indexed data for ~w — the data product has not been indexed yet or indexing is in progress. A background index has been triggered; retry shortly.",
+           [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:SearchNotIndexed',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+% Search engine served a commit that does not exist in the TerminusDB
+% commit graph. This indicates a data integrity issue — vectorlink has
+% indexed data for a commit TerminusDB does not know about.
+api_global_error_jsonld(error(search_served_commit_not_found(Commit_Id), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search engine served a commit (~w) that does not exist in the TerminusDB commit graph. This may indicate stale or orphaned index data.",
+           [Commit_Id]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:not_found",
+             'api:error' : _{ '@type' : 'api:SearchServedCommitNotFound',
+                              'api:commit_id' : Commit_Id },
+             'api:message' : Msg
+            }.
+% Generic handler for engine forward failures (non-404 status codes).
+% Maps 4xx engine errors to api:failure (400) and 5xx to api:server_error (500).
+api_global_error_jsonld(error(vectorlink_forward_failed(Status, _Body, _URL), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg),
+           "Search engine returned unexpected status ~w",
+           [Status]),
+    (   Status >= 400,
+        Status < 500
+    ->  Api_Status = "api:failure"
+    ;   Api_Status = "api:server_error"
+    ),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : Api_Status,
+             'api:error' : _{ '@type' : 'api:SearchEngineError',
+                              'api:status_code' : Status },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(submitted_id_does_not_match_generated_id(Submitted_Id, Generated_Id), _), Type, JSON) :-
     error_type(Type, Type_Displayed),
     format(string(Msg), "Document was submitted with id ~q, but id ~q was generated", [Submitted_Id, Generated_Id]),
@@ -368,12 +508,38 @@ api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), 
                             },
              'api:message' : Msg
             }.
+api_global_error_jsonld(error(no_database_store_version, storage_path_does_not_exist(Path)), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store directory ~q does not exist. To create a fresh store run 'terminusdb store init', or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StoragePathDoesNotExist',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(no_database_store_version, storage_path_empty(Path)), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store directory ~q is empty. To create a fresh store run 'terminusdb store init', or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StoragePathEmpty',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
 api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "The store has no defined database version and so can not be opened. This may indicate the store has not been initialized yet. Try running 'terminusdb store init' or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", []),
+    format(string(Msg), "The store directory exists but contains no STORAGE_VERSION file, so it does not appear to be an initialized store. To create a fresh store run 'terminusdb store init', or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(storage_version_not_a_number, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store's STORAGE_VERSION file exists but does not contain a valid version number. The store may be corrupt or written by an incompatible TerminusDB version.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StorageVersionNotANumber' },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(invalid_path(Path), _), Type, JSON) :-
@@ -953,6 +1119,14 @@ api_error_jsonld_(rebase,error(rebase_commit_application_failed(fixup_error(Thei
              'api:error' : _{ '@type' : 'api:RebaseFixupError',
                               'api:their_commit' : Their_Commit_Id,
                               'api:witness' : Fixup_Witnesses},
+             'api:message' : Msg
+            }.
+api_error_jsonld_(rebase,error(rebase_target_branch_changed(Path),_), JSON) :-
+    format(string(Msg), "Rebase target branch head changed during the operation: ~q", [Path]),
+    JSON = _{'@type' : 'api:RebaseErrorResponse',
+             'api:status' : 'api:conflict',
+             'api:error' : _{ '@type' : 'api:RebaseTargetBranchChanged',
+                              'api:absolute_descriptor' : Path},
              'api:message' : Msg
             }.
 api_error_jsonld_(pack,error(unresolvable_collection(Descriptor),_), JSON) :-
@@ -1585,7 +1759,7 @@ api_error_jsonld_(capability,error(no_capability_for_user_with_scope(User,Scope)
                               'api:user' : User,
                               'api:scope' : Scope }
             }.
-api_error_jsonld_(patch,error(patch_conflicts(Conflicts)), JSON) :-
+api_error_jsonld_(patch,error(patch_conflicts(Conflicts), _), JSON) :-
     format(string(Msg), "The patch did not apply cleanly because of the attached conflicts", []),
     JSON = _{'@type' : 'api:PatchResponse',
              'api:status' : "api:conflict",
@@ -1623,6 +1797,23 @@ api_error_jsonld_(log, error(resource_has_no_history(Descriptor), _), JSON) :-
              'api:message' : Msg,
              'api:error' : _{ '@type' : "api:ResourceHasNoHistory",
                               'api:absolute_descriptor' : Path}
+            }.
+api_error_jsonld_(log, error(mutually_exclusive_log_parameters(Provided), _), JSON) :-
+    atomic_list_concat(Provided, ", ", Params),
+    format(string(Msg), "Log window parameters may not be combined in one request: ~s", [Params]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:MutuallyExclusiveLogParameters",
+                              'api:parameters' : Provided}
+            }.
+api_error_jsonld_(log, error(invalid_log_datetime(DateTime), _), JSON) :-
+    format(string(Msg), "Datetime parameter is not a valid ISO 8601 value: ~w", [DateTime]),
+    JSON = _{'@type' : 'api:LogErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:InvalidLogDateTime",
+                              'api:datetime' : DateTime}
             }.
 api_error_jsonld_(migration, error(no_migration_at_commit(Commit_Id), _), JSON) :-
     format(string(Msg), "Unable to find a migration for schema change at commit id: ~q", [Commit_Id]),
@@ -1745,6 +1936,164 @@ api_error_jsonld_(migration, error(unknown_schema_migration_operation(Operation)
                               'api:operation' : Operation
                             }
             }.
+api_error_jsonld_(migration, error(destructive_migration_requires_opt_in(Operation), _), JSON) :-
+    format(string(Msg), "The operation ~q rewrites stored identifiers and requires allow_destructive_migration to be set to true", [Operation]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:DestructiveMigrationRequiresOptIn",
+                              'api:operation' : Operation
+                            }
+            }.
+api_error_jsonld_(migration, error(rebase_prefix_unchanged(Prefix), _), JSON) :-
+    format(string(Msg), "The rebase source and target prefixes are identical: ~q", [Prefix]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : "api:RebasePrefixUnchanged",
+                              'api:prefix' : Prefix
+                            }
+            }.
+api_error_jsonld_(migration, error(unknown_irrefutable_property_creation(Class, Property, Type), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q could not be created with type ~q, as no irrefutable default could be constructed for it", [Property, Class, Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnknownIrrefutablePropertyCreation',
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:new_type' : Type
+                            }
+            }.
+api_error_jsonld_(migration, error(required_property_has_no_default(Class, Property), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q is required, but no default was supplied for it", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:RequiredPropertyHasNoDefault',
+                              'api:class' : Class,
+                              'api:property' : Property
+                            }
+            }.
+api_error_jsonld_(migration, error(property_type_changed_due_to_parent_change(Class, Property, Type1, Type2), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q cannot change type from ~q to ~q as a result of a change of parents", [Property, Class, Type1, Type2]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:PropertyTypeChangedDueToParentChange',
+                              'api:class' : Class,
+                              'api:property' : Property,
+                              'api:old_type' : Type1,
+                              'api:new_type' : Type2
+                            }
+            }.
+api_error_jsonld_(migration, error(unused_property_default(Class, Property), _), JSON) :-
+    format(string(Msg), "A default was supplied for property ~q on class ~q, but this property was not introduced by the change of parents", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnusedPropertyDefault',
+                              'api:class' : Class,
+                              'api:property' : Property
+                            }
+            }.
+api_error_jsonld_(migration, error(schema_check_failure(Witnesses), _), JSON) :-
+    format(string(Msg), "There was an error when schema checking", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:SchemaCheckFailure',
+                              'api:witnesses' : Witnesses
+                            }
+            }.
+api_error_jsonld_(migration, error(class_does_not_exist(Class), _), JSON) :-
+    format(string(Msg), "The class ~q does not exist", [Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:ClassDoesNotExist',
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(bad_key_type(Key_Type), _), JSON) :-
+    format(string(Msg), "The key type ~q is not one of Random, ValueHash, UuidV7, Lexical or Hash", [Key_Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:BadKeyType',
+                              'api:key_type' : Key_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(immovable_property(Property, Class), _), JSON) :-
+    format(string(Msg), "The property ~q cannot be moved on class ~q as it is defined by a parent or child class", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:ImmovableProperty',
+                              'api:property' : Property,
+                              'api:class' : Class
+                            }
+            }.
+api_error_jsonld_(migration, error(violation_of_diamond_property(Class, Property), _), JSON) :-
+    format(string(Msg), "The property ~q on class ~q is not provided uniformly by all parents, violating the diamond property constraint", [Property, Class]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:DiamondPropertyViolation',
+                              'api:class' : Class,
+                              'api:property' : Property
+                            }
+            }.
+api_error_jsonld_(migration, error(id_overlap_after_key_change(Duplicates), _), JSON) :-
+    format(string(Msg), "Changing the key would produce duplicate document ids: ~q", [Duplicates]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:IdOverlapAfterKeyChange',
+                              'api:duplicates' : Duplicates
+                            }
+            }.
+api_error_jsonld_(migration, error(casting_error(Value, Type), _), JSON) :-
+    format(string(Value_String), "~w", [Value]),
+    format(string(Msg), "The value ~s could not be cast as ~q", [Value_String, Type]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : Value_String,
+                              'api:type' : Type
+                            }
+            }.
+% Schema document elaboration failures surface inside migrations when a
+% CreateClassProperty spec uses an unknown or malformed family.
+api_error_jsonld_(migration, error(schema_type_unknown(Schema_Type), _), JSON) :-
+    format(string(Msg), "The '@type' field referred to an unimplemented schema type.", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:UnknownSchemaType',
+                              'api:type' : Schema_Type
+                            }
+            }.
+api_error_jsonld_(migration, error(unable_to_elaborate_schema_document(Document), _), JSON) :-
+    format(string(Msg), "The submitted schema document could not be elaborated due to an unknown syntax error.", []),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:DocumentElaborationImpossible',
+                              'api:document' : Document
+                            }
+            }.
+api_error_jsonld_(migration, error(missing_field(Field, Document), _), JSON) :-
+    format(string(Msg), "Missing '~s' field in submitted document.", [Field]),
+    JSON = _{'@type' : 'api:MigrationErrorResponse',
+             'api:status' : "api:failure",
+             'api:message' : Msg,
+             'api:error' : _{ '@type' : 'api:MissingField',
+                              'api:field' : Field,
+                              'api:document' : Document
+                            }
+            }.
 api_error_jsonld_(index, error(handlebars_template_error(Msg, Line, Character)), JSON) :-
     JSON = _{'@type' : 'api:IndexErrorResponse',
              'api:status' : "api:failure",
@@ -1804,6 +2153,7 @@ error_type_(access_documents, 'api:AccessDocumentErrorResponse').
 error_type_(get_documents, 'api:GetDocumentErrorResponse').
 error_type_(insert_documents, 'api:InsertDocumentErrorResponse').
 error_type_(optimize, 'api:OptimizeErrorResponse').
+error_type_(rebase, 'api:RebaseErrorResponse').
 error_type_(pack, 'api:PackErrorResponse').
 error_type_(prefix, 'api:PrefixErrorResponse').
 error_type_(pull, 'api:PullErrorResponse').
@@ -1833,6 +2183,9 @@ error_type_(patch, 'api:PatchErrorResponse').
 error_type_(migration, 'api:MigrationErrorResponse').
 error_type_(concat, 'api:ConcatErrorResponse').
 error_type_(index, 'api:IndexErrorResponse').
+error_type_(search, 'api:SearchErrorResponse').
+error_type_(suggest, 'api:SearchErrorResponse').
+error_type_(server, 'api:ServerErrorResponse').
 
 % Info endpoint errors
 api_error_jsonld_(info, error(no_database_store_version, _), JSON) :-
@@ -1964,6 +2317,15 @@ api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids), _), JSON
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SameDocumentIdsMutatedInOneTransaction',
                               'api:duplicate_ids' : Ids},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(elaboration_stale(Reason), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Elaboration is stale: ~w", [Reason]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:conflict",
+             'api:error' : _{ '@type' : 'api:ElaborationStale',
+                              'api:reason' : Reason},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(document_access_impossible(Descriptor, Graph_Type, Read_Write), _), JSON) :-
@@ -2120,6 +2482,14 @@ api_document_error_jsonld(Type,error(query_is_only_supported_for_instance_graphs
     JSON = _{'@type' : JSON_Type,
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:QueryDocumentOnlySupportedForInstanceGraphs'},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type,error(id_prefix_is_only_supported_for_instance_graphs,_), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "The id_prefix parameter is currently only supported for instance graphs", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:IdPrefixOnlySupportedForInstanceGraphs'},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type,error(counted_not_supported_for_selector,_), JSON) :-
@@ -2302,6 +2672,15 @@ api_document_error_jsonld(Type, error(can_not_insert_existing_object_with_id(Id,
              'api:error' : _{ '@type' : 'api:DocumentIdAlreadyExists',
                               'api:document_id' : Id,
                               'api:document' : Document},
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(can_not_insert_existing_object_with_id(Id), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Tried to insert a new document with id ~q, but an object with that id already exists", [Id]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:DocumentIdAlreadyExists',
+                              'api:document_id' : Id},
              'api:message' : Msg
             }.
 api_document_error_jsonld(Type, error(unknown_language_tag(Tag,Document), _), JSON) :-
@@ -2616,6 +2995,16 @@ api_document_error_jsonld(Type, error(embedded_subdocument_has_linked_by(Documen
                               'api:document' : Document },
              'api:message' : Msg
             }.
+api_document_error_jsonld(Type, error(back_links_not_supported_in_replace, _),JSON) :-
+    !,
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:LinksInReplaceError',
+                              'api:document' : json{}},
+             'api:message' : Msg
+            }.
 api_document_error_jsonld(Type, error(back_links_not_supported_in_replace(Document), _),JSON) :-
     document_error_type(Type, JSON_Type),
     format(string(Msg), "It is not possible to use '@linked-by' in replace document.", []),
@@ -2677,6 +3066,26 @@ api_document_error_jsonld(Type, error(no_embedding_query_for_type(DocType), _), 
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoEmbeddingQueryForType',
                               'api:document_type' : DocType },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(embedding_query_parsing_failed(DocType, ParseError), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Embedding query could not be parsed for type ~q: ~w", [DocType, ParseError]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddingQueryParsingFailed',
+                              'api:document_type' : DocType,
+                              'api:parse_error' : ParseError },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(embedding_query_validation_failed(DocType, ValidationError), _), JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "Embedding query could not be validated for type ~q: ~w", [DocType, ValidationError]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:EmbeddingQueryValidationFailed',
+                              'api:document_type' : DocType,
+                              'api:validation_error' : ValidationError },
              'api:message' : Msg
             }.
 
@@ -2757,6 +3166,34 @@ generic_exception_jsonld(woql_syntax_error(JSON,Path,Element),JSON) :-
              'api:message' : Message,
              'vio:path' : Director,
              'vio:query' : JSON}.
+generic_exception_jsonld(type_error(T,O),Context,JSON) :-
+    !,
+    log_type_error_backtrace(T, O, Context),
+    generic_exception_jsonld(type_error(T,O),JSON).
+
+log_type_error_backtrace(T, O, Context) :-
+    catch(
+        (   nonvar(Context),
+            Context = context(prolog_stack(Frames), _),
+            is_list(Frames)
+        ->  with_output_to(string(Stack_String),
+                           print_prolog_backtrace(current_output, Frames))
+        ;   with_output_to(string(Stack_String),
+                           format(current_output, "context: ~q", [Context]))
+        ),
+        _,
+        Stack_String = "backtrace unavailable"
+    ),
+    catch(
+        json_log_error_formatted(
+            'Unexpected type_error: expected ~q, got ~q, backtrace: ~s',
+            [T, O, Stack_String]),
+        _,
+        format(user_error,
+               '[ERROR] Unexpected type_error: expected ~q, got ~q, backtrace: ~s~n',
+               [T, O, Stack_String])
+    ).
+
 generic_exception_jsonld(type_error(T,O),JSON) :-
     format(atom(M),'Type error for ~q which should be ~q', [O,T]),
     format(atom(OA), '~q', [O]),
@@ -2907,6 +3344,53 @@ generic_exception_jsonld(invalid_document_format(Format, Message), JSON) :-
     JSON = _{'@type' : 'api:InvalidDocumentFormatError',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(vectorlink_engine_unavailable(Method, Path), JSON) :-
+    format(string(Msg), "embedded vectorlink engine cannot serve ~w ~w (not initialized or FFI missing)", [Method, Path]),
+    JSON = _{'@type' : 'api:EngineUnavailable',
+             'api:status' : 'api:server_error',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEngineUnavailable',
+                             'api:method' : Method,
+                             'api:path' : Path}}.
+generic_exception_jsonld(vectorlink_engine_init_timeout(Method, Path), JSON) :-
+    format(string(Msg), "embedded vectorlink engine still initializing, cannot serve ~w ~w yet", [Method, Path]),
+    JSON = _{'@type' : 'api:EngineUnavailable',
+             'api:status' : 'api:service_unavailable',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEngineInitTimeout',
+                             'api:method' : Method,
+                             'api:path' : Path}}.
+generic_exception_jsonld(server_not_ready, JSON) :-
+    JSON = _{'@type' : 'api:NotReadyErrorResponse',
+             'api:status' : 'api:service_unavailable',
+             'api:message' : 'server is still initializing, retry shortly'}.
+generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "vectorlink endpoint is not configured (called from ~w)", [Context]),
+    JSON = _{'@type' : 'api:EndpointNotConfigured',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkEndpointNotConfigured',
+                             'api:context' : Context}}.
+generic_exception_jsonld(semantic_indexer_endpoint_not_configured(Context), JSON) :-
+    format(string(Msg), "semantic indexer endpoint is not configured (called from ~w)", [Context]),
+    JSON = _{'@type' : 'api:EndpointNotConfigured',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:SemanticIndexerEndpointNotConfigured',
+                             'api:context' : Context}}.
+generic_exception_jsonld(permission_error(http_method, Method, Location), JSON) :-
+    format(string(Msg), "HTTP method ~w is not allowed for ~w", [Method, Location]),
+    upcase_atom(Method, Method_Upper),
+    JSON = _{'@type' : 'api:MethodNotAllowedErrorResponse',
+             'api:status' : 'api:method_not_allowed',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:MethodNotAllowed',
+                             'api:method' : Method_Upper,
+                             'api:path' : Location}}.
+generic_exception_jsonld(Error, _Context, JSON) :-
+    !,
+    generic_exception_jsonld(Error, JSON).
+
 generic_exception_jsonld(Error, JSON) :-
     % Catch-all for unhandled errors - log the full error but return sanitized message
     % This prevents information leakage in 500 errors
@@ -2935,6 +3419,7 @@ status_http_code('api:forbidden',403).
 status_http_code('api:not_found',404).
 status_http_code('api:method_not_allowed',405).
 status_http_code('api:conflict',409).
+status_http_code('api:service_unavailable',503).
 status_http_code('api:server_error',500).
 
 status_cli_code('api:success',0).
@@ -2958,5 +3443,281 @@ test(bad_schema_document, []) :-
                            'api:document':_{'@type':'Garbage'}},
              'api:message':"The submitted schema document could not be elaborated due to an unknown syntax error.",
              'api:status':"api:failure"}.
+
+test(document_id_already_exists_with_document, []) :-
+    api_error_jsonld(insert_documents,
+                     error(can_not_insert_existing_object_with_id(
+                               'terminusdb:///data/Doc/test1',
+                               _{'@type':'Doc','@id':'Doc/test1','name':'test'}), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentIdAlreadyExists'),
+    get_dict('api:document_id', Error, 'terminusdb:///data/Doc/test1'),
+    get_dict('api:document', Error, _{'@type':'Doc','@id':'Doc/test1','name':'test'}),
+    get_dict('api:status', JSON, "api:failure").
+
+test(document_id_already_exists_without_document, []) :-
+    % The queued commit path throws can_not_insert_existing_object_with_id/1
+    % (without the Document argument) because it does not go through
+    % call_catch_document_mutation which embeds the document. This must
+    % still produce a proper 400 error response, not a 500.
+    api_error_jsonld(insert_documents,
+                     error(can_not_insert_existing_object_with_id(
+                               'terminusdb:///data/Doc/test1'), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentIdAlreadyExists'),
+    get_dict('api:document_id', Error, 'terminusdb:///data/Doc/test1'),
+    \+ get_dict('api:document', Error, _),
+    get_dict('api:status', JSON, "api:failure").
+
+test(parallel_elaboration_timeout_is_retryable_error, []) :-
+    % A worker that takes an elaboration chunk but never reports back makes
+    % the request handler throw parallel_elaboration_timeout/3 after the
+    % configured message timeout. Nothing is committed at that point, so the
+    % client must get a typed, retryable response - not an unhandled 500.
+    api_error_jsonld(insert_documents,
+                     error(parallel_elaboration_timeout(request42, 3, 120.0), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ElaborationTimeout'),
+    get_dict('api:timeout_seconds', Error, 120.0),
+    get_dict('api:outstanding_chunks', Error, 3),
+    get_dict('api:status', JSON, "api:service_unavailable"),
+    json_http_code(JSON, 503),
+    % The response must name the tuning knob so operators can act on it.
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "TERMINUSDB_ELABORATION_TIMEOUT")).
+
+test(parallel_elaboration_failed_is_typed_error, []) :-
+    % A chunk that fails to elaborate without throwing a detailed error
+    % surfaces as parallel_elaboration_failed. It must not escape error
+    % mapping as a generic unhandled 500.
+    api_error_jsonld(insert_documents,
+                     error(parallel_elaboration_failed(chunk(2, [doc])), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ElaborationFailed'),
+    get_dict('api:chunk', Error, 2),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500).
+
+test(commit_queue_timeout_is_indeterminate_server_error, []) :-
+    % When the commit-queue acknowledgement does not arrive within the
+    % producer timeout, the commit package is already enqueued. The
+    % server cannot say whether the commit will be applied, so the
+    % response must be an honest 500 asserting neither success nor
+    % failure - never a retryable 503, which would invite a duplicate
+    % submission.
+    api_error_jsonld(insert_documents,
+                     error(commit_queue_timeout(request42), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueTimeout'),
+    get_dict('api:request_id', Error, request42),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500),
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "may or may not have been applied")).
+
+test(worker_exited_is_indeterminate_server_error, []) :-
+    % A worker dying mid-commit is the same indeterminate-outcome class as
+    % the commit-queue timeout: the client must get an honest 500, plus the
+    % worker id for operational diagnosis.
+    api_error_jsonld(insert_documents,
+                     error(worker_exited(worker_4), _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueWorkerExited'),
+    get_dict('api:worker_id', Error, worker_4),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500),
+    get_dict('api:message', JSON, Message),
+    once(sub_string(Message, _, _, _, "may or may not have been applied")).
+
+test(commit_queue_timeout_without_request_id_is_indeterminate_error, []) :-
+    % Producers that cannot identify the request must still get the
+    % honest indeterminate-outcome response.
+    api_error_jsonld(insert_documents,
+                     error(commit_queue_timeout, _),
+                     JSON),
+    get_dict('@type', JSON, 'api:InsertDocumentErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:CommitQueueTimeout'),
+    get_dict('api:status', JSON, "api:server_error"),
+    json_http_code(JSON, 500).
+
+test(server_not_ready_is_retryable_503, []) :-
+    once(generic_exception_jsonld(server_not_ready, JSON)),
+    get_dict('@type', JSON, 'api:NotReadyErrorResponse'),
+    get_dict('api:status', JSON, 'api:service_unavailable'),
+    json_http_code(JSON, 503).
+
+test(migration_unknown_irrefutable_property_creation, []) :-
+    % Thrown as a bare error/1 (no context) when a non-simple family reaches
+    % create_class_property_operation.
+    once(api_error_jsonld(migration,
+                     error(unknown_irrefutable_property_creation("C","p","xsd:string")),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnknownIrrefutablePropertyCreation'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_required_property_has_no_default, []) :-
+    once(api_error_jsonld(migration,
+                     error(required_property_has_no_default("C","p"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:RequiredPropertyHasNoDefault'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_property_type_changed_due_to_parent_change, []) :-
+    once(api_error_jsonld(migration,
+                     error(property_type_changed_due_to_parent_change("C","p","xsd:string","xsd:integer"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:PropertyTypeChangedDueToParentChange'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_unused_property_default, []) :-
+    once(api_error_jsonld(migration,
+                     error(unused_property_default("C","p"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnusedPropertyDefault'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_schema_check_failure_has_error_envelope, []) :-
+    % The generic schema_check_failure fallback emits bare system:witnesses
+    % with no api:error; the migration context must carry a typed envelope
+    % alongside the witness list.
+    once(api_error_jsonld(migration,
+                     error(schema_check_failure([witness{property:p,message:m}]), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:SchemaCheckFailure'),
+    get_dict('api:witnesses', Error, [_|_]),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_class_does_not_exist, []) :-
+    once(api_error_jsonld(migration,
+                     error(class_does_not_exist("C"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ClassDoesNotExist'),
+    get_dict('api:class', Error, "C"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_bad_key_type, []) :-
+    once(api_error_jsonld(migration,
+                     error(bad_key_type("Bogus"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:BadKeyType'),
+    get_dict('api:key_type', Error, "Bogus"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_immovable_property, []) :-
+    once(api_error_jsonld(migration,
+                     error(immovable_property("p","C"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:ImmovableProperty'),
+    get_dict('api:property', Error, "p"),
+    get_dict('api:class', Error, "C"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_violation_of_diamond_property, []) :-
+    once(api_error_jsonld(migration,
+                     error(violation_of_diamond_property("C","p"), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DiamondPropertyViolation'),
+    get_dict('api:class', Error, "C"),
+    get_dict('api:property', Error, "p"),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_id_overlap_after_key_change, []) :-
+    once(api_error_jsonld(migration,
+                     error(id_overlap_after_key_change(["C/1","C/2"]), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:IdOverlapAfterKeyChange'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_casting_error_is_bad_cast, []) :-
+    % typecast/4 throws casting_error rather than failing; any site that lets
+    % it escape (e.g. default insertion on create/change_parents) must still
+    % surface as a typed cast failure, not a 500.
+    once(api_error_jsonld(migration,
+                     error(casting_error("abc",'http://www.w3.org/2001/XMLSchema#integer'), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:BadCast'),
+    get_dict('api:value', Error, "abc"),
+    get_dict('api:type', Error, 'http://www.w3.org/2001/XMLSchema#integer'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_schema_type_unknown, []) :-
+    % Schema document elaboration errors surface inside migrations too —
+    % an unknown property spec family is a client error, not a 500.
+    once(api_error_jsonld(migration,
+                     error(schema_type_unknown('Foreign'), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:UnknownSchemaType'),
+    get_dict('api:type', Error, 'Foreign'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_unable_to_elaborate_schema_document, []) :-
+    once(api_error_jsonld(migration,
+                     error(unable_to_elaborate_schema_document(_{'@type':"Array"}), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:DocumentElaborationImpossible'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
+
+test(migration_missing_field, []) :-
+    once(api_error_jsonld(migration,
+                     error(missing_field('@id', _{foo:bar}), _),
+                     JSON)),
+    get_dict('@type', JSON, 'api:MigrationErrorResponse'),
+    get_dict('api:error', JSON, Error),
+    get_dict('@type', Error, 'api:MissingField'),
+    get_dict('api:field', Error, '@id'),
+    get_dict('api:status', JSON, "api:failure"),
+    json_http_code(JSON, 400).
 
 :- end_tests(error_reporting).

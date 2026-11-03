@@ -4,7 +4,7 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(api)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 /**
  * JSON Number Serialization Tests

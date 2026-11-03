@@ -20,13 +20,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install swi-prolog
         run: ./.github/install-swi-prolog.sh stable
 
       - name: Checkout tus
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: terminusdb-org/tus
           path: tus
@@ -50,7 +50,7 @@ jobs:
       
     steps:
       - name: Checkout repository      
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Lint
         run: make lint-openapi
@@ -61,9 +61,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - run: sudo apt update && sudo apt install software-properties-common -y
       - run: sudo apt-add-repository ppa:swi-prolog/stable -y && sudo apt update && sudo apt install swi-prolog-nox protobuf-compiler libprotobuf-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/rust
+          add-job-id-key: false
+          # Clippy stores cargo-check artifacts, not build artifacts. Sharing
+          # the native-build key poisons it: GHA cache entries are immutable,
+          # so a clippy save makes every later cargo build a full rebuild.
+          shared-key: clippy
       - uses: actions-rs/clippy-check@v1
         continue-on-error: true
         with:

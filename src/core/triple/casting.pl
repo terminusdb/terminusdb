@@ -43,7 +43,8 @@ decimal_precision(20).
 :- use_module(library(apply_macros)).
 :- use_module(library(url), [is_absolute_url/1]).
 :- use_module(library(uri), [uri_components/2]).
-:- use_module(library(http/json), [atom_json_dict/3]).
+:- use_module(core(query/global_prefixes), [default_prefixes/1]).
+:- use_module(library(json), [atom_json_dict/3]).
 
 /*
  * string_decimal_to_rational(+String, -Rational) is semidet.
@@ -198,7 +199,14 @@ typecast(Val, Type, Hint, Cast) :-
             typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Bare_Literal,Hint,Cast)
         ->  true
         ;   atom(Val)
-        ->  typecast_switch(Expanded_Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
+        ->  (   % An enum member's canonical string form is its lexical
+                % value, not the schema node IRI it is stored as.
+                Expanded_Type = 'http://www.w3.org/2001/XMLSchema#string',
+                option(enum_members(Members), Hint),
+                memberchk(Val-Lexical, Members)
+            ->  Cast = Lexical^^'http://www.w3.org/2001/XMLSchema#string'
+            ;   typecast_switch(Expanded_Type,'http://www.w3.org/2002/07/owl#Thing',Val,Hint,Cast)
+            )
         ;   string(Val)
         ->  typecast_switch(Expanded_Type,'http://www.w3.org/2001/XMLSchema#string',Val,Hint,Cast)
         ;   is_dict(Val)
@@ -342,13 +350,13 @@ typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://ter
         normalise_interval_start(D1, N1),
         normalise_interval_end(D2, N2),
         compute_duration_between(N1, N2, Dur),
-        Cast = date_time_interval(N1, N2, Dur, explicit)
+        Cast = date_time_interval(N1, N2, Dur, explicit, tz(0), tz(0))
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
 %%% xdd:dateTimeInterval => xdd:dateRange
 typecast_switch('http://terminusdb.com/schema/xdd#dateRange', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateRange') :-
     !,
     (   is_date_time_interval(Val),
-        Val = date_time_interval(C1, C2, _, _)
+        Val = date_time_interval(C1, C2, _, _, _, _)
     ->  component_to_parts(C1, S1, _),
         component_to_parts(C2, S2, NS2),
         % The interval end is exclusive: the last covered instant is
@@ -370,37 +378,134 @@ typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))
     ).
 
+%%% xsd:date => xdd:dateRange (a date is an inclusive one-day range)
+typecast_switch('http://terminusdb.com/schema/xdd#dateRange', 'http://www.w3.org/2001/XMLSchema#date', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateRange') :-
+    !,
+    (   is_date(Val)
+    ->  Cast = date_range(Val, Val)
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
+
+%%% xsd:date => xdd:dateTimeInterval ([midnight, next midnight), same as
+%%% the dateRange arm — a date denotes its whole day)
+typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#date', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
+    !,
+    (   is_date(Val)
+    ->  normalise_interval_start(Val, N1),
+        normalise_interval_end(Val, N2),
+        compute_duration_between(N1, N2, Dur),
+        Cast = date_time_interval(N1, N2, Dur, explicit, tz(0), tz(0))
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
+
+%%% xsd:dateTime => xdd:dateTimeInterval
+%%% A stored dateTime is already UTC-normalised (zone consumed at parse);
+%%% it becomes the zero-length point [T, T) rendered with 'Z'.
+typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#dateTime', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
+    !,
+    (   is_date_time(Val)
+    ->  compute_duration_between(Val, Val, Dur),
+        Cast = date_time_interval(Val, Val, Dur, explicit, tz(0), tz(0))
+    ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
+
+%%% xdd:dateTimeInterval => xsd:dateTime
+%%% Only a zero-length interval (start == end) names an instant.
+typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
+    !,
+    (   is_date_time_interval(Val),
+        Val = date_time_interval(C, C, _, _, _, _),
+        is_date_time(C)
+    ->  Cast = C
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTime'),_))).
+
+%%% xdd:dateTimeInterval => xsd:date
+%%% Only a zero-length interval at a day boundary names a date.
+typecast_switch('http://www.w3.org/2001/XMLSchema#date', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#date') :-
+    !,
+    (   is_date_time_interval(Val),
+        Val = date_time_interval(C, C, _, _, _, _),
+        interval_component_to_date(C, _)
+    ->  interval_component_to_date(C, Cast)
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#date'),_))).
+
+%%% xdd:dateRange => xsd:date (only a single-day range names a date)
+typecast_switch('http://www.w3.org/2001/XMLSchema#date', 'http://terminusdb.com/schema/xdd#dateRange', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#date') :-
+    !,
+    (   is_date_range(Val),
+        Val = date_range(D, D)
+    ->  Cast = D
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#date'),_))).
+
+%%% xdd:dateRange => xsd:dateTime (a single-day range names its midnight)
+typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime', 'http://terminusdb.com/schema/xdd#dateRange', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
+    !,
+    (   is_date_range(Val),
+        Val = date_range(D, D),
+        D = date(Y,M,Dy,_)
+    ->  Cast = date_time(Y,M,Dy,0,0,0,0)
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTime'),_))).
+
+% A date component keeps its zone; a midnight dateTime becomes the UTC date.
+interval_component_to_date(date(Y,M,D,Off), date(Y,M,D,Off)) :- !.
+interval_component_to_date(date_time(Y,M,D,0,0,0,0), date(Y,M,D,0)).
+
 parse_date_time_interval(Val, Cast) :-
     atom_codes(Val, Codes),
     phrase(dateTimeInterval(X, Y, Z), Codes),
     !,
     normalise_interval_start(X, NX),
     normalise_interval_end(Y, NY),
-    Cast = date_time_interval(NX, NY, Z, explicit).
+    component_tz(X, TzX),
+    component_tz(Y, TzY),
+    Cast = date_time_interval(NX, NY, Z, explicit, TzX, TzY).
 parse_date_time_interval(Val, Cast) :-
     atom_codes(Val, Codes),
     phrase(dateTimeInterval(X, Y), Codes),
     !,
     parse_two_component_interval(X, Y, Cast).
+% A bare finite component is an as-of point [T,T): a date anchors at local
+% day-start (zoneless), a dateTime at itself. Matches parse_lexical_interval.
+parse_date_time_interval(Val, Cast) :-
+    atom_codes(Val, Codes),
+    phrase(dateTimeIntervalComponent(X), Codes),
+    X \= open,
+    X \= unknown,
+    \+ is_duration(X),
+    !,
+    normalise_interval_start(X, NX),
+    (   X = date(_,_,_,_)
+    ->  Tz = none
+    ;   component_tz(X, Tz)),
+    compute_duration_between(NX, NX, Dur),
+    Cast = date_time_interval(NX, NX, Dur, explicit, Tz, Tz).
 
-parse_two_component_interval(X, Y, date_time_interval(NX, NY, X, duration_end)) :-
+parse_two_component_interval(X, Y, date_time_interval(NX, NY, X, duration_end, TzY, TzY)) :-
     is_duration(X),
+    Y \= open,
+    Y \= unknown,
     !,
-    % Compute the start from the unbumped end so that "P3M/2025-04-30"
-    % yields a start of 2025-01-30 (3 months before April 30), then
-    % bump the end to the next day (May 1) for the exclusive endpoint.
-    normalise_interval_start(Y, YN),
-    subtract_duration_from_component(YN, X, NX),
-    normalise_interval_end(Y, NY).
-parse_two_component_interval(X, Y, date_time_interval(NX, NY, Y, start_duration)) :-
+    component_tz(Y, TzY),
+    % Anchor the duration on the exclusive (bumped) end: "P1M/2025-12-31"
+    % is the month whose last covered day is Dec 31 → [Dec 1, Jan 1).
+    % Matches the Rust parser, which bumps the date end before subtracting.
+    normalise_interval_end(Y, NY),
+    subtract_duration_from_component(NY, X, NX).
+parse_two_component_interval(X, Y, date_time_interval(NX, NY, Y, start_duration, TzX, TzX)) :-
     is_duration(Y),
+    X \= open,
+    X \= unknown,
     !,
+    component_tz(X, TzX),
     normalise_interval_start(X, NX),
     add_duration_to_component(NX, Y, NY).
-parse_two_component_interval(X, Y, date_time_interval(NX, NY, Dur, explicit)) :-
+parse_two_component_interval(X, Y, date_time_interval(NX, NY, Dur, explicit, TzX, TzY)) :-
+    \+ is_duration(X),
+    \+ is_duration(Y),
+    component_tz(X, TzX),
+    component_tz(Y, TzY),
     normalise_interval_start(X, NX),
     normalise_interval_end(Y, NY),
-    compute_duration_between(NX, NY, Dur).
+    (   (NX == neg_infinity ; NX == unknown ; NY == infinity ; NY == unknown)
+    ->  Dur = duration(1,0,0,0,0,0,0,0.0)
+    ;   compute_duration_between(NX, NY, Dur)).
 
 %%% xdd:dateTimeInterval => xsd:string
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
@@ -411,45 +516,64 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
     ).
 
 interval_to_string(Interval, S) :-
-    Interval = date_time_interval(_,_,_,Flag),
+    Interval = date_time_interval(_,_,_,Flag,_,_),
     interval_to_string_as(Interval, Flag, S).
 
-interval_to_string_as(date_time_interval(C1,C2,_Dur,_Flag), explicit, S) :-
+% A zoneless zero-length explicit interval is the as-of point spelling —
+% the dict entry cannot distinguish it from a supplied t/t pair, and the
+% value is the same instant either way. Zoned points keep the pair, and
+% so do unknown/unknown ('/').
+interval_to_string_as(date_time_interval(C,C,_Dur,explicit,none,none), explicit, S) :-
+    (   C = date(_,_,_,_)
+    ;   C = date_time(_,_,_,_,_,_,_)),
     !,
-    interval_component_string(C1,Val1),
-    interval_component_string(C2,Val2),
+    interval_point_string(C, none, S).
+interval_to_string_as(date_time_interval(C1,C2,_Dur,_Flag,Tz1,Tz2), explicit, S) :-
+    !,
+    interval_component_string(C1,Tz1,Val1),
+    interval_component_string(C2,Tz2,Val2),
     format(string(S), '~w/~w', [Val1,Val2]).
-interval_to_string_as(date_time_interval(C1,_C2,Dur,_Flag), start_duration, S) :-
+interval_to_string_as(date_time_interval(C1,_C2,Dur,_Flag,Tz1,_), start_duration, S) :-
     !,
-    interval_component_string(C1,Val1),
-    interval_component_string(Dur,Val2),
+    interval_component_string(C1,Tz1,Val1),
+    interval_component_string(Dur,none,Val2),
     format(string(S), '~w/~w', [Val1,Val2]).
-interval_to_string_as(date_time_interval(_C1,C2,Dur,_Flag), duration_end, S) :-
+interval_to_string_as(date_time_interval(_C1,C2,Dur,_Flag,_,Tz2), duration_end, S) :-
     !,
-    interval_component_string(Dur,Val1),
-    interval_component_string(C2,Val2),
+    interval_component_string(Dur,none,Val1),
+    interval_component_string(C2,Tz2,Val2),
     format(string(S), '~w/~w', [Val1,Val2]).
 
 %% Normalise a start component: dates become date_time at 00:00:00 UTC (no bump).
+%% 'open' normalises to neg_infinity at the start; 'unknown' stays unknown.
+normalise_interval_start(open, neg_infinity) :- !.
+normalise_interval_start(neg_infinity, neg_infinity) :- !.
+normalise_interval_start(unknown, unknown) :- !.
 normalise_interval_start(date(Y,M,D,_Offset), date_time(Y,M,D,0,0,0,0)) :- !.
 normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS), date_time(Y,Mo,D,H,M,S,NS)) :- !.
+normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS,none), date_time(Y,Mo,D,H,M,S,NS)) :- !.
 normalise_interval_start(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
-normalise_interval_start(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
+normalise_interval_start(duration(Sign,W,Y,Mo,D,H,M,S), duration(Sign,W,Y,Mo,D,H,M,S)) :- !.
 
 %% Normalise an end component: dates become date_time at 00:00:00 UTC on the
 %% following day (the "day-after bump"), so that a date-only end is exclusive.
+%% 'open' normalises to infinity at the end; 'unknown' stays unknown.
+normalise_interval_end(open, infinity) :- !.
+normalise_interval_end(infinity, infinity) :- !.
+normalise_interval_end(unknown, unknown) :- !.
 normalise_interval_end(date(Y,M,D,_Offset), Norm) :- !,
     date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
     NextStamp is Stamp + 86400,
     stamp_date_time(NextStamp, date(NY,NM,ND,_H,_Mi,_S,_Off,'UTC',_DST), 'UTC'),
     Norm = date_time(NY,NM,ND,0,0,0,0).
 normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS), date_time(Y,Mo,D,H,M,S,NS)) :- !.
+normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,none), date_time(Y,Mo,D,H,M,S,NS)) :- !.
 normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
-normalise_interval_end(duration(Sign,Y,Mo,D,H,M,S), duration(Sign,Y,Mo,D,H,M,S)) :- !.
+normalise_interval_end(duration(Sign,W,Y,Mo,D,H,M,S), duration(Sign,W,Y,Mo,D,H,M,S)) :- !.
 
-compute_duration_between(Start, End, duration(Sign, 0, 0, Days, Hours, Minutes, Seconds)) :-
+compute_duration_between(Start, End, duration(Sign, 0, 0, 0, Days, Hours, Minutes, Seconds)) :-
     component_to_parts(Start, T1, NS1),
     component_to_parts(End, T2, NS2),
     % Whole seconds as an exact float difference, nanoseconds as integers —
@@ -478,9 +602,57 @@ component_to_parts(date(Y,M,D,_), T, 0) :-
 component_to_parts(date_time(Y,Mo,D,H,Mi,S,NS), T, NS) :-
     date_time_stamp(date(Y,Mo,D,H,Mi,S,0,-,-), T).
 
-interval_component_string(date(Y,M,D,Offset), S) :- !, date_string(date(Y,M,D,Offset), S).
-interval_component_string(duration(Sign,Y,Mo,D,H,M,SS), S) :- !, duration_string(duration(Sign,Y,Mo,D,H,M,SS), S).
-interval_component_string(DT, S) :- date_time_string(DT, S).
+interval_component_string(neg_infinity, _Tz, "..") :- !.
+interval_component_string(infinity, _Tz, "..") :- !.
+interval_component_string(unknown, _Tz, "") :- !.
+interval_component_string(date(Y,M,D,_Offset), _Tz, S) :- !, date_time_string(date_time(Y,M,D,0,0,0,0), S).
+interval_component_string(duration(Sign,W,Y,Mo,D,H,M,SS), _Tz, S) :- !, duration_string(duration(Sign,W,Y,Mo,D,H,M,SS), S).
+interval_component_string(DT, Tz, S) :- interval_date_time_string(DT, Tz, S).
+
+interval_point_string(date(Y,M,D,_Offset), _Tz, S) :-
+    !,
+    format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
+interval_point_string(date_time(Y,M,D,0,0,0,0), none, S) :-
+    !,
+    format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
+interval_point_string(C, Tz, S) :-
+    interval_component_string(C, Tz, S).
+
+%% Extract the supplied zone from a parsed interval component into term tz
+%% form: tz(OffsetSeconds) | none (zone-less local time).
+component_tz(date(_,_,_,Offset), tz(Offset)) :- !.
+component_tz(date_time(_,_,_,_,_,_,_,none), none) :- !.
+component_tz(date_time(_,_,_,_,_,_,_,Offset), tz(Offset)) :- !.
+component_tz(duration(_,_,_,_,_,_,_,_), none) :- !.
+component_tz(open, none) :- !.
+component_tz(unknown, none) :- !.
+
+%% Render a normalized UTC component in the supplied zone.
+%% tz(0) -> 'Z', tz(OffSecs) -> ±hh:mm wall clock, none -> no designator.
+interval_date_time_string(DT, Tz, S) :-
+    component_to_parts(DT, TS, NS),
+    (   Tz = tz(Off)
+    ->  LocalTS is TS - Off
+    ;   LocalTS = TS
+    ),
+    stamp_date_time(LocalTS, date(Y,M,D,H,Mi,Se,0,'UTC',-), 'UTC'),
+    SF is floor(Se),
+    zone_suffix(Tz, ZS),
+    (   NS =:= 0
+    ->  format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+~w', [Y,M,D,H,Mi,SF,ZS])
+    ;   0 is NS mod 1000000
+    ->  Ms is NS div 1000000,
+        format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~3+~w', [Y,M,D,H,Mi,SF,Ms,ZS])
+    ;   0 is NS mod 1000
+    ->  Us is NS div 1000,
+        format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~6+~w', [Y,M,D,H,Mi,SF,Us,ZS])
+    ;   format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+T~|~`0t~d~2+:~|~`0t~d~2+:~|~`0t~d~2+.~|~`0t~d~9+~w', [Y,M,D,H,Mi,SF,NS,ZS])
+    ).
+
+zone_suffix(none, '').
+zone_suffix(tz(0), 'Z').
+zone_suffix(tz(Off), S) :- Off < 0, !, AH is -Off // 3600, AM is (-Off mod 3600) // 60, format(string(S),'+~|~`0t~d~2+:~|~`0t~d~2+',[AH,AM]).
+zone_suffix(tz(Off), S) :- Off > 0, AH is Off // 3600, AM is (Off mod 3600) // 60, format(string(S),'-~|~`0t~d~2+:~|~`0t~d~2+',[AH,AM]).
 %%% xsd:string => xdd:integerRange
 typecast_switch('http://terminusdb.com/schema/xdd#integerRange', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#integerRange') :-
     !,
@@ -791,14 +963,14 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#duration', 'http://www.w3.org/
 typecast_switch('http://www.w3.org/2001/XMLSchema#yearMonthDuration', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#yearMonthDuration') :-
     !,
     (   duration_string(Cast,Val),
-        Cast = duration(_Sign,_Y,_M,_D,0,0,0)
+        Cast = duration(_Sign,0,_Y,_M,0,0,0,0)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#yearMonthduration'),_))).
 %%% xsd:string => xsd:dayTimeDuration
 typecast_switch('http://www.w3.org/2001/XMLSchema#dayTimeDuration', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dayTimeDuration') :-
     !,
     (   duration_string(Cast,Val),
-        Cast = duration(_Sign,0,0,_D,_H,_M,_S)
+        Cast = duration(_Sign,_W,0,0,_D,_H,_M,_S)
     ->  true
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dayTimeDuration'),_))).
 %%% xsd:duration => xsd:string
@@ -1045,6 +1217,65 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#NCName', 'http://www.w3.org/20
 %%% xsd:NCName => xsd:string (downcast)
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#NCName', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#string') :-
     !.
+
+/*
+ * Expanded names: xsd:QName and xbrl:SQName.
+ *
+ * Stored form is always Clark notation `{uri}local`; the active prefix map
+ * only affects the `prefix:local` edge form. The `prefixes(Dict)` hint option
+ * overrides the global defaults (used by WOQL Typecast's `prefixes` field);
+ * when absent the global defaults apply, which always bind xsd:/xbrl:.
+ */
+qname_prefixes(Hint, Prefixes) :-
+    (   option(prefixes(Prefixes), Hint)
+    ->  true
+    ;   default_prefixes(Prefixes)
+    ).
+
+%%% xsd:string => xsd:QName (lexical or Clark in, Clark stored)
+typecast_switch('http://www.w3.org/2001/XMLSchema#QName', 'http://www.w3.org/2001/XMLSchema#string', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    lexical_to_clark(Val, Prefixes, 'http://www.w3.org/2001/XMLSchema#QName', Cast).
+%%% xsd:QName => xsd:string (Clark => prefix:local, Clark verbatim if unbound)
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://www.w3.org/2001/XMLSchema#QName', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    clark_to_lexical(Val, Prefixes, Cast).
+%%% xsd:string => xbrl:SQName (OIM §3.1: any non-whitespace localname)
+typecast_switch('https://xbrl.org/2021SQName', 'http://www.w3.org/2001/XMLSchema#string', Val, Hint, Cast^^'https://xbrl.org/2021SQName') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    lexical_to_clark(Val, Prefixes, 'https://xbrl.org/2021SQName', Cast).
+%%% xbrl:SQName => xsd:string
+typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'https://xbrl.org/2021SQName', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#string') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    clark_to_lexical(Val, Prefixes, Cast).
+%%% xsd:QName => xbrl:SQName (QName names are SQName names — retag only)
+typecast_switch('https://xbrl.org/2021SQName', 'http://www.w3.org/2001/XMLSchema#QName', Val, _, Val^^'https://xbrl.org/2021SQName') :-
+    !.
+%%% xbrl:SQName => xsd:QName (only when the localname is an NCName)
+typecast_switch('http://www.w3.org/2001/XMLSchema#QName', 'https://xbrl.org/2021SQName', Val, _, Val^^'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    (   (qname_local(Val, Local), is_ncname(Local))
+    ->  true
+    ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#QName'),_))).
+
+%%% xsd:anyURI => xsd:QName / xbrl:SQName
+%%% The IRI is decomposed through the prefix map: longest bound expansion
+%%% match, else `prefix:local` lexical, else Clark passthrough. A namespace
+%%% with no bound prefix is a casting_error — the engine never guesses the
+%%% boundary; declare the prefix in the context and retry.
+typecast_switch('http://www.w3.org/2001/XMLSchema#QName', 'http://www.w3.org/2001/XMLSchema#anyURI', Val, Hint, Cast^^'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    anyuri_to_clark(Val, Prefixes, 'http://www.w3.org/2001/XMLSchema#QName', Cast).
+typecast_switch('https://xbrl.org/2021SQName', 'http://www.w3.org/2001/XMLSchema#anyURI', Val, Hint, Cast^^'https://xbrl.org/2021SQName') :-
+    !,
+    qname_prefixes(Hint, Prefixes),
+    anyuri_to_clark(Val, Prefixes, 'https://xbrl.org/2021SQName', Cast).
+
 %%% xsd:string => rdf:PlainLiteral
 typecast_switch('http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Val@'') :-
     !,
@@ -1492,44 +1723,137 @@ test(anyuri_iri_chinese, []) :-
 
 test(interval_explicit_dates_normalize_to_datetime, []) :-
     parse_date_time_interval('2025-01-01/2025-03-31',
-                             date_time_interval(Start, End, _Dur, explicit)),
+                             date_time_interval(Start, End, _Dur, explicit, Tz1, Tz2)),
     Start = date_time(2025,1,1,0,0,0,0),
-    End = date_time(2025,4,1,0,0,0,0).
+    End = date_time(2025,4,1,0,0,0,0),
+    Tz1 = tz(0),
+    Tz2 = tz(0).
 
 test(interval_explicit_datetimes_preserved, []) :-
     parse_date_time_interval('2025-01-01T10:30:00Z/2025-03-31T15:45:00Z',
-                             date_time_interval(Start, End, _Dur, explicit)),
+                             date_time_interval(Start, End, _Dur, explicit, Tz1, Tz2)),
     Start = date_time(2025,1,1,10,30,0,0),
-    End = date_time(2025,3,31,15,45,0,0).
+    End = date_time(2025,3,31,15,45,0,0),
+    Tz1 = tz(0),
+    Tz2 = tz(0).
 
 test(interval_datetime_with_timezone_normalized_to_utc, []) :-
+    % Instants still normalise to UTC; the supplied offsets travel as
+    % tz(SecondsWest) metadata for lexical round-trip.
     parse_date_time_interval('2025-01-31T09:00:00+02:00/2025-03-31T09:00:00-05:00',
-                             date_time_interval(Start, End, _Dur, explicit)),
+                             date_time_interval(Start, End, _Dur, explicit, Tz1, Tz2)),
     Start = date_time(2025,1,31,7,0,0,0),
-    End = date_time(2025,3,31,14,0,0,0).
+    End = date_time(2025,3,31,14,0,0,0),
+    Tz1 = tz(-7200),
+    Tz2 = tz(18000).
 
 test(interval_start_duration_date_normalizes, []) :-
     parse_date_time_interval('2025-01-01/P3M',
-                             date_time_interval(Start, End, Dur, start_duration)),
+                             date_time_interval(Start, End, Dur, start_duration, Tz1, Tz2)),
     Start = date_time(2025,1,1,0,0,0,0),
     End = date_time(2025,4,1,0,0,0,0),
-    Dur = duration(1,0,3,0,0,0,0).
+    Dur = duration(1,0,0,3,0,0,0,0),
+    Tz1 = tz(0),
+    Tz2 = tz(0).
 
 test(interval_duration_end_date_normalizes_with_bump, []) :-
     parse_date_time_interval('P3M/2025-03-31',
-                             date_time_interval(Start, End, Dur, duration_end)),
-    Start = date_time(2024,12,31,0,0,0,0),
+                             date_time_interval(Start, End, Dur, duration_end, Tz1, Tz2)),
+    Start = date_time(2025,1,1,0,0,0,0),
     End = date_time(2025,4,1,0,0,0,0),
-    Dur = duration(1,0,3,0,0,0,0).
+    Dur = duration(1,0,0,3,0,0,0,0),
+    Tz1 = tz(0),
+    Tz2 = tz(0).
 
 test(interval_date_end_leap_year_bump, []) :-
     parse_date_time_interval('2020-02-01/2020-02-29',
-                             date_time_interval(_Start, End, _Dur, explicit)),
+                             date_time_interval(_Start, End, _Dur, explicit, _, _)),
     End = date_time(2020,3,1,0,0,0,0).
+
+test(interval_open_end_parse, []) :-
+    parse_date_time_interval('2025-01-01/..',
+                             date_time_interval(Start, End, Dur, explicit, Tz1, Tz2)),
+    Start = date_time(2025,1,1,0,0,0,0),
+    End = infinity,
+    Dur = duration(1,0,0,0,0,0,0,0.0),
+    Tz1 = tz(0),
+    Tz2 = none.
+
+test(interval_open_start_parse, []) :-
+    parse_date_time_interval('../2025-01-01T10:30:00Z',
+                             date_time_interval(Start, End, _Dur, explicit, _, _)),
+    Start = neg_infinity,
+    End = date_time(2025,1,1,10,30,0,0).
+
+test(interval_forever_parse, []) :-
+    parse_date_time_interval('../..',
+                             date_time_interval(neg_infinity, infinity, _, explicit, none, none)).
+
+test(interval_unknown_end_parse, []) :-
+    parse_date_time_interval('2025-01-01/',
+                             date_time_interval(Start, End, Dur, explicit, _, _)),
+    Start = date_time(2025,1,1,0,0,0,0),
+    End = unknown,
+    Dur = duration(1,0,0,0,0,0,0,0.0).
+
+test(interval_unknown_start_parse, []) :-
+    parse_date_time_interval('/2025-01-01',
+                             date_time_interval(Start, End, _Dur, explicit, _, _)),
+    Start = unknown,
+    End = date_time(2025,1,2,0,0,0,0).
+
+test(interval_both_unknown_parse, []) :-
+    parse_date_time_interval('/',
+                             date_time_interval(unknown, unknown, _, explicit, none, none)).
+
+test(interval_duration_with_open_end_fails, [fail]) :-
+    parse_date_time_interval('P1Y/..', _).
+
+test(interval_duration_with_unknown_end_fails, [fail]) :-
+    parse_date_time_interval('P1Y/', _).
+
+test(interval_open_start_duration_fails, [fail]) :-
+    parse_date_time_interval('../P1Y', _).
+
+test(interval_roundtrip_open_end, []) :-
+    typecast("2025-01-01/.."^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-01T00:00:00Z/..".
+
+test(interval_roundtrip_forever, []) :-
+    typecast("../.."^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "../..".
+
+test(interval_roundtrip_unknown_end, []) :-
+    typecast("2025-01-01/"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-01T00:00:00Z/".
+
+test(interval_roundtrip_both_unknown, []) :-
+    typecast("/"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "/".
 
 test(interval_date_end_year_boundary_bump, []) :-
     parse_date_time_interval('2024-01-01/2024-12-31',
-                             date_time_interval(_Start, End, _Dur, explicit)),
+                             date_time_interval(_Start, End, _Dur, explicit, _, _)),
     End = date_time(2025,1,1,0,0,0,0).
 
 test(interval_roundtrip_explicit_dates, []) :-
@@ -1566,7 +1890,7 @@ test(interval_roundtrip_datetime_with_timezone, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "2025-01-31T07:00:00Z/2025-03-31T07:00:00Z".
+    S = "2025-01-31T09:00:00+02:00/2025-03-31T09:00:00+02:00".
 
 test(interval_roundtrip_datetime_with_time, []) :-
     typecast("2025-01-01T10:30:00Z/2025-03-31T15:45:00Z"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1586,23 +1910,77 @@ test(interval_roundtrip_duration_with_hours, []) :-
              S^^'http://www.w3.org/2001/XMLSchema#string'),
     S = "2025-01-01T00:00:00Z/PT1H".
 
+test(dateTimeInterval_string_from_dates, []) :-
+    typecast(date_time_interval(date(2025,1,1,0), date(2025,4,1,0), duration(1,0,0,0,90,0,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_from_datetimes, []) :-
+    typecast(date_time_interval(date_time(2025,1,1,10,30,0,0), date_time(2025,4,1,15,45,0,0), duration(1,0,0,0,90,5,15,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T10:30:00Z/2025-04-01T15:45:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_mixed_date_datetime, []) :-
+    typecast(date_time_interval(date(2025,1,1,0), date_time(2025,4,1,12,0,0,0), duration(1,0,0,0,90,12,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_string_from_dates_roundtrip, []) :-
+    typecast("2025-01-01/2025-04-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2025-01-01T00:00:00Z/2025-04-02T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_to_next_year, []) :-
+    typecast("2019-01-01/2019-12-31"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2019-01-01T00:00:00Z/2020-01-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_over_leap_day, []) :-
+    typecast("2020-02-01/2020-02-29"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2020-02-01T00:00:00Z/2020-03-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_unqualified_end_bumps_to_leap_day, []) :-
+    typecast("2020-02-27/2020-02-28"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2020-02-27T00:00:00Z/2020-02-29T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(dateTimeInterval_datetime_end_is_not_bumped, []) :-
+    typecast("2019-01-01T00:00:00/2020-01-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             "2019-01-01T00:00:00/2020-01-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string').
 test(date_range_to_interval_inclusive, []) :-
     % [D1, D2] covers both whole days: the interval end is the exclusive
     % instant at (D2 + 1 day)T00:00:00Z.
     typecast(date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange',
              'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
-             date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), _, explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
+             date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), _, explicit, _, _)^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
 
 test(interval_to_date_range_exclusive_end, []) :-
     % An exclusive end at exactly midnight belongs to the next day, so the
     % last included date is the day before it.
-    typecast(date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), duration(1,0,0,90,0,0,0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), duration(1,0,0,0,90,0,0,0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://terminusdb.com/schema/xdd#dateRange', [],
              date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
 
 test(interval_to_date_range_midday_end, []) :-
     % An end instant inside a day includes that day's date.
-    typecast(date_time_interval(date_time(2025,1,1,9,30,0,0), date_time(2025,3,31,17,15,0,0), duration(1,0,0,0,0,0,0), explicit)^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+    typecast(date_time_interval(date_time(2025,1,1,9,30,0,0), date_time(2025,3,31,17,15,0,0), duration(1,0,0,0,0,0,0,0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://terminusdb.com/schema/xdd#dateRange', [],
              date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange').
 
@@ -1645,5 +2023,263 @@ test(rational_decimal_negative_trimming, []) :-
     % survive; only trailing zeros are trimmed.
     rational_to_decimal_string(-156r100, "-1.56", 20),
     rational_to_decimal_string(2005r100, "20.05", 20).
+
+
+test(interval_zone_less_roundtrip_stays_zone_less, []) :-
+    typecast("2025-01-31T09:00:00/2025-03-31T09:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-31T09:00:00/2025-03-31T09:00:00".
+
+test(interval_roundtrip_mixed_timezones, []) :-
+    typecast("2025-01-31T09:00:00-05:00/2025-03-31T18:30:00+05:30"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-31T09:00:00-05:00/2025-03-31T18:30:00+05:30".
+
+% --- Expanded names: xsd:QName / xbrl:SQName (Clark storage) ---
+
+test(string_to_qname_expands_bound_prefix, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns#}foo'.
+
+test(string_to_sqname_first_colon_split, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:a:b:c"^^'http://www.w3.org/2001/XMLSchema#string',
+             'https://xbrl.org/2021SQName', [prefixes(P)],
+             Cast^^'https://xbrl.org/2021SQName'),
+    Cast = '{http://example.org/ns#}a:b:c'.
+
+test(string_to_qname_clark_passthrough, []) :-
+    typecast("{http://unbound.example/}x"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = "{http://unbound.example/}x".
+
+test(string_to_qname_unbound_prefix, [error(casting_error("no:foo",_),_)]) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("no:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)], _).
+
+test(string_to_qname_malformed, []) :-
+    forall(member(Bad, ["nocolon", ":x", "p:", "{}x", "{ns"]),
+           (   catch(typecast(Bad^^'http://www.w3.org/2001/XMLSchema#string',
+                              'http://www.w3.org/2001/XMLSchema#QName', [], _),
+                     E, true),
+               E = error(casting_error(_,_),_)
+           )).
+
+test(string_to_sqname_rejects_whitespace_local, [error(casting_error(_,_),_)]) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:a b"^^'http://www.w3.org/2001/XMLSchema#string',
+             'https://xbrl.org/2021SQName', [prefixes(P)], _).
+
+test(string_to_qname_rejects_non_ncname_local, [error(casting_error(_,_),_)]) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:a:b"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)], _).
+
+test(qname_to_string_exact_match, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("{http://example.org/ns#}foo"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "eg:foo".
+
+test(qname_to_string_unbound_keeps_clark, []) :-
+    typecast("{http://unbound.example/}x"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "{http://unbound.example/}x".
+
+test(qname_to_string_no_substring_match, []) :-
+    % eg -> http://example.org/ns# must not contract http://example.org/ns#sub
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("{http://example.org/ns#sub}foo"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "{http://example.org/ns#sub}foo".
+
+test(qname_to_string_smallest_prefix_on_tie, []) :-
+    P = _{zz: 'http://dup.example/ns', aa: 'http://dup.example/ns'},
+    typecast("{http://dup.example/ns}x"^^'http://www.w3.org/2001/XMLSchema#QName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "aa:x".
+
+test(qname_to_sqname_retag, []) :-
+    typecast('{http://ns/}foo'^^'http://www.w3.org/2001/XMLSchema#QName',
+             'https://xbrl.org/2021SQName', [],
+             Cast^^'https://xbrl.org/2021SQName'),
+    Cast = '{http://ns/}foo'.
+
+test(sqname_to_qname_ncname_local_ok, []) :-
+    typecast('{http://ns/}foo'^^'https://xbrl.org/2021SQName',
+             'http://www.w3.org/2001/XMLSchema#QName', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://ns/}foo'.
+
+test(sqname_to_qname_rejects_non_ncname_local, [error(casting_error(_,_),_)]) :-
+    typecast('{http://ns/}a:b'^^'https://xbrl.org/2021SQName',
+             'http://www.w3.org/2001/XMLSchema#QName', [], _).
+
+test(sqname_to_string_lexical_round_trip, []) :-
+    P = _{xbrl: 'https://xbrl.org/2021'},
+    typecast("xbrl:a:b}c"^^'http://www.w3.org/2001/XMLSchema#string',
+             'https://xbrl.org/2021SQName', [prefixes(P)],
+             Clark^^'https://xbrl.org/2021SQName'),
+    typecast(Clark^^'https://xbrl.org/2021SQName',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "xbrl:a:b}c".
+
+% --- xsd:anyURI => QNames: prefix-map decomposition ---
+
+test(anyuri_to_qname_expansion_match, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast('http://example.org/ns#foo'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns#}foo'.
+
+test(anyuri_to_qname_longest_expansion_wins, []) :-
+    P = _{a: 'http://example.org/', ab: 'http://example.org/ns/'},
+    typecast('http://example.org/ns/foo'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns/}foo'.
+
+test(anyuri_to_qname_lexical_prefix, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast('eg:foo'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns#}foo'.
+
+test(anyuri_to_qname_clark_passthrough, []) :-
+    typecast('{http://ns/}foo'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#QName', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://ns/}foo'.
+
+test(anyuri_to_qname_unbound_namespace_fails, [error(casting_error(_,_),_)]) :-
+    % No delimiter guessing: an IRI whose namespace is not bound in the
+    % prefix map cannot name a (S)QName — declare the prefix first.
+    forall(member(IRI, ['https://example.org/path#frag',
+                        'https://example.org/path/name']),
+           catch(typecast(IRI^^'http://www.w3.org/2001/XMLSchema#anyURI',
+                          'http://www.w3.org/2001/XMLSchema#QName', [], _),
+                 E, throw(E))).
+
+test(anyuri_to_qname_rejects_non_ncname_local, [error(casting_error(_,_),_)]) :-
+    P = _{ns: 'http://ns/'},
+    typecast('http://ns/a:b'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)], _).
+
+test(anyuri_to_qname_unsplittable, [error(casting_error(_,_),_)]) :-
+    typecast('plainword'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'http://www.w3.org/2001/XMLSchema#QName', [], _).
+
+test(anyuri_to_sqname_expansion_match, []) :-
+    P = _{eg: 'http://example.org/ns#'},
+    typecast('http://example.org/ns#a:b'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'https://xbrl.org/2021SQName', [prefixes(P)],
+             Cast^^'https://xbrl.org/2021SQName'),
+    Cast = '{http://example.org/ns#}a:b'.
+
+test(anyuri_to_sqname_non_ncname_local_ok, []) :-
+    P = _{ns: 'http://ns/'},
+    typecast('http://ns/a:b'^^'http://www.w3.org/2001/XMLSchema#anyURI',
+             'https://xbrl.org/2021SQName', [prefixes(P)],
+             Cast^^'https://xbrl.org/2021SQName'),
+    Cast = '{http://ns/}a:b'.
+
+% --- date/dateTime <=> intervals ---
+
+test(date_to_daterange_single_day, []) :-
+    typecast(date(2020,1,15,0)^^'http://www.w3.org/2001/XMLSchema#date',
+             'http://terminusdb.com/schema/xdd#dateRange', [],
+             Cast^^'http://terminusdb.com/schema/xdd#dateRange'),
+    Cast = date_range(date(2020,1,15,0), date(2020,1,15,0)).
+
+test(date_to_datetimeinterval_covers_day, []) :-
+    typecast(date(2020,1,15,0)^^'http://www.w3.org/2001/XMLSchema#date',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Cast = date_time_interval(date_time(2020,1,15,0,0,0,0),
+                              date_time(2020,1,16,0,0,0,0),
+                              duration(1,0,0,0,1,0,0,0.0),
+                              explicit, tz(0), tz(0)).
+
+test(datetime_to_datetimeinterval_zero_point, []) :-
+    T = date_time(2020,1,15,12,30,45,0),
+    typecast(T^^'http://www.w3.org/2001/XMLSchema#dateTime',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Cast = date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
+                              explicit, tz(0), tz(0)).
+
+test(datetimeinterval_point_to_datetime, []) :-
+    T = date_time(2020,1,15,12,30,45,0),
+    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
+                                explicit, tz(0), tz(0))
+             ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#dateTime', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#dateTime'),
+    Cast = T.
+
+test(datetimeinterval_nonzero_to_datetime_fails,
+     [error(casting_error(_,_),_)]) :-
+    typecast(date_time_interval(date_time(2020,1,15,0,0,0,0),
+                                date_time(2020,1,16,0,0,0,0),
+                                duration(1,0,0,0,1,0,0,0.0),
+                                explicit, tz(0), tz(0))
+             ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#dateTime', [], _).
+
+test(datetimeinterval_midnight_point_to_date, []) :-
+    T = date_time(2020,1,15,0,0,0,0),
+    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
+                                explicit, tz(0), tz(0))
+             ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#date', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#date'),
+    Cast = date(2020,1,15,0).
+
+test(datetimeinterval_noon_point_to_date_fails,
+     [error(casting_error(_,_),_)]) :-
+    T = date_time(2020,1,15,12,0,0,0),
+    typecast(date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
+                                explicit, tz(0), tz(0))
+             ^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#date', [], _).
+
+test(daterange_single_day_to_date, []) :-
+    D = date(2020,1,15,0),
+    typecast(date_range(D, D)^^'http://terminusdb.com/schema/xdd#dateRange',
+             'http://www.w3.org/2001/XMLSchema#date', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#date'),
+    Cast = D.
+
+test(daterange_multi_day_to_date_fails, [error(casting_error(_,_),_)]) :-
+    typecast(date_range(date(2020,1,15,0), date(2020,1,16,0))
+             ^^'http://terminusdb.com/schema/xdd#dateRange',
+             'http://www.w3.org/2001/XMLSchema#date', [], _).
+
+test(daterange_single_day_to_datetime_midnight, []) :-
+    D = date(2020,1,15,0),
+    typecast(date_range(D, D)^^'http://terminusdb.com/schema/xdd#dateRange',
+             'http://www.w3.org/2001/XMLSchema#dateTime', [],
+             Cast^^'http://www.w3.org/2001/XMLSchema#dateTime'),
+    Cast = date_time(2020,1,15,0,0,0,0).
 
 :- end_tests(typecast).

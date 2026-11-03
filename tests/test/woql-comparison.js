@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, woql } = require('../lib')
+const { Agent, db, woql, document } = require('../lib')
 
 describe('woql-comparison', function () {
   let agent
@@ -1068,38 +1068,47 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, intervalQuery('before', dec(1), dec(3), dec(5), dec(8)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('rejects before when intervals overlap: [1,5) not before [3,8)', async function () {
       const r = await woql.post(agent, intervalQuery('before', dec(1), dec(5), dec(3), dec(8)))
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
     it('validates meets: [1,5) meets [5,10)', async function () {
       const r = await woql.post(agent, intervalQuery('meets', dec(1), dec(5), dec(5), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('rejects meets when gap exists: [1,4) does not meet [5,10)', async function () {
       const r = await woql.post(agent, intervalQuery('meets', dec(1), dec(4), dec(5), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
     it('validates overlaps: [1,6) overlaps [4,10)', async function () {
       const r = await woql.post(agent, intervalQuery('overlaps', dec(1), dec(6), dec(4), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates starts: [1,5) starts [1,10)', async function () {
       const r = await woql.post(agent, intervalQuery('starts', dec(1), dec(5), dec(1), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates during: [3,7) during [1,10)', async function () {
       const r = await woql.post(agent, intervalQuery('during', dec(3), dec(7), dec(1), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates finishes: [5,10) finishes [1,10)', async function () {
       const r = await woql.post(agent, intervalQuery('finishes', dec(5), dec(10), dec(1), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates equals: [1,10) equals [1,10)', async function () {
       const r = await woql.post(agent, intervalQuery('equals', dec(1), dec(10), dec(1), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('rejects equals when endpoints differ: [1,10) != [1,9)', async function () {
       const r = await woql.post(agent, intervalQuery('equals', dec(1), dec(10), dec(1), dec(9)))
       expect(r.body.bindings).to.have.lengthOf(0)
@@ -1110,22 +1119,27 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, intervalQuery('after', dec(5), dec(8), dec(1), dec(3)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates met_by (inverse of meets): [5,10) met_by [1,5)', async function () {
       const r = await woql.post(agent, intervalQuery('met_by', dec(5), dec(10), dec(1), dec(5)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates overlapped_by: [4,10) overlapped_by [1,6)', async function () {
       const r = await woql.post(agent, intervalQuery('overlapped_by', dec(4), dec(10), dec(1), dec(6)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates started_by: [1,10) started_by [1,5)', async function () {
       const r = await woql.post(agent, intervalQuery('started_by', dec(1), dec(10), dec(1), dec(5)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates contains (inverse of during): [1,10) contains [3,7)', async function () {
       const r = await woql.post(agent, intervalQuery('contains', dec(1), dec(10), dec(3), dec(7)))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates finished_by: [1,10) finished_by [5,10)', async function () {
       const r = await woql.post(agent, intervalQuery('finished_by', dec(1), dec(10), dec(5), dec(10)))
       expect(r.body.bindings).to.have.lengthOf(1)
@@ -1140,6 +1154,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:rel']['@value']).to.equal('before')
     })
+
     it('classifies relation as "during" when [3,7) vs [1,10)', async function () {
       const q = intervalQuery(
         { '@type': 'NodeValue', variable: 'v:rel' },
@@ -1148,6 +1163,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:rel']['@value']).to.equal('during')
     })
+
     it('classifies relation as "equals" when [1,10) vs [1,10)', async function () {
       const q = intervalQuery(
         { '@type': 'NodeValue', variable: 'v:rel' },
@@ -1164,18 +1180,21 @@ describe('woql-comparison', function () {
         dat('2024-04-01'), dat('2024-07-01')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('week during fiscal year with dates', async function () {
       const r = await woql.post(agent, intervalQuery('during',
         dat('2024-03-15'), dat('2024-03-20'),
         dat('2024-01-01'), dat('2025-01-01')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('FY contains June with dates', async function () {
       const r = await woql.post(agent, intervalQuery('contains',
         dat('2024-01-01'), dat('2025-01-01'),
         dat('2024-06-01'), dat('2024-07-01')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('Q1 before Q2 with dates', async function () {
       const r = await woql.post(agent, intervalQuery('before',
         dat('2024-01-01'), dat('2024-03-31'),
@@ -1205,6 +1224,7 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, irtQuery('meets', iv('2024-01-01/2024-03-31'), iv('2024-04-01/2024-06-30')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates meets: Q1 meets Q2 (explicit datetime)', async function () {
       // Same as above but with explicit datetime endpoints — no bump needed
       // since the end is already T00:00:00Z (exclusive boundary)
@@ -1213,10 +1233,12 @@ describe('woql-comparison', function () {
         iv('2024-04-01T00:00:00Z/2024-07-01T00:00:00Z')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('rejects meets when gap exists', async function () {
       const r = await woql.post(agent, irtQuery('meets', iv('2024-01-01/2024-03-31'), iv('2024-05-01/2024-06-30')))
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
     it('rejects meets when gap exists (explicit datetime)', async function () {
       // Same as above but with explicit datetime endpoints
       const r = await woql.post(agent, irtQuery('meets',
@@ -1224,10 +1246,12 @@ describe('woql-comparison', function () {
         iv('2024-05-01T00:00:00Z/2024-07-01T00:00:00Z')))
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
     it('validates before: Q1 before Q3', async function () {
       const r = await woql.post(agent, irtQuery('before', iv('2024-01-01/2024-03-01'), iv('2024-06-01/2024-09-01')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates before: Q1 before Q3 (explicit datetime)', async function () {
       // Date-only end 2024-03-01 bumps to Mar 2; 2024-09-01 bumps to Sep 2
       const r = await woql.post(agent, irtQuery('before',
@@ -1235,10 +1259,12 @@ describe('woql-comparison', function () {
         iv('2024-06-01T00:00:00Z/2024-09-02T00:00:00Z')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates during: sub-interval within year', async function () {
       const r = await woql.post(agent, irtQuery('during', iv('2024-03-01/2024-06-01'), iv('2024-01-01/2024-12-01')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates during: sub-interval within year (explicit datetime)', async function () {
       // Date-only end 2024-06-01 bumps to Jun 2; 2024-12-01 bumps to Dec 2
       const r = await woql.post(agent, irtQuery('during',
@@ -1246,10 +1272,12 @@ describe('woql-comparison', function () {
         iv('2024-01-01T00:00:00Z/2024-12-02T00:00:00Z')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates equals: same interval', async function () {
       const r = await woql.post(agent, irtQuery('equals', iv('2024-01-01/2024-06-01'), iv('2024-01-01/2024-06-01')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validates equals: same interval (explicit datetime)', async function () {
       // Date-only end 2024-06-01 bumps to Jun 2 on both sides
       const r = await woql.post(agent, irtQuery('equals',
@@ -1257,6 +1285,7 @@ describe('woql-comparison', function () {
         iv('2024-01-01T00:00:00Z/2024-06-02T00:00:00Z')))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('classifies relation as meets', async function () {
       // Q1 = Jan–Mar 31 (end bumps to Apr 1), Q2 starts Apr 1 → meets
       const r = await woql.post(agent, irtQuery(
@@ -1265,6 +1294,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:rel']['@value']).to.equal('meets')
     })
+
     it('classifies relation as before', async function () {
       const r = await woql.post(agent, irtQuery(
         { '@type': 'DataValue', variable: 'v:rel' },
@@ -1272,6 +1302,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:rel']['@value']).to.equal('before')
     })
+
     it('classifies dateTime intervals as meets', async function () {
       const r = await woql.post(agent, irtQuery(
         { '@type': 'DataValue', variable: 'v:rel' },
@@ -1299,6 +1330,7 @@ describe('woql-comparison', function () {
       // Date-only start normalizes to T00:00:00Z; date-only end bumps to next day
       expect(r.body.bindings[0]['v:i']['@value']).to.equal('2025-01-01T00:00:00Z/2025-04-01T00:00:00Z')
     })
+
     it('deconstructs interval into start+end dates', async function () {
       const q = {
         '@type': 'Interval',
@@ -1309,9 +1341,12 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, q)
       expect(r.body.bindings).to.have.lengthOf(1)
       // Extracted components are normalized to xsd:dateTime
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T00:00:00Z')
+      expect(r.body.bindings[0]['v:e']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:e']['@value']).to.equal('2025-04-01T00:00:00Z')
     })
+
     it('validates matching start+end+interval', async function () {
       const dtVal = (v) => ({ '@type': 'xsd:dateTime', '@value': v })
       const q = {
@@ -1323,6 +1358,7 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, q)
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('rejects mismatched start+end+interval', async function () {
       const q = {
         '@type': 'Interval',
@@ -1333,6 +1369,7 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, q)
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
     it('constructs interval from dateTime endpoints', async function () {
       const dtVal = (v) => ({ '@type': 'xsd:dateTime', '@value': v })
       const q = {
@@ -1345,6 +1382,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:i']['@value']).to.equal('2025-01-01T09:00:00Z/2025-01-01T17:30:00Z')
     })
+
     it('constructs mixed date/dateTime interval', async function () {
       const dtVal = (v) => ({ '@type': 'xsd:dateTime', '@value': v })
       const q = {
@@ -1376,9 +1414,11 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       // Start is normalized to xsd:dateTime; end-of-quarter end bumps to
       // Apr 1 (exclusive), giving P90D (Jan 1 to Apr 1 in non-leap 2025)
+      expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T00:00:00Z')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('P90D')
     })
+
     it('constructs interval from start + P90D duration', async function () {
       const q = {
         '@type': 'IntervalStartDuration',
@@ -1391,6 +1431,7 @@ describe('woql-comparison', function () {
       // Date-only start normalizes to T00:00:00Z; duration preserved
       expect(r.body.bindings[0]['v:i']['@value']).to.equal('2025-01-01T00:00:00Z/P90D')
     })
+
     it('extracts sub-day duration from dateTime interval', async function () {
       const q = {
         '@type': 'IntervalStartDuration',
@@ -1403,6 +1444,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT8H30M')
     })
+
     it('extracts nanosecond duration from timezone-offset interval', async function () {
       const q = {
         '@type': 'IntervalStartDuration',
@@ -1415,6 +1457,44 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:s']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:s']['@value']).to.equal('2025-01-01T07:00:00Z')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('PT0.123456789S')
+    })
+
+    it('constructs interval from start + P2W duration, keeping the denomination', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', data: datVal('2025-01-01') },
+        duration: { '@type': 'DataValue', data: durVal('P2W') },
+        interval: { '@type': 'DataValue', variable: 'v:i' },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      // The week resolves to 14 days at the endpoint but keeps its
+      // supplied denomination — P2W and P14D are distinct values.
+      expect(r.body.bindings[0]['v:i']['@value']).to.equal('2025-01-01T00:00:00Z/P2W')
+    })
+
+    it('extracts the supplied P2W spelling from a stored interval', async function () {
+      const q = {
+        '@type': 'IntervalStartDuration',
+        start: { '@type': 'DataValue', variable: 'v:s' },
+        duration: { '@type': 'DataValue', variable: 'v:d' },
+        interval: { '@type': 'DataValue', data: intervalVal('2025-01-01/P2W') },
+      }
+      const r = await woql.post(agent, q)
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:d']['@value']).to.equal('P2W')
+    })
+
+    it('relates a week-denominated interval by resolved endpoints', async function () {
+      const q = {
+        '@type': 'IntervalRelationTyped',
+        x: { '@type': 'DataValue', data: intervalVal('2025-01-01/P2W') },
+        y: { '@type': 'DataValue', data: intervalVal('2025-01-15/2025-01-20') },
+        relation: { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': 'meets' } },
+      }
+      const r = await woql.post(agent, q)
+      // 2025-01-01 + P2W ends at 2025-01-15 — meets holds.
+      expect(r.body.bindings).to.have.lengthOf(1)
     })
   })
 
@@ -1433,9 +1513,11 @@ describe('woql-comparison', function () {
       const r = await woql.post(agent, q)
       expect(r.body.bindings).to.have.lengthOf(1)
       // End-of-quarter end bumps to Apr 1 (exclusive); P90D from Jan 1
+      expect(r.body.bindings[0]['v:e']['@type']).to.equal('xsd:dateTime')
       expect(r.body.bindings[0]['v:e']['@value']).to.equal('2025-04-01T00:00:00Z')
       expect(r.body.bindings[0]['v:d']['@value']).to.equal('P90D')
     })
+
     it('constructs interval from P90D duration + end date', async function () {
       const q = {
         '@type': 'IntervalDurationEnd',
@@ -1465,31 +1547,37 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:n']['@value']).to.equal('2025-01-16')
     })
+
     it('end-of-month: Jan 31 -> Feb 1', async function () {
       const r = await woql.post(agent, dayAfterQuery('2025-01-31', 'v:n'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:n']['@value']).to.equal('2025-02-01')
     })
+
     it('end-of-year: Dec 31 -> Jan 1 next year', async function () {
       const r = await woql.post(agent, dayAfterQuery('2025-12-31', 'v:n'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:n']['@value']).to.equal('2026-01-01')
     })
+
     it('leap Feb 28 -> Feb 29', async function () {
       const r = await woql.post(agent, dayAfterQuery('2024-02-28', 'v:n'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:n']['@value']).to.equal('2024-02-29')
     })
+
     it('leap Feb 29 -> Mar 1', async function () {
       const r = await woql.post(agent, dayAfterQuery('2024-02-29', 'v:n'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:n']['@value']).to.equal('2024-03-01')
     })
+
     it('non-leap Feb 28 -> Mar 1', async function () {
       const r = await woql.post(agent, dayAfterQuery('2023-02-28', 'v:n'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:n']['@value']).to.equal('2023-03-01')
     })
+
     it('bidirectional: given next=Apr 1, deduces date=Mar 31', async function () {
       const r = await woql.post(agent, dayAfterQuery('v:d', '2025-04-01'))
       expect(r.body.bindings).to.have.lengthOf(1)
@@ -1512,21 +1600,25 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:p']['@value']).to.equal('2025-01-14')
     })
+
     it('start-of-month: Mar 1 -> Feb 28', async function () {
       const r = await woql.post(agent, dayBeforeQuery('2025-03-01', 'v:p'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:p']['@value']).to.equal('2025-02-28')
     })
+
     it('start-of-year: Jan 1 -> Dec 31 prev year', async function () {
       const r = await woql.post(agent, dayBeforeQuery('2025-01-01', 'v:p'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:p']['@value']).to.equal('2024-12-31')
     })
+
     it('leap Mar 1 -> Feb 29', async function () {
       const r = await woql.post(agent, dayBeforeQuery('2024-03-01', 'v:p'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:p']['@value']).to.equal('2024-02-29')
     })
+
     it('bidirectional: given previous=Mar 31, deduces date=Apr 1', async function () {
       const r = await woql.post(agent, dayBeforeQuery('v:d', '2025-03-31'))
       expect(r.body.bindings).to.have.lengthOf(1)
@@ -1552,25 +1644,30 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:d']['@value']).to.equal(1)
     })
+
     it('Sunday: 2024-01-07 -> 7', async function () {
       const r = await woql.post(agent, weekdayQuery('2024-01-07', 'v:d'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:d']['@value']).to.equal(7)
     })
+
     it('Leap day 2024-02-29 -> Thursday (4)', async function () {
       const r = await woql.post(agent, weekdayQuery('2024-02-29', 'v:d'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:d']['@value']).to.equal(4)
     })
+
     it('dateTime: 2024-01-01T12:00:00Z -> Monday (1)', async function () {
       const r = await woql.post(agent, weekdayQuery('2024-01-01T12:00:00Z', 'v:d'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:d']['@value']).to.equal(1)
     })
+
     it('validates: 2024-01-01 is Monday (1)', async function () {
       const r = await woql.post(agent, weekdayQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 1 }))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validation fails: 2024-01-01 is not Tuesday (2)', async function () {
       const r = await woql.post(agent, weekdayQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 2 }))
       expect(r.body.bindings).to.have.lengthOf(0)
@@ -1592,11 +1689,13 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:d']['@value']).to.equal(1)
     })
+
     it('Saturday: 2024-01-06 -> 7', async function () {
       const r = await woql.post(agent, sundayStartQuery('2024-01-06', 'v:d'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:d']['@value']).to.equal(7)
     })
+
     it('Monday: 2024-01-01 -> 2', async function () {
       const r = await woql.post(agent, sundayStartQuery('2024-01-01', 'v:d'))
       expect(r.body.bindings).to.have.lengthOf(1)
@@ -1626,40 +1725,47 @@ describe('woql-comparison', function () {
       expect(r.body.bindings[0]['v:y']['@value']).to.equal(2024)
       expect(r.body.bindings[0]['v:w']['@value']).to.equal(1)
     })
+
     it('2024-12-30 -> week 1 of 2025 (year boundary)', async function () {
       const r = await woql.post(agent, isoWeekQuery('2024-12-30', 'v:y', 'v:w'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:y']['@value']).to.equal(2025)
       expect(r.body.bindings[0]['v:w']['@value']).to.equal(1)
     })
+
     it('2023-01-01 -> week 52 of 2022', async function () {
       const r = await woql.post(agent, isoWeekQuery('2023-01-01', 'v:y', 'v:w'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:y']['@value']).to.equal(2022)
       expect(r.body.bindings[0]['v:w']['@value']).to.equal(52)
     })
+
     it('2020-12-31 -> week 53 of 2020 (53-week year)', async function () {
       const r = await woql.post(agent, isoWeekQuery('2020-12-31', 'v:y', 'v:w'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:y']['@value']).to.equal(2020)
       expect(r.body.bindings[0]['v:w']['@value']).to.equal(53)
     })
+
     it('2024-06-15 -> week 24 of 2024', async function () {
       const r = await woql.post(agent, isoWeekQuery('2024-06-15', 'v:y', 'v:w'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:y']['@value']).to.equal(2024)
       expect(r.body.bindings[0]['v:w']['@value']).to.equal(24)
     })
+
     it('dateTime: 2024-06-15T09:30:00Z -> week 24 of 2024', async function () {
       const r = await woql.post(agent, isoWeekQuery('2024-06-15T09:30:00Z', 'v:y', 'v:w'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:y']['@value']).to.equal(2024)
       expect(r.body.bindings[0]['v:w']['@value']).to.equal(24)
     })
+
     it('validates: 2024-01-01 is week 1 of 2024', async function () {
       const r = await woql.post(agent, isoWeekQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 2024 }, { '@type': 'xsd:integer', '@value': 1 }))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validation fails: 2024-01-01 is not week 2', async function () {
       const r = await woql.post(agent, isoWeekQuery('2024-01-01', { '@type': 'xsd:integer', '@value': 2024 }, { '@type': 'xsd:integer', '@value': 2 }))
       expect(r.body.bindings).to.have.lengthOf(0)
@@ -1688,6 +1794,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].d['@value']).to.equal('P91D')
     })
+
     it('computes duration: 2025-01-01 to 2025-04-01 = P90D (non-leap)', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         { '@type': 'xsd:date', '@value': '2025-01-01' },
@@ -1696,6 +1803,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].d['@value']).to.equal('P90D')
     })
+
     it('EOM add: Jan 31 + P1M = Feb 29 (leap)', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         { '@type': 'xsd:date', '@value': '2020-01-31' },
@@ -1704,6 +1812,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].e['@value']).to.equal('2020-02-29')
     })
+
     it('EOM add: Feb 29 + P1M = Mar 31', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         { '@type': 'xsd:date', '@value': '2020-02-29' },
@@ -1712,6 +1821,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].e['@value']).to.equal('2020-03-31')
     })
+
     it('EOM subtract: Mar 31 - P1M = Feb 29 (leap)', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         'v:s',
@@ -1720,6 +1830,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].s['@value']).to.equal('2020-02-29')
     })
+
     it('EOM reversibility: Feb 29 - P1M = Jan 31', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         'v:s',
@@ -1728,6 +1839,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].s['@value']).to.equal('2020-01-31')
     })
+
     it('datetime with time: computes PT9H30M', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         { '@type': 'xsd:dateTime', '@value': '2024-01-01T08:00:00Z' },
@@ -1736,6 +1848,7 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0].d['@value']).to.equal('PT9H30M')
     })
+
     it('validates: consistent start+end+duration', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         { '@type': 'xsd:date', '@value': '2024-01-01' },
@@ -1743,6 +1856,7 @@ describe('woql-comparison', function () {
         { '@type': 'xsd:duration', '@value': 'P91D' }))
       expect(r.body.bindings).to.have.lengthOf(1)
     })
+
     it('validation fails: inconsistent start+end+duration', async function () {
       const r = await woql.post(agent, dateDurationQuery(
         { '@type': 'xsd:date', '@value': '2024-01-01' },
@@ -1768,34 +1882,172 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal(1)
     })
+
     it('range_max of integers', async function () {
       const r = await woql.post(agent, rangeQuery('RangeMax', [intVal(7), intVal(2), intVal(9), intVal(1), intVal(5)], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal(9)
     })
+
     it('range_min single element', async function () {
       const r = await woql.post(agent, rangeQuery('RangeMin', [intVal(42)], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal(42)
     })
+
     it('range_min empty list yields no bindings', async function () {
       const r = await woql.post(agent, rangeQuery('RangeMin', [], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(0)
     })
+
     it('range_min of dates', async function () {
       const r = await woql.post(agent, rangeQuery('RangeMin', [datVal('2024-06-15'), datVal('2024-01-01'), datVal('2024-03-01')], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal('2024-01-01')
     })
+
     it('range_max of dates', async function () {
       const r = await woql.post(agent, rangeQuery('RangeMax', [datVal('2024-06-15'), datVal('2024-01-01'), datVal('2024-03-01')], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal('2024-06-15')
     })
+
     it('range_min equal elements', async function () {
       const r = await woql.post(agent, rangeQuery('RangeMin', [intVal(3), intVal(3), intVal(3)], 'v:m'))
       expect(r.body.bindings).to.have.lengthOf(1)
       expect(r.body.bindings[0]['v:m']['@value']).to.equal(3)
+    })
+  })
+
+  describe('TripleRelation (Allen relations over stored triples)', function () {
+    const schema = [{
+      '@id': 'Event',
+      '@type': 'Class',
+      '@key': { '@type': 'Lexical', '@fields': ['name'] },
+      name: 'xsd:string',
+      interval: 'xdd:dateTimeInterval',
+    }]
+
+    const events = [
+      { '@type': 'Event', name: 'ev-2024-H1', interval: '2024-01-01/2024-06-30' },
+      { '@type': 'Event', name: 'ev-2024-H2', interval: '2024-07-01/2024-12-31' },
+      { '@type': 'Event', name: 'ev-2025-Q1', interval: '2025-01-01/2025-03-31' },
+      { '@type': 'Event', name: 'ev-2025-Q2', interval: '2025-04-01/2025-06-30' },
+      { '@type': 'Event', name: 'ev-2025-Q3', interval: '2025-07-01/2025-09-30' },
+    ]
+
+    before(async function () {
+      await document.insert(agent, { schema })
+      await document.insert(agent, { instance: events })
+    })
+
+    // stored spans (date ends bump): H1[..,24-07-01) H2[..,25-01-01)
+    //   Q1 [25-01-01,25-04-01) Q2 [25-04-01,25-07-01) Q3 [25-07-01,25-10-01)
+    function trQuery (relation, value, valueType = 'xdd:dateTimeInterval') {
+      return {
+        '@type': 'TripleRelation',
+        subject: { '@type': 'NodeValue', variable: 'v:doc' },
+        predicate: { '@type': 'NodeValue', node: 'terminusdb:///schema#interval' },
+        object: { '@type': 'Value', variable: 'v:iv' },
+        relation: { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': relation } },
+        value: { '@type': 'DataValue', data: { '@type': valueType, '@value': value } },
+      }
+    }
+
+    const namesOf = bindings => bindings.map(b => b['v:doc'].split('/').pop()).sort()
+
+    it('meets: events ending when reference starts', async function () {
+      const r = await woql.post(agent, trQuery('meets', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+    })
+
+    it('during: events strictly inside reference', async function () {
+      const r = await woql.post(agent, trQuery('during', '2025-01-01T00:00:00Z/2025-10-01T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+    })
+
+    it('overlaps: event overlapping reference from the left', async function () {
+      const r = await woql.post(agent, trQuery('overlaps', '2025-03-15T00:00:00Z/2025-05-15T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+    })
+
+    it('before: events before reference', async function () {
+      const r = await woql.post(agent, trQuery('before', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2024-H1', 'ev-2024-H2'])
+    })
+
+    it('contains: as-of instant lands in exactly one period at a seam', async function () {
+      const r = await woql.post(agent, trQuery('contains', '2025-04-01T00:00:00Z', 'xsd:dateTime'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+    })
+
+    it('contains: mid-period instant', async function () {
+      const r = await woql.post(agent, trQuery('contains', '2025-05-15T00:00:00Z', 'xsd:dateTime'))
+      expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+    })
+
+    it('during: interval is never during a point', async function () {
+      const r = await woql.post(agent, trQuery('during', '2025-05-15T00:00:00Z', 'xsd:dateTime'))
+      expect(r.body.bindings).to.have.lengthOf(0)
+    })
+
+    // full Allen table — same fixture and expectations as the GraphQL
+    // relationship suite, so both surfaces must agree relation-for-relation
+    const cases = [
+      ['equals', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q2']],
+      ['before', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2024-H1', 'ev-2024-H2']],
+      ['after', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', []],
+      ['meets', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q1']],
+      ['met_by', '2025-04-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q3']],
+      ['overlaps', '2025-03-15T00:00:00Z/2025-05-15T00:00:00Z', ['ev-2025-Q1']],
+      ['overlapped_by', '2025-03-15T00:00:00Z/2025-05-15T00:00:00Z', ['ev-2025-Q2']],
+      ['starts', '2025-04-01T00:00:00Z/2025-12-31T00:00:00Z', ['ev-2025-Q2']],
+      ['started_by', '2025-04-01T00:00:00Z/2025-05-01T00:00:00Z', ['ev-2025-Q2']],
+      ['during', '2025-01-01T00:00:00Z/2025-10-01T00:00:00Z', ['ev-2025-Q2']],
+      ['contains', '2025-04-05T00:00:00Z/2025-06-15T00:00:00Z', ['ev-2025-Q2']],
+      ['finishes', '2025-01-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q2']],
+      ['finished_by', '2025-06-01T00:00:00Z/2025-07-01T00:00:00Z', ['ev-2025-Q2']],
+    ]
+    for (const [relation, value, names] of cases) {
+      it(`relation ${relation}`, async function () {
+        const r = await woql.post(agent, trQuery(relation, value))
+        expect(namesOf(r.body.bindings)).to.deep.equal(names)
+      })
+    }
+
+    describe('date coercion: bare date is an instant, date/date is a day', function () {
+      // A bare xsd:date coerces to the as-of point [t,t) at local day-start —
+      // the financial-reporting instant — while the explicit date/date pair
+      // keeps whole-local-day semantics (end inclusive → next day start).
+      it('bare date: met_by matches the interval it starts (point, not day)', async function () {
+        const r = await woql.post(agent, trQuery('met_by', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+      })
+
+      it('bare date: after sees the point at day-start (Q2,Q3 — a day would give only Q3)', async function () {
+        const r = await woql.post(agent, trQuery('after', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2', 'ev-2025-Q3'])
+      })
+
+      it('bare date: finished_by matches the interval ending at the point', async function () {
+        const r = await woql.post(agent, trQuery('finished_by', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+      })
+
+      it('date/date: met_by matches nothing (day interval, no start at its end)', async function () {
+        const r = await woql.post(agent, trQuery('met_by', '2025-04-01/2025-04-01'))
+        expect(r.body.bindings).to.have.lengthOf(0)
+      })
+
+      it('date/date: after skips the interval the day sits in', async function () {
+        const r = await woql.post(agent, trQuery('after', '2025-04-01/2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q3'])
+      })
+
+      it('date/date: an interval contains the whole day', async function () {
+        const r = await woql.post(agent, trQuery('contains', '2025-04-01/2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+      })
     })
   })
 })

@@ -42,6 +42,27 @@ describe('Field-Level Unfold', function () {
       expect(r.status).to.equal(200)
     })
 
+    it('should reject non-true @unfold values', async function () {
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'BadUnfold',
+          u: {
+            '@type': 'Optional',
+            '@class': 'xsd:string',
+            '@unfold': [],
+          },
+        },
+      ]
+
+      const r = await document.insert(agent, { schema }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:SchemaCheckFailure')
+      const witnesses = r.body['api:error']['api:witnesses']
+      expect(witnesses).to.be.an('array')
+      expect(witnesses[0]['@type']).to.equal('bad_unfold_value')
+    })
+
     it('should preserve @unfold in schema roundtrip', async function () {
       const r = await document.get(agent, { query: { graph_type: 'schema', id: 'Order' } })
       expect(r.status).to.equal(200)

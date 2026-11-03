@@ -1,16 +1,18 @@
 :- module(json_preserve, [
     json_read_dict/3,
     json_read_dict_stream/3,
-    sys_json_parse_value/2
+    sys_json_parse_value/2,
+    close_list_tails/1
 ]).
 
 :- use_module(library(option)).
 :- use_module(library(lists)).
+:- use_module(library(utf8)).
 :- use_module(library(plunit)).
 
 /** <module> Fast JSON Parser using Rust
  *
- * Drop-in replacement for library(http/json) using serde_json via Rust FFI.
+ * Drop-in replacement for library(json) using serde_json via Rust FFI.
  * Provides significant performance improvements AND preserves numeric precision.
  *
  * CRITICAL: Must use Rust parser to preserve arbitrary precision decimals.
@@ -65,10 +67,39 @@ json_read_dict(Stream, Dict, Options) :-
 json_read_dict_stream(Stream, Dict, Options) :-
     % Use Rust parser for one-at-a-time streaming
     % All streams are now string streams (buffered from HTTP)
+    % Parse errors must propagate — mapping them to eof would silently
+    % truncate multi-document streams and drop the remaining documents.
     (   '$json_preserve':json_read_one_from_stream(Stream, Value)
-    ->  Dict = Value
-    ;   % Rust parser returned nothing - must be EOF
+    ->  (   Value = eof
+        ->  Dict = eof
+        ;   % The streaming parser may leave array tails as variables.
+            % JSON values never contain real variables, so close any
+            % remaining tails to make nested arrays proper lists.
+            close_list_tails(Value),
+            Dict = Value
+        )
+    ;   % Rust parser returned nothing or failed - must be EOF
         handle_eof(Options, Dict)
+    ).
+
+% close_list_tails(+Term) is det.
+% Recursively close any remaining variable tails on lists that appear
+% inside a parsed JSON value. The Rust streaming parser can leave nested
+% array tails as variables.
+close_list_tails(Term) :-
+    (   var(Term)
+    ->  Term = []
+    ;   is_dict(Term)
+    ->  dict_pairs(Term, _, Pairs),
+        forall(member(_-Value, Pairs), close_list_tails(Value))
+    ;   is_list(Term)
+    ->  (   Term = []
+        ->  true
+        ;   Term = [Head|Tail]
+        ->  close_list_tails(Head),
+            close_list_tails(Tail)
+        )
+    ;   true
     ).
 
 %! handle_eof(+Options, -Dict) is det.
@@ -97,10 +128,10 @@ sys_json_parse_value(JSONString, Value) :-
     '$json_preserve':json_read_string(JSONText, Value).
 
 % ============================================================================
-% Unit Tests - Verify compatibility with library(http/json)
+% Unit Tests - Verify compatibility with library(json)
 % ============================================================================
 
-:- use_module(library(http/json), [atom_json_dict/3]).
+:- use_module(library(json), [atom_json_dict/3]).
 :- use_module(library(plunit)).
 
 % Define assertion/1 locally to satisfy linter (plunit provides it at runtime)
@@ -109,6 +140,39 @@ assertion(Goal) :- call(Goal).
 :- endif.
 
 :- begin_tests(json_preserve).
+
+test(stream_returns_strings_not_atoms) :-
+    JSON = '{"@type":"Simple","name":"abc123"}',
+    open_string(JSON, Stream),
+    json_read_dict(Stream, Dict, [default_tag(json), end_of_file(eof)]),
+    Dict \= eof,
+    get_dict(name, Dict, Name),
+    string(Name),
+    Name = "abc123".
+
+test(stream_returns_id_as_string) :-
+    JSON = '{"@type":"Simple","@id":"Simple/foo","name":"abc123"}',
+    open_string(JSON, Stream),
+    json_read_dict(Stream, Dict, [default_tag(json), end_of_file(eof)]),
+    Dict \= eof,
+    get_dict('@id', Dict, Id),
+    string(Id),
+    Id = "Simple/foo",
+    get_dict(name, Dict, Name),
+    string(Name),
+    Name = "abc123".
+
+test(stream_returns_strings_in_array) :-
+    JSON = '[{"@type":"Simple","@id":"Simple/foo","name":"abc123"}]',
+    open_string(JSON, Stream),
+    json_read_dict(Stream, Dict, [default_tag(json), end_of_file(eof)]),
+    Dict = [First],
+    get_dict('@id', First, Id),
+    string(Id),
+    Id = "Simple/foo",
+    get_dict(name, First, Name),
+    string(Name),
+    Name = "abc123".
 
 test(basic_object) :-
     JSON = '{"name": "Alice", "age": 30}',
@@ -351,6 +415,35 @@ test(stream_eof_after_read) :-
     Dict1.x == 10,
     json_read_dict(Stream, Dict2, [end_of_file(eof)]),
     Dict2 == eof,
+    close(Stream).
+
+% Test UTF-8 content via the octet-byte string-stream convention used by
+% the HTTP layer (input_encoding(octet) into a string, then open_string):
+% each code point is one raw byte, so multi-byte UTF-8 survives intact.
+test(stream_utf8_bytes) :-
+    atom_codes('{"name":"Umeå","city":"São Paulo"}', Chars),
+    phrase(utf8_codes(Chars), Bytes),
+    string_codes(Byte_String, Bytes),
+    open_string(Byte_String, Stream),
+    json_read_dict(Stream, Dict, [end_of_file(eof)]),
+    Dict.name == "Umeå",
+    Dict.city == "São Paulo",
+    close(Stream).
+
+% Test that a parse error is raised, not silently reported as eof.
+% Returning eof here truncates multi-document streams mid-flight and
+% silently drops the remaining documents.
+test(stream_parse_error_not_eof, [error(json_parse_error(_,_,_), _)]) :-
+    open_string('{bad json', Stream),
+    json_read_dict(Stream, _Dict, [end_of_file(eof)]),
+    close(Stream).
+
+% Test non-UTF-8 bytes raise rather than silently return eof — a lone
+% latin-1 byte is what a decoded-character string stream would emit.
+test(stream_invalid_utf8_not_eof, [error(json_parse_error(_,_,_), _)]) :-
+    string_codes(Byte_String, [0x7B, 0x22, 0x6E, 0x22, 0x3A, 0x22, 0xE5, 0x22, 0x7D]),
+    open_string(Byte_String, Stream),
+    json_read_dict(Stream, _Dict, [end_of_file(eof)]),
     close(Stream).
 
 % Test array with nested objects

@@ -347,6 +347,7 @@ describe('document', function () {
       let A
       let B
       let schema
+
       before(async function () {
         A = util.randomString()
         B = util.randomString()

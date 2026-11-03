@@ -3,7 +3,8 @@
               initialise_woql_contexts/0,
               json_woql/2,
               json_woql_path_element_error_message/4,
-              json_value_cast_type/3
+              json_value_cast_type/3,
+              json_value_cast_type/4
           ]).
 
 /** <module> WOQL JSON-LD syntax
@@ -22,7 +23,7 @@
 :- use_module(global_prefixes).
 :- reexport(core(util/syntax)).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 :- use_module(library(apply)).
 :- use_module(library(yall)).
@@ -72,25 +73,28 @@ is_float_or_double_type(Type) :-
                   'xsd:double']).
 
 json_value_cast_type(V,Type,WOQL) :-
+    json_value_cast_type(V,Type,[],WOQL).
+
+json_value_cast_type(V,Type,Hint,WOQL) :-
     default_prefixes(Default_Prefixes),
     prefix_expand(Type, Default_Prefixes, TE),
     (   string(V)
     ->  typecast(V^^xsd:string,
-                 TE, [], Val)
+                 TE, Hint, Val)
     ;   atom(V),
         atom_string(V,String)
     ->  typecast(String^^xsd:string,
-                 TE, [], Val)
+                 TE, Hint, Val)
     ;   integer(V)
     ->  % CRITICAL FIX: Convert integers to floats for xsd:double/xsd:float types
         % This ensures proper string serialization (33.0 not 33)
         (   is_float_or_double_type(TE)
         ->  % Convert to float first, then typecast
             FloatV is float(V),
-            typecast(FloatV^^TE, TE, [], Val)
+            typecast(FloatV^^TE, TE, Hint, Val)
         ;   % Keep integers as integers for operations like limit/offset
             typecast(V^^xsd:decimal,
-                     TE, [], Val)
+                     TE, Hint, Val)
         )
     ;   rational(V),
         \+ integer(V)
@@ -104,10 +108,10 @@ json_value_cast_type(V,Type,WOQL) :-
         % So floats here are actual JSON numbers that already have limited precision
         format(string(Num_String), '~w', [V]),
         typecast(Num_String^^xsd:string,
-                 TE, [], Val)
+                 TE, Hint, Val)
     ;   member(V,[false,true])
     ->  typecast(V^^xsd:boolean,
-                 TE, [], Val)
+                 TE, Hint, Val)
     ;   throw(error(null_unsupported, V))
     ),
     WOQL = Val.
@@ -1082,6 +1086,19 @@ json_type_to_woql_ast('IntervalRelationTyped',JSON,WOQL,Path) :-
     json_value_to_woql_ast(X,WX,[x|Path]),
     json_value_to_woql_ast(Y,WY,[y|Path]),
     WOQL = interval_relation_typed(WR,WX,WY).
+json_type_to_woql_ast('TripleRelation',JSON,WOQL,Path) :-
+    _{subject : Subject,
+      predicate : Predicate,
+      object : Object,
+      relation : Relation,
+      value : Value
+     } :< JSON,
+    json_value_to_woql_ast(Subject,WS,[subject|Path]),
+    json_value_to_woql_ast(Predicate,WP,[predicate|Path]),
+    json_value_to_woql_ast(Object,WO,[object|Path]),
+    json_value_to_woql_ast(Relation,WR,[relation|Path]),
+    json_value_to_woql_ast(Value,WV,[value|Path]),
+    WOQL = triple_relation(WS,WP,WO,WR,WV).
 json_type_to_woql_ast('Weekday',JSON,WOQL,Path) :-
     _{date : D,
       weekday : W
@@ -1478,7 +1495,13 @@ json_type_to_woql_ast('Typecast',JSON,WOQL,Path) :-
                                        |Path]),
     json_value_to_woql_ast(Var,WVar,[result
                                      |Path]),
-    WOQL = typecast(WVal,WType,WVar).
+    (   get_dict(prefixes, JSON, Prefixes)
+    ->  % Optional prefix map for expanded-name casts: literal dictionary or
+        % a variable bound elsewhere (e.g. via dot to a stored namespaces map).
+        json_value_to_woql_ast(Prefixes,WPrefixes,[prefixes
+                                                 |Path]),
+        WOQL = typecast(WVal,WType,WVar,WPrefixes)
+    ;   WOQL = typecast(WVal,WType,WVar)).
 json_type_to_woql_ast('Not',JSON,WOQL,Path) :-
     _{query : Q
      } :< JSON,

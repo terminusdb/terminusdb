@@ -343,7 +343,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('double subtraction (inline)', async function () {
       const query = {
@@ -378,7 +378,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('double multiplication (inline)', async function () {
       const query = {
@@ -413,7 +413,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('double division (inline)', async function () {
       const query = {
@@ -448,7 +448,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     // Decimal with inline values
     it('decimal addition (inline)', async function () {
@@ -484,7 +484,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('decimal subtraction (inline)', async function () {
       const query = {
@@ -519,7 +519,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('decimal multiplication (inline)', async function () {
       const query = {
@@ -554,7 +554,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('decimal division (inline)', async function () {
       const query = {
@@ -589,7 +589,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     // Double with variables
     it('double addition (variables)', async function () {
@@ -627,7 +627,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('double subtraction (variables)', async function () {
       const query = {
@@ -664,7 +664,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('double multiplication (variables)', async function () {
       const query = {
@@ -701,7 +701,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('double division (variables)', async function () {
       // NOW WORKS! New logic: defaults to / when types unknown (safer)
@@ -740,7 +740,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     // Decimal with variables
     it('decimal addition (variables)', async function () {
@@ -778,7 +778,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('decimal subtraction (variables)', async function () {
       const query = {
@@ -815,7 +815,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('decimal multiplication (variables)', async function () {
       const query = {
@@ -852,7 +852,7 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
 
     it('decimal division (variables)', async function () {
       const query = {
@@ -889,6 +889,6 @@ describe('double-variable-arithmetic', function () {
       // GroupBy with group_by: ['none'] evaluates all 4M solutions, Select filters to just result
       // Select with variables: [''] filters everything, returns empty binding
       expect(Object.keys(result.bindings[0]).length).to.equal(0)
-    }).timeout(60000)
+    }).timeout(10000)
   })
 })

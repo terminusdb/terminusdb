@@ -1,11 +1,80 @@
 use base64;
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use std::convert::TryFrom;
+use rug::ops::Pow;
 use rug::Integer;
 use std::io::Cursor;
 use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, derived_period, duration_parts_to_period, legacy_component_of,
+    legacy_interval_to_lexical, lexical_interval_entry, lexical_interval_from_parts,
+    period_to_parts, Component, LexicalInterval, FLAG_DURATION_END, FLAG_START_DURATION,
+};
 use tdb_succinct::*;
+
+/// Range-checked numeric conversion: a Prolog value that does not fit the
+/// target width is a marshalling error, not a silent wrap.
+fn exact<T, U>(v: T) -> PrologResult<U>
+where
+    U: TryFrom<T>,
+{
+    U::try_from(v).map_err(|_| PrologError::Exception)
+}
+
+/// Marshal/decode failures are domain errors in the caller's term, never
+/// silent failures: a value that cannot be represented must raise, so
+/// document writes and queries stop instead of dropping data.
+fn raise_domain<C: QueryableContextType>(
+    context: &Context<C>,
+    culprit: &Term,
+) -> PrologResult<TypedDictEntry> {
+    context.raise_exception(
+        &term! {context: error(domain_error(value(), #culprit), _)}?,
+    )
+}
+
+/// A `duration/8` term as the bounded legacy `Duration`. Seconds arrive as
+/// integer, float, or `NrD` rational and are normalised to decimal digits
+/// before the `f64` conversion; anything outside the stored field widths —
+/// or a non-terminating/underflowing fraction — is `Err`, and the caller
+/// raises `domain_error` rather than dropping the value.
+fn duration_from_term<C: QueryableContextType>(
+    context: &Context<C>,
+    inner_term: &Term,
+) -> Result<Duration, String> {
+    // Stringify then parse: `get_arg` cannot extract compound sub-terms and
+    // the shared parser keeps validation identical to the interval path.
+    let term_string: String = context
+        .string_from_term(inner_term)
+        .map_err(|_| "duration term not serialisable".to_string())?;
+    let (sign, week, year, month, day, hour, minute, digits) =
+        parse_duration_parts(&term_string)?;
+    if week != 0 {
+        return Err("week durations need the lexical duration format".to_string());
+    }
+    let bounded = |v: i64| -> Result<u8, String> {
+        u8::try_from(v).map_err(|_| format!("duration component out of range: {v}"))
+    };
+    let second: f64 = digits
+        .parse()
+        .map_err(|_| format!("invalid duration seconds: {digits}"))?;
+    // Reject non-finite overflow and underflow to zero of a non-zero value:
+    // both silently change the stored duration.
+    if !second.is_finite() || (second == 0.0 && digits.bytes().any(|b| b != b'0' && b != b'.')) {
+        return Err(format!("unrepresentable duration seconds: {term_string}"));
+    }
+    Ok(Duration {
+        sign,
+        year,
+        month: bounded(month)?,
+        day: bounded(day)?,
+        hour: bounded(hour)?,
+        minute: bounded(minute)?,
+        second,
+    })
+}
 
 pub fn make_entry_from_term<C: QueryableContextType>(
     context: &Context<C>,
@@ -44,6 +113,9 @@ pub fn make_entry_from_term<C: QueryableContextType>(
     } else if atom!("http://www.w3.org/2001/XMLSchema#QName") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(QName::make_entry(&inner_string.into_inner()))
+    } else if atom!("https://xbrl.org/2021SQName") == ty {
+        let inner_string: PrologText = inner_term.get_ex()?;
+        Ok(SQName::make_entry(&inner_string.into_inner()))
     } else if atom!("http://www.w3.org/2001/XMLSchema#ID") == ty {
         let inner_string: PrologText = inner_term.get_ex()?;
         Ok(ID::make_entry(&inner_string.into_inner()))
@@ -61,22 +133,22 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         Ok(AnySimpleType::make_entry(&inner_string))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedByte") == ty {
         let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u8::make_entry(&(inner_number as u8)))
+        Ok(u8::make_entry(&exact::<_, u8>(inner_number)?))
     } else if atom!("http://www.w3.org/2001/XMLSchema#byte") == ty {
         let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i8::make_entry(&(inner_number as i8)))
+        Ok(i8::make_entry(&exact::<_, i8>(inner_number)?))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedShort") == ty {
         let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u16::make_entry(&(inner_number as u16)))
+        Ok(u16::make_entry(&exact::<_, u16>(inner_number)?))
     } else if atom!("http://www.w3.org/2001/XMLSchema#short") == ty {
         let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i16::make_entry(&(inner_number as i16)))
+        Ok(i16::make_entry(&exact::<_, i16>(inner_number)?))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedInt") == ty {
         let inner_number: u64 = inner_term.get_ex()?;
-        Ok(u32::make_entry(&(inner_number as u32)))
+        Ok(u32::make_entry(&exact::<_, u32>(inner_number)?))
     } else if atom!("http://www.w3.org/2001/XMLSchema#int") == ty {
         let inner_number: i64 = inner_term.get_ex()?;
-        Ok(i32::make_entry(&(inner_number as i32)))
+        Ok(i32::make_entry(&exact::<_, i32>(inner_number)?))
     } else if atom!("http://www.w3.org/2001/XMLSchema#unsignedLong") == ty {
         let inner_number: u64 = inner_term.get_ex()?;
         Ok(u64::make_entry(&inner_number))
@@ -99,26 +171,38 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             // Fall back to number for backwards compatibility (converts float/int to string)
             context.string_from_term(inner_term)?
         };
-        Ok(Decimal::make_entry(&Decimal::new(decimal_str).unwrap()))
+        Ok(Decimal::make_entry(
+            &Decimal::new(decimal_str).map_err(|_| PrologError::Exception)?,
+        ))
     } else if atom!("http://www.w3.org/2001/XMLSchema#integer") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
+        let integer: Integer = Integer::parse(inner_number)
+            .map_err(|_| PrologError::Exception)?
+            .into();
         Ok(Integer::make_entry(&integer))
     } else if atom!("http://www.w3.org/2001/XMLSchema#positiveInteger") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
+        let integer: Integer = Integer::parse(inner_number)
+            .map_err(|_| PrologError::Exception)?
+            .into();
         Ok(PositiveInteger::make_entry(&PositiveInteger(integer)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#negativeInteger") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
+        let integer: Integer = Integer::parse(inner_number)
+            .map_err(|_| PrologError::Exception)?
+            .into();
         Ok(NegativeInteger::make_entry(&NegativeInteger(integer)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#nonPositiveInteger") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
+        let integer: Integer = Integer::parse(inner_number)
+            .map_err(|_| PrologError::Exception)?
+            .into();
         Ok(NonPositiveInteger::make_entry(&NonPositiveInteger(integer)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#nonNegativeInteger") == ty {
         let inner_number: String = context.string_from_term(inner_term)?;
-        let integer: Integer = Integer::parse(inner_number).unwrap().into();
+        let integer: Integer = Integer::parse(inner_number)
+            .map_err(|_| PrologError::Exception)?
+            .into();
         Ok(NonNegativeInteger::make_entry(&NonNegativeInteger(integer)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYear") == ty {
         // TODO check that the functor is what we expect
@@ -126,23 +210,23 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let offset: u64 = inner_term.get_arg_ex(2)?;
         Ok(GYear::make_entry(&GYear {
             year,
-            offset: offset as i16,
+            offset: exact(offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gMonth") == ty {
         // TODO check that the functor is what we expect
         let month: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
         let offset: u64 = inner_term.get_arg_ex(2)?;
         Ok(GMonth::make_entry(&GMonth {
-            month: month as u8,
-            offset: offset as i16,
+            month: exact(month)?,
+            offset: exact(offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gDay") == ty {
         // TODO check that the functor is what we expect
         let day: u64 = inner_term.get_arg_ex(1)?; // TODO should this throw if the arg is not there?
         let offset: u64 = inner_term.get_arg_ex(2)?;
         Ok(GDay::make_entry(&GDay {
-            day: day as u8,
-            offset: offset as i16,
+            day: exact(day)?,
+            offset: exact(offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gYearMonth") == ty {
         // TODO check that the functor is what we expect
@@ -151,8 +235,8 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let offset: u64 = inner_term.get_arg_ex(3)?;
         Ok(GYearMonth::make_entry(&GYearMonth {
             year,
-            month: month as u8,
-            offset: offset as i16,
+            month: exact(month)?,
+            offset: exact(offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#gMonthDay") == ty {
         // TODO check that the functor is what we expect
@@ -160,63 +244,25 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let day: u64 = inner_term.get_arg_ex(2)?;
         let offset: u64 = inner_term.get_arg_ex(3)?;
         Ok(GMonthDay::make_entry(&GMonthDay {
-            month: month as u8,
-            day: day as u8,
-            offset: offset as i16,
+            month: exact(month)?,
+            day: exact(day)?,
+            offset: exact(offset)?,
         }))
     } else if atom!("http://www.w3.org/2001/XMLSchema#duration") == ty {
-        let sign: i64 = inner_term.get_arg_ex(1)?;
-        let year: i64 = inner_term.get_arg_ex(2)?;
-        let month: i64 = inner_term.get_arg_ex(3)?;
-        let day: i64 = inner_term.get_arg_ex(4)?;
-        let hour: i64 = inner_term.get_arg_ex(5)?;
-        let minute: i64 = inner_term.get_arg_ex(6)?;
-        let second: f64 = inner_term.get_arg_ex(7)?;
-        Ok(Duration::make_entry(&Duration {
-            sign: sign as i8,
-            year,
-            month: month as u8,
-            day: day as u8,
-            hour: hour as u8,
-            minute: minute as u8,
-            second,
-        }))
+        match duration_from_term(context, inner_term) {
+            Ok(d) => Ok(Duration::make_entry(&d)),
+            Err(_) => raise_domain(context, inner_term),
+        }
     } else if atom!("http://www.w3.org/2001/XMLSchema#yearMonthDuration") == ty {
-        let sign: i64 = inner_term.get_arg_ex(1)?;
-        let year: i64 = inner_term.get_arg_ex(2)?;
-        let month: i64 = inner_term.get_arg_ex(3)?;
-        let day: i64 = inner_term.get_arg_ex(4)?;
-        let hour: i64 = inner_term.get_arg_ex(5)?;
-        let minute: i64 = inner_term.get_arg_ex(6)?;
-        let second: f64 = inner_term.get_arg_ex(7)?;
-        Ok(YearMonthDuration::make_entry(&YearMonthDuration(
-            Duration {
-                sign: sign as i8,
-                year,
-                month: month as u8,
-                day: day as u8,
-                hour: hour as u8,
-                minute: minute as u8,
-                second,
-            },
-        )))
+        match duration_from_term(context, inner_term) {
+            Ok(d) => Ok(YearMonthDuration::make_entry(&YearMonthDuration(d))),
+            Err(_) => raise_domain(context, inner_term),
+        }
     } else if atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration") == ty {
-        let sign: i64 = inner_term.get_arg_ex(1)?;
-        let year: i64 = inner_term.get_arg_ex(2)?;
-        let month: i64 = inner_term.get_arg_ex(3)?;
-        let day: i64 = inner_term.get_arg_ex(4)?;
-        let hour: i64 = inner_term.get_arg_ex(5)?;
-        let minute: i64 = inner_term.get_arg_ex(6)?;
-        let second: f64 = inner_term.get_arg_ex(7)?;
-        Ok(DayTimeDuration::make_entry(&DayTimeDuration(Duration {
-            sign: sign as i8,
-            year,
-            month: month as u8,
-            day: day as u8,
-            hour: hour as u8,
-            minute: minute as u8,
-            second,
-        })))
+        match duration_from_term(context, inner_term) {
+            Ok(d) => Ok(DayTimeDuration::make_entry(&DayTimeDuration(d))),
+            Err(_) => raise_domain(context, inner_term),
+        }
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTime") == ty {
         let year: i64 = inner_term.get_arg_ex(1)?;
         let month: i64 = inner_term.get_arg_ex(2)?;
@@ -225,10 +271,10 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let minute: i64 = inner_term.get_arg_ex(5)?;
         let second: i64 = inner_term.get_arg_ex(6)?;
         let nano: i64 = inner_term.get_arg_ex(7)?;
-        let dt = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
-            .unwrap()
-            .and_hms_nano_opt(hour as u32, minute as u32, second as u32, nano as u32)
-            .unwrap();
+        let dt = NaiveDate::from_ymd_opt(exact(year)?, exact(month)?, exact(day)?)
+            .ok_or(PrologError::Exception)?
+            .and_hms_nano_opt(exact(hour)?, exact(minute)?, exact(second)?, exact(nano)?)
+            .ok_or(PrologError::Exception)?;
         Ok(NaiveDateTime::make_entry(&dt))
     } else if atom!("http://www.w3.org/2001/XMLSchema#dateTimeStamp") == ty {
         let year: i64 = inner_term.get_arg_ex(1)?;
@@ -238,10 +284,10 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let minute: i64 = inner_term.get_arg_ex(5)?;
         let second: i64 = inner_term.get_arg_ex(6)?;
         let nano: i64 = inner_term.get_arg_ex(7)?;
-        let dt = NaiveDate::from_ymd_opt(year as i32, month as u32, day as u32)
-            .unwrap()
-            .and_hms_nano_opt(hour as u32, minute as u32, second as u32, nano as u32)
-            .unwrap();
+        let dt = NaiveDate::from_ymd_opt(exact(year)?, exact(month)?, exact(day)?)
+            .ok_or(PrologError::Exception)?
+            .and_hms_nano_opt(exact(hour)?, exact(minute)?, exact(second)?, exact(nano)?)
+            .ok_or(PrologError::Exception)?;
         Ok(DateTimeStamp::make_entry(&DateTimeStamp(dt)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#date") == ty {
         let year: i64 = inner_term.get_arg_ex(1)?;
@@ -250,35 +296,40 @@ pub fn make_entry_from_term<C: QueryableContextType>(
         let offset: i64 = inner_term.get_arg_ex(4)?;
         let dt = Date {
             year,
-            month: month as u8,
-            day: day as u8,
-            offset: offset as i16,
+            month: exact(month)?,
+            day: exact(day)?,
+            offset: exact(offset)?,
         };
         Ok(Date::make_entry(&dt))
     } else if atom!("http://www.w3.org/2001/XMLSchema#time") == ty {
         let hour: u64 = inner_term.get_arg_ex(1)?;
         let minute: u64 = inner_term.get_arg_ex(2)?;
         let second: u64 = inner_term.get_arg_ex(3)?;
-        let t = NaiveTime::from_hms_opt(hour as u32, minute as u32, second as u32).unwrap();
+        let t = NaiveTime::from_hms_opt(exact(hour)?, exact(minute)?, exact(second)?)
+            .ok_or(PrologError::Exception)?;
         Ok(NaiveTime::make_entry(&t))
     } else if atom!("http://www.w3.org/2001/XMLSchema#base64Binary") == ty {
         let base64: String = inner_term.get_ex()?;
         let mut wrapped_reader = Cursor::new(base64);
         let mut decoder = base64::read::DecoderReader::new(&mut wrapped_reader, base64::STANDARD);
-        // handle errors as you normally would
         let mut result = Vec::new();
-        decoder.read_to_end(&mut result).unwrap();
+        decoder
+            .read_to_end(&mut result)
+            .map_err(|_| PrologError::Exception)?;
         Ok(Base64Binary::make_entry(&Base64Binary(result)))
     } else if atom!("http://www.w3.org/2001/XMLSchema#hexBinary") == ty {
         let hexstring: String = inner_term.get_ex()?;
         Ok(HexBinary::make_entry(&HexBinary(
-            hex::decode(hexstring).unwrap(),
+            hex::decode(hexstring).map_err(|_| PrologError::Exception)?,
         )))
     } else if atom!("http://terminusdb.com/schema/xdd#dateTimeInterval") == ty {
         // Serialize compound term to string and parse in Rust,
         // because swipl-rs get_arg cannot extract compound sub-terms.
         let term_string: String = context.string_from_term(inner_term)?;
-        parse_interval_term(&term_string).map_err(|_| PrologError::Exception)
+        match parse_interval_term(&term_string) {
+            Ok(entry) => Ok(entry),
+            Err(_) => raise_domain(context, inner_term),
+        }
     } else {
         Err(PrologError::Exception)
     }
@@ -380,6 +431,11 @@ pub fn unify_entry<C: QueryableContextType>(
             let val = entry.as_val::<QName, String>();
             object_term.unify_arg(1, val)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#QName"))
+        }
+        Datatype::SQName => {
+            let val = entry.as_val::<SQName, String>();
+            object_term.unify_arg(1, val)?;
+            object_term.unify_arg(2, atom!("https://xbrl.org/2021SQName"))
         }
         Datatype::ID => {
             let val = entry.as_val::<ID, String>();
@@ -607,7 +663,7 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::Duration => {
             let duration_term = context.new_term_ref();
-            duration_term.unify(functor!("duration/7"))?;
+            duration_term.unify(functor!("duration/8"))?;
             let duration = entry.as_val::<Duration, Duration>();
             let sign = duration.sign as i64;
             let year = duration.year;
@@ -617,18 +673,19 @@ pub fn unify_entry<C: QueryableContextType>(
             let minute = duration.minute as i64;
             let second = duration.second;
             duration_term.unify_arg(1, sign)?;
-            duration_term.unify_arg(2, year)?;
-            duration_term.unify_arg(3, month)?;
-            duration_term.unify_arg(4, day)?;
-            duration_term.unify_arg(5, hour)?;
-            duration_term.unify_arg(6, minute)?;
-            duration_term.unify_arg(7, second)?;
+            duration_term.unify_arg(2, 0i64)?; // legacy Duration has no week field
+            duration_term.unify_arg(3, year)?;
+            duration_term.unify_arg(4, month)?;
+            duration_term.unify_arg(5, day)?;
+            duration_term.unify_arg(6, hour)?;
+            duration_term.unify_arg(7, minute)?;
+            duration_term.unify_arg(8, second)?;
             object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#duration"))
         }
         Datatype::YearMonthDuration => {
             let duration_term = context.new_term_ref();
-            duration_term.unify(functor!("duration/7"))?;
+            duration_term.unify(functor!("duration/8"))?;
             let duration = entry.as_val::<YearMonthDuration, YearMonthDuration>().0;
             let sign = duration.sign as i64;
             let year = duration.year;
@@ -638,12 +695,13 @@ pub fn unify_entry<C: QueryableContextType>(
             let minute = duration.minute as i64;
             let second = duration.second;
             duration_term.unify_arg(1, sign)?;
-            duration_term.unify_arg(2, year)?;
-            duration_term.unify_arg(3, month)?;
-            duration_term.unify_arg(4, day)?;
-            duration_term.unify_arg(5, hour)?;
-            duration_term.unify_arg(6, minute)?;
-            duration_term.unify_arg(7, second)?;
+            duration_term.unify_arg(2, 0i64)?; // legacy YearMonthDuration has no week field
+            duration_term.unify_arg(3, year)?;
+            duration_term.unify_arg(4, month)?;
+            duration_term.unify_arg(5, day)?;
+            duration_term.unify_arg(6, hour)?;
+            duration_term.unify_arg(7, minute)?;
+            duration_term.unify_arg(8, second)?;
             object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(
                 2,
@@ -652,7 +710,7 @@ pub fn unify_entry<C: QueryableContextType>(
         }
         Datatype::DayTimeDuration => {
             let duration_term = context.new_term_ref();
-            duration_term.unify(functor!("duration/7"))?;
+            duration_term.unify(functor!("duration/8"))?;
             let duration = entry.as_val::<DayTimeDuration, DayTimeDuration>().0;
             let sign = duration.sign as i64;
             let year = duration.year;
@@ -662,12 +720,13 @@ pub fn unify_entry<C: QueryableContextType>(
             let minute = duration.minute as i64;
             let second = duration.second;
             duration_term.unify_arg(1, sign)?;
-            duration_term.unify_arg(2, year)?;
-            duration_term.unify_arg(3, month)?;
-            duration_term.unify_arg(4, day)?;
-            duration_term.unify_arg(5, hour)?;
-            duration_term.unify_arg(6, minute)?;
-            duration_term.unify_arg(7, second)?;
+            duration_term.unify_arg(2, 0i64)?; // legacy DayTimeDuration has no week field
+            duration_term.unify_arg(3, year)?;
+            duration_term.unify_arg(4, month)?;
+            duration_term.unify_arg(5, day)?;
+            duration_term.unify_arg(6, hour)?;
+            duration_term.unify_arg(7, minute)?;
+            duration_term.unify_arg(8, second)?;
             object_term.unify_arg(1, duration_term)?;
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#dayTimeDuration"))
         }
@@ -752,8 +811,31 @@ pub fn unify_entry<C: QueryableContextType>(
             object_term.unify_arg(2, atom!("http://www.w3.org/2001/XMLSchema#hexBinary"))
         }
         Datatype::DateTimeInterval => {
-            let iv = entry.as_val::<DateTimeInterval, DateTimeInterval>();
-            let term_string = format_interval_term(&iv);
+            let bytes = entry.to_bytes();
+            let iv = match bytes.len() {
+                INTERVAL_LEGACY_ENCODED_WIDTH => {
+                    legacy_interval_to_lexical(&DateTimeInterval::from_legacy_lexical(bytes))
+                }
+                INTERVAL_ENCODED_WIDTH => {
+                    legacy_interval_to_lexical(&DateTimeInterval::from_lexical(bytes))
+                }
+                _ => match decode_lexical_entry(&bytes) {
+                    Ok(iv) => iv,
+                    Err(_) => {
+                        return context.raise_exception(
+                            &term! {context: error(domain_error(xdd_interval_value, #object_term), _)}?,
+                        )
+                    }
+                },
+            };
+            let term_string = match format_lexical_interval_term(&iv) {
+                Ok(s) => s,
+                Err(_) => {
+                    return context.raise_exception(
+                        &term! {context: error(domain_error(xdd_interval_value, #object_term), _)}?,
+                    )
+                }
+            };
             {
                 let f = context.open_frame();
                 let term = f.term_from_string(&term_string)?;
@@ -790,7 +872,16 @@ fn split_top_level_args(s: &str) -> Vec<&str> {
     parts
 }
 
-fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
+fn parse_component_timestamp(s: &str, is_start: bool) -> Result<(i64, u32, u8), String> {
+    match s {
+        "neg_infinity" if is_start => return Ok((INTERVAL_NEG_INF, 0, INTERVAL_COMPONENT_OPEN)),
+        "infinity" if !is_start => return Ok((INTERVAL_POS_INF, 0, INTERVAL_COMPONENT_OPEN)),
+        "unknown" if is_start => {
+            return Ok((INTERVAL_UNKNOWN_START, 0, INTERVAL_COMPONENT_UNKNOWN))
+        }
+        "unknown" => return Ok((INTERVAL_UNKNOWN_END, 0, INTERVAL_COMPONENT_UNKNOWN)),
+        _ => {}
+    }
     if let Some(inner) = s
         .strip_prefix("date_time(")
         .and_then(|s| s.strip_suffix(")"))
@@ -823,6 +914,14 @@ fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
         let y: i32 = parts[0].parse().map_err(|e| format!("{e}"))?;
         let m: u32 = parts[1].parse().map_err(|e| format!("{e}"))?;
         let d: u32 = parts[2].parse().map_err(|e| format!("{e}"))?;
+        // Arg 4 is the component's lexical zone in SWI seconds-west
+        // convention (component_tz/2 copies it into the tz fields, which are
+        // authoritative). The stored instant is the nominal UTC day, so the
+        // value contributes nothing — but it must still be a sane offset.
+        let off: i64 = parts[3].parse().map_err(|e| format!("{e}"))?;
+        if off.unsigned_abs() > 86400 {
+            return Err(format!("invalid date zone offset: {off}"));
+        }
         let dt = NaiveDate::from_ymd_opt(y, m, d)
             .ok_or_else(|| format!("invalid date: {y}-{m}-{d}"))?
             .and_hms_opt(0, 0, 0)
@@ -833,24 +932,167 @@ fn parse_component_timestamp(s: &str) -> Result<(i64, u32, u8), String> {
     }
 }
 
-fn parse_duration_fields(s: &str) -> Result<Duration, String> {
+/// A `duration(Sign,W,Y,Mo,D,H,Mi,S)` arg string as parts: `i64` magnitudes
+/// plus a canonical seconds digit string. The legacy `Duration` struct caps
+/// four fields at `u8`; the parts shape carries what the term actually
+/// says so wide values reach the lexical encoders instead of erroring.
+/// The ISO week form is exclusive — `W>0` with any other nonzero field is
+/// a malformed term.
+fn parse_duration_parts(s: &str) -> Result<(i8, i64, i64, i64, i64, i64, i64, String), String> {
     let inner = s
         .strip_prefix("duration(")
         .and_then(|s| s.strip_suffix(")"))
         .ok_or_else(|| format!("invalid duration: {s}"))?;
     let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
-    if parts.len() != 7 {
+    if parts.len() != 8 {
         return Err(format!("invalid duration arity: {}", parts.len()));
     }
-    Ok(Duration {
-        sign: parts[0].parse::<i64>().map_err(|e| format!("{e}"))? as i8,
-        year: parts[1].parse().map_err(|e| format!("{e}"))?,
-        month: parts[2].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
-        day: parts[3].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
-        hour: parts[4].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
-        minute: parts[5].parse::<u64>().map_err(|e| format!("{e}"))? as u8,
-        second: parts[6].parse().map_err(|e| format!("{e}"))?,
+    let sign: i64 = parts[0].parse().map_err(|e| format!("{e}"))?;
+    if !matches!(sign, 1 | -1) {
+        return Err(format!("invalid duration sign: {sign}"));
+    }
+    let mag = |i: usize| -> Result<i64, String> {
+        let v: i64 = parts[i].parse().map_err(|e| format!("{e}"))?;
+        if v < 0 {
+            return Err(format!("negative duration component: {v}"));
+        }
+        Ok(v)
+    };
+    let second = normalise_seconds_arg(parts[7])?;
+    let (week, year, month, day, hour, minute) =
+        (mag(1)?, mag(2)?, mag(3)?, mag(4)?, mag(5)?, mag(6)?);
+    if week != 0
+        && (year != 0
+            || month != 0
+            || day != 0
+            || hour != 0
+            || minute != 0
+            || !second.bytes().all(|b| b == b'0' || b == b'.'))
+    {
+        return Err(format!("week form cannot combine with other fields: {s}"));
+    }
+    Ok((sign as i8, week, year, month, day, hour, minute, second))
+}
+
+/// A `duration/8` seconds argument — integer, float, or `NrD` rational
+/// spelling — as a canonical decimal digit string. Rationals only expand
+/// when the denominator is `2^a·5^b` (finite decimal); anything else is a
+/// marshal error, not a silent rounding.
+fn normalise_seconds_arg(s: &str) -> Result<String, String> {
+    if let Some((num, den)) = s.split_once('r') {
+        let n: Integer = num
+            .parse()
+            .map_err(|_| format!("invalid rational seconds: {s}"))?;
+        let d: Integer = den
+            .parse()
+            .map_err(|_| format!("invalid rational seconds: {s}"))?;
+        rational_to_decimal(&n, &d).ok_or_else(|| format!("non-terminating rational seconds: {s}"))
+    } else {
+        expand_decimal_spelling(s)
+    }
+}
+
+/// `N/D` with `D = 2^a·5^b` as a canonical decimal digit string.
+/// `None` when the decimal expansion does not terminate.
+fn rational_to_decimal(n: &Integer, d: &Integer) -> Option<String> {
+    if *d <= 0 || *n < 0 {
+        return None;
+    }
+    let (rest, twos) = d.clone().remove_factor(&Integer::from(2));
+    let (rest, fives) = rest.remove_factor(&Integer::from(5));
+    if rest != 1 {
+        return None;
+    }
+    let scale = twos.max(fives) as usize;
+    let scaled = if twos >= fives {
+        n.clone() * Integer::from(5).pow(twos - fives)
+    } else {
+        n.clone() * Integer::from(2).pow(fives - twos)
+    };
+    let digits = scaled.to_string();
+    let padded = if digits.len() <= scale {
+        format!("{}{}", "0".repeat(scale - digits.len() + 1), digits)
+    } else {
+        digits
+    };
+    let (int, frac) = padded.split_at(padded.len() - scale);
+    let frac = frac.trim_end_matches('0');
+    Some(if frac.is_empty() {
+        int.to_string()
+    } else {
+        format!("{int}.{frac}")
     })
+}
+
+/// An integer or float spelling (digits, optional `.`, optional exponent)
+/// as a canonical decimal digit string: no exponent, no trailing zeros,
+/// no leading zeros. Signs and non-decimal input are rejected.
+fn expand_decimal_spelling(s: &str) -> Result<String, String> {
+    let (mantissa, exp) = match s.split_once(|c| c == 'e' || c == 'E') {
+        Some((m, e)) => (
+            m,
+            e.parse::<i64>()
+                .map_err(|_| format!("invalid exponent: {s}"))?,
+        ),
+        None => (s, 0),
+    };
+    if mantissa.is_empty() || mantissa.starts_with(['-', '+']) {
+        return Err(format!("invalid seconds: {s}"));
+    }
+    let (int, frac) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if int.is_empty()
+        || !int.bytes().all(|b| b.is_ascii_digit())
+        || !frac.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(format!("invalid seconds: {s}"));
+    }
+    let all = format!("{int}{frac}");
+    let point = int.len() as i64 + exp;
+    let out = if point <= 0 {
+        format!("0.{}{}", "0".repeat((-point) as usize), all)
+    } else if point as usize >= all.len() {
+        format!("{}{}", all, "0".repeat(point as usize - all.len()))
+    } else {
+        format!("{}.{}", &all[..point as usize], &all[point as usize..])
+    };
+    let (i, f) = out.split_once('.').map_or((out.as_str(), ""), |(i, f)| (i, f));
+    let i = i.trim_start_matches('0');
+    let i = if i.is_empty() { "0" } else { i };
+    let f = f.trim_end_matches('0');
+    Ok(if f.is_empty() {
+        i.to_string()
+    } else {
+        format!("{i}.{f}")
+    })
+}
+
+/// Parse a `tz(Seconds)` or `none` term into the stored i16 minutes offset.
+/// The Prolog side follows the SWI convention of seconds *west* of
+/// Greenwich, so a +02:00 zone arrives as tz(-7200) → 120 minutes.
+fn parse_interval_tz(s: &str) -> Result<i16, String> {
+    if s == "none" {
+        return Ok(INTERVAL_NO_ZONE);
+    }
+    let secs: i64 = s
+        .strip_prefix("tz(")
+        .and_then(|s| s.strip_suffix(")"))
+        .ok_or_else(|| format!("invalid tz term: {s}"))?
+        .parse()
+        .map_err(|e| format!("invalid tz offset: {e}"))?;
+    // Seconds must convert exactly to whole minutes: truncation here would
+    // silently change the stored zone.
+    if secs % 60 != 0 {
+        return Err(format!("tz offset not whole minutes: {secs}"));
+    }
+    i16::try_from(-secs / 60).map_err(|_| format!("tz offset out of range: {secs}"))
+}
+
+fn format_interval_tz(tz: i16) -> String {
+    if tz == INTERVAL_NO_ZONE {
+        "none".to_string()
+    } else {
+        format!("tz({})", -(tz as i64) * 60)
+    }
 }
 
 fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
@@ -859,44 +1101,56 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
         .and_then(|s| s.strip_suffix(")"))
         .ok_or_else(|| format!("invalid interval term: {s}"))?;
     let args = split_top_level_args(inner);
-    if args.len() != 4 {
-        return Err(format!("expected 4 args, got {}", args.len()));
+    if args.len() != 6 {
+        return Err(format!("expected 6 args, got {}", args.len()));
     }
-    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0])?;
-    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1])?;
-    let duration = parse_duration_fields(args[2])?;
+    let (start_seconds, start_nanos, start_type) = parse_component_timestamp(args[0], true)?;
+    let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1], false)?;
+    let (sign, week, year, month, day, hour, minute, second) = parse_duration_parts(args[2])?;
     let flag = match args[3] {
         "explicit" => INTERVAL_FLAG_EXPLICIT,
         "start_duration" => INTERVAL_FLAG_START_DURATION,
         "duration_end" => INTERVAL_FLAG_DURATION_END,
         other => return Err(format!("unknown flag: {other}")),
     };
-    Ok(DateTimeInterval::make_entry(&DateTimeInterval {
-        start_seconds,
-        start_nanos,
-        end_seconds,
-        end_nanos,
-        start_type,
-        end_type,
+    let start_tz = parse_interval_tz(args[4])?;
+    let end_tz = parse_interval_tz(args[5])?;
+    // The typed dictionary canonically stores interval entries in lexical
+    // encoding (`upgrade_lexical_intervals` rewrites fixed-width entries at
+    // layer load). Marshaling through the legacy `DateTimeInterval` — whose
+    // `Duration.day` is a `u8` — drops wide periods before they ever reach
+    // the encoder: lookups miss, removals silently noop. Build the lexical
+    // interval directly so the period carries the term's actual digits.
+    let period = duration_parts_to_period(sign, week, year, month, day, hour, minute, &second);
+    Ok(lexical_interval_entry(&lexical_interval_from_parts(
+        (start_seconds, start_nanos, start_type, start_tz),
+        (end_seconds, end_nanos, end_type, end_tz),
         flag,
-        duration,
-    }))
+        &period,
+    )))
 }
 
-fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String {
+fn format_component_term(
+    seconds: i64,
+    nanos: u32,
+    component_type: u8,
+    is_start: bool,
+) -> Result<String, String> {
     use chrono::DateTime;
+    match component_type {
+        INTERVAL_COMPONENT_OPEN => {
+            return Ok(if is_start { "neg_infinity" } else { "infinity" }.to_string())
+        }
+        INTERVAL_COMPONENT_UNKNOWN => return Ok("unknown".to_string()),
+        _ => {}
+    }
     let dt = DateTime::from_timestamp(seconds, nanos)
         .map(|dt| dt.naive_utc())
-        .unwrap_or_else(|| {
-            NaiveDate::from_ymd_opt(1970, 1, 1)
-                .unwrap()
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-        });
+        .ok_or_else(|| "interval instant outside representable range".to_string())?;
     if component_type == INTERVAL_COMPONENT_DATE {
-        format!("date({},{},{},0)", dt.year(), dt.month(), dt.day())
+        Ok(format!("date({},{},{},0)", dt.year(), dt.month(), dt.day()))
     } else {
-        format!(
+        Ok(format!(
             "date_time({},{},{},{},{},{},{})",
             dt.year(),
             dt.month(),
@@ -905,27 +1159,208 @@ fn format_component_term(seconds: i64, nanos: u32, component_type: u8) -> String
             dt.minute(),
             dt.second(),
             dt.nanosecond()
-        )
+        ))
     }
 }
 
-fn format_interval_term(iv: &DateTimeInterval) -> String {
-    let start = format_component_term(iv.start_seconds, iv.start_nanos, iv.start_type);
-    let end = format_component_term(iv.end_seconds, iv.end_nanos, iv.end_type);
-    let dur = format!(
-        "duration({},{},{},{},{},{},{})",
-        iv.duration.sign,
-        iv.duration.year,
-        iv.duration.month,
-        iv.duration.day,
-        iv.duration.hour,
-        iv.duration.minute,
-        iv.duration.second
-    );
+/// A `LexicalInterval` back as a `date_time_interval/6` term string — the
+/// read-path inverse of `parse_interval_term`, with no legacy struct in
+/// between (the period can exceed the legacy `u8` field widths).
+fn format_lexical_interval_term(iv: &LexicalInterval) -> Result<String, String> {
+    fn component_term(c: &Component, is_start: bool) -> Result<String, String> {
+        let (secs, nanos, ty, _tz) = legacy_component_of(c)
+            .ok_or_else(|| "interval component outside representable range".to_string())?;
+        format_component_term(secs, nanos, ty, is_start)
+    }
+    let start = component_term(&iv.start, true)?;
+    let end = component_term(&iv.end, false)?;
+    // Supplied canonical for the duration forms, derived period for explicit.
+    let period = match iv.flag {
+        FLAG_START_DURATION => iv.canonical.split('/').nth(1).unwrap_or("PT0S").to_string(),
+        FLAG_DURATION_END => iv.canonical.split('/').next().unwrap_or("PT0S").to_string(),
+        _ => derived_period(iv),
+    };
+    // `duration/8` carries a week field, so stored `PnW` spellings read
+    // back with their denomination intact and re-marshal verbatim.
+    let (sign, week, year, month, day, hour, minute, second) = period_to_parts(&period)
+        .map_err(|_| format!("undecodable interval period: {period}"))?;
     let flag = match iv.flag {
-        INTERVAL_FLAG_START_DURATION => "start_duration",
-        INTERVAL_FLAG_DURATION_END => "duration_end",
+        FLAG_START_DURATION => "start_duration",
+        FLAG_DURATION_END => "duration_end",
         _ => "explicit",
     };
-    format!("date_time_interval({},{},{},{})", start, end, dur, flag)
+    let (_, _, _, start_tz) = legacy_component_of(&iv.start)
+        .ok_or_else(|| "interval start outside representable range".to_string())?;
+    let (_, _, _, end_tz) = legacy_component_of(&iv.end)
+        .ok_or_else(|| "interval end outside representable range".to_string())?;
+    Ok(format!(
+        "date_time_interval({},{},{},{},{},{})",
+        start,
+        end,
+        format!(
+            "duration({sign},{week},{year},{month},{day},{hour},{minute},{})",
+            seconds_term(&second)
+        ),
+        flag,
+        format_interval_tz(start_tz),
+        format_interval_tz(end_tz)
+    ))
+}
+
+/// Seconds digits as a term spelling: integral values stay integers,
+/// fractions become `NrD` rationals so the term carries the exact decimal
+/// instead of a float approximation.
+fn seconds_term(digits: &str) -> String {
+    match digits.split_once('.') {
+        Some((i, f)) => {
+            let num = format!("{i}{f}");
+            let num = num.trim_start_matches('0');
+            let num = if num.is_empty() { "0" } else { num };
+            format!("{num}r1{}", "0".repeat(f.len()))
+        }
+        None => digits.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tdb_succinct::tfc::lexical_interval::encode_lexical_interval;
+
+    /// The dictionary canonically holds `encode_lexical_interval` bytes for
+    /// `DateTimeInterval` values (layer load upgrades fixed-width entries).
+    /// `parse_interval_term` must marshal to that same canonical form or
+    /// `object_value_id` — and therefore any delete or id lookup — misses.
+    #[test]
+    fn interval_term_marshals_to_canonical_lexical_encoding() {
+        let entry = parse_interval_term("date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(0),tz(0))")
+            .unwrap();
+        assert_eq!(entry.datatype(), Datatype::DateTimeInterval);
+        assert_ne!(
+            entry.to_bytes().len(),
+            INTERVAL_ENCODED_WIDTH,
+            "fixed-width encoding is upgraded away at layer load and can never match"
+        );
+        decode_lexical_entry(&entry.to_bytes()).expect("entry must be a decodable lexical interval");
+    }
+
+    /// Delete-by-lookup decodes a stored entry to a term, then re-marshals it.
+    /// The marshal must be a fixed point of decode-encode or the removal
+    /// resolves a nonexistent id and silently does nothing.
+    #[test]
+    fn interval_term_roundtrip_is_stable() {
+        let term = "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(0),tz(0))";
+        let entry = parse_interval_term(term).unwrap();
+        let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
+        let reparsed =
+            parse_interval_term(&format_lexical_interval_term(&decoded).unwrap()).unwrap();
+        assert_eq!(entry.to_bytes(), reparsed.to_bytes());
+    }
+
+    /// Wide day counts used to die in the legacy `Duration` `u8` field
+    /// before reaching the encoder — silent lookup misses and dropped
+    /// document fields. Marshal must carry the digits through.
+    #[test]
+    fn interval_term_accepts_wide_day_counts() {
+        for term in [
+            "date_time_interval(date(2025,1,20,0),date(2025,10,13,0),duration(1,0,0,0,273,0,0,0),explicit,tz(0),tz(0))",
+            "date_time_interval(date(2025,1,20,0),infinity,duration(1,0,0,0,300,0,0,0),start_duration,tz(0),tz(0))",
+        ] {
+            let entry = parse_interval_term(term).unwrap();
+            let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
+            let reparsed =
+                parse_interval_term(&format_lexical_interval_term(&decoded).unwrap()).unwrap();
+            assert_eq!(entry.to_bytes(), reparsed.to_bytes());
+        }
+    }
+
+    /// Seconds arrive as integers, floats or `NrD` rationals; all must
+    /// marshal through the exact decimal spelling. For `explicit` the
+    /// read-back duration arg is the derived period, so use
+    /// `start_duration` where the supplied period is stored verbatim.
+    #[test]
+    fn interval_term_accepts_rational_seconds() {
+        let entry = parse_interval_term("date_time_interval(date(2025,1,20,0),infinity,duration(1,0,0,0,0,0,0,1r10),start_duration,tz(0),tz(0))")
+            .unwrap();
+        let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
+        let term = format_lexical_interval_term(&decoded).unwrap();
+        assert!(term.contains("duration(1,0,0,0,0,0,0,1r10)"), "got: {}", term);
+        let reparsed = parse_interval_term(&term).unwrap();
+        assert_eq!(entry.to_bytes(), reparsed.to_bytes());
+    }
+
+    #[test]
+    fn seconds_arg_normalises_to_canonical_decimal() {
+        for (input, expected) in [
+            ("0", "0"),
+            ("1.5", "1.5"),
+            ("1.50", "1.5"),
+            ("1r10", "0.1"),
+            ("65r10", "6.5"),
+            ("1r1000", "0.001"),
+            ("1.5e-3", "0.0015"),
+            ("1e2", "100"),
+            ("273.0", "273"),
+        ] {
+            assert_eq!(normalise_seconds_arg(input).unwrap(), expected, "{}", input);
+        }
+        for bad in ["1r3", "-1.5", "nan", "1.5.2", "abc", "2r0", "+1"] {
+            assert!(normalise_seconds_arg(bad).is_err(), "accepted: {}", bad);
+        }
+    }
+
+    /// A stored `to_lexical` (fixed-width) entry and the canonical lexical
+    /// form of the same value must be identical after the dict upgrade —
+    /// i.e. `legacy_interval_to_lexical` and `encode_lexical_interval`
+    /// compose to the canonicalization applied by the store.
+    #[test]
+    fn lexical_encoding_matches_store_upgrade() {
+        let secs = NaiveDate::from_ymd_opt(2020, 1, 15)
+            .unwrap()
+            .and_hms_opt(12, 30, 45)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let iv = DateTimeInterval {
+            start_seconds: secs,
+            start_nanos: 0,
+            end_seconds: secs,
+            end_nanos: 0,
+            start_type: INTERVAL_COMPONENT_DATETIME,
+            end_type: INTERVAL_COMPONENT_DATETIME,
+            flag: INTERVAL_FLAG_EXPLICIT,
+            duration: Duration {
+                sign: 1,
+                year: 0,
+                month: 0,
+                day: 0,
+                hour: 0,
+                minute: 0,
+                second: 0.0,
+            },
+            start_tz: 0,
+            end_tz: 0,
+        };
+        let upgraded = encode_lexical_interval(&legacy_interval_to_lexical(&iv));
+        let entry = parse_interval_term("date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(0),tz(0))").unwrap();
+        assert_eq!(entry.to_bytes().as_ref(), upgraded.as_slice());
+    }
+
+    /// Boundary strictness: malformed interval terms must fail rather than
+    /// marshal a guessed or truncated value.
+    #[test]
+    fn interval_term_rejects_bad_input() {
+        for bad in [
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(0),tz(0))",
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(0,0,0,0,0,0,0,0),explicit,tz(0),tz(0))",
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,-1),explicit,tz(0),tz(0))",
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),bogus,tz(0),tz(0))",
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(30),tz(0))",
+            "date_time_interval(date_time(2020,2,30,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(0),tz(0))",
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,1r3),explicit,tz(0),tz(0))",
+            "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,-1,0,0,0,0),explicit,tz(0),tz(0))",
+        ] {
+            assert!(parse_interval_term(bad).is_err(), "accepted: {}", bad);
+        }
+    }
 }

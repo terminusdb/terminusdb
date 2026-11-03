@@ -23,7 +23,7 @@ jobs:
       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Install libssl1.1
         run: |

@@ -22,6 +22,14 @@
               instance_uri_to_prefixed/3,
               prefixed_to_uri/3,
               prefixed_to_property/3,
+              expanded_name_datatype/1,
+              split_clark/3,
+              qname_local/2,
+              is_ncname/1,
+              non_whitespace/1,
+              lexical_to_clark/4,
+              clark_to_lexical/3,
+              anyuri_to_clark/4,
               uri_eq/3,
               add_duration_to_component/3,
               subtract_duration_from_component/3
@@ -39,6 +47,7 @@
 :- use_module(library(lists), [reverse/2]).
 :- use_module(library(sort)).
 :- use_module(core(util)).
+:- use_module(core(util/xsd_parser), [ncname//0]).
 :- use_module(core(triple/casting), [typecast/4, decimal_precision/1, rational_to_decimal_string/3]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
@@ -165,7 +174,8 @@ remove_date_time_offset(Y,M,D,HH,MM,SS,NS,Offset,date_time(Y1,M1,D1,HH1,MM1,SS_F
  * calendar arithmetic and day/time via seconds. Result type matches
  * input unless sub-day time components are added to a date.
  */
-add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+add_duration_to_component(date(Y,M,D,O), duration(Sign,W,DY,DMo,DD0,DH,DMi,DS), End) :-
+    DD is DD0 + 7 * W,
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
@@ -185,7 +195,8 @@ add_duration_to_component(date(Y,M,D,O), duration(Sign,DY,DMo,DD,DH,DMi,DS), End
     ->  End = date(EY,EM,ED,O)
     ;   End = date_time(EY,EM,ED,EHH,EMM,ESSF,ENS)
     ).
-add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,DH,DMi,DS), End) :-
+add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,W,DY,DMo,DD0,DH,DMi,DS), End) :-
+    DD is DD0 + 7 * W,
     Y1 is Y + Sign * DY,
     M1 is M + Sign * DMo,
     duration_normalize_year_month(Y1, M1, Y2, M2),
@@ -214,9 +225,9 @@ add_duration_to_component(date_time(Y,M,D,HH,MM,SS,NS), duration(Sign,DY,DMo,DD,
  *
  * Negate the duration sign and add.
  */
-subtract_duration_from_component(Component, duration(Sign,Y,Mo,D,H,M,S), Start) :-
+subtract_duration_from_component(Component, duration(Sign,W,Y,Mo,D,H,M,S), Start) :-
     NSign is Sign * -1,
-    add_duration_to_component(Component, duration(NSign,Y,Mo,D,H,M,S), Start).
+    add_duration_to_component(Component, duration(NSign,W,Y,Mo,D,H,M,S), Start).
 
 % Normalize month overflow/underflow: e.g. month 0 or 13.
 % Uses floored division so that month 0 wraps to December of the previous year.
@@ -389,16 +400,19 @@ time_string(time(HN,MN,SN),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(time(HH,MM,SS,_NS,Offset),Codes),
-    time_to_internal_time(time(HH,MM,SS,Offset),time(HN,MN,SN)).
+    phrase(time(HH,MM,SS,NS,Offset),Codes),
+    time_to_internal_time(time(HH,MM,SS,NS,Offset),time(HN,MN,SN)).
 
 duration_string(Duration,String) :-
     nonvar(Duration),
     !,
-    Duration = duration(S,Y,M,D,HH,MM,SS),
+    Duration = duration(S,W,Y,M,D,HH,MM,SS),
     (   S = 1
     ->  SP = ''
     ;   SP = '-'),
+    (   W \= 0
+    ->  format(atom(WP),'~wW',[W])
+    ;   WP = ''),
     (   Y \= 0
     ->  format(atom(YP),'~wY',[Y])
     ;   YP = ''),
@@ -420,18 +434,19 @@ duration_string(Duration,String) :-
     (   SS =\= 0
     ->  format(atom(SSP),'~wS',[SS])
     ;   SSP = ''),
-    atomic_list_concat([SP,'P',YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
-    % Zero duration: "P" alone is not valid ISO 8601, use "P0D"
+    atomic_list_concat([SP,'P',WP,YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
+    % Zero duration: "P" alone is not valid ISO 8601. The canonical zero is
+    % "PT0S" — seconds precision is the maximum-precision spelling.
     (   (Atom0 == 'P' ; Atom0 == '-P')
-    ->  atom_concat(Atom0, '0D', Atom)
+    ->  atom_concat(Atom0, 'T0S', Atom)
     ;   Atom = Atom0
     ),
     atom_string(Atom,String).
-duration_string(duration(Sign,Y,M,D,HH,MM,SS),String) :-
+duration_string(duration(Sign,W,Y,M,D,HH,MM,SS),String) :-
     nonvar(String),
     !,
     atom_codes(String,Codes),
-    phrase(duration(Sign,Y,M,D,HH,MM,SS),Codes).
+    phrase(duration(Sign,W,Y,M,D,HH,MM,SS),Codes).
 
 current_xsd_date_time(XSD) :-
     get_time(Unix),
@@ -797,6 +812,158 @@ prefixed_to_property(Term, Ctx, URI) :-
     get_dict('@schema', Ctx, Schema),
     put_dict('@base', Ctx, Schema, New_Ctx),
     prefixed_to_uri(Term, New_Ctx, URI).
+
+/*
+ * Expanded names: xsd:QName and xbrl:SQName.
+ *
+ * The storage form is always Clark notation `{uri}local`. The lexical edge
+ * form is `prefix:local` (OIM §3.1: split on the FIRST colon; the prefix is
+ * an NCName bound in the active prefix map; the localname is any
+ * non-whitespace string, colons included — xsd:QName additionally requires
+ * an NCName localname).
+ *
+ * Rendering performs an exact whole-namespace URI->prefix lookup only.
+ * Longest-prefix substring matching (as uri_to_prefixed uses for IRIs) must
+ * NOT be used here: it would corrupt a namespace that merely shares a
+ * leading substring with a bound URI.
+ */
+
+expanded_name_datatype('http://www.w3.org/2001/XMLSchema#QName').
+expanded_name_datatype('https://xbrl.org/2021SQName').
+
+is_ncname(S) :-
+    atom_codes(S,C),
+    phrase(xsd_parser:ncname,C,[]).
+
+non_whitespace(S) :-
+    \+ (sub_atom(S,_,1,_,C), char_type(C,white)).
+
+% split_clark(+Clark, -Ns, -Local) is semidet.
+% Namespace is delimited by the first '}' (SQName locals may contain '}').
+split_clark(Clark, Ns, Local) :-
+    sub_atom(Clark, 0, 1, _, '{'),
+    once(sub_atom(Clark, Before, 1, _, '}')),
+    Ns_Length is Before - 1,
+    Ns_Length > 0,
+    sub_atom(Clark, 1, Ns_Length, _, Ns),
+    Local_Before is Before + 1,
+    sub_atom(Clark, Local_Before, Local_Length, 0, Local),
+    Local_Length > 0.
+
+qname_local(Clark, Local) :-
+    split_clark(Clark, _, Local).
+
+% Localname grammar beyond the shared non-whitespace rule: xsd:QName
+% requires an NCName; xbrl:SQName accepts anything non-whitespace.
+expanded_name_local_ok(Local, 'http://www.w3.org/2001/XMLSchema#QName') :-
+    !,
+    is_ncname(Local).
+expanded_name_local_ok(_, _).
+
+% lexical_to_clark(+Lexical, +Prefixes:dict, +TypeURI, -Clark) is det.
+% Accepts `prefix:local` (expanded via Prefixes) or `{uri}local` Clark input
+% (validated, kept verbatim). Throws casting_error on malformed input or an
+% unbound prefix.
+lexical_to_clark(Lexical, Prefixes, TypeURI, Clark) :-
+    (   split_clark(Lexical, _Ns, Local)
+    ->  (   non_whitespace(Local),
+            expanded_name_local_ok(Local, TypeURI)
+        ->  Clark = Lexical
+        ;   throw(error(casting_error(Lexical, TypeURI), _)))
+    ;   (   sub_atom(Lexical, Before, 1, _, ':'), % leftmost ':'
+            sub_atom(Lexical, 0, Before, _, Prefix),
+            Local_Before is Before + 1,
+            sub_atom(Lexical, Local_Before, _, 0, Local),
+            Prefix \= '',
+            is_ncname(Prefix),
+            Local \= '',
+            non_whitespace(Local),
+            expanded_name_local_ok(Local, TypeURI),
+            get_dict(Prefix, Prefixes, URI)
+        ->  atomic_list_concat(['{', URI, '}', Local], Clark)
+        ;   throw(error(casting_error(Lexical, TypeURI), _)))
+    ).
+
+% clark_to_lexical(+Clark, +Prefixes:dict, -Lexical) is det.
+% Exact-match URI->prefix lookup; smallest prefix on ties; Clark verbatim
+% when the namespace is unbound or the input is not Clark-shaped.
+% Output is always a string, matching the xsd:string cast convention.
+clark_to_lexical(Clark, Prefixes, Lexical) :-
+    (   split_clark(Clark, Ns, Local)
+    ->  % exact-match key enumeration; '@'-keys are context keywords, not bindings.
+        % Dict values may be atoms or strings — compare textually like
+        % anyuri_expansion_split does, or a string-valued map misses.
+        findall(P, (get_dict(P, Prefixes, Ns0),
+                    \+ sub_atom(P, 0, 1, _, '@'),
+                    atomic(Ns0),
+                    atom_string(Ns0, Ns)),
+                Candidates),
+        (   Candidates = []
+        ->  Lexical0 = Clark
+        ;   sort(Candidates, [Prefix|_]),
+            atomic_list_concat([Prefix, Local], ':', Lexical0)
+        )
+    ;   Lexical0 = Clark
+    ),
+    (   atom(Lexical0)
+    ->  atom_string(Lexical0, Lexical)
+    ;   Lexical = Lexical0
+    ).
+
+/*
+ * anyuri_to_clark(+AnyURI, +Prefixes:dict, +TypeURI, -Clark) is det.
+ *
+ * xsd:anyURI carries a raw IRI, not a `prefix:local` lexical, so the split
+ * resolves against the prefix map in the other direction: an expansion that
+ * prefixes the IRI (longest wins) gives the namespace. `prefix:local` input
+ * and `{uri}local` input are still honoured. An IRI whose namespace is not
+ * bound in the map raises casting_error — the namespace boundary is not
+ * guessable without ambiguity, so the prefix must be declared first.
+ */
+anyuri_to_clark(AnyURI, Prefixes, TypeURI, Clark) :-
+    (   split_clark(AnyURI, _Ns, Local)
+    ->  (   expanded_name_local_ok(Local, TypeURI)
+        ->  Clark = AnyURI
+        ;   throw(error(casting_error(AnyURI, TypeURI), _)))
+    ;   anyuri_expansion_split(AnyURI, Prefixes, Ns, Local)
+    ->  clark_or_error(AnyURI, Ns, Local, TypeURI, Clark)
+    ;   anyuri_lexical_split(AnyURI, Prefixes, Ns, Local)
+    ->  clark_or_error(AnyURI, Ns, Local, TypeURI, Clark)
+    ;   throw(error(casting_error(AnyURI, TypeURI), _))
+    ).
+
+% Longest bound expansion that is a prefix of the IRI wins.
+anyuri_expansion_split(AnyURI, Prefixes, Ns, Local) :-
+    findall(Len-Ns0,
+            (   get_dict(_P, Prefixes, Ns0),
+                atomic(Ns0),
+                atom_string(Ns0, Ns_String),
+                string_length(Ns_String, Len),
+                Len > 0,
+                sub_atom(AnyURI, 0, Len, _, Ns_String)),
+            Matches),
+    Matches \= [],
+    sort(0, @>=, Matches, [Len-Ns|_]),
+    atom_string(Ns, Ns_String),
+    sub_atom(AnyURI, Len, Local_Len, 0, Local),
+    Local_Len > 0.
+
+% `prefix:local` input: leftmost colon, NCName prefix bound in the map.
+anyuri_lexical_split(AnyURI, Prefixes, Ns, Local) :-
+    sub_atom(AnyURI, Before, 1, _, ':'),
+    Before > 0,
+    sub_atom(AnyURI, 0, Before, _, Prefix),
+    is_ncname(Prefix),
+    get_dict(Prefix, Prefixes, Ns),
+    Local_Before is Before + 1,
+    sub_atom(AnyURI, Local_Before, Local_Len, 0, Local),
+    Local_Len > 0.
+
+clark_or_error(AnyURI, Ns, Local, TypeURI, Clark) :-
+    (   non_whitespace(Local),
+        expanded_name_local_ok(Local, TypeURI)
+    ->  atomic_list_concat(['{', Ns, '}', Local], Clark)
+    ;   throw(error(casting_error(AnyURI, TypeURI), _))).
 
 :- begin_tests(turtle_literal_marshalling).
 

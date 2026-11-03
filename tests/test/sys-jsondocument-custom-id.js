@@ -253,7 +253,7 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
     const result = await document.insert(agent, {
       instance: { name: 'url_named' },
       author: 'test_author',
-      queryString: 'raw_json=true&id=url-named-doc&author=test_author&message=test',
+      queryString: 'raw_json=true&id=url-named-doc&author=test_author&message=test&compress_ids=false',
     })
     expect(result.body[0]).to.equal('terminusdb:///data/url-named-doc')
 
@@ -290,7 +290,7 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
     const replaced = await document.replace(agent, {
       instance: { name: 'replace_me', v: 2 },
       author: 'test_author',
-      queryString: `raw_json=true&id=${encodeURIComponent(id)}&author=test_author&message=test`,
+      queryString: `raw_json=true&id=${encodeURIComponent(id)}&author=test_author&message=test&compress_ids=false`,
     })
     expect(replaced.body[0]).to.equal(id)
 

@@ -66,4 +66,13 @@ describe('diff', function () {
     expect(r2.status).to.equal(200)
     expect(r2.body).to.deep.equal(after)
   })
+
+  it('patch a decimal SwapValue', async function () {
+    const patchPath = api.path.patch(agent)
+    const before = { weight: 1.1 }
+    const patch = { weight: { '@op': 'SwapValue', '@before': 1.1, '@after': 1.2 } }
+    const r = await agent.post(patchPath).send({ before, patch })
+    expect(r.status).to.equal(200)
+    expect(r.body).to.deep.equal({ weight: 1.2 })
+  })
 })

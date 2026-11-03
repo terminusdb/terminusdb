@@ -2,10 +2,12 @@
 use itertools::Itertools;
 use juniper::{self, FromInputValue, InputValue, ID};
 use ordered_float::OrderedFloat;
-use regex::{Regex, RegexSet};
+use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
-use tdb_succinct::tfc::interval::parse_iso_interval;
-use tdb_succinct::{DateTimeInterval, Decimal, TdbDataType, TypedDictEntry};
+use tdb_succinct::tfc::lexical_interval::{
+    interval_relation, lexical_interval_entry, literal_as_interval, AllenRelation,
+};
+use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
 
 use crate::consts::{RDF_FIRST, RDF_NIL, RDF_REST, SYS_VALUE};
 use crate::path::iterator::{CachedClonableIterator, ClonableIterator};
@@ -27,8 +29,8 @@ use super::frame::{
     Prefixes, TypeDefinition,
 };
 use super::schema::{
-    id_matches_restriction, BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue,
-    TerminusContext, TerminusOrderBy, TerminusOrdering,
+    BigFloat, BigInt, DateTime, GeneratedEnum, NodeOrValue, TerminusOrderBy, TerminusOrdering,
+    TerminusResolveContext,
 };
 
 use crate::path::compile::{compile_path, path_to_class};
@@ -108,6 +110,8 @@ enum FilterValue {
     BigFloat(GenericOperation, BigFloat, String),
     DateTime(GenericOperation, DateTime, String),
     String(GenericOperation, String, String),
+    // typed relation: rel atom + interval-or-instant literal
+    Relation(String, String),
     Enum { op: EnumOperation, value: IriName },
     Foreign(IdOperation, String),
 }
@@ -136,6 +140,25 @@ FilterObject{ edges:
 }
 */
 
+/// Maximum compiled regex program size (bytes). Prevents ReDoS by
+/// rejecting regexes with enormous NFA/dfa state machines.
+const REGEX_SIZE_LIMIT: usize = 256 * 1024; // 256 KiB
+/// Maximum DFA cache size (bytes). Caps memory used by the DFA during matching.
+const REGEX_DFA_SIZE_LIMIT: usize = 512 * 1024; // 512 KiB
+
+/// Compile a user-supplied regex pattern with resource limits to prevent
+/// ReDoS (Regular Expression Denial of Service).
+///
+/// The `size_limit` caps the compiled NFA size, rejecting pathological
+/// patterns with exponential state expansion. The `dfa_size_limit` caps
+/// the DFA cache used during matching, bounding memory consumption.
+fn compile_safe_regex(pattern: &str) -> Result<Regex, regex::Error> {
+    RegexBuilder::new(pattern)
+        .size_limit(REGEX_SIZE_LIMIT)
+        .dfa_size_limit(REGEX_DFA_SIZE_LIMIT)
+        .build()
+}
+
 fn compile_string_input_value(string_type: &str, value: StringFilterInputObject) -> FilterValue {
     if let Some(val) = value.eq {
         FilterValue::String(GenericOperation::Eq, val, string_type.to_string())
@@ -149,8 +172,11 @@ fn compile_string_input_value(string_type: &str, value: StringFilterInputObject)
         FilterValue::String(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::String(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.relationship {
+        FilterValue::Relation(val.rel, val.value)
     } else if let Some(val) = value.regex {
-        let regex = Regex::new(&val).expect("Could not compile regex");
+        let regex = compile_safe_regex(&val)
+            .expect("Could not compile regex (pattern rejected by size limit or invalid syntax)");
         FilterValue::Text(TextOperation::Regex(regex), string_type.to_string())
     } else if let Some(val) = value.startsWith {
         FilterValue::Text(TextOperation::StartsWith(val), string_type.to_string())
@@ -197,6 +223,8 @@ fn compile_datetime_input_value(
         FilterValue::DateTime(GenericOperation::Gt, val, string_type.to_string())
     } else if let Some(val) = value.ge {
         FilterValue::DateTime(GenericOperation::Ge, val, string_type.to_string())
+    } else if let Some(val) = value.relationship {
+        FilterValue::Relation(val.rel, val.value)
     } else {
         panic!("Unable to compile string input value to a filter")
     }
@@ -702,11 +730,13 @@ fn object_type_filter<'a>(
             let op = *op;
             let val = val.clone();
             let g = g.clone();
-            // Use TypedDictEntry ordering for dateTimeInterval (binary sorts chronologically)
+            // Use TypedDictEntry ordering for dateTimeInterval (lexical
+            // entries sort semantically: chronological endpoints, open and
+            // unknown classes at the extremes)
             let interval_entry = if type_str == "dateTimeInterval" {
-                parse_iso_interval(&val)
+                literal_as_interval(&val)
                     .ok()
-                    .map(|iv| DateTimeInterval::make_entry(&iv))
+                    .map(|iv| lexical_interval_entry(&iv))
             } else {
                 None
             };
@@ -719,6 +749,29 @@ fn object_type_filter<'a>(
                     object_string.cmp(&val)
                 };
                 ordering_matches_op(cmp, op)
+            }))
+        }
+        FilterValue::Relation(rel, val) => {
+            let relation = rel
+                .parse::<AllenRelation>()
+                .expect("unknown relation name in relationship filter");
+            let reference = literal_as_interval(val)
+                .expect("relationship value must be an interval or instant literal");
+            // index candidates — a superset; the literal check below keeps
+            // the verdict exact on members only
+            let candidates: std::collections::HashSet<u64> = g
+                .interval_relation_object_ids(relation, &reference)
+                .into_iter()
+                .collect();
+            let g = g.clone();
+            ClonableIterator::new(iter.filter(move |object| {
+                candidates.contains(object) && {
+                    let object_value = g.id_object_value(*object).expect("Object value must exist");
+                    let object_string = value_to_string(&object_value);
+                    literal_as_interval(&object_string)
+                        .map(|iv| interval_relation(&iv, relation, &reference))
+                        .unwrap_or(false)
+                }
             }))
         }
         FilterValue::Enum { op, value } => {
@@ -756,8 +809,8 @@ fn object_type_filter<'a>(
     }
 }
 
-fn compile_query<'a>(
-    context: &'a TerminusContext<'static>,
+fn compile_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     all_frames: &'a AllFrames,
     filter: Rc<FilterObject>,
@@ -771,7 +824,8 @@ fn compile_query<'a>(
     if let Some(restriction_name) = filter.restriction.clone() {
         iter = ClonableIterator::new(iter.filter(move |id| {
             let restriction_name = all_frames.graphql_to_short_name(&restriction_name);
-            id_matches_restriction(context, restriction_name, *id)
+            context
+                .id_matches_restriction(restriction_name, *id)
                 .unwrap()
                 .is_some()
         }));
@@ -1210,8 +1264,8 @@ fn generate_initial_iterator<'a>(
     }
 }
 
-fn lookup_by_filter<'a>(
-    context: &'a TerminusContext<'static>,
+fn lookup_by_filter<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     class_name: &'a GraphQLName<'a>,
     all_frames: &'a AllFrames,
@@ -1235,8 +1289,8 @@ fn lookup_by_filter<'a>(
     }
 }
 
-pub fn run_filter_query<'a>(
-    context: &'a TerminusContext<'static>,
+pub fn run_filter_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     arguments: &'a juniper::Arguments,
     class_name: &'a GraphQLName<'a>,
@@ -1352,8 +1406,8 @@ pub fn run_filter_query<'a>(
 }
 
 /// Run a count query - returns count of matching documents without collecting them
-pub fn run_count_query<'a>(
-    context: &'a TerminusContext<'static>,
+pub fn run_count_query<'a, C: TerminusResolveContext>(
+    context: &'a C,
     g: &'a SyncStoreLayer,
     filter_input: &FilterInputObject,
     class_name: &'a GraphQLName<'a>,
@@ -1484,5 +1538,52 @@ impl Ord for QueryOrderKey {
 impl PartialOrd for QueryOrderKey {
     fn partial_cmp(&self, other: &QueryOrderKey) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod regex_tests {
+    use super::*;
+
+    #[test]
+    fn valid_simple_regex_compiles() {
+        let re = compile_safe_regex(r"^abc.*xyz$");
+        assert!(re.is_ok());
+        assert!(re.unwrap().is_match("abc123xyz"));
+    }
+
+    #[test]
+    fn valid_regex_with_alternation_compiles() {
+        let re = compile_safe_regex(r"(foo|bar|baz)+");
+        assert!(re.is_ok());
+        assert!(re.unwrap().is_match("foobarbaz"));
+    }
+
+    #[test]
+    fn redos_nested_quantifier_rejected_by_size_limit() {
+        // The Rust regex crate uses Thompson NFA (linear-time, no backtracking),
+        // so classic ReDoS via catastrophic backtracking is not possible.
+        // However, size_limit protects against memory exhaustion from patterns
+        // that compile to huge NFAs. A pattern with many nested groups and
+        // alternations creates a large state machine — this should be rejected.
+        let evil = "a".repeat(10_000);
+        let pattern = format!("({})+", evil);
+        let re = compile_safe_regex(&pattern);
+        assert!(
+            re.is_err(),
+            "Huge NFA pattern should be rejected by size_limit"
+        );
+    }
+
+    #[test]
+    fn invalid_regex_returns_error() {
+        let re = compile_safe_regex(r"[unclosed");
+        assert!(re.is_err());
+    }
+
+    #[test]
+    fn empty_regex_compiles() {
+        let re = compile_safe_regex("");
+        assert!(re.is_ok());
     }
 }

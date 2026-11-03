@@ -5,6 +5,7 @@ describe('db-auth', function () {
   this.timeout(5000)
 
   let agent
+
   before(async function () {
     agent = new Agent().auth()
   })

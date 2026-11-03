@@ -1,4 +1,8 @@
 use chrono::{NaiveDateTime, NaiveTime};
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
+    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
+};
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
@@ -7,6 +11,46 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
+
+/// String render of a DateTimeInterval entry across storage formats:
+/// variable-width lexical entries render through the lexical decoder;
+/// un-upgraded fixed-width entries (legacy 48 and branch 52) decode via the
+/// legacy layout so archived layers still render.
+fn interval_entry_to_string(tde: &TypedDictEntry) -> String {
+    let bytes = tde.to_bytes();
+    match bytes.len() {
+        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(
+            &legacy_interval_to_lexical(&DateTimeInterval::from_legacy_lexical(bytes)),
+        ),
+        INTERVAL_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
+            &DateTimeInterval::from_lexical(bytes),
+        )),
+        _ => decode_lexical_entry(&bytes)
+            .map(|iv| render_point_aware(&iv))
+            .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).into_owned()),
+    }
+}
+
+/// A stored zoneless [t,t) is the as-of point spelling: the entry cannot
+/// distinguish a supplied pair from a bare component, and the value is the
+/// same instant either way. A day-aligned instant is the bare date. Zoned
+/// points keep the pair spelling.
+fn render_point_aware(iv: &LexicalInterval) -> String {
+    if iv.flag == FLAG_EXPLICIT && iv.start == iv.end {
+        if let Component::Finite(f) = &iv.start {
+            if f.tz_class == TZ_ZONELESS {
+                let mut single = iv.clone();
+                single.canonical = f.canonical.clone();
+                let s = render_lexical_interval(&single);
+                return match s.strip_suffix("T00:00:00") {
+                    Some(date) => date.to_string(),
+                    None => s,
+                };
+            }
+        }
+    }
+    render_lexical_interval(iv)
+}
 
 pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
     let result = match tde.datatype() {
@@ -20,6 +64,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
         Datatype::NCName => tde.as_val::<NCName, String>(),
         Datatype::Notation => tde.as_val::<Notation, String>(),
         Datatype::QName => tde.as_val::<QName, String>(),
+        Datatype::SQName => tde.as_val::<SQName, String>(),
         Datatype::ID => tde.as_val::<ID, String>(),
         Datatype::IDRef => tde.as_val::<IDRef, String>(),
         Datatype::Entity => tde.as_val::<Entity, String>(),
@@ -39,7 +84,7 @@ pub fn value_to_string(tde: &TypedDictEntry) -> Cow<'_, str> {
         Datatype::DayTimeDuration => tde.as_val::<DayTimeDuration, String>(),
         Datatype::Base64Binary => tde.as_val::<Base64Binary, String>(),
         Datatype::HexBinary => tde.as_val::<HexBinary, String>(),
-        Datatype::DateTimeInterval => tde.as_val::<DateTimeInterval, String>(),
+        Datatype::DateTimeInterval => interval_entry_to_string(tde),
         x => panic!("not a stringy type: {:?}", x),
     };
 
@@ -224,6 +269,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::NCName => Value::String(tde.as_val::<NCName, String>()),
         Datatype::Notation => Value::String(tde.as_val::<Notation, String>()),
         Datatype::QName => Value::String(tde.as_val::<QName, String>()),
+        Datatype::SQName => Value::String(tde.as_val::<SQName, String>()),
         Datatype::ID => Value::String(tde.as_val::<ID, String>()),
         Datatype::IDRef => Value::String(tde.as_val::<IDRef, String>()),
         Datatype::Entity => Value::String(tde.as_val::<Entity, String>()),
@@ -264,7 +310,7 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::Base64Binary => Value::String(tde.as_val::<Base64Binary, String>()),
         Datatype::HexBinary => Value::String(tde.as_val::<HexBinary, String>()),
         Datatype::AnySimpleType => Value::String(tde.as_val::<AnySimpleType, String>()),
-        Datatype::DateTimeInterval => Value::String(tde.as_val::<DateTimeInterval, String>()),
+        Datatype::DateTimeInterval => Value::String(interval_entry_to_string(tde)),
     }
 }
 
@@ -364,6 +410,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::QName => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<QName, String>()))
         }
+        Datatype::SQName => {
+            juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<SQName, String>()))
+        }
         Datatype::ID => {
             juniper::Value::Scalar(DefaultScalarValue::String(tde.as_val::<ID, String>()))
         }
@@ -429,16 +478,17 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
             tde.as_val::<AnySimpleType, String>(),
         )),
         Datatype::DateTimeInterval => juniper::Value::Scalar(DefaultScalarValue::String(
-            tde.as_val::<DateTimeInterval, String>(),
+            interval_entry_to_string(tde),
         )),
     }
 }
 
-pub fn enum_node_to_value(enum_type: &str, enum_uri: &str) -> String {
-    let enum_list: Vec<&str> = enum_uri.split(enum_type).collect();
-    // 1.. is from slash on
-    let enum_value = &(enum_list[1])[1..];
-    enum_value.to_string()
+pub fn enum_node_to_value(_enum_type: &str, enum_uri: &str) -> String {
+    // the lexical is always the last encoded segment — members may live
+    // under the enum's @base rather than its own IRI
+    let pos = enum_uri.rfind('/').unwrap();
+    let encoded = &enum_uri[pos + 1..];
+    urlencoding::decode(encoded).unwrap().to_string()
 }
 
 /// TODO: Generic scalar input value type for future GraphQL input handling.

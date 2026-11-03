@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
+use swipl::prelude::*;
+use swipl::text::PrologText;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use serde_json::Value;
-use swipl::prelude::*;
-use swipl::text::PrologText;
 
 #[derive(Clone)]
 struct JwkKey {
@@ -80,8 +80,7 @@ impl JwksCache {
         {
             return;
         }
-        if self
-            .background_refresh_in_progress
+        if self.background_refresh_in_progress
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
@@ -100,18 +99,14 @@ impl JwksCache {
                             *cache.last_refresh_error.write().unwrap() = None;
                         }
                         Err(e) => {
-                            *cache.last_refresh_error.write().unwrap() =
-                                Some(format!("JWT JWKS background refresh failed: {}", e));
+                            *cache.last_refresh_error.write().unwrap() = Some(format!("JWT JWKS background refresh failed: {}", e));
                         }
                     }
-                    cache
-                        .background_refresh_in_progress
-                        .store(false, Ordering::SeqCst);
+                    cache.background_refresh_in_progress.store(false, Ordering::SeqCst);
                 }
             });
         if spawn_result.is_err() {
-            self.background_refresh_in_progress
-                .store(false, Ordering::SeqCst);
+            self.background_refresh_in_progress.store(false, Ordering::SeqCst);
         }
     }
 }
@@ -172,11 +167,7 @@ fn parse_jwk(jwk: &Jwk) -> Option<JwkKey> {
         }
         _ => return None,
     };
-    Some(JwkKey {
-        kid,
-        algorithm,
-        decoding_key,
-    })
+    Some(JwkKey { kid, algorithm, decoding_key })
 }
 
 fn parse_jwks_response(json: &str) -> Result<Vec<JwkKey>, String> {
@@ -202,21 +193,11 @@ fn fetch_url_blocking(url: &str) -> Result<String, String> {
             Ok(resp) if resp.status().is_success() => {
                 let content_length = resp.content_length().unwrap_or(0) as usize;
                 if content_length > MAX_JWKS_RESPONSE_BYTES {
-                    return Err(format!(
-                        "JWKS response too large: {} bytes (limit {})",
-                        content_length, MAX_JWKS_RESPONSE_BYTES
-                    ));
+                    return Err(format!("JWKS response too large: {} bytes (limit {})", content_length, MAX_JWKS_RESPONSE_BYTES));
                 }
-                let body = resp
-                    .bytes()
-                    .await
-                    .map_err(|e| format!("response read error: {}", e))?;
+                let body = resp.bytes().await.map_err(|e| format!("response read error: {}", e))?;
                 if body.len() > MAX_JWKS_RESPONSE_BYTES {
-                    return Err(format!(
-                        "JWKS response too large: {} bytes (limit {})",
-                        body.len(),
-                        MAX_JWKS_RESPONSE_BYTES
-                    ));
+                    return Err(format!("JWKS response too large: {} bytes (limit {})", body.len(), MAX_JWKS_RESPONSE_BYTES));
                 }
                 String::from_utf8(body.to_vec()).map_err(|e| format!("response UTF-8 error: {}", e))
             }
@@ -238,10 +219,7 @@ fn fetch_oidc_jwks_uri(issuer_url: &str) -> Result<String, String> {
     };
     let body = fetch_url_blocking(&discovery_url)?;
     let doc: Value = serde_json::from_str(&body).map_err(|e| format!("OIDC parse error: {}", e))?;
-    let jwks_uri = doc
-        .get("jwks_uri")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+    let jwks_uri = doc.get("jwks_uri").and_then(|v| v.as_str()).map(|s| s.to_string())
         .ok_or("OIDC discovery missing jwks_uri".to_string())?;
     if !jwks_uri.starts_with("https://") {
         return Err(format!("OIDC jwks_uri must use HTTPS, got: {}", jwks_uri));
@@ -262,8 +240,7 @@ fn parse_jwt_header(token: &str) -> Result<JwtHeader, String> {
     }
     use base64::Engine;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[0])
-        .map_err(|e| format!("header b64 error: {}", e))?;
+        .decode(parts[0]).map_err(|e| format!("header b64 error: {}", e))?;
     serde_json::from_slice(&bytes).map_err(|e| format!("header json error: {}", e))
 }
 
@@ -296,10 +273,8 @@ struct JwtDecodeOptions {
 
 fn parse_algorithm(alg: &str) -> Option<Algorithm> {
     match alg {
-        "RS256" => Some(Algorithm::RS256),
-        "RS384" => Some(Algorithm::RS384),
-        "RS512" => Some(Algorithm::RS512),
-        "ES256" => Some(Algorithm::ES256),
+        "RS256" => Some(Algorithm::RS256), "RS384" => Some(Algorithm::RS384),
+        "RS512" => Some(Algorithm::RS512), "ES256" => Some(Algorithm::ES256),
         "ES384" => Some(Algorithm::ES384),
         _ => None,
     }
@@ -340,18 +315,18 @@ fn init_jwks_cache<C: FrameableContextType>(
     context: &Context<C>,
     endpoint: &str,
 ) -> Result<(), PrologError> {
-    log_info!(context, "JWT: fetching JWKS from {}", endpoint);
+    let _ = log_info!(context, "JWT: fetching JWKS from {}", endpoint);
     match fetch_jwks_blocking(endpoint) {
         Ok(keys) => {
             let key_count = keys.len();
-            log_info!(context, "JWT: loaded {} keys from JWKS", key_count);
+            let _ = log_info!(context, "JWT: loaded {} keys from JWKS", key_count);
             JWKS_CACHE
                 .get_or_init(|| JwksCache::new(endpoint))
                 .replace_keys(keys);
             Ok(())
         }
         Err(e) => {
-            log_error!(context, "JWT: JWKS fetch failed: {}", e);
+            let _ = log_error!(context, "JWT: JWKS fetch failed: {}", e);
             JWKS_CACHE.get_or_init(|| JwksCache::new(endpoint));
             Err(PrologError::Failure)
         }
@@ -368,14 +343,14 @@ predicates! {
     #[module("$rustnative")]
     semidet fn jwt_setup_oidc(context, issuer_url_term) {
         let issuer_url: String = match issuer_url_term.get::<PrologText>() { Ok(t) => t.into_inner(), Err(_) => return Err(PrologError::Failure) };
-        log_info!(context, "JWT: discovering OIDC config from {}", issuer_url);
+        let _ = log_info!(context, "JWT: discovering OIDC config from {}", issuer_url);
         match fetch_oidc_jwks_uri(&issuer_url) {
             Ok(jwks_uri) => {
-                log_info!(context, "JWT: discovered JWKS URI: {}", jwks_uri);
+                let _ = log_info!(context, "JWT: discovered JWKS URI: {}", jwks_uri);
                 init_jwks_cache(context, &jwks_uri)
             }
             Err(e) => {
-                log_error!(context, "JWT: OIDC discovery failed: {}", e);
+                let _ = log_error!(context, "JWT: OIDC discovery failed: {}", e);
                 Err(PrologError::Failure)
             }
         }
@@ -395,36 +370,36 @@ predicates! {
         };
 
         if header.alg == "none" {
-            log_warning!(context, "JWT: rejected token with alg:none");
+            let _ = log_warning!(context, "JWT: rejected token with alg:none");
             return Err(PrologError::Failure);
         }
 
         let header_alg = match parse_algorithm(&header.alg) {
             Some(a) => a,
-            None => { let alg = &header.alg; log_warning!(context, "JWT: unsupported algorithm {}", alg); return Err(PrologError::Failure); }
+            None => { let alg = &header.alg; let _ = log_warning!(context, "JWT: unsupported algorithm {}", alg); return Err(PrologError::Failure); }
         };
 
         let kid = match &header.kid {
             Some(k) => k,
-            None => { log_warning!(context, "JWT: token has no kid"); return Err(PrologError::Failure); }
+            None => { let _ = log_warning!(context, "JWT: token has no kid"); return Err(PrologError::Failure); }
         };
 
         let cache = match JWKS_CACHE.get() {
             Some(c) => c,
-            None => { log_error!(context, "JWT: JWKS cache not initialized"); return Err(PrologError::Failure); }
+            None => { let _ = log_error!(context, "JWT: JWKS cache not initialized"); return Err(PrologError::Failure); }
         };
 
         cache.maybe_background_refresh();
 
         if let Some(err) = cache.last_refresh_error.write().unwrap().take() {
-            log_error!(context, "{}", err);
+            let _ = log_error!(context, "{}", err);
         }
 
         let key = match cache.get_key(kid) {
             Some(k) => k,
             None => {
                 cache.trigger_background_refresh();
-                log_warning!(context, "JWT: kid not found in JWKS");
+                let _ = log_warning!(context, "JWT: kid not found in JWKS");
                 return Err(PrologError::Failure);
             }
         };
@@ -432,7 +407,7 @@ predicates! {
         if header_alg != key.algorithm {
             let hdr_alg = &header.alg;
             let key_alg = key.algorithm;
-            log_warning!(context, "JWT: algorithm mismatch — header {}, key {:?}", hdr_alg, key_alg);
+            let _ = log_warning!(context, "JWT: algorithm mismatch — header {}, key {:?}", hdr_alg, key_alg);
             return Err(PrologError::Failure);
         }
 
@@ -445,7 +420,7 @@ predicates! {
                 payload_term.unify(payload.as_str())
             }
             Err(e) => {
-                log_error!(context, "JWT: decode failed: {}", e);
+                let _ = log_error!(context, "JWT: decode failed: {}", e);
                 Err(PrologError::Failure)
             }
         }
@@ -489,11 +464,7 @@ mod tests {
             kty: "RSA".to_string(),
             alg: Some("RS384".to_string()),
             r#use: Some("sig".to_string()),
-            n: None,
-            e: None,
-            x: None,
-            y: None,
-            crv: None,
+            n: None, e: None, x: None, y: None, crv: None,
         };
         assert_eq!(infer_algorithm(&jwk), Some(Algorithm::RS384));
     }
@@ -505,11 +476,7 @@ mod tests {
             kty: "RSA".to_string(),
             alg: None,
             r#use: None,
-            n: None,
-            e: None,
-            x: None,
-            y: None,
-            crv: None,
+            n: None, e: None, x: None, y: None, crv: None,
         };
         assert_eq!(infer_algorithm(&jwk), Some(Algorithm::RS256));
     }
@@ -521,10 +488,7 @@ mod tests {
             kty: "EC".to_string(),
             alg: None,
             r#use: None,
-            n: None,
-            e: None,
-            x: None,
-            y: None,
+            n: None, e: None, x: None, y: None,
             crv: Some("P-256".to_string()),
         };
         assert_eq!(infer_algorithm(&jwk), Some(Algorithm::ES256));
@@ -537,11 +501,7 @@ mod tests {
             kty: "OKP".to_string(),
             alg: None,
             r#use: None,
-            n: None,
-            e: None,
-            x: None,
-            y: None,
-            crv: None,
+            n: None, e: None, x: None, y: None, crv: None,
         };
         assert_eq!(infer_algorithm(&jwk), None);
     }
@@ -566,11 +526,7 @@ mod tests {
         let jwks_json = r#"{"keys":[{"kty":"RSA","kid":"confusion-key","alg":"HS256","use":"sig","n":"nBu1v1kpRN9keDGj_94bckliV-80f1Rd1suMUOF0Ie4VywXsQU6C2_X1Q2Au-a_bzBaCSiFnUVSTrIdf1PgSwjudC7zPXEfMBtRbh7RtXea4EOCmLRg8nm9OC1ZlFi-0ne0_otU9yj0vP8xbl9ottv-7i5-WLTf5XXMpQOb8lLoQBdsiDPh7SzWaHZwkSQJFzAUvoBOi0ILl2I3T_ArZMgkoZSTDvd5PU2nHv6bmovvIm82X4hOX8imY3caYAQUL98aSqUEWoDdqBZyQkAJ04ruFTCQAoDUOFBhuZCp9UO0-BIvobhQ1rkUwf78DtGjj-W_2MDu6z-P18Uhxc20o_w","e":"AQAB"}]}"#;
         let result = parse_jwks_response(jwks_json);
         assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap().len(),
-            0,
-            "RSA key with HS256 alg must be rejected"
-        );
+        assert_eq!(result.unwrap().len(), 0, "RSA key with HS256 alg must be rejected");
     }
 
     #[test]
@@ -589,8 +545,7 @@ mod tests {
 
     #[test]
     fn test_parse_jwks_response_skips_encryption_keys() {
-        let jwks_json =
-            r#"{"keys":[{"kty":"RSA","kid":"enc-key","use":"enc","n":"somen","e":"AQAB"}]}"#;
+        let jwks_json = r#"{"keys":[{"kty":"RSA","kid":"enc-key","use":"enc","n":"somen","e":"AQAB"}]}"#;
         let result = parse_jwks_response(jwks_json);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -598,8 +553,7 @@ mod tests {
 
     #[test]
     fn test_parse_jwks_response_skips_keys_without_kid() {
-        let jwks_json =
-            r#"{"keys":[{"kty":"RSA","alg":"RS256","use":"sig","n":"somen","e":"AQAB"}]}"#;
+        let jwks_json = r#"{"keys":[{"kty":"RSA","alg":"RS256","use":"sig","n":"somen","e":"AQAB"}]}"#;
         let result = parse_jwks_response(jwks_json);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -694,11 +648,10 @@ mod tests {
         // regardless, last_refresh_trigger was just set to now, so the
         // second call within 5 seconds should be rate-limited.
         // We verify by checking that last_refresh_trigger is recent.
-        let elapsed = Instant::now().duration_since(*cache.last_refresh_trigger.read().unwrap());
-        assert!(
-            elapsed < MIN_REFRESH_INTERVAL,
-            "last_refresh_trigger should be recent after first call"
-        );
+        let elapsed = Instant::now()
+            .duration_since(*cache.last_refresh_trigger.read().unwrap());
+        assert!(elapsed < MIN_REFRESH_INTERVAL,
+            "last_refresh_trigger should be recent after first call");
     }
 
     #[test]
@@ -741,12 +694,8 @@ mod tests {
     }
 
     fn decode_hs256(token: &str, validation: &Validation) -> bool {
-        jsonwebtoken::decode::<Value>(
-            token,
-            &DecodingKey::from_secret(b"test-secret"),
-            validation,
-        )
-        .is_ok()
+        jsonwebtoken::decode::<Value>(token, &DecodingKey::from_secret(b"test-secret"), validation)
+            .is_ok()
     }
 
     fn now() -> u64 {
@@ -776,7 +725,9 @@ mod tests {
     fn test_validation_rejects_string_nbf() {
         // The CVE-2026-25537 PoC: nbf as a string must not silently skip the
         // not-before check.
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": "99999999999"}));
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": "99999999999"}),
+        );
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -784,7 +735,8 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_null_nbf() {
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": null}));
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": null}));
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -792,7 +744,9 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_future_nbf() {
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 7200, "nbf": now() + 3600}));
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 7200, "nbf": now() + 3600}),
+        );
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -800,7 +754,8 @@ mod tests {
 
     #[test]
     fn test_validation_accepts_past_nbf() {
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": now() - 60}));
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "nbf": now() - 60}));
         let opts = JwtDecodeOptions::default();
         let validation = build_validation(Algorithm::HS256, true, &opts);
         assert!(decode_hs256(&token, &validation));
@@ -808,15 +763,22 @@ mod tests {
 
     #[test]
     fn test_validation_rejects_numeric_iss() {
-        let opts = JwtDecodeOptions { iss: Some("expected-issuer".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": 123}));
+        let opts = JwtDecodeOptions {
+            iss: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": 123}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
     }
 
     #[test]
     fn test_validation_rejects_missing_iss_when_configured() {
-        let opts = JwtDecodeOptions { iss: Some("expected-issuer".to_string()), ..Default::default() };
+        let opts = JwtDecodeOptions {
+            iss: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
         let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -824,23 +786,35 @@ mod tests {
 
     #[test]
     fn test_validation_accepts_correct_iss() {
-        let opts = JwtDecodeOptions { iss: Some("expected-issuer".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": "expected-issuer"}));
+        let opts = JwtDecodeOptions {
+            iss: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 3600, "iss": "expected-issuer"}),
+        );
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(decode_hs256(&token, &validation));
     }
 
     #[test]
     fn test_validation_rejects_numeric_aud() {
-        let opts = JwtDecodeOptions { aud: Some("expected-aud".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": 123}));
+        let opts = JwtDecodeOptions {
+            aud: Some("expected-aud".to_string()),
+            ..Default::default()
+        };
+        let token =
+            sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": 123}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
     }
 
     #[test]
     fn test_validation_rejects_missing_aud_when_configured() {
-        let opts = JwtDecodeOptions { aud: Some("expected-aud".to_string()), ..Default::default() };
+        let opts = JwtDecodeOptions {
+            aud: Some("expected-aud".to_string()),
+            ..Default::default()
+        };
         let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600}));
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(!decode_hs256(&token, &validation));
@@ -848,8 +822,13 @@ mod tests {
 
     #[test]
     fn test_validation_accepts_correct_aud() {
-        let opts = JwtDecodeOptions { aud: Some("expected-aud".to_string()), ..Default::default() };
-        let token = sign_hs256(serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": "expected-aud"}));
+        let opts = JwtDecodeOptions {
+            aud: Some("expected-aud".to_string()),
+            ..Default::default()
+        };
+        let token = sign_hs256(
+            serde_json::json!({"sub": "admin", "exp": now() + 3600, "aud": "expected-aud"}),
+        );
         let validation = build_validation(Algorithm::HS256, false, &opts);
         assert!(decode_hs256(&token, &validation));
     }

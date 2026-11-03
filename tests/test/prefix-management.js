@@ -5,6 +5,7 @@ describe('prefix-management', function () {
   this.timeout(10000)
 
   let agent
+
   before(async function () {
     agent = new Agent().auth()
   })

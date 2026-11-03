@@ -30,7 +30,7 @@ jobs:
           fi
 
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Read Current Version
         id: version

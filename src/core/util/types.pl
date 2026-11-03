@@ -319,7 +319,7 @@ is_date_range(date_range(Date1,Date2)) :-
     is_date(Date1),
     is_date(Date2).
 
-is_date_time_interval(date_time_interval(C1,C2,D,Flag)) :-
+is_date_time_interval(date_time_interval(C1,C2,D,Flag,_,_)) :-
     is_interval_component(C1),
     is_interval_component(C2),
     is_duration(D),
@@ -330,7 +330,11 @@ is_interval_flag(start_duration).
 is_interval_flag(duration_end).
 
 is_interval_component(C) :- is_date(C), !.
-is_interval_component(C) :- is_date_time(C).
+is_interval_component(C) :- is_date_time(C), !.
+%% ISO 8601-2 non-finite endpoints stored in component positions
+is_interval_component(neg_infinity).
+is_interval_component(infinity).
+is_interval_component(unknown).
 
 is_integer_range(integer_range(Integer1,Integer2)) :-
     integer(Integer1),
@@ -388,8 +392,9 @@ is_time(time(HH,MM,SS)) :-
 is_boolean(true).
 is_boolean(false).
 
-is_duration(duration(Sign,Y,M,D,HH,MM,SS)) :-
+is_duration(duration(Sign,W,Y,M,D,HH,MM,SS)) :-
     member(Sign, [1,-1]),
+    number(W),
     number(Y),
     number(M),
     number(D),

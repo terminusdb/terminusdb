@@ -17,7 +17,7 @@
                json_read_list_stream_head/3,
                json_read_tail_stream/2,
                terminus_schema_path/1]).
-:- use_module(library(http/json), [json_write_dict/3]).
+:- use_module(library(json), [json_write_dict/3]).
 :- use_module(core(query), [literally/2]).
 
 is_var(v(_)).
@@ -479,6 +479,13 @@ definition(
         types: [data_value,data_value,data_value]
     }).
 definition(
+    triple_relation{
+        name: 'TripleRelation',
+        fields: [subject,predicate,object,relation,value],
+        mode: [?,?,?,+,+],
+        types: [node,node,data_value,data_value,data_value]
+    }).
+definition(
     weekday{
         name: 'Weekday',
         fields: [date,weekday],
@@ -728,9 +735,9 @@ definition(
 definition(
     typecast{
         name: 'Typecast',
-        fields: [value,type,result],
-        mode:  [+,+,?],
-        types: [value,node,value]
+        fields: [value,type,result,optional(prefixes)],
+        mode:  [+,+,?,+],
+        types: [value,node,value,json]
     }).
 definition(
     typeof{
@@ -827,6 +834,7 @@ operator(month_start_dates(_,_,_)).
 operator(month_end_dates(_,_,_)).
 operator(interval_relation(_,_,_,_,_)).
 operator(interval_relation_typed(_,_,_)).
+operator(triple_relation(_,_,_,_,_)).
 operator(weekday(_,_)).
 operator(weekday_sunday_start(_,_)).
 operator(iso_week(_,_,_)).
@@ -1412,6 +1420,9 @@ cost_(day_before(_,_), Cost, _Polarity) =>
     Cost = 1.
 
 cost_(typecast(_,_,_), Cost, _Polarity) =>
+    Cost = 1.
+
+cost_(typecast(_,_,_,_), Cost, _Polarity) =>
     Cost = 1.
 
 cost_(typeof(_,_), Cost, _Polarity) =>

@@ -21,6 +21,7 @@
               collection_descriptor_prefixes/2,
               collection_descriptor_default_write_graph/2,
               descriptor_to_loggable/2,
+              branch_key_from_descriptor/2,
               ensure_transaction_has_builder/2,
               ensure_transaction_schema_written/1,
               should_retain_layers_for_descriptor/1,
@@ -170,6 +171,7 @@
 :- use_module(core(util)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
+:- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2]).
 :- use_module(config(terminus_config)).
 
 :- use_module(library(terminus_store)).
@@ -866,6 +868,7 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                     database: Database,
                     repository: Repository,
                     branch: Branch}.
+
 descriptor_to_loggable(Descriptor, Loggable) :-
     commit_descriptor{
         repository_descriptor:
@@ -880,6 +883,17 @@ descriptor_to_loggable(Descriptor, Loggable) :-
                     database: Database,
                     repository: Repository,
                     commit: Commit}.
+
+%! branch_key_from_descriptor(+Descriptor, -BranchKey) is det.
+% Builds a stable string key for a descriptor. Branch descriptors use the
+% descriptor path so the key is human-readable and stable; other descriptors
+% fall back to term_string.
+branch_key_from_descriptor(Descriptor, BranchKey) :-
+    (   branch_descriptor{} :< Descriptor
+    ->  resolve_absolute_string_descriptor(BranchKey0, Descriptor)
+    ;   term_string(Descriptor, BranchKey0)
+    ),
+    atom_string(BranchKey0, BranchKey).
 
 graph_descriptor_find_read_write_object(_, [], _) :-
         !,

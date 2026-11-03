@@ -131,6 +131,7 @@
               convlist/4,
               time_to_internal_time/2,
               datetime_to_internal_datetime/2,
+              iso8601_to_epoch/2,
               json_read_term/2,
               json_read_term_stream/2,
               json_read_list_stream/2,
@@ -187,7 +188,7 @@
               gMonth//2,
               gMonthDay//3,
               gDay//2,
-              duration//7,
+              duration//8,
               yearMonthDuration//3,
               dayTimeDuration//5,
               string/3,
@@ -201,6 +202,7 @@
               dateRange//2,
               dateTimeInterval//2,
               dateTimeInterval//3,
+              dateTimeIntervalComponent//1,
               decimalRange//2,
               email//0,
               gYearRange//2,
@@ -268,6 +270,8 @@
               read_data_version_header/2,
               read_data_version/2,
               write_data_version_header/1,
+              write_transaction_retry_count_header/1,
+              transaction_retry_count_from_meta_data/2,
               serialize_data_version/2,
               transaction_data_version/2,
               validation_data_version/3,
@@ -276,6 +280,7 @@
               % json_stream.pl
               json_stream_start/2,
               json_stream_end/1,
+              json_stream_write/3,
               json_stream_write_dict/3,
 
               % iana.pl

@@ -26,7 +26,7 @@
 
 :- use_module(utils).
 
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 /*
  * Check a JSON dict parameter value against an expected type. If it's wrong,

@@ -35,6 +35,7 @@ if [[ $use_docker -eq 0 ]]; then
       --user $user \
       --env TERMINUSDB_SERVER_DB_PATH="$TERMINUSDB_SERVER_DB_PATH" \
       --env TERMINUSDB_LOG_LEVEL="ERROR" \
+      --env TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED="$TERMINUSDB_SCHEMALESS_SHAPE_CHECK_DISABLED" \
       --workdir /app/terminusdb/tests \
       "$TERMINUSDB_DOCKER_CONTAINER" \
       /app/terminusdb/terminusdb \

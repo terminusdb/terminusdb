@@ -14,7 +14,7 @@ const mocha = {
 }
 
 export default [
-  globalIgnores(['**/.*', '!**/.mocharc.js']),
+  globalIgnores(['**/.*', '!**/.mocharc.js', '**/storage/']),
   ...neostandard({
     env: ['mocha'],
     globals: {

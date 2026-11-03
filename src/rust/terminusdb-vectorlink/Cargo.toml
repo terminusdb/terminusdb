@@ -1,0 +1,22 @@
+[package]
+name = "terminusdb-vectorlink"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Embedded vectorlink engine, built from git source.
+# shortcut: pinned rev; bump manually when pulling vectorlink updates.
+vectorlink = { git = "https://github.com/terminusdb-org/vectorlink", rev = "854c7b519e15551455ea8535e9dd6eb14c2657bf" }
+terminusdb-webserver = { path = "../terminusdb-webserver" }
+swipl = { version = "0.3.16", features = ["serde"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+futures = "0.3"
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+serde_json = "1"
+nix = { version = "0.31", features = ["fs"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

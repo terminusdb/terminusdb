@@ -42,6 +42,7 @@
 
               with_test_transaction/3,
               with_test_transaction/4,
+              with_quiet_user_error/1,
 
               write_schema_string/2,
               write_schema/2,
@@ -84,14 +85,17 @@
 
 :- use_module(library(http/http_client)).
 :- use_module(library(http/http_open)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 
 :- use_module(library(apply)).
 :- use_module(library(apply_macros)).
 :- use_module(library(filesex)).
 
 :- use_module(library(debug)).
+:- use_module(library(time), [call_with_time_limit/2]).
+:- use_module(library(memfile)).
 :- use_module(library(process)).
+:- use_module(library(socket)).
 :- use_module(library(plunit)).
 :- use_module(library(pcre)).
 :- use_module(library(random)).
@@ -114,6 +118,32 @@
 %
 test_format(Goal, Format, Args) :-
     print_message(testing, test_format(Goal, Format, Args)).
+
+:- meta_predicate with_quiet_user_error(0).
+
+%!  with_quiet_user_error(:Goal) is det
+%
+%   Run Goal with `user_error` redirected to a memory file.
+%   Suppresses expected json_log/format output from tests that
+%   deliberately trigger error paths. The alias is restored on
+%   completion, failure or exception.
+%
+%   A memory file is used so no OS fd is allocated — real files can
+%   reuse an fd the test just closed, changing what code under test
+%   observes.
+%
+with_quiet_user_error(Goal) :-
+    stream_property(OldErr, alias(user_error)),
+    new_memory_file(MemFile),
+    open_memory_file(MemFile, write, NullStream),
+    setup_call_cleanup(
+        set_stream(NullStream, alias(user_error)),
+        Goal,
+        (   close(NullStream),
+            set_stream(OldErr, alias(user_error)),
+            free_memory_file(MemFile)
+        )
+    ).
 
 :- multifile prolog:message//1.
 
@@ -419,6 +449,12 @@ inherit_env_vars(Env_List_In, [Var|Vars], Env_List) :-
 read_line_until_start_line(Error) :-
     read_line_until_start_line(Error, []).
 
+% A dead child (EOF before the banner) or an over-30s stall both mean
+% the spawn failed on this port — retry with a different one.
+spawn_failure(error(server_has_no_output(_Stderr_Lines), _)).
+spawn_failure(time_limit_exceeded).
+spawn_failure(error(time_limit_exceeded, _)).
+
 read_line_until_start_line(Error, Collected) :-
     read_line_to_string(Error, Line),
     (   Line = end_of_file
@@ -427,6 +463,16 @@ read_line_until_start_line(Error, Collected) :-
     ;   re_match("% Listening on ",Line)
     ->  true
     ;   read_line_until_start_line(Error, [Line|Collected])
+    ).
+
+read_until_eof(Stream, Lines) :-
+    read_until_eof(Stream, [], Lines).
+
+read_until_eof(Stream, Acc, Lines) :-
+    read_line_to_string(Stream, Line),
+    (   Line = end_of_file
+    ->  reverse(Acc, Lines)
+    ;   read_until_eof(Stream, [Line|Acc], Lines)
     ).
 
 % spawn_server(+Path, -URL, -PID, +Options) is det.
@@ -457,6 +503,12 @@ spawn_server_1(Path, URL, PID, Options) :-
         'TERMINUSDB_SERVER_PORT'=Port,
         'TERMINUSDB_SERVER_DB_PATH'=Path,
         'TERMINUSDB_SERVER_JWKS_ENDPOINT'='https://cdn.terminusdb.com/jwks.json',
+        % Spawned test servers must not auto-select the embedded
+        % vectorlink engine when an Ollama endpoint happens to answer on
+        % the host — its sled embed cache lives under the shared
+        % temporary_terminus_store parent dir, so concurrent test servers
+        % would collide on the cache lock and die mid-startup.
+        'TERMINUSDB_INDEXER_BACKEND'='none',
         'TERMINUSDB_JWT_ENABLED'='true'
     ],
 
@@ -470,10 +522,18 @@ spawn_server_1(Path, URL, PID, Options) :-
                          'SystemRoot', % Windows specific stuff...
                          'TMP', % Windows sadness
                          'TEMP', % Again...
+                         'TERMINUSDB_ADDON_PATH',
                          'TERMINUSDB_ADMIN_PASSWD',
+                         'TERMINUSDB_PLUGINS_PATH',
+                         'TERMINUSDB_BUILTIN_PLUGINS_PATH',
                          'TERMINUSDB_SERVER_PACK_DIR',
 %                         'TERMINUSDB_JWT_ENABLED',
                          'TERMINUSDB_SERVER_TMP_PATH',
+                         % Relocatable swipl installs (e.g. the ubuntu CI
+                         % toolchain under /opt/swipl) need these to find
+                         % libswipl.so at exec time.
+                         'LD_LIBRARY_PATH',
+                         'DYLD_LIBRARY_PATH',
                          'PATH'
                      ],
                      Env_List),
@@ -493,11 +553,23 @@ spawn_server_1(Path, URL, PID, Options) :-
     sleep(0.5),
     % Catch server startup failures and retry with a different port.
     % Previously, server_has_no_output threw past the between/3 retry.
-    catch(read_line_until_start_line(Error),
-          error(server_has_no_output(_Stderr_Lines), _),
-          (   catch(process_kill(PID, 9), _, true),
+    % The wait is bounded: a child that lives but never prints its banner
+    % (e.g. a slow blocking fetch at boot) must not hang the suite —
+    % kill it and let the between/3 port retry try again.
+    catch(call_with_time_limit(30, read_line_until_start_line(Error)),
+          Catchable,
+          (   spawn_failure(Catchable)
+          ->  catch(process_kill(PID, 9), _, true),
               catch(process_wait(PID, _), _, true),
-              fail)),
+              % Record why the attempt failed so spawn_server/4 can
+              % report it; a killed child's stderr drains to EOF, so a
+              % timeout still yields its last lines.
+              (   Catchable = error(server_has_no_output(_), _)
+              ->  nb_setval(spawn_server_failure, Catchable)
+              ;   catch(read_until_eof(Error, Lines), _, Lines = []),
+                  nb_setval(spawn_server_failure, spawn_timeout(Lines))),
+              fail
+          ;   throw(Catchable))),
 
     ignore(memberchk(error(Error), Options)),
     ignore(memberchk(input(Input), Options)),
@@ -507,18 +579,23 @@ spawn_server_1(Path, URL, PID, Options) :-
     ;   true),
     process_wait(PID, Status, [timeout(0)]),
     (   Status = exit(98)
-    ->  fail
+    ->  catch(read_until_eof(Error, Lines), _, Lines = []),
+        nb_setval(spawn_server_failure, spawn_exit(98, Lines)),
+        fail
     ;   Status \= timeout
     ->  throw(error(server_spawn_failed(Status), _))
     ;   true).
 
 spawn_server(Path, URL, PID, Options) :-
+    nb_setval(spawn_server_failure, none),
     (   memberchk(port(_), Options)
     ->  Error = server_spawn_port_in_use
     ;   Error = server_spawn_retry_exceeded),
 
-    do_or_die(spawn_server_1(Path, URL, PID, Options),
-              error(Error, _)).
+    (   spawn_server_1(Path, URL, PID, Options)
+    ->  true
+    ;   nb_getval(spawn_server_failure, Last),
+        throw(error(server_spawn_failure(Error, Last), _))).
 
 kill_server(PID) :-
     % As of SWI-Prolog v8.4.0, process_kill(PID), which defaults to SIGTERM,
@@ -647,10 +724,10 @@ test_woql_label_descriptor(Name, Descriptor) :-
                      instance: Instance_Name
                  }.
 
+:- meta_predicate with_test_transaction(+, -, :, -).
 :- meta_predicate with_test_transaction(+, -, :).
 with_test_transaction(Descriptor, Context, Goal) :-
     with_test_transaction(Descriptor, Context, Goal, _).
-:- meta_predicate with_test_transaction(+, -, :, -).
 with_test_transaction(Descriptor, Context, Goal, Result) :-
     do_or_die(var(Context),
               error(test_transaction_initiated_with_bound_context, _)),
@@ -679,3 +756,26 @@ ends_with_uuid_v7(Id) :-
     atom_string(Id, S),
     sub_string(S, _, 36, 0, UUID),
     is_uuid_v7_string(UUID).
+
+:- begin_tests(spawn_server_diagnostics).
+
+% A spawn on a port already bound by a listener fails on its single
+% attempt (deterministic even when running as root, unlike a low port).
+% The thrown error must wrap the recorded attempt failure — the child's
+% last stderr lines or a timeout — instead of a bare atom.
+test("failed spawn surfaces the attempt failure in the thrown error") :-
+    tcp_socket(Socket),
+    % The server binds 0.0.0.0 with SO_REUSEADDR, which tolerates a
+    % specific-address listener — the holder must take the wildcard too.
+    tcp_bind(Socket, '0.0.0.0':Port),
+    tcp_listen(Socket, 1),
+    setup_temp_store(State-Dir),
+    catch(spawn_server(Dir, _URL, _PID, [port(Port)]),
+          E,
+          true),
+    teardown_temp_store(State-Dir),
+    tcp_close_socket(Socket),
+    E = error(server_spawn_failure(server_spawn_port_in_use, Failure), _),
+    assertion(Failure \= none).
+
+:- end_tests(spawn_server_diagnostics).

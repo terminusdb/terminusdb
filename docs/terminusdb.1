@@ -42,6 +42,16 @@ Run server in interactive mode
 .TP
 \fB\-m\fR, \fB\-\-memory\fR=[value]
 Run server in\-memory, without a persistent store\. Takes a password as an optional argument\. The in\-memory store will be initialized with an admin account with the given password\. If absent, the admin account will have 'root' as a password\.
+.SS "mcp"
+\fBterminusdb mcp OPTIONS\fR
+.P
+Run an MCP (Model Context Protocol) server on stdin/stdout against the local store\. No port is opened\. Connect a client such as Claude Code with `claude mcp add terminusdb \-\- terminusdb mcp`\. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/\.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer, default none \(em set vectorlink to enable semantic indexing; it requires a running Ollama with the embedding model, see https://ollama\.com/download), TERMINUSDB_MEMORY_PASSWORD (run in\-memory without a persistent store, with the value as admin password \(em empty means 'root')\.
+.TP
+\fB\-\-impersonate\fR=[value]
+impersonate a particular user
+.TP
+\fB\-h\fR, \fB\-\-help\fR=[value]
+Print help for \fBmcp\fR command
 .SS "list"
 \fBterminusdb list OPTIONS\fR
 .P
