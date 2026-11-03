@@ -510,10 +510,36 @@ api_global_error_jsonld(error(store_outdated(Store_Version,Server_Version), _), 
             }.
 api_global_error_jsonld(error(no_database_store_version, _), Type, JSON) :-
     error_type(Type, Type_Displayed),
-    format(string(Msg), "The store has no defined database version and so can not be opened. This may indicate the store has not been initialized yet. Try running 'terminusdb store init' or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", []),
+    format(string(Msg), "The store directory exists but contains no STORAGE_VERSION file, so it does not appear to be an initialized store. To create a fresh store run 'terminusdb store init', or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", []),
     JSON = _{'@type' : Type_Displayed,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:NoDatabaseStoreVersion' },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(storage_path_does_not_exist(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store directory ~q does not exist. To create a fresh store run 'terminusdb store init', or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StoragePathDoesNotExist',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(storage_path_empty(Path), _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store directory ~q is empty. To create a fresh store run 'terminusdb store init', or set TERMINUSDB_SERVER_DB_PATH to an existing initialized store.", [Path]),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StoragePathEmpty',
+                              'api:path' : Path },
+             'api:message' : Msg
+            }.
+api_global_error_jsonld(error(storage_version_not_a_number, _), Type, JSON) :-
+    error_type(Type, Type_Displayed),
+    format(string(Msg), "The store's STORAGE_VERSION file exists but does not contain a valid version number. The store may be corrupt or written by an incompatible TerminusDB version.", []),
+    JSON = _{'@type' : Type_Displayed,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:StorageVersionNotANumber' },
              'api:message' : Msg
             }.
 api_global_error_jsonld(error(invalid_path(Path), _), Type, JSON) :-

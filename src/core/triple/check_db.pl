@@ -47,12 +47,20 @@ get_db_version(Path, Version) :-
     ->  setup_call_cleanup(
             open(Version_File,read,Stream),
             (   read_string(Stream, "\n", "\r", _End, String),
-                do_or_die(number_string(Version, String),
-                          storage_version_not_a_number)
+                (   number_string(Version, String)
+                ->  true
+                ;   throw(error(storage_version_not_a_number, _))
+                )
             ),
             close(Stream)
         )
-    ;   throw(error(no_database_store_version, _))
+    ;   (   \+ exists_directory(Path)
+        ->  throw(error(storage_path_does_not_exist(Path), _))
+        ;   directory_files(Path, Entries),
+            subtract(Entries, ['.', '..'], [])
+        ->  throw(error(storage_path_empty(Path), _))
+        ;   throw(error(no_database_store_version, _))
+        )
     ).
 
 
@@ -92,3 +100,60 @@ assert_database_version_is_current(Path) :-
     ;   Current_Version < Expected_Version
     ->  throw(error(store_outdated(Current_Version, Expected_Version), _))
     ;   throw(error(server_outdated(Current_Version, Expected_Version), _))).
+
+:- begin_tests(upgrade_db).
+:- use_module(library(lists)).
+
+%  A scratch directory name unique per test run.
+store_test_dir(Dir) :-
+    tmp_file(check_db_test, Path),
+    atomic_list_concat([Path, '-dir'], Dir).
+
+test(missing_path_errors_distinctly, [
+         throws(error(storage_path_does_not_exist('/definitely/not/a/store-path'), _))
+     ]) :-
+    get_db_version('/definitely/not/a/store-path', _).
+
+test(empty_directory_errors_distinctly, [
+         setup((store_test_dir(Dir), make_directory_path(Dir))),
+         cleanup(delete_directory_and_contents(Dir)),
+         throws(error(storage_path_empty(Dir), _))
+     ]) :-
+    get_db_version(Dir, _).
+
+test(uninitialized_directory_errors_distinctly, [
+         setup((store_test_dir(Dir),
+                make_directory_path(Dir),
+                directory_file_path(Dir, 'somefile', F),
+                open(F, write, S),
+                close(S))),
+         cleanup(delete_directory_and_contents(Dir)),
+         throws(error(no_database_store_version, _))
+     ]) :-
+    get_db_version(Dir, _).
+
+test(corrupt_version_file_errors_distinctly, [
+         setup((store_test_dir(Dir),
+                make_directory_path(Dir),
+                directory_file_path(Dir, 'STORAGE_VERSION', F),
+                open(F, write, S),
+                write(S, 'not-a-number'),
+                close(S))),
+         cleanup(delete_directory_and_contents(Dir)),
+         throws(error(storage_version_not_a_number, _))
+     ]) :-
+    get_db_version(Dir, _).
+
+test(valid_version_file_reads, [
+         setup((store_test_dir(Dir),
+                make_directory_path(Dir),
+                directory_file_path(Dir, 'STORAGE_VERSION', F),
+                open(F, write, S),
+                write(S, '2'),
+                close(S))),
+         cleanup(delete_directory_and_contents(Dir))
+     ]) :-
+    get_db_version(Dir, Version),
+    Version = 2.
+
+:- end_tests(upgrade_db).
