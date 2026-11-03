@@ -4,11 +4,11 @@ SWIPL_VERSION ?= 10.0.2
 
 # Version-tagged release of tdb-admin to download for the embedded admin panel.
 # Must match a tag in https://github.com/terminusdb-org/tdb-admin/releases
-TDB_ADMIN_VERSION ?= v0.1.1-rc3
+TDB_ADMIN_VERSION ?= v0.1.2
 
 # Version-tagged release of tdb-data to download for the embedded data explorer.
 # Must match a tag in https://github.com/terminusdb-org/tdb-data/releases
-TDB_DATA_VERSION ?= v0.1.0-rc2
+TDB_DATA_VERSION ?= v0.1.2
 
 RONN_FILE=docs/terminusdb.1.ronn
 ROFF_FILE=docs/terminusdb.1
