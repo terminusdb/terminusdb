@@ -212,7 +212,6 @@ initialize_database_with_store(Key, Store, Force) :-
 current_woql_version("v1.0.3").
 current_repository_version("v1.0.1").
 current_ref_version("v1.0.2").
-current_system_version("v1.0.1").
 
 has_no_store :-
     catch(
@@ -222,8 +221,6 @@ has_no_store :-
         true
     ).
 
-current_schema_version(system_schema, Version) :-
-    current_system_version(Version).
 current_schema_version(repo_schema, Version) :-
     current_repository_version(Version).
 current_schema_version(ref_schema, Version) :-
@@ -267,18 +264,39 @@ initialize_system_schema_for_update(Store, Force) :-
  * update_system_schema_graph(-Changed) is det.
  *
  * Upgrade the system schema graph (capabilities, users, organisations,
- * the Action enum) when its schema_version lags the bundled
- * system_schema.json. Reports Changed=true so callers can run
- * dependent instance-data migrations (built-in roles).
+ * the Action enum) when it lags the bundled system_schema.json.
+ *
+ * Detection is a sentinel rather than a version number: the system
+ * schema context doubles as the system's prefix map, so no
+ * version-carrying field can be added to it without breaking term
+ * expansion. Instead we ask the stored schema graph for the newest
+ * Action enum value — its absence means the schema predates this
+ * release. Reports Changed=true so callers can run dependent
+ * instance-data migrations (built-in roles).
  */
 update_system_schema_graph(Changed) :-
     system_schema_name(System_Label),
-    system_schema_json(System_Path),
-    update_system_graph(System_Label,
-                        System_Path,
-                        system_schema,
-                        api_init:initialize_system_schema_for_update,
-                        Changed).
+    Descriptor = label_descriptor{
+                     schema: System_Label,
+                     variety: repository_descriptor
+                 },
+    open_descriptor(Descriptor, Transaction_Object),
+    create_context(Transaction_Object,
+                   commit_info{author:"test", message:"test"},
+                   Context),
+    (   ask(Context, get_document('Action', Action_Enum)),
+        get_dict('@values', Action_Enum, Values),
+        member(V, Values),
+        sub_atom(V, _, _, 0, woql_logic_exec)
+    ->  Changed = false
+    ;   json_log_notice_formatted("Upgrading ~s",[System_Label]),
+        system_schema_json(System_Path),
+        file_to_predicate(System_Path, system_schema),
+        triple_store(Store),
+        initialize_system_schema(Store, true, _Layer),
+        abolish_all_tables,
+        Changed = true
+    ).
 
 /**
  * update_system_roles is det.

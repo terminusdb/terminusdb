@@ -1,5 +1,4 @@
 { "@type" : "@context",
-  "@metadata" : { "schema_version" : "v1.0.1" },
   "@documentation" : {
       "@title" : "The System schema",
       "@description" : "This is the System schema in which resides all information regarding capabilities, users, organizations, databases and available actions.",
