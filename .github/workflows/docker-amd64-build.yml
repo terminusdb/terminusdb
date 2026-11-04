@@ -26,6 +26,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      # Embedded UI pins live in UI_VERSIONS — the single source of truth.
+      - name: Read embedded UI versions
+        run: grep -E '^TDB_(ADMIN|DATA)_VERSION=' UI_VERSIONS >> "$GITHUB_ENV"
+
       - name: Build and export
         uses: docker/build-push-action@v3
         with:
@@ -38,7 +42,10 @@ jobs:
           # dependency tree (stable while Cargo.lock is unchanged) and
           # rust_builder stays thin — target/ is deleted in the same RUN.
           cache-to: type=gha,mode=max,scope=amd64
-          build-args: TERMINUSDB_GIT_HASH=${{ github.sha }}
+          build-args: |
+            TERMINUSDB_GIT_HASH=${{ github.sha }}
+            TDB_ADMIN_VERSION=${{ env.TDB_ADMIN_VERSION }}
+            TDB_DATA_VERSION=${{ env.TDB_DATA_VERSION }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0.36.0
