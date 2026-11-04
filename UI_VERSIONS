@@ -1,0 +1,11 @@
+# Version-tagged releases of the web UIs embedded in TerminusDB builds.
+# Each value must match a published GitHub release tag (with leading 'v'):
+#   https://github.com/terminusdb-org/tdb-admin/releases
+#   https://github.com/terminusdb-org/tdb-data/releases
+#
+# This file is the single source of truth for those pins: the Makefile
+# includes it, CI sources it, and the Dockerfiles consume it via
+# --build-arg with no defaults of their own.
+# Override locally: make docker TDB_ADMIN_VERSION=vX.Y.Z
+TDB_ADMIN_VERSION=v0.1.2
+TDB_DATA_VERSION=v0.1.2

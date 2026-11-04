@@ -4,8 +4,10 @@
 # Set the swipl version by argument (see Makefile for the default!)
 ARG SWIPL_VERSION=10.0.2
 ARG SKIP_TESTS=false
-ARG TDB_ADMIN_VERSION=v0.1.1-rc3
-ARG TDB_DATA_VERSION=v0.1.0-rc2
+# No defaults: the UI pins live in UI_VERSIONS and are passed via --build-arg
+# by 'make docker' and CI.
+ARG TDB_ADMIN_VERSION
+ARG TDB_DATA_VERSION
 
 # Minimal SWI-Prolog
 FROM swipl:${SWIPL_VERSION} AS swipl_minimal
@@ -75,7 +77,8 @@ RUN strip --strip-debug src/rust/librust.so
 
 # Download the pre-built tdb-admin dist package from GitHub releases.
 FROM alpine:latest AS admin_dist
-ARG TDB_ADMIN_VERSION=v0.1.1-rc3
+ARG TDB_ADMIN_VERSION
+RUN : "${TDB_ADMIN_VERSION:?TDB_ADMIN_VERSION build-arg required — pin lives in UI_VERSIONS (use 'make docker')}"
 RUN apk add --no-cache curl tar
 RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
     mkdir -p /admin/dist && \
@@ -84,7 +87,8 @@ RUN TDB_ADMIN_VER="${TDB_ADMIN_VERSION#v}" && \
 
 # Download the pre-built tdb-data dist package from GitHub releases.
 FROM alpine:latest AS data_dist
-ARG TDB_DATA_VERSION=v0.1.0-rc2
+ARG TDB_DATA_VERSION
+RUN : "${TDB_DATA_VERSION:?TDB_DATA_VERSION build-arg required — pin lives in UI_VERSIONS (use 'make docker')}"
 RUN apk add --no-cache curl tar
 RUN TDB_DATA_VER="${TDB_DATA_VERSION#v}" && \
     mkdir -p /data/dist && \

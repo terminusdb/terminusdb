@@ -9,6 +9,7 @@ TerminusDB uses an automated release workflow with GitHub Actions that handles:
 - Multi-architecture Docker images (AMD64, ARM64) with noroot variants
 - Snap package publishing
 - Automated artifact management
+- Embedded web UIs (tdb-admin / tdb-data) pinned via `UI_VERSIONS`
 - The repository is normally in vX.X.X-dev (and then in either no suffic or -rcX)
 
 <!-- [[[cog
@@ -79,7 +80,21 @@ When called as `workflow_call` (from other workflows), the action automatically 
 
 **Review and merge** the version bump PR before proceeding.
 
-### 3. Create Release Tag
+### 3. Pin Embedded UI Versions
+
+The server image embeds the **tdb-admin** and **tdb-data** web UIs, downloaded as release tarballs at image-build time. Their versions are pinned in [`UI_VERSIONS`](../UI_VERSIONS) — the single source of truth read by the Makefile, CI, and the Docker builds. The Dockerfiles carry no fallback defaults: a build without the pins fails rather than silently shipping stale UIs.
+
+The pins must point to **already-published** UI releases *before* the release tag is pushed — the tag freezes whatever `UI_VERSIONS` contains at that commit:
+
+1. Run the release workflows in [tdb-admin](https://github.com/terminusdb-org/tdb-admin) and [tdb-data](https://github.com/terminusdb-org/tdb-data), and publish the resulting draft GitHub releases.
+2. Update `UI_VERSIONS` on `main` to the tags just published, and merge the change.
+3. Optionally verify the pins resolve: `make admin-dist data-dist` downloads the pinned tarballs into `app/{admin,data}/dist`.
+
+If a tag ships stale pins, the fix is a pin update plus a **new tag** — published tags are never rebuilt.
+
+Each embedded UI displays its own version in the interface (tdb-data status bar, tdb-admin sidebar footer), so the running image can be verified visually at `/app/data` and `/app/admin`.
+
+### 4. Create Release Tag
 
 After the version bump PR is merged:
 
@@ -92,7 +107,7 @@ git push origin v<VERSION>
 
 **Important:** Pushing a tag triggers the automated build and publish workflows.
 
-### 4. Automated Build & Publish
+### 5. Automated Build & Publish
 
 Pushing a version tag (`v*.*.*`) automatically triggers:
 
@@ -124,7 +139,7 @@ Pushing a version tag (`v*.*.*`) automatically triggers:
   - **candidate** channel for `-rc`, `-beta`, `-alpha` versions
   - **edge** channel for `-dev` versions
 
-### 5. Create GitHub Release
+### 6. Create GitHub Release
 
 After automated builds complete (monitor in Actions tab):
 
@@ -138,7 +153,7 @@ After automated builds complete (monitor in Actions tab):
 
 > **Note:** RC versions (e.g., `12.1.0-rc3`) are fully supported and should be marked as pre-releases in GitHub.
 
-### 6. Verify Release
+### 7. Verify Release
 
 Confirm successful publication:
 
@@ -150,7 +165,7 @@ Confirm successful publication:
   - Verify version in appropriate channel
 - **GitHub Release:** Verify release notes are correct
 
-### 7. Bump to development version again
+### 8. Bump to development version again
 
 Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/actions/workflows/bump-version.yml) and click **Run workflow**:
 - **Branch:** `main`
@@ -158,7 +173,7 @@ Go to [Actions → Bump Version](https://github.com/terminusdb/terminusdb/action
 
 Then merge the new development version PR (to ensure build images are correctly produced). You may need to close and reopen the PR if the version bump verification build is stuck.
 
-### 8. Post-Release (Optional)
+### 9. Post-Release (Optional)
 
 For major releases, consider:
 - Announcement blog post

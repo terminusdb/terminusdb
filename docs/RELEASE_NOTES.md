@@ -1,10 +1,46 @@
 # TerminusDB Server 12.1.0 Release Candidate 2
 
-* The commit log time is now fully monotonic, and with nano-second resolution if the underlying platform supports it.
-* Ensure cardinality narrowing and strengthened schema inheritance is properly recognized in sets.
-* Support for date time ranges in the commit log API and precise datetime bounds for the log api
-* Add a /dashboard with navigation to the API and user interfaces
-* Support for fast counts of documents and triples
+The second release candidate of TerminusDB 12.1 hardens the capability model and finishes the datatype and vector search work that began in rc1.
+
+Headline changes:
+
+* **New capability actions for search, reindex and upcoming stored WOQL.** Thirteen new actions land in the system schema — `search`, `search_snippets`, `reindex_write`, `woql_exec` family, and dedicated `woql_instance_*`/`woql_schema_*` delegates — with a new built-in `Role/executor` for executable data products. Existing installs migrate automatically on boot: `Role/admin` and `Role/consumer` gain the new actions, customised roles are left untouched. **Breaking, intentional:** custom roles that lack `search` lose access to search endpoints, and any existing branch literally named `@logic` becomes capability-gated [#2617](https://github.com/terminusdb/terminusdb/pull/2617)
+* **Succinct, fast ISO8601 intervals.** `xdd:dateTimeInterval` is now stored lexically with indexed start and end points, enabling point-aware interval relations straight at the stored-triple seam [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* **Fixed `xsd:duration`.** The old fixed-width encoding silently capped durations at P255D with no range check; a new lexical, arbitrary-precision encoding replaces it — previously stored durations keep reading correctly [#2620](https://github.com/terminusdb/terminusdb/issues/2620)
+* **QName and SQName datatypes** with Clark-notation storage, prefix-aware rendering, and typecasting across the document pipeline [#2611](https://github.com/terminusdb/terminusdb/pull/2611)
+* **`triple_relation` WOQL predicate** relating a triple component to a value — such as Allen interval algebra — plus a generic relationship filter in GraphQL [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* **Overhauled migrations** for managing classes, fields, enums and foreign references, now preserving instance data on every inferrable weakening migration [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* **New modeller in tdb-data for schema management** The modeller is overhauled and now works stepwise together with the modelling user one field and class at a time, including fixing the necessary migrations for it!
+* **JSON document collections** and a new database modeller in the tdb-data browser, backed by lazy IRI-prefix document listing in the documents API [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+
+Notice that migration will be performed automatically to the new system schema on boot, which is backwards compatible. The store is backwards compatible for `xsd:duration` and `xdd:dateTimeIntervals` changes but any values written with the new format will not work with older releases.
+
+## New functionality
+* Indexed counting: WOQL `triple_count`/`triple_range_count`, `counted` document listing, and GraphQL `_count` [#2601](https://github.com/terminusdb/terminusdb/pull/2601)
+* JSON document collections via lazy IRI-prefix document listing in the documents API [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* Overhauled and finalized migrations for managing classes, fields, enums and foreign references, preserving instance data on every inferrable weakening migration [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* Fast ISO8601 intervals (xdd:dateTimeInterval) and wide duration segments [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* New WOQL `triple_relation` predicate relating a triple component to a value (such as Allen interval algebra), plus a generic relationship filter in GraphQL [#2607](https://github.com/terminusdb/terminusdb/pull/2607)
+* XML QName & SQName Datatypes support [#2611](https://github.com/terminusdb/terminusdb/pull/2611)
+* Migrations for AnyURI with QNames and SQNames and proper typecasting [#2618](https://github.com/terminusdb/terminusdb/pull/2618)
+
+## Bugfixes
+* Schema modeller adjustments [#2604](https://github.com/terminusdb/terminusdb/pull/2604)
+* Single date in intervals means start of day timestamp as-of [#2612](https://github.com/terminusdb/terminusdb/pull/2612)
+* Replace the fixed-width `xsd:duration` dictionary encoding with a lexical, arbitrary-precision encoding — previously capped at P255D with no range check; old-format durations still read correctly [#2620](https://github.com/terminusdb/terminusdb/issues/2620)
+
+## Maintenance
+* Move the star and Discord asks below the intro [#2602](https://github.com/terminusdb/terminusdb/pull/2602)
+* Bump follow-redirects from 1.16.1 to 1.16.2 in /tests by @dependabot [#2605](https://github.com/terminusdb/terminusdb/pull/2605)
+* Upgrade javascript testing environment [#2608](https://github.com/terminusdb/terminusdb/pull/2608)
+* Tests for date [#2614](https://github.com/terminusdb/terminusdb/pull/2614)
+* Preparations for 12.1.0-rc2 [#2615](https://github.com/terminusdb/terminusdb/pull/2615)
+
+## Security
+* New action capabilities for search, reindex, and stored WOQL (security) [#2617](https://github.com/terminusdb/terminusdb/pull/2617)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.0.9...v12.1.0-rc2
+
 
 # TerminusDB Server 12.1.0 Release Candidate 1
 
