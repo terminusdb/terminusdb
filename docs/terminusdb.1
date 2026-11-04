@@ -1,6 +1,6 @@
 .\" generated with Ronn-NG/v0.9.1
 .\" http://github.com/apjanke/ronn-ng/tree/0.9.1
-.TH "TERMINUSDB" "1" "October 2026" ""
+.TH "TERMINUSDB" "1" "November 2026" ""
 .SH "NAME"
 \fBterminusdb\fR \- command line interface to the terminusdb Graph DBMS
 .SH "SYNOPSIS"
@@ -44,8 +44,10 @@ Run server in interactive mode
 Run server in\-memory, without a persistent store\. Takes a password as an optional argument\. The in\-memory store will be initialized with an admin account with the given password\. If absent, the admin account will have 'root' as a password\.
 .SS "mcp"
 \fBterminusdb mcp OPTIONS\fR
-.P
-Run an MCP (Model Context Protocol) server on stdin/stdout against the local store\. No port is opened\. Connect a client such as Claude Code with `claude mcp add terminusdb \-\- terminusdb mcp`\. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/\.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer, default none \(em set vectorlink to enable semantic indexing; it requires a running Ollama with the embedding model, see https://ollama\.com/download), TERMINUSDB_MEMORY_PASSWORD (run in\-memory without a persistent store, with the value as admin password \(em empty means 'root')\.
+.TS
+allbox;
+Run an MCP (Model Context Protocol) server on stdin/stdout against the local store\. No port is opened\. Connect a client such as Claude Code with \fBclaude mcp add terminusdb \-\- terminusdb mcp\fR\. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/\.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer \(em the embedded vectorlink backend is selected automatically at startup when an OpenAI\-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink	http_vectorlink	none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in\-memory without a persistent store, with the value as admin password \(em empty means 'root')\.
+.TE
 .TP
 \fB\-\-impersonate\fR=[value]
 impersonate a particular user
@@ -631,6 +633,9 @@ merge repeated documents into a single document record
 .TP
 \fB\-f\fR, \fB\-\-full_replace\fR, \fB\-\-full\-replace\fR=[value]
 delete all previous documents and substitute these
+.TP
+\fB\-z\fR, \fB\-\-compress_ids\fR, \fB\-\-compress\-ids\fR=[value]
+return compressed / minimized ids using default prefixes
 .SS "doc delete"
 \fBterminusdb doc delete DATABASE_SPEC OPTIONS\fR
 .P
@@ -705,6 +710,9 @@ merge repeated documents into a single document record
 .TP
 \fB\-c\fR, \fB\-\-create\fR=[value]
 create document if it does not exist
+.TP
+\fB\-z\fR, \fB\-\-compress_ids\fR, \fB\-\-compress\-ids\fR=[value]
+return compressed / minimized ids using default prefixes
 .SS "doc get"
 \fBterminusdb doc get DATABASE_SPEC OPTIONS\fR
 .P
@@ -751,7 +759,7 @@ document query search template
 .SS "role create"
 \fBterminusdb role create ROLE_NAME ACTION_1 \.\. ACTION_N OPTIONS\fR
 .P
-Create a new role with the listed actions\. Actions may be any of: "create_database", "delete_database", "class_frame", "clone", "fetch", "push", "branch", "rebase", "instance_read_access", "instance_write_access", "schema_read_access", "schema_write_access", "meta_read_access", "meta_write_access", "commit_read_access", "commit_write_access", "manage_capabilities"
+Create a new role with the listed actions\. Actions may be any of: "create_database", "delete_database", "class_frame", "clone", "fetch", "push", "branch", "rebase", "instance_read_access", "instance_write_access", "schema_read_access", "schema_write_access", "meta_read_access", "meta_write_access", "commit_read_access", "commit_write_access", "manage_capabilities", "search", "search_snippets", "reindex_write", "woql_main_exec", "woql_logic_exec", "woql_logic_read", "woql_logic_write", "woql_other_exec", "woql_search", "woql_instance_read", "woql_instance_write", "woql_schema_read", "woql_schema_write"
 .TP
 \fB\-\-impersonate\fR=[value]
 impersonate a particular user
