@@ -111,3 +111,38 @@ pub fn log_info(msg: String) {
 pub fn log_debug(msg: String) {
     log("DEBUG", &msg);
 }
+
+/// `log::Log` shim routing facade records through the same channel as the
+/// direct log_* calls, so crate diagnostics land in json_log and honour the
+/// `log_level` flag. Registered once by `install()`; `set_logger` errors are
+/// ignored so re-install stays idempotent.
+struct PrologLogger;
+
+impl log::Log for PrologLogger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        // Gating happens in json_log via the log_level flag; let every
+        // record through so the facade does not pre-filter.
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        let severity = match record.level() {
+            log::Level::Error => "ERROR",
+            log::Level::Warn => "WARNING",
+            log::Level::Info => "INFO",
+            log::Level::Debug | log::Level::Trace => "DEBUG",
+        };
+        log(severity, &format!("{}", record.args()));
+    }
+
+    fn flush(&self) {}
+}
+
+static PROLOG_LOGGER: PrologLogger = PrologLogger;
+
+/// Install the shim as the global `log` logger. Safe to call repeatedly:
+/// only the first call takes effect.
+pub fn install_log_shim() {
+    let _ = log::set_logger(&PROLOG_LOGGER);
+    log::set_max_level(log::LevelFilter::Trace);
+}
