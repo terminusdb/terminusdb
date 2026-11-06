@@ -279,7 +279,10 @@ describe('frame', function () {
     expect(enumDef.type).to.equal('string')
     expect(enumDef.oneOf).to.have.length(2)
     expect(enumDef.oneOf[0]).to.have.property('enum')
-    expect(body.required).to.have.members(['name', 'color', 'tags'])
+    // Collections (Set/List/Array) and Optional are 0..n — absent is a
+    // valid document, so only mandatory and min-cardinality-bound
+    // properties are required.
+    expect(body.required).to.have.members(['name', 'color'])
     expect(body['x-terminusdb'].type_choices).to.deep.equal([schema['@id']])
     expect(body['x-terminusdb'].id_pattern).to.have.string(`^${schema['@id']}/`)
     expect(body['x-terminusdb'].key).to.deep.equal({
