@@ -398,7 +398,7 @@ predicates! {
         }
 
         let unify_result = unsafe { PL_unify_stream(stream_term.term_ptr(), stream) };
-        if !unify_result {
+        if unify_result as i32 == 0 {
             unsafe { Sclose(stream) };
             return Err(PrologError::Failure);
         }
