@@ -77,15 +77,17 @@ cli_toplevel :-
     ->  true
     ;   catch(set_prolog_flag(gc_thread, false), _, true)),
     initialise_log_settings,
-    % Environment defaults for `terminusdb mcp` must land before the
-    % first db_path/1 resolution anywhere — db_path is tabled, so a
-    % setenv after the first call is a no-op.
-    (   Argv = [mcp|_]
-    ->  apply_mcp_env_defaults
-    ;   true),
+    % serve's --port/--store envs must land before update_system_graphs
+    % opens (and tables) db_path.
+    apply_serve_env_defaults(Argv),
     (   store_free_invocation(Argv)
     ->  true
-    ;   update_system_graphs
+    ;   catch_with_backtrace(
+            update_system_graphs,
+            Store_Upgrade_Error,
+            (   format(user_error, '~N[ERROR] Store upgrade failed:~n', []),
+                report_unexpected_error(Store_Upgrade_Error),
+                halt(1)))
     ),
     % Better error handling here...
     (   catch_with_backtrace(
@@ -154,9 +156,21 @@ opt_spec(serve,'terminusdb serve OPTIONS',
            longflags([memory]),
            meta(password),
            default('_'),
-           help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')]]).
+           help('Run server in-memory, without a persistent store. Takes a password as an optional argument. The in-memory store will be initialized with an admin account with the given password. If absent, the admin account will have \'root\' as a password.')],
+          [opt(port),
+           type(integer),
+           shortflags([p]),
+           longflags([port]),
+           meta('PORT'),
+           help('Port to listen on. Overrides TERMINUSDB_SERVER_PORT (default 6363).')],
+          [opt(store),
+           type(atom),
+           shortflags([s]),
+           longflags([store]),
+           meta('DIR'),
+           help('Storage root directory. Overrides TERMINUSDB_STORE and TERMINUSDB_SERVER_DB_PATH (default ~~/.terminusdb). The db lives at <root>/db, vectorlink at <root>/vectorlink.')]]).
 opt_spec(mcp,'terminusdb mcp OPTIONS',
-         'Run an MCP (Model Context Protocol) server on stdin/stdout against the local store. No port is opened. Connect a client such as Claude Code with `claude mcp add terminusdb -- terminusdb mcp`. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer — the embedded vectorlink backend is selected automatically at startup when an OpenAI-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink|http_vectorlink|none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in-memory without a persistent store, with the value as admin password — empty means \'root\').',
+         'Run an MCP (Model Context Protocol) server on stdin/stdout against the local store. No port is opened. Connect a client such as Claude Code with `claude mcp add terminusdb -- terminusdb mcp`. Configuration is via environment variables: TERMINUSDB_STORE (storage root — the db lives at <root>/db, vectorlink at <root>/vectorlink; default ~/.terminusdb) or the legacy TERMINUSDB_SERVER_DB_PATH (db dir directly), TERMINUSDB_INDEXER_BACKEND (semantic indexer — the embedded vectorlink backend is selected automatically at startup when an OpenAI-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink|http_vectorlink|none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in-memory without a persistent store, with the value as admin password — empty means \'root\').',
          [[opt(help),
            type(boolean),
            shortflags([h]),
@@ -1621,10 +1635,6 @@ assert_system_db_is_accessible :-
             halt(1))).
 
 run(Argv) :-
-    % Idempotent: also applied in cli_toplevel before store probing.
-    (   Argv = [mcp|_]
-    ->  apply_mcp_env_defaults
-    ;   true),
     % Check env vars to report errors as soon as possible.
     check_all_env_vars,
     (   Argv = [Cmd|_],
@@ -1680,27 +1690,45 @@ run_(_) :-
     format(current_output, "terminusdb [command]~n~twhere command is one of: ~w~n", [Commands]),
     format(current_output, "type: terminusdb [command] --help for more details~n", []).
 
-%% apply_mcp_env_defaults is det.
+% TERMINUSDB_INDEXER_BACKEND stays unset when the user hasn't chosen
+% — auto_configure_indexer probes for a live endpoint after plugins
+% load and selects the embedded backend when one answers.
+
+%% apply_serve_env_defaults(+Argv) is det.
 %
-%  Environment defaults for `terminusdb mcp`. Must run before the first
-%  db_path/1 resolution anywhere in the process — db_path is tabled, so
-%  a setenv after the first call is a no-op. cli_toplevel calls this
-%  before update_system_graphs; it is repeated in run_command for
-%  direct invocations that bypass the toplevel.
-apply_mcp_env_defaults :-
-    (   getenv('TERMINUSDB_SERVER_DB_PATH', _)
-    ->  true
-    ;   expand_file_name('~/.terminusdb', [DB_Home]),
-        setenv('TERMINUSDB_SERVER_DB_PATH', DB_Home),
-        % The embedded engine derives its data dir from db_path's parent
-        % — which would be ~/ — so pin it inside the store folder.
-        (   getenv('VECTORLINK_DATA_DIR', _)
-        ->  true
-        ;   expand_file_name('~/.terminusdb/vectorlink', [VL_Dir]),
-            setenv('VECTORLINK_DATA_DIR', VL_Dir))).
-    % TERMINUSDB_INDEXER_BACKEND stays unset when the user hasn't chosen
-    % — auto_configure_indexer probes for a live endpoint after plugins
-    % load and selects the embedded backend when one answers.
+%  Parse serve's --port/--store from raw Argv and export them as
+%  TERMINUSDB_* environment variables. cli_toplevel calls this before
+%  update_system_graphs: db_path/1 is tabled, so the env must be set
+%  before the first store open or serve silently uses the default
+%  store. Parse errors are ignored here — run_/1 reports them properly.
+apply_serve_env_defaults([serve|Rest]) :-
+    !,
+    opt_spec_expanded(serve, _, _, Spec),
+    (   catch(opt_parse(Spec, Rest, Opts, _Positional), _, fail)
+    ->  serve_env_options(Opts)
+    ;   true).
+apply_serve_env_defaults(_Argv).
+
+%% serve_env_options(+Opts) is det.
+%
+%  Export --port/--store as their TERMINUSDB_* environment variables so
+%  the server and plugin machinery pick them up through the usual config
+%  path. Optparse emits each declared option even when its flag is
+%  absent, leaving the value an unbound variable — guard with ground/1
+%  exactly like memory(_) is handled in terminus_server/2. Must run
+%  before the first db_path/1 resolution (it is tabled): cli_toplevel
+%  calls apply_serve_env_defaults/1 ahead of update_system_graphs, and
+%  run_command(serve) repeats it for direct invocations.
+serve_env_options(Opts) :-
+    (   option(port(Port), Opts),
+        ground(Port)
+    ->  setenv('TERMINUSDB_SERVER_PORT', Port)
+    ;   true),
+    (   option(store(Store), Opts),
+        ground(Store)
+    ->  absolute_file_name(Store, AbsStore),
+        setenv('TERMINUSDB_STORE', AbsStore)
+    ;   true).
 
 % Commands
 run_command(help,_Positional,Opts) :-
@@ -1713,17 +1741,22 @@ run_command(test,_Positional,Opts) :-
     ->  halt(0)
     ;   halt(1)).
 run_command(serve,_Positional,Opts) :-
-    api_report_errors(
-        server,
-        (   load_plugins,
-            vectorlink:auto_configure_indexer,
-            option(interactive(true), Opts)
-        ->  terminus_server([serve|Opts], false),
-            prolog
-        ;   terminus_server([serve|Opts], true))
-    ).
+    (   api_report_errors(
+            server,
+            (   serve_env_options(Opts),
+                load_plugins,
+                vectorlink:auto_configure_indexer,
+                option(interactive(true), Opts)
+            ->  terminus_server([serve|Opts], false),
+                prolog
+            ;   terminus_server([serve|Opts], true))
+        )
+    % A silent failure (e.g. a bind error before the FFI raised it as an
+    % exception) must not fall through to the catch-all run_command clause
+    % that prints help and exits 0 — surface it as an error.
+    ->  true
+    ;   throw(error(server_failed_to_start, _))).
 run_command(mcp,_Positional,Opts) :-
-    apply_mcp_env_defaults,
     api_report_errors(
         mcp,
         (   % In-memory store — same init as serve's --memory flag, via
@@ -2898,7 +2931,28 @@ api_error_cli(API, Error) :-
     ),
     format(user_error,"Error: ~s~n",[Msg]),
     json_write_dict(user_error,JSON, [serialize_unknown(true)]),
+    (   get_dict('api:error', JSON, Api_Error),
+        get_dict('@type', Api_Error, 'api:InternalServerError')
+    ->  report_unexpected_error(Error)
+    ;   true),
     halt(Status).
+
+%% report_unexpected_error(+Error) is det.
+%
+%  Print full diagnostics for an exception no typed API error mapping
+%  claimed. The JSON response stays sanitized for scripts; stderr gets
+%  the standard print_message rendering (which names the formal error
+%  and the failing goal) followed by the captured Prolog stack, so
+%  operators can diagnose startup and store-upgrade failures.
+report_unexpected_error(Error) :-
+    (   Error = error(Formal, context(_, Context_Msg))
+    ->  print_message(error, error(Formal, context(_, Context_Msg)))
+    ;   print_message(error, Error)),
+    (   Error = error(_, context(prolog_stack(Stack), _)),
+        nonvar(Stack)
+    ->  nl(user_error),
+        print_prolog_backtrace(user_error, Stack)
+    ;   true).
 
 initialise_signals :-
     (   current_prolog_flag(unix, true)
@@ -2918,6 +2972,13 @@ initialise_log_settings :-
 
 :- multifile prolog:message//1.
 
+prolog:message(error(cannot_start_server(Port, Msg), _)) -->
+    [
+    'Server cannot start: ~w'-[Msg],
+    nl,
+    'Port ~w is unavailable — stop the conflicting process or use --port.'-[Port],
+    nl
+    ].
 prolog:message(server_missing_config(BasePath)) -->
     [
     'CRITICAL ERROR: Server can\'t be started because the configuration is missing',
@@ -3028,3 +3089,98 @@ format_doc_id_list(Ids) :-
         )
     ;   true
     ).
+
+:- begin_tests(cli_error_reporting).
+
+:- use_module(library(memfile)).
+
+deliberately_failing_goal :-
+    throw(error(instantiation_error, _)).
+
+captured_user_error_text(Goal, Text) :-
+    stream_property(OldErr, alias(user_error)),
+    new_memory_file(MemFile),
+    open_memory_file(MemFile, write, ErrStream),
+    setup_call_cleanup(
+        set_stream(ErrStream, alias(user_error)),
+        Goal,
+        (   close(ErrStream),
+            set_stream(OldErr, alias(user_error)))),
+    open_memory_file(MemFile, read, ReadStream),
+    read_string(ReadStream, _, Text),
+    close(ReadStream),
+    free_memory_file(MemFile).
+
+test(report_unexpected_error_shows_message_and_stack, []) :-
+    catch_with_backtrace(
+        deliberately_failing_goal,
+        Error,
+        captured_user_error_text(
+            report_unexpected_error(Error),
+            Text)),
+    % The real exception must reach stderr, not only the sanitized JSON.
+    assertion(sub_string(Text, _, _, _, "instantiated")),
+    % And a Prolog stack that names the failing predicate.
+    assertion(sub_string(Text, _, _, _, "deliberately_failing_goal")).
+
+test(report_unexpected_error_without_stack, []) :-
+    captured_user_error_text(
+        report_unexpected_error(error(instantiation_error, _)),
+        Text),
+    assertion(sub_string(Text, _, _, _, "instantiated")).
+
+:- end_tests(cli_error_reporting).
+
+:- begin_tests(serve_options).
+
+unset_serve_env :-
+    unsetenv('TERMINUSDB_SERVER_PORT'),
+    unsetenv('TERMINUSDB_STORE'),
+    unsetenv('TERMINUSDB_SERVER_DB_PATH').
+
+% Options left unbound by optparse (flag absent, no default) must not
+% be pushed into the environment — a var would crash setenv/2 and
+% absolute_file_name/2 with instantiation_error.
+test(serve_env_options_skips_unbound_opts,
+     [setup(unset_serve_env), cleanup(unset_serve_env)]) :-
+    serve_env_options([help(false), interactive(false),
+                       memory(_), port(_), store(_)]),
+    \+ getenv('TERMINUSDB_SERVER_PORT', _),
+    \+ getenv('TERMINUSDB_STORE', _).
+
+% --store exports TERMINUSDB_STORE (the storage root: <root>/db,
+% <root>/vectorlink) — TERMINUSDB_STORE is the official variable;
+% TERMINUSDB_SERVER_DB_PATH stays valid as legacy input only.
+test(serve_env_options_sets_bound_opts,
+     [setup(unset_serve_env), cleanup(unset_serve_env)]) :-
+    serve_env_options([port(6464), store('/tmp/x')]),
+    getenv('TERMINUSDB_SERVER_PORT', '6464'),
+    getenv('TERMINUSDB_STORE', '/tmp/x').
+
+% db_path/1 is tabled: --port/--store must be exported before the first
+% store open in cli_toplevel, or serve silently uses the default store.
+test(apply_serve_env_defaults_sets_store_env,
+     [setup(unset_serve_env), cleanup(unset_serve_env)]) :-
+    apply_serve_env_defaults([serve, '--port', '6477', '--store', '/tmp/x']),
+    getenv('TERMINUSDB_SERVER_PORT', '6477'),
+    getenv('TERMINUSDB_STORE', '/tmp/x').
+
+test(apply_serve_env_defaults_ignores_other_commands,
+     [setup(unset_serve_env), cleanup(unset_serve_env)]) :-
+    apply_serve_env_defaults([db, list]),
+    \+ getenv('TERMINUSDB_SERVER_PORT', _),
+    \+ getenv('TERMINUSDB_STORE', _).
+
+test(apply_serve_env_defaults_no_flags,
+     [setup(unset_serve_env), cleanup(unset_serve_env)]) :-
+    apply_serve_env_defaults([serve]),
+    \+ getenv('TERMINUSDB_SERVER_PORT', _),
+    \+ getenv('TERMINUSDB_STORE', _).
+
+test(apply_serve_env_defaults_store_flag_beats_legacy_env,
+     [setup(unset_serve_env), cleanup(unset_serve_env)]) :-
+    setenv('TERMINUSDB_SERVER_DB_PATH', '/tmp/keep'),
+    apply_serve_env_defaults([serve, '--store', '/tmp/x']),
+    getenv('TERMINUSDB_STORE', '/tmp/x').
+
+:- end_tests(serve_options).
