@@ -18,10 +18,7 @@ swipl = {git="https://github.com/terminusdb-org/swipl-rs"}
 #[patch."https://github.com/terminusdb-org/tdb-succinct"]
 #tdb-succinct = {path="../../../tdb-succinct"}
 
-# Labelstore-client pins tag v0.22.0 internally; patch the git source so the
-# whole graph resolves a single terminus-store (trait identity for LabelStore).
-[patch."https://github.com/terminusdb-org/terminusdb-store"]
-terminus-store = {git="https://github.com/terminusdb-org/terminusdb-store", tag="v0.22.1"}
+#[patch."https://github.com/terminusdb-org/terminusdb-store"]
 #terminus-store = {path="../../../terminusdb-store"}
 
 # To develop against a local vectorlink checkout instead of the pinned
