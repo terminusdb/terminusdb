@@ -119,20 +119,26 @@ pub fn log_debug(msg: String) {
 struct PrologLogger;
 
 impl log::Log for PrologLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        // Gating happens in json_log via the log_level flag; let every
-        // record through so the facade does not pre-filter.
-        true
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        // Bare span markers from tracing ("load;") carry no information;
+        // every other record goes through so gating stays in json_log.
+        metadata.target() != "tracing::span"
     }
 
     fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        // Lance is chatty at INFO (a loading event per dataset open); demote
+        // its stream so routine store chatter stays out of INFO-level logs.
         let severity = match record.level() {
             log::Level::Error => "ERROR",
             log::Level::Warn => "WARNING",
+            log::Level::Info if record.target().starts_with("lance") => "DEBUG",
             log::Level::Info => "INFO",
             log::Level::Debug | log::Level::Trace => "DEBUG",
         };
-        log(severity, &format!("{}", record.args()));
+        log(severity, &format!("[{}] {}", record.target(), record.args()));
     }
 
     fn flush(&self) {}
