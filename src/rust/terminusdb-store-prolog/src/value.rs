@@ -8,9 +8,10 @@ use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
 use tdb_succinct::tfc::lexical_interval::{
-    decode_lexical_entry, derived_period, duration_parts_to_period, legacy_component_of,
+    decode_lexical_entry, duration_parts_to_period, extend_component,
     legacy_interval_to_lexical, lexical_interval_entry, lexical_interval_from_parts,
-    period_to_parts, Component, LexicalInterval, FLAG_DURATION_END, FLAG_START_DURATION,
+    parse_lexical_interval, render_lexical_interval, FLAG_DURATION_END, FLAG_EXPLICIT,
+    FLAG_POINT, FLAG_START_DURATION,
 };
 use tdb_succinct::*;
 
@@ -323,12 +324,23 @@ pub fn make_entry_from_term<C: QueryableContextType>(
             hex::decode(hexstring).map_err(|_| PrologError::Exception)?,
         )))
     } else if atom!("http://terminusdb.com/schema/xdd#dateTimeInterval") == ty {
-        // Serialize compound term to string and parse in Rust,
-        // because swipl-rs get_arg cannot extract compound sub-terms.
-        let term_string: String = context.string_from_term(inner_term)?;
-        match parse_interval_term(&term_string) {
-            Ok(entry) => Ok(entry),
-            Err(_) => raise_domain(context, inner_term),
+        // The inner value is the canonical lexical string — the Rust
+        // grammar is the sole authority, so text marshals straight to an
+        // entry. A legacy `date_time_interval/6` compound still marshals
+        // through the term parser for producers that build intervals in
+        // Prolog.
+        match inner_term.get::<PrologText>() {
+            Ok(text) => match parse_lexical_interval(&text.into_inner()) {
+                Ok(iv) => Ok(lexical_interval_entry(&iv)),
+                Err(_) => raise_domain(context, inner_term),
+            },
+            Err(_) => {
+                let term_string: String = context.string_from_term(inner_term)?;
+                match parse_interval_term(&term_string) {
+                    Ok(entry) => Ok(entry),
+                    Err(_) => raise_domain(context, inner_term),
+                }
+            }
         }
     } else {
         Err(PrologError::Exception)
@@ -828,20 +840,11 @@ pub fn unify_entry<C: QueryableContextType>(
                     }
                 },
             };
-            let term_string = match format_lexical_interval_term(&iv) {
-                Ok(s) => s,
-                Err(_) => {
-                    return context.raise_exception(
-                        &term! {context: error(domain_error(xdd_interval_value, #object_term), _)}?,
-                    )
-                }
-            };
-            {
-                let f = context.open_frame();
-                let term = f.term_from_string(&term_string)?;
-                object_term.unify_arg(1, term)?;
-                f.close();
-            }
+            // The read value is the canonical lexical string — the same
+            // spelling the write path accepts, for the full entry domain
+            // (deep years and exact fractions cannot pass through the
+            // legacy term representation).
+            object_term.unify_arg(1, render_lexical_interval(&iv).as_str())?;
             object_term.unify_arg(
                 2,
                 atom!("http://terminusdb.com/schema/xdd#dateTimeInterval"),
@@ -1087,13 +1090,6 @@ fn parse_interval_tz(s: &str) -> Result<i16, String> {
     i16::try_from(-secs / 60).map_err(|_| format!("tz offset out of range: {secs}"))
 }
 
-fn format_interval_tz(tz: i16) -> String {
-    if tz == INTERVAL_NO_ZONE {
-        "none".to_string()
-    } else {
-        format!("tz({})", -(tz as i64) * 60)
-    }
-}
 
 fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     let inner = s
@@ -1108,9 +1104,10 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     let (end_seconds, end_nanos, end_type) = parse_component_timestamp(args[1], false)?;
     let (sign, week, year, month, day, hour, minute, second) = parse_duration_parts(args[2])?;
     let flag = match args[3] {
-        "explicit" => INTERVAL_FLAG_EXPLICIT,
-        "start_duration" => INTERVAL_FLAG_START_DURATION,
-        "duration_end" => INTERVAL_FLAG_DURATION_END,
+        "explicit" => FLAG_EXPLICIT,
+        "start_duration" => FLAG_START_DURATION,
+        "duration_end" => FLAG_DURATION_END,
+        "point" => FLAG_POINT,
         other => return Err(format!("unknown flag: {other}")),
     };
     let start_tz = parse_interval_tz(args[4])?;
@@ -1122,110 +1119,42 @@ fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     // the encoder: lookups miss, removals silently noop. Build the lexical
     // interval directly so the period carries the term's actual digits.
     let period = duration_parts_to_period(sign, week, year, month, day, hour, minute, &second);
-    Ok(lexical_interval_entry(&lexical_interval_from_parts(
+    let iv = lexical_interval_from_parts(
         (start_seconds, start_nanos, start_type, start_tz),
         (end_seconds, end_nanos, end_type, end_tz),
         flag,
         &period,
-    )))
-}
-
-fn format_component_term(
-    seconds: i64,
-    nanos: u32,
-    component_type: u8,
-    is_start: bool,
-) -> Result<String, String> {
-    use chrono::DateTime;
-    match component_type {
-        INTERVAL_COMPONENT_OPEN => {
-            return Ok(if is_start { "neg_infinity" } else { "infinity" }.to_string())
+    );
+    // Duration forms: a marshalled term's non-anchor side is a placeholder
+    // (`infinity`, `unknown`) or an already-materialised bound — either way
+    // the duration defines it. The canonical from_parts builds is the spelled
+    // `T/P`/`P/T` literal, so reparsing materialises the bound through the
+    // same code path as any other interval write. A date-kind end canonical
+    // is already the inclusive spelling, so the reparsed bound stays
+    // exclusive — no double bump.
+    let iv = match flag {
+        FLAG_START_DURATION | FLAG_DURATION_END => {
+            let (a, b) = iv.canonical.split_once('/').unwrap_or(("", ""));
+            let lit = if flag == FLAG_START_DURATION {
+                format!("{}/{}", extend_component(a), b)
+            } else {
+                format!("{}/{}", a, extend_component(b))
+            };
+            parse_lexical_interval(&lit)
+                .map_err(|e| format!("invalid interval term anchor: {e}"))?
         }
-        INTERVAL_COMPONENT_UNKNOWN => return Ok("unknown".to_string()),
-        _ => {}
-    }
-    let dt = DateTime::from_timestamp(seconds, nanos)
-        .map(|dt| dt.naive_utc())
-        .ok_or_else(|| "interval instant outside representable range".to_string())?;
-    if component_type == INTERVAL_COMPONENT_DATE {
-        Ok(format!("date({},{},{},0)", dt.year(), dt.month(), dt.day()))
-    } else {
-        Ok(format!(
-            "date_time({},{},{},{},{},{},{})",
-            dt.year(),
-            dt.month(),
-            dt.day(),
-            dt.hour(),
-            dt.minute(),
-            dt.second(),
-            dt.nanosecond()
-        ))
-    }
-}
-
-/// A `LexicalInterval` back as a `date_time_interval/6` term string — the
-/// read-path inverse of `parse_interval_term`, with no legacy struct in
-/// between (the period can exceed the legacy `u8` field widths).
-fn format_lexical_interval_term(iv: &LexicalInterval) -> Result<String, String> {
-    fn component_term(c: &Component, is_start: bool) -> Result<String, String> {
-        let (secs, nanos, ty, _tz) = legacy_component_of(c)
-            .ok_or_else(|| "interval component outside representable range".to_string())?;
-        format_component_term(secs, nanos, ty, is_start)
-    }
-    let start = component_term(&iv.start, true)?;
-    let end = component_term(&iv.end, false)?;
-    // Supplied canonical for the duration forms, derived period for explicit.
-    let period = match iv.flag {
-        FLAG_START_DURATION => iv.canonical.split('/').nth(1).unwrap_or("PT0S").to_string(),
-        FLAG_DURATION_END => iv.canonical.split('/').next().unwrap_or("PT0S").to_string(),
-        _ => derived_period(iv),
+        _ => iv,
     };
-    // `duration/8` carries a week field, so stored `PnW` spellings read
-    // back with their denomination intact and re-marshal verbatim.
-    let (sign, week, year, month, day, hour, minute, second) = period_to_parts(&period)
-        .map_err(|_| format!("undecodable interval period: {period}"))?;
-    let flag = match iv.flag {
-        FLAG_START_DURATION => "start_duration",
-        FLAG_DURATION_END => "duration_end",
-        _ => "explicit",
-    };
-    let (_, _, _, start_tz) = legacy_component_of(&iv.start)
-        .ok_or_else(|| "interval start outside representable range".to_string())?;
-    let (_, _, _, end_tz) = legacy_component_of(&iv.end)
-        .ok_or_else(|| "interval end outside representable range".to_string())?;
-    Ok(format!(
-        "date_time_interval({},{},{},{},{},{})",
-        start,
-        end,
-        format!(
-            "duration({sign},{week},{year},{month},{day},{hour},{minute},{})",
-            seconds_term(&second)
-        ),
-        flag,
-        format_interval_tz(start_tz),
-        format_interval_tz(end_tz)
-    ))
-}
-
-/// Seconds digits as a term spelling: integral values stay integers,
-/// fractions become `NrD` rationals so the term carries the exact decimal
-/// instead of a float approximation.
-fn seconds_term(digits: &str) -> String {
-    match digits.split_once('.') {
-        Some((i, f)) => {
-            let num = format!("{i}{f}");
-            let num = num.trim_start_matches('0');
-            let num = if num.is_empty() { "0" } else { num };
-            format!("{num}r1{}", "0".repeat(f.len()))
-        }
-        None => digits.to_string(),
-    }
+    Ok(lexical_interval_entry(&iv))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tdb_succinct::tfc::lexical_interval::encode_lexical_interval;
+    use tdb_succinct::tfc::lexical_interval::{
+        cmp_interval_bounds, encode_lexical_interval, parse_lexical_interval,
+        render_lexical_interval,
+    };
 
     /// The dictionary canonically holds `encode_lexical_interval` bytes for
     /// `DateTimeInterval` values (layer load upgrades fixed-width entries).
@@ -1244,48 +1173,113 @@ mod tests {
         decode_lexical_entry(&entry.to_bytes()).expect("entry must be a decodable lexical interval");
     }
 
-    /// Delete-by-lookup decodes a stored entry to a term, then re-marshals it.
-    /// The marshal must be a fixed point of decode-encode or the removal
+    /// Delete-by-lookup decodes a stored entry to a value, then re-marshals
+    /// it. The marshal must be a fixed point of decode-encode or the removal
     /// resolves a nonexistent id and silently does nothing.
     #[test]
     fn interval_term_roundtrip_is_stable() {
         let term = "date_time_interval(date_time(2020,1,15,12,30,45,0),date_time(2020,1,15,12,30,45,0),duration(1,0,0,0,0,0,0,0),explicit,tz(0),tz(0))";
         let entry = parse_interval_term(term).unwrap();
         let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
-        let reparsed =
-            parse_interval_term(&format_lexical_interval_term(&decoded).unwrap()).unwrap();
+        let reparsed = lexical_interval_entry(
+            &parse_lexical_interval(&render_lexical_interval(&decoded)).unwrap(),
+        );
         assert_eq!(entry.to_bytes(), reparsed.to_bytes());
+    }
+
+    /// A bare instant literal marshals under the point flag: the stored
+    /// entry keeps the single-component canonical, distinct from a
+    /// supplied `T/T` pair at the same instant — which renders the pair.
+    #[test]
+    fn interval_term_point_marshals_single_spelling() {
+        let point = parse_interval_term("date_time_interval(date_time(2025,3,14,22,0,0,0),date_time(2025,3,14,22,0,0,0),duration(1,0,0,0,0,0,0,0),point,tz(-7200),tz(-7200))")
+            .unwrap();
+        let dec = decode_lexical_entry(&point.to_bytes()).unwrap();
+        assert_eq!(dec.flag, FLAG_POINT);
+        assert_eq!(
+            render_lexical_interval(&dec),
+            "2025-03-15T00:00:00+02:00"
+        );
+        let pair = parse_interval_term("date_time_interval(date_time(2025,3,14,22,0,0,0),date_time(2025,3,14,22,0,0,0),duration(1,0,0,0,0,0,0,0),explicit,tz(-7200),tz(-7200))")
+            .unwrap();
+        let dec = decode_lexical_entry(&pair.to_bytes()).unwrap();
+        assert_eq!(dec.flag, FLAG_EXPLICIT);
+        assert_eq!(
+            render_lexical_interval(&dec),
+            "2025-03-15T00:00:00+02:00/2025-03-15T00:00:00+02:00"
+        );
+    }
+
+    /// A whole-day date point round-trips: `date` components, derived
+    /// `P1D` and the point flag survive decode → term → re-marshal, and
+    /// the canonical renders the single supplied date.
+    #[test]
+    fn interval_term_point_date_roundtrip() {
+        let term = "date_time_interval(date(2026,10,1,0),date(2026,10,2,0),duration(1,0,0,0,1,0,0,0),point,none,none)";
+        let entry = parse_interval_term(term).unwrap();
+        let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
+        assert_eq!(render_lexical_interval(&decoded), "2026-10-01");
+        let reparsed = lexical_interval_entry(
+            &parse_lexical_interval("2026-10-01").unwrap(),
+        );
+        assert_eq!(entry.to_bytes(), reparsed.to_bytes());
+    }
+
+    /// A `date`-kind pair marshals DATE endpoints: the start is the named
+    /// day and the (already exclusive) end decodes back as the inclusive
+    /// last day. The entry must be byte-identical to the lexical parse of
+    /// the same `D1/D2` literal, and read back as a `date` pair.
+    #[test]
+    fn interval_term_date_pair_marshals_date_kind() {
+        let term = "date_time_interval(date(2025,1,1,0),date(2025,4,1,0),duration(1,0,0,0,90,0,0,0.0),explicit,none,none)";
+        let entry = parse_interval_term(term).unwrap();
+        let expected = lexical_interval_entry(
+            &parse_lexical_interval("2025-01-01/2025-03-31").unwrap(),
+        );
+        assert_eq!(entry.to_bytes(), expected.to_bytes());
+        let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
+        assert_eq!(render_lexical_interval(&decoded), "2025-01-01/2025-03-31");
     }
 
     /// Wide day counts used to die in the legacy `Duration` `u8` field
     /// before reaching the encoder — silent lookup misses and dropped
-    /// document fields. Marshal must carry the digits through.
+    /// document fields. Marshal must carry the digits through. Rendered
+    /// spellings re-parse to the same bounds: `tz(0)` on a date carries no
+    /// renderable designator, so the spelling metadata may differ while the
+    /// interval is identical.
     #[test]
     fn interval_term_accepts_wide_day_counts() {
-        for term in [
-            "date_time_interval(date(2025,1,20,0),date(2025,10,13,0),duration(1,0,0,0,273,0,0,0),explicit,tz(0),tz(0))",
-            "date_time_interval(date(2025,1,20,0),infinity,duration(1,0,0,0,300,0,0,0),start_duration,tz(0),tz(0))",
+        for (term, want_render) in [
+            ("date_time_interval(date(2025,1,20,0),date(2025,10,13,0),duration(1,0,0,0,273,0,0,0),explicit,tz(0),tz(0))", "2025-01-20/2025-10-12"),
+            ("date_time_interval(date(2025,1,20,0),infinity,duration(1,0,0,0,300,0,0,0),start_duration,tz(0),tz(0))", "2025-01-20/P300D"),
         ] {
             let entry = parse_interval_term(term).unwrap();
             let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
-            let reparsed =
-                parse_interval_term(&format_lexical_interval_term(&decoded).unwrap()).unwrap();
-            assert_eq!(entry.to_bytes(), reparsed.to_bytes());
+            assert_eq!(render_lexical_interval(&decoded), want_render);
+            let reparsed = decode_lexical_entry(
+                &lexical_interval_entry(&parse_lexical_interval(want_render).unwrap())
+                    .to_bytes(),
+            )
+            .unwrap();
+            assert_eq!(
+                cmp_interval_bounds(&decoded, &reparsed),
+                std::cmp::Ordering::Equal
+            );
         }
     }
 
     /// Seconds arrive as integers, floats or `NrD` rationals; all must
-    /// marshal through the exact decimal spelling. For `explicit` the
-    /// read-back duration arg is the derived period, so use
-    /// `start_duration` where the supplied period is stored verbatim.
+    /// marshal through the exact decimal spelling — `1r10` lands as the
+    /// exact `PT0.1S` declared period, not a float approximation.
     #[test]
     fn interval_term_accepts_rational_seconds() {
         let entry = parse_interval_term("date_time_interval(date(2025,1,20,0),infinity,duration(1,0,0,0,0,0,0,1r10),start_duration,tz(0),tz(0))")
             .unwrap();
         let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
-        let term = format_lexical_interval_term(&decoded).unwrap();
-        assert!(term.contains("duration(1,0,0,0,0,0,0,1r10)"), "got: {}", term);
-        let reparsed = parse_interval_term(&term).unwrap();
+        assert_eq!(render_lexical_interval(&decoded), "2025-01-20/PT0.1S");
+        let reparsed = lexical_interval_entry(
+            &parse_lexical_interval(&render_lexical_interval(&decoded)).unwrap(),
+        );
         assert_eq!(entry.to_bytes(), reparsed.to_bytes());
     }
 

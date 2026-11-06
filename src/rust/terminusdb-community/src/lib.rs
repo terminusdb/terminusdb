@@ -23,6 +23,13 @@ mod value;
 
 pub use swipl;
 use swipl::prelude::*;
+
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, derived_period, encode_lexical_interval,
+    extend_component, parse_lexical_interval, render_lexical_interval,
+    Component, FLAG_DECLARED_PERIOD, FLAG_DURATION_END, FLAG_POINT,
+    FLAG_START_DURATION,
+};
 pub use terminusdb_store_prolog::terminus_store;
 
 use rand::Rng;
@@ -121,6 +128,91 @@ predicates! {
         s_term.unify(format!("{:x}", digest).as_str())
     }
 
+    /// Parse an xdd:dateTimeInterval literal with the storage parser and
+    /// unify Out with its canonical rendered form. Fails on malformed input;
+    /// the caller maps failure to a cast error.
+    #[module("$xdd")]
+    semidet fn interval_parse(_context, lit_term, out_term) {
+        // literals arrive as atoms from documents and as strings from WOQL
+        let lit: String = lit_term
+            .get::<String>()
+            .or_else(|_| lit_term.get::<Atom>().map(|a| a.name().to_string()))?;
+        match parse_lexical_interval(&lit) {
+            Ok(parsed) => {
+                let entry = encode_lexical_interval(&parsed);
+                let decoded = decode_lexical_entry(&entry).unwrap();
+                let rendered = render_lexical_interval(&decoded);
+                out_term.unify(rendered.as_str())
+            }
+            Err(_) => Err(PrologError::Failure),
+        }
+    }
+
+    /// Decompose an xdd:dateTimeInterval literal into its supplied side
+    /// spellings (ISO extended form; a duration side yields its `P…`
+    /// spelling, specials yield `..`/`X*`/empty), the interval flag, and
+    /// the bounds-derived canonical duration. Fails on malformed input.
+    #[module("$xdd")]
+    semidet fn interval_components(
+        _context,
+        lit_term,
+        s1_term,
+        s2_term,
+        flag_term,
+        period_term,
+    ) {
+        let lit: String = lit_term
+            .get::<String>()
+            .or_else(|_| lit_term.get::<Atom>().map(|a| a.name().to_string()))?;
+        match parse_lexical_interval(&lit) {
+            Ok(iv) => {
+                // declared `T/T/P` rebuilds the same term shape the legacy
+                // parser produced: explicit flag, supplied period.
+                let flag = match iv.flag {
+                    FLAG_POINT => "point",
+                    FLAG_START_DURATION => "start_duration",
+                    FLAG_DURATION_END => "duration_end",
+                    _ => "explicit",
+                };
+                let parts: Vec<&str> = iv.canonical.split('/').collect();
+                let side = |s: &str, c: &Component, is_left: bool| {
+                    // a duration side carries its `P…` spelling, not a component
+                    if (is_left && iv.flag == FLAG_DURATION_END)
+                        || (!is_left && iv.flag == FLAG_START_DURATION)
+                    {
+                        s.to_string()
+                    } else {
+                        match c {
+                            Component::Finite(_) => extend_component(s),
+                            _ => c.canonical_str().to_string(),
+                        }
+                    }
+                };
+                let (s1, s2, period) = match iv.flag {
+                    FLAG_POINT => (
+                        extend_component(parts[0]),
+                        String::new(),
+                        derived_period(&iv),
+                    ),
+                    FLAG_DECLARED_PERIOD => (
+                        side(parts[0], &iv.start, true),
+                        side(parts[1], &iv.end, false),
+                        parts.get(2).copied().unwrap_or("").to_string(),
+                    ),
+                    _ => (
+                        side(parts[0], &iv.start, true),
+                        side(parts.get(1).copied().unwrap_or(""), &iv.end, false),
+                        derived_period(&iv),
+                    ),
+                };
+                s1_term.unify(s1.as_str())?;
+                s2_term.unify(s2.as_str())?;
+                flag_term.unify(flag)?;
+                period_term.unify(period.as_str())
+            }
+            Err(_) => Err(PrologError::Failure),
+        }
+    }
 }
 
 // implements RFC4648 encoding
@@ -145,6 +237,8 @@ pub fn install() {
     register_random_base64();
     register_uuid_v7();
     register_sha1_hex();
+    register_interval_parse();
+    register_interval_components();
     doc::register();
     graphql::register();
     json_preserve::register();
