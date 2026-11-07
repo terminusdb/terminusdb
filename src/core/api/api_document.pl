@@ -75,6 +75,8 @@
 :- use_module(core(document/json), [
                   insert_document_expanded/4,
                   insert_document_expanded/5,
+                  insert_document_expanded/6,
+                  insert_document_merge/9,
                   replace_document_expanded/5,
                   insert_backlinks/2,
                   extract_return_ids/2,
@@ -294,13 +296,16 @@ api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config,
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
-           (   Stream_Started = started(Started),
-               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-                         error(document_not_found(Id), _)),
-               nb_setarg(1, Stream_Started, true)
-           )).
+    (   strip_identifiers(Config)
+    ->  forall(api_get_documents_by_query(Transaction, instance, Type, Query, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               (   Stream_Started = started(Started),
+                   do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                             error(document_not_found(Id), _)),
+                   nb_setarg(1, Stream_Started, true)
+               ))).
 
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
@@ -402,13 +407,19 @@ api_document_exists(instance, Transaction, Id) :-
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    Stream_Started = started(Started),
-    database_prefixes(Transaction, Prefixes),
-    prefix_expand(Id, Prefixes, Id_Ex),
-    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-              error(document_not_found(Id), _)),
-   nb_setarg(1, Stream_Started, true).
+    (   strip_identifiers(Config)
+    ->  % materialize via api_get_document so the strip applies
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        api_get_document(instance, Transaction, Id_Ex, Config, Document),
+        json_stream_write_dict(Config, Stream_Started, Document)
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        Stream_Started = started(Started),
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)).
 api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)),
@@ -417,52 +428,66 @@ api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
 api_print_documents(schema, Transaction, Config, Stream_Started) :-
     forall(api_get_documents(Transaction, schema, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents(instance, Transaction, Config, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents(instance, Transaction, Config, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall(api_get_documents(Transaction, instance, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :-
     forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction,Prefixes),
-    % TODO errors on unknown prefix
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+api_print_documents_by_type(instance, Transaction, Config, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall(api_get_documents_by_type(Transaction, instance, Type, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        database_and_default_prefixes(Transaction,Prefixes),
+        % TODO errors on unknown prefix
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
 
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
     forall((member(Id, Ids),
             api_get_document(schema, Transaction, Id, Config, Document)),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction, Prefixes),
-    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
-            Ids,
-            Ids_Ex),
-    (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall((member(Id, Ids),
+                api_get_document(instance, Transaction, Id, Config, Document)),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+                Ids,
+                Ids_Ex),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 % Documents selected by an id prefix, printed as full documents. The Rust
 % writer streams the sorted subject-dictionary range for the prefix and
 % materializes each document inline — no Prolog-side id list.
-api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction, Prefixes),
-    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
-    (   ground(Type)
-    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
-    ;   true),
-    (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall((api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
+                api_get_document(instance, Transaction, Id, Config, Document)),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+        (   ground(Type)
+        ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+        ;   true),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Type, _Stream_Started) :-
     throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
 
@@ -518,11 +543,48 @@ compress_id_for_output(Config, Prefixes, Id, Out_Id) :-
     ->  true
     ;   Out_Id = Id).
 
+% strip_identifiers(+Config) is semidet.
+% True when the request asked for identifiers=false — document @id/@type
+% annotations are stripped from the response so a fetched document reads
+% back in its submitted lexical form.
+strip_identifiers(Config) :-
+    Config.get(identifiers, true) = false.
+
+% strip_id_type_annotations(+Document, -Stripped) is det.
+% Recursively removes document `@id`/`@type` annotations so the result reads
+% back in submitted lexical form. Typed literal wrappers (dicts carrying
+% `@value`) and `@id` link references are preserved — they are semantic
+% content, not generated annotations.
+strip_id_type_annotations(Value, Value) :-
+    \+ is_dict(Value), \+ is_list(Value), !.
+strip_id_type_annotations(List, Stripped) :-
+    is_list(List), !,
+    maplist(strip_id_type_annotations, List, Stripped).
+strip_id_type_annotations(Dict, Dict) :-
+    (   get_dict('@value', Dict, _)
+    ;   get_dict('@type', Dict, '@id')),
+    !.
+strip_id_type_annotations(Dict, Dict) :-
+    dict_pairs(Dict, _, Pairs),
+    forall(member(Key-_, Pairs), memberchk(Key, ['@id','@type'])),
+    !.
+strip_id_type_annotations(Dict, Stripped) :-
+    dict_pairs(Dict, Tag, Pairs),
+    findall(Key-Stripped_Value,
+            (   member(Key-Value, Pairs),
+                \+ memberchk(Key, ['@id','@type']),
+                strip_id_type_annotations(Value, Stripped_Value)),
+            Stripped_Pairs),
+    dict_pairs(Stripped, Tag, Stripped_Pairs).
+
 api_get_document(instance, Transaction, Id, Config, Document) :-
     Raw_Id = Config.get(raw_id, true),
     Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false, raw_id: Raw_Id},
-    do_or_die(get_document(Transaction, Id, Document, Options),
-              error(document_not_found(Id), _)).
+    do_or_die(get_document(Transaction, Id, Document0, Options),
+              error(document_not_found(Id), _)),
+    (   strip_identifiers(Config)
+    ->  strip_id_type_annotations(Document0, Document)
+    ;   Document = Document0).
 api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
@@ -552,6 +614,7 @@ known_document_error(type_not_found(_)).
 known_document_error(can_not_insert_existing_object_with_id(_)).
 known_document_error(unrecognized_property(_,_,_)).
 known_document_error(casting_error(_,_)).
+known_document_error(unbound_prefix(_,_,_)).
 known_document_error(submitted_id_does_not_match_generated_id(_,_)).
 known_document_error(submitted_document_id_does_not_have_expected_prefix(_,_)).
 known_document_error(document_key_type_unknown(_)).
@@ -604,17 +667,17 @@ call_catch_document_mutation(Document, Goal) :-
               throw(error(New_E, _))
           ;   throw(error(E, Context)))).
 
-api_insert_document_(schema, _Raw_JSON, _Overwrite, Transaction, Document, Captures, [Id], Captures, T-T) :-
+api_insert_document_(schema, _Raw_JSON, _Overwrite, _Merge, Transaction, Document, Captures, [Id], Captures, T-T) :-
     call_catch_document_mutation(
         Document,
         do_or_die(insert_schema_document(Transaction, Document),
                   error(document_insertion_failed_unexpectedly(Document), _))),
     do_or_die(Id = (Document.get('@id')),
               error(document_has_no_id_somehow, _)).
-api_insert_document_(instance, Raw_JSON, Overwrite, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
+api_insert_document_(instance, Raw_JSON, Overwrite, Merge, Transaction, Document, Captures_In, Id, Captures_Out, BLH-BLT) :-
     call_catch_document_mutation(
         Document,
-        do_or_die(insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Id, BLH-BLT, Captures_Out),
+        do_or_die(insert_document_merge(Transaction, Document, Raw_JSON, Overwrite, Merge, Captures_In, Id, BLH-BLT, Captures_Out),
                   error(document_insertion_failed_unexpectedly(Document), _))).
 
 api_insert_document_unsafe_(schema, _, Transaction, Prefixes, Document, Captures, [Id], Captures, T-T) :-
@@ -635,7 +698,7 @@ api_insert_document_unsafe_(instance, Raw_JSON, Transaction, Prefixes, Document,
             error(document_insertion_failed_unexpectedly(Document), _))
     ).
 
-insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, _Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     api_nuke_documents_(Graph_Type, Transaction),
     (   Graph_Type = schema
     ->  % For a schema full replace, read the context and replace the existing one.
@@ -656,10 +719,10 @@ insert_documents_(true, Graph_Type, Raw_JSON, _Overwrite, Stream, Transaction, I
     ),
     inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
     api_insert_document_from_lazy_list_unsafe(Lazy_List_With_Id, Graph_Type, Raw_JSON, Transaction, Prefixes, Captures_In, Captures_Out, BackLinks-[], Ids).
-insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
+insert_documents_(false, Graph_Type, Raw_JSON, Overwrite, Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids) :-
     stream_to_lazy_docs(Stream, Lazy_List),
     inject_document_id(Injected_Id, Lazy_List, Lazy_List_With_Id),
-    api_insert_document_from_lazy_list(Lazy_List_With_Id, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
+    api_insert_document_from_lazy_list(Lazy_List_With_Id, Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_In, Captures_Out, BackLinks-[], Ids).
 
 /* A request-level document id is addressed exactly like a body @id. The
  * body must hold a single document; a matching @id is fine and a differing
@@ -705,13 +768,17 @@ api_insert_document_from_lazy_list_unsafe([], _, _, _, _, Captures, Captures, T-
 
 % /8 wrapper - backward compatibility (default overwrite=false)
 api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
-    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, false, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
 
-api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
+% /9 wrapper - backward compatibility (default merge_repeats=false)
+api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_In, Captures_Out, BackLinks, Ids) :-
+    api_insert_document_from_lazy_list(List, Graph_Type, Raw_JSON, Overwrite, false, Transaction, Captures_In, Captures_Out, BackLinks, Ids).
+
+api_insert_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_In, Captures_Out, BLH-BLT, [Ids|New_Ids]) :-
     !,
-    api_insert_document_(Graph_Type, Raw_JSON, Overwrite, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
-    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Overwrite, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
-api_insert_document_from_lazy_list([], _, _, _, _, Captures, Captures, T-T, []).
+    api_insert_document_(Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Document, Captures_In, Ids, Captures_Mid, BLH-BLM),
+    api_insert_document_from_lazy_list(Rest, Graph_Type, Raw_JSON, Overwrite, Merge, Transaction, Captures_Mid, Captures_Out, BLM-BLT, New_Ids).
+api_insert_document_from_lazy_list([], _, _, _, _, _, Captures, Captures, T-T, []).
 
 api_replace_document_from_lazy_list([Document|Rest], Graph_Type, Raw_JSON, Transaction, Create,
                                     Captures_In, Captures_Out, [Ids|New_Ids]) :-
@@ -954,14 +1021,14 @@ elaborate_stream_producer(DB, LazyDocs, Queue) :-
         thread_send_message(Queue, error)
     ).
 
-consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids, Captures_Out) :-
+consume_elaborated_queue(Queue, Transaction, Overwrite, Merge, CommitId, Ids, Captures_Out) :-
     (   has_commit_window_guard
     ->  WaitForGuard = true
     ;   WaitForGuard = false
     ),
-    consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids, Captures_Out).
+    consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids, Captures_Out).
 
-consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids, Captures_Out) :-
+consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids, Captures_Out) :-
     (   WaitForGuard = true,
         \+ first_commit_candidate(Transaction, CommitId)
     ->  release_commit_window_guard
@@ -985,14 +1052,14 @@ consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard,
     ;   Message = error(Error)
     ->  throw(Error)
     ;   Message = docs(Pairs)
-    ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids_Mid, Captures_Mid),
-        consume_elaborated_queue_(Queue, Transaction, Overwrite, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
+    ->  pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Merge, Ids_Mid, Captures_Mid),
+        consume_elaborated_queue_(Queue, Transaction, Overwrite, Merge, CommitId, WaitForGuard, Ids_Tail, Captures_Tail),
         append(Ids_Mid, Ids_Tail, Ids),
         merge_captures(Captures_Mid, Captures_Tail, Captures_Out)
     ).
 
-pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
-    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out).
+pairs_to_insert_ids_and_captures(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out) :-
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out).
 
 verify_contract(Transaction, Contract) :-
     is_dict(Contract, verification_contract),
@@ -1059,25 +1126,25 @@ verify_contracts(_Transaction, [], ok) :- !.
 verify_contracts(Transaction, Contracts, Result) :-
     '$doc':verify_contracts(Transaction, Contracts, Result).
 
-pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids, Captures_Out) :-
+pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Merge, Ids, Captures_Out) :-
     enrich_pairs_for_operation(Pairs, insert, EnrichedPairs),
     pairs_values(EnrichedPairs, Contracts),
     verify_contracts(Transaction, Contracts),
-    pairs_to_insert_ids_and_captures__(EnrichedPairs, Transaction, Overwrite, Ids, Captures_Out).
+    pairs_to_insert_ids_and_captures__(EnrichedPairs, Transaction, Overwrite, Merge, Ids, Captures_Out).
 
-pairs_to_insert_ids_and_captures__([], _, _, [], empty_assoc).
-pairs_to_insert_ids_and_captures__([Doc-Contract], Transaction, Overwrite, [Ids], Captures_Out) :-
-    insert_document_expanded(Transaction, Doc, Contract, Overwrite, _),
+pairs_to_insert_ids_and_captures__([], _, _, _, [], empty_assoc).
+pairs_to_insert_ids_and_captures__([Doc-Contract], Transaction, Overwrite, Merge, [Ids], Captures_Out) :-
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Merge, _),
     get_dict(id_pairs, Contract, Id_Pairs),
     extract_return_ids(Id_Pairs, Ids),
     get_dict(captures_out, Contract, Captures_Out).
-pairs_to_insert_ids_and_captures__([Doc-Contract|Rest], Transaction, Overwrite, [Ids|Ids_Rest], Captures_Out) :-
+pairs_to_insert_ids_and_captures__([Doc-Contract|Rest], Transaction, Overwrite, Merge, [Ids|Ids_Rest], Captures_Out) :-
     Rest \= [],
-    insert_document_expanded(Transaction, Doc, Contract, Overwrite, _),
+    insert_document_expanded(Transaction, Doc, Contract, Overwrite, Merge, _),
     get_dict(id_pairs, Contract, Id_Pairs),
     extract_return_ids(Id_Pairs, Ids),
     get_dict(captures_out, Contract, Captures_First),
-    pairs_to_insert_ids_and_captures__(Rest, Transaction, Overwrite, Ids_Rest, Captures_Rest),
+    pairs_to_insert_ids_and_captures__(Rest, Transaction, Overwrite, Merge, Ids_Rest, Captures_Rest),
     merge_captures(Captures_First, Captures_Rest, Captures_Out).
 
 merge_captures(Captures1, Captures2, Merged) :-
@@ -1156,7 +1223,7 @@ pairs_to_replace_ids_and_captures__([Doc-Contract|Rest], Transaction, Create, [[
 
 api_insert_documents_core(Transaction, queue(Queue), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, CommitId, _Injected_Id, Ids) :-
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    consume_elaborated_queue(Queue, Transaction, Overwrite, CommitId, Ids_List, Captures_Out),
+    consume_elaborated_queue(Queue, Transaction, Overwrite, Doc_Merge, CommitId, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -1172,7 +1239,7 @@ api_insert_documents_core(Transaction, pairs([]), Graph_Type, _Raw_JSON, _Full_R
 api_insert_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, _Full_Replace, Doc_Merge, Overwrite, _CommitId, _Injected_Id, Ids) :-
     !,
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Ids_List, Captures_Out),
+    pairs_to_insert_ids_and_captures_(Pairs, Transaction, Overwrite, Doc_Merge, Ids_List, Captures_Out),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     idlists_duplicates_toplevel(Ids_List, Duplicates, Ids),
@@ -1185,7 +1252,7 @@ api_insert_documents_core(Transaction, pairs(Pairs), Graph_Type, _Raw_JSON, _Ful
 api_insert_documents_core(Transaction, Stream, Graph_Type, Raw_JSON, Full_Replace, Doc_Merge, Overwrite, _CommitId, Injected_Id, Ids) :-
     empty_assoc(Captures_In),
     ensure_transaction_has_builder(Graph_Type, Transaction),
-    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids_List),
+    insert_documents_(Full_Replace, Graph_Type, Raw_JSON, Overwrite, Doc_Merge, Stream, Transaction, Injected_Id, Captures_In, Captures_Out, BackLinks, Ids_List),
     die_if(nonground_captures(Captures_Out, Nonground),
            error(not_all_captures_found(Nonground), _)),
     database_instance(Transaction, [Instance]),

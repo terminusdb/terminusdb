@@ -7,12 +7,20 @@ describe('QName and SQName expanded-name types', function () {
   before(async function () {
     agent = new Agent().auth()
     await db.create(agent)
-    const schema = {
-      '@id': 'Names',
-      '@type': 'Class',
-      qname: 'xsd:QName',
-      sqname: 'xbrl:SQName',
-    }
+    const schema = [
+      {
+        '@id': 'Names',
+        '@type': 'Class',
+        qname: 'xsd:QName',
+        sqname: 'xbrl:SQName',
+      },
+      {
+        '@id': 'KeyedName',
+        '@type': 'Class',
+        '@key': { '@type': 'Lexical', '@fields': ['name'] },
+        name: 'xbrl:SQName',
+      },
+    ]
     await document.insert(agent, { schema })
   })
 
@@ -94,6 +102,29 @@ describe('QName and SQName expanded-name types', function () {
     const r = await woql.post(agent, query).unverified()
     expect(r.status).to.equal(400)
     expect(r.body['api:error']['@type']).to.equal('api:BadCast')
+  })
+
+  it('reports the unbound prefix in a WOQL BadCast', async function () {
+    const query = {
+      '@type': 'Typecast',
+      value: { '@type': 'Value', data: { '@type': 'xsd:string', '@value': 'nope:foo' } },
+      type: { '@type': 'NodeValue', node: 'xsd:QName' },
+      result: { '@type': 'Value', variable: 'q' },
+    }
+    const r = await woql.post(agent, query).unverified()
+    expect(r.status).to.equal(400)
+    expect(r.body['api:error']['@type']).to.equal('api:BadCast')
+    expect(r.body['api:error']['api:prefix']).to.equal('nope')
+    expect(r.body['api:message']).to.include('nope')
+  })
+
+  it('reports the unbound prefix in a document BadCast', async function () {
+    const doc = { '@type': 'KeyedName', name: 'nope:foo' }
+    const r = await document.insert(agent, { instance: doc }).unverified()
+    expect(r.status).to.equal(400)
+    expect(r.body['api:error']['@type']).to.equal('api:BadCast')
+    expect(r.body['api:error']['api:prefix']).to.equal('nope')
+    expect(r.body['api:message']).to.include('nope')
   })
 
   it('rejects an SQName with whitespace in the localname', async function () {

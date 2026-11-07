@@ -207,6 +207,23 @@ text(Enum_Value) =>
                                   enum : Type,
                                   value : Enum_Value})
     ).
+% Already-elaborated enum members arrive as {"@type":"@id","@id":MemberId};
+% accept the member id as a repeat of the elaboration instead of rejecting
+% the dict as a non-text value.  This keeps re-insertion of elaborated or
+% unfolded documents (and merge_repeats member comparison) idempotent.
+check_enum(Enum_Value,Type,Enums,Annotated),
+is_dict(Enum_Value),
+_{'@type' : "@id", '@id' : Id} :< Enum_Value =>
+    (   member(Value, Enums),
+        (   Value == Id
+        ;   atom_string(Value, Id)
+        ;   atom_string(Id, Value)
+        )
+    ->  Annotated = success(Enum_Value)
+    ;   Annotated = witness(json{ '@type' : not_a_valid_enum,
+                                  enum : Type,
+                                  value : Enum_Value})
+    ).
 check_enum(Enum_Value,Type,_,Annotated) =>
     Annotated = witness(json{ '@type' : not_a_valid_enum,
                               enum : Type,
@@ -759,6 +776,30 @@ Type = 'http://terminusdb.com/schema/sys#JSON' =>
     % For sys:JSON, recursively escape all @-prefixed keys to prevent them being treated as control fields
     escape_at_prefixed_keys(Value, EscapedValue),
     infer_type_(Schema, Prefixes, Type, EscapedValue, _, Annotated, Captures).
+check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
+is_dict(Value),
+get_dict('@value', Value, Values),
+is_list(Values),
+get_dict('@container', Value, _Container) =>
+    % An elaborated collection wrapper ({"@container":C,"@type":T,
+    % "@value":[...]}) is not itself a document of Type: check each member
+    % against the expected member type and rebuild the wrapper, so
+    % re-insertion of elaborated or unfolded documents stays idempotent.
+    Captures = captures(In,DepH-DepT,SubH-SubT,Out),
+    mapm(
+        {Schema,Prefixes,Type}/
+        [Member,Exp,DepH0-SubH0-In0,DepT0-SubT0-Out0]>>(
+            Capture0 = captures(In0,DepH0-DepT0,SubH0-SubT0,Out0),
+            check_simple_or_compound_type_(Schema,Prefixes,Member,Type,Exp,Capture0)
+        ),
+        Values,Expanded,DepH-SubH-In,DepT-SubT-Out),
+    promote_result_list(Expanded,Result_List),
+    (   Result_List = witness(_)
+    ->  Annotated = Result_List
+    ;   Result_List = success(Checked),
+        put_dict('@value', Value, Checked, Annotated_Value),
+        Annotated = success(Annotated_Value)
+    ).
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value) =>
     infer_type_(Schema, Prefixes, Type, Value, _, Annotated, Captures).

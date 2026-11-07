@@ -9276,7 +9276,7 @@ test(typecast_qname_unbound_prefix_errors, [
     setup((setup_temp_store(State),
            create_db_without_schema(admin,test))),
     cleanup(teardown_temp_store(State)),
-    throws(error(casting_error("unbound:foo",_),_))
+    throws(error(unbound_prefix(unbound,"unbound:foo",_),_))
 ]) :-
     Query = _{ '@type' : "Typecast",
                value : _{'@type' : "Value",

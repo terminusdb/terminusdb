@@ -2150,7 +2150,8 @@ interpret_instance_operation_(cast_class_property(Class, Property, New_Type, Def
                             (   catch(typecast(V^^Old_Type_Ex, Simple_Type_Ex, [prefixes(DB_Prefixes)], Cast),
                                       error(E,_),
                                       (   (   E = casting_error(_,_)
-                                          ;   E = unknown_type_casting_error(_,_) )
+                                          ;   E = unknown_type_casting_error(_,_)
+                                          ;   E = unbound_prefix(_,_,_) )
                                       ->  fail
                                       ;   throw(error(E,_))))
                             ->  true

@@ -30,9 +30,11 @@
               insert_document/3,
               insert_document/7,
               insert_document/8,
+              insert_document_merge/9,
               insert_document_expanded/3,
               insert_document_expanded/4,
               insert_document_expanded/5,
+              insert_document_expanded/6,
               insert_document_unsafe/8,
               replace_document_expanded/5,
               insert_backlinks/2,
@@ -92,6 +94,7 @@
 :- use_module(instance).
 :- use_module(schema).
 :- use_module(migration, [type_weaken/3]).
+:- use_module(normalize, [normalize_document/3]).
 
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
@@ -326,32 +329,34 @@ value_json(X,O,_) :-
     value_json(X,O).
 
 get_all_path_values(JSON,Path_Values) :-
+    get_all_path_values(JSON,_{},Path_Values).
+get_all_path_values(JSON,Prefixes,Path_Values) :-
     findall(Path-Value,
-            get_path_value(JSON,Path,Value),
+            get_path_value(JSON,Prefixes,Path,Value),
             Path_Values).
 
 % TODO: Arrays
-get_value([], []) :-
+get_value([], _, []) :-
     !.
-get_value(List, Value) :-
+get_value(List, Prefixes, Value) :-
     is_list(List),
     !,
     member(Elt,List),
-    get_value(Elt,Value).
-get_value(Elaborated, Value) :-
+    get_value(Elt,Prefixes,Value).
+get_value(Elaborated, _, Value) :-
     is_dict(Elaborated),
     get_dict('@type', Elaborated, "@id"),
     !,
     get_dict('@id', Elaborated, Value).
-get_value(Elaborated,Value) :-
+get_value(Elaborated,Prefixes,Value) :-
     is_dict(Elaborated),
     get_dict('@container',Elaborated,List_Type),
     memberchk(List_Type, ["@array", "@list", "@set"]),
     !,
     get_dict('@value',Elaborated, List),
     member(Elt,List),
-    get_value(Elt,Value).
-get_value(Elaborated,Value) :-
+    get_value(Elt,Prefixes,Value).
+get_value(Elaborated,Prefixes,Value) :-
     is_dict(Elaborated),
     get_dict('@container',Elaborated,Table_Type),
     memberchk(Table_Type, ["@table"]),
@@ -359,14 +364,14 @@ get_value(Elaborated,Value) :-
     get_dict('@value',Elaborated, Table),
     member(List,Table),
     member(Elt,List),
-    get_value(Elt,Value).
-get_value(Elaborated,Value) :-
+    get_value(Elt,Prefixes,Value).
+get_value(Elaborated,Prefixes,Value) :-
     is_dict(Elaborated),
     get_dict('@value',Elaborated,_),
     !,
-    value_json(Value,Elaborated).
+    value_json(Value,Elaborated,Prefixes).
 
-get_path_value(Elaborated,Path,Value) :-
+get_path_value(Elaborated,Prefixes,Path,Value) :-
     is_dict(Elaborated),
     get_dict('@type',Elaborated,_),
     !,
@@ -384,19 +389,19 @@ get_path_value(Elaborated,Path,Value) :-
         atom(V)
     ->  Path = [P],
         V = Value
-    ;   get_value(V,Value)
+    ;   get_value(V,Prefixes,Value)
     *->  Path = [P]
-    ;   get_path_value(V,Sub_Path,Value),
+    ;   get_path_value(V,Prefixes,Sub_Path,Value),
         Path = [P|Sub_Path]
     ).
-get_path_value(Elaborated,[I|Path],Value) :-
+get_path_value(Elaborated,Prefixes,[I|Path],Value) :-
     is_list(Elaborated),
     sort(Elaborated, Sorted),
     !,
     % We must be sorted to ensure stability.
     % NOTE: This probably breaks if there are unbound dictionary tags!
     nth0(I, Sorted, Elt),
-    get_path_value(Elt, Path, Value).
+    get_path_value(Elt, Prefixes, Path, Value).
 
 get_field_values(JSON,DB,Context,Fields,Values) :-
     findall(
@@ -436,24 +441,30 @@ get_field_values_(JSON,Schema,_Context,Fields,Values) :-
         Values).
 
 untyped_typecast(V, Type, Val, Val_Type) :-
+    untyped_typecast(V, Type, [], Val, Val_Type).
+untyped_typecast(V, Type, Hint, Val, Val_Type) :-
     (   string(V)
     ->  typecast(V^^xsd:string,
-                 Type, [], Val^^Val_Type)
+                 Type, Hint, Val^^Val_Type)
     ;   atom(V),
         atom_string(V,String)
     ->  typecast(String^^xsd:string,
-                 Type, [], Val^^Val_Type)
+                 Type, Hint, Val^^Val_Type)
     ;   number(V)
     ->  typecast(V^^xsd:decimal,
-                 Type, [], Val^^Val_Type)).
+                 Type, Hint, Val^^Val_Type)).
 
 normalize_json_value(V, Type, Val) :-
+    normalize_json_value(V, Type, [], Val).
+normalize_json_value(V, Type, Hint, Val) :-
     global_prefix_expand_safe(Type, TE),
 
-    untyped_typecast(V, TE, Casted, Casted_Type),
-    typecast(Casted^^Casted_Type, xsd:string, [], Val^^_).
+    untyped_typecast(V, TE, Hint, Casted, Casted_Type),
+    typecast(Casted^^Casted_Type, xsd:string, Hint, Val^^_).
 
 raw(JValue,Value) :-
+    raw(JValue,[],Value).
+raw(JValue,Hint,Value) :-
     is_dict(JValue),
     !,
     (   get_dict('@type', JValue, "@id")
@@ -463,38 +474,69 @@ raw(JValue,Value) :-
         (   [] = V
         ->  Value = optional(none)
         ;   [Single_Value] = V
-        ->  raw(Single_Value, Value)
+        ->  raw(Single_Value, Hint, Value)
         ;   \+ is_list(V)
         ->  get_dict('@type', JValue, Value_Type),
-            normalize_json_value(V, Value_Type, Value)
+            normalize_json_value(V, Value_Type, Hint, Value)
         ;   Container_Type = "@table"
-        ->  maplist([V1,V1_Raw]>>maplist(raw, V1, V1_Raw),
+        ->  maplist({Hint}/[V1,V1_Raw]>>maplist(raw_(Hint), V1, V1_Raw),
                     V,V_Raw),
             Value = table(V_Raw)
         ;   (   Container_Type = "@set"
             ->  sort(V, V_1)
             ;   V_1 = V),
-            maplist(raw, V_1, V_Raw),
+            maplist(raw_(Hint), V_1, V_Raw),
             Value = list(V_Raw))
     ;   get_dict('@type', JValue, Value_Type)
     ->  (   get_dict('@value', JValue, Uncasted_Value)
-        ->  normalize_json_value(Uncasted_Value, Value_Type, Value)
+        ->  normalize_json_value(Uncasted_Value, Value_Type, Hint, Value)
         ;   get_dict('@id', JValue, Value))
     ;   get_dict('@value', JValue, Value)
     ).
-raw(JValue,JValue).
+raw(JValue,_,JValue).
+
+raw_(Hint,JValue,Value) :-
+    raw(JValue,Hint,Value).
 
 idgen_suffix(Values, Suffix) :-
-    maplist(raw,Values,Raw),
-    maplist(encode_id_fragment,Raw,Encoded),
+    idgen_suffix(Values, _{}, Suffix).
+idgen_suffix(Values, Prefixes, Suffix) :-
+    maplist(raw_([prefixes(Prefixes)]),Values,Raw),
+    maplist(expand_qname_id_value(Prefixes),Raw,Expanded),
+    maplist(encode_id_fragment,Expanded,Encoded),
     merge_separator_split(Suffix, '+', Encoded).
 
+% expand_qname_id_value(+Prefixes, +Raw, -Expanded) is det.
+% Key field values that parse as `prefix:local` with a bound prefix are
+% rewritten to their Clark `{uri}local` expansion, so generated document ids
+% carry the fully qualified name and stay accurate when namespace prefixes
+% change. `{uri}local` input and non-resolvable values pass through.
+expand_qname_id_value(_Prefixes, Value, Value) :-
+    \+ (atom(Value) ; string(Value)), !.
+expand_qname_id_value(Prefixes, Value, Expanded) :-
+    atom_string(Value, S),
+    (   sub_string(S, 0, 1, _, "{")
+    ->  Expanded = Value
+    ;   sub_string(S, Before, 1, After, ":"),
+        Before > 0, After > 0,
+        sub_string(S, 0, Before, _, Prefix_String),
+        atom_string(Prefix, Prefix_String),
+        get_dict(Prefix, Prefixes, URI)
+    ->  Local_Start is Before + 1,
+        sub_string(S, Local_Start, _, 0, Local),
+        atomic_list_concat(['{', URI, '}', Local], Expanded)
+    ;   Expanded = Value).
+
 idgen_lexical(Base,Values,ID) :-
-    idgen_suffix(Values, Suffix),
+    idgen_lexical(Base,_{},Values,ID).
+idgen_lexical(Base,Prefixes,Values,ID) :-
+    idgen_suffix(Values, Prefixes, Suffix),
     atom_concat(Base, Suffix, ID).
 
 idgen_hash(Base,Values,ID) :-
-    idgen_suffix(Values, Suffix),
+    idgen_hash(Base,_{},Values,ID).
+idgen_hash(Base,Prefixes,Values,ID) :-
+    idgen_suffix(Values, Prefixes, Suffix),
     crypto_data_hash(Suffix, Hash, [algorithm(sha256)]),
     atom_concat(Base, Hash, ID).
 
@@ -577,13 +619,16 @@ json_idgen(Descriptor, _JSON, _DB, _Context, _Path, _Id) :-
 json_idgen_(lexical(Base, Fields), JSON, DB, Context, Path, Id) :-
     get_field_values(JSON, DB, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_lexical(Path_Base, Values, Id).
+    database_and_default_prefixes(DB, Prefixes),
+    idgen_lexical(Path_Base, Prefixes, Values, Id).
 json_idgen_(hash(Base, Fields), JSON, DB, Context, Path, Id) :-
     get_field_values(JSON, DB, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_hash(Path_Base, Values, Id).
-json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
-    get_all_path_values(JSON, Path_Values),
+    database_and_default_prefixes(DB, Prefixes),
+    idgen_hash(Path_Base, Prefixes, Values, Id).
+json_idgen_(value_hash(Base), JSON, DB, _Context, _Path, Id) :-
+    database_and_default_prefixes(DB, Prefixes),
+    get_all_path_values(JSON, Prefixes, Path_Values),
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
@@ -601,13 +646,19 @@ json_idgen_schema(Descriptor, _JSON, _Schema, _Context, _Path, _Id) :-
 json_idgen_schema_(lexical(Base, Fields), JSON, Schema, Context, Path, Id) :-
     get_field_values_(JSON, Schema, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_lexical(Path_Base, Values, Id).
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes),
+    idgen_lexical(Path_Base, Prefixes, Values, Id).
 json_idgen_schema_(hash(Base, Fields), JSON, Schema, Context, Path, Id) :-
     get_field_values_(JSON, Schema, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_hash(Path_Base, Values, Id).
-json_idgen_schema_(value_hash(Base), JSON, _Schema, _Context, _Path, Id) :-
-    get_all_path_values(JSON, Path_Values),
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes),
+    idgen_hash(Path_Base, Prefixes, Values, Id).
+json_idgen_schema_(value_hash(Base), JSON, _Schema, Context, _Path, Id) :-
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes),
+    get_all_path_values(JSON, Prefixes, Path_Values),
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_schema_(random(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
@@ -651,9 +702,9 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     % Normalize to strings for comparison (handle atom vs string)
     atom_string(Id_Ex, Id_String),
     atom_string(Generated_Id_Ex, Generated_String),
-    do_or_die(
-        Id_String = Generated_String,
-        error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
+    (   Id_String = Generated_String
+    ->  true
+    ;   throw(error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _))
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
@@ -3455,6 +3506,126 @@ check_existing_document_status(Transaction, Id, Variety, Status) :-
         ;   Status = not_present)
     ).
 
+%! check_id_pairs_not_present(+Transaction, +Elaborated, +Id_Pairs, +Merge) is det.
+%
+%  Every document id generated from the submission must not already exist in
+%  the instance. When Merge is true a present id is still accepted if the
+%  submitted member is structurally identical to the stored document (an
+%  exact repeat); differing content at the same id remains an error.
+check_id_pairs_not_present(Transaction, Elaborated, Id_Pairs, Merge) :-
+    forall(
+        member(Id-Variety, Id_Pairs),
+        (   check_existing_document_status(Transaction, Id, Variety, Status),
+            (   Status = present
+            ->  (   Merge = true,
+                    elaborated_member_equivalent(Transaction, Elaborated, Id)
+                ->  true
+                ;   throw(error(can_not_insert_existing_object_with_id(Id), _)))
+            ;   true))).
+
+%! check_id_pairs_for_insert(+Transaction, +Elaborated, +Id_Pairs, +Overwrite, +Merge) is det.
+%
+%  Skips the existence check entirely under overwrite; otherwise requires
+%  every generated id to be absent or - under Merge - an exact repeat.
+check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge) :-
+    (   Overwrite = false
+    ->  check_id_pairs_not_present(Transaction, Elaborated, Id_Pairs, Merge)
+    ;   true).
+
+%! elaborated_member_equivalent(+Transaction, +Elaborated, +Id) is semidet.
+%
+%  True when the member of the elaborated submission identified by Id is
+%  structurally identical to the document already stored under that id.
+%  The comparison goes through the same normalization as the diff API: the
+%  member is inserted into a scratch store and read back, then compared
+%  term-for-term against the committed document.
+elaborated_member_equivalent(Transaction, Elaborated, Id) :-
+    once(elaborated_member(Elaborated, Id, Member)),
+    unelaborate_member(Member, Source),
+    % A @subdocument member cannot be normalized on its own — its identity
+    % is its parent's — so equivalence is not decidable here; the repeat is
+    % treated as a conflict (see terminusdb/terminusdb#2454).
+    get_dict('@type', Source, Member_Type),
+    \+ is_subdocument(Transaction, Member_Type),
+    normalize_document(Transaction, Source, Normalized),
+    get_document(Transaction, Id, Committed),
+    Committed = Normalized.
+
+%! unelaborate_member(+Elaborated, -Source) is det.
+%
+%  Reverses the elaboration envelope on a member document so it can be fed
+%  back through insert_document: @container wrappers become plain lists and
+%  typed literals {"@type":T,"@value":V} become V.  Node references
+%  {"@type":"@id","@id":Id} are valid input and kept as-is.
+unelaborate_member(Elaborated, Source) :-
+    is_dict(Elaborated),
+    get_dict('@container', Elaborated, _),
+    get_dict('@value', Elaborated, Values),
+    is_list(Values),
+    !,
+    maplist(unelaborate_member, Values, Source).
+unelaborate_member(Elaborated, Source) :-
+    is_dict(Elaborated),
+    !,
+    dict_pairs(Elaborated, _, Pairs),
+    % '@id' is elaboration-assigned and takes part in ValueHash key
+    % generation, so it must be dropped to reproduce the submitted form —
+    % except on {"@type":"@id"} link nodes, where it is the content.
+    (   get_dict('@type', Elaborated, "@id")
+    ->  Source_Pairs0 = Pairs
+    ;   exclude([('@id'-_)]>>true, Pairs, Source_Pairs0)
+    ),
+    maplist(unelaborate_member_pair, Source_Pairs0, Source_Pairs),
+    dict_pairs(Source, json, Source_Pairs).
+unelaborate_member(Elaborated, Source) :-
+    is_list(Elaborated),
+    !,
+    maplist(unelaborate_member, Elaborated, Source).
+unelaborate_member(Scalar, Scalar).
+
+unelaborate_member_pair(Key-Value, Key-Source) :-
+    unelaborate_member_value(Value, Source).
+
+unelaborate_member_value(Value, Source) :-
+    is_dict(Value),
+    _{'@type' : Type, '@value' : V} :< Value,
+    dict_pairs(Value, json, Pairs),
+    length(Pairs, 2),
+    Type \= "@id",
+    !,
+    unelaborate_member(V, Source).
+unelaborate_member_value(Value, Source) :-
+    unelaborate_member(Value, Source).
+
+%! elaborated_member(+JSON, +Id, -Member) is nondet.
+%
+%  Finds the (possibly nested) dictionary in an elaborated JSON document
+%  whose '@id' is Id. Pure links carry no '@id' of their own and are
+%  skipped.
+elaborated_member(JSON, Id, JSON) :-
+    is_dict(JSON),
+    get_dict('@id', JSON, Id),
+    !.
+elaborated_member(JSON, Id, Member) :-
+    is_dict(JSON),
+    !,
+    dict_pairs(JSON, _, Pairs),
+    member(_-Value, Pairs),
+    elaborated_member_value(Value, Id, Member).
+elaborated_member(List, Id, Member) :-
+    is_list(List),
+    member(Item, List),
+    elaborated_member_value(Item, Id, Member).
+
+elaborated_member_value(Value, Id, Member) :-
+    is_dict(Value),
+    !,
+    elaborated_member(Value, Id, Member).
+elaborated_member_value(Value, Id, Member) :-
+    is_list(Value),
+    member(Item, Value),
+    elaborated_member_value(Item, Id, Member).
+
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
         (   get_dict('@base', Prefixes, Base),
@@ -3515,8 +3686,27 @@ insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Ids, De
     database_and_default_prefixes(Transaction, Prefixes),
     insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out).
 
-% insert_document/9 - with Overwrite parameter
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, Captures, [Id], T-T, Captures) :-
+% insert_document/9 - with Overwrite parameter (merge_repeats disabled)
+insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out) :-
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, false, Captures_In, Ids, Dependencies, Captures_Out).
+
+%! insert_document_merge(+Transaction, +Document, +Raw_JSON, +Overwrite, +Merge, +Captures_In, -Ids, -Dependencies, -Captures_Out) is semidet.
+%
+%  Like insert_document/8 but additionally threads the merge_repeats flag
+%  down to the per-id existence check: under merge_repeats an exactly
+%  identical, already-committed member counts as a repeat rather than a
+%  conflict.
+insert_document_merge(Query_Context, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_document_merge(TO, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out).
+insert_document_merge(Transaction, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out).
+
+% insert_document/10 - with Overwrite and Merge parameters
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, _Merge, Captures, [Id], T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -3540,7 +3730,7 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, Captur
         )
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Overwrite, Captures_In, Ids, SH-ST, Captures_Out) :-
+insert_document(Transaction, Document, Prefixes, false, Overwrite, Merge, Captures_In, Ids, SH-ST, Captures_Out) :-
     json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -3561,17 +3751,7 @@ insert_document(Transaction, Document, Prefixes, false, Overwrite, Captures_In, 
     when(ground(Dependencies),
          (
              % Only check existence when overwrite=false (performance optimization)
-             (   Overwrite = false
-             ->  forall(
-                     member(Id-Variety, Id_Pairs),
-                     (   check_existing_document_status(Transaction, Id, Variety, Status),
-                         die_if(Status = present,
-                                error(can_not_insert_existing_object_with_id(Id), _))
-                     )
-                 )
-             ;   % overwrite=true: skip existence check, insert will handle it
-                 true
-             ),
+             check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge),
              insert_document_expanded(Transaction, Elaborated, _)
          )).
 
@@ -3633,6 +3813,9 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
  * API queue consumer.
  */
 insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
+    insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, false, ID).
+
+insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, Merge, ID) :-
     get_dict('@id', Elaborated, ID0),
     (   atom(ID0)
     ->  ID = ID0
@@ -3651,30 +3834,12 @@ insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
         error(inserted_subdocument_as_document, _)),
     database_instance(Transaction, [Instance]),
     (   ground(Dependencies)
-    ->  forall(
-            member(ExistingId-Variety, Id_Pairs),
-            (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
-                (   Overwrite = false
-                ->  die_if(Status = present,
-                           error(can_not_insert_existing_object_with_id(ExistingId), _))
-                ;   true
-                )
-            )
-        ),
+    ->  check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge),
         insert_document_expanded(Transaction, Elaborated, ID),
         insert_backlinks(Backlinks, Instance)
     ;   when(ground(Dependencies),
              (
-                 forall(
-                     member(ExistingId-Variety, Id_Pairs),
-                     (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
-                         (   Overwrite = false
-                         ->  die_if(Status = present,
-                                    error(can_not_insert_existing_object_with_id(ExistingId), _))
-                         ;   true
-                         )
-                     )
-                 ),
+                 check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge),
                  insert_document_expanded(Transaction, Elaborated, ID),
                  insert_backlinks(Backlinks, Instance)
              ))
@@ -5471,6 +5636,36 @@ test(idgen_value_hash,
           '@type':'http://s/Task',
           'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
                                 '@value':"Groceries"}}.
+
+test(expand_qname_id_value, []) :-
+    P = _{'ex-fin': 'https://example.com/example-financials',
+          xbrl: 'https://xbrl.org/PWD/2026-09-01'},
+    expand_qname_id_value(P, 'ex-fin:Assets',
+                          '{https://example.com/example-financials}Assets'),
+    expand_qname_id_value(P, 'xbrl:label',
+                          '{https://xbrl.org/PWD/2026-09-01}label'),
+    % already-Clark values pass through unchanged
+    expand_qname_id_value(P, '{http://other.example/}x',
+                          '{http://other.example/}x'),
+    % unbound prefixes and non-qname lexicals pass through unchanged
+    expand_qname_id_value(P, 'unbound:foo', 'unbound:foo'),
+    expand_qname_id_value(P, 'plain', 'plain'),
+    expand_qname_id_value(P, '', '').
+
+test(idgen_suffix_expands_bound_qname, []) :-
+    P = _{'ex-fin': 'https://example.com/example-financials'},
+    idgen_suffix(['ex-fin:Assets'], P, Suffix),
+    Suffix = '%7Bhttps%3A%2F%2Fexample.com%2Fexample-financials%7DAssets'.
+
+test(idgen_suffix_qname_prefixed_and_clark_same_id, []) :-
+    P = _{'ex-fin': 'https://example.com/example-financials'},
+    idgen_suffix(['ex-fin:Assets'], P, Prefixed_Suffix),
+    idgen_suffix(['{https://example.com/example-financials}Assets'], P, Clark_Suffix),
+    Prefixed_Suffix = Clark_Suffix.
+
+test(idgen_suffix_unbound_prefix_untouched, []) :-
+    idgen_suffix(['unbound:foo'], _{}, Suffix),
+    Suffix = 'unbound%3Afoo'.
 
 test(idgen_lexical_optional,
      [setup((setup_temp_store(State),
