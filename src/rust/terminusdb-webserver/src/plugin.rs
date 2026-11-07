@@ -44,11 +44,17 @@ predicates! {
         let routes = collect_routes(context)?;
         let static_paths = collect_static_paths(context)?;
         let streams = collect_streams(context)?;
-        server::start_with_routes(port as u16, routes, static_paths, streams)
-            .map_err(|e| {
-                crate::log::log_error(format!("[terminusdb-webserver] {}", e));
-                PrologError::Failure
-            })
+        if let Err(e) = server::start_with_routes(port as u16, routes, static_paths, streams) {
+            let msg = format!("{}", e);
+            crate::log::log_error(format!("[terminusdb-webserver] {}", msg));
+            // Fail loud: a bind failure must surface as an exception so the
+            // CLI reports the real error and exits non-zero — a silent
+            // predicate failure prints command help and exits 0.
+            return context.raise_exception(
+                &term! {context: error(cannot_start_server(#port, #msg), _)}?,
+            );
+        }
+        Ok(())
     }
 
     /// Shut down the request-dispatcher thread and destroy its Prolog
@@ -392,7 +398,7 @@ predicates! {
         }
 
         let unify_result = unsafe { PL_unify_stream(stream_term.term_ptr(), stream) };
-        if !unify_result {
+        if unify_result as i32 == 0 {
             unsafe { Sclose(stream) };
             return Err(PrologError::Failure);
         }

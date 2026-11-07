@@ -1468,29 +1468,42 @@ plugins:post_server_startup_hook(_Port) :-
 %  $vectorlink FFI is unavailable — the embedded backend cannot run
 %  without the Rust dylib.
 init_embedded_engine :-
-    do_or_die(
-        current_predicate('$vectorlink':vectorlink_init/2),
-        error(vectorlink_ffi_not_loaded(vectorlink_init), _)),
-    embedded_data_dir(Data_Dir),
-    embedded_tokenizer_path(Tokenizer_Path),
-    do_or_die(
-        '$vectorlink':vectorlink_init(Data_Dir, Tokenizer_Path),
-        error(vectorlink_engine_init_failed(Data_Dir), _)).
+    (   embedded_data_dir(Data_Dir)
+    ->  do_or_die(
+            current_predicate('$vectorlink':vectorlink_init/2),
+            error(vectorlink_ffi_not_loaded(vectorlink_init), _)),
+        embedded_tokenizer_path(Tokenizer_Path),
+        do_or_die(
+            '$vectorlink':vectorlink_init(Data_Dir, Tokenizer_Path),
+            error(vectorlink_engine_init_failed(Data_Dir), _))
+    ;   format(user_error,
+               '[INFO] [vectorlink] embedded engine disabled: neither TERMINUSDB_STORE nor VECTORLINK_DATA_DIR is set — set one to enable the index~n',
+               [])).
 
 %% embedded_data_dir(-Path) is det.
 %
+%% embedded_data_dir(-Path) is semidet.
+%
 %  Data directory for the embedded engine's Lance store and embed cache.
-%  VECTORLINK_DATA_DIR wins when set; otherwise a 'vectorlink' directory
-%  next to the database store (db_path is <storage>/db by convention, so
-%  its parent is the storage root).
+%  VECTORLINK_DATA_DIR wins when set; then TERMINUSDB_STORE
+%  <root>/vectorlink (the storage root informs vectorlink even when a
+%  legacy TERMINUSDB_SERVER_DB_PATH points the db elsewhere). With
+%  nothing configured the default storage root applies —
+%  ~/.terminusdb/vectorlink — so local users get indexing out of the
+%  box. Fails only when a legacy TERMINUSDB_SERVER_DB_PATH is set
+%  without STORE/VECTORLINK_DATA_DIR: those installs must opt in, or a
+%  stray index dir would appear at an unintended location.
 embedded_data_dir(Path) :-
     (   getenv('VECTORLINK_DATA_DIR', Env_Path),
         Env_Path \== ''
     ->  Path = Env_Path
-    ;   config:db_path(Db_Path),
-        file_directory_name(Db_Path, Storage_Dir),
-        atomic_list_concat([Storage_Dir, 'vectorlink'], '/', Path)
-    ).
+    ;   getenv('TERMINUSDB_STORE', Store),
+        Store \== ''
+    ->  expand_file_name(Store, [Store_Abs]),
+        atomic_list_concat([Store_Abs, 'vectorlink'], '/', Path)
+    ;   getenv('TERMINUSDB_SERVER_DB_PATH', _)
+    ->  fail
+    ;   expand_file_name('~/.terminusdb/vectorlink', [Path])).
 
 %% embedded_tokenizer_path(-Path) is det.
 %
@@ -4948,3 +4961,44 @@ test("indexer_unavailable with null last_indexed commit stays indexer_unavailabl
     get_dict(status, Response, Status).
 
 :- end_tests(vectorlink_not_found_override).
+
+:- begin_tests(vectorlink_embedded_paths).
+
+% The engine is opt-in for legacy installs: TERMINUSDB_SERVER_DB_PATH
+% alone (no STORE/VECTORLINK_DATA_DIR) disables it — a stray index dir
+% must never appear next to a store the operator never named.
+test(embedded_data_dir_fails_on_legacy_db_path_only,
+     [cleanup((unsetenv('VECTORLINK_DATA_DIR'), unsetenv('TERMINUSDB_STORE'),
+               unsetenv('TERMINUSDB_SERVER_DB_PATH')))]) :-
+    unsetenv('VECTORLINK_DATA_DIR'),
+    unsetenv('TERMINUSDB_STORE'),
+    setenv('TERMINUSDB_SERVER_DB_PATH', '/tmp/legacy-db'),
+    \+ embedded_data_dir(_).
+
+% Local default users get indexing out of the box: nothing configured →
+% ~/.terminusdb/vectorlink, sibling of the default ~/.terminusdb/db.
+test(embedded_data_dir_defaults_to_home_store,
+     [cleanup((unsetenv('VECTORLINK_DATA_DIR'), unsetenv('TERMINUSDB_STORE'),
+               unsetenv('TERMINUSDB_SERVER_DB_PATH')))]) :-
+    unsetenv('VECTORLINK_DATA_DIR'),
+    unsetenv('TERMINUSDB_STORE'),
+    unsetenv('TERMINUSDB_SERVER_DB_PATH'),
+    expand_file_name('~/.terminusdb/vectorlink', [Default_VL]),
+    embedded_data_dir(Default_VL).
+
+test(embedded_data_dir_env_wins,
+     [cleanup(unsetenv('VECTORLINK_DATA_DIR'))]) :-
+    setenv('VECTORLINK_DATA_DIR', '/tmp/vl-explicit'),
+    embedded_data_dir('/tmp/vl-explicit').
+
+:- end_tests(vectorlink_embedded_paths).
+
+:- begin_tests(vectorlink_store_informs_vl).
+
+test(embedded_data_dir_store_env_wins,
+     [cleanup((unsetenv('VECTORLINK_DATA_DIR'), unsetenv('TERMINUSDB_STORE')))]) :-
+    unsetenv('VECTORLINK_DATA_DIR'),
+    setenv('TERMINUSDB_STORE', '/tmp/store-root'),
+    embedded_data_dir('/tmp/store-root/vectorlink').
+
+:- end_tests(vectorlink_store_informs_vl).

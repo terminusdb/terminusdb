@@ -21,6 +21,7 @@ hyper-util = { version = "0.1.10", features = ["full"] }
 flate2 = "1.0"
 uuid = { version = "1.10", features = ["v4"] }
 libc = "0.2"
+log = "0.4"
 socket2 = "0.6"
 terminusdb-store-prolog = { path = "../terminusdb-store-prolog" }
 reqwest = { version = "0.12", features = ["stream"] }

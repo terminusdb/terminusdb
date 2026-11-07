@@ -281,11 +281,8 @@ update_system_schema_graph(Changed) :-
                      variety: repository_descriptor
                  },
     open_descriptor(Descriptor, Transaction_Object),
-    create_context(Transaction_Object,
-                   commit_info{author:"test", message:"test"},
-                   Context),
-    (   ask(Context, get_document('Action', Action_Enum)),
-        get_dict('@values', Action_Enum, Values),
+    (   get_schema_document(Transaction_Object, 'Action', Action_Enum),
+        get_dict('@value', Action_Enum, Values),
         member(V, Values),
         sub_atom(V, _, _, 0, woql_logic_exec)
     ->  Changed = false
@@ -524,8 +521,7 @@ test("TERMINUSDB_INSECURE_USER_HEADER=TerminusDB-5",
 
 test("TERMINUSDB_SERVER_DB_PATH is not set", [true(DB_Path = Expected_Path)]) :-
     config:default_database_path(DB_Path),
-    working_directory(CWD, CWD),
-    directory_file_path(CWD, "storage/db", Expected_Path).
+    expand_file_name('~/.terminusdb/db', [Expected_Path]).
 
 test("TERMINUSDB_SERVER_DB_PATH is empty",
      [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', '')),
@@ -533,8 +529,7 @@ test("TERMINUSDB_SERVER_DB_PATH is empty",
        true(DB_Path = Expected_Path)
      ]) :-
     config:default_database_path(DB_Path),
-    working_directory(CWD, CWD),
-    directory_file_path(CWD, "storage/db", Expected_Path).
+    expand_file_name('~/.terminusdb/db', [Expected_Path]).
 
 test("TERMINUSDB_SERVER_DB_PATH=../relative/path",
      [ setup(setenv('TERMINUSDB_SERVER_DB_PATH', "../relative/path")),
@@ -596,6 +591,15 @@ test(update_system_graphs_is_idempotent, [
      ]) :-
     update_system_graphs,
     update_system_graphs.
+
+% The sentinel must recognise an already-current system schema and
+% report no change — otherwise the schema is rewritten on every boot.
+test(update_system_schema_graph_detects_current_schema, [
+         setup(setup_temp_store(State)),
+         cleanup(teardown_temp_store(State))
+     ]) :-
+    update_system_schema_graph(Changed),
+    assertion(Changed == false).
 
 test(update_system_roles_restores_builtin_roles, [
          setup((setup_temp_store(State),

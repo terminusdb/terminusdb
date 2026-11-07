@@ -1,3 +1,13 @@
+# TerminusDB Server 12.1.0 Release Candidate 3
+
+Storage layout and vectorlink configuration changes:
+
+* **`TERMINUSDB_STORE` is the new official storage variable.** It names the storage root; the database lives at `<root>/db` and the embedded vectorlink index at `<root>/vectorlink`. The `terminusdb serve --store` flag now sets `TERMINUSDB_STORE`. `TERMINUSDB_SERVER_DB_PATH` remains valid as a legacy override naming the db dir directly — when both are set, `DB_PATH` wins for the database and `STORE` still informs vectorlink.
+* **New default storage layout.** Without configuration, the store resolves to `~/.terminusdb/db` instead of the cwd-relative `./storage/db`. **Migration:** move an existing default store into the new layout (`~/.terminusdb/` contents → `~/.terminusdb/db/`, keeping `../vectorlink/` as a db sibling), or keep `TERMINUSDB_SERVER_DB_PATH` pointing at the old location. Default Docker users are unaffected — the image now exports `TERMINUSDB_STORE`, so databases remain in their existing location.
+* **Embedded vectorlink is opt-in.** The engine starts only when `TERMINUSDB_STORE` (or `serve --store`) or `VECTORLINK_DATA_DIR` is set; otherwise it logs a notice and stays disabled. A `TERMINUSDB_SERVER_DB_PATH`-only install that wants vectorlink must set `TERMINUSDB_STORE` or `VECTORLINK_DATA_DIR`.
+* **Concurrent vectorlink instances degrade to read-only.** When the embed-cache lock is held by another process, the second instance disables the cache, skips startup cleanup, refuses all index writes, and serves search queries only — reported on the console.
+* **Startup failures exit non-zero.** A port already in use (or any other serve startup failure) now reports the real error and exits 1 instead of printing command help and exiting 0.
+
 # TerminusDB Server 12.1.0 Release Candidate 2
 
 The second release candidate of TerminusDB 12.1 hardens the capability model and finishes the datatype and vector search work that began in rc1.
