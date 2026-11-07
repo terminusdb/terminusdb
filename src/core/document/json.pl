@@ -326,32 +326,34 @@ value_json(X,O,_) :-
     value_json(X,O).
 
 get_all_path_values(JSON,Path_Values) :-
+    get_all_path_values(JSON,_{},Path_Values).
+get_all_path_values(JSON,Prefixes,Path_Values) :-
     findall(Path-Value,
-            get_path_value(JSON,Path,Value),
+            get_path_value(JSON,Prefixes,Path,Value),
             Path_Values).
 
 % TODO: Arrays
-get_value([], []) :-
+get_value([], _, []) :-
     !.
-get_value(List, Value) :-
+get_value(List, Prefixes, Value) :-
     is_list(List),
     !,
     member(Elt,List),
-    get_value(Elt,Value).
-get_value(Elaborated, Value) :-
+    get_value(Elt,Prefixes,Value).
+get_value(Elaborated, _, Value) :-
     is_dict(Elaborated),
     get_dict('@type', Elaborated, "@id"),
     !,
     get_dict('@id', Elaborated, Value).
-get_value(Elaborated,Value) :-
+get_value(Elaborated,Prefixes,Value) :-
     is_dict(Elaborated),
     get_dict('@container',Elaborated,List_Type),
     memberchk(List_Type, ["@array", "@list", "@set"]),
     !,
     get_dict('@value',Elaborated, List),
     member(Elt,List),
-    get_value(Elt,Value).
-get_value(Elaborated,Value) :-
+    get_value(Elt,Prefixes,Value).
+get_value(Elaborated,Prefixes,Value) :-
     is_dict(Elaborated),
     get_dict('@container',Elaborated,Table_Type),
     memberchk(Table_Type, ["@table"]),
@@ -359,14 +361,14 @@ get_value(Elaborated,Value) :-
     get_dict('@value',Elaborated, Table),
     member(List,Table),
     member(Elt,List),
-    get_value(Elt,Value).
-get_value(Elaborated,Value) :-
+    get_value(Elt,Prefixes,Value).
+get_value(Elaborated,Prefixes,Value) :-
     is_dict(Elaborated),
     get_dict('@value',Elaborated,_),
     !,
-    value_json(Value,Elaborated).
+    value_json(Value,Elaborated,Prefixes).
 
-get_path_value(Elaborated,Path,Value) :-
+get_path_value(Elaborated,Prefixes,Path,Value) :-
     is_dict(Elaborated),
     get_dict('@type',Elaborated,_),
     !,
@@ -384,19 +386,19 @@ get_path_value(Elaborated,Path,Value) :-
         atom(V)
     ->  Path = [P],
         V = Value
-    ;   get_value(V,Value)
+    ;   get_value(V,Prefixes,Value)
     *->  Path = [P]
-    ;   get_path_value(V,Sub_Path,Value),
+    ;   get_path_value(V,Prefixes,Sub_Path,Value),
         Path = [P|Sub_Path]
     ).
-get_path_value(Elaborated,[I|Path],Value) :-
+get_path_value(Elaborated,Prefixes,[I|Path],Value) :-
     is_list(Elaborated),
     sort(Elaborated, Sorted),
     !,
     % We must be sorted to ensure stability.
     % NOTE: This probably breaks if there are unbound dictionary tags!
     nth0(I, Sorted, Elt),
-    get_path_value(Elt, Path, Value).
+    get_path_value(Elt, Prefixes, Path, Value).
 
 get_field_values(JSON,DB,Context,Fields,Values) :-
     findall(
@@ -436,24 +438,30 @@ get_field_values_(JSON,Schema,_Context,Fields,Values) :-
         Values).
 
 untyped_typecast(V, Type, Val, Val_Type) :-
+    untyped_typecast(V, Type, [], Val, Val_Type).
+untyped_typecast(V, Type, Hint, Val, Val_Type) :-
     (   string(V)
     ->  typecast(V^^xsd:string,
-                 Type, [], Val^^Val_Type)
+                 Type, Hint, Val^^Val_Type)
     ;   atom(V),
         atom_string(V,String)
     ->  typecast(String^^xsd:string,
-                 Type, [], Val^^Val_Type)
+                 Type, Hint, Val^^Val_Type)
     ;   number(V)
     ->  typecast(V^^xsd:decimal,
-                 Type, [], Val^^Val_Type)).
+                 Type, Hint, Val^^Val_Type)).
 
 normalize_json_value(V, Type, Val) :-
+    normalize_json_value(V, Type, [], Val).
+normalize_json_value(V, Type, Hint, Val) :-
     global_prefix_expand_safe(Type, TE),
 
-    untyped_typecast(V, TE, Casted, Casted_Type),
-    typecast(Casted^^Casted_Type, xsd:string, [], Val^^_).
+    untyped_typecast(V, TE, Hint, Casted, Casted_Type),
+    typecast(Casted^^Casted_Type, xsd:string, Hint, Val^^_).
 
 raw(JValue,Value) :-
+    raw(JValue,[],Value).
+raw(JValue,Hint,Value) :-
     is_dict(JValue),
     !,
     (   get_dict('@type', JValue, "@id")
@@ -463,38 +471,47 @@ raw(JValue,Value) :-
         (   [] = V
         ->  Value = optional(none)
         ;   [Single_Value] = V
-        ->  raw(Single_Value, Value)
+        ->  raw(Single_Value, Hint, Value)
         ;   \+ is_list(V)
         ->  get_dict('@type', JValue, Value_Type),
-            normalize_json_value(V, Value_Type, Value)
+            normalize_json_value(V, Value_Type, Hint, Value)
         ;   Container_Type = "@table"
-        ->  maplist([V1,V1_Raw]>>maplist(raw, V1, V1_Raw),
+        ->  maplist({Hint}/[V1,V1_Raw]>>maplist(raw_(Hint), V1, V1_Raw),
                     V,V_Raw),
             Value = table(V_Raw)
         ;   (   Container_Type = "@set"
             ->  sort(V, V_1)
             ;   V_1 = V),
-            maplist(raw, V_1, V_Raw),
+            maplist(raw_(Hint), V_1, V_Raw),
             Value = list(V_Raw))
     ;   get_dict('@type', JValue, Value_Type)
     ->  (   get_dict('@value', JValue, Uncasted_Value)
-        ->  normalize_json_value(Uncasted_Value, Value_Type, Value)
+        ->  normalize_json_value(Uncasted_Value, Value_Type, Hint, Value)
         ;   get_dict('@id', JValue, Value))
     ;   get_dict('@value', JValue, Value)
     ).
-raw(JValue,JValue).
+raw(JValue,_,JValue).
+
+raw_(Hint,JValue,Value) :-
+    raw(JValue,Hint,Value).
 
 idgen_suffix(Values, Suffix) :-
-    maplist(raw,Values,Raw),
+    idgen_suffix(Values, _{}, Suffix).
+idgen_suffix(Values, Prefixes, Suffix) :-
+    maplist(raw_([prefixes(Prefixes)]),Values,Raw),
     maplist(encode_id_fragment,Raw,Encoded),
     merge_separator_split(Suffix, '+', Encoded).
 
 idgen_lexical(Base,Values,ID) :-
-    idgen_suffix(Values, Suffix),
+    idgen_lexical(Base,_{},Values,ID).
+idgen_lexical(Base,Prefixes,Values,ID) :-
+    idgen_suffix(Values, Prefixes, Suffix),
     atom_concat(Base, Suffix, ID).
 
 idgen_hash(Base,Values,ID) :-
-    idgen_suffix(Values, Suffix),
+    idgen_hash(Base,_{},Values,ID).
+idgen_hash(Base,Prefixes,Values,ID) :-
+    idgen_suffix(Values, Prefixes, Suffix),
     crypto_data_hash(Suffix, Hash, [algorithm(sha256)]),
     atom_concat(Base, Hash, ID).
 
@@ -577,13 +594,16 @@ json_idgen(Descriptor, _JSON, _DB, _Context, _Path, _Id) :-
 json_idgen_(lexical(Base, Fields), JSON, DB, Context, Path, Id) :-
     get_field_values(JSON, DB, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_lexical(Path_Base, Values, Id).
+    database_and_default_prefixes(DB, Prefixes),
+    idgen_lexical(Path_Base, Prefixes, Values, Id).
 json_idgen_(hash(Base, Fields), JSON, DB, Context, Path, Id) :-
     get_field_values(JSON, DB, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_hash(Path_Base, Values, Id).
-json_idgen_(value_hash(Base), JSON, _DB, _Context, _Path, Id) :-
-    get_all_path_values(JSON, Path_Values),
+    database_and_default_prefixes(DB, Prefixes),
+    idgen_hash(Path_Base, Prefixes, Values, Id).
+json_idgen_(value_hash(Base), JSON, DB, _Context, _Path, Id) :-
+    database_and_default_prefixes(DB, Prefixes),
+    get_all_path_values(JSON, Prefixes, Path_Values),
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_(random(Base), JSON, _DB, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
@@ -601,13 +621,19 @@ json_idgen_schema(Descriptor, _JSON, _Schema, _Context, _Path, _Id) :-
 json_idgen_schema_(lexical(Base, Fields), JSON, Schema, Context, Path, Id) :-
     get_field_values_(JSON, Schema, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_lexical(Path_Base, Values, Id).
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes),
+    idgen_lexical(Path_Base, Prefixes, Values, Id).
 json_idgen_schema_(hash(Base, Fields), JSON, Schema, Context, Path, Id) :-
     get_field_values_(JSON, Schema, Context, Fields, Values),
     path_component([type(Base)|Path], Context, [Path_Base]),
-    idgen_hash(Path_Base, Values, Id).
-json_idgen_schema_(value_hash(Base), JSON, _Schema, _Context, _Path, Id) :-
-    get_all_path_values(JSON, Path_Values),
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes),
+    idgen_hash(Path_Base, Prefixes, Values, Id).
+json_idgen_schema_(value_hash(Base), JSON, _Schema, Context, _Path, Id) :-
+    default_prefixes(Defaults),
+    put_dict(Context, Defaults, Prefixes),
+    get_all_path_values(JSON, Prefixes, Path_Values),
     idgen_path_values_hash(Base, Path_Values, Id).
 json_idgen_schema_(random(Base), JSON, _Schema, Context, Path, Id) :-
     json_idgen_base(Base, JSON, Context, Path, Id).
