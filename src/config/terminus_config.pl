@@ -131,9 +131,24 @@ max_transaction_retries(Value) :-
         Value is Num_Workers * 2).
 
 % This is defined only for testing. Use db_path/1 since it is tabled.
+%
+% Resolution order, first hit wins:
+%   1. TERMINUSDB_SERVER_DB_PATH — names the db dir directly (legacy
+%      override; wins even when TERMINUSDB_STORE is also set).
+%   2. TERMINUSDB_STORE — the storage root (official); the db lives at
+%      <root>/db and vectorlink at <root>/vectorlink.
+%   3. ~/.terminusdb/db — the default storage root ~/.terminusdb.
 default_database_path(Path) :-
-    getenv_default('TERMINUSDB_SERVER_DB_PATH', './storage/db', Value),
-    absolute_file_name(Value, Path).
+    (   getenv('TERMINUSDB_SERVER_DB_PATH', Value),
+        Value \= ''
+    ->  expand_file_name(Value, [Expanded]),
+        absolute_file_name(Expanded, Path)
+    ;   getenv('TERMINUSDB_STORE', Store),
+        Store \= ''
+    ->  expand_file_name(Store, [Expanded]),
+        absolute_file_name(Expanded, Store_Abs),
+        atomic_list_concat([Store_Abs, 'db'], '/', Path)
+    ;   expand_file_name('~/.terminusdb/db', [Path])).
 
 /**
  * db_path(-Path) is det.

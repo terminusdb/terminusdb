@@ -159,6 +159,15 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
     std::fs::create_dir_all(data_path)
         .map_err(|e| format!("failed to create data dir {}: {}", config.data_dir, e))?;
 
+    // Probe the embed cache first: a held sled lock means another process
+    // owns this data dir — the engine then runs read-only (search queries
+    // only, no writes). The cache must be opened exactly once — a second
+    // open would see this process's own lock and falsely report read-only.
+    let embed_cache = vectorlink::embed::cache::EmbedCache::open(
+        &data_path.join("embed_cache"),
+        config.embed_cache_size,
+    );
+
     let dim = config.embed_provider.expected_dim();
     let store = Arc::new(vectorlink::store::lance::LanceStore::new(
         data_path,
@@ -167,20 +176,32 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
         config.lance_metadata_cache_bytes,
     ));
 
+    let service = vectorlink::service::SearchService::new_with_cache(
+        store.clone(),
+        config.clone(),
+        tokenizer,
+        embed_cache,
+    );
+
     // Startup cleanup: remove stale compaction branches left by a
     // crashed compaction (mirrors vectorlink's own server startup).
-    let cleanup_store = store.clone();
-    let cleaned = handle
-        .block_on(async move { cleanup_store.io_cleanup_compaction_branches().await })
-        .map_err(|e| format!("compaction branch cleanup failed: {}", e))?;
-    if !cleaned.is_empty() {
-        terminusdb_webserver::log::log_info(format!(
-            "[vectorlink] cleaned {} stale compaction branch(es) from crashed compaction(s)",
-            cleaned.len()
-        ));
+    // A write — skipped entirely in read-only mode.
+    if service.is_read_only() {
+        terminusdb_webserver::log::log_info(
+            "[vectorlink] read-only mode: skipping startup compaction cleanup".to_string(),
+        );
+    } else {
+        let cleanup_store = store.clone();
+        let cleaned = handle
+            .block_on(async move { cleanup_store.io_cleanup_compaction_branches().await })
+            .map_err(|e| format!("compaction branch cleanup failed: {}", e))?;
+        if !cleaned.is_empty() {
+            terminusdb_webserver::log::log_info(format!(
+                "[vectorlink] cleaned {} stale compaction branch(es) from crashed compaction(s)",
+                cleaned.len()
+            ));
+        }
     }
-
-    let service = vectorlink::service::SearchService::new(store, config.clone(), tokenizer);
     // No auth layer: requests only reach this router through the FFI from
     // already-authorized Prolog handlers.
     let router = vectorlink::http_api::trusted_router(service, config.clone());
