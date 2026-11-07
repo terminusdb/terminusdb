@@ -1286,6 +1286,12 @@ describe('woql-comparison', function () {
       expect(r.body.bindings).to.have.lengthOf(1)
     })
 
+    it('validates equals: bare date is the same interval as the D/D pair', async function () {
+      // A bare date is the duration of the day — [Oct 1, Oct 2) either way
+      const r = await woql.post(agent, irtQuery('equals', iv('2026-10-01'), iv('2026-10-01/2026-10-01')))
+      expect(r.body.bindings).to.have.lengthOf(1)
+    })
+
     it('classifies relation as meets', async function () {
       // Q1 = Jan–Mar 31 (end bumps to Apr 1), Q2 starts Apr 1 → meets
       const r = await woql.post(agent, irtQuery(
@@ -2015,23 +2021,29 @@ describe('woql-comparison', function () {
       })
     }
 
-    describe('date coercion: bare date is an instant, date/date is a day', function () {
-      // A bare xsd:date coerces to the as-of point [t,t) at local day-start —
-      // the financial-reporting instant — while the explicit date/date pair
-      // keeps whole-local-day semantics (end inclusive → next day start).
-      it('bare date: met_by matches the interval it starts (point, not day)', async function () {
+    describe('date spelling: bare date and date/date are the same day', function () {
+      // A bare xdd:dateTimeInterval date is the whole day [D, D+1) — the
+      // same interval as the explicit date/date pair (XBRL CSV / XBRL 2.1,
+      // end inclusive → next day start); only the supplied spelling differs.
+      // The bare-date expectations therefore mirror the date/date ones.
+      it('bare date: met_by matches nothing (day interval, no start at its end)', async function () {
         const r = await woql.post(agent, trQuery('met_by', '2025-04-01'))
-        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+        expect(r.body.bindings).to.have.lengthOf(0)
       })
 
-      it('bare date: after sees the point at day-start (Q2,Q3 — a day would give only Q3)', async function () {
+      it('bare date: after skips the interval the day sits in', async function () {
         const r = await woql.post(agent, trQuery('after', '2025-04-01'))
-        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2', 'ev-2025-Q3'])
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q3'])
       })
 
-      it('bare date: finished_by matches the interval ending at the point', async function () {
+      it('bare date: finished_by matches nothing (no interval ends Apr 2)', async function () {
         const r = await woql.post(agent, trQuery('finished_by', '2025-04-01'))
-        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q1'])
+        expect(r.body.bindings).to.have.lengthOf(0)
+      })
+
+      it('bare date: an interval contains the whole day', async function () {
+        const r = await woql.post(agent, trQuery('contains', '2025-04-01'))
+        expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
       })
 
       it('date/date: met_by matches nothing (day interval, no start at its end)', async function () {
@@ -2047,6 +2059,73 @@ describe('woql-comparison', function () {
       it('date/date: an interval contains the whole day', async function () {
         const r = await woql.post(agent, trQuery('contains', '2025-04-01/2025-04-01'))
         expect(namesOf(r.body.bindings)).to.deep.equal(['ev-2025-Q2'])
+      })
+    })
+  })
+
+  describe('single-instant literals (issue #2626)', function () {
+    function eqQuery (value) {
+      return {
+        '@type': 'Equals',
+        left: { '@type': 'DataValue', variable: 'v:today' },
+        right: { '@type': 'DataValue', data: { '@type': 'xdd:dateTimeInterval', '@value': value } },
+      }
+    }
+
+    it('bare instant with +02:00 offset binds as the single timestamp', async function () {
+      const r = await woql.post(agent, eqQuery('2025-03-15T00:00:00+02:00'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:today']['@value']).to.equal('2025-03-15T00:00:00+02:00')
+    })
+
+    it('bare instant with Z binds as the single timestamp', async function () {
+      const r = await woql.post(agent, eqQuery('2025-03-15T00:00:00Z'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:today']['@value']).to.equal('2025-03-15T00:00:00Z')
+    })
+
+    it('explicit zero-duration pair binds as the pair', async function () {
+      const v = '2025-03-15T00:00:00+02:00/2025-03-15T00:00:00+02:00'
+      const r = await woql.post(agent, eqQuery(v))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:today']['@value']).to.equal(v)
+    })
+
+    it('bare date binds as the single date spelling', async function () {
+      const r = await woql.post(agent, eqQuery('2026-10-01'))
+      expect(r.body.bindings).to.have.lengthOf(1)
+      expect(r.body.bindings[0]['v:today']['@value']).to.equal('2026-10-01')
+    })
+
+    describe('literal spelling representations (issue #2626)', function () {
+      // Each supplied spelling is its own literal and binds back verbatim.
+      // `2025-01-01/2025-03-31` and `2025-01-01T00:00:00/2025-04-01T00:00:00`
+      // are the same period [Jan 1, Apr 1) written two ways — distinct
+      // literals, equal intervals.
+      const spellings = [
+        '2025-01-01/2025-03-31',
+        '2025-01-01T00:00:00/2025-04-01T00:00:00',
+        '2025-01-01/2025-04-01T00:00:00',
+        '2025-01-01T00:00:00/2025-04-01',
+        'P3M/2025-03-31',
+        '2025-01-01/P3M',
+      ]
+      spellings.forEach((spelling) => {
+        it(`binds ${spelling} back verbatim`, async function () {
+          const r = await woql.post(agent, eqQuery(spelling))
+          expect(r.body.bindings).to.have.lengthOf(1)
+          expect(r.body.bindings[0]['v:today']['@value']).to.equal(spelling)
+        })
+      })
+
+      it('a date pair is the same period as the zoneless datetime pair', async function () {
+        const r = await woql.post(agent, {
+          '@type': 'IntervalRelationTyped',
+          relation: { '@type': 'DataValue', data: { '@type': 'xsd:string', '@value': 'equals' } },
+          x: { '@type': 'DataValue', data: { '@type': 'xdd:dateTimeInterval', '@value': '2025-01-01/2025-03-31' } },
+          y: { '@type': 'DataValue', data: { '@type': 'xdd:dateTimeInterval', '@value': '2025-01-01T00:00:00/2025-04-01T00:00:00' } },
+        })
+        expect(r.body.bindings).to.have.lengthOf(1)
       })
     })
   })

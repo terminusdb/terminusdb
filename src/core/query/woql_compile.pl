@@ -34,7 +34,7 @@
 
 :- use_module(core(account)).
 :- use_module(core(triple)).
-:- use_module(core(triple/casting), [normalise_interval_start/2, normalise_interval_end/2]).
+:- use_module(core(triple/casting), [normalise_interval_start/2, normalise_interval_end/2, interval_as_term/2, interval_term_lexical/2, interval_component_string/3]).
 :- use_module(core(document/json), [schema_enum_member_lexicals/2]).
 :- use_module(core(transaction)).
 :- use_module(core(document)).
@@ -1373,13 +1373,16 @@ normalise_typed_or_component(Value, Normaliser, Component) :-
 woql_interval(Start, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(C1,C2,_Dur,_Flag,_,_),
+        interval_as_term(IV, TIV),
+        TIV = date_time_interval(C1,C2,_Dur,_Flag,_,_),
         (   nonvar(Start)
-        ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
+        ->  normalise_typed_or_component(Start, normalise_interval_start, NS1),
+            interval_components_same_instant(NS1, C1)
         ;   interval_component_typed_datetime(C1, Start)
         ),
         (   nonvar(End)
-        ->  normalise_typed_or_component(End, normalise_interval_end, C2)
+        ->  normalise_typed_or_component(End, normalise_interval_end, NS2),
+            interval_components_same_instant(NS2, C2)
         ;   interval_component_typed_datetime(C2, End)
         )
     ;   nonvar(Start), nonvar(End)
@@ -1387,11 +1390,11 @@ woql_interval(Start, End, Interval) :-
         End = D2^^_,
         normalise_interval_start(D1, N1),
         normalise_interval_end(D2, N2),
-        interval_component_stamp_ns(N1, NS1),
-        interval_component_stamp_ns(N2, NS2),
-        DiffNanos is NS2 - NS1,
-        nanoseconds_to_duration(DiffNanos, Dur),
-        Interval = date_time_interval(N1,N2,Dur,explicit,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        interval_component_string(N1, tz(0), S1),
+        interval_component_string(N2, tz(0), S2),
+        format(string(Lex), '~w/~w', [S1,S2]),
+        '$xdd':interval_parse(Lex, Canon),
+        Interval = Canon^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval), _))
     ).
 
@@ -1432,6 +1435,15 @@ interval_component_stamp_ns(date_time(Y,M,D,HH,MM,SS,NS), StampNanos) :-
     date_time_stamp(date(Y,M,D,HH,MM,SS,0,-,-), Stamp),
     StampNanos is floor(Stamp * 1000000000) + NS.
 
+% A stored component may carry date kind where the normalised supplied
+% form is a date_time — both name the same instant, so compare on the
+% instant value rather than the term shape.
+interval_components_same_instant(A, B) :-
+    A == B
+    ->  true
+    ;   interval_component_stamp_ns(A, NS),
+        interval_component_stamp_ns(B, NS).
+
 % Convert a nanoseconds difference to an xsd:duration term (days/time only).
 nanoseconds_to_duration(Nanos, duration(Sign,0,0,0,Days,Hours,Mins,SSec)) :-
     (   Nanos < 0
@@ -1443,7 +1455,7 @@ nanoseconds_to_duration(Nanos, duration(Sign,0,0,0,Days,Hours,Mins,SSec)) :-
     Rem2 is Rem1 mod 3600000000000,
     Mins is Rem2 // 60000000000,
     Rem3 is Rem2 mod 60000000000,
-    SSec is Rem3 / 1000000000.
+    SSec is Rem3 rdiv 1000000000.
 
 % Convert a nanoseconds difference to an xsd:duration term, omitting zero time components.
 nanoseconds_to_duration_significant(Nanos, duration(Sign,0,0,0,Days,Hours,Mins,SSec)) :-
@@ -1458,11 +1470,11 @@ nanoseconds_to_duration_significant(Nanos, duration(Sign,0,0,0,Days,Hours,Mins,S
         Mins is Rem2 // 60000000000,
         Rem3 is Rem2 mod 60000000000,
         (   Rem3 =:= 0
-        ->  SSec = 0.0
-        ;   SSec is Rem3 / 1000000000)
+        ->  SSec = 0
+        ;   SSec is Rem3 rdiv 1000000000)
     ;   Hours = 0,
         Mins = 0,
-        SSec = 0.0
+        SSec = 0
     ).
 
 % Convert a Unix timestamp back to a component matching the type of a template.
@@ -1492,7 +1504,8 @@ duration_day_time_seconds(duration(Sign,W,_Y,_M,D,HH,MM,SS), Secs) :-
     Secs is Sign * (W * 604800 + D * 86400 + HH * 3600 + MM * 60 + SS).
 
 % Extract the stored duration from an arity-4 interval.
-interval_extract_duration(date_time_interval(_,_,Dur,_,_,_), Dur).
+interval_extract_duration(V, Dur) :-
+    interval_as_term(V, date_time_interval(_,_,Dur,_,_,_)).
 
 /*
  * woql_interval_start_duration(Start, Duration, Interval) is det.
@@ -1504,9 +1517,11 @@ interval_extract_duration(date_time_interval(_,_,Dur,_,_,_), Dur).
 woql_interval_start_duration(Start, Duration, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(C1,_C2,Dur,_Flag,_,_),
+        interval_as_term(IV, TIV),
+        TIV = date_time_interval(C1,_C2,Dur,_Flag,_,_),
         (   nonvar(Start)
-        ->  normalise_typed_or_component(Start, normalise_interval_start, C1)
+        ->  normalise_typed_or_component(Start, normalise_interval_start, NS1),
+            interval_components_same_instant(NS1, C1)
         ;   interval_component_typed_datetime(C1, Start)
         ),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
@@ -1514,8 +1529,11 @@ woql_interval_start_duration(Start, Duration, Interval) :-
     ->  Start = D1^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
         normalise_interval_start(D1, N1),
-        add_duration_to_component(N1, Dur, N2),
-        Interval = date_time_interval(N1,N2,Dur,start_duration,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        interval_component_string(N1, tz(0), S1),
+        duration_string(Dur, S2),
+        format(string(Lex), '~w/~w', [S1,S2]),
+        '$xdd':interval_parse(Lex, Canon),
+        Interval = Canon^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_start_duration), _))
     ).
 
@@ -1529,21 +1547,26 @@ woql_interval_start_duration(Start, Duration, Interval) :-
 woql_interval_duration_end(Duration, End, Interval) :-
     (   nonvar(Interval)
     ->  Interval = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
-        IV = date_time_interval(_C1,C2,Dur,_Flag,_,_),
+        interval_as_term(IV, TIV),
+        TIV = date_time_interval(_C1,C2,Dur,_Flag,_,_),
         (   nonvar(End)
-        ->  normalise_typed_or_component(End, normalise_interval_end, C2)
+        ->  normalise_typed_or_component(End, normalise_interval_end, NS2),
+            interval_components_same_instant(NS2, C2)
         ;   interval_component_typed_datetime(C2, End)
         ),
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration'
     ;   nonvar(Duration), nonvar(End)
     ->  End = D2^^_,
         Duration = Dur^^'http://www.w3.org/2001/XMLSchema#duration',
-        % Anchor the duration on the exclusive (bumped) end so that
-        % "P3M/2025-03-31" yields the quarter [Jan 1, Apr 1) — matching
-        % parse_two_component_interval and the Rust parser.
+        % The spelled "P/T" form anchors the duration on the end bound —
+        % the Rust parser computes the start, matching the legacy
+        % subtract-from-bumped-end semantics.
         normalise_interval_end(D2, N2),
-        subtract_duration_from_component(N2, Dur, N1),
-        Interval = date_time_interval(N1,N2,Dur,duration_end,tz(0),tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+        duration_string(Dur, S1),
+        interval_component_string(N2, tz(0), S2),
+        format(string(Lex), '~w/~w', [S1,S2]),
+        '$xdd':interval_parse(Lex, Canon),
+        Interval = Canon^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
     ;   throw(error(instantiation_error(interval_duration_end), _))
     ).
 
@@ -1647,9 +1670,13 @@ woql_interval_relation_typed(Rel, X, Y) :-
  * (e.g. xsd:dateTime) compares as the zero-duration point [t,t).
  */
 woql_relation_bounds(V, S, E) :-
-    (   V = date_time_interval(C1,C2,_,_,_,_)^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
-    ->  interval_component_typed_datetime(C1, S),
-        interval_component_typed_datetime(C2, E)
+    (   V = IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'
+    ->  (   interval_as_term(IV, TIV),
+            TIV = date_time_interval(C1,C2,_,_,_,_)
+        ->  interval_component_typed_datetime(C1, S),
+            interval_component_typed_datetime(C2, E)
+        ;   throw(error(casting_error(IV,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))
+        )
     ;   S = V, E = V
     ).
 

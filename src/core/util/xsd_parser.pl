@@ -175,8 +175,11 @@ decimal(M) -->
     }.
 decimal(M) --> integer(M) .
 
+% Fraction digits stay exact — a GMP rational, never an f64 (a float
+% renders `1.0e-10`, not ISO notation, and loses precision past ~15 digits).
 unsignedDecimal(M) --> natural(I), fullstop, digits(S),
-		       { string_concat("0.", S, T), number_string(E,T), M is I + E } .
+		       { string_length(S, L), number_string(F, S),
+			 M is I + F rdiv 10^L } .
 unsignedDecimal(M) --> natural(M) .
 
 exp --> "e" .
@@ -457,6 +460,8 @@ dateRange(date(Y1,M1,D1,Offset1),date(Y2,M2,D2,Offset2)) -->
 	"," , whitespace, date(Y2,M2,D2,Offset2), whitespace,
 	"]" .
 
+% Grammar for xdd:dateTimeInterval literals — the datatype contract is
+% terminusdb-enterprise/docs/specifications/xdd-datetimeinterval.md
 dateTimeInterval(Start,End,Duration) -->
     dateTimeIntervalComponent(Start), "/" , dateTimeIntervalComponent(End), "/" , dateTimeIntervalComponent(Duration).
 dateTimeInterval(Start,End) -->

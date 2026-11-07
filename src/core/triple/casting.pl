@@ -5,7 +5,11 @@
               rational_to_decimal_string/3,
               decimal_precision/1,
               normalise_interval_start/2,
-              normalise_interval_end/2
+              normalise_interval_end/2,
+              interval_as_term/2,
+              interval_term_lexical/2,
+              interval_component_string/3,
+              interval_component_end_string/3
           ]).
 
 :- discontiguous typecast_switch/5.
@@ -340,23 +344,27 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.co
         date_string(D2,Val2)
     ->  format(string(S), '[~w,~w]', [Val1,Val2])
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
+%%% xdd:dateTimeInterval — datatype contract:
+%%% terminusdb-enterprise/docs/specifications/xdd-datetimeinterval.md
+%%% (spelling is the literal; bare T = point [T,T); bare D = the local day
+%%% [D,D+1); date/date inclusive; zoneless stays local; flag 3 = point.)
 %%% xdd:dateRange => xdd:dateTimeInterval
 typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://terminusdb.com/schema/xdd#dateRange', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
     !,
     (   is_date_range(Val),
         Val = date_range(D1,D2)
-    ->  % Inclusive date range: end date covers the whole day, so the
-        % exclusive interval end is the following day at midnight.
-        normalise_interval_start(D1, N1),
-        normalise_interval_end(D2, N2),
-        compute_duration_between(N1, N2, Dur),
-        Cast = date_time_interval(N1, N2, Dur, explicit, tz(0), tz(0))
+    ->  % An inclusive date range is the date/date pair — the stored
+        % literal keeps the date-kind spellings.
+        interval_component_string(D1, none, S1),
+        interval_component_string(D2, none, S2),
+        format(string(Lex), '~w/~w', [S1,S2]),
+        '$xdd':interval_parse(Lex, Cast)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateRange'),_))).
 %%% xdd:dateTimeInterval => xdd:dateRange
 typecast_switch('http://terminusdb.com/schema/xdd#dateRange', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateRange') :-
     !,
-    (   is_date_time_interval(Val),
-        Val = date_time_interval(C1, C2, _, _, _, _)
+    (   interval_as_term(Val, Term),
+        Term = date_time_interval(C1, C2, _, _, _, _)
     ->  component_to_parts(C1, S1, _),
         component_to_parts(C2, S2, NS2),
         % The interval end is exclusive: the last covered instant is
@@ -371,9 +379,11 @@ typecast_switch('http://terminusdb.com/schema/xdd#dateRange', 'http://terminusdb
         Cast = date_range(date(Y1,M1,D1,0), date(Y2,M2,D2,0))
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
 %%% xsd:string => xdd:dateTimeInterval
+%%% The Rust lexical grammar is the authority: the canonical spelling IS
+%%% the stored value, so Cast is the canonicalised string itself.
 typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#string', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
     !,
-    (   parse_date_time_interval(Val, Cast)
+    (   '$xdd':interval_parse(Val, Cast)
     ->  true
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))
     ).
@@ -392,26 +402,28 @@ typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www
     (   is_date(Val)
     ->  normalise_interval_start(Val, N1),
         normalise_interval_end(Val, N2),
-        compute_duration_between(N1, N2, Dur),
-        Cast = date_time_interval(N1, N2, Dur, explicit, tz(0), tz(0))
+        interval_component_string(N1, tz(0), S1),
+        interval_component_string(N2, tz(0), S2),
+        format(string(Lex), '~w/~w', [S1,S2]),
+        '$xdd':interval_parse(Lex, Cast)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
 
 %%% xsd:dateTime => xdd:dateTimeInterval
 %%% A stored dateTime is already UTC-normalised (zone consumed at parse);
-%%% it becomes the zero-length point [T, T) rendered with 'Z'.
+%%% it becomes the zero-length pair [T, T) rendered with 'Z'.
 typecast_switch('http://terminusdb.com/schema/xdd#dateTimeInterval', 'http://www.w3.org/2001/XMLSchema#dateTime', Val, _, Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval') :-
     !,
     (   is_date_time(Val)
-    ->  compute_duration_between(Val, Val, Dur),
-        Cast = date_time_interval(Val, Val, Dur, explicit, tz(0), tz(0))
+    ->  interval_date_time_string(Val, tz(0), S),
+        format(string(Lex), '~w/~w', [S,S]),
+        '$xdd':interval_parse(Lex, Cast)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))).
 
 %%% xdd:dateTimeInterval => xsd:dateTime
 %%% Only a zero-length interval (start == end) names an instant.
 typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#dateTime') :-
     !,
-    (   is_date_time_interval(Val),
-        Val = date_time_interval(C, C, _, _, _, _),
+    (   interval_as_term(Val, date_time_interval(C, C, _, _, _, _)),
         is_date_time(C)
     ->  Cast = C
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#dateTime'),_))).
@@ -420,8 +432,7 @@ typecast_switch('http://www.w3.org/2001/XMLSchema#dateTime', 'http://terminusdb.
 %%% Only a zero-length interval at a day boundary names a date.
 typecast_switch('http://www.w3.org/2001/XMLSchema#date', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, Cast^^'http://www.w3.org/2001/XMLSchema#date') :-
     !,
-    (   is_date_time_interval(Val),
-        Val = date_time_interval(C, C, _, _, _, _),
+    (   interval_as_term(Val, date_time_interval(C, C, _, _, _, _)),
         interval_component_to_date(C, _)
     ->  interval_component_to_date(C, Cast)
     ;   throw(error(casting_error(Val,'http://www.w3.org/2001/XMLSchema#date'),_))).
@@ -461,8 +472,11 @@ parse_date_time_interval(Val, Cast) :-
     phrase(dateTimeInterval(X, Y), Codes),
     !,
     parse_two_component_interval(X, Y, Cast).
-% A bare finite component is an as-of point [T,T): a date anchors at local
-% day-start (zoneless), a dateTime at itself. Matches parse_lexical_interval.
+% A bare finite component is a single-instant literal: a dateTime is the
+% as-of point [T,T); a bare ISO date is the duration of the day [D,D+1),
+% the same interval as the explicit date/date pair (XBRL CSV / XBRL 2.1).
+% The point flag keeps the supplied single-component spelling distinct
+% from an explicit T/T pair at equal bounds. Matches parse_lexical_interval.
 parse_date_time_interval(Val, Cast) :-
     atom_codes(Val, Codes),
     phrase(dateTimeIntervalComponent(X), Codes),
@@ -470,68 +484,105 @@ parse_date_time_interval(Val, Cast) :-
     X \= unknown,
     \+ is_duration(X),
     !,
-    normalise_interval_start(X, NX),
-    (   X = date(_,_,_,_)
-    ->  Tz = none
-    ;   component_tz(X, Tz)),
-    compute_duration_between(NX, NX, Dur),
-    Cast = date_time_interval(NX, NX, Dur, explicit, Tz, Tz).
+    (   X = date(Y,M,D,_)
+    ->  % a bare date covers its whole day: keep date components so the
+        % stored literal is the supplied date spelling
+        NX = X, Tz = none,
+        date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
+        Next is Stamp + 86400,
+        stamp_date_time(Next, date(NY,NM,ND,_,_,_,_,'UTC',_), 'UTC'),
+        NE = date(NY,NM,ND,0)
+    ;   normalise_interval_start(X, NX),
+        NE = NX,
+        component_tz(X, Tz)),
+    compute_duration_between(NX, NE, Dur),
+    Cast = date_time_interval(NX, NE, Dur, point, Tz, Tz).
 
 parse_two_component_interval(X, Y, date_time_interval(NX, NY, X, duration_end, TzY, TzY)) :-
     is_duration(X),
     Y \= open,
     Y \= unknown,
     !,
-    component_tz(Y, TzY),
+    interval_component_tz(Y, TzY),
     % Anchor the duration on the exclusive (bumped) end: "P1M/2025-12-31"
     % is the month whose last covered day is Dec 31 → [Dec 1, Jan 1).
     % Matches the Rust parser, which bumps the date end before subtracting.
-    normalise_interval_end(Y, NY),
+    interval_end_component(Y, NY),
     subtract_duration_from_component(NY, X, NX).
 parse_two_component_interval(X, Y, date_time_interval(NX, NY, Y, start_duration, TzX, TzX)) :-
     is_duration(Y),
     X \= open,
     X \= unknown,
     !,
-    component_tz(X, TzX),
-    normalise_interval_start(X, NX),
+    interval_component_tz(X, TzX),
+    interval_start_component(X, NX),
     add_duration_to_component(NX, Y, NY).
 parse_two_component_interval(X, Y, date_time_interval(NX, NY, Dur, explicit, TzX, TzY)) :-
     \+ is_duration(X),
     \+ is_duration(Y),
-    component_tz(X, TzX),
-    component_tz(Y, TzY),
-    normalise_interval_start(X, NX),
-    normalise_interval_end(Y, NY),
+    interval_component_tz(X, TzX),
+    interval_component_tz(Y, TzY),
+    interval_start_component(X, NX),
+    interval_end_component(Y, NY),
     (   (NX == neg_infinity ; NX == unknown ; NY == infinity ; NY == unknown)
-    ->  Dur = duration(1,0,0,0,0,0,0,0.0)
+    ->  Dur = duration(1,0,0,0,0,0,0,0)
     ;   compute_duration_between(NX, NY, Dur)).
 
 %%% xdd:dateTimeInterval => xsd:string
+%%% The stored value is the canonical spelling — a text inner value
+%%% re-validates to the canonical form, and a legacy marshalled term
+%%% renders then canonicalises through the Rust grammar.
 typecast_switch('http://www.w3.org/2001/XMLSchema#string', 'http://terminusdb.com/schema/xdd#dateTimeInterval', Val, _, S^^'http://www.w3.org/2001/XMLSchema#string') :-
     !,
-    (   is_date_time_interval(Val)
-    ->  interval_to_string(Val, S)
+    (   (string(Val) ; atom(Val))
+    ->  '$xdd':interval_parse(Val, S)
+    ;   is_date_time_interval(Val)
+    ->  interval_term_lexical(Val, S)
     ;   throw(error(casting_error(Val,'http://terminusdb.com/schema/xdd#dateTimeInterval'),_))
     ).
+
+% interval_as_term(+Value, ?Term) — the marshalled date_time_interval/6
+% term for a value: terms pass through, canonical spellings rebuild
+% through the DCG. Spellings the term cannot carry (X* endpoints,
+% deeper-than-nanos fractions, i64-out years) fail rather than truncate.
+% The functor check precedes unification with the caller's pattern —
+% head-matching (T,T) would reject a nonzero term before the body ran.
+interval_as_term(In, Term) :-
+    nonvar(In),
+    In = date_time_interval(_,_,_,_,_,_),
+    !,
+    Term = In.
+interval_as_term(In, Term) :-
+    (   string(In)
+    ->  atom_string(A, In)
+    ;   atom(In)
+    ->  A = In
+    ;   !, fail
+    ),
+    parse_date_time_interval(A, Term).
+
+% interval_term_lexical(+Term, -Lexical) — canonical spelling for a
+% marshalled term: render, then re-validate through the Rust grammar so
+% a Prolog arithmetic slip surfaces instead of storing bad bounds.
+interval_term_lexical(T, Lex) :-
+    interval_to_string(T, Raw),
+    '$xdd':interval_parse(Raw, Lex).
 
 interval_to_string(Interval, S) :-
     Interval = date_time_interval(_,_,_,Flag,_,_),
     interval_to_string_as(Interval, Flag, S).
 
-% A zoneless zero-length explicit interval is the as-of point spelling —
-% the dict entry cannot distinguish it from a supplied t/t pair, and the
-% value is the same instant either way. Zoned points keep the pair, and
-% so do unknown/unknown ('/').
-interval_to_string_as(date_time_interval(C,C,_Dur,explicit,none,none), explicit, S) :-
-    (   C = date(_,_,_,_)
-    ;   C = date_time(_,_,_,_,_,_,_)),
+% A point literal renders the supplied single component — the bare
+% instant or the bare date — zoneless, Z, or offset alike.
+interval_to_string_as(date_time_interval(C,_,_,point,Tz,_), point, S) :-
     !,
-    interval_point_string(C, none, S).
+    interval_point_string(C, Tz, S).
+% An explicit pair keeps both endpoints, even a zero-duration T/T: only
+% the point flag collapses to the single spelling.
 interval_to_string_as(date_time_interval(C1,C2,_Dur,_Flag,Tz1,Tz2), explicit, S) :-
     !,
     interval_component_string(C1,Tz1,Val1),
-    interval_component_string(C2,Tz2,Val2),
+    interval_component_end_string(C2,Tz2,Val2),
     format(string(S), '~w/~w', [Val1,Val2]).
 interval_to_string_as(date_time_interval(C1,_C2,Dur,_Flag,Tz1,_), start_duration, S) :-
     !,
@@ -541,7 +592,7 @@ interval_to_string_as(date_time_interval(C1,_C2,Dur,_Flag,Tz1,_), start_duration
 interval_to_string_as(date_time_interval(_C1,C2,Dur,_Flag,_,Tz2), duration_end, S) :-
     !,
     interval_component_string(Dur,none,Val1),
-    interval_component_string(C2,Tz2,Val2),
+    interval_component_end_string(C2,Tz2,Val2),
     format(string(S), '~w/~w', [Val1,Val2]).
 
 %% Normalise a start component: dates become date_time at 00:00:00 UTC (no bump).
@@ -573,13 +624,35 @@ normalise_interval_end(date_time(Y,Mo,D,H,M,S,NS,Offset), Norm) :- !,
     remove_date_time_offset(Y,Mo,D,H,M,S,NS,Offset,Norm).
 normalise_interval_end(duration(Sign,W,Y,Mo,D,H,M,S), duration(Sign,W,Y,Mo,D,H,M,S)) :- !.
 
+%% Interval component forms that keep the supplied kind: internal instants
+%% stay UTC, but the literal presents local time — a zoneless date is a
+%% date, not a Z-suffixed midnight. A zoned date has no lexical form in
+%% storage (kind DATE is always zoneless), so it normalises to a date_time
+%% carrying its zone rather than silently dropping it.
+interval_start_component(date(Y,M,D,0), date(Y,M,D,0)) :- !.
+interval_start_component(X, NX) :- normalise_interval_start(X, NX).
+
+% A zoneless date end stores the exclusive day after as a date component —
+% [D 00:00, D+1 00:00) covers the supplied date's whole day, and the
+% canonical renders it back as the inclusive last day.
+interval_end_component(date(Y,M,D,0), date(NY,NM,ND,0)) :- !,
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
+    Next is Stamp + 86400,
+    stamp_date_time(Next, date(NY,NM,ND,_,_,_,_,'UTC',_), 'UTC').
+interval_end_component(X, NX) :- normalise_interval_end(X, NX).
+
+% kind DATE is zoneless: tz(0) would render a phantom 'Z' the input
+% never had.
+interval_component_tz(date(_,_,_,0), none) :- !.
+interval_component_tz(X, Tz) :- component_tz(X, Tz).
+
 compute_duration_between(Start, End, duration(Sign, 0, 0, 0, Days, Hours, Minutes, Seconds)) :-
     component_to_parts(Start, T1, NS1),
     component_to_parts(End, T2, NS2),
-    % Whole seconds as an exact float difference, nanoseconds as integers —
-    % never pass NS through the float timestamp (precision loss at epoch
-    % scale would corrupt sub-second durations).
-    SecDiff is T2 - T1,
+    % Whole seconds as an exact integer difference — stamps are floats,
+    % so round() restores the integer, and NS stays integer: anything less
+    % exact would collapse the rational seconds back to f64.
+    SecDiff is round(T2 - T1),
     NSDiff is NS2 - NS1,
     (   NSDiff < 0
     ->  SecNorm is SecDiff - 1, NSNorm is NSDiff + 1000000000
@@ -594,7 +667,7 @@ compute_duration_between(Start, End, duration(Sign, 0, 0, 0, Days, Hours, Minute
     Hours is truncate(Rem1 / 3600),
     Rem2 is Rem1 - Hours * 3600,
     Minutes is truncate(Rem2 / 60),
-    Seconds is Rem2 - Minutes * 60 + NSNorm / 1000000000.
+    Seconds is Rem2 - Minutes * 60 + NSNorm rdiv 1000000000.
 
 component_to_parts(date(Y,M,D,_), T, 0) :-
     !,
@@ -605,14 +678,23 @@ component_to_parts(date_time(Y,Mo,D,H,Mi,S,NS), T, NS) :-
 interval_component_string(neg_infinity, _Tz, "..") :- !.
 interval_component_string(infinity, _Tz, "..") :- !.
 interval_component_string(unknown, _Tz, "") :- !.
-interval_component_string(date(Y,M,D,_Offset), _Tz, S) :- !, date_time_string(date_time(Y,M,D,0,0,0,0), S).
+interval_component_string(date(Y,M,D,_Offset), _Tz, S) :- !,
+    format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
 interval_component_string(duration(Sign,W,Y,Mo,D,H,M,SS), _Tz, S) :- !, duration_string(duration(Sign,W,Y,Mo,D,H,M,SS), S).
 interval_component_string(DT, Tz, S) :- interval_date_time_string(DT, Tz, S).
 
-interval_point_string(date(Y,M,D,_Offset), _Tz, S) :-
+%% End-position rendering: a stored date-kind end is the exclusive day
+%% after — the supplied inclusive date is one calendar day before.
+interval_component_end_string(date(Y,M,D,Offset), Tz, S) :-
     !,
-    format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
-interval_point_string(date_time(Y,M,D,0,0,0,0), none, S) :-
+    date_time_stamp(date(Y,M,D,0,0,0,0,-,-), Stamp),
+    Prev is Stamp - 86400,
+    stamp_date_time(Prev, date(PY,PM,PD,_,_,_,_,'UTC',_), 'UTC'),
+    interval_component_string(date(PY,PM,PD,Offset), Tz, S).
+interval_component_end_string(C, Tz, S) :-
+    interval_component_string(C, Tz, S).
+
+interval_point_string(date(Y,M,D,_Offset), _Tz, S) :-
     !,
     format(string(S), '~|~`0t~d~4+-~|~`0t~d~2+-~|~`0t~d~2+', [Y,M,D]).
 interval_point_string(C, Tz, S) :-
@@ -1721,13 +1803,15 @@ test(anyuri_iri_chinese, []) :-
 
 %% --- DateTimeInterval normalization tests ---
 
-test(interval_explicit_dates_normalize_to_datetime, []) :-
+test(interval_explicit_dates_keep_date_kind, []) :-
     parse_date_time_interval('2025-01-01/2025-03-31',
                              date_time_interval(Start, End, _Dur, explicit, Tz1, Tz2)),
-    Start = date_time(2025,1,1,0,0,0,0),
-    End = date_time(2025,4,1,0,0,0,0),
-    Tz1 = tz(0),
-    Tz2 = tz(0).
+    % date components keep their kind — the stored end is the exclusive
+    % day after, and the literal stays the supplied date spellings
+    Start = date(2025,1,1,0),
+    End = date(2025,4,1,0),
+    Tz1 = none,
+    Tz2 = none.
 
 test(interval_explicit_datetimes_preserved, []) :-
     parse_date_time_interval('2025-01-01T10:30:00Z/2025-03-31T15:45:00Z',
@@ -1750,33 +1834,33 @@ test(interval_datetime_with_timezone_normalized_to_utc, []) :-
 test(interval_start_duration_date_normalizes, []) :-
     parse_date_time_interval('2025-01-01/P3M',
                              date_time_interval(Start, End, Dur, start_duration, Tz1, Tz2)),
-    Start = date_time(2025,1,1,0,0,0,0),
-    End = date_time(2025,4,1,0,0,0,0),
+    Start = date(2025,1,1,0),
+    End = date(2025,4,1,0),
     Dur = duration(1,0,0,3,0,0,0,0),
-    Tz1 = tz(0),
-    Tz2 = tz(0).
+    Tz1 = none,
+    Tz2 = none.
 
 test(interval_duration_end_date_normalizes_with_bump, []) :-
     parse_date_time_interval('P3M/2025-03-31',
                              date_time_interval(Start, End, Dur, duration_end, Tz1, Tz2)),
-    Start = date_time(2025,1,1,0,0,0,0),
-    End = date_time(2025,4,1,0,0,0,0),
+    Start = date(2025,1,1,0),
+    End = date(2025,4,1,0),
     Dur = duration(1,0,0,3,0,0,0,0),
-    Tz1 = tz(0),
-    Tz2 = tz(0).
+    Tz1 = none,
+    Tz2 = none.
 
 test(interval_date_end_leap_year_bump, []) :-
     parse_date_time_interval('2020-02-01/2020-02-29',
                              date_time_interval(_Start, End, _Dur, explicit, _, _)),
-    End = date_time(2020,3,1,0,0,0,0).
+    End = date(2020,3,1,0).
 
 test(interval_open_end_parse, []) :-
     parse_date_time_interval('2025-01-01/..',
                              date_time_interval(Start, End, Dur, explicit, Tz1, Tz2)),
-    Start = date_time(2025,1,1,0,0,0,0),
+    Start = date(2025,1,1,0),
     End = infinity,
-    Dur = duration(1,0,0,0,0,0,0,0.0),
-    Tz1 = tz(0),
+    Dur = duration(1,0,0,0,0,0,0,0),
+    Tz1 = none,
     Tz2 = none.
 
 test(interval_open_start_parse, []) :-
@@ -1792,15 +1876,15 @@ test(interval_forever_parse, []) :-
 test(interval_unknown_end_parse, []) :-
     parse_date_time_interval('2025-01-01/',
                              date_time_interval(Start, End, Dur, explicit, _, _)),
-    Start = date_time(2025,1,1,0,0,0,0),
+    Start = date(2025,1,1,0),
     End = unknown,
-    Dur = duration(1,0,0,0,0,0,0,0.0).
+    Dur = duration(1,0,0,0,0,0,0,0).
 
 test(interval_unknown_start_parse, []) :-
     parse_date_time_interval('/2025-01-01',
                              date_time_interval(Start, End, _Dur, explicit, _, _)),
     Start = unknown,
-    End = date_time(2025,1,2,0,0,0,0).
+    End = date(2025,1,2,0).
 
 test(interval_both_unknown_parse, []) :-
     parse_date_time_interval('/',
@@ -1822,7 +1906,7 @@ test(interval_roundtrip_open_end, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "2025-01-01T00:00:00Z/..".
+    S = "2025-01-01/..".
 
 test(interval_roundtrip_forever, []) :-
     typecast("../.."^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1840,7 +1924,7 @@ test(interval_roundtrip_unknown_end, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "2025-01-01T00:00:00Z/".
+    S = "2025-01-01/".
 
 test(interval_roundtrip_both_unknown, []) :-
     typecast("/"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1854,7 +1938,7 @@ test(interval_roundtrip_both_unknown, []) :-
 test(interval_date_end_year_boundary_bump, []) :-
     parse_date_time_interval('2024-01-01/2024-12-31',
                              date_time_interval(_Start, End, _Dur, explicit, _, _)),
-    End = date_time(2025,1,1,0,0,0,0).
+    End = date(2025,1,1,0).
 
 test(interval_roundtrip_explicit_dates, []) :-
     typecast("2025-01-01/2025-03-31"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1863,7 +1947,7 @@ test(interval_roundtrip_explicit_dates, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z".
+    S = "2025-01-01/2025-03-31".
 
 test(interval_roundtrip_start_duration, []) :-
     typecast("2025-01-01/P3M"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1872,7 +1956,7 @@ test(interval_roundtrip_start_duration, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "2025-01-01T00:00:00Z/P3M".
+    S = "2025-01-01/P3M".
 
 test(interval_roundtrip_duration_end, []) :-
     typecast("P3M/2025-03-31"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1881,7 +1965,7 @@ test(interval_roundtrip_duration_end, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "P3M/2025-04-01T00:00:00Z".
+    S = "P3M/2025-03-31".
 
 test(interval_roundtrip_datetime_with_timezone, []) :-
     typecast("2025-01-31T09:00:00+02:00/2025-03-31T09:00:00+02:00"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1908,12 +1992,12 @@ test(interval_roundtrip_duration_with_hours, []) :-
     typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
-    S = "2025-01-01T00:00:00Z/PT1H".
+    S = "2025-01-01/PT1H".
 
 test(dateTimeInterval_string_from_dates, []) :-
     typecast(date_time_interval(date(2025,1,1,0), date(2025,4,1,0), duration(1,0,0,0,90,0,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
-             "2025-01-01T00:00:00Z/2025-04-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+             "2025-01-01/2025-03-31"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_string_from_datetimes, []) :-
     typecast(date_time_interval(date_time(2025,1,1,10,30,0,0), date_time(2025,4,1,15,45,0,0), duration(1,0,0,0,90,5,15,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
@@ -1923,7 +2007,7 @@ test(dateTimeInterval_string_from_datetimes, []) :-
 test(dateTimeInterval_string_mixed_date_datetime, []) :-
     typecast(date_time_interval(date(2025,1,1,0), date_time(2025,4,1,12,0,0,0), duration(1,0,0,0,90,12,0,0.0), explicit, tz(0), tz(0))^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
-             "2025-01-01T00:00:00Z/2025-04-01T12:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+             "2025-01-01/2025-04-01T12:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_string_from_dates_roundtrip, []) :-
     typecast("2025-01-01/2025-04-01"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1931,7 +2015,7 @@ test(dateTimeInterval_string_from_dates_roundtrip, []) :-
              IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
     typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
-             "2025-01-01T00:00:00Z/2025-04-02T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+             "2025-01-01/2025-04-01"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_unqualified_end_bumps_to_next_year, []) :-
     typecast("2019-01-01/2019-12-31"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1939,7 +2023,7 @@ test(dateTimeInterval_unqualified_end_bumps_to_next_year, []) :-
              IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
     typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
-             "2019-01-01T00:00:00Z/2020-01-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+             "2019-01-01/2019-12-31"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_unqualified_end_bumps_over_leap_day, []) :-
     typecast("2020-02-01/2020-02-29"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1947,7 +2031,7 @@ test(dateTimeInterval_unqualified_end_bumps_over_leap_day, []) :-
              IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
     typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
-             "2020-02-01T00:00:00Z/2020-03-01T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+             "2020-02-01/2020-02-29"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_unqualified_end_bumps_to_leap_day, []) :-
     typecast("2020-02-27/2020-02-28"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1955,7 +2039,7 @@ test(dateTimeInterval_unqualified_end_bumps_to_leap_day, []) :-
              IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
     typecast(IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
              'http://www.w3.org/2001/XMLSchema#string', [],
-             "2020-02-27T00:00:00Z/2020-02-29T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string').
+             "2020-02-27/2020-02-28"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(dateTimeInterval_datetime_end_is_not_bumped, []) :-
     typecast("2019-01-01T00:00:00/2020-01-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
@@ -1966,10 +2050,14 @@ test(dateTimeInterval_datetime_end_is_not_bumped, []) :-
              "2019-01-01T00:00:00/2020-01-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string').
 test(date_range_to_interval_inclusive, []) :-
     % [D1, D2] covers both whole days: the interval end is the exclusive
-    % instant at (D2 + 1 day)T00:00:00Z.
+    % day after D2, kept as a date component so it renders inclusively.
     typecast(date_range(date(2025,1,1,0), date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange',
              'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
-             date_time_interval(date_time(2025,1,1,0,0,0,0), date_time(2025,4,1,0,0,0,0), _, explicit, _, _)^^'http://terminusdb.com/schema/xdd#dateTimeInterval').
+             IV^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    IV = "2025-01-01/2025-03-31",
+    interval_as_term(IV,
+                     date_time_interval(date(2025,1,1,0), date(2025,4,1,0),
+                                        _, explicit, _, _)).
 
 test(interval_to_date_range_exclusive_end, []) :-
     % An exclusive end at exactly midnight belongs to the next day, so the
@@ -2042,6 +2130,183 @@ test(interval_roundtrip_mixed_timezones, []) :-
              'http://www.w3.org/2001/XMLSchema#string', [],
              S^^'http://www.w3.org/2001/XMLSchema#string'),
     S = "2025-01-31T09:00:00-05:00/2025-03-31T18:30:00+05:30".
+
+% --- Bare single-component literals: the point flag keeps the spelling ---
+
+test(interval_bare_datetime_offset_renders_single, []) :-
+    typecast("2025-03-15T00:00:00+02:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-03-15T00:00:00+02:00",
+    interval_as_term(Interval,
+                     date_time_interval(C,C,_,point,tz(-7200),tz(-7200))),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-03-15T00:00:00+02:00".
+
+test(interval_bare_datetime_z_renders_single, []) :-
+    typecast("2025-03-15T00:00:00Z"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-03-15T00:00:00Z",
+    interval_as_term(Interval,
+                     date_time_interval(C,C,_,point,tz(0),tz(0))),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-03-15T00:00:00Z".
+
+test(interval_bare_datetime_zoneless_renders_single, []) :-
+    typecast("2025-03-15T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-03-15T00:00:00",
+    interval_as_term(Interval,
+                     date_time_interval(C,C,_,point,none,none)),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-03-15T00:00:00".
+
+test(interval_bare_date_covers_whole_day, []) :-
+    typecast("2026-10-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    % the bare date is the same [D, D+1) interval as the explicit D/D pair
+    typecast("2026-10-01/2026-10-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Pair^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2026-10-01",
+    Pair = "2026-10-01/2026-10-01",
+    interval_as_term(Interval,
+                     date_time_interval(S,E,Dur,point,none,none)),
+    interval_as_term(Pair,
+                     date_time_interval(SP,EP,_,explicit,_,_)),
+    S = date(2026,10,1,0),
+    E = date(2026,10,2,0),
+    Dur = duration(1,0,0,0,1,0,0,_),
+    component_to_parts(S, TS, _),
+    component_to_parts(E, TE, _),
+    component_to_parts(SP, TS, _),
+    component_to_parts(EP, TE, _),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "2026-10-01".
+
+test(interval_explicit_zero_duration_pair_stays_pair, []) :-
+    typecast("2025-03-15T00:00:00/2025-03-15T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-03-15T00:00:00/2025-03-15T00:00:00",
+    interval_as_term(Interval,
+                     date_time_interval(_,_,_,explicit,_,_)),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-03-15T00:00:00/2025-03-15T00:00:00".
+
+test(interval_explicit_date_pair_renders_pair, []) :-
+    typecast("2026-10-01/2026-10-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2026-10-01/2026-10-01",
+    interval_as_term(Interval,
+                     date_time_interval(_,_,_,explicit,_,_)),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    % the pair keeps the supplied date spellings — inclusive on both ends
+    S = "2026-10-01/2026-10-01".
+
+% --- Date components in pairs keep their kind and zoneless spelling ---
+% Internal instants are UTC, but the literal presents local time: a date
+% renders as the date, a zoneless dateTime carries no designator.
+
+test(interval_date_pair_end_is_inclusive_whole_day, []) :-
+    typecast("2025-01-01/2025-03-31"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-01-01/2025-03-31",
+    interval_as_term(Interval,
+                     date_time_interval(S,E,Dur,explicit,none,none)),
+    S = date(2025,1,1,0),
+    % the stored end is the exclusive day after — the pair covers Mar 31
+    E = date(2025,4,1,0),
+    Dur = duration(1,0,0,0,90,0,0,_),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             Lex^^'http://www.w3.org/2001/XMLSchema#string'),
+    Lex = "2025-01-01/2025-03-31".
+
+test(interval_date_pair_same_period_as_zoneless_datetime_pair, []) :-
+    typecast("2025-01-01/2025-03-31"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             DI^^_),
+    typecast("2025-01-01T00:00:00/2025-04-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             TI^^_),
+    interval_as_term(DI, date_time_interval(DS,DE,_,_,_,_)),
+    interval_as_term(TI, date_time_interval(TS,TE,_,_,_,_)),
+    component_to_parts(DS, Start, _),
+    component_to_parts(DE, End, _),
+    component_to_parts(TS, Start, _),
+    component_to_parts(TE, End, _).
+
+test(interval_zoneless_datetime_pair_renders_zoneless, []) :-
+    typecast("2025-01-01T00:00:00/2025-04-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-01-01T00:00:00/2025-04-01T00:00:00",
+    interval_as_term(Interval,
+                     date_time_interval(_,_,_,explicit,none,none)),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-01T00:00:00/2025-04-01T00:00:00".
+
+test(interval_mixed_date_start_datetime_end_renders_kinds, []) :-
+    typecast("2025-01-01/2025-04-01T00:00:00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-01/2025-04-01T00:00:00".
+
+test(interval_mixed_datetime_start_date_end_renders_kinds, []) :-
+    typecast("2025-01-01T00:00:00/2025-04-01"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "2025-01-01T00:00:00/2025-04-01",
+    interval_as_term(Interval,
+                     date_time_interval(_,date(2025,4,2,0),_,explicit,_,none)),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-01T00:00:00/2025-04-01".
+
+test(interval_duration_end_with_date_renders_date_spelling, []) :-
+    typecast("P3M/2025-03-31"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    Interval = "P3M/2025-03-31",
+    interval_as_term(Interval,
+                     date_time_interval(_,date(2025,4,1,0),_,duration_end,_,none)),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "P3M/2025-03-31".
+
+test(interval_daterange_cast_renders_date_pair, []) :-
+    typecast(date_range(date(2025,1,1,0),date(2025,3,31,0))^^'http://terminusdb.com/schema/xdd#dateRange',
+             'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
+             Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
+    typecast(Interval^^'http://terminusdb.com/schema/xdd#dateTimeInterval',
+             'http://www.w3.org/2001/XMLSchema#string', [],
+             S^^'http://www.w3.org/2001/XMLSchema#string'),
+    S = "2025-01-01/2025-03-31".
 
 % --- Expanded names: xsd:QName / xbrl:SQName (Clark storage) ---
 
@@ -2215,18 +2480,23 @@ test(date_to_datetimeinterval_covers_day, []) :-
     typecast(date(2020,1,15,0)^^'http://www.w3.org/2001/XMLSchema#date',
              'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
              Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
-    Cast = date_time_interval(date_time(2020,1,15,0,0,0,0),
-                              date_time(2020,1,16,0,0,0,0),
-                              duration(1,0,0,0,1,0,0,0.0),
-                              explicit, tz(0), tz(0)).
+    Cast = "2020-01-15T00:00:00Z/2020-01-16T00:00:00Z",
+    interval_as_term(Cast,
+                     date_time_interval(date_time(2020,1,15,0,0,0,0),
+                                        date_time(2020,1,16,0,0,0,0),
+                                        duration(1,0,0,0,1,0,0,0),
+                                        explicit, tz(0), tz(0))).
 
 test(datetime_to_datetimeinterval_zero_point, []) :-
     T = date_time(2020,1,15,12,30,45,0),
     typecast(T^^'http://www.w3.org/2001/XMLSchema#dateTime',
              'http://terminusdb.com/schema/xdd#dateTimeInterval', [],
              Cast^^'http://terminusdb.com/schema/xdd#dateTimeInterval'),
-    Cast = date_time_interval(T, T, duration(1,0,0,0,0,0,0,0.0),
-                              explicit, tz(0), tz(0)).
+    Cast = "2020-01-15T12:30:45Z/2020-01-15T12:30:45Z",
+    interval_as_term(Cast,
+                     date_time_interval(T, T,
+                                        duration(1,0,0,0,0,0,0,0),
+                                        explicit, tz(0), tz(0))).
 
 test(datetimeinterval_point_to_datetime, []) :-
     T = date_time(2020,1,15,12,30,45,0),
@@ -2283,3 +2553,50 @@ test(daterange_single_day_to_datetime_midnight, []) :-
     Cast = date_time(2020,1,15,0,0,0,0).
 
 :- end_tests(typecast).
+
+/** The $xdd:interval_parse/2 foreign predicate — the storage parser
+ *  exposed to Prolog. Asserts canonical round-trip behaviour and
+ *  measures per-call cost for comparison against the Prolog casting path.
+ */
+
+:- begin_tests(xdd_ffi).
+
+test(point_zoned_renders_single_timestamp) :-
+    '$xdd':interval_parse("2025-03-15T00:00:00+02:00", Out),
+    assertion(Out == "2025-03-15T00:00:00+02:00").
+
+test(date_pair_verbatim) :-
+    '$xdd':interval_parse("2025-01-01/2025-03-31", Out),
+    assertion(Out == "2025-01-01/2025-03-31").
+
+test(deep_negative_year_point) :-
+    '$xdd':interval_parse("-13800000000-01-01", Out),
+    assertion(Out == "-13800000000-01-01").
+
+test(forty_nine_digit_fraction) :-
+    '$xdd':interval_parse("2025-01-01T00:00:00.1234567890123456789012345678901234567890123456789Z", Out),
+    assertion(Out == "2025-01-01T00:00:00.1234567890123456789012345678901234567890123456789Z").
+
+test(negative_duration_rejected, [fail]) :-
+    '$xdd':interval_parse("-P1D/2025-03-15", _).
+
+test(bench_ffi_vs_prolog, [true]) :-
+    ffi_bench(20000, "2025-03-15T00:00:00+02:00", P),
+    format("ffi point tz        : ~3f us/call~n", [P]),
+    ffi_bench(20000, "2025-01-01/2025-03-31", D),
+    format("ffi date/date       : ~3f us/call~n", [D]),
+    ffi_bench(20000, "2025-01-01/P3M", DP),
+    format("ffi date/period     : ~3f us/call~n", [DP]),
+    ffi_bench(20000, "2025-01-01T00:00:00.111111111Z", F9),
+    format("ffi point frac9     : ~3f us/call~n", [F9]),
+    ffi_bench(20000, "-13800000000-01-01/P380000Y", Deep),
+    format("ffi deep year D/P   : ~3f us/call~n", [Deep]).
+
+ffi_bench(N, Lit, Micros) :-
+    garbage_collect,
+    statistics(cputime, T0),
+    forall(between(1, N, _), '$xdd':interval_parse(Lit, _)),
+    statistics(cputime, T1),
+    Micros is (T1-T0)*1000000/N.
+
+:- end_tests(xdd_ffi).

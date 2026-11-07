@@ -2312,7 +2312,7 @@ api_document_error_jsonld(Type,error(branch_does_not_exist(Descriptor), _), JSON
 api_document_error_jsonld(Type, error(same_ids_in_one_transaction(Ids), _), JSON) :-
     document_error_type(Type, JSON_Type),
 
-    format(string(Msg), "Tried to mutate document with same id multiple times", []),
+    format(string(Msg), "Tried to mutate document with same id multiple times in one transaction. Pass merge_repeats=true to merge documents repeated in a single insert.", []),
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:SameDocumentIdsMutatedInOneTransaction',

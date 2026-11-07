@@ -5,7 +5,7 @@ use ordered_float::OrderedFloat;
 use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
 use tdb_succinct::tfc::lexical_interval::{
-    interval_relation, lexical_interval_entry, literal_as_interval, AllenRelation,
+    cmp_interval_bounds, decode_lexical_entry, interval_relation, literal_as_interval, AllenRelation,
 };
 use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
 
@@ -730,20 +730,22 @@ fn object_type_filter<'a>(
             let op = *op;
             let val = val.clone();
             let g = g.clone();
-            // Use TypedDictEntry ordering for dateTimeInterval (lexical
-            // entries sort semantically: chronological endpoints, open and
-            // unknown classes at the extremes)
-            let interval_entry = if type_str == "dateTimeInterval" {
-                literal_as_interval(&val)
-                    .ok()
-                    .map(|iv| lexical_interval_entry(&iv))
+            // dateTimeInterval compares by interval bounds, not literal
+            // bytes: spellings denoting the same period (a date pair and its
+            // zoneless datetime twin, a point and the equal-bound pair) are
+            // the same value for eq/ne and order chronologically for
+            // lt/le/ge/gt
+            let reference = if type_str == "dateTimeInterval" {
+                literal_as_interval(&val).ok()
             } else {
                 None
             };
             ClonableIterator::new(iter.filter(move |object| {
                 let object_value = g.id_object_value(*object).expect("Object value must exist");
-                let cmp = if let Some(ref entry) = interval_entry {
-                    object_value.cmp(entry)
+                let cmp = if let Some(ref iv) = reference {
+                    let object_iv = decode_lexical_entry(&object_value.to_bytes())
+                        .expect("object value must decode as a lexical interval");
+                    cmp_interval_bounds(&object_iv, iv)
                 } else {
                     let object_string = value_to_string(&object_value).to_string();
                     object_string.cmp(&val)

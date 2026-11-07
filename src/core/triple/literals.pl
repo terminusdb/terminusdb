@@ -432,7 +432,10 @@ duration_string(Duration,String) :-
     ->  format(atom(MMP),'~wM',[MM])
     ;   MMP = ''),
     (   SS =\= 0
-    ->  format(atom(SSP),'~wS',[SS])
+    ->  % seconds carry a GMP rational — render exact decimal digits,
+        % never the `1r…` term form or f64 `…e-10` notation
+        rational_to_decimal_string(SS, SS_Str, 49),
+        format(atom(SSP),'~wS',[SS_Str])
     ;   SSP = ''),
     atomic_list_concat([SP,'P',WP,YP,MP,DP,TP,HHP,MMP,SSP],Atom0),
     % Zero duration: "P" alone is not valid ISO 8601. The canonical zero is
