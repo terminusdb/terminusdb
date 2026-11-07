@@ -2330,7 +2330,7 @@ test(string_to_qname_clark_passthrough, []) :-
              Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
     Cast = "{http://unbound.example/}x".
 
-test(string_to_qname_unbound_prefix, [error(casting_error("no:foo",_),_)]) :-
+test(string_to_qname_unbound_prefix, [error(unbound_prefix(no,"no:foo",_),_)]) :-
     P = _{eg: 'http://example.org/ns#'},
     typecast("no:foo"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)], _).

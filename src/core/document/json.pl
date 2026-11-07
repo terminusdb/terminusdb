@@ -3674,6 +3674,11 @@ insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_I
 %  down to the per-id existence check: under merge_repeats an exactly
 %  identical, already-committed member counts as a repeat rather than a
 %  conflict.
+insert_document_merge(Query_Context, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out) :-
+    is_query_context(Query_Context),
+    !,
+    query_default_collection(Query_Context, TO),
+    insert_document_merge(TO, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out).
 insert_document_merge(Transaction, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out) :-
     database_and_default_prefixes(Transaction, Prefixes),
     insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out).
