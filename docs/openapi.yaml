@@ -1059,6 +1059,18 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
         - name: identifiers
           in: query
           required: false

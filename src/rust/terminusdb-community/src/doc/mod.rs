@@ -46,6 +46,8 @@ pub struct DocumentContext<L: Layer + Clone> {
     sys_index_ids: Vec<u64>,
     // when false, sys:JSONDocument documents are emitted without the injected @id
     include_id: bool,
+    // XSD canonicalization version selector for the request
+    xsd_10: bool,
 
     rdf: Arc<RdfIds<L>>,
     sys: Arc<SysIds<L>>,
@@ -54,13 +56,14 @@ pub struct DocumentContext<L: Layer + Clone> {
 
 impl<L: Layer + Clone> DocumentContext<L> {
     pub fn new(schema: L, instance: Option<L>) -> DocumentContext<L> {
-        Self::new_with_options(schema, instance, true)
+        Self::new_with_options(schema, instance, true, false)
     }
 
     pub fn new_with_options(
         schema: L,
         instance: Option<L>,
         include_id: bool,
+        xsd_10: bool,
     ) -> DocumentContext<L> {
         let schema_rdf = RdfIds::new(Some(schema.clone()));
         let schema_sys = Arc::new(SysIds::new(Some(schema.clone())));
@@ -207,6 +210,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             shared_types,
             sys_index_ids,
             include_id,
+            xsd_10,
 
             rdf,
             sys,
@@ -234,6 +238,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
             shared_types: HashSet::with_capacity(0),
             sys_index_ids: Vec::with_capacity(0),
             include_id: true,
+            xsd_10: false,
 
             rdf: Arc::new(RdfIds::new(instance.clone())),
             sys: Arc::new(SysIds::new(instance)),
@@ -415,7 +420,7 @@ impl<L: Layer + Clone> DocumentContext<L> {
                         self.reverse_prefix_map(),
                     ),
                 ),
-                _ => value_to_json(v),
+                _ => value_to_json_xsd(v, self.xsd_10),
             });
         }
 
@@ -1438,12 +1443,13 @@ fn write_id_json<C: QueryableContextType, L: Layer + Clone>(
 use super::types::*;
 predicates! {
     #[module("$doc")]
-    semidet fn get_document_context(context, transaction_term, include_id_term, context_term) {
+    semidet fn get_document_context(context, transaction_term, include_id_term, xsd_10_term, context_term) {
         let schema_layer = transaction_schema_layer(context, transaction_term)?.unwrap();
         let instance_layer = transaction_instance_layer(context, transaction_term)?;
         let include_id: bool = include_id_term.get()?;
+        let xsd_10: bool = xsd_10_term.get()?;
 
-        let get_context = DocumentContext::new_with_options(schema_layer, instance_layer, include_id);
+        let get_context = DocumentContext::new_with_options(schema_layer, instance_layer, include_id, xsd_10);
 
         context_term.unify(DocumentContextBlob(Arc::new(get_context)))
     }
