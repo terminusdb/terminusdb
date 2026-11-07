@@ -207,15 +207,18 @@ pub fn type_is_json(s: &str) -> bool {
     s == "JSON" || s == "JSONObject"
 }
 
+/// Formatter consulted by `value_to_json` for stored decimal lexicals.
+pub type DecimalLexicalHook = fn(&str, bool) -> String;
+
 lazy_static! {
     /// Extension hook for downstream editions to transform a stored
     /// decimal lexical before it is emitted as a JSON number.
-    static ref DECIMAL_LEXICAL_HOOK: std::sync::RwLock<Option<fn(&str, bool) -> String>> =
+    static ref DECIMAL_LEXICAL_HOOK: std::sync::RwLock<Option<DecimalLexicalHook>> =
         std::sync::RwLock::new(None);
 }
 
 /// Register the decimal lexical formatter consulted by `value_to_json`.
-pub fn register_decimal_lexical_hook(hook: fn(&str, bool) -> String) {
+pub fn register_decimal_lexical_hook(hook: DecimalLexicalHook) {
     *DECIMAL_LEXICAL_HOOK.write().unwrap() = Some(hook);
 }
 
