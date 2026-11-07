@@ -855,6 +855,17 @@ api_error_jsonld_(frame,error(casting_error(Val,Type),_), JSON) :-
                               'api:type' : Type},
              'api:message' : Msg
             }.
+api_error_jsonld_(frame,error(unbound_prefix(Prefix,Val,Type),_), JSON) :-
+    format(string(ValS), "~w", [Val]),
+    format(string(Msg), "The value ~s uses prefix ~q which is not bound in the database context; declare it in the schema @context (needed to cast to ~q)", [ValS,Prefix,Type]),
+    JSON = _{'@type' : 'api:FrameErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:prefix' : Prefix,
+                              'api:value' : ValS,
+                              'api:type' : Type},
+             'api:message' : Msg
+            }.
 api_error_jsonld_(woql,error(find_resource_pre_flight_failure_for(AST), _), JSON) :-
     format(string(Msg), "Unable to find and process a resource from the AST ~q", [AST]),
     JSON = _{'@type' : "api:WoqlErrorResponse",
@@ -949,6 +960,17 @@ api_error_jsonld_(woql,error(casting_error(Val,Type),_), JSON) :-
     JSON = _{'@type' : 'api:WoqlErrorResponse',
              'api:status' : 'api:failure',
              'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : ValS,
+                              'api:type' : Type},
+             'api:message' : Msg
+            }.
+api_error_jsonld_(woql,error(unbound_prefix(Prefix,Val,Type),_), JSON) :-
+    format(string(ValS), "~w", [Val]),
+    format(string(Msg), "The value ~s uses prefix ~q which is not bound in the database context; declare it in the schema @context (needed to cast to ~q)", [ValS,Prefix,Type]),
+    JSON = _{'@type' : 'api:WoqlErrorResponse',
+             'api:status' : 'api:failure',
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:prefix' : Prefix,
                               'api:value' : ValS,
                               'api:type' : Type},
              'api:message' : Msg
@@ -2462,6 +2484,18 @@ api_document_error_jsonld(Type, error(casting_error(Value, Destination_Type, Doc
     JSON = _{'@type' : JSON_Type,
              'api:status' : "api:failure",
              'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:value' : Value,
+                              'api:type' : Destination_Type,
+                              'api:document' : Document },
+             'api:message' : Msg
+            }.
+api_document_error_jsonld(Type, error(unbound_prefix(Prefix, Value, Destination_Type, Document),_),JSON) :-
+    document_error_type(Type, JSON_Type),
+    format(string(Msg), "value ~q uses prefix ~q which is not bound in the database context; declare it in the schema @context before inserting (needed to cast to ~q)", [Value, Prefix, Destination_Type]),
+    JSON = _{'@type' : JSON_Type,
+             'api:status' : "api:failure",
+             'api:error' : _{ '@type' : 'api:BadCast',
+                              'api:prefix' : Prefix,
                               'api:value' : Value,
                               'api:type' : Destination_Type,
                               'api:document' : Document },

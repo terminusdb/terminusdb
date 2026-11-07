@@ -881,9 +881,10 @@ lexical_to_clark(Lexical, Prefixes, TypeURI, Clark) :-
             is_ncname(Prefix),
             Local \= '',
             non_whitespace(Local),
-            expanded_name_local_ok(Local, TypeURI),
-            get_dict(Prefix, Prefixes, URI)
-        ->  atomic_list_concat(['{', URI, '}', Local], Clark)
+            expanded_name_local_ok(Local, TypeURI)
+        ->  (   get_dict(Prefix, Prefixes, URI)
+            ->  atomic_list_concat(['{', URI, '}', Local], Clark)
+            ;   throw(error(unbound_prefix(Prefix, Lexical, TypeURI), _)))
         ;   throw(error(casting_error(Lexical, TypeURI), _)))
     ).
 

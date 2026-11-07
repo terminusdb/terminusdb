@@ -1059,6 +1059,23 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: identifiers
+          in: query
+          required: false
+          description: |
+            Include generated document annotations in the response. When
+            `identifiers=false`, returned documents are stripped of `@id`
+            and `@type` so they can read back in a submitted lexical form.
+            Stripping is recursive and covers unfolded shared members and
+            subdocuments; a pure unfolded link reference keeps its
+            `@id`/`@type` so the reference is not lost. Applies to all
+            instance selectors (`id`, `ids`, `type`, `id_prefix`, `query`
+            and the bare listing). The stripped form is not directly
+            resubmittable — insertion still may still require `@type` to
+            identify the class if it can't be resolved automatically.
+          schema:
+            type: boolean
+            default: true
         - name: xsd
           in: query
           required: false
@@ -1204,7 +1221,16 @@ paths:
         - name: merge_repeats
           in: query
           required: false
-          description: If true, duplicate document IDs in the same request are silently merged instead of causing an error.
+          description: |
+            If true, repeated inserts of the same document are merged
+            instead of causing a `DocumentIdAlreadyExists` error. This
+            covers duplicates within one request and resubmission of an
+            already-committed document — including a `@shared` member
+            elaborated again inside a later parent. A repeat is accepted
+            only when its content normalizes to exactly the existing
+            document; differing content at the same `@id` still fails.
+            Limitation: `@subdocument` members cannot be normalized
+            standalone and may remain a conflict.
           schema:
             type: boolean
             default: false
@@ -1323,7 +1349,16 @@ paths:
         - name: merge_repeats
           in: query
           required: false
-          description: If true, duplicate document IDs in the same request are silently merged instead of causing an error.
+          description: |
+            If true, repeated inserts of the same document are merged
+            instead of causing a `DocumentIdAlreadyExists` error. This
+            covers duplicates within one request and resubmission of an
+            already-committed document — including a `@shared` member
+            elaborated again inside a later parent. A repeat is accepted
+            only when its content normalizes to exactly the existing
+            document; differing content at the same `@id` still fails.
+            Limitation: `@subdocument` members cannot be normalized
+            standalone and may remain a conflict.
           schema:
             type: boolean
             default: false

@@ -543,6 +543,60 @@ describe('document', function () {
       expect(result.body['api:error']['@type']).to.equal('api:SameDocumentIdsMutatedInOneTransaction')
     })
 
+    it('allows resubmitting an identical embedded document with merge_repeats', async function () {
+      const shared = util.randomString()
+      const parent = util.randomString()
+      const schema = [
+        { '@id': shared, '@type': 'Class', '@shared': [], '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' },
+        { '@id': parent, '@type': 'Class', member: { '@class': shared, '@type': 'Optional' } },
+      ]
+      await document.insert(agent, { schema })
+      const member = { '@type': shared, name: 'shared1', value: 'same' }
+      await document.insert(agent, { instance: { '@type': parent, member } })
+      const r = await document.insert(agent, { instance: { '@type': parent, member }, merge_repeats: true }).unverified()
+      expect(r.status).to.equal(200)
+    })
+
+    it('rejects resubmitting an identical embedded document without merge_repeats', async function () {
+      const shared = util.randomString()
+      const parent = util.randomString()
+      const schema = [
+        { '@id': shared, '@type': 'Class', '@shared': [], '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' },
+        { '@id': parent, '@type': 'Class', member: { '@class': shared, '@type': 'Optional' } },
+      ]
+      await document.insert(agent, { schema })
+      const member = { '@type': shared, name: 'shared1', value: 'same' }
+      await document.insert(agent, { instance: { '@type': parent, member } })
+      const r = await document.insert(agent, { instance: { '@type': parent, member } }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentIdAlreadyExists')
+    })
+
+    it('rejects a modified embedded document even with merge_repeats', async function () {
+      const shared = util.randomString()
+      const parent = util.randomString()
+      const schema = [
+        { '@id': shared, '@type': 'Class', '@shared': [], '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' },
+        { '@id': parent, '@type': 'Class', member: { '@class': shared, '@type': 'Optional' } },
+      ]
+      await document.insert(agent, { schema })
+      await document.insert(agent, { instance: { '@type': parent, member: { '@type': shared, name: 'shared1', value: 'same' } } })
+      const changed = { '@type': parent, member: { '@type': shared, name: 'shared1', value: 'different' } }
+      const r = await document.insert(agent, { instance: changed, merge_repeats: true }).unverified()
+      expect(r.status).to.equal(400)
+      expect(r.body['api:error']['@type']).to.equal('api:DocumentIdAlreadyExists')
+    })
+
+    it('allows resubmitting the same document with merge_repeats', async function () {
+      const className = util.randomString()
+      const schema = [{ '@id': className, '@type': 'Class', '@key': { '@type': 'Lexical', '@fields': ['name'] }, name: 'xsd:string', value: 'xsd:string' }]
+      await document.insert(agent, { schema })
+      const instance = { '@type': className, name: 'doc1', value: 'same' }
+      await document.insert(agent, { instance })
+      const r = await document.insert(agent, { instance, merge_repeats: true }).unverified()
+      expect(r.status).to.equal(200)
+    })
+
     describe('tests cardinality in schema', function () {
       let card
       let min

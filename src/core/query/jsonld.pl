@@ -359,10 +359,21 @@ compress_uri(URI, Key, Prefix, Comp) :-
     atomic_list_concat([Key,':',Rest], Comp).
 
 compress_pairs_uri(URI, Pairs, Folded_URI) :-
-    (   member(Prefix-Expanded, Pairs),
-        compress_uri(URI, Prefix, Expanded, Folded_URI)
-    ->  true
-    ;   URI = Folded_URI).
+    % Among all context entries whose expansion is a prefix of URI, the
+    % longest expansion wins; ties keep the first in context order, as
+    % before.
+    findall(Len-RevIdx-Folded,
+            (   nth0(Idx, Pairs, Prefix-Expanded),
+                compress_uri(URI, Prefix, Expanded, Folded),
+                atom_string(Expanded_A, Expanded),
+                atom_length(Expanded_A, Len),
+                RevIdx is -Idx),
+            Candidates),
+    (   Candidates = []
+    ->  URI = Folded_URI
+    ;   msort(Candidates, Sorted),
+        last(Sorted, _Len-_RevIdx-Folded_URI)
+    ).
 
 compress_dict_uri(URI, Dict, Folded_URI) :-
     dict_pairs(Dict, _, Pairs),
@@ -467,6 +478,27 @@ test(compress_hyphenated_prefix_property, [])
     compress(Document, Context, Compressed),
 
     json{'dfrnt-bom:weight':42} :< Compressed.
+
+% When one prefix URI is a string-extension of another, the longest
+% matching URI must win, regardless of prefix order in the context.
+test(compress_longest_prefix_wins, [])
+:-
+    Context = json{ 'xbrl'  : "https://xbrl.org/PWD/2026-09-01",
+                    'xbrla' : "https://xbrl.org/PWD/2026-09-01/accounting"},
+    Document = json{ 'https://xbrl.org/PWD/2026-09-01/accountingbalance' : "debit"},
+    compress(Document, Context, Compressed),
+
+    json{'xbrla:balance':"debit"} :< Compressed.
+
+test(compress_longest_prefix_wins_reversed_order, [])
+:-
+    Context = json{ 'xbrla' : "https://xbrl.org/PWD/2026-09-01/accounting",
+                    'xbrl'  : "https://xbrl.org/PWD/2026-09-01"},
+    Document = json{ 'https://xbrl.org/PWD/2026-09-01/accountingbalance' : "debit",
+                     'https://xbrl.org/PWD/2026-09-01unit' : "iso4217:USD"},
+    compress(Document, Context, Compressed),
+
+    json{'xbrla:balance':"debit", 'xbrl:unit':"iso4217:USD"} :< Compressed.
 
 :- end_tests(jsonld_compress).
 
