@@ -592,6 +592,11 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             detect_output_format(Search, Request, OutputFormat),
 
+            % XSD canonicalization version for rendered literals; '1.0'
+            % requires enterprise edition (issue #2632).
+            param_value_search_or_json_optional(Search, JSON, xsd, non_empty_atom, '1.1', Xsd_Raw),
+            xsd_version_param(Xsd_Raw, Xsd_Version),
+
             Config = config{
                          skip: Skip,
                          count: Count,
@@ -606,12 +611,13 @@ document_handler(get, Path, Request, System_DB, Auth) :-
                          request: Request
                      },
 
-            api_read_document_selector(
-                System_DB, Auth, Path, Graph_Type,
-                Id, Ids, Type, Query, Config,
-                Requested_Data_Version, Actual_Data_Version,
-                routes:cors_json_stream_write_headers_(Request, Actual_Data_Version)
-            )
+            with_xsd_version(Xsd_Version,
+                api_read_document_selector(
+                    System_DB, Auth, Path, Graph_Type,
+                    Id, Ids, Type, Query, Config,
+                    Requested_Data_Version, Actual_Data_Version,
+                    routes:cors_json_stream_write_headers_(Request, Actual_Data_Version)
+                ))
         )).
 
 document_handler(post, Path, Request, System_DB, Auth) :-
@@ -1000,6 +1006,14 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
 
             read_data_version_header(Request, Requested_Data_Version),
 
+            (   memberchk(search(Search), Request)
+            ->  true
+            ;   Search = []),
+            % XSD canonicalization version for rendered literals; '1.0'
+            % requires enterprise edition (issue #2632).
+            param_value_search_or_json_optional(Search, JSON, xsd, non_empty_atom, '1.1', Xsd_Raw),
+            xsd_version_param(Xsd_Raw, Xsd_Version),
+
             Options = _{
                           files: Files,
                           all_witnesses: All_Witnesses,
@@ -1009,18 +1023,19 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
                           streaming: Streaming,
                           library: Library
                       },
-            (   Streaming = true
-            ->  format('Status: 200~n'),
-                format('Content-Type: application/json~n'),
-                format("Transfer-Encoding: chunked~n~n"),
-                woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
-            ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Transaction_Meta_Data, Response, Options),
-                transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
-                write_cors_headers(Request),
-                write_data_version_header(New_Data_Version),
-                write_transaction_retry_count_header(Transaction_Retry_Count),
-                reply_json_dict(Response, [width(0)])
-            )
+            with_xsd_version(Xsd_Version,
+                (   Streaming = true
+                ->  format('Status: 200~n'),
+                    format('Content-Type: application/json~n'),
+                    format("Transfer-Encoding: chunked~n~n"),
+                    woql_query_streaming_json(System_DB, Auth, Path_Option, json_query(Query), Options)
+                ;   woql_query_json(System_DB, Auth, Path_Option, json_query(Query), _Context, New_Data_Version, Transaction_Meta_Data, Response, Options),
+                    transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
+                    write_cors_headers(Request),
+                    write_data_version_header(New_Data_Version),
+                    write_transaction_retry_count_header(Transaction_Retry_Count),
+                    reply_json_dict(Response, [width(0)])
+                ))
         )).
 
 
@@ -3531,8 +3546,11 @@ graphql_handler(Method, Path_Atom, Request, System_DB, Auth) :-
     ;   Search = []),
 
     catch((      param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
+                 param_value_search_optional(Search, xsd, non_empty_atom, '1.1', Xsd_Raw),
+                 xsd_version_param(Xsd_Raw, Xsd_Version),
                  authenticate(System_DB, Request, Auth),
-                 handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids),
+                 with_xsd_version(Xsd_Version,
+                     handle_graphql_request(System_DB, Auth, Method, Path_Atom, Input, Response, Content_Type, Content_Length, New_Data_Version, Transaction_Meta_Data, Compress_Ids)),
                  transaction_retry_count_from_meta_data(Transaction_Meta_Data, Transaction_Retry_Count),
                  write_cors_headers(Request),
                  write_data_version_header(New_Data_Version),

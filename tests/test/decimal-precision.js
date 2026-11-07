@@ -163,6 +163,53 @@ describe('decimal-precision', function () {
       expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('100000')
       expect(response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('2.5')
     })
+
+    it('accepts xsd=1.1 explicitly and renders the XSD 1.1 canonical form', async function () {
+      const response = await document.get(agent, {
+        body: { id: 'HighPrecision/canon1' },
+        query: { xsd: '1.1' },
+      })
+
+      expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1')
+      expect(response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.5')
+    })
+
+    it('rejects xsd=1.0 on the document endpoint without enterprise edition', async function () {
+      const response = await document.get(agent, {
+        body: { id: 'HighPrecision/canon1' },
+        query: { xsd: '1.0' },
+      }).unverified()
+
+      expect(response.status).to.equal(400)
+      expect(response.body['api:message']).to.include('enterprise')
+    })
+
+    it('rejects xsd=1.0 on the WOQL endpoint without enterprise edition', async function () {
+      const query = {
+        '@type': 'Eval',
+        expression: {
+          '@type': 'ArithmeticValue',
+          data: { '@type': 'xsd:decimal', '@value': '1.0' },
+        },
+        result: { '@type': 'ArithmeticValue', variable: 'R' },
+      }
+      const response = await agent
+        .post(`${api.path.woqlResource({ dbName: agent.dbName, orgName: agent.orgName })}?xsd=1.0`)
+        .send({ query })
+
+      expect(response.status).to.equal(400)
+      expect(response.body['api:message']).to.include('enterprise')
+    })
+
+    it('rejects xsd=1.0 on the GraphQL endpoint without enterprise edition', async function () {
+      const graphqlPath = api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName })
+      const response = await agent
+        .post(`${graphqlPath}?xsd=1.0`)
+        .send({ query: '{ HighPrecision { value15digits } }' })
+
+      expect(response.status).to.equal(400)
+      expect(response.text).to.include('enterprise')
+    })
   })
 
   describe('WOQL Arithmetic Precision', function () {

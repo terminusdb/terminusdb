@@ -4,6 +4,9 @@
               string_decimal_to_rational/2,
               rational_to_decimal_string/3,
               decimal_precision/1,
+              xsd_version/1,
+              xsd_version_param/2,
+              with_xsd_version/2,
               normalise_interval_start/2,
               normalise_interval_end/2,
               interval_as_term/2,
@@ -36,6 +39,44 @@
  */
 :- multifile decimal_precision/1.
 decimal_precision(20).
+
+/**
+ * Request-scoped XSD canonicalization version.
+ *
+ * The endpoints that render literals scope each request with
+ * with_xsd_version/2; absent a scope the default is '1.1'. The flag is
+ * thread-local so concurrent requests cannot interfere.
+ */
+:- thread_local request_xsd_version_/1.
+:- meta_predicate with_xsd_version(+, 0).
+
+xsd_version(Version) :-
+    (   request_xsd_version_(Version)
+    ->  true
+    ;   Version = '1.1').
+
+with_xsd_version(Version, Goal) :-
+    setup_call_cleanup(
+        asserta(request_xsd_version_(Version)),
+        Goal,
+        retractall(request_xsd_version_(Version))).
+
+/**
+ * xsd_version_param(+Value, -Version) is det.
+ *
+ * Validate an 'xsd' endpoint parameter. '1.0' renders decimal canonical
+ * forms per XSD 1.0 and requires enterprise edition; '1.1' is the
+ * XSD 1.1 canonical form and the default.
+ */
+xsd_version_param(Version, Version) :-
+    memberchk(Version, ['1.0', '1.1']),
+    !,
+    (   Version = '1.0',
+        \+ config:is_enterprise
+    ->  throw(error(unsupported_xsd_version('1.0'), _))
+    ;   true).
+xsd_version_param(Version, _) :-
+    throw(error(bad_parameter_type(xsd, "1.0 or 1.1", Version), _)).
 
 :- use_module(core(query/jsonld)). % dubious. we should not be importing query stuff here.
 
@@ -116,8 +157,11 @@ rational_to_decimal_string(Rational, String, MaxDecimals) :-
         % Fractional part
         Remainder is Num mod Den,
         (   Remainder =:= 0
-        ->  % No fractional part
-            format(string(String), "~w~w", [Sign, IntPart])
+        ->  % No fractional part: XSD 1.1 canonical drops the fraction;
+            % XSD 1.0 canonical requires the decimal point with a digit.
+            (   xsd_version('1.0')
+            ->  format(string(String), "~w~w.0", [Sign, IntPart])
+            ;   format(string(String), "~w~w", [Sign, IntPart]))
         ;   % Compute MaxDecimals digits of precision WITH ROUNDING
             Multiplier is 10^MaxDecimals,
             % Round to nearest: add 0.5 before truncating
@@ -1742,6 +1786,67 @@ test(decimal_canonical_strips_leading_plus_and_zeros, []) :-
              'http://www.w3.org/2001/XMLSchema#string',
              [],
              "100000"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(decimal_canonical_xsd_10_integer_valued, []) :-
+    % XSD 1.0 canonical form (issue #2632): the decimal point is required
+    % with at least one fractional digit — integer-valued decimals render
+    % with ".0". Non-integral values still shed trailing zeros.
+    with_xsd_version('1.0',
+        forall(
+            member(Lexical-Canonical,
+                   ["1"     - "1.0",
+                    "1.0"   - "1.0",
+                    "1.50"  - "1.5",
+                    "100000.00" - "100000.0",
+                    "0.0"   - "0.0",
+                    "-1.0"  - "-1.0"]),
+            (   typecast(Lexical^^'http://www.w3.org/2001/XMLSchema#string',
+                         'http://www.w3.org/2001/XMLSchema#decimal',
+                         [],
+                         Decimal^^'http://www.w3.org/2001/XMLSchema#decimal'),
+                typecast(Decimal^^'http://www.w3.org/2001/XMLSchema#decimal',
+                         'http://www.w3.org/2001/XMLSchema#string',
+                         [],
+                         Canonical^^'http://www.w3.org/2001/XMLSchema#string')
+            )
+        )).
+
+test(decimal_canonical_version_scope_does_not_leak, []) :-
+    % The request-scoped version resets after the goal: '1.1' canonical
+    % rendering resumes on the same thread.
+    with_xsd_version('1.0',
+        (   typecast("1"^^'http://www.w3.org/2001/XMLSchema#string',
+                     'http://www.w3.org/2001/XMLSchema#decimal',
+                     [],
+                     D1^^'http://www.w3.org/2001/XMLSchema#decimal'),
+            typecast(D1^^'http://www.w3.org/2001/XMLSchema#decimal',
+                     'http://www.w3.org/2001/XMLSchema#string',
+                     [],
+                     "1.0"^^'http://www.w3.org/2001/XMLSchema#string'))),
+    typecast("1"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [],
+             D2^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    typecast(D2^^'http://www.w3.org/2001/XMLSchema#decimal',
+             'http://www.w3.org/2001/XMLSchema#string',
+             [],
+             "1"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(xsd_version_param_accepts_supported_versions, []) :-
+    xsd_version_param('1.1', '1.1'),
+    setup_call_cleanup(
+        set_prolog_flag(terminusdb_enterprise, true),
+        xsd_version_param('1.0', '1.0'),
+        set_prolog_flag(terminusdb_enterprise, false)).
+
+test(xsd_version_param_10_requires_enterprise,
+     [condition(\+ config:is_enterprise),
+      error(unsupported_xsd_version('1.0'), _)]) :-
+    xsd_version_param('1.0', _).
+
+test(xsd_version_param_rejects_unknown_version,
+     [error(bad_parameter_type(xsd, _, _), _)]) :-
+    xsd_version_param('2.0', _).
 
 test(anyuri_bare_filename, []) :-
     % Per XSD 1.1 spec and RFC 3987, xsd:anyURI accepts relative URI references
