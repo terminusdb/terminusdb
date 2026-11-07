@@ -17,6 +17,7 @@ function commonGetParams (params) {
   result.prefixed = params.boolean('prefixed')
   result.raw_id = params.boolean('raw_id')
   result.format = params.string('format')
+  result.xsd = params.string('xsd')
   params.assertEmpty()
   return result
 }

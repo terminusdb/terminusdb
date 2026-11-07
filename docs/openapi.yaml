@@ -1067,15 +1067,27 @@ paths:
             `identifiers=false`, returned documents are stripped of `@id`
             and `@type` so they can read back in a submitted lexical form.
             Stripping is recursive and covers unfolded shared members and
-            subdocuments; a pure unfolded link reference keeps its 
-            `@id`/`@type` so the reference is not lost. Applies to all 
-            instance selectors (`id`, `ids`, `type`, `id_prefix`, `query` 
-            and the bare listing). The stripped form is not directly 
+            subdocuments; a pure unfolded link reference keeps its
+            `@id`/`@type` so the reference is not lost. Applies to all
+            instance selectors (`id`, `ids`, `type`, `id_prefix`, `query`
+            and the bare listing). The stripped form is not directly
             resubmittable — insertion still may still require `@type` to
             identify the class if it can't be resolved automatically.
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
 
       responses:
         200:
@@ -1624,6 +1636,19 @@ paths:
       x-js-client: Client.woqlQuery
       tags:
         - WOQL
+      parameters:
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       requestBody:
         required: true
         content:
@@ -1649,6 +1674,18 @@ paths:
         - WOQL
       parameters:
         - $ref: '#/components/parameters/branch_path'
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       requestBody:
         required: true
         content:
@@ -1705,6 +1742,18 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       responses:
         200:
           description: GraphQL query result
@@ -1786,6 +1835,18 @@ paths:
           schema:
             type: boolean
             default: true
+        - name: xsd
+          in: query
+          required: false
+          description: |
+            XSD canonicalization version for rendered literals. `1.1` (default)
+            renders integer-valued `xsd:decimal` without a fraction (`1`).
+            `1.0` renders the XSD 1.0 canonical form (`1.0`) and requires
+            enterprise edition.
+          schema:
+            type: string
+            enum: ["1.0", "1.1"]
+            default: "1.1"
       requestBody:
         required: true
         content:
