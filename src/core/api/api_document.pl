@@ -296,13 +296,16 @@ api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config,
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
-           (   Stream_Started = started(Started),
-               do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-                         error(document_not_found(Id), _)),
-               nb_setarg(1, Stream_Started, true)
-           )).
+    (   strip_identifiers(Config)
+    ->  forall(api_get_documents_by_query(Transaction, instance, Type, Query, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               (   Stream_Started = started(Started),
+                   do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                             error(document_not_found(Id), _)),
+                   nb_setarg(1, Stream_Started, true)
+               ))).
 
 api_get_documents_by_query(Transaction, Graph_Type, Type, Query, Config, Document) :-
     api_document:api_generate_document_ids_by_query(Graph_Type, Transaction, Type, Query, Config, Id),
@@ -404,13 +407,19 @@ api_document_exists(instance, Transaction, Id) :-
 api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    Stream_Started = started(Started),
-    database_prefixes(Transaction, Prefixes),
-    prefix_expand(Id, Prefixes, Id_Ex),
-    do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
-              error(document_not_found(Id), _)),
-   nb_setarg(1, Stream_Started, true).
+    (   strip_identifiers(Config)
+    ->  % materialize via api_get_document so the strip applies
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        api_get_document(instance, Transaction, Id_Ex, Config, Document),
+        json_stream_write_dict(Config, Stream_Started, Document)
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        Stream_Started = started(Started),
+        database_prefixes(Transaction, Prefixes),
+        prefix_expand(Id, Prefixes, Id_Ex),
+        do_or_die('$doc':print_document_json(current_output, Context, Id_Ex, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)).
 api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)),
@@ -419,52 +428,66 @@ api_print_document(schema, Transaction, Id, Config, Stream_Started) :-
 api_print_documents(schema, Transaction, Config, Stream_Started) :-
     forall(api_get_documents(Transaction, schema, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents(instance, Transaction, Config, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents(instance, Transaction, Config, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall(api_get_documents(Transaction, instance, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :-
     forall(api_get_documents_by_type(Transaction, schema, Type, Config, Document),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_type(instance, Transaction, Config, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction,Prefixes),
-    % TODO errors on unknown prefix
-    prefix_expand_schema(Type, Prefixes, Type_Ex),
+api_print_documents_by_type(instance, Transaction, Config, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall(api_get_documents_by_type(Transaction, instance, Type, Config, Document),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        database_and_default_prefixes(Transaction,Prefixes),
+        % TODO errors on unknown prefix
+        prefix_expand_schema(Type, Prefixes, Type_Ex),
 
-    (   parallelize_enabled
-    ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+        (   parallelize_enabled
+        ->  '$doc':par_print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_all_documents_json_by_type(current_output, Context, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
     forall((member(Id, Ids),
             api_get_document(schema, Transaction, Id, Config, Document)),
            json_stream_write_dict(Config, Stream_Started, Document)).
-api_print_documents_by_id(instance, Transaction, Config, Ids, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction, Prefixes),
-    maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
-            Ids,
-            Ids_Ex),
-    (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall((member(Id, Ids),
+                api_get_document(instance, Transaction, Id, Config, Document)),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
+                Ids,
+                Ids_Ex),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_id(current_output, Context, Ids_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_id(current_output, Context, Ids, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 
 % Documents selected by an id prefix, printed as full documents. The Rust
 % writer streams the sorted subject-dictionary range for the prefix and
 % materializes each document inline — no Prolog-side id list.
-api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, _Stream_Started) :-
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
-    database_and_default_prefixes(Transaction, Prefixes),
-    prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
-    (   ground(Type)
-    ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
-    ;   true),
-    (   parallelize_enabled
-    ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
-    ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))).
+api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, Stream_Started) :-
+    (   strip_identifiers(Config)
+    ->  forall((api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
+                api_get_document(instance, Transaction, Id, Config, Document)),
+               json_stream_write_dict(Config, Stream_Started, Document))
+    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+        database_and_default_prefixes(Transaction, Prefixes),
+        prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
+        (   ground(Type)
+        ->  prefix_expand_schema(Type, Prefixes, Type_Ex)
+        ;   true),
+        (   parallelize_enabled
+        ->  '$doc':par_print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
+        ;   '$doc':print_documents_json_by_prefix(current_output, Context, Id_Prefix_Ex, Type_Ex, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
 api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Type, _Stream_Started) :-
     throw(error(id_prefix_is_only_supported_for_instance_graphs, _)).
 
@@ -520,11 +543,48 @@ compress_id_for_output(Config, Prefixes, Id, Out_Id) :-
     ->  true
     ;   Out_Id = Id).
 
+% strip_identifiers(+Config) is semidet.
+% True when the request asked for identifiers=false — document @id/@type
+% annotations are stripped from the response so a fetched document reads
+% back in its submitted lexical form.
+strip_identifiers(Config) :-
+    Config.get(identifiers, true) = false.
+
+% strip_id_type_annotations(+Document, -Stripped) is det.
+% Recursively removes document `@id`/`@type` annotations so the result reads
+% back in submitted lexical form. Typed literal wrappers (dicts carrying
+% `@value`) and `@id` link references are preserved — they are semantic
+% content, not generated annotations.
+strip_id_type_annotations(Value, Value) :-
+    \+ is_dict(Value), \+ is_list(Value), !.
+strip_id_type_annotations(List, Stripped) :-
+    is_list(List), !,
+    maplist(strip_id_type_annotations, List, Stripped).
+strip_id_type_annotations(Dict, Dict) :-
+    (   get_dict('@value', Dict, _)
+    ;   get_dict('@type', Dict, '@id')),
+    !.
+strip_id_type_annotations(Dict, Dict) :-
+    dict_pairs(Dict, _, Pairs),
+    forall(member(Key-_, Pairs), memberchk(Key, ['@id','@type'])),
+    !.
+strip_id_type_annotations(Dict, Stripped) :-
+    dict_pairs(Dict, Tag, Pairs),
+    findall(Key-Stripped_Value,
+            (   member(Key-Value, Pairs),
+                \+ memberchk(Key, ['@id','@type']),
+                strip_id_type_annotations(Value, Stripped_Value)),
+            Stripped_Pairs),
+    dict_pairs(Stripped, Tag, Stripped_Pairs).
+
 api_get_document(instance, Transaction, Id, Config, Document) :-
     Raw_Id = Config.get(raw_id, true),
     Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false, raw_id: Raw_Id},
-    do_or_die(get_document(Transaction, Id, Document, Options),
-              error(document_not_found(Id), _)).
+    do_or_die(get_document(Transaction, Id, Document0, Options),
+              error(document_not_found(Id), _)),
+    (   strip_identifiers(Config)
+    ->  strip_id_type_annotations(Document0, Document)
+    ;   Document = Document0).
 api_get_document(schema, Transaction, Id, _Config, Document) :-
     do_or_die(get_schema_document(Transaction, Id, Document),
               error(document_not_found(Id), _)).
