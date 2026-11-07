@@ -1710,6 +1710,39 @@ test(decimal_to_string_cast, []) :-
              [],
              "0.5679"^^'http://www.w3.org/2001/XMLSchema#string').
 
+test(decimal_canonical_integer_valued, []) :-
+    % XSD 1.1 canonical form (issue #2632): an integer-valued decimal
+    % renders without the fraction — "1.0" canonicalizes to "1".
+    forall(
+        member(Lexical-Canonical,
+               ["1"     - "1",
+                "1.0"   - "1",
+                "1.50"  - "1.5",
+                "100000.00" - "100000",
+                "0.0"   - "0",
+                "-1.0"  - "-1"]),
+        (   typecast(Lexical^^'http://www.w3.org/2001/XMLSchema#string',
+                     'http://www.w3.org/2001/XMLSchema#decimal',
+                     [],
+                     Decimal^^'http://www.w3.org/2001/XMLSchema#decimal'),
+            typecast(Decimal^^'http://www.w3.org/2001/XMLSchema#decimal',
+                     'http://www.w3.org/2001/XMLSchema#string',
+                     [],
+                     Canonical^^'http://www.w3.org/2001/XMLSchema#string')
+        )
+    ).
+
+test(decimal_canonical_strips_leading_plus_and_zeros, []) :-
+    % Canonical form carries no leading '+' and no insignificant zeros.
+    typecast("+100000.00"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#decimal',
+             [],
+             Decimal^^'http://www.w3.org/2001/XMLSchema#decimal'),
+    typecast(Decimal^^'http://www.w3.org/2001/XMLSchema#decimal',
+             'http://www.w3.org/2001/XMLSchema#string',
+             [],
+             "100000"^^'http://www.w3.org/2001/XMLSchema#string').
+
 test(anyuri_bare_filename, []) :-
     % Per XSD 1.1 spec and RFC 3987, xsd:anyURI accepts relative URI references
     typecast("helloWorld.xsd"^^'http://www.w3.org/2001/XMLSchema#string',

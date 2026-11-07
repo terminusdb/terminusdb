@@ -122,6 +122,49 @@ describe('decimal-precision', function () {
     })
   })
 
+  describe('XSD Canonical Form (issue #2632)', function () {
+    // XSD 1.1: an integer-valued xsd:decimal canonicalizes without the
+    // fraction — "1.0" reads back as "1". Non-integral values keep their
+    // significant digits with trailing zeros trimmed.
+    it('returns integer-valued decimals without the fraction', async function () {
+      const docs = [
+        { '@type': 'HighPrecision', '@id': 'HighPrecision/canon1', value20digits: 1, value15digits: 1.0, calculation: 1.5 },
+        { '@type': 'HighPrecision', '@id': 'HighPrecision/canon2', value20digits: 100000.00, value15digits: 0.0, calculation: -1.0 },
+      ]
+
+      await document.insert(agent, { instance: docs })
+
+      const r1 = await document.get(agent, { body: { id: 'HighPrecision/canon1' } })
+      const r2 = await document.get(agent, { body: { id: 'HighPrecision/canon2' } })
+
+      // Compare against the raw lexical in the JSON text, not the parsed
+      // number — the assertion is about the canonical spelling.
+      expect(r1.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1')
+      expect(r1.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1')
+      expect(r1.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.5')
+      expect(r2.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('100000')
+      expect(r2.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('0')
+      expect(r2.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('-1')
+    })
+
+    it('trims insignificant zeros in submitted decimal strings', async function () {
+      const doc = {
+        '@type': 'HighPrecision',
+        '@id': 'HighPrecision/canon3',
+        value20digits: '1.50',
+        value15digits: '+100000.00',
+        calculation: '2.500',
+      }
+
+      await document.insert(agent, { instance: doc })
+      const response = await document.get(agent, { body: { id: 'HighPrecision/canon3' } })
+
+      expect(response.text.match(/"value20digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.5')
+      expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('100000')
+      expect(response.text.match(/"calculation"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('2.5')
+    })
+  })
+
   describe('WOQL Arithmetic Precision', function () {
     it('should preserve precision in WOQL arithmetic operations', async function () {
       // Test: 1/3 + 1/6 = 1/2 = 0.5
