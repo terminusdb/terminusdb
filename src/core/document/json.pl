@@ -30,9 +30,11 @@
               insert_document/3,
               insert_document/7,
               insert_document/8,
+              insert_document_merge/9,
               insert_document_expanded/3,
               insert_document_expanded/4,
               insert_document_expanded/5,
+              insert_document_expanded/6,
               insert_document_unsafe/8,
               replace_document_expanded/5,
               insert_backlinks/2,
@@ -92,6 +94,7 @@
 :- use_module(instance).
 :- use_module(schema).
 :- use_module(migration, [type_weaken/3]).
+:- use_module(normalize, [normalize_document/3]).
 
 :- use_module(library(assoc)).
 :- use_module(library(pcre)).
@@ -677,9 +680,9 @@ check_submitted_id_against_generated_id(Context, Generated_Id, Id) :-
     % Normalize to strings for comparison (handle atom vs string)
     atom_string(Id_Ex, Id_String),
     atom_string(Generated_Id_Ex, Generated_String),
-    do_or_die(
-        Id_String = Generated_String,
-        error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _)
+    (   Id_String = Generated_String
+    ->  true
+    ;   throw(error(submitted_id_does_not_match_generated_id(Id_Ex, Generated_Id_Ex), _))
     ).
 check_submitted_id_against_generated_id(Context, Id, Id_Ex) :-
     prefix_expand(Id, Context, Id_Ex).
@@ -3481,6 +3484,126 @@ check_existing_document_status(Transaction, Id, Variety, Status) :-
         ;   Status = not_present)
     ).
 
+%! check_id_pairs_not_present(+Transaction, +Elaborated, +Id_Pairs, +Merge) is det.
+%
+%  Every document id generated from the submission must not already exist in
+%  the instance. When Merge is true a present id is still accepted if the
+%  submitted member is structurally identical to the stored document (an
+%  exact repeat); differing content at the same id remains an error.
+check_id_pairs_not_present(Transaction, Elaborated, Id_Pairs, Merge) :-
+    forall(
+        member(Id-Variety, Id_Pairs),
+        (   check_existing_document_status(Transaction, Id, Variety, Status),
+            (   Status = present
+            ->  (   Merge = true,
+                    elaborated_member_equivalent(Transaction, Elaborated, Id)
+                ->  true
+                ;   throw(error(can_not_insert_existing_object_with_id(Id), _)))
+            ;   true))).
+
+%! check_id_pairs_for_insert(+Transaction, +Elaborated, +Id_Pairs, +Overwrite, +Merge) is det.
+%
+%  Skips the existence check entirely under overwrite; otherwise requires
+%  every generated id to be absent or - under Merge - an exact repeat.
+check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge) :-
+    (   Overwrite = false
+    ->  check_id_pairs_not_present(Transaction, Elaborated, Id_Pairs, Merge)
+    ;   true).
+
+%! elaborated_member_equivalent(+Transaction, +Elaborated, +Id) is semidet.
+%
+%  True when the member of the elaborated submission identified by Id is
+%  structurally identical to the document already stored under that id.
+%  The comparison goes through the same normalization as the diff API: the
+%  member is inserted into a scratch store and read back, then compared
+%  term-for-term against the committed document.
+elaborated_member_equivalent(Transaction, Elaborated, Id) :-
+    once(elaborated_member(Elaborated, Id, Member)),
+    unelaborate_member(Member, Source),
+    % A @subdocument member cannot be normalized on its own — its identity
+    % is its parent's — so equivalence is not decidable here; the repeat is
+    % treated as a conflict (see terminusdb/terminusdb#2454).
+    get_dict('@type', Source, Member_Type),
+    \+ is_subdocument(Transaction, Member_Type),
+    normalize_document(Transaction, Source, Normalized),
+    get_document(Transaction, Id, Committed),
+    Committed = Normalized.
+
+%! unelaborate_member(+Elaborated, -Source) is det.
+%
+%  Reverses the elaboration envelope on a member document so it can be fed
+%  back through insert_document: @container wrappers become plain lists and
+%  typed literals {"@type":T,"@value":V} become V.  Node references
+%  {"@type":"@id","@id":Id} are valid input and kept as-is.
+unelaborate_member(Elaborated, Source) :-
+    is_dict(Elaborated),
+    get_dict('@container', Elaborated, _),
+    get_dict('@value', Elaborated, Values),
+    is_list(Values),
+    !,
+    maplist(unelaborate_member, Values, Source).
+unelaborate_member(Elaborated, Source) :-
+    is_dict(Elaborated),
+    !,
+    dict_pairs(Elaborated, _, Pairs),
+    % '@id' is elaboration-assigned and takes part in ValueHash key
+    % generation, so it must be dropped to reproduce the submitted form —
+    % except on {"@type":"@id"} link nodes, where it is the content.
+    (   get_dict('@type', Elaborated, "@id")
+    ->  Source_Pairs0 = Pairs
+    ;   exclude([('@id'-_)]>>true, Pairs, Source_Pairs0)
+    ),
+    maplist(unelaborate_member_pair, Source_Pairs0, Source_Pairs),
+    dict_pairs(Source, json, Source_Pairs).
+unelaborate_member(Elaborated, Source) :-
+    is_list(Elaborated),
+    !,
+    maplist(unelaborate_member, Elaborated, Source).
+unelaborate_member(Scalar, Scalar).
+
+unelaborate_member_pair(Key-Value, Key-Source) :-
+    unelaborate_member_value(Value, Source).
+
+unelaborate_member_value(Value, Source) :-
+    is_dict(Value),
+    _{'@type' : Type, '@value' : V} :< Value,
+    dict_pairs(Value, json, Pairs),
+    length(Pairs, 2),
+    Type \= "@id",
+    !,
+    unelaborate_member(V, Source).
+unelaborate_member_value(Value, Source) :-
+    unelaborate_member(Value, Source).
+
+%! elaborated_member(+JSON, +Id, -Member) is nondet.
+%
+%  Finds the (possibly nested) dictionary in an elaborated JSON document
+%  whose '@id' is Id. Pure links carry no '@id' of their own and are
+%  skipped.
+elaborated_member(JSON, Id, JSON) :-
+    is_dict(JSON),
+    get_dict('@id', JSON, Id),
+    !.
+elaborated_member(JSON, Id, Member) :-
+    is_dict(JSON),
+    !,
+    dict_pairs(JSON, _, Pairs),
+    member(_-Value, Pairs),
+    elaborated_member_value(Value, Id, Member).
+elaborated_member(List, Id, Member) :-
+    is_list(List),
+    member(Item, List),
+    elaborated_member_value(Item, Id, Member).
+
+elaborated_member_value(Value, Id, Member) :-
+    is_dict(Value),
+    !,
+    elaborated_member(Value, Id, Member).
+elaborated_member_value(Value, Id, Member) :-
+    is_list(Value),
+    member(Item, Value),
+    elaborated_member_value(Item, Id, Member).
+
 valid_json_id_or_die(Prefixes,Id) :-
     do_or_die(
         (   get_dict('@base', Prefixes, Base),
@@ -3541,8 +3664,22 @@ insert_document(Transaction, Document, Raw_JSON, Overwrite, Captures_In, Ids, De
     database_and_default_prefixes(Transaction, Prefixes),
     insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out).
 
-% insert_document/9 - with Overwrite parameter
-insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, Captures, [Id], T-T, Captures) :-
+% insert_document/9 - with Overwrite parameter (merge_repeats disabled)
+insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Captures_In, Ids, Dependencies, Captures_Out) :-
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, false, Captures_In, Ids, Dependencies, Captures_Out).
+
+%! insert_document_merge(+Transaction, +Document, +Raw_JSON, +Overwrite, +Merge, +Captures_In, -Ids, -Dependencies, -Captures_Out) is semidet.
+%
+%  Like insert_document/8 but additionally threads the merge_repeats flag
+%  down to the per-id existence check: under merge_repeats an exactly
+%  identical, already-committed member counts as a repeat rather than a
+%  conflict.
+insert_document_merge(Transaction, Document, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out) :-
+    database_and_default_prefixes(Transaction, Prefixes),
+    insert_document(Transaction, Document, Prefixes, Raw_JSON, Overwrite, Merge, Captures_In, Ids, Dependencies, Captures_Out).
+
+% insert_document/10 - with Overwrite and Merge parameters
+insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, _Merge, Captures, [Id], T-T, Captures) :-
     (   Raw_JSON = true,
         Pre_Document = Document
     ;   get_dict('@type', Pre_Document, String_Type),
@@ -3566,7 +3703,7 @@ insert_document(Transaction, Pre_Document, Prefixes, Raw_JSON, Overwrite, Captur
         )
     ;   insert_json_object(Transaction, Document, Id)
     ).
-insert_document(Transaction, Document, Prefixes, false, Overwrite, Captures_In, Ids, SH-ST, Captures_Out) :-
+insert_document(Transaction, Document, Prefixes, false, Overwrite, Merge, Captures_In, Ids, SH-ST, Captures_Out) :-
     json_elaborate(Transaction, Document, Prefixes, Captures_In, Elaborated, Id_Pairs, Dependencies, SH-ST, Captures_Out),
     % Are we trying to insert a subdocument?
     do_or_die(
@@ -3587,17 +3724,7 @@ insert_document(Transaction, Document, Prefixes, false, Overwrite, Captures_In, 
     when(ground(Dependencies),
          (
              % Only check existence when overwrite=false (performance optimization)
-             (   Overwrite = false
-             ->  forall(
-                     member(Id-Variety, Id_Pairs),
-                     (   check_existing_document_status(Transaction, Id, Variety, Status),
-                         die_if(Status = present,
-                                error(can_not_insert_existing_object_with_id(Id), _))
-                     )
-                 )
-             ;   % overwrite=true: skip existence check, insert will handle it
-                 true
-             ),
+             check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge),
              insert_document_expanded(Transaction, Elaborated, _)
          )).
 
@@ -3659,6 +3786,9 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
  * API queue consumer.
  */
 insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
+    insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, false, ID).
+
+insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, Merge, ID) :-
     get_dict('@id', Elaborated, ID0),
     (   atom(ID0)
     ->  ID = ID0
@@ -3677,30 +3807,12 @@ insert_document_expanded(Transaction, Elaborated, Contract, Overwrite, ID) :-
         error(inserted_subdocument_as_document, _)),
     database_instance(Transaction, [Instance]),
     (   ground(Dependencies)
-    ->  forall(
-            member(ExistingId-Variety, Id_Pairs),
-            (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
-                (   Overwrite = false
-                ->  die_if(Status = present,
-                           error(can_not_insert_existing_object_with_id(ExistingId), _))
-                ;   true
-                )
-            )
-        ),
+    ->  check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge),
         insert_document_expanded(Transaction, Elaborated, ID),
         insert_backlinks(Backlinks, Instance)
     ;   when(ground(Dependencies),
              (
-                 forall(
-                     member(ExistingId-Variety, Id_Pairs),
-                     (   check_existing_document_status(Transaction, ExistingId, Variety, Status),
-                         (   Overwrite = false
-                         ->  die_if(Status = present,
-                                    error(can_not_insert_existing_object_with_id(ExistingId), _))
-                         ;   true
-                         )
-                     )
-                 ),
+                 check_id_pairs_for_insert(Transaction, Elaborated, Id_Pairs, Overwrite, Merge),
                  insert_document_expanded(Transaction, Elaborated, ID),
                  insert_backlinks(Backlinks, Instance)
              ))
