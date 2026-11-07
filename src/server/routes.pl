@@ -596,8 +596,7 @@ document_handler(get, Path, Request, System_DB, Auth) :-
 
             detect_output_format(Search, Request, OutputFormat),
 
-            % XSD canonicalization version for rendered literals; '1.0'
-            % requires enterprise edition (issue #2632).
+            % XSD canonicalization version selector; '1.0' is enterprise-only.
             param_value_search_or_json_optional(Search, JSON, xsd, non_empty_atom, '1.1', Xsd_Raw),
             xsd_version_param(Xsd_Raw, Xsd_Version),
 
@@ -1014,8 +1013,7 @@ woql_handler_helper(Request, System_DB, Auth, Path_Option) :-
             (   memberchk(search(Search), Request)
             ->  true
             ;   Search = []),
-            % XSD canonicalization version for rendered literals; '1.0'
-            % requires enterprise edition (issue #2632).
+            % XSD canonicalization version selector; '1.0' is enterprise-only.
             param_value_search_or_json_optional(Search, JSON, xsd, non_empty_atom, '1.1', Xsd_Raw),
             xsd_version_param(Xsd_Raw, Xsd_Version),
 

@@ -1,8 +1,13 @@
 :- module(api_graphql, [
               handle_graphql_request/11,
               resolve_graphql_dbs/6,
-              get_or_create_graphql_context/2
+              get_or_create_graphql_context/2,
+              graphql_decimal_render_hook/3
           ]).
+
+% Extension hook for downstream editions to post-process the rendered
+% GraphQL response; no clauses in community so it passes through.
+:- multifile graphql_decimal_render_hook/3.
 
 :- use_module(core(util)).
 :- use_module(core(transaction)).
@@ -161,7 +166,10 @@ handle_graphql_request(System_DB, Auth, _Method, Path_Atom, Input_Stream, Respon
                 ;   Transaction_Meta_Data = none,
                     New_Data_Version = no_data_version),
                 % Post-process: convert decimal strings to JSON numbers
-                post_process_graphql_decimals(ResponseRaw, Response)
+                post_process_graphql_decimals(ResponseRaw, Response0),
+                (   graphql_decimal_render_hook(Response0, Transaction, Response)
+                ->  true
+                ;   Response = Response0)
             ),
             close(BodyIn)
         )

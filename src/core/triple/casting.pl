@@ -7,6 +7,7 @@
               xsd_version/1,
               xsd_version_param/2,
               with_xsd_version/2,
+              decimal_integer_lexical_hook/3,
               normalise_interval_start/2,
               normalise_interval_end/2,
               interval_as_term/2,
@@ -49,6 +50,10 @@ decimal_precision(20).
  */
 :- thread_local request_xsd_version_/1.
 :- meta_predicate with_xsd_version(+, 0).
+
+% Extension hook for downstream editions to override the lexical form of
+% integer-valued decimals; no clauses in community.
+:- multifile decimal_integer_lexical_hook/3.
 
 xsd_version(Version) :-
     (   request_xsd_version_(Version)
@@ -157,10 +162,9 @@ rational_to_decimal_string(Rational, String, MaxDecimals) :-
         % Fractional part
         Remainder is Num mod Den,
         (   Remainder =:= 0
-        ->  % No fractional part: XSD 1.1 canonical drops the fraction;
-            % XSD 1.0 canonical requires the decimal point with a digit.
-            (   xsd_version('1.0')
-            ->  format(string(String), "~w~w.0", [Sign, IntPart])
+        ->  % No fractional part: canonical drops the fraction.
+            (   decimal_integer_lexical_hook(Sign, IntPart, String)
+            ->  true
             ;   format(string(String), "~w~w", [Sign, IntPart]))
         ;   % Compute MaxDecimals digits of precision WITH ROUNDING
             Multiplier is 10^MaxDecimals,
@@ -1786,51 +1790,6 @@ test(decimal_canonical_strips_leading_plus_and_zeros, []) :-
              'http://www.w3.org/2001/XMLSchema#string',
              [],
              "100000"^^'http://www.w3.org/2001/XMLSchema#string').
-
-test(decimal_canonical_xsd_10_integer_valued, []) :-
-    % XSD 1.0 canonical form (issue #2632): the decimal point is required
-    % with at least one fractional digit — integer-valued decimals render
-    % with ".0". Non-integral values still shed trailing zeros.
-    with_xsd_version('1.0',
-        forall(
-            member(Lexical-Canonical,
-                   ["1"     - "1.0",
-                    "1.0"   - "1.0",
-                    "1.50"  - "1.5",
-                    "100000.00" - "100000.0",
-                    "0.0"   - "0.0",
-                    "-1.0"  - "-1.0"]),
-            (   typecast(Lexical^^'http://www.w3.org/2001/XMLSchema#string',
-                         'http://www.w3.org/2001/XMLSchema#decimal',
-                         [],
-                         Decimal^^'http://www.w3.org/2001/XMLSchema#decimal'),
-                typecast(Decimal^^'http://www.w3.org/2001/XMLSchema#decimal',
-                         'http://www.w3.org/2001/XMLSchema#string',
-                         [],
-                         Canonical^^'http://www.w3.org/2001/XMLSchema#string')
-            )
-        )).
-
-test(decimal_canonical_version_scope_does_not_leak, []) :-
-    % The request-scoped version resets after the goal: '1.1' canonical
-    % rendering resumes on the same thread.
-    with_xsd_version('1.0',
-        (   typecast("1"^^'http://www.w3.org/2001/XMLSchema#string',
-                     'http://www.w3.org/2001/XMLSchema#decimal',
-                     [],
-                     D1^^'http://www.w3.org/2001/XMLSchema#decimal'),
-            typecast(D1^^'http://www.w3.org/2001/XMLSchema#decimal',
-                     'http://www.w3.org/2001/XMLSchema#string',
-                     [],
-                     "1.0"^^'http://www.w3.org/2001/XMLSchema#string'))),
-    typecast("1"^^'http://www.w3.org/2001/XMLSchema#string',
-             'http://www.w3.org/2001/XMLSchema#decimal',
-             [],
-             D2^^'http://www.w3.org/2001/XMLSchema#decimal'),
-    typecast(D2^^'http://www.w3.org/2001/XMLSchema#decimal',
-             'http://www.w3.org/2001/XMLSchema#string',
-             [],
-             "1"^^'http://www.w3.org/2001/XMLSchema#string').
 
 test(xsd_version_param_accepts_supported_versions, []) :-
     xsd_version_param('1.1', '1.1'),

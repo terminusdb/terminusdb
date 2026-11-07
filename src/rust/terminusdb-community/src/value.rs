@@ -207,7 +207,26 @@ pub fn type_is_json(s: &str) -> bool {
     s == "JSON" || s == "JSONObject"
 }
 
+lazy_static! {
+    /// Extension hook for downstream editions to transform a stored
+    /// decimal lexical before it is emitted as a JSON number.
+    static ref DECIMAL_LEXICAL_HOOK: std::sync::RwLock<Option<fn(&str, bool) -> String>> =
+        std::sync::RwLock::new(None);
+}
+
+/// Register the decimal lexical formatter consulted by `value_to_json`.
+pub fn register_decimal_lexical_hook(hook: fn(&str, bool) -> String) {
+    *DECIMAL_LEXICAL_HOOK.write().unwrap() = Some(hook);
+}
+
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {
+    value_to_json_xsd(tde, false)
+}
+
+/// `xsd_10` selects the request's XSD canonicalization version and is
+/// forwarded to the registered decimal lexical hook. With no hook
+/// registered the output is identical to `value_to_json`.
+pub fn value_to_json_xsd(tde: &TypedDictEntry, xsd_10: bool) -> Value {
     match tde.datatype() {
         Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
         Datatype::Token => {
@@ -233,6 +252,10 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::String => Value::String(tde.as_val::<String, String>()),
         Datatype::Decimal => {
             let s = tde.as_val::<Decimal, String>();
+            let s = match *DECIMAL_LEXICAL_HOOK.read().unwrap() {
+                Some(hook) => hook(&s, xsd_10),
+                None => s,
+            };
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
                 _ => Value::String(s),
