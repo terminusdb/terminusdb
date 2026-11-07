@@ -3149,6 +3149,11 @@ generic_exception_jsonld(unsupported_document_format(Format), JSON) :-
     JSON = _{'@type' : 'api:UnsupportedDocumentFormatErrorResponse',
              'api:status' : 'api:failure',
              'api:message' : Msg}.
+generic_exception_jsonld(unsupported_xsd_version(Version), JSON) :-
+    format(string(Msg), "Unsupported xsd parameter value: ~q. XSD ~q canonical rendering requires enterprise edition.", [Version, Version]),
+    JSON = _{'@type' : 'api:UnsupportedXsdVersionErrorResponse',
+             'api:status' : 'api:failure',
+             'api:message' : Msg}.
 generic_exception_jsonld(syntax_error(M),JSON) :-
     format(atom(OM), '~q', [M]),
     JSON = _{'api:status' : 'api:failure',

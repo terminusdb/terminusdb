@@ -2,7 +2,8 @@
 
 :- use_module(core(plugin_api)).
 :- use_module(core(account), [assert_read_access/4]).
-:- use_module(core(triple), [xrdf_deleted/4, xrdf/4, database_instance/2]).
+:- use_module(core(triple), [xrdf_deleted/4, xrdf/4, database_instance/2,
+                            xsd_version_param/2, with_xsd_version/2]).
 :- use_module(core(transaction), [read_write_obj_reader/2]).
 :- use_module(core(transaction/ref_entity), [commit_id_uri/3, commit_uri_to_metadata/5]).
 :- use_module(core(transaction/descriptor), [open_descriptor/2]).
@@ -687,9 +688,12 @@ execute_finite_operation_over_sse(Request, StreamId, Mode, System_DB, Auth,
         open_string(RequestBody, BodyIn),
         (   catch(
                 (   param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
-                    handle_graphql_request(System_DB, Auth, GraphqlMethod, BranchPathAtom, BodyIn,
-                                           GraphqlResponse, 'application/json',
-                                           Content_Length, _NewDataVersion, _TransactionMetaData, Compress_Ids)
+                    param_value_search_optional(Search, xsd, non_empty_atom, '1.1', Xsd_Raw),
+                    xsd_version_param(Xsd_Raw, Xsd_Version),
+                    with_xsd_version(Xsd_Version,
+                        handle_graphql_request(System_DB, Auth, GraphqlMethod, BranchPathAtom, BodyIn,
+                                               GraphqlResponse, 'application/json',
+                                               Content_Length, _NewDataVersion, _TransactionMetaData, Compress_Ids))
                 ),
                 Error,
                 (   json_log:json_log_error_formatted("[graphql-sse] finite op error: ~w", [Error]),
@@ -719,6 +723,8 @@ graphql_error_map(error(requires_super_user, _), 403, "Super user access require
 graphql_error_map(error(json_parse_error(_Line, _Col), _), 400, "Malformed JSON in request body", "BAD_REQUEST") :- !.
 graphql_error_map(error(bad_parameter_type(Param, Type, Value), _), 400, Msg, "BAD_REQUEST") :- !,
     format(string(Msg), "Invalid value for parameter ~q (expected ~q): ~q", [Param, Type, Value]).
+graphql_error_map(error(unsupported_xsd_version(Version), _), 400, Msg, "BAD_REQUEST") :- !,
+    format(string(Msg), "Unsupported xsd parameter value: ~q. XSD ~q canonical rendering requires enterprise edition.", [Version, Version]).
 graphql_error_map(_, 500, "An internal server error occurred", "INTERNAL_SERVER_ERROR").
 
 %% sse_plugin_error_to_graphql_json(+Error, -JsonString) is det.
@@ -905,9 +911,12 @@ delegate_graphql_request(Request, System_DB, Auth, Method, PathAtom, BodyString,
         open_string(BodyString, BodyIn),
         (   catch(
                 (   param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
-                    handle_graphql_request(System_DB, Auth, Method, PathAtom, BodyIn,
-                                           GraphqlResponse, 'application/json',
-                                           Content_Length, NewDataVersion, TransactionMetaData, Compress_Ids)
+                    param_value_search_optional(Search, xsd, non_empty_atom, '1.1', Xsd_Raw),
+                    xsd_version_param(Xsd_Raw, Xsd_Version),
+                    with_xsd_version(Xsd_Version,
+                        handle_graphql_request(System_DB, Auth, Method, PathAtom, BodyIn,
+                                               GraphqlResponse, 'application/json',
+                                               Content_Length, NewDataVersion, TransactionMetaData, Compress_Ids))
                 ),
                 Error,
                 sse_plugin_error_response(Request, Error, Response)

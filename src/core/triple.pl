@@ -7,6 +7,9 @@
               % casting.pl
               typecast/4,
               typecast_switch/5,
+              xsd_version/1,
+              xsd_version_param/2,
+              with_xsd_version/2,
 
               % database_utils.pl
               system_graph_layer/2,
