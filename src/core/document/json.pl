@@ -502,8 +502,30 @@ idgen_suffix(Values, Suffix) :-
     idgen_suffix(Values, _{}, Suffix).
 idgen_suffix(Values, Prefixes, Suffix) :-
     maplist(raw_([prefixes(Prefixes)]),Values,Raw),
-    maplist(encode_id_fragment,Raw,Encoded),
+    maplist(expand_qname_id_value(Prefixes),Raw,Expanded),
+    maplist(encode_id_fragment,Expanded,Encoded),
     merge_separator_split(Suffix, '+', Encoded).
+
+% expand_qname_id_value(+Prefixes, +Raw, -Expanded) is det.
+% Key field values that parse as `prefix:local` with a bound prefix are
+% rewritten to their Clark `{uri}local` expansion, so generated document ids
+% carry the fully qualified name and stay accurate when namespace prefixes
+% change. `{uri}local` input and non-resolvable values pass through.
+expand_qname_id_value(_Prefixes, Value, Value) :-
+    \+ (atom(Value) ; string(Value)), !.
+expand_qname_id_value(Prefixes, Value, Expanded) :-
+    atom_string(Value, S),
+    (   sub_string(S, 0, 1, _, "{")
+    ->  Expanded = Value
+    ;   sub_string(S, Before, 1, After, ":"),
+        Before > 0, After > 0,
+        sub_string(S, 0, Before, _, Prefix_String),
+        atom_string(Prefix, Prefix_String),
+        get_dict(Prefix, Prefixes, URI)
+    ->  Local_Start is Before + 1,
+        sub_string(S, Local_Start, _, 0, Local),
+        atomic_list_concat(['{', URI, '}', Local], Expanded)
+    ;   Expanded = Value).
 
 idgen_lexical(Base,Values,ID) :-
     idgen_lexical(Base,_{},Values,ID).
@@ -5614,6 +5636,36 @@ test(idgen_value_hash,
           '@type':'http://s/Task',
           'http://s/name':json{ '@type':'http://www.w3.org/2001/XMLSchema#string',
                                 '@value':"Groceries"}}.
+
+test(expand_qname_id_value, []) :-
+    P = _{'ex-fin': 'https://example.com/example-financials',
+          xbrl: 'https://xbrl.org/PWD/2026-09-01'},
+    expand_qname_id_value(P, 'ex-fin:Assets',
+                          '{https://example.com/example-financials}Assets'),
+    expand_qname_id_value(P, 'xbrl:label',
+                          '{https://xbrl.org/PWD/2026-09-01}label'),
+    % already-Clark values pass through unchanged
+    expand_qname_id_value(P, '{http://other.example/}x',
+                          '{http://other.example/}x'),
+    % unbound prefixes and non-qname lexicals pass through unchanged
+    expand_qname_id_value(P, 'unbound:foo', 'unbound:foo'),
+    expand_qname_id_value(P, 'plain', 'plain'),
+    expand_qname_id_value(P, '', '').
+
+test(idgen_suffix_expands_bound_qname, []) :-
+    P = _{'ex-fin': 'https://example.com/example-financials'},
+    idgen_suffix(['ex-fin:Assets'], P, Suffix),
+    Suffix = '%7Bhttps%3A%2F%2Fexample.com%2Fexample-financials%7DAssets'.
+
+test(idgen_suffix_qname_prefixed_and_clark_same_id, []) :-
+    P = _{'ex-fin': 'https://example.com/example-financials'},
+    idgen_suffix(['ex-fin:Assets'], P, Prefixed_Suffix),
+    idgen_suffix(['{https://example.com/example-financials}Assets'], P, Clark_Suffix),
+    Prefixed_Suffix = Clark_Suffix.
+
+test(idgen_suffix_unbound_prefix_untouched, []) :-
+    idgen_suffix(['unbound:foo'], _{}, Suffix),
+    Suffix = 'unbound%3Afoo'.
 
 test(idgen_lexical_optional,
      [setup((setup_temp_store(State),
