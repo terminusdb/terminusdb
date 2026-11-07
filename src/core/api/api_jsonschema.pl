@@ -233,13 +233,20 @@ class_extension_key(Frame, metadata, Metadata) :-
     get_dict('@metadata', Frame, Metadata).
 
 % is_required_property(+FrameValue) is semidet.
-% TerminusDB requires every non-Optional property to be present in
-% the document; Optional is the only excluded wrapper.
+% Only properties whose absence is invalid are required: bare values
+% (Mandatory), Cardinality with a lower bound above zero, and specs
+% without a wrapper. Collections (Set, List, Array) and Optional are
+% 0..n — an absent key means an empty/absent collection, which the
+% document API accepts, so requiring it would over-constrain output.
 is_required_property(Value) :-
     (   is_dict(Value)
     ->  (   get_dict('@type', Value, Type)
         ->  normalize_system_type(Type, Type_Bare),
-            Type_Bare \= 'Optional'
+            \+ memberchk(Type_Bare, ['Optional', 'Set', 'List', 'Array']),
+            (   Type_Bare = 'Cardinality'
+            ->  get_dict('@min', Value, Min),
+                Min > 0
+            ;   true)
         ;   true)
     ;   true).
 
@@ -694,8 +701,9 @@ test(simple_class,
     assertion(JSON.properties.lucky ==
               json{type:"array", minItems:1, maxItems:3,
                    items:json{type:"integer"}}),
-    % required: every non-Optional property; @type and @id are optional
-    assertion(JSON.required == [aliases,history,lucky,street]),
+    % required: mandatory street and cardinality-bounded lucky; Set/List
+    % collections and Optional are not required
+    assertion(JSON.required == [lucky,street]),
     % @type and @id accept arbitrary string values
     assertion(JSON.properties.'@type' == json{type:"string"}),
     assertion(JSON.properties.'@id' == json{type:"string"}),
