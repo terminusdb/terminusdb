@@ -1,7 +1,8 @@
 :- module('document/patch',
           [   simple_patch/4,
               diff_op/2,
-              get_dict_or_null/3
+              get_dict_or_null/3,
+              strip_wire_hints/2
           ]).
 
 :- use_module(core(util)).
@@ -122,6 +123,29 @@ strip_typed_literal(V, Bare) :-
     (   nonvar(V), V = Bare^^_
     ->  true
     ;   Bare = V
+    ).
+
+%
+% strip_wire_hints(+Term, -Stripped) is det.
+%
+% Recursively strip ^^ type tags from a patch result.  The tags are parse
+% metadata for storage typing — a patch response is plain JSON, and the
+% response serializer cannot write the compound.  Only used on results
+% that are rendered back to the caller; storage paths keep the tags.
+strip_wire_hints(X, Y) :-
+    (   nonvar(X), X = Bare^^_
+    ->  Y = Bare
+    ;   is_dict(X)
+    ->  dict_pairs(X, Tag, Pairs),
+        maplist([K-V,K-W]>>strip_wire_hints(V,W), Pairs, Pairs1),
+        dict_pairs(Y, Tag, Pairs1)
+    ;   is_list(X)
+    ->  maplist(strip_wire_hints, X, Y)
+    ;   compound(X)   % success(After) / conflict(...) result wrappers
+    ->  X =.. [F|Args],
+        maplist(strip_wire_hints, Args, Args1),
+        Y =.. [F|Args1]
+    ;   Y = X
     ).
 
 values_equal(V1, V2) :-
@@ -1171,6 +1195,20 @@ test(values_equal_float_and_integer, []) :-
 
 test(values_equal_integer_and_decimal, []) :-
     values_equal(1, 1r1).
+
+test(strip_wire_hints_deep, []) :-
+    %% Every arm: ^^ literals (incl. high-precision rational), dicts,
+    %% lists, result wrappers, plain scalars.
+    In = success(_{ a : 11r10^^'xsd:decimal',
+                    b : [ 987654321098765432109r100000000000000000000^^'xsd:decimal',
+                          "s", 3 ],
+                    c : conflict(_{ d : 1r3^^'xsd:decimal' }) }),
+    strip_wire_hints(In, Out),
+    Out = success(_{ a : 11r10,
+                     b : [ R, "s", 3 ],
+                     c : conflict(_{ d : 1r3 }) }),
+    %% High-precision rational survives stripping unchanged.
+    R =:= 9.87654321098765432109.
 
 test(swap_decimal_value, []) :-
     %% Regression: patching a decimal property with a float SwapValue

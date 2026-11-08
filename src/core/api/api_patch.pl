@@ -39,7 +39,10 @@ api_patch(System_DB, Auth, Patch, Before, After, Options) :-
     % deployments with a public database.
     assert_auth_action_scope(System_DB, Auth,
                              '@schema':'Action/instance_read_access', _),
-    simple_patch(Patch,Before,After,Options).
+    simple_patch(Patch,Before,Result0,Options),
+    % Wire ^^ tags are parse metadata for storage typing; the response is
+    % plain JSON, so strip them before rendering (storage paths keep them).
+    strip_wire_hints(Result0, After).
 
 patch_id(Patch, Id) :-
     get_dict('@insert', Patch, Insert_Doc), !,
