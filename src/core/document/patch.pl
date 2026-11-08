@@ -117,12 +117,24 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff,
 % as a stored xsd:decimal rational (e.g. 11r10) and a JSON float (e.g. 1.1)
 % are treated as equal.  Dicts and lists are compared structurally.
 %
+% Typed wire literals carry ^^ as a type hint, not as part of the value.
+strip_typed_literal(V, Bare) :-
+    (   nonvar(V), V = Bare^^_
+    ->  true
+    ;   Bare = V
+    ).
+
 values_equal(V1, V2) :-
+    strip_typed_literal(V1, W1),
+    strip_typed_literal(V2, W2),
+    values_equal_(W1, W2).
+
+values_equal_(V1, V2) :-
     number(V1),
     number(V2),
     !,
     V1 =:= V2.
-values_equal(V1, V2) :-
+values_equal_(V1, V2) :-
     (   is_dict(V1)
     ;   is_dict(V2)
     ;   is_list(V1)
@@ -130,7 +142,7 @@ values_equal(V1, V2) :-
     ),
     !,
     V1 = V2.
-values_equal(V1, V2) :-
+values_equal_(V1, V2) :-
     % Convert both to atoms for comparison
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
     (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
@@ -144,7 +156,12 @@ values_equal(V1, V2) :-
 % context before comparison. Non-string values delegate to
 % values_equal/2.
 %
-values_equal(V1, V2, _Prefixes) :-
+values_equal(V1, V2, Prefixes) :-
+    strip_typed_literal(V1, W1),
+    strip_typed_literal(V2, W2),
+    values_equal_(W1, W2, Prefixes).
+
+values_equal_(V1, V2, _Prefixes) :-
     (   number(V1)
     ;   number(V2)
     ;   is_dict(V1)
@@ -154,7 +171,7 @@ values_equal(V1, V2, _Prefixes) :-
     ),
     !,
     values_equal(V1, V2).
-values_equal(V1, V2, Prefixes) :-
+values_equal_(V1, V2, Prefixes) :-
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
     (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
     (   A1 = A2
@@ -1182,7 +1199,7 @@ test(swap_decimal_value_json_preserve, []) :-
                 weight : 11r10 },
     simple_patch(Patch, Before, success(_{ '@id' : "Test/1",
                                              '@type' : "Test",
-                                             weight : 6r5 }), []).
+                                             weight : 6r5^^'http://www.w3.org/2001/XMLSchema#decimal' }), []).
 
 test(swapvalue_empty_before_against_empty, []) :-
     Before = _{ '@id' : "Task/1",
