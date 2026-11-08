@@ -265,6 +265,12 @@ json_type_to_value_type(J, T, J, T, _Hint) :-
         T = 'http://www.w3.org/2001/XMLSchema#boolean',
         error(unexpected_boolean_value(J, T), _)).
 json_type_to_value_type(J, T, X, T, Hint) :-
+    atom(J),
+    \+ memberchk(J, [false, true]),
+    !,
+    atom_string(J, J_Str),
+    typecast(J_Str^^'http://www.w3.org/2001/XMLSchema#string', T, Hint, X^^_).
+json_type_to_value_type(J, T, X, T, Hint) :-
     % Guard: Reject strings starting with reserved marker prefix before typecasting
     (   string(J),
         sub_string(J, 0, 16, _, "__TERMINUS_NUM__")
@@ -452,7 +458,9 @@ get_field_values_(JSON,Schema,_Context,Fields,Values) :-
 untyped_typecast(V, Type, Val, Val_Type) :-
     untyped_typecast(V, Type, [], Val, Val_Type).
 untyped_typecast(V, Type, Hint, Val, Val_Type) :-
-    (   string(V)
+    (   V = _^^_
+    ->  typecast(V, Type, Hint, Val^^Val_Type)
+    ;   string(V)
     ->  typecast(V^^xsd:string,
                  Type, Hint, Val^^Val_Type)
     ;   atom(V),
