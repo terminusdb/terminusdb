@@ -44,6 +44,7 @@
 use serde_json::Value as JsonValue;
 use swipl::fli::*;
 use swipl::prelude::*;
+use tdb_succinct::tfc::lexical_interval::parse_lexical_interval;
 
 /// The ladder classes `cast_level` decides natively.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -67,6 +68,9 @@ enum Class {
     StrSub,
     /// xsd:anySimpleType — accepts every form via string forwarding
     Simple,
+    /// xdd:dateTimeInterval — judged by the same storage parser the Prolog
+    /// gate calls ('$xdd':interval_parse → parse_lexical_interval)
+    Interval,
     Unhandled,
 }
 
@@ -142,6 +146,7 @@ fn classify(type_uri: &str) -> Class {
         "string" => Class::Str,
         "normalizedString" | "token" | "anyURI" => Class::StrSub,
         "anySimpleType" => Class::Simple,
+        "dateTimeInterval" => Class::Interval,
         _ => Class::Unhandled,
     }
 }
@@ -520,6 +525,12 @@ fn ladder_level(form: &Form, class: Class) -> Option<u64> {
         (Form::Str(s), Class::Json) => json_lexical(s).then_some(5),
         (Form::Str(_), Class::Str | Class::StrSub) => Some(6),
         (Form::Str(_), Class::Simple) => Some(4),
+        // 'A/B' is a true interval (4); a bare instant lexical only
+        // satisfies the type as a degenerate [t,t] range, ranked below an
+        // exact instant-type match (5). Mirrors cast_specificity.
+        (Form::Str(s), Class::Interval) => parse_lexical_interval(s)
+            .is_ok()
+            .then(|| if s.contains('/') { 4 } else { 5 }),
         (_, Class::Unhandled) => None,
         // NumericOther only appears inside Typed (handled above);
         // Typed itself is matched before ladder_level is reached.
