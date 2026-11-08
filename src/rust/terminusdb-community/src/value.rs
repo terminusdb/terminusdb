@@ -1,14 +1,14 @@
 use chrono::{NaiveDateTime, NaiveTime};
-use tdb_succinct::tfc::lexical_interval::{
-    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
-    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
-};
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
 use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
+    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
+};
 use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
@@ -19,9 +19,9 @@ use terminusdb_store_prolog::value::split_lang_string;
 fn interval_entry_to_string(tde: &TypedDictEntry) -> String {
     let bytes = tde.to_bytes();
     match bytes.len() {
-        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(
-            &legacy_interval_to_lexical(&DateTimeInterval::from_legacy_lexical(bytes)),
-        ),
+        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
+            &DateTimeInterval::from_legacy_lexical(bytes),
+        )),
         INTERVAL_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
             &DateTimeInterval::from_lexical(bytes),
         )),
@@ -207,7 +207,29 @@ pub fn type_is_json(s: &str) -> bool {
     s == "JSON" || s == "JSONObject"
 }
 
+/// Formatter consulted by `value_to_json` for stored decimal lexicals.
+pub type DecimalLexicalHook = fn(&str, bool) -> String;
+
+lazy_static! {
+    /// Extension hook for downstream editions to transform a stored
+    /// decimal lexical before it is emitted as a JSON number.
+    static ref DECIMAL_LEXICAL_HOOK: std::sync::RwLock<Option<DecimalLexicalHook>> =
+        std::sync::RwLock::new(None);
+}
+
+/// Register the decimal lexical formatter consulted by `value_to_json`.
+pub fn register_decimal_lexical_hook(hook: DecimalLexicalHook) {
+    *DECIMAL_LEXICAL_HOOK.write().unwrap() = Some(hook);
+}
+
 pub fn value_to_json(tde: &TypedDictEntry) -> Value {
+    value_to_json_xsd(tde, false)
+}
+
+/// `xsd_10` selects the request's XSD canonicalization version and is
+/// forwarded to the registered decimal lexical hook. With no hook
+/// registered the output is identical to `value_to_json`.
+pub fn value_to_json_xsd(tde: &TypedDictEntry, xsd_10: bool) -> Value {
     match tde.datatype() {
         Datatype::Boolean => Value::Bool(tde.as_val::<bool, bool>()),
         Datatype::Token => {
@@ -233,6 +255,10 @@ pub fn value_to_json(tde: &TypedDictEntry) -> Value {
         Datatype::String => Value::String(tde.as_val::<String, String>()),
         Datatype::Decimal => {
             let s = tde.as_val::<Decimal, String>();
+            let s = match *DECIMAL_LEXICAL_HOOK.read().unwrap() {
+                Some(hook) => hook(&s, xsd_10),
+                None => s,
+            };
             match serde_json::from_str::<Value>(&s) {
                 Ok(Value::Number(n)) => Value::Number(n),
                 _ => Value::String(s),
@@ -477,9 +503,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
             tde.as_val::<AnySimpleType, String>(),
         )),
-        Datatype::DateTimeInterval => juniper::Value::Scalar(DefaultScalarValue::String(
-            interval_entry_to_string(tde),
-        )),
+        Datatype::DateTimeInterval => {
+            juniper::Value::Scalar(DefaultScalarValue::String(interval_entry_to_string(tde)))
+        }
     }
 }
 

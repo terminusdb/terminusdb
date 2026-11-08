@@ -22,9 +22,10 @@ install-pack:
 	git clone --depth 1 --branch $(BRANCH) $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
 	$(SWIPL) \
 	  --on-error=halt \
-	  -g "pack_remove($(PACK_NAME))" \
-	  -g "pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS))" \
-	  -g "pack_info($(PACK_NAME))" \
+	  -g "ignore(catch(pack_remove($(PACK_NAME)), _, fail))" \
+	  -g "ignore(catch(pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS)), _, fail))" \
+	  -g "pack_attach('$(CURDIR)/.deps/$(PACK_NAME)', [])" \
+	  -g "(use_module(library($(PACK_NAME))) -> writeln(pack_ok($(PACK_NAME))) ; halt(1))" \
 	  -g halt
 
 .PHONY: clean

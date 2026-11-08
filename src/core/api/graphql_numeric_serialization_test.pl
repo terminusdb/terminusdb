@@ -15,7 +15,13 @@
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
 :- use_module(core(api)).
+:- use_module(core(api/api_graphql)).
+:- use_module(core(document/json)).
 :- use_module(core(query/resolve_query_resource), [resolve_absolute_string_descriptor/2]).
+:- use_module(core(query/ask), [create_context/3, with_transaction/3]).
+:- use_module(core(account)).
+:- use_module(core(query)).
+:- use_module(core(util)).
 :- use_module(library(json)).
 :- use_module(library(http/http_open)).
 
@@ -30,12 +36,13 @@ test(graphql_integer_as_json_number, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with integer field
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'Product',
           quantity: 'xsd:integer'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -84,12 +91,13 @@ test(graphql_decimal_as_json_number, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with decimal field
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'Product',
           price: 'xsd:decimal'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -121,7 +129,7 @@ test(graphql_decimal_as_json_number, [
     
     % Parse JSON response and verify raw JSON text contains number not string
     % Should contain: "price":19.99  NOT "price":"19.99"
-    sub_string(JSON_String, _, _, _, '"price":19.99'),
+    assert_single_substring(JSON_String, '"price":19.99'),
     \+ sub_string(JSON_String, _, _, _, '"price":"19.99"').
 
 test(graphql_big_integer_as_json_number, [
@@ -130,12 +138,13 @@ test(graphql_big_integer_as_json_number, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with integer field
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'LargeNumber',
           value: 'xsd:integer'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -169,7 +178,7 @@ test(graphql_big_integer_as_json_number, [
     % Verify JSON contains number without quotes
     % Should contain: "value":9007199254740993  NOT "value":"9007199254740993"
     atom_concat('"value":', BigInt, Expected),
-    sub_string(JSON_String, _, _, _, Expected),
+    assert_single_substring(JSON_String, Expected),
     
     % Verify it's not quoted as a string
     atom_concat('"value":"', BigInt, NotExpected),
@@ -181,12 +190,13 @@ test(graphql_high_precision_decimal_as_json_number, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with decimal field
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'Measurement',
           value: 'xsd:decimal'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -219,7 +229,7 @@ test(graphql_high_precision_decimal_as_json_number, [
     
     % Verify JSON contains the full precision number without quotes
     atom_concat('"value":', HighPrecision, Expected),
-    sub_string(JSON_String, _, _, _, Expected),
+    assert_single_substring(JSON_String, Expected),
     
     % Verify it's not quoted as a string
     atom_concat('"value":"', HighPrecision, NotExpected),
@@ -231,15 +241,16 @@ test(graphql_multiple_numeric_types, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with multiple numeric fields
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'Financial',
           intValue: 'xsd:int',
           longValue: 'xsd:long',
           decimalValue: 'xsd:decimal',
           unsignedLongValue: 'xsd:unsignedLong'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -276,10 +287,10 @@ test(graphql_multiple_numeric_types, [
     api_test_graphql_request(GraphQL_Descriptor, Path, GraphQL_Query, JSON_String),
     
     % All should be JSON numbers, not strings
-    sub_string(JSON_String, _, _, _, '"intValue":42'),
-    sub_string(JSON_String, _, _, _, '"longValue":9999999999'),
-    sub_string(JSON_String, _, _, _, '"decimalValue":123.456'),
-    sub_string(JSON_String, _, _, _, '"unsignedLongValue":18446744073709551615'),
+    assert_single_substring(JSON_String, '"intValue":42'),
+    assert_single_substring(JSON_String, '"longValue":9999999999'),
+    assert_single_substring(JSON_String, '"decimalValue":123.456'),
+    assert_single_substring(JSON_String, '"unsignedLongValue":18446744073709551615'),
     
     % Verify none are quoted as strings
     \+ sub_string(JSON_String, _, _, _, '"intValue":"42"'),
@@ -293,15 +304,16 @@ test(graphql_negative_and_zero_numbers, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with numeric fields
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'Numbers',
           zeroInt: 'xsd:integer',
           negativeInt: 'xsd:integer',
           zeroDecimal: 'xsd:decimal',
           negativeDecimal: 'xsd:decimal'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -338,10 +350,10 @@ test(graphql_negative_and_zero_numbers, [
     api_test_graphql_request(GraphQL_Descriptor, Path, GraphQL_Query, JSON_String),
     
     % All should be JSON numbers
-    sub_string(JSON_String, _, _, _, '"zeroInt":0'),
-    sub_string(JSON_String, _, _, _, '"negativeInt":-42'),
-    sub_string(JSON_String, _, _, _, '"zeroDecimal":0'),
-    sub_string(JSON_String, _, _, _, '"negativeDecimal":-19.99').
+    assert_single_substring(JSON_String, '"zeroInt":0'),
+    assert_single_substring(JSON_String, '"negativeInt":-42'),
+    assert_single_substring(JSON_String, '"zeroDecimal":0'),
+    assert_single_substring(JSON_String, '"negativeDecimal":-19.99').
 
 test(graphql_positiveInteger_as_json_number, [
     setup((setup_temp_store(State),
@@ -349,12 +361,13 @@ test(graphql_positiveInteger_as_json_number, [
     cleanup(teardown_temp_store(State))
 ]) :-
     % Create a schema with positiveInteger field
-    Schema = [
+    Schema =
         _{'@type': 'Class',
           '@id': 'Counter',
           count: 'xsd:positiveInteger'}
-    ],
+    ,
     
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
     with_test_transaction(
         Descriptor,
         C1,
@@ -385,44 +398,64 @@ test(graphql_positiveInteger_as_json_number, [
     api_test_graphql_request(GraphQL_Descriptor, Path, GraphQL_Query, JSON_String),
     
     % Verify JSON contains number without quotes
-    sub_string(JSON_String, _, _, _, '"count":999999999999999999'),
+    assert_single_substring(JSON_String, '"count":999999999999999999'),
     \+ sub_string(JSON_String, _, _, _, '"count":"999999999999999999"').
 
 % Helper predicate to make GraphQL requests for testing
 % This simulates the HTTP request flow through the GraphQL API
+% Asserts Sub occurs exactly once in String. Deterministic: findall
+% collects every occurrence; the [_] match asserts there was exactly one.
+assert_single_substring(String, Sub) :-
+    findall(_, sub_string(String, _, _, _, Sub), [_]).
+
 api_test_graphql_request(Descriptor, _Path, Query, JSON_Response) :-
-    % This would need to call the actual GraphQL handler
-    % For now, we'll use a placeholder that needs to be implemented
-    format(atom(JSON_Request), '{"query": "~w"}', [Query]),
-    atom_string(JSON_Request, JSON_Request_String),
-    
-    % Call the GraphQL API
-    open_descriptor(Descriptor, Transaction),
-    System = system_descriptor{},
-    
-    % Create a temporary stream with the query
+    atom_json_dict(JSON_Request_Atom, _{query: Query}, []),
+    atom_string(JSON_Request_Atom, JSON_Request_String),
+    do_or_die(open_descriptor(system_descriptor{}, System),
+              error(unresolvable_absolute_descriptor(system_descriptor{}), _)),
+    triple:super_user_authority(Auth),
+    do_or_die(open_descriptor(Descriptor, Transaction),
+              error(unresolvable_absolute_descriptor(Descriptor), _)),
+    api_graphql:resolve_graphql_dbs(System, Auth, Descriptor, Transaction,
+                                    Commit_DB, Meta_DB),
+    assert_read_access(System, Auth, Descriptor,
+                       type_filter{types:[instance,schema]}),
+    api_graphql:get_or_create_graphql_context(Transaction, Graphql_Context),
+    string_length(JSON_Request_String, ContentLength),
+
     setup_call_cleanup(
         open_string(JSON_Request_String, Input),
         (
-            string_length(JSON_Request_String, ContentLength),
-            catch(
-                '$graphql':handle_request(
-                    post,
-                    _GraphQL_Context,
-                    System,
-                    none, % meta
-                    none, % commit
-                    Transaction,
-                    'admin', % auth
-                    ContentLength,
-                    Input,
-                    JSON_Response,
-                    _IsError,
-                    _Author,
-                    _Message
+            Commit_Info0 = commit_info{author: Author, message: Message},
+            maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info),
+            create_context(Transaction, Commit_Info, Request_Context),
+            with_transaction(
+                Request_Context,
+                (   '$graphql':handle_request(
+                        post,
+                        Graphql_Context,
+                        System,
+                        Meta_DB,
+                        Commit_DB,
+                        Transaction,
+                        Auth,
+                        ContentLength,
+                        Input,
+                        JSON_Response,
+                        Is_Error,
+                        Author,
+                        Message,
+                        false
+                    ),
+                    die_if(Is_Error = true, response(JSON_Response)),
+                    (   var(Author)
+                    ->  user_name_uri(System, Author, Auth)
+                    ;   true),
+                    (   var(Message)
+                    ->  Message = "GraphQL test query"
+                    ;   true)
                 ),
-                Error,
-                (format('GraphQL Error: ~w~n', [Error]), fail)
+                _Meta_Data
             )
         ),
         close(Input)

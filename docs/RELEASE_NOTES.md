@@ -7,6 +7,13 @@ Storage layout and vectorlink configuration changes:
 * **Embedded vectorlink is opt-in.** The engine starts only when `TERMINUSDB_STORE` (or `serve --store`) or `VECTORLINK_DATA_DIR` is set; otherwise it logs a notice and stays disabled. A `TERMINUSDB_SERVER_DB_PATH`-only install that wants vectorlink must set `TERMINUSDB_STORE` or `VECTORLINK_DATA_DIR`.
 * **Concurrent vectorlink instances degrade to read-only.** When the embed-cache lock is held by another process, the second instance disables the cache, skips startup cleanup, refuses all index writes, and serves search queries only — reported on the console.
 * **Startup failures exit non-zero.** A port already in use (or any other serve startup failure) now reports the real error and exits 1 instead of printing command help and exiting 0.
+* `xdd:dateTimeInterval` keeps a single instant a single instant: a bare dateTime literal reads back as the supplied timestamp (with `Z`, an offset, or zoneless) instead of a zero-length `T/T` pair — a new `point` flag in the lexical entry distinguishes the bare form from an explicit pair, which still renders `T/T`. A bare ISO date now denotes the whole day `[D, D+1)` (duration `P1D`), the same interval as `D/D`, consistent with XBRL CSV and XBRL 2.1. Date pairs keep their supplied spelling both ways: `2025-01-01/2025-03-31` reads back as `2025-01-01/2025-03-31` — dates are inclusive of their named day and a zoneless datetime renders as local time rather than acquiring `Z` — and filter equality treats every spelling of the same period as the same interval. Values stored before this change are unaffected [#2626](https://github.com/terminusdb/terminusdb/issues/2626)
+
+## Behavior changes
+
+* `xsd:duration` now supports > 255 days (i64 instead of u8 representation)
+* `xsd:duration` canonical zero length duration is now generally aligned to PT0S
+* `xdd:dateTimeInterval` now handles single instants and date-only intervals and increased range
 
 # TerminusDB Server 12.1.0 Release Candidate 2
 

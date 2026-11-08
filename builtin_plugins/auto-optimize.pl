@@ -182,7 +182,7 @@ maybe_abolish_tables :-
         garbage_collect_atoms,
         statistics(atoms, AtomsAfter),
         format(atom(Msg), "GC: periodic deep cleanup - abolished tables, reclaimed atoms (~w -> ~w)", [AtomsBefore, AtomsAfter]),
-        json_log_info(Msg)
+        json_log_debug(Msg)
     ;   true
     ).
 

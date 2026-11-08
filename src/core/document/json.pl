@@ -88,6 +88,7 @@
               tabled_get_document_context/2,
               json_write_options/1,
               extract_sys_json_value/2,
+              integer_decimal_json_value/3,
               path_component/3
           ]).
 
@@ -214,12 +215,20 @@ encode_id_fragment(_, _) :-
 % renders as Clark (always a legal output). Upgrade: thread the context if a
 % caller needs db-local contraction here. Document GET and query binding
 % renders use the context-aware paths instead.
+%
+% Extension hook for downstream editions to produce alternate JSON values
+% for stored numerics; no clauses in community so the default paths apply.
+:- multifile integer_decimal_json_value/3.
+
 value_type_to_json_type(X, T, S, T) :-
     value_type_to_json_type(X, T, S, T, []).
 value_type_to_json_type(X, T, S, T, Hint) :-
     expanded_name_datatype(T),
     !,
     typecast(X^^T, 'http://www.w3.org/2001/XMLSchema#string', Hint, S^^_).
+value_type_to_json_type(X, T, S, T, _Hint) :-
+    integer_decimal_json_value(X, T, S),
+    !.
 value_type_to_json_type(X, T, X, T, _Hint) :-
     number(X),
     !.
@@ -255,6 +264,12 @@ json_type_to_value_type(J, T, J, T, _Hint) :-
     do_or_die(
         T = 'http://www.w3.org/2001/XMLSchema#boolean',
         error(unexpected_boolean_value(J, T), _)).
+json_type_to_value_type(J, T, X, T, Hint) :-
+    atom(J),
+    \+ memberchk(J, [false, true]),
+    !,
+    atom_string(J, J_Str),
+    typecast(J_Str^^'http://www.w3.org/2001/XMLSchema#string', T, Hint, X^^_).
 json_type_to_value_type(J, T, X, T, Hint) :-
     % Guard: Reject strings starting with reserved marker prefix before typecasting
     (   string(J),
@@ -443,7 +458,9 @@ get_field_values_(JSON,Schema,_Context,Fields,Values) :-
 untyped_typecast(V, Type, Val, Val_Type) :-
     untyped_typecast(V, Type, [], Val, Val_Type).
 untyped_typecast(V, Type, Hint, Val, Val_Type) :-
-    (   string(V)
+    (   V = _^^_
+    ->  typecast(V, Type, Hint, Val^^Val_Type)
+    ;   string(V)
     ->  typecast(V^^xsd:string,
                  Type, Hint, Val^^Val_Type)
     ;   atom(V),
@@ -3365,7 +3382,7 @@ json_to_database_type(O, _, O).
 % contains stale layer from before previous transaction's commit.
 % tabled_get_document_context must fetch fresh layer state for each transaction.
 tabled_get_document_context(Transaction, Context) :-
-    '$doc':get_document_context(Transaction, true, Context).
+    '$doc':get_document_context(Transaction, true, false, Context).
 
 run_delete_document(Desc, Commit, ID) :-
     create_context(Desc,Commit,Context),

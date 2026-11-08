@@ -5,7 +5,8 @@ use ordered_float::OrderedFloat;
 use regex::{Regex, RegexBuilder, RegexSet};
 use rug::Integer;
 use tdb_succinct::tfc::lexical_interval::{
-    cmp_interval_bounds, decode_lexical_entry, interval_relation, literal_as_interval, AllenRelation,
+    cmp_interval_bounds, decode_lexical_entry, interval_relation, literal_as_interval,
+    AllenRelation,
 };
 use tdb_succinct::{Decimal, TdbDataType, TypedDictEntry};
 

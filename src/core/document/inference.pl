@@ -195,6 +195,179 @@ missing_property_witness(Dictionary,Properties,Type,witness(Result)) :-
 
 no_captures(captures(C,T-T,S-S,C)).
 
+/*
+ * Specificity staircase for type inference.
+ *
+ * When no '@type' is present the document's class is inferred by
+ * testing it against every candidate class that matches its shape.  A
+ * candidate is only a *unique* interpretation when it succeeds at a
+ * strictly better specificity level than every rival, where a level
+ * summarises how faithful the required lexical interpretations are.
+ * Lower is better: each field value contributes the level at which its
+ * untyped JSON value must be interpreted to satisfy the field's
+ * declared base type, and a candidate's level is the worst such level
+ * over all its fields (its weakest link).
+ *
+ * Staircase per JSON input kind (integers are more specific than
+ * decimals — not every decimal renders as an integer):
+ *
+ *   integer: integer-family 0, xsd:decimal 1, float/double 2, json 3, string 4, other 5
+ *   float:   xsd:decimal 0, integer-family 1, float/double 2, json 3, string 4, other 5
+ *   string:  integer-family 1, xsd:decimal 2, float/double 3, other-typed 4, json 5, xsd:string 6
+ *   boolean: xsd:boolean 0, json 1, string 2, other 3
+ *   typed V^^T: identical type 0, any other cast 5
+ *
+ * The running level is kept in a thread-local accumulator: the
+ * candidate loop resets it per candidate, base-type and sys:JSON checks
+ * fold their own level in, and nested inference propagates its resolved
+ * level back into the enclosing candidate.
+ */
+:- thread_local(cast_level_memo_/4).
+
+/* cast_level/4 is pure in (Value,Type): sibling candidates that declare a
+ * field with the same type re-evaluate the same pair, so each pair is
+ * computed once and replayed.  Entries are cleared at every top-level
+ * infer_type call. */
+cast_level_memoized(Value, Type, Level, Wit) :-
+    (   nonvar(Value), cast_level_memo_(Value, Type, Level, Wit)
+    ->  true
+    ;   '$inference':cast_level(Value, Type, Level, Wit),
+        asserta(cast_level_memo_(Value, Type, Level, Wit))
+    ).
+
+/* The level accumulator is a single mutable cell asserted once per
+ * thread — profiling shows clause ops dominate infer (asserta/retractall
+ * per field ~= 50%); nb_setarg is non-backtracking like the clause ops it
+ * replaces and costs ~0.1 us instead of ~3 us per update. */
+:- thread_local(inference_level_cell_/1).
+
+inference_level_cell(Cell) :-
+    (   inference_level_cell_(Cell)
+    ->  true
+    ;   Cell = cell(0),
+        asserta(inference_level_cell_(Cell))
+    ).
+
+inference_level_save(Saved) :-
+    inference_level_cell(Cell),
+    arg(1, Cell, Saved),
+    nb_setarg(1, Cell, 0).
+
+inference_level_set(Level) :-
+    inference_level_cell(Cell),
+    nb_setarg(1, Cell, Level).
+
+inference_level_note(Level) :-
+    inference_level_cell(Cell),
+    arg(1, Cell, Current),
+    New is Current + Level,
+    nb_setarg(1, Cell, New).
+
+inference_level_read(Level) :-
+    inference_level_cell(Cell),
+    arg(1, Cell, Level).
+
+integer_family_type(Type) :-
+    basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#integer'),
+    Type \= 'http://www.w3.org/2001/XMLSchema#decimal'.
+
+% The lexical is in integer form ("5", "+5", "-12") — a loose cast like
+% "1.0" to xsd:integer succeeds but does not *render* as an integer.
+integer_lexical(Value) :-
+    (   string(Value)
+    ->  S = Value
+    ;   atom(Value)
+    ->  atom_string(Value, S)
+    ),
+    string_codes(S, Codes),
+    catch(number_codes(Number, Codes), _, fail),
+    integer(Number).
+
+float_family_type(Type) :-
+    memberchk(Type, ['http://www.w3.org/2001/XMLSchema#float',
+                     'http://www.w3.org/2001/XMLSchema#double']).
+
+string_family_type(Type) :-
+    basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#string').
+
+json_family_type(Type) :-
+    memberchk(Type, ['http://terminusdb.com/schema/xdd#json',
+                     'http://terminusdb.com/schema/sys#JSON',
+                     'http://terminusdb.com/schema/sys#JSONDocument']).
+
+cast_specificity(Value, Type, Level) :-
+    global_prefix_expand_safe(Type, Type_Ex),
+    (   nonvar(Value), Value = _^^VType
+    ->  (   VType == Type_Ex
+        ->  Level = 0
+        ;   Level = 5
+        )
+    ;   integer(Value)
+    ->  (   integer_family_type(Type_Ex)
+        ->  Level = 0
+        ;   Type_Ex == 'http://www.w3.org/2001/XMLSchema#decimal'
+        ->  Level = 1
+        ;   float_family_type(Type_Ex)
+        ->  Level = 2
+        ;   json_family_type(Type_Ex)
+        ->  Level = 3
+        ;   string_family_type(Type_Ex)
+        ->  Level = 4
+        ;   Level = 5
+        )
+    ;   number(Value)
+    ->  (   Type_Ex == 'http://www.w3.org/2001/XMLSchema#decimal'
+        ->  Level = 0
+        ;   integer_family_type(Type_Ex)
+        ->  Level = 1
+        ;   float_family_type(Type_Ex)
+        ->  Level = 2
+        ;   json_family_type(Type_Ex)
+        ->  Level = 3
+        ;   string_family_type(Type_Ex)
+        ->  Level = 4
+        ;   Level = 5
+        )
+    ;   memberchk(Value, [true, false])
+    ->  (   Type_Ex == 'http://www.w3.org/2001/XMLSchema#boolean'
+        ->  Level = 0
+        ;   json_family_type(Type_Ex)
+        ->  Level = 1
+        ;   string_family_type(Type_Ex)
+        ->  Level = 2
+        ;   Level = 3
+        )
+    ;   (   string(Value)
+        ;   atom(Value)
+        )
+    ->  (   integer_family_type(Type_Ex)
+        ->  (   integer_lexical(Value)
+            ->  Level = 1
+            ;   Level = 4
+            )
+        ;   Type_Ex == 'http://www.w3.org/2001/XMLSchema#decimal'
+        ->  Level = 2
+        ;   float_family_type(Type_Ex)
+        ->  Level = 3
+        ;   json_family_type(Type_Ex)
+        ->  Level = 5
+        ;   string_family_type(Type_Ex)
+        ->  Level = 6
+        ;   memberchk(Type_Ex, ['http://terminusdb.com/schema/xdd#dateTimeInterval',
+                                'xdd:dateTimeInterval'])
+        ->  % An instant lexical (no '/') only satisfies an interval type as
+            % a degenerate [t,t] range — weaker than the exact instant-type
+            % match.  Rank it below other-typed (4) so xsd:date/dateTime
+            % candidates win the tie; true 'A/B' interval lexicals stay at 4.
+            (   sub_string(Value, _, _, _, '/')
+            ->  Level = 4
+            ;   Level = 5
+            )
+        ;   Level = 4
+        )
+    ;   Level = 5
+    ).
+
 check_enum(Enum_Value,Type,Enums,Annotated),
 text(Enum_Value) =>
     (   member(Value, Enums),
@@ -775,6 +948,7 @@ is_dict(Value),
 Type = 'http://terminusdb.com/schema/sys#JSON' =>
     % For sys:JSON, recursively escape all @-prefixed keys to prevent them being treated as control fields
     escape_at_prefixed_keys(Value, EscapedValue),
+    inference_level_note(5),
     infer_type_(Schema, Prefixes, Type, EscapedValue, _, Annotated, Captures).
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_dict(Value),
@@ -813,6 +987,7 @@ Type = 'http://terminusdb.com/schema/sys#JSON',
 is_list(Value) =>
     % Arrays are valid JSON values for sys:JSON
     no_captures(Captures),
+    inference_level_note(5),
     Annotated = success(json{ '@type' : Type,
                               '@value' : Value }).
 check_value_type_(_Schema,_Prefixes,Value,Type,_Annotated,_Captures),
@@ -824,25 +999,30 @@ Type = 'http://terminusdb.com/schema/sys#JSON',
 (Value = _Val^^_ValType ; string(Value) ; number(Value) ; memberchk(Value, [true, false, null])) =>
     % Accept primitive types (typed or untyped) for sys:JSON
     no_captures(Captures),
+    cast_specificity(Value, Type, Level),
+    inference_level_note(Level),
     Annotated = success(json{'@type' : Type,
                              '@value' : Value }).
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
-    catch(
-        (   json_value_cast_type(Value,Type,[prefixes(Prefixes)],_),
-            Annotated = success(json{'@type' : Type,
-                                     '@value' : Value })
-        ),
-        error(casting_error(Val, Type), _),
-        (   schemaless_shape_check_disabled(Schema)
-        ->  Annotated = success(json{'@type': 'http://www.w3.org/2001/XMLSchema#string',
-                                    '@value': Val })
-        ;   Annotated = witness(json{'@type':could_not_interpret_as_type,
-                                      'value': Val,
-                                      'type' : Type })
+    cast_level_memoized(Value, Type, Level, Wit),
+    (   integer(Level)
+    ->  inference_level_note(Level),
+        % Pre-typed wire values (e.g. 1^^xsd:decimal) carry the tag only as
+        % a ladder hint; the stored @value must be the bare literal so
+        % json_to_database_type re-casts it against the chosen field type.
+        (   Value = Bare^^_
+        ->  Annotated = success(json{ '@type' : Type,
+                                      '@value' : Bare })
+        ;   Annotated = success(json{ '@type' : Type,
+                                      '@value' : Value })
         )
+    ;   Level == unhandled
+    ->  check_value_type_cast_(Schema, Prefixes, Value, Type, Annotated)
+    ;   check_value_type_cast_failure_(Schema, Wit, Type, Annotated)
     ).
+
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_schema_enum(Schema,Type) =>
     check_type_(Schema, Prefixes, Value, Type, Annotated, Captures).
@@ -864,6 +1044,34 @@ check_value_type_(Schema,_Prefixes,Value,Type,Annotated,Captures) =>
     ;   Annotated = witness(json{ '@type' : invalid_class,
                                   value : Value,
                                   type : Type })
+    ).
+
+check_value_type_cast_(Schema,Prefixes,Value,Type,Annotated) :-
+    catch(
+        (   json_value_cast_type(Value,Type,[prefixes(Prefixes)],_),
+            cast_specificity(Value, Type, Level),
+            inference_level_note(Level),
+            % Pre-typed wire values (e.g. 1^^xsd:decimal) carry the type only
+            % as a ladder hint; the stored @value must be the bare literal so
+            % json_to_database_type re-casts it against the chosen field type.
+            (   Value = Bare^^_
+            ->  Annotated = success(json{ '@type' : Type,
+                                          '@value' : Bare })
+            ;   Annotated = success(json{ '@type' : Type,
+                                          '@value' : Value })
+            )
+        ),
+        error(casting_error(Val, Type), _),
+        check_value_type_cast_failure_(Schema, Val, Type, Annotated)
+    ).
+
+check_value_type_cast_failure_(Schema, Val, Type, Annotated) :-
+    (   schemaless_shape_check_disabled(Schema)
+    ->  Annotated = success(json{'@type': 'http://www.w3.org/2001/XMLSchema#string',
+                                 '@value': Val })
+    ;   Annotated = witness(json{'@type':could_not_interpret_as_type,
+                                  'value': Val,
+                                  'type' : Type })
     ).
 
 schema_class_has_property(Schema, Class, Property) :-
@@ -934,6 +1142,7 @@ infer_type(Database, Prefixes, Dictionary, Type, Annotated, Captures) :-
     database_schema(Database, Schema),
     default_prefixes(Default_Prefixes),
     put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    retractall(cast_level_memo_(_,_,_,_)),
     infer_type_(Schema, Merged_Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
                 Type, Annotated, Captures).
 
@@ -941,6 +1150,7 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, Captures) :-
     database_schema(Database, Schema),
     default_prefixes(Default_Prefixes),
     put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
+    retractall(cast_level_memo_(_,_,_,_)),
     infer_type_(Schema, Merged_Prefixes, Super, Dictionary, Type, Annotated, Captures).
 
 infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, captures(In,DepH-DepT,SubH-SubT,Out)) :-
@@ -1004,30 +1214,41 @@ get_dict('@type', Dictionary, Type) =>
     ).
 infer_type_or_check_(Schema, Prefixes, Super, Dictionary, Type, Annotated,captures(In,DepH-DepT,SubH-SubT,Out)) =>
     expand_dictionary_keys(Dictionary,Schema,Dictionary_Expanded),
-    findall(Candidate-Annotated0-captures(In,DepH-DepT0,SubH-SubT0,Out0),
+    inference_level_save(Saved_Level),
+    findall(Candidate-Annotated0-captures(In,DepH-DepT0,SubH-SubT0,Out0)-Cand_Level,
             (   Captures0 = captures(In,DepH-DepT0,SubH-SubT0, Out0),
                 candidate_subsumed_(Schema, Super, Candidate, Dictionary_Expanded),
-                check_type_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0)
+                inference_level_set(0),
+                check_type_(Schema,Prefixes,Dictionary_Expanded,Candidate,Annotated0,Captures0),
+                inference_level_read(Cand_Level)
             ),
             Results),
-    exclude([_-witness(_)-_]>>true, Results, Successes),
-    (   Successes = [Type-success(Annotated0)-captures(In,DepH-DepT,SubH-SubT,Out)]
-    ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
-        Annotated = success(Annotated1)
-    ;   Successes = []
-    ->  (   [_-witness(Witness)-_] = Results
+    exclude([_-witness(_)-_-_]>>true, Results, Successes),
+    (   Successes = []
+    ->  inference_level_set(Saved_Level),
+        (   [_-witness(Witness)-_-_] = Results
         ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
                                       'reason' : Witness,
                                       'document' : Dictionary})
         ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
                                       'document' : Dictionary})
         )
-    ;   maplist([Type-_-_,Type]>>true,Successes,Types)
-    ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                  'document' : Dictionary,
-                                  'candidates' : Types})
-    ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
-                                  'document' : Dictionary})
+    ;   findall(L, member(_-_-_-L, Successes), Levels),
+        min_list(Levels, Best_Level),
+        findall(E, (member(E, Successes), E = _-_-_-Best_Level), Best),
+        (   Best = [Type-success(Annotated0)-captures(In,DepH-DepT,SubH-SubT,Out)-Best_Level]
+        ->  put_dict(json{'@type' : Type}, Annotated0, Annotated1),
+            Annotated = success(Annotated1),
+            Combined is Saved_Level + Best_Level,
+            inference_level_set(Combined)
+        ;   inference_level_set(Saved_Level),
+            maplist([C-_-_-_,C]>>true,Best,Types)
+        ->  Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                      'document' : Dictionary,
+                                      'candidates' : Types})
+        ;   Annotated = witness(json{ '@type' : no_unique_type_for_document,
+                                      'document' : Dictionary})
+        )
     ).
 
 infer_type(Database, Dictionary, Type, Annotated) :-
@@ -1684,5 +1905,18 @@ test(array_of_obj_captures,
     infer_type(Database,Prefixes,Document,_Type,_Result,captures(In,H-T,[]-[],Out)),
     In == Out,
     H == T.
+
+test(interval_instant_specificity) :-
+    % An instant lexical satisfies an interval type only as a degenerate
+    % [t,t] range: level 5, below the exact instant-type match at 4.
+    cast_specificity('2026-01-01T00:00:00','xdd:dateTimeInterval',5),
+    cast_specificity('2026-12-31','xdd:dateTimeInterval',5),
+    cast_specificity('2026-01-01T00:00:00','xsd:dateTime',4),
+    cast_specificity('2026-12-31','xsd:date',4),
+    % A true 'A/B' interval lexical keeps the normal other-typed level.
+    cast_specificity('2020-01-01/2021-01-01','xdd:dateTimeInterval',4),
+    % The expanded URI behaves identically to the prefixed form.
+    cast_specificity('2026-01-01T00:00:00',
+                     'http://terminusdb.com/schema/xdd#dateTimeInterval',5).
 
 :- end_tests(infer).

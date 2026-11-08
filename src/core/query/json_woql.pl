@@ -78,7 +78,11 @@ json_value_cast_type(V,Type,WOQL) :-
 json_value_cast_type(V,Type,Hint,WOQL) :-
     default_prefixes(Default_Prefixes),
     prefix_expand(Type, Default_Prefixes, TE),
-    (   string(V)
+    (   nonvar(V), V = _^^_
+    ->  % Pre-typed value (e.g. 1^^xsd:decimal from the wire) - cast
+        % from its declared type; recasts freely to other targets.
+        typecast(V, TE, Hint, Val)
+    ;   string(V)
     ->  typecast(V^^xsd:string,
                  TE, Hint, Val)
     ;   atom(V),
