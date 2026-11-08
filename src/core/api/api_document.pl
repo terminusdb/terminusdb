@@ -295,11 +295,21 @@ api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, I
 api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config, _Id) :-
     throw(error(query_is_only_supported_for_instance_graphs, _)).
 
+
+% api_document_context(+Transaction, +Config, -Context) is det.
+% Builds the Rust document-printer context, forwarding the request's XSD
+% canonicalization version.
+api_document_context(Transaction, Config, Context) :-
+    (   xsd_version('1.0')
+    ->  Xsd_10 = true
+    ;   Xsd_10 = false),
+    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Xsd_10, Context).
+
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
     (   strip_identifiers(Config)
     ->  forall(api_get_documents_by_query(Transaction, instance, Type, Query, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
-    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    ;   api_document_context(Transaction, Config, Context),
         forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
                (   Stream_Started = started(Started),
                    do_or_die('$doc':print_document_json(current_output, Context, Id, Config.as_list, (Config.compress), (Config.unfold), (Config.minimized), Started),
@@ -333,7 +343,7 @@ api_count_documents(Transaction, instance, Type, Config, Count) :-
     get_dict(id_prefix, Config, Id_Prefix),
     ground(Id_Prefix),
     !,
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    api_document_context(Transaction, Config, Context),
     database_and_default_prefixes(Transaction, Prefixes),
     prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
     (   ground(Type)
@@ -413,7 +423,7 @@ api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
         prefix_expand(Id, Prefixes, Id_Ex),
         api_get_document(instance, Transaction, Id_Ex, Config, Document),
         json_stream_write_dict(Config, Stream_Started, Document)
-    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    ;   api_document_context(Transaction, Config, Context),
         Stream_Started = started(Started),
         database_prefixes(Transaction, Prefixes),
         prefix_expand(Id, Prefixes, Id_Ex),
@@ -432,7 +442,7 @@ api_print_documents(instance, Transaction, Config, Stream_Started) :-
     (   strip_identifiers(Config)
     ->  forall(api_get_documents(Transaction, instance, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
-    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    ;   api_document_context(Transaction, Config, Context),
         (   parallelize_enabled
         ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
         ;   '$doc':print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized)))).
@@ -444,7 +454,7 @@ api_print_documents_by_type(instance, Transaction, Config, Type, Stream_Started)
     (   strip_identifiers(Config)
     ->  forall(api_get_documents_by_type(Transaction, instance, Type, Config, Document),
                json_stream_write_dict(Config, Stream_Started, Document))
-    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    ;   api_document_context(Transaction, Config, Context),
         database_and_default_prefixes(Transaction,Prefixes),
         % TODO errors on unknown prefix
         prefix_expand_schema(Type, Prefixes, Type_Ex),
@@ -462,7 +472,7 @@ api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
     ->  forall((member(Id, Ids),
                 api_get_document(instance, Transaction, Id, Config, Document)),
                json_stream_write_dict(Config, Stream_Started, Document))
-    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    ;   api_document_context(Transaction, Config, Context),
         database_and_default_prefixes(Transaction, Prefixes),
         maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
                 Ids,
@@ -479,7 +489,7 @@ api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type,
     ->  forall((api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
                 api_get_document(instance, Transaction, Id, Config, Document)),
                json_stream_write_dict(Config, Stream_Started, Document))
-    ;   '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    ;   api_document_context(Transaction, Config, Context),
         database_and_default_prefixes(Transaction, Prefixes),
         prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
         (   ground(Type)
@@ -506,7 +516,7 @@ api_print_documents_by_id_prefix(schema, _Transaction, _Config, _Id_Prefix, _Typ
 api_print_document_ids(instance, Transaction, Id, Ids, Type, Query, Config, _Stream_Started) :-
     \+ (nonvar(Query) ; ground(Id) ; ground(Ids)),
     !,
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Context),
+    api_document_context(Transaction, Config, Context),
     database_and_default_prefixes(Transaction, Prefixes),
     (   get_dict(id_prefix, Config, Id_Prefix), ground(Id_Prefix)
     ->  prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex)

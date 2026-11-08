@@ -140,7 +140,10 @@ mod tests {
     #[test]
     fn clark_to_lexical_exact_match() {
         let rev = reverse_prefix_map(&prefixes());
-        assert_eq!("eg:foo", clark_to_lexical("{http://example.org/ns#}foo", &rev));
+        assert_eq!(
+            "eg:foo",
+            clark_to_lexical("{http://example.org/ns#}foo", &rev)
+        );
     }
 
     #[test]
@@ -166,10 +169,7 @@ mod tests {
     #[test]
     fn clark_to_lexical_smallest_prefix_on_tie() {
         let rev = reverse_prefix_map(&prefixes());
-        assert_eq!(
-            "aa:x",
-            clark_to_lexical("{http://dup.example/ns}x", &rev)
-        );
+        assert_eq!("aa:x", clark_to_lexical("{http://dup.example/ns}x", &rev));
     }
 
     #[test]

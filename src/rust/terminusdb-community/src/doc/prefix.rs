@@ -224,9 +224,7 @@ lazy_static! {
 
 /// Cached URI→prefix reverse map for a schema layer.  Same lifecycle contract
 /// as `get_layer_prefix_map` — layer names are content-addressed.
-pub(crate) fn get_layer_reverse_prefix_map(
-    layer: &SyncStoreLayer,
-) -> Arc<HashMap<String, String>> {
+pub(crate) fn get_layer_reverse_prefix_map(layer: &SyncStoreLayer) -> Arc<HashMap<String, String>> {
     let name = name_to_string(layer.name());
     {
         let cache = LAYER_REVERSE_PREFIX_MAP_CACHE.lock().unwrap();
