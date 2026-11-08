@@ -23,6 +23,7 @@ mod value;
 
 pub use swipl;
 use swipl::prelude::*;
+pub use value::register_decimal_lexical_hook;
 
 use tdb_succinct::tfc::lexical_interval::{
     decode_lexical_entry, derived_period, encode_lexical_interval,
