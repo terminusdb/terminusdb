@@ -347,6 +347,16 @@ cast_specificity(Value, Type, Level) :-
         ->  Level = 5
         ;   string_family_type(Type_Ex)
         ->  Level = 6
+        ;   memberchk(Type_Ex, ['http://terminusdb.com/schema/xdd#dateTimeInterval',
+                                'xdd:dateTimeInterval'])
+        ->  % An instant lexical (no '/') only satisfies an interval type as
+            % a degenerate [t,t] range — weaker than the exact instant-type
+            % match.  Rank it below other-typed (4) so xsd:date/dateTime
+            % candidates win the tie; true 'A/B' interval lexicals stay at 4.
+            (   sub_string(Value, _, _, _, '/')
+            ->  Level = 4
+            ;   Level = 5
+            )
         ;   Level = 4
         )
     ;   Level = 5
@@ -1889,5 +1899,18 @@ test(array_of_obj_captures,
     infer_type(Database,Prefixes,Document,_Type,_Result,captures(In,H-T,[]-[],Out)),
     In == Out,
     H == T.
+
+test(interval_instant_specificity) :-
+    % An instant lexical satisfies an interval type only as a degenerate
+    % [t,t] range: level 5, below the exact instant-type match at 4.
+    cast_specificity('2026-01-01T00:00:00','xdd:dateTimeInterval',5),
+    cast_specificity('2026-12-31','xdd:dateTimeInterval',5),
+    cast_specificity('2026-01-01T00:00:00','xsd:dateTime',4),
+    cast_specificity('2026-12-31','xsd:date',4),
+    % A true 'A/B' interval lexical keeps the normal other-typed level.
+    cast_specificity('2020-01-01/2021-01-01','xdd:dateTimeInterval',4),
+    % The expanded URI behaves identically to the prefixed form.
+    cast_specificity('2026-01-01T00:00:00',
+                     'http://terminusdb.com/schema/xdd#dateTimeInterval',5).
 
 :- end_tests(infer).
