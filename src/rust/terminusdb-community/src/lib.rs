@@ -12,6 +12,7 @@ mod doc;
 mod embedding;
 mod expanded_name;
 mod graphql;
+mod inference;
 mod json_preserve;
 mod jwt;
 mod path;
@@ -26,10 +27,9 @@ use swipl::prelude::*;
 pub use value::register_decimal_lexical_hook;
 
 use tdb_succinct::tfc::lexical_interval::{
-    decode_lexical_entry, derived_period, encode_lexical_interval,
-    extend_component, parse_lexical_interval, render_lexical_interval,
-    Component, FLAG_DECLARED_PERIOD, FLAG_DURATION_END, FLAG_POINT,
-    FLAG_START_DURATION,
+    decode_lexical_entry, derived_period, encode_lexical_interval, extend_component,
+    parse_lexical_interval, render_lexical_interval, Component, FLAG_DECLARED_PERIOD,
+    FLAG_DURATION_END, FLAG_POINT, FLAG_START_DURATION,
 };
 pub use terminusdb_store_prolog::terminus_store;
 
@@ -248,6 +248,7 @@ pub fn install() {
     clock::register();
     change_window::register();
     embedding::register();
+    inference::register();
     jwt::register();
     terminusdb_webserver::install();
 }
