@@ -28,78 +28,47 @@ fn json_value_to_prolog_term<'a, C: QueryableContextType>(
                 return Ok(term);
             }
 
-            // Only create rationals for decimals; keep integers as integers
+            // Decimals (any number with a '.') arrive as NrD^^xsd:decimal —
+            // the literal digits become an exact rational so arbitrary
+            // precision is preserved, and the decimal type tag feeds the
+            // inference ladder's semantic distinction. 1.50 -> 3r2,
+            // 1.0 -> 1 (10r10 normalizes to the integer 1).
             if let Some(dot_pos) = num_str.find('.') {
-                // Has decimal point - create rational for precision
                 let (integer_part, frac_part_with_dot) = num_str.split_at(dot_pos);
                 let frac_part = &frac_part_with_dot[1..]; // Skip the '.'
 
-                // Strip trailing zeros from fractional part
-                let frac_trimmed = frac_part.trim_end_matches('0');
+                // numerator = integer_part + frac digits, leading zeros
+                // stripped ("0.000015" -> "15"), sign preserved;
+                // denominator = 10^k
+                let digits = format!("{}{}", integer_part, frac_part);
+                let (sign, digits) = match digits.strip_prefix('-') {
+                    Some(rest) => ("-", rest),
+                    None => ("", digits.as_str()),
+                };
+                let trimmed = digits.trim_start_matches('0');
+                let numerator = if trimmed.is_empty() {
+                    "0".to_string()
+                } else {
+                    format!("{}{}", sign, trimmed)
+                };
+                let denominator = format!("1{}", "0".repeat(frac_part.len()));
 
-                // If only zeros after decimal, treat as integer
-                if frac_trimmed.is_empty() {
-                    let int_atom_term = context.new_term_ref();
-                    int_atom_term.unify(Atom::new(integer_part))?;
-                    let int_term = context.new_term_ref();
-                    context.call_once(pred!(atom_number / 2), [&int_atom_term, &int_term])?;
-                    return Ok(int_term);
-                }
+                // Parse "NrD" as a Prolog term - a real rational, no f64.
+                let rat_atom_term = context.new_term_ref();
+                rat_atom_term.unify(Atom::new(&format!("{}r{}", numerator, denominator)))?;
+                let rat_term = context.new_term_ref();
+                context.call_once(
+                    pred!(atom_to_term / 3),
+                    [&rat_atom_term, &rat_term, &context.new_term_ref()],
+                )?;
 
-                // numerator = integer_part + frac_part (concatenated as one number)
-                let numerator = format!("{}{}", integer_part, frac_trimmed);
-                // denominator = 10^(frac_part.len())
-                let denominator = format!("1{}", "0".repeat(frac_trimmed.len()));
-
-                // Try to create rational - if it fails, fall back to standard float
-                let num_atom_term = context.new_term_ref();
-                num_atom_term.unify(Atom::new(&numerator))?;
-                let num_term = context.new_term_ref();
-
-                // Check if atom_number succeeds and returns integers (not floats)
-                if context
-                    .call_once(pred!(atom_number / 2), [&num_atom_term, &num_term])
-                    .is_err()
-                {
-                    // Failed to parse - fall back to standard number
-                    let term = context.new_term_ref();
-                    if let Some(f) = n.as_f64() {
-                        term.unify(f)?;
-                    } else {
-                        return Err(PrologError::Failure);
-                    }
-                    return Ok(term);
-                }
-
-                let den_atom_term = context.new_term_ref();
-                den_atom_term.unify(Atom::new(&denominator))?;
-                let den_term = context.new_term_ref();
-                context.call_once(pred!(atom_number / 2), [&den_atom_term, &den_term])?;
-
-                // Build rational using rdiv operator: numerator rdiv denominator
-                let rational_term = context.new_term_ref();
-                let rdiv_functor = Functor::new(Atom::new("rdiv"), 2);
-
-                // Create rdiv expression
-                rational_term.unify(rdiv_functor)?;
-                rational_term.unify_arg(1, &num_term)?;
-                rational_term.unify_arg(2, &den_term)?;
-
-                // Evaluate the rdiv expression - if it fails, fall back to float
-                let result = context.new_term_ref();
-                match context.call_once(pred!(is / 2), [&result, &rational_term]) {
-                    Ok(_) => Ok(result),
-                    Err(_) => {
-                        // rdiv evaluation failed (probably float args) - return as float
-                        let term = context.new_term_ref();
-                        if let Some(f) = n.as_f64() {
-                            term.unify(f)?;
-                        } else {
-                            return Err(PrologError::Failure);
-                        }
-                        Ok(term)
-                    }
-                }
+                let type_term = context.new_term_ref();
+                type_term.unify(Atom::new("http://www.w3.org/2001/XMLSchema#decimal"))?;
+                let typed_term = context.new_term_ref();
+                typed_term.unify(Functor::new(Atom::new("^^"), 2))?;
+                typed_term.unify_arg(1, &rat_term)?;
+                typed_term.unify_arg(2, &type_term)?;
+                Ok(typed_term)
             } else {
                 // Integer - parse directly as integer (no rational needed)
                 let int_atom_term = context.new_term_ref();
