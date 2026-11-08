@@ -856,6 +856,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
         before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              branch_key_from_transaction(Transaction, BranchKey),
@@ -900,7 +901,7 @@ api_insert_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                              )
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -1337,6 +1338,7 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
     stream_property(Stream, position(Pos)),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      (   set_stream_position(Stream, Pos),
                          % First pass: collect all IDs to delete
@@ -1349,7 +1351,7 @@ api_delete_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_D
                          api_delete_documents_bulk_(Graph_Type, Transaction, Ids_To_Delete)
                      ),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1374,10 +1376,11 @@ api_delete_document(SystemDB, Auth, Path, ID, Requested_Data_Version, New_Data_V
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_delete_document_(Graph_Type, Transaction, ID),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1394,10 +1397,11 @@ api_delete_documents_by_type(SystemDB, Auth, Path, Type, Requested_Data_Version,
 
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_delete_documents_by_type_for_graph(Graph_Type, Transaction, Type),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1733,10 +1737,11 @@ api_nuke_documents(SystemDB, Auth, Path, Requested_Data_Version, New_Data_Versio
     option_or_die(message(Message),Options),
     resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
     before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
+    data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
     with_transaction(Context,
                      api_nuke_documents_(Graph_Type, Transaction),
                      Meta_Data,
-                     Options),
+                     Guarded_Options),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Transaction_Meta_Data = Meta_Data.
 
@@ -1793,6 +1798,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
     ;   resolve_descriptor_auth(write, SystemDB, Auth, Path, Graph_Type, Descriptor),
         before_write(Descriptor, Auth, Author, Message, Requested_Data_Version, Context, Transaction),
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              branch_key_from_transaction(Transaction, BranchKey),
@@ -1816,7 +1822,7 @@ api_replace_documents(SystemDB, Auth, Path, Stream, Requested_Data_Version, New_
                              )
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -1908,7 +1914,12 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
         producer_timeout(ProducerTimeout),
         setup_call_cleanup(
             true,
-            (   Package = commit_package{
+            (   (   Requested_Data_Version = no_data_version
+                ->  Package_Options = options{overwrite: Overwrite, merge_repeats: Doc_Merge}
+                ;   Package_Options = options{overwrite: Overwrite, merge_repeats: Doc_Merge,
+                                              data_version_guard: Descriptor-Requested_Data_Version}
+                ),
+                Package = commit_package{
                     branch_key: BranchKey,
                     all_branches: [BranchKey],
                     transaction_objects: TransactionObjects,
@@ -1920,7 +1931,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
                                            raw_docs: Docs
                                        }],
                     commit_info: Context.commit_info,
-                    options: options{overwrite: Overwrite, merge_repeats: Doc_Merge},
+                    options: Package_Options,
                     graph_type: Graph_Type,
                     reply_queue: ReplyQueue,
                     request_id: RequestId
@@ -1943,6 +1954,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
         % branch commit, so the commit queue cannot serialize them. Fall back
         % to the synchronous path inside the already-open transaction.
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              (   InputFormat = json
@@ -1954,7 +1966,7 @@ api_insert_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Version
                              compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -1988,7 +2000,12 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
         producer_timeout(ProducerTimeout),
         setup_call_cleanup(
             true,
-            (   Package = commit_package{
+            (   (   Requested_Data_Version = no_data_version
+                ->  Package_Options = options{create: Create, merge_repeats: Doc_Merge}
+                ;   Package_Options = options{create: Create, merge_repeats: Doc_Merge,
+                                              data_version_guard: Descriptor-Requested_Data_Version}
+                ),
+                Package = commit_package{
                     branch_key: BranchKey,
                     all_branches: [BranchKey],
                     transaction_objects: TransactionObjects,
@@ -2000,7 +2017,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
                                            raw_docs: Docs
                                        }],
                     commit_info: Context.commit_info,
-                    options: options{create: Create, merge_repeats: Doc_Merge},
+                    options: Package_Options,
                     graph_type: Graph_Type,
                     reply_queue: ReplyQueue,
                     request_id: RequestId
@@ -2022,6 +2039,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
     ;   % Non-branch descriptors have no advancing branch commit; fall back to
         % the synchronous path.
         stream_property(Stream, position(Pos)),
+        data_version_guarded_options(Descriptor, Requested_Data_Version, Options, Guarded_Options),
         with_transaction(Context,
                          (   set_stream_position(Stream, Pos),
                              (   InputFormat = json
@@ -2033,7 +2051,7 @@ api_replace_documents_queued(SystemDB, Auth, Path, Stream, Requested_Data_Versio
                              compress_doc_ids(Compress_Ids, Transaction, Raw_Ids, Ids)
                          ),
                          Meta_Data,
-                         Options),
+                         Guarded_Options),
         meta_data_version(Transaction, Meta_Data, New_Data_Version),
         Transaction_Meta_Data = Meta_Data
     ).
@@ -2607,6 +2625,21 @@ do_execute_commit_package(Package, Result) :-
             )
         )
     ->  true
+    ;   % Guarded package lost the label CAS: the client asked to commit
+        % onto a version that has moved, so the answer is a mismatch, not
+        % a merge. Re-elaboration cannot apply anyway (builders are spent).
+        get_dict(data_version_guard, Package.options, Guard_Descriptor-Guard_Requested)
+    ->  (   catch(
+                (   open_descriptor(Guard_Descriptor, Fresh_Transaction),
+                    transaction_data_version(Fresh_Transaction, Fresh_Actual),
+                    Fresh_Actual \= Guard_Requested
+                ->  Result = error(error(data_version_mismatch(Guard_Requested, Fresh_Actual), _))
+                ;   Result = error(unexpected_commit_failure)
+                ),
+                GuardError,
+                Result = error(GuardError)
+            )
+        )
     ;   json_log_error_formatted("execute_commit_package catch block failed", []),
         Result = error(unexpected_commit_failure)
     ),

@@ -41,6 +41,7 @@ run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transactio
         error(query_default_collection_failed_unexpectedly(Output_Context), _)),
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version),
+    data_version_guarded_options(Transaction.descriptor, Requested_Data_Version, [], Transaction_Options),
     with_transaction(
         Output_Context,
         query_response:(
@@ -52,7 +53,8 @@ run_context_ast_jsonld_response(Context, AST, Requested_Data_Version, Transactio
                     Binding_Set),
             * json_log_info_formatted('~N[Binding Set] ~q~n', [Binding_Set])
         ),
-        Meta_Data
+        Meta_Data,
+        Transaction_Options
     ),
     Transaction_Meta_Data = Meta_Data,
     context_variable_names(Output_Context, Names),
@@ -75,6 +77,7 @@ run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, 
     transaction_data_version(Transaction, Actual_Data_Version),
     compare_data_versions(Requested_Data_Version, Actual_Data_Version),
     write_preface_record(Output_Context),
+    data_version_guarded_options(Transaction.descriptor, Requested_Data_Version, [], Transaction_Options),
     with_transaction(
         Output_Context,
         forall(woql_compile:Prog,
@@ -84,7 +87,8 @@ run_context_ast_jsonld_streaming_response(Context, AST, Requested_Data_Version, 
                    write_woql_json_binding(JSON_Binding)
                )
               ),
-        Meta_Data
+        Meta_Data,
+        Transaction_Options
     ),
     meta_data_version(Transaction, Meta_Data, New_Data_Version),
     Postscript_Record = _{'@type' : 'PostscriptRecord',
