@@ -1,7 +1,8 @@
 :- module('document/patch',
           [   simple_patch/4,
               diff_op/2,
-              get_dict_or_null/3
+              get_dict_or_null/3,
+              strip_wire_hints/2
           ]).
 
 :- use_module(core(util)).
@@ -117,12 +118,47 @@ pairs_and_conflicts_from_keys([Key|Keys], JSON, Diff,
 % as a stored xsd:decimal rational (e.g. 11r10) and a JSON float (e.g. 1.1)
 % are treated as equal.  Dicts and lists are compared structurally.
 %
+% Typed wire literals carry ^^ as a type hint, not as part of the value.
+strip_typed_literal(V, Bare) :-
+    (   nonvar(V), V = Bare^^_
+    ->  true
+    ;   Bare = V
+    ).
+
+%
+% strip_wire_hints(+Term, -Stripped) is det.
+%
+% Recursively strip ^^ type tags from a patch result.  The tags are parse
+% metadata for storage typing — a patch response is plain JSON, and the
+% response serializer cannot write the compound.  Only used on results
+% that are rendered back to the caller; storage paths keep the tags.
+strip_wire_hints(X, Y) :-
+    (   nonvar(X), X = Bare^^_
+    ->  Y = Bare
+    ;   is_dict(X)
+    ->  dict_pairs(X, Tag, Pairs),
+        maplist([K-V,K-W]>>strip_wire_hints(V,W), Pairs, Pairs1),
+        dict_pairs(Y, Tag, Pairs1)
+    ;   is_list(X)
+    ->  maplist(strip_wire_hints, X, Y)
+    ;   compound(X)   % success(After) / conflict(...) result wrappers
+    ->  X =.. [F|Args],
+        maplist(strip_wire_hints, Args, Args1),
+        Y =.. [F|Args1]
+    ;   Y = X
+    ).
+
 values_equal(V1, V2) :-
+    strip_typed_literal(V1, W1),
+    strip_typed_literal(V2, W2),
+    values_equal_(W1, W2).
+
+values_equal_(V1, V2) :-
     number(V1),
     number(V2),
     !,
     V1 =:= V2.
-values_equal(V1, V2) :-
+values_equal_(V1, V2) :-
     (   is_dict(V1)
     ;   is_dict(V2)
     ;   is_list(V1)
@@ -130,7 +166,7 @@ values_equal(V1, V2) :-
     ),
     !,
     V1 = V2.
-values_equal(V1, V2) :-
+values_equal_(V1, V2) :-
     % Convert both to atoms for comparison
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
     (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
@@ -144,7 +180,12 @@ values_equal(V1, V2) :-
 % context before comparison. Non-string values delegate to
 % values_equal/2.
 %
-values_equal(V1, V2, _Prefixes) :-
+values_equal(V1, V2, Prefixes) :-
+    strip_typed_literal(V1, W1),
+    strip_typed_literal(V2, W2),
+    values_equal_(W1, W2, Prefixes).
+
+values_equal_(V1, V2, _Prefixes) :-
     (   number(V1)
     ;   number(V2)
     ;   is_dict(V1)
@@ -154,7 +195,7 @@ values_equal(V1, V2, _Prefixes) :-
     ),
     !,
     values_equal(V1, V2).
-values_equal(V1, V2, Prefixes) :-
+values_equal_(V1, V2, Prefixes) :-
     (   atom(V1) -> A1 = V1 ; atom_string(A1, V1)),
     (   atom(V2) -> A2 = V2 ; atom_string(A2, V2)),
     (   A1 = A2
@@ -1155,6 +1196,20 @@ test(values_equal_float_and_integer, []) :-
 test(values_equal_integer_and_decimal, []) :-
     values_equal(1, 1r1).
 
+test(strip_wire_hints_deep, []) :-
+    %% Every arm: ^^ literals (incl. high-precision rational), dicts,
+    %% lists, result wrappers, plain scalars.
+    In = success(_{ a : 11r10^^'xsd:decimal',
+                    b : [ 987654321098765432109r100000000000000000000^^'xsd:decimal',
+                          "s", 3 ],
+                    c : conflict(_{ d : 1r3^^'xsd:decimal' }) }),
+    strip_wire_hints(In, Out),
+    Out = success(_{ a : 11r10,
+                     b : [ R, "s", 3 ],
+                     c : conflict(_{ d : 1r3 }) }),
+    %% High-precision rational survives stripping unchanged.
+    R =:= 9.87654321098765432109.
+
 test(swap_decimal_value, []) :-
     %% Regression: patching a decimal property with a float SwapValue
     %% must not produce a conflict when the stored value is equal.
@@ -1182,7 +1237,7 @@ test(swap_decimal_value_json_preserve, []) :-
                 weight : 11r10 },
     simple_patch(Patch, Before, success(_{ '@id' : "Test/1",
                                              '@type' : "Test",
-                                             weight : 6r5 }), []).
+                                             weight : 6r5^^'http://www.w3.org/2001/XMLSchema#decimal' }), []).
 
 test(swapvalue_empty_before_against_empty, []) :-
     Before = _{ '@id' : "Task/1",

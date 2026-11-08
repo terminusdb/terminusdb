@@ -43,3 +43,4 @@ assets/
 # builtin_plugins/assets holds shipped source assets (tokenizer, llms.txt)
 !builtin_plugins/assets/
 test-logs/
+tests/context_cache/catalog

@@ -421,8 +421,7 @@ fn convert_value(
     prefix_map: &HashMap<String, String>,
 ) -> Result<Value, ElaborationError> {
     match range_type {
-        "http://www.w3.org/2001/XMLSchema#QName"
-        | "https://xbrl.org/2021SQName" => match value {
+        "http://www.w3.org/2001/XMLSchema#QName" | "https://xbrl.org/2021SQName" => match value {
             Value::String(s) => crate::expanded_name::lexical_to_clark(
                 s,
                 prefix_map,

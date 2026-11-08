@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { Agent, db, document, woql } = require('../lib')
+const { Agent, db, document, woql, util } = require('../lib')
 const Decimal = require('decimal.js')
 const { ApolloClient, InMemoryCache, HttpLink, gql, ApolloLink, concat } = require('@apollo/client/core')
 const fetch = require('cross-fetch')
@@ -180,8 +180,13 @@ describe('decimal-precision', function () {
         query: { xsd: '1.0' },
       }).unverified()
 
-      expect(response.status).to.equal(400)
-      expect(response.body['api:message']).to.include('enterprise')
+      if (util.enterprise) {
+        expect(response.status).to.equal(200)
+        expect(response.text.match(/"value15digits"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.0')
+      } else {
+        expect(response.status).to.equal(400)
+        expect(response.body['api:message']).to.include('enterprise')
+      }
     })
 
     it('rejects xsd=1.0 on the WOQL endpoint without enterprise edition', async function () {
@@ -197,8 +202,13 @@ describe('decimal-precision', function () {
         .post(`${api.path.woqlResource({ dbName: agent.dbName, orgName: agent.orgName })}?xsd=1.0`)
         .send({ query })
 
-      expect(response.status).to.equal(400)
-      expect(response.body['api:message']).to.include('enterprise')
+      if (util.enterprise) {
+        expect(response.status).to.equal(200)
+        expect(response.text.match(/"@value"\s*:\s*([0-9.eE+-]+)/)[1]).to.equal('1.0')
+      } else {
+        expect(response.status).to.equal(400)
+        expect(response.body['api:message']).to.include('enterprise')
+      }
     })
 
     it('rejects xsd=1.0 on the GraphQL endpoint without enterprise edition', async function () {
@@ -207,8 +217,13 @@ describe('decimal-precision', function () {
         .post(`${graphqlPath}?xsd=1.0`)
         .send({ query: '{ HighPrecision { value15digits } }' })
 
-      expect(response.status).to.equal(400)
-      expect(response.text).to.include('enterprise')
+      if (util.enterprise) {
+        expect(response.status).to.equal(200)
+        expect(response.text).to.match(/"value15digits"\s*:\s*1\.0(?![0-9])/)
+      } else {
+        expect(response.status).to.equal(400)
+        expect(response.text).to.include('enterprise')
+      }
     })
   })
 

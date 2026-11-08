@@ -1,14 +1,14 @@
 use chrono::{NaiveDateTime, NaiveTime};
-use tdb_succinct::tfc::lexical_interval::{
-    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
-    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
-};
 use juniper::{DefaultScalarValue, FromInputValue};
 use lazy_static::*;
 use rug::Integer;
 use serde_json::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use tdb_succinct::tfc::lexical_interval::{
+    decode_lexical_entry, legacy_interval_to_lexical, render_lexical_interval, Component,
+    LexicalInterval, FLAG_EXPLICIT, TZ_ZONELESS,
+};
 use tdb_succinct::*;
 use terminusdb_store_prolog::value::split_lang_string;
 
@@ -19,9 +19,9 @@ use terminusdb_store_prolog::value::split_lang_string;
 fn interval_entry_to_string(tde: &TypedDictEntry) -> String {
     let bytes = tde.to_bytes();
     match bytes.len() {
-        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(
-            &legacy_interval_to_lexical(&DateTimeInterval::from_legacy_lexical(bytes)),
-        ),
+        INTERVAL_LEGACY_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
+            &DateTimeInterval::from_legacy_lexical(bytes),
+        )),
         INTERVAL_ENCODED_WIDTH => render_lexical_interval(&legacy_interval_to_lexical(
             &DateTimeInterval::from_lexical(bytes),
         )),
@@ -503,9 +503,9 @@ pub fn value_to_graphql(tde: &TypedDictEntry) -> juniper::Value<DefaultScalarVal
         Datatype::AnySimpleType => juniper::Value::Scalar(DefaultScalarValue::String(
             tde.as_val::<AnySimpleType, String>(),
         )),
-        Datatype::DateTimeInterval => juniper::Value::Scalar(DefaultScalarValue::String(
-            interval_entry_to_string(tde),
-        )),
+        Datatype::DateTimeInterval => {
+            juniper::Value::Scalar(DefaultScalarValue::String(interval_entry_to_string(tde)))
+        }
     }
 }
 

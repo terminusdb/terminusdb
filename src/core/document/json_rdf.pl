@@ -38,6 +38,13 @@ is_json_subdocument_type(Type) :-
 json_data_prefix('terminusdb:///json/').
 
 json_type_rdf_type(X,R),
+nonvar(X),
+X = _^^T,
+atom(T) =>
+    % Pre-typed wire literal (e.g. 247r2^^xsd:decimal from the preserve
+    % parser) — already a valid literal; process it as-is.
+    R = X.
+json_type_rdf_type(X,R),
 string(X) =>
     % Strings are stored as xsd:string by default
     % Note: @@id and @@type values should be treated as xsd:anyURI when validated at dict level

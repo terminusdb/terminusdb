@@ -414,12 +414,12 @@ impl<L: Layer + Clone> DocumentContext<L> {
         if let Some(v) = id_name.value_ref() {
             // this is not actually a document but a value
             return Err(match v.datatype() {
-                Datatype::QName | Datatype::SQName => Value::String(
-                    crate::expanded_name::clark_to_lexical(
+                Datatype::QName | Datatype::SQName => {
+                    Value::String(crate::expanded_name::clark_to_lexical(
                         &value_to_string(v),
                         self.reverse_prefix_map(),
-                    ),
-                ),
+                    ))
+                }
                 _ => value_to_json_xsd(v, self.xsd_10),
             });
         }
