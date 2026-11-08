@@ -482,9 +482,11 @@ test(large_integers) :-
 test(float_values) :-
     JSON = '{"pi":3.14159,"e":2.71828}',
     json_read_dict(JSON, Dict, []),
-    % Rust parser converts decimals to rationals for precision
-    rational(Dict.pi),
-    rational(Dict.e).
+    % Decimals arrive as NrD^^xsd:decimal - exact rationals
+    Dict.pi = Pi^^'http://www.w3.org/2001/XMLSchema#decimal',
+    rational(Pi),
+    Dict.e = E^^'http://www.w3.org/2001/XMLSchema#decimal',
+    rational(E).
 
 % Test boolean and null
 test(special_values) :-
