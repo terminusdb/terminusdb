@@ -44,3 +44,11 @@ assets/
 !builtin_plugins/assets/
 test-logs/
 tests/context_cache/catalog
+
+# ACID suite run artefacts (tests/acid/README.md)
+tests/acid/traces/
+tests/acid/jepsen/store/
+tests/acid/jepsen/target/
+tests/acid/jepsen/.cpcache/
+tests/acid/**/__pycache__/
+tests/acid/jepsen/secret/
