@@ -16,6 +16,10 @@ Storage layout and vectorlink configuration changes:
 * `xsd:duration` canonical zero length duration is now generally aligned to PT0S
 * `xdd:dateTimeInterval` now handles single instants and date-only intervals and increased range
 
+## Bugfixes
+
+* GraphQL and the VectorLink embedding indexer no longer panic on schemas that carry a field-level `@unfold` annotation — the GraphQL frame parser accepts (and ignores for GraphQL typing) `@unfold` on any field definition, and a frame that still fails to parse now surfaces a catchable `rust_error` exception instead of a panic [#2628](https://github.com/terminusdb/terminusdb/issues/2628)
+
 # TerminusDB Server 12.1.0 Release Candidate 2
 
 The second release candidate of TerminusDB 12.1 hardens the capability model and finishes the datatype and vector search work that began in rc1.

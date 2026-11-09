@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { Agent, db, document } = require('../lib')
+const { Agent, api, db, document } = require('../lib')
 
 describe('Field-Level Unfold', function () {
   let agent
@@ -499,6 +499,68 @@ describe('Field-Level Unfold', function () {
       expect(r.body.toB.name).to.equal('B1')
       // The back-reference should be just an @id (already visited)
       expect(r.body.toB.toA).to.equal('CycleA/a1')
+    })
+  })
+
+  describe('GraphQL with @unfold schema', function () {
+    before(async function () {
+      agent.dbName = 'field_unfold_graphql_test'
+      await db.create(agent, { label: 'Field Unfold GraphQL Test' })
+
+      const schema = [
+        {
+          '@type': 'Class',
+          '@id': 'WH',
+          '@key': { '@type': 'Lexical', '@fields': ['code'] },
+          code: 'xsd:string',
+        },
+        {
+          '@type': 'Class',
+          '@id': 'Suspect',
+          '@key': { '@type': 'Random' },
+          name: 'xsd:string',
+          linked: {
+            '@type': 'Optional',
+            '@class': 'WH',
+            '@unfold': true,
+          },
+        },
+      ]
+
+      const r = await document.insert(agent, { schema })
+      expect(r.status).to.equal(200)
+
+      const instances = [
+        { '@type': 'WH', code: 'warehouse-1' },
+        {
+          '@type': 'Suspect',
+          name: 'Alice',
+          linked: 'WH/warehouse-1',
+        },
+      ]
+      const r2 = await document.insert(agent, { instance: instances })
+      expect(r2.status).to.equal(200)
+    })
+
+    after(async function () {
+      await db.delete(agent)
+    })
+
+    it('should execute trivial GraphQL queries with @unfold schema', async function () {
+      const r = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: '{ Suspect { name } }' })
+      expect(r.status).to.equal(200)
+      expect(r.body.data.Suspect).to.be.an('array')
+      expect(r.body.data.Suspect[0].name).to.equal('Alice')
+    })
+
+    it('should resolve linked field on @unfold schema', async function () {
+      const r = await agent.post(api.path.graphQL({ dbName: agent.dbName, orgName: agent.orgName }))
+        .send({ query: '{ Suspect { linked { code } } }' })
+      expect(r.status).to.equal(200)
+      expect(r.body.data.Suspect).to.be.an('array')
+      expect(r.body.data.Suspect[0].linked).to.be.an('object')
+      expect(r.body.data.Suspect[0].linked.code).to.equal('warehouse-1')
     })
   })
 })
