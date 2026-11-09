@@ -8050,6 +8050,48 @@ test(field_level_unfold_frame_roundtrip,
      get_dict(items, Order, ItemsField),
      get_dict('@unfold', ItemsField, true).
 
+test(field_level_unfold_frame_simple_mode,
+     [
+         setup(
+             (   setup_temp_store(State),
+                 test_document_label_descriptor(Desc),
+                 write_schema(schema2,Desc)
+             )),
+         cleanup(
+             teardown_temp_store(State)
+         )
+     ]) :-
+     % GraphQL and the indexer consume simple(true) frames; @unfold must be
+     % emitted there too, and the Rust frame parser must accept the shape.
+     DocumentSuspect =
+     _{ '@id' : "Suspect",
+        '@type' : "Class",
+        linked : _{ '@type' : "Optional",
+                    '@class' : "WH",
+                    '@unfold' : true }
+      },
+
+     DocumentWH =
+     _{ '@id' : "WH",
+        '@type' : "Class",
+        code : "xsd:string"
+      },
+
+     with_test_transaction(
+         Desc,
+         Context,
+         (   insert_schema_document(Context, DocumentSuspect),
+             insert_schema_document(Context, DocumentWH)
+         ),
+         _
+     ),
+
+     open_descriptor(Desc, DB),
+     all_class_frames(DB, Frames, [compress_ids(true),expand_abstract(true),simple(true)]),
+     Suspect = Frames.get('Suspect'),
+     get_dict(linked, Suspect, LinkedField),
+     get_dict('@unfold', LinkedField, true).
+
 test(field_level_unfold_property_lookup,
      [
          setup(

@@ -11,9 +11,14 @@ Storage layout and vectorlink configuration changes:
 
 ## Behavior changes
 
+* **`sys:JSONDocument` reads are verbatim by default.** `raw_id` on the document API now defaults to `false`, so raw JSON documents read back semantically identical to the submission — including `@`-prefixed members like `"@type"` or nested `"@id"`, which are document content, not generated annotations (key order and whitespace canonicalize). Pass `raw_id=true` to inject the document `@id` as before. The change applies uniformly across every instance selector: direct `id` reads, `ids`, `type`, `id_prefix` listings, `query`, and the bare listing, in both single-document and `as_list` output. **Migration:** clients that rely on the injected `@id` on raw reads must now pass `raw_id=true` explicitly; no data migration is needed since storage and the insert path are unchanged. `identifiers=false` no longer strips `@`-members inside raw JSON documents: they stream through the same verbatim path instead of the annotation-stripping path, which now applies only to schema'd documents. Field names that needed URI-escaping at insert (spaces, unicode, reserved characters) now decode correctly on read through the Rust printer.
 * `xsd:duration` now supports > 255 days (i64 instead of u8 representation)
 * `xsd:duration` canonical zero length duration is now generally aligned to PT0S
 * `xdd:dateTimeInterval` now handles single instants and date-only intervals and increased range
+
+## Bugfixes
+
+* GraphQL and the VectorLink embedding indexer no longer panic on schemas that carry a field-level `@unfold` annotation — the GraphQL frame parser accepts (and ignores for GraphQL typing) `@unfold` on any field definition, and a frame that still fails to parse now surfaces a catchable `rust_error` exception instead of a panic [#2628](https://github.com/terminusdb/terminusdb/issues/2628)
 
 # TerminusDB Server 12.1.0 Release Candidate 2
 
