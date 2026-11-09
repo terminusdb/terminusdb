@@ -155,13 +155,23 @@
   body may arrive keyword- or string-keyed."
   [resp]
   (and (= 400 (:status resp))
-       (let [err (:body resp)
-             err (get err "api:error" (get err :api:error))
-             t   (get err "@type" (get err (keyword "@type")))]
-         (contains? #{"api:DataVersionMismatch" "api:BadDataVersion"}
-                    (some-> t name)))))
+       (let [b (:body resp)]
+         (if (string? b)
+           ;; error responses don't always come back JSON-parsed
+           (or (str/includes? b "DataVersionMismatch")
+               (str/includes? b "BadDataVersion"))
+           (let [err (get b "api:error" (get b :api:error))
+                 t   (get err "@type" (get err (keyword "@type")))]
+             (contains? #{"api:DataVersionMismatch" "api:BadDataVersion"}
+                        (some-> t name)))))))
 
 (defn doc-id [k] (str "JepsenList/" k))
+
+(defn doc-vals
+  "The doc's vals array; the response body may be keyword- or
+  string-keyed depending on how clj-http parsed it."
+  [doc]
+  (or (get doc "vals") (get doc :vals)))
 
 (defn read-vals
   "Current ordered list for key k, as longs. A missing document (404)
@@ -171,7 +181,7 @@
   (let [{:keys [status doc]} (get-doc node (doc-id k))]
     (cond
       (and (= 200 status) doc)
-      (mapv #(Long/parseLong %) (or (get doc "vals") []))
+      (mapv #(Long/parseLong %) (or (doc-vals doc) []))
 
       (or (= 404 status) (= 200 status)) []
 
@@ -187,7 +197,7 @@
     (let [{:keys [doc version status]} (get-doc node (doc-id k))
           _ (when-not (or (= 200 status) (= 404 status))
             (throw (ex-info "pre-append read failed" {:key k :status status})))
-          vals (if doc (mapv str (or (get doc "vals") [])) [])
+          vals (if doc (mapv str (or (doc-vals doc) [])) [])
           resp (put-doc! node {:doc-id (doc-id k)
                                :vals (conj vals (str v))}
                          version)]
@@ -197,7 +207,8 @@
         :else (throw (ex-info "put-doc failed"
                               {:key k :status (:status resp)
                                :api-error (get-in resp [:body "api:error" "@type"])
-                               :body (:body resp)}))))))
+                               :resp-body (let [b (:body resp)]
+                                            (subs (str b) 0 (min 300 (count (str b)))))}))))))
 
 (defn mop!
   "Apply one append-txn micro-op; returns the completed mop."
@@ -217,8 +228,12 @@
         (assoc op :type :ok
                :value (mapv (partial mop! node) (:value op)))
         (catch clojure.lang.ExceptionInfo e
-          (assoc op :type :fail
-               :error (str (.getMessage e) " " (pr-str (dissoc (ex-data e) :body)))))
+          ;; A 5xx may be post-commit: e.g. data_version_cas_lost is thrown
+          ;; after builders committed. Mark those indeterminate, not :fail.
+          (if (<= 500 (or (:status (ex-data e)) 0) 599)
+            (assoc op :type :info :error (str "indeterminate " (pr-str (ex-data e))))
+            (assoc op :type :fail
+                 :error (str (.getMessage e) " " (pr-str (dissoc (ex-data e) :body))))))
         (catch java.net.SocketTimeoutException e
           (assoc op :type :info :error :timeout))
         (catch java.net.ConnectException e
