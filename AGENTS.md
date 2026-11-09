@@ -27,3 +27,13 @@ adjectives that carry no evidence. Tone of voice: senior software
 architect — state mechanism, evidence, and limitation; let numbers
 argue. Keep the reader's form intact (GitHub issue/discussion template
 sections, report headings).
+
+## Public-facing technical writing
+
+Documentation and blog posts aimed at a technical audience follow the
+same evidence-first discipline: precise numbers over adjectives,
+mechanism over metaphor, named tools and pins over "industry-standard",
+and a stated negative space — every page says plainly what it does not
+verify, prove, or cover. No marketing voice, no "blazingly", no claims
+the evidence does not carry. Trustworthiness comes from the reader
+being able to check every number and reproduce every result.
