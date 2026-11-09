@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod dispatch;
+pub mod index_handoff;
 pub mod indexer;
 pub mod log;
 pub mod plugin;
