@@ -41,8 +41,8 @@ export default [
     },
   },
   {
-    // Suite is intentionally gated on the SKIP_MEMORY_MODE_TESTS env var.
-    files: ['test/memory-mode.js'],
+    // Suites are intentionally gated on env vars (local binary required).
+    files: ['test/memory-mode.js', 'test/index-handoff.js'],
     rules: {
       'mocha/no-conditional-tests': 'off',
     },

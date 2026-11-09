@@ -29,8 +29,15 @@ use terminusdb_webserver::indexer::ByteStream;
 
 /// The embedded vectorlink engine: its axum router, built without the
 /// auth layer — in-process requests are already authorized by the host.
+///
+/// `read_only` mirrors `SearchService::is_read_only` (the embed-cache
+/// write lock is held by another process) and `index_task_dir` is the
+/// shared `<data_dir>/index_tasks` directory where read-only instances
+/// drop index-task files for the lock holder to execute.
 struct EmbeddedEngine {
     router: axum::Router,
+    read_only: bool,
+    index_task_dir: std::path::PathBuf,
 }
 
 impl EmbeddedEngine {
@@ -98,6 +105,14 @@ impl EngineTransport for EmbeddedEngine {
         req: EngineRequest,
     ) -> futures::future::BoxFuture<'a, Result<EngineResponse, String>> {
         Box::pin(self.call(req))
+    }
+
+    fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+        Some(self.index_task_dir.clone())
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -204,9 +219,14 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
     }
     // No auth layer: requests only reach this router through the FFI from
     // already-authorized Prolog handlers.
+    let read_only = service.is_read_only();
     let router = vectorlink::http_api::trusted_router(service, config.clone());
 
-    let engine = Arc::new(EmbeddedEngine { router });
+    let engine = Arc::new(EmbeddedEngine {
+        router,
+        read_only,
+        index_task_dir: data_path.join("index_tasks"),
+    });
     *ENGINE.write().unwrap() = Some(engine.clone());
     set_engine_transport(engine);
 
@@ -504,7 +524,11 @@ mod tests {
                     ]))
                 }),
             );
-        EmbeddedEngine { router }
+        EmbeddedEngine {
+            router,
+            read_only: false,
+            index_task_dir: std::path::PathBuf::new(),
+        }
     }
 
     fn get_req(path: &str) -> EngineRequest {
@@ -593,6 +617,8 @@ mod tests {
         let service = vectorlink::service::SearchService::new(store, config.clone(), tokenizer);
         let engine = EmbeddedEngine {
             router: vectorlink::http_api::trusted_router(service, config),
+            read_only: false,
+            index_task_dir: dir.join("index_tasks"),
         };
 
         let resp = engine
