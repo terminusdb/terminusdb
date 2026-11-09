@@ -359,10 +359,8 @@ pub fn type_collection_from_term<'a, C: QueryableContextType>(
     context: &Context<'a, C>,
     frame_term: &Term,
 ) -> PrologResult<TerminusTypeCollectionInfo> {
-    // TODO this should probably do more proper erroring
     let pre_frames: UncleanAllFrames = context
-        .deserialize_from_term(frame_term)
-        .expect("Unable to parse frames into rust struct");
+        .try_or_die_generic(context.deserialize_from_term(frame_term))?;
     let frames: AllFrames = pre_frames.finalize();
 
     Ok(TerminusTypeCollectionInfo {

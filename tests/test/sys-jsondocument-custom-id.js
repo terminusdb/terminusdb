@@ -39,8 +39,8 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
     // External IRI should be preserved as-is
     expect(returnedId).to.equal('https://example.com/myid')
 
-    // Retrieve and verify
-    const retrieved = await document.get(agent, { query: { id: returnedId } })
+    // Retrieve and verify (raw_id=true injects the document @id)
+    const retrieved = await document.get(agent, { query: { id: returnedId, raw_id: true } })
     expect(retrieved.body['@id']).to.equal('https://example.com/myid')
     expect(retrieved.body.name).to.equal('example_document')
     expect(retrieved.body.data.message).to.equal('Hello World')
@@ -192,7 +192,7 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
     const insertedId = insertResult.body[0]
 
     // Should be able to retrieve with the returned ID
-    const retrieved = await document.get(agent, { query: { id: insertedId } })
+    const retrieved = await document.get(agent, { query: { id: insertedId, raw_id: true } })
     // The retrieved @id uses @base directly (no automatic JSONDocument/ prefix)
     expect(retrieved.body['@id']).to.include('consistent-doc')
     expect(retrieved.body.name).to.equal('Consistency Test')
@@ -215,7 +215,7 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
     expect(retrieved.body.n).to.equal(7)
   })
 
-  it('should include @id on read when raw_id=true (default)', async function () {
+  it('should include @id on read only when raw_id=true', async function () {
     const insertResult = await document.insert(agent, {
       instance: { name: 'with_id' },
       author: 'test_author',
@@ -228,8 +228,143 @@ describe('sys:JSONDocument Custom IRI @id Support', function () {
     })
     expect(explicit.body['@id']).to.equal(id)
 
+    // Default since 12.1: raw JSON documents read back verbatim, no @id.
     const implicit = await document.get(agent, { query: { id } })
-    expect(implicit.body['@id']).to.include('JSONDocument/')
+    expect(implicit.body).to.not.have.property('@id')
+    expect(implicit.body).to.not.have.property('@type')
+    expect(implicit.body.name).to.equal('with_id')
+  })
+
+  it('should roundtrip @id/@type content fields verbatim with identifiers=false', async function () {
+    // @-prefixed members are user content, not generated annotations:
+    // identifiers=false must stream the stored JSON verbatim instead of
+    // stripping them.
+    const payload = {
+      name: 'annotated_content',
+      '@type': 'https://schema.org/Thing',
+      nested: {
+        '@id': 'https://example.com/child',
+        '@type': 'https://schema.org/Part',
+        keep: 1,
+      },
+      list: [{ '@id': 'item-ref', keep: 2 }, 'plain', 3],
+    }
+
+    const insertResult = await document.insert(agent, {
+      instance: payload,
+      author: 'test_author',
+      raw_json: true,
+    })
+    const id = insertResult.body[0]
+
+    const retrieved = await document.get(agent, {
+      query: { id, identifiers: false },
+    })
+    expect(retrieved.body).to.deep.equal(payload)
+  })
+
+  it('should roundtrip @id/@type content fields verbatim by default', async function () {
+    // raw_id defaults to false in 12.1: a bare GET streams the stored JSON
+    // verbatim, so content @-keys survive without asking for identifiers.
+    const payload = {
+      name: 'default_verbatim',
+      '@type': 'content-annotation',
+      meta: { '@id': 'content-ref', keep: 1 },
+    }
+
+    const insertResult = await document.insert(agent, {
+      instance: payload,
+      author: 'test_author',
+      raw_json: true,
+    })
+    const id = insertResult.body[0]
+
+    const retrieved = await document.get(agent, { query: { id } })
+    expect(retrieved.body).to.deep.equal(payload)
+  })
+
+  it('should roundtrip keys requiring URI-escaping verbatim', async function () {
+    // json: predicate local names are URI-segment-encoded at insert; the
+    // Rust printer must decode them so keys read back as submitted.
+    const payload = {
+      'uni key': 'with space',
+      'emoji 🎉': 'unicode',
+      'percent%': 'literal percent',
+      'slash/and?query=1': 'reserved chars',
+      nested: { 'inner key': 1 },
+    }
+
+    const insertResult = await document.insert(agent, {
+      instance: payload,
+      author: 'test_author',
+      raw_json: true,
+    })
+    const id = insertResult.body[0]
+
+    const retrieved = await document.get(agent, { query: { id } })
+    expect(retrieved.body).to.deep.equal(payload)
+  })
+
+  it('should roundtrip raw JSON verbatim in a mixed listing with identifiers=false', async function () {
+    // A listing mixes schema'd documents and raw JSON documents; the raw
+    // ones keep their @-content while schema'd ones lose annotations.
+    const payload = {
+      name: 'listed_raw',
+      '@type': 'in-list',
+      ref: { '@id': 'list-ref', keep: 9 },
+    }
+
+    const insertResult = await document.insert(agent, {
+      instance: payload,
+      author: 'test_author',
+      raw_json: true,
+    })
+    const id = insertResult.body[0]
+
+    const retrieved = await document.get(agent, {
+      query: { as_list: true, identifiers: false },
+    })
+    expect(retrieved.body).to.be.an('array')
+    const doc = retrieved.body.find((d) => d.name === 'listed_raw')
+    expect(doc, id).to.exist
+    expect(doc).to.deep.equal(payload)
+  })
+
+  it('should roundtrip raw JSON verbatim via an id_prefix listing', async function () {
+    // id_prefix selects a contiguous id range; raw documents matched by
+    // the prefix stream verbatim under identifiers=false as under the
+    // default, and gain @id only with raw_id=true.
+    const payload = {
+      name: 'prefix_listed',
+      '@type': 'prefix-content',
+      meta: { '@id': 'prefix-ref', keep: 5 },
+    }
+
+    await document.insert(agent, {
+      instance: payload,
+      author: 'test_author',
+      queryString: 'raw_json=true&id=prefixtest/doc&author=test_author&message=test',
+    })
+
+    const byDefault = await document.get(agent, {
+      query: { id_prefix: 'prefixtest/', as_list: true },
+    })
+    expect(byDefault.body).to.be.an('array').with.lengthOf(1)
+    expect(byDefault.body[0]).to.deep.equal(payload)
+
+    const noIdentifiers = await document.get(agent, {
+      query: { id_prefix: 'prefixtest/', as_list: true, identifiers: false },
+    })
+    expect(noIdentifiers.body).to.be.an('array').with.lengthOf(1)
+    expect(noIdentifiers.body[0]).to.deep.equal(payload)
+
+    const withId = await document.get(agent, {
+      query: { id_prefix: 'prefixtest/', as_list: true, raw_id: true, compress_ids: false },
+    })
+    expect(withId.body).to.be.an('array').with.lengthOf(1)
+    expect(withId.body[0]['@id']).to.equal('terminusdb:///data/prefixtest/doc')
+    expect(withId.body[0].name).to.equal('prefix_listed')
+    expect(withId.body[0]['@type']).to.equal('prefix-content')
   })
 
   it('should omit @id in as_list reads when raw_id=false', async function () {
