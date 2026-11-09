@@ -566,9 +566,9 @@ document_handler(get, Path, Request, System_DB, Auth) :-
             param_value_search_or_json_optional(Search, JSON, minimized, boolean, true, Minimized),
             param_value_search_or_json_optional(Search, JSON, as_list, boolean, false, As_List),
             param_value_search_or_json_optional(Search, JSON, unfold, boolean, true, Unfold),
-            % raw_id: keep internal @id/@type on raw JSON documents.
-            % Default flips to false in 12.1.
-            param_value_search_or_json_optional(Search, JSON, raw_id, boolean, true, Raw_Id),
+            % raw_id: inject the internal @id on raw JSON documents.
+            % Off by default since 12.1 — raw docs read back verbatim.
+            param_value_search_or_json_optional(Search, JSON, raw_id, boolean, false, Raw_Id),
             % identifiers: include generated document @id/@type annotations
             % in the response (default). identifiers=false strips them so the
             % document reads back in its submitted lexical form.
