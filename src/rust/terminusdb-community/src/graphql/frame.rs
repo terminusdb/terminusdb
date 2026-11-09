@@ -1,7 +1,7 @@
 use bimap::BiMap;
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{self, Deserialize};
+use serde::{self, de::IgnoredAny, Deserialize};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -405,6 +405,9 @@ fn default_dimensionality() -> usize {
     1
 }
 
+// '@unfold' arrives as the Prolog atom `true`, which untagged content
+// buffering reads as a string — Option<bool> cannot see it. IgnoredAny
+// accepts any representation; GraphQL discards the hint either way.
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(tag = "@type")]
 enum ComplexFieldDefinition {
@@ -412,13 +415,13 @@ enum ComplexFieldDefinition {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         #[serde(rename = "@unfold")]
-        unfold: Option<bool>,
+        unfold: Option<IgnoredAny>,
     },
     Set {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         #[serde(rename = "@unfold")]
-        unfold: Option<bool>,
+        unfold: Option<IgnoredAny>,
     },
     Array {
         #[serde(rename = "@class")]
@@ -426,13 +429,13 @@ enum ComplexFieldDefinition {
         #[serde(default = "default_dimensionality")]
         dimensions: usize,
         #[serde(rename = "@unfold")]
-        unfold: Option<bool>,
+        unfold: Option<IgnoredAny>,
     },
     List {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         #[serde(rename = "@unfold")]
-        unfold: Option<bool>,
+        unfold: Option<IgnoredAny>,
     },
     Cardinality {
         #[serde(rename = "@class")]
@@ -440,13 +443,13 @@ enum ComplexFieldDefinition {
         min: Option<usize>,
         max: Option<usize>,
         #[serde(rename = "@unfold")]
-        unfold: Option<bool>,
+        unfold: Option<IgnoredAny>,
     },
     Foreign {
         #[serde(rename = "@class")]
         class: StructuralFieldInnerDefinition,
         #[serde(rename = "@unfold")]
-        unfold: Option<bool>,
+        unfold: Option<IgnoredAny>,
     },
 }
 
@@ -511,8 +514,21 @@ impl From<StructuralFieldDefinition> for UncleanFieldDefinition {
                     UncleanFieldDefinition::Required(class.name())
                 }
             },
+            StructuralFieldDefinition::SimpleAnnotatedField(f) => {
+                UncleanFieldDefinition::Required(f.class.name())
+            }
         }
     }
+}
+
+// A property spec that carries annotations but no '@type' family tag, such as
+// the schema frame's {'@class':X,'@unfold':true} rendering of a required field.
+#[derive(Deserialize, PartialEq, Debug)]
+struct SimpleAnnotatedFieldDefinition {
+    #[serde(rename = "@class")]
+    class: StructuralFieldInnerDefinition,
+    #[serde(rename = "@unfold")]
+    unfold: Option<IgnoredAny>,
 }
 
 #[derive(Deserialize, PartialEq, Debug)]
@@ -520,6 +536,7 @@ impl From<StructuralFieldDefinition> for UncleanFieldDefinition {
 enum StructuralFieldDefinition {
     SimpleField(String),
     ContainerField(ComplexFieldDefinition),
+    SimpleAnnotatedField(SimpleAnnotatedFieldDefinition),
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]
@@ -1496,6 +1513,66 @@ _{'@type': "Array", '@class': 'Something'}
                 class: BaseOrDerived::Derived(ShortName("Something".to_string())),
                 dimensions: 1
             },
+            typedef
+        );
+    }
+
+    #[test]
+    fn deserialize_unfold_container_field() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        // Real frames carry '@type' and '@unfold' as atoms, '@class' as a
+        // string. Untagged buffering turns the atom `true` into
+        // Content::Str("true"), which Option<bool> rejects — this test
+        // guards the Option<IgnoredAny> declaration it requires.
+        let term = r#"
+_{'@type':'Optional', '@class':"WH", '@unfold':true}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanFieldDefinition = context.deserialize_from_term(&term).unwrap();
+
+        assert_eq!(
+            UncleanFieldDefinition::Optional(BaseOrDerived::Derived(ShortName("WH".to_string()))),
+            typedef
+        );
+    }
+
+    #[test]
+    fn deserialize_unfold_set_field() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        let term = r#"
+_{'@type':'Set', '@class':"WH", '@unfold':true}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanFieldDefinition = context.deserialize_from_term(&term).unwrap();
+
+        assert_eq!(
+            UncleanFieldDefinition::Set(BaseOrDerived::Derived(ShortName("WH".to_string()))),
+            typedef
+        );
+    }
+
+    #[test]
+    fn deserialize_unfold_simple_field() {
+        let engine = Engine::new();
+        let activation = engine.activate();
+        let context: Context<_> = activation.into();
+
+        // Non-container @unfold renders as {'@class':X,'@unfold':true} with no
+        // '@type' — the shape the schema frame emits for required fields.
+        let term = r#"
+_{'@class':"WH", '@unfold':true}
+"#;
+        let term = unwrap_result(&context, context.term_from_string(term));
+        let typedef: UncleanFieldDefinition = context.deserialize_from_term(&term).unwrap();
+
+        assert_eq!(
+            UncleanFieldDefinition::Required(BaseOrDerived::Derived(ShortName("WH".to_string()))),
             typedef
         );
     }
