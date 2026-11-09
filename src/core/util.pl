@@ -114,6 +114,7 @@
               op(700,xfy,<>),
               '<>'/2,
               do_or_die/2,
+              retry_startup/2,
               option_or_die/2,
               die_if/2,
               whole_arg/2,

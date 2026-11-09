@@ -33,6 +33,7 @@
               getenv_number/2,
               getenv_default/3,
               getenv_default_number/3,
+              retry_startup/2,
               escape_pcre/2,
               pattern_string_split/3,
               merge_separator_split/3,
@@ -179,6 +180,24 @@ die_if(Goal, Error) :-
     (   call(Goal)
     ->  throw(Error)
     ;   true).
+
+/*
+ * retry_startup(+Retries, :Goal) is semidet.
+ *
+ * Run Goal, retrying failure or exceptions every half-second while a
+ * startup transient may still resolve. Once Retries is exhausted the
+ * goal runs unprotected: its exception propagates and its failure
+ * fails, so the caller sees the real outcome.
+ */
+:- meta_predicate retry_startup(+, 0).
+retry_startup(Retries, Goal) :-
+    (   Retries > 0
+    ->  (   catch(Goal, _Error, fail)
+        ->  true
+        ;   sleep(0.5),
+            Retries1 is Retries - 1,
+            retry_startup(Retries1, Goal))
+    ;   Goal).
 
 /**
  * get_key(+Key,+Object,-Val,+Default) is det.

@@ -101,7 +101,7 @@
               list_existing_databases/4,
               pretty_print_databases/1,
               db_exists_api/4,
-              user_databases_serve_ready/0,
+              system_database_serve_ready/0,
 
               % api_error.pl
               api_error_jsonld/3,

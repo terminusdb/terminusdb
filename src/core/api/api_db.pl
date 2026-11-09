@@ -4,10 +4,8 @@
               list_existing_databases/4,
               pretty_print_databases/1,
               db_exists_api/4,
-              user_databases_serve_ready/0
+              system_database_serve_ready/0
           ]).
-
-:- meta_predicate retry_startup(+, 0).
 
 :- use_module(core(transaction)).
 :- use_module(core(util)).
@@ -53,60 +51,29 @@ get_user_database(System_DB, Auth, Organization, Name, User_Database-Db_Uri) :-
     user_accessible_database_id(System_DB, Auth, Organization, Name, Db_Uri),
     format(string(User_Database),"~s/~s",[Organization,Name]).
 
-%% user_databases_serve_ready is det.
-%% user_databases_serve_ready(+Retries) is det.
+%% system_database_serve_ready is det.
+%% system_database_serve_ready(+Retries) is det.
 %
-%  Resolve the serving descriptor of every finalized user database
-%  recorded in the system database. Startup gates the `dbs` readiness
-%  component on this so HTTP requests can only dispatch once each
-%  committed database demonstrably opens — a database still coming up
-%  must never look like absent data.
+%  Verify that the system database resolves and enumerates through the
+%  request path — the machinery every request needs to locate its target
+%  database. Startup gates the `dbs` readiness component on this so HTTP
+%  requests can only dispatch once databases are findable at all.
 %
-%  Databases still in 'creating' state are skipped: they have no
-%  committed data to serve and a killed creation must not block startup.
-%  Each resolution retries to absorb startup transients (a store or
-%  commit graph still loading); exhaustion throws so the caller can mark
-%  the `dbs` component failed.
-user_databases_serve_ready :-
-    user_databases_serve_ready(120).
+%  Individual user databases are intentionally not probed here: boot must
+%  not load every database, and a single damaged database must never
+%  abort startup. Each database is verified lazily at first touch inside
+%  open_descriptor — a database that exists but cannot open is marked
+%  unservable in memory (descriptor:db_failed/3) and answers a real
+%  error rather than a phantom not-found.
+system_database_serve_ready :-
+    system_database_serve_ready(120).
 
-user_databases_serve_ready(Retries) :-
+system_database_serve_ready(Retries) :-
     do_or_die(
         retry_startup(Retries,
             (   create_context(system_descriptor{}, System_DB),
-                get_all_databases(System_DB, _Organization, Databases))),
-        error(system_database_not_serve_ready, _)),
-    forall(
-        member(Path-Db_Uri, Databases),
-        (   database_state_finalized(System_DB, Db_Uri)
-        ->  do_or_die(
-                retry_startup(Retries,
-                    (   resolve_absolute_string_descriptor(Path, Descriptor),
-                        open_descriptor(Descriptor, _Transaction))),
-                error(user_database_not_serve_ready(Path), _))
-        ;   true)).
-
-%% database_state_finalized(+System_DB, +Db_Uri) is semidet.
-%
-%  The system database records `DatabaseState/finalized` once database
-%  creation has committed every backing graph.
-database_state_finalized(System_DB, Db_Uri) :-
-    ask(System_DB, t(Db_Uri, state, '@schema':'DatabaseState/finalized')).
-
-%% retry_startup(+Retries, :Goal) is semidet.
-%
-%  Run Goal, retrying failure or exceptions every half-second while a
-%  startup transient may still resolve. Once Retries is exhausted the
-%  goal runs unprotected: its exception propagates and its failure
-%  fails, so the caller sees the real outcome.
-retry_startup(Retries, Goal) :-
-    (   Retries > 0
-    ->  (   catch(Goal, _Error, fail)
-        ->  true
-        ;   sleep(0.5),
-            Retries1 is Retries - 1,
-            retry_startup(Retries1, Goal))
-    ;   Goal).
+                get_all_databases(System_DB, _Organization, _Databases))),
+        error(system_database_not_serve_ready, _)).
 
 list_databases(System_DB, Auth, Database_Objects, Options) :-
     ignore(option(organization(Organization), Options)),
@@ -247,50 +214,90 @@ test(list_existing_no_branches,
     forall(member(Object, Database_Objects),
            member(Object, Expected_Objects)).
 
-% user_databases_serve_ready/1 — the `dbs` readiness check. Every finalized
-% user database must open its serving descriptor; databases still in
-% 'creating' state are skipped (they have no committed data to serve),
-% and a finalized database that cannot resolve must fail the check so
-% startup can mark `dbs` failed instead of serving phantom 404/empty
-% responses. Tests pass zero retries so a transient check resolves
-% immediately.
+% system_database_serve_ready/1 — the `dbs` readiness check. It proves the
+% system database resolves and enumerates through the request path; user
+% databases are verified lazily at first touch instead, so a damaged or
+% still-loading database never blocks boot and never looks like absent
+% data — it is marked unservable in memory and answers a real error.
+% Tests pass zero retries so a transient check resolves immediately.
 
 test(serve_ready_empty_store,
      [setup(setup_temp_store(State)),
       cleanup(teardown_temp_store(State))]) :-
-    user_databases_serve_ready(0).
+    system_database_serve_ready(0).
 
-test(serve_ready_finalized_databases,
+test(serve_ready_with_databases,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin","foo"),
              create_db_without_schema("admin","bar"))),
       cleanup(teardown_temp_store(State))]) :-
-    user_databases_serve_ready(0).
+    system_database_serve_ready(0).
 
-test(serve_ready_skips_unfinalized_databases,
+test(serve_ready_ignores_unresolvable_database,
      [setup(setup_temp_store(State)),
       cleanup(teardown_temp_store(State))]) :-
-    % A database record still in 'creating' state (e.g. a killed create)
-    % has no backing store label yet and must not block serve-readiness.
-    create_context(system_descriptor{}, System_Context),
-    with_transaction(System_Context,
-        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
-                                       "ghost label", "ghost comment", _Db_Uri),
-        _),
-    user_databases_serve_ready(0).
-
-test(serve_ready_fails_for_unresolvable_database,
-     [setup(setup_temp_store(State)),
-      cleanup(teardown_temp_store(State)),
-      error(user_database_not_serve_ready("admin/ghostdb"))]) :-
-    % A finalized record whose backing store cannot resolve must fail the
-    % check — passing here is how committed data later looks absent.
+    % A finalized record whose backing store cannot resolve must not block
+    % or fail serve-readiness — one damaged database never takes the
+    % server down.
     create_context(system_descriptor{}, System_Context),
     with_transaction(System_Context,
         system_entity:insert_db_object(System_Context, "admin", "ghostdb",
                                        "ghost label", "ghost comment", Db_Uri),
         _),
     db_create:finalize_db(Db_Uri),
-    user_databases_serve_ready(0).
+    system_database_serve_ready(0).
+
+test(unresolvable_database_marks_failed,
+     [setup(setup_temp_store(State)),
+      cleanup((ignore(retract(descriptor:db_failed(_,_,_))),
+               ignore(retract(descriptor:db_unservable_loading(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % The finalized-but-unresolvable database is marked loading at first
+    % touch and the single background attempt fails, so the request waits
+    % for that attempt and then answers a 500-class error — never a
+    % phantom not-found. Later requests fail fast on the fresh mark.
+    create_context(system_descriptor{}, System_Context),
+    with_transaction(System_Context,
+        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
+                                       "ghost label", "ghost comment", Db_Uri),
+        _),
+    db_create:finalize_db(Db_Uri),
+    resolve_absolute_string_descriptor("admin/ghostdb", Descriptor),
+    assertion(catch(open_descriptor(Descriptor, _Transaction),
+                    error(database_unservable("admin", "ghostdb"), _),
+                    true)),
+    assertion(descriptor:db_failed("admin", "ghostdb", _Since)),
+    assertion(catch(open_descriptor(Descriptor, _Transaction2),
+                    error(database_unservable("admin", "ghostdb"), _),
+                    true)).
+
+test(loading_database_answers_retryable_error,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","realdb"),
+             setenv('TERMINUSDB_DB_LOAD_WAIT','0'))),
+      cleanup((unsetenv('TERMINUSDB_DB_LOAD_WAIT'),
+               ignore(retract(descriptor:db_unservable_loading(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % While a load is in flight the request waits out its grace window,
+    % then answers a retryable 503-class error — never a phantom not-found.
+    get_time(Now),
+    assertz(descriptor:db_unservable_loading("admin", "realdb", Now)),
+    resolve_absolute_string_descriptor("admin/realdb", Descriptor),
+    assertion(catch(open_descriptor(Descriptor, _Transaction),
+                    error(database_loading("admin", "realdb"), _),
+                    true)).
+
+test(expired_failed_mark_retries_open,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","realdb"))),
+      cleanup((ignore(retract(descriptor:db_failed(_,_,_))),
+               teardown_temp_store(State)))]) :-
+    % A failure mark older than 30 minutes is retracted and the database
+    % gets a fresh attempt — the 500 is sticky, not permanent.
+    get_time(Now), Stale is Now - 1801,
+    assertz(descriptor:db_failed("admin", "realdb", Stale)),
+    resolve_absolute_string_descriptor("admin/realdb", Descriptor),
+    open_descriptor(Descriptor, _Transaction),
+    assertion(\+ descriptor:db_failed("admin", "realdb", _)).
 
 :- end_tests(db).

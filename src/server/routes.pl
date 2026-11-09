@@ -4419,6 +4419,36 @@ test(unresolvable_collection_keeps_404_once_ready,
     assertion(sub_string(Text, _, _, _, "404")),
     assertion(\+ sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
 
+test(database_unservable_renders_500,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_ready(store),
+             readiness:readiness_ready(dbs),
+             readiness:mark_hooks_done)),
+      cleanup(readiness:reset_readiness)]) :-
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(database_unservable("admin", "borked"), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "500")),
+    assertion(sub_string(Text, _, _, _, "api:server_error")),
+    assertion(sub_string(Text, _, _, _, "api:DatabaseUnservable")).
+
+test(database_loading_renders_503,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_ready(store),
+             readiness:readiness_ready(dbs),
+             readiness:mark_hooks_done)),
+      cleanup(readiness:reset_readiness)]) :-
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(database_loading("admin", "bigdb"), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")),
+    assertion(sub_string(Text, _, _, _, "api:DatabaseLoading")).
+
 test(non_lookup_errors_keep_their_response_while_not_ready,
      [setup((readiness:reset_readiness,
              readiness:readiness_pending(dbs))),
