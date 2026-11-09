@@ -2456,8 +2456,15 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
             do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
                       error(vectorlink_endpoint_not_configured(index_handler), _)),
             vectorlink:descriptor_domain(Descriptor, Domain),
-            vectorlink:io_delete_domain(Endpoint, Domain),
-            format(string(Message), "Index for ~w deleted", [Path]),
+            (   plugin_api:indexer_engine_read_only
+            ->  % This instance is read-only: write a delete task for the
+                % write-lock holder instead of hitting the engine, which
+                % would refuse the write with a 500.
+                plugin_api:indexer_enqueue_delete(Domain),
+                Message = "Index delete handed off to the instance holding the index write lock"
+            ;   vectorlink:io_delete_domain(Endpoint, Domain),
+                format(string(Message), "Index for ~w deleted", [Path])
+            ),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
             json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',

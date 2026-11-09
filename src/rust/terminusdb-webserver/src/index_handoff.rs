@@ -45,6 +45,9 @@ pub enum IndexTaskKind {
     Index,
     /// Full rebuild from the oldest commit (indexer_reindex semantics).
     Reindex,
+    /// Drop all indexed data for a domain (DELETE /domain semantics).
+    /// `path` on the task carries the domain (`org/db`), not a branch ref.
+    Delete,
 }
 
 impl IndexTaskKind {
@@ -52,6 +55,7 @@ impl IndexTaskKind {
         match self {
             IndexTaskKind::Index => "index",
             IndexTaskKind::Reindex => "reindex",
+            IndexTaskKind::Delete => "delete",
         }
     }
 }
@@ -303,6 +307,11 @@ mod tests {
             "admin%2Fdb%2Flocal%2Fbranch%2Fmain.index.json"
         );
         assert_eq!(
+            "admin%2Fdb.delete.json",
+            task_file_name("admin/db", IndexTaskKind::Delete),
+        );
+        assert_eq!(
+            "admin%2Fdb%2Flocal%2Fbranch%2Fmain.reindex.json",
             task_file_name("admin/db/local/branch/main", IndexTaskKind::Reindex),
             "admin%2Fdb%2Flocal%2Fbranch%2Fmain.reindex.json"
         );

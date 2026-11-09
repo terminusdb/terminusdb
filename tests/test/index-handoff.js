@@ -1,11 +1,11 @@
 const { expect } = require('chai')
-const { spawn, execFile } = require('child_process')
-const crypto = require('crypto')
-const fs = require('fs')
-const http = require('http')
-const net = require('net')
-const os = require('os')
-const path = require('path')
+const { spawn, execFile } = require('node:child_process')
+const crypto = require('node:crypto')
+const fs = require('node:fs')
+const http = require('node:http')
+const net = require('node:net')
+const os = require('node:os')
+const path = require('node:path')
 const { util } = require('../lib')
 
 // Two TerminusDB instances share one storage and vectorlink directory. The
@@ -60,7 +60,9 @@ function getFreePort () {
 // from the input text hash so repeated runs embed identically.
 function startEmbedServer () {
   const server = http.createServer((req, res) => {
-    if (req.method !== 'POST' || req.url.replace(/\/+$/, '') !== '/v1/embeddings') {
+    let reqPath = req.url
+    while (reqPath.endsWith('/')) reqPath = reqPath.slice(0, -1)
+    if (req.method !== 'POST' || reqPath !== '/v1/embeddings') {
       res.writeHead(404).end()
       return
     }
@@ -96,8 +98,8 @@ function httpRequest (port, method, requestPath, body = null) {
       path: requestPath,
       method,
       headers: {
-        Authorization: `Basic ${Buffer.from(`admin:${PASSWORD}`).toString('base64')}`,
-        'Content-Type': 'application/json',
+        Authorization: 'Basic ' + Buffer.from('admin:' + PASSWORD).toString('base64'),
+        ...(body !== null ? { 'Content-Type': 'application/json' } : {}),
       },
     }, (res) => {
       const chunks = []
@@ -122,7 +124,7 @@ async function poll (fn, timeoutMs, intervalMs = 500) {
   while (Date.now() < deadline) {
     last = await fn()
     if (last) return last
-    await new Promise(resolve => setTimeout(resolve, intervalMs))
+    await new Promise(resolve => setTimeout(resolve, intervalMs)) // NOSONAR — polling is serialized by definition
   }
   throw new Error('poll timed out')
 }
@@ -137,10 +139,38 @@ async function waitForServer (port, timeoutMs = 30000) {
       })
       res.resume()
       return res.statusCode === 200
-    } catch (e) {
+    } catch (e) { // NOSONAR — connection refused is expected while the server starts
+      // not up yet — keep polling until the deadline
       return false
     }
   }, timeoutMs, 250)
+}
+
+function stopInstance (proc) {
+  return new Promise((resolve) => {
+    if (proc?.exitCode !== null || proc?.signalCode !== null) return resolve()
+    proc.once('exit', () => resolve())
+    proc.kill('SIGTERM')
+    setTimeout(() => { try { proc.kill('SIGKILL') } catch (e) {} resolve() }, 10000).unref()
+  })
+}
+
+async function indexStatus (port) {
+  const res = await httpRequest(
+    port, 'GET',
+    `/api/index/${ORG}/${DB}?path=${BRANCH_PATH}&branch=main`,
+  )
+  expect(res.status).to.equal(200)
+  return res.body
+}
+
+async function tryIndexStatus (port) {
+  try {
+    return await indexStatus(port)
+  } catch (e) {
+    // transient startup/readiness failure — callers poll until non-null
+    return null
+  }
 }
 
 describe('Read-only index handoff', function () {
@@ -200,37 +230,11 @@ describe('Read-only index handoff', function () {
     return proc
   }
 
-  function stopInstance (proc) {
-    return new Promise((resolve) => {
-      if (!proc || proc.exitCode !== null || proc.signalCode !== null) return resolve()
-      proc.once('exit', () => resolve())
-      proc.kill('SIGTERM')
-      setTimeout(() => { try { proc.kill('SIGKILL') } catch (e) {} resolve() }, 10000).unref()
-    })
-  }
-
   function taskFiles () {
     try {
       return fs.readdirSync(taskDir).filter(f => f.endsWith('.json'))
     } catch (e) {
       return []
-    }
-  }
-
-  async function indexStatus (port) {
-    const res = await httpRequest(
-      port, 'GET',
-      `/api/index/${ORG}/${DB}?path=${BRANCH_PATH}&branch=main`,
-    )
-    expect(res.status).to.equal(200)
-    return res.body
-  }
-
-  async function tryIndexStatus (port) {
-    try {
-      return await indexStatus(port)
-    } catch (e) {
-      return null
     }
   }
 
@@ -272,7 +276,7 @@ describe('Read-only index handoff', function () {
 
     const status = await poll(async () => {
       const s = await tryIndexStatus(portA)
-      return s && s.engine && s.engine.searchable_documents >= 2 ? s : false
+      return s?.engine?.searchable_documents >= 2 ? s : false
     }, 60000)
     expect(status.status).to.equal('completed')
     expect(status.read_only).to.equal(false)
@@ -282,7 +286,7 @@ describe('Read-only index handoff', function () {
     await waitForServer(portB)
     await poll(async () => {
       const s = await tryIndexStatus(portB)
-      return s && s.read_only === true ? s : false
+      return s?.read_only === true ? s : false
     }, 30000)
   })
 
@@ -331,5 +335,23 @@ describe('Read-only index handoff', function () {
     expect(res.status).to.equal(200)
     const hits = res.body && (res.body.results || res.body.hits || res.body)
     expect(hits).to.satisfy(h => Array.isArray(h) ? h.length > 0 : Object.keys(h).length > 0)
+  })
+
+  it('hands off a domain-index delete from the read-only instance', async function () {
+    const res = await httpRequest(portB, 'DELETE', `/api/index/${BRANCH_PATH}`)
+    expect(res.status, res.text).to.equal(200)
+    expect(res.body['api:message']).to.match(/handed off/i)
+    const files = await poll(async () => {
+      const found = taskFiles().filter(f => f.endsWith('.delete.json'))
+      return found.length > 0 ? found : false
+    }, 10000, 200)
+    expect(files[0]).to.equal(`${ORG}%2F${DB}.delete.json`)
+    // The writer executes the domain delete and removes the task file.
+    await poll(async () => taskFiles().filter(f => f.endsWith('.delete.json')).length === 0, 60000)
+    const status = await poll(async () => {
+      const s = await tryIndexStatus(portB)
+      return s?.engine?.searchable_documents === 0 ? s : false
+    }, 30000)
+    expect(status.read_only).to.equal(true)
   })
 })

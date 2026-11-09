@@ -1262,7 +1262,7 @@ fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
 /// lock holder was alive start without waiting one interval.
 async fn handoff_poller_loop(
     dir: std::path::PathBuf,
-    _transport: Arc<dyn EngineTransport>,
+    transport: Arc<dyn EngineTransport>,
     registry: Arc<IndexerRegistry>,
 ) {
     let poll_secs = std::env::var("TERMINUSDB_INDEXER_HANDOFF_POLL_SECS")
@@ -1298,8 +1298,9 @@ async fn handoff_poller_loop(
         // dropped instead of executed.
         let mut sorted = fresh;
         sorted.sort_by_key(|c| match c.task.kind {
-            IndexTaskKind::Reindex => 0,
-            IndexTaskKind::Index => 1,
+            IndexTaskKind::Delete => 0,
+            IndexTaskKind::Reindex => 1,
+            IndexTaskKind::Index => 2,
         });
         let mut reindexed: HashSet<BranchKey> = HashSet::new();
         for claimed in sorted {
@@ -1333,20 +1334,41 @@ async fn handoff_poller_loop(
                 IndexTaskKind::Reindex => {
                     registry.reindex(task.path.clone(), task.branch.clone(), task.store_clustering)
                 }
+                IndexTaskKind::Delete => {
+                    // task.path carries the domain (org/db). The delete runs
+                    // inline: it is a single local engine call, and the
+                    // claim flock is held for its duration so requesters
+                    // still see `underway`.
+                    execute_domain_delete(&transport, &task.path).await
+                }
             };
             match result {
                 Ok(()) => {
                     if task.kind == IndexTaskKind::Reindex {
                         reindexed.insert(key.clone());
                     }
-                    claims.insert(
-                        claimed.file_path.clone(),
-                        ClaimedIndexTask {
-                            _file: claimed.file,
-                            key,
-                            claimed_at: Instant::now(),
-                        },
-                    );
+                    if task.kind == IndexTaskKind::Delete {
+                        // No registry task exists for a delete — its
+                        // completion is the engine response above. Remove
+                        // the file now instead of waiting out the spawn
+                        // grace.
+                        if let Err(e) = std::fs::remove_file(&claimed.file_path) {
+                            crate::log::log_error(format!(
+                                "[indexer] handoff: failed to remove {}: {}",
+                                claimed.file_path.display(),
+                                e
+                            ));
+                        }
+                    } else {
+                        claims.insert(
+                            claimed.file_path.clone(),
+                            ClaimedIndexTask {
+                                _file: claimed.file,
+                                key,
+                                claimed_at: Instant::now(),
+                            },
+                        );
+                    }
                 }
                 Err(e) => {
                     crate::log::log_error(format!(
@@ -1359,6 +1381,30 @@ async fn handoff_poller_loop(
                 }
             }
         }
+    }
+}
+
+/// Issue DELETE /domain?domain=X through the engine transport — the same
+/// call a local DELETE /api/index makes on a writable engine. 404 counts
+/// as success: the domain being gone already satisfies the request.
+async fn execute_domain_delete(
+    transport: &Arc<dyn EngineTransport>,
+    domain: &str,
+) -> Result<(), String> {
+    let delete_path = format!("/domain?domain={}", urlencoding::encode(domain));
+    match transport
+        .execute(EngineRequest {
+            method: Method::DELETE,
+            path: delete_path.clone(),
+            body: None,
+            content_type: None,
+            timeout: Some(Duration::from_secs(30)),
+        })
+        .await
+    {
+        Ok(r) if (200..300).contains(&r.status) || r.status == 404 => Ok(()),
+        Ok(r) => Err(format!("DELETE {} returned {}", delete_path, r.status)),
+        Err(e) => Err(format!("DELETE {} failed: {}", delete_path, e)),
     }
 }
 
@@ -2158,6 +2204,39 @@ predicates! {
         }
     }
 
+    /// Enqueue a domain-index delete as a handoff task file for the
+    /// write-lock holder to execute. Only succeeds when the installed
+    /// transport is read-only and shares a task directory.
+    /// Signature: indexer_enqueue_delete(+Domain)
+    #[module("$appserver")]
+    pub semidet fn indexer_enqueue_delete(_context, domain_term) {
+        let domain: PrologText = domain_term.get_ex()?;
+        let transport = indexer_registry()
+            .get_transport()
+            .map_err(|_| PrologError::Failure)?;
+        if !transport.is_read_only() {
+            return Err(PrologError::Failure);
+        }
+        let dir = transport.index_task_dir().ok_or(PrologError::Failure)?;
+        let task = index_handoff::IndexTask::new(
+            &domain.into_inner(),
+            "",
+            false,
+            IndexTaskKind::Delete,
+            "api:index-delete",
+        );
+        match index_handoff::enqueue(&dir, &task) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                crate::log::log_error(format!(
+                    "[indexer] read-only: failed to write delete handoff task: {}",
+                    e
+                ));
+                Err(PrologError::Failure)
+            }
+        }
+    }
+
     /// Re-index a branch from scratch. Aborts any running task, wipes the
     /// branch's index on vectorlink, then starts fresh from the oldest commit.
     /// Signature: indexer_reindex(+Path, +BranchName, +StoreClustering)
@@ -2180,6 +2259,7 @@ pub fn register() {
     register_indexer_progress();
     register_indexer_abort_domain();
     register_indexer_engine_read_only();
+    register_indexer_enqueue_delete();
     register_indexer_reindex();
 }
 
@@ -3182,5 +3262,55 @@ mod tests {
         assert!(claims.is_empty(),
             "claim past spawn grace with no registry task must be released");
         assert!(!claimed.file_path.exists());
+    }
+
+    /// Engine transport returning a canned status for delete execution.
+    struct StubTransport {
+        status: u16,
+        calls: StdMutex<Vec<String>>,
+    }
+
+    impl EngineTransport for StubTransport {
+        fn execute<'a>(
+            &'a self,
+            req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("{} {}", req.method, req.path));
+            let status = self.status;
+            Box::pin(async move {
+                Ok(EngineResponse {
+                    status,
+                    headers: HeaderMap::new(),
+                    body: boxed_sync_stream(futures::stream::empty()),
+                })
+            })
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[tokio::test]
+    async fn test_execute_domain_delete_issues_engine_delete() {
+        let transport: Arc<dyn EngineTransport> =
+            Arc::new(StubTransport { status: 200, calls: StdMutex::new(Vec::new()) });
+        execute_domain_delete(&transport, "admin/db").await.unwrap();
+        let stub = transport.as_any().downcast_ref::<StubTransport>().unwrap();
+        assert_eq!(stub.calls.lock().unwrap().as_slice(),
+                   ["DELETE /domain?domain=admin%2Fdb"]);
+    }
+
+    #[tokio::test]
+    async fn test_execute_domain_delete_tolerates_404_and_fails_500() {
+        let t404: Arc<dyn EngineTransport> =
+            Arc::new(StubTransport { status: 404, calls: StdMutex::new(Vec::new()) });
+        execute_domain_delete(&t404, "admin/db").await.unwrap();
+        let t500: Arc<dyn EngineTransport> =
+            Arc::new(StubTransport { status: 500, calls: StdMutex::new(Vec::new()) });
+        assert!(execute_domain_delete(&t500, "admin/db").await.is_err());
     }
 }

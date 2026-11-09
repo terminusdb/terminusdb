@@ -5,6 +5,7 @@
     indexer_progress/3,
     indexer_abort_domain/1,
     indexer_engine_read_only/0,
+    indexer_enqueue_delete/1,
     indexer_available/0,
     indexer_endpoint_available/0,
     indexer_tokenizer_available/1
@@ -118,6 +119,18 @@ indexer_progress(Path, BranchName, Progress) :-
 indexer_engine_read_only :-
     (   current_predicate('$appserver':indexer_engine_read_only/0)
     ->  '$appserver':indexer_engine_read_only
+    ;   fail
+    ).
+
+%% indexer_enqueue_delete(+Domain) is semidet.
+%
+%  Write a domain-index delete task to the shared handoff queue for the
+%  write-lock holder to execute. Only succeeds when the installed engine
+%  is read-only and shares an index-task directory; fails otherwise, so
+%  callers must gate on indexer_engine_read_only first.
+indexer_enqueue_delete(Domain) :-
+    (   current_predicate('$appserver':indexer_enqueue_delete/1)
+    ->  '$appserver':indexer_enqueue_delete(Domain)
     ;   fail
     ).
 
