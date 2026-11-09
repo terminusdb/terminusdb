@@ -8,7 +8,11 @@
               serialize_data_version/2,
               transaction_data_version/2,
               validation_data_version/3,
-              meta_data_version/3
+              meta_data_version/3,
+              expected_label_version/2,
+              expected_label_version/4,
+              record_expected_label_version/4,
+              data_version_guarded_options/4
           ]).
 
 :- use_module(library(lists)).
@@ -29,6 +33,48 @@ compare_data_versions(Expected, Actual) :-
 
 compare_data_versions_(no_data_version, _Actual_Data_Version).
 compare_data_versions_(data_version(Label, Value), data_version(Label, Value)).
+
+/**
+ * expected_label_version(?Label, ?Version) is nondet.
+ *
+ * Thread-local record of the label version a commit-time data-version guard
+ * captured. commit_validation_object consults this at nb_set_head sites to
+ * select the versioned CAS (nb_force_set_head/3); absent means unguarded.
+ */
+:- dynamic expected_label_version/4.
+
+/**
+ * record_expected_label_version(+Label, +Version) is det.
+ *
+ * Re-recorded on each run_transactions attempt so retries carry the fresh
+ * expectation.
+ */
+record_expected_label_version(Label, Version, Descriptor, Requested) :-
+    retractall(expected_label_version(Label, _, _, _)),
+    assertz(expected_label_version(Label, Version, Descriptor, Requested)).
+
+expected_label_version(Label, Version) :-
+    expected_label_version(Label, Version, _, _).
+
+/**
+ * data_version_guarded_options(+Descriptor, +Requested_Data_Version,
+ *                              +Options, -Options_With_Guard) is det.
+ *
+ * Adds the commit-time data-version guard to transaction options when the
+ * caller supplied a precondition. The guard is re-asserted inside the commit
+ * lock and sealed by the store's versioned label CAS; unversioned writes get
+ * no guard and keep the unversioned commit path.
+ */
+data_version_guarded_options(_Descriptor, no_data_version, Options, Options) :-
+    !.
+data_version_guarded_options(Descriptor, Requested_Data_Version, Options,
+                             Options_With_Guard) :-
+    (   is_dict(Options)
+    ->  put_dict(_{data_version_guard: Descriptor-Requested_Data_Version},
+                 Options, Options_With_Guard)
+    ;   Options_With_Guard =
+            [data_version_guard(Descriptor-Requested_Data_Version)|Options]
+    ).
 
 /**
  * read_data_version_header(+Request, -Data_Version) is det.
@@ -82,6 +128,25 @@ test("pass") :-
     read_data_version('label:value', data_version(label, value)).
 
 :- end_tests(read_data_version_header_tests).
+
+:- begin_tests(data_version_guard_tests).
+
+test("unversioned write carries no guard") :-
+    data_version_guarded_options(some_descriptor, no_data_version, [a(1)], [a(1)]).
+
+test("versioned write gets guard prepended") :-
+    data_version_guarded_options(descriptor(x), data_version(branch, 'abc'), [],
+                                 [data_version_guard(descriptor(x)-data_version(branch, 'abc'))]).
+
+test("expected label version re-records") :-
+    record_expected_label_version('org|db', 1, d1, r1),
+    record_expected_label_version('org|db', 2, d2, r2),
+    expected_label_version('org|db', 2, d2, r2),
+    expected_label_version('org|db', 2),
+    \+ expected_label_version('org|db', 1),
+    retractall(expected_label_version(_, _, _, _)).
+
+:- end_tests(data_version_guard_tests).
 
 write_data_version_header(data_version(Data_Version_Label, Data_Version_Value)) :-
     atom(Data_Version_Label),

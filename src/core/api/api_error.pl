@@ -2311,6 +2311,10 @@ api_document_error_jsonld(Type, error(invalid_path(Path), _), JSON) :-
                               'api:resource_path' : Path },
              'api:message' : Msg
             }.
+api_document_error_jsonld(_Type, error(database_unservable(Organization, Database), _), JSON) :-
+    generic_exception_jsonld(database_unservable(Organization, Database), JSON).
+api_document_error_jsonld(_Type, error(database_loading(Organization, Database), _), JSON) :-
+    generic_exception_jsonld(database_loading(Organization, Database), JSON).
 api_document_error_jsonld(Type,error(unresolvable_collection(Descriptor),_), JSON) :-
     document_error_type(Type, JSON_Type),
     resolve_absolute_string_descriptor(Path, Descriptor),
@@ -3271,6 +3275,22 @@ generic_exception_jsonld(database_not_finalized(Organization, Database), JSON) :
     JSON = _{'@type' : 'api:DatabaseNotFinalized',
              'api:status' : 'api:failure',
              'api:error' : _{'@type' : 'api:DatabaseNotFinalized',
+                             'api:organization_name' : Organization,
+                             'api:database_name' : Database},
+             'api:message' : Msg}.
+generic_exception_jsonld(database_unservable(Organization, Database), JSON) :-
+    format(string(Msg), "Database ~s/~s could not be loaded and is not being served — its mark expires in 30 minutes.", [Organization, Database]),
+    JSON = _{'@type' : 'api:ErrorResponse',
+             'api:status' : 'api:server_error',
+             'api:error' : _{'@type' : 'api:DatabaseUnservable',
+                             'api:organization_name' : Organization,
+                             'api:database_name' : Database},
+             'api:message' : Msg}.
+generic_exception_jsonld(database_loading(Organization, Database), JSON) :-
+    format(string(Msg), "Database ~s/~s is still loading and cannot serve requests yet — retry the request.", [Organization, Database]),
+    JSON = _{'@type' : 'api:NotReadyErrorResponse',
+             'api:status' : 'api:service_unavailable',
+             'api:error' : _{'@type' : 'api:DatabaseLoading',
                              'api:organization_name' : Organization,
                              'api:database_name' : Database},
              'api:message' : Msg}.

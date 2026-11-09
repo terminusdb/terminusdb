@@ -27,7 +27,8 @@
               should_retain_layers_for_descriptor/1,
               retain_descriptor_layers/2,
               db_creation_bypass/2,
-              db_currently_creating/2
+              db_currently_creating/2,
+              db_failed/3
           ]).
 
 /** <module> Descriptor Manipulation
@@ -166,6 +167,16 @@
 :- use_module(system_entity, [database_exists/3, database_finalized/3]).
 :- thread_local db_creation_bypass/2.
 :- dynamic db_currently_creating/2.
+
+% Databases that exist in the system graph but whose graphs currently
+% fail to open. The first failed open asserts db_unservable_loading/3
+% and one detached thread runs a single open attempt; requests meanwhile
+% wait out the 30s grace window, then answer a retryable 503 instead of
+% a phantom not-found. A failed attempt asserts db_failed/3 — requests
+% then answer 500 until the mark expires after 30 minutes, after which
+% the next request clears it and re-enters the whole load cycle.
+:- dynamic db_unservable_loading/3.
+:- dynamic db_failed/3.
 
 
 :- use_module(core(util)).
@@ -563,18 +574,38 @@ open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
         database_exists(system_descriptor{}, Organization_Name, Database_Name),
         \+ database_finalized(system_descriptor{}, Organization_Name, Database_Name)
     ->  throw(error(database_not_finalized(Organization_Name, Database_Name), _))
+    ;   db_failed(Organization_Name, Database_Name, Failed_Since)
+    ->  (   get_time(Now), Now - Failed_Since < 1800
+        ->  throw(error(database_unservable(Organization_Name, Database_Name), _))
+        ;   % The 500 mark expired — retract it and fall through to a fresh
+            % open attempt, which re-enters the whole load cycle on failure.
+            retractall(db_failed(Organization_Name, Database_Name, _)))
+    ;   db_unservable_loading(Organization_Name, Database_Name, _)
+    ->  await_database_load(Organization_Name, Database_Name)
     ;   true
     ),
 
-    Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
-                                            database_name: Database_Name,
-                                            type: schema },
-
-    open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map, Map_1),
-    Instance_Graph = repo_graph{ organization_name: Organization_Name,
-                                 database_name: Database_Name,
-                                 type: instance },
-    open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_2),
+    (   open_user_database_graphs(Organization_Name, Database_Name,
+                                  Map, Map_2,
+                                  Repository_Ontology_Object, Instance_Object)
+    ->  true
+    ;   db_creation_bypass(Organization_Name, Database_Name)
+    ->  fail
+    ;   db_currently_creating(Organization_Name, Database_Name)
+    ->  fail
+    ;   \+ database_exists(system_descriptor{}, Organization_Name, Database_Name)
+    ->  fail
+    ;   % The database record exists but its graphs will not open — a still-
+        % loading store or real damage. Never answer not-found for committed
+        % data: mark it loading, spawn the background reload, and wait on it.
+        % await_database_load then answers 503 (still loading past the wait)
+        % or 500 (load exhausted) — or returns so the re-open below serves.
+        mark_database_loading(Organization_Name, Database_Name),
+        await_database_load(Organization_Name, Database_Name),
+        open_user_database_graphs(Organization_Name, Database_Name,
+                                  Map, Map_2,
+                                  Repository_Ontology_Object, Instance_Object)
+    ),
 
     Transaction_Object = transaction_object{
                              descriptor : Descriptor,
@@ -728,6 +759,92 @@ open_descriptor(Descriptor, Commit_Info, Transaction_Object) :-
 
 open_descriptor(Descriptor, Transaction_Object) :-
     open_descriptor(Descriptor, commit_info{}, Transaction_Object).
+
+%% open_user_database_graphs(+Organization_Name, +Database_Name,
+%%                           +Map, -Map_Out, -Schema_Object, -Instance_Object) is semidet.
+%
+%  Open the two repo graphs a database descriptor serves on — the load a
+%  database request needs and the probe a background reload uses. Fails
+%  when the backing store cannot supply either graph.
+open_user_database_graphs(Organization_Name, Database_Name, Map, Map_Out,
+                          Repository_Ontology_Object, Instance_Object) :-
+    Repository_Ontology_Graph = repo_graph{ organization_name: Organization_Name,
+                                            database_name: Database_Name,
+                                            type: schema },
+    open_read_write_obj(Repository_Ontology_Graph, Repository_Ontology_Object, Map, Map_1),
+    Instance_Graph = repo_graph{ organization_name: Organization_Name,
+                                 database_name: Database_Name,
+                                 type: instance },
+    open_read_write_obj(Instance_Graph, Instance_Object, Map_1, Map_Out).
+
+%% mark_database_loading(+Organization_Name, +Database_Name) is det.
+%
+%  Record that a database is being loaded and spawn the single background
+%  attempt — one try per request-triggered failure, running as long as
+%  the store's own open takes. The attempt's outcome is what requests
+%  then wait on: success retracts the loading mark, failure asserts
+%  db_failed/3.
+mark_database_loading(Organization_Name, Database_Name) :-
+    with_mutex(db_unservable_load,
+        (   db_unservable_loading(Organization_Name, Database_Name, _)
+        ->  true
+        ;   retractall(db_failed(Organization_Name, Database_Name, _)),
+            get_time(Now),
+            assertz(db_unservable_loading(Organization_Name, Database_Name, Now)),
+            json_log_warning_formatted('database ~s/~s failed to open; loading in background', [Organization_Name, Database_Name]),
+            (   catch(thread_create(
+                          reload_database_graphs(Organization_Name, Database_Name),
+                          _, [detached(true)]),
+                      _, fail)
+            ->  true
+            ;   % No loader, no waiting: a spawned thread that never starts
+                % would leave the loading mark up forever and 503 for good.
+                assertz(db_failed(Organization_Name, Database_Name, Now)),
+                retractall(db_unservable_loading(Organization_Name, Database_Name, _))))).
+
+%% await_database_load(+Organization_Name, +Database_Name) is det.
+%
+%  Wait out the remainder of the loading grace window: while the
+%  background attempt is young the request blocks for it, so a database
+%  that finishes loading mid-request serves real data instead of an
+%  error. Past the window (or once the attempt failed) the request
+%  answers instead of holding — 503 while the load still runs, 500 once
+%  it has given up.
+await_database_load(Organization_Name, Database_Name) :-
+    (   db_unservable_loading(Organization_Name, Database_Name, Since)
+    ->  db_load_wait(Seconds),
+        get_time(Now),
+        Polls is max(0, ceil((Seconds - (Now - Since)) * 2)),
+        (   retry_startup(Polls, (\+ db_unservable_loading(Organization_Name, Database_Name, _)))
+        ->  true
+        ;   throw(error(database_loading(Organization_Name, Database_Name), _)))
+    ;   true),
+    (   db_failed(Organization_Name, Database_Name, _)
+    ->  throw(error(database_unservable(Organization_Name, Database_Name), _))
+    ;   true).
+
+%% db_load_wait(-Seconds) is det.
+%
+%  How long a request may wait on an in-flight database load before
+%  answering 503. TERMINUSDB_DB_LOAD_WAIT overrides the 30s default.
+db_load_wait(Seconds) :-
+    getenv_default_number('TERMINUSDB_DB_LOAD_WAIT', 30, Seconds).
+
+%% reload_database_graphs(+Organization_Name, +Database_Name) is det.
+%
+%  The one background try: open the database's graphs once, letting the
+%  store take whatever time it takes. Success clears the loading mark so
+%  the next request serves; failure records db_failed/3 so requests
+%  answer 500 until the mark expires and a retry is allowed.
+reload_database_graphs(Organization_Name, Database_Name) :-
+    (   catch(open_user_database_graphs(Organization_Name, Database_Name,
+                                        [], _Map, _Schema, _Instance),
+              _Error, fail)
+    ->  json_log_info_formatted('database ~s/~s loaded; resuming service', [Organization_Name, Database_Name])
+    ;   get_time(Now),
+        assertz(db_failed(Organization_Name, Database_Name, Now)),
+        json_log_error_formatted('database ~s/~s could not be loaded; answering errors until the mark expires', [Organization_Name, Database_Name])),
+    retractall(db_unservable_loading(Organization_Name, Database_Name, _)).
 
 should_retain_layers_for_descriptor(system_descriptor{}) :-
     !.

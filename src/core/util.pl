@@ -114,6 +114,7 @@
               op(700,xfy,<>),
               '<>'/2,
               do_or_die/2,
+              retry_startup/2,
               option_or_die/2,
               die_if/2,
               whole_arg/2,
@@ -276,6 +277,10 @@
               transaction_data_version/2,
               validation_data_version/3,
               meta_data_version/3,
+              expected_label_version/2,
+              expected_label_version/4,
+              record_expected_label_version/4,
+              data_version_guarded_options/4,
 
               % json_stream.pl
               json_stream_start/2,

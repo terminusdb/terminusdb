@@ -233,6 +233,38 @@ else
 	sh -c "cd tests ; npx mocha --exclude 'test/cli-*.js' && MOCHA_PARALLEL=true npx mocha 'test/cli-*.js'"
 endif
 
+# Formal ACID verification of the atomic commit path (tests/acid/README.md).
+# ALICE enumerates every legal crash state of the store from a syscall trace
+# and checks each one; Jepsen runs elle-checked append transactions under
+# kill/pause nemeses. Both run in Linux containers against the :local image —
+# too slow for the regular gates, so they stay opt-in.
+.PHONY: test-acid
+test-acid: test-acid-alice test-acid-jepsen
+
+.PHONY: test-acid-alice
+test-acid-alice: docker
+	mkdir -p tests/acid/traces
+	docker build -f tests/acid/alice/Dockerfile -t terminusdb-acid-alice:local .
+	docker run --rm \
+		-v "$(CURDIR)/tests/acid/traces:/acid-work/traces_dir" \
+		terminusdb-acid-alice:local
+
+# Docker Compose ships either as the `docker compose` plugin or the
+# standalone `docker-compose` binary — pick whichever exists.
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
+# Throwaway SSH keypair for the Jepsen run — generated on demand, never
+# committed (tests/acid/jepsen/secret/ is gitignored).
+tests/acid/jepsen/secret/id_rsa:
+	mkdir -p tests/acid/jepsen/secret
+	ssh-keygen -t rsa -b 3072 -f $@ -N "" -C jepsen-acid-throwaway
+
+.PHONY: test-acid-jepsen
+test-acid-jepsen: docker tests/acid/jepsen/secret/id_rsa
+	cd tests/acid/jepsen && $(COMPOSE) build
+	cd tests/acid/jepsen && $(COMPOSE) up --abort-on-container-exit --exit-code-from control
+	cd tests/acid/jepsen && $(COMPOSE) down
+
 # Start Docker container for integration testing (no plugins).
 # Rebuilds the docker image and recreates the container.
 .PHONY: docker-test-server
