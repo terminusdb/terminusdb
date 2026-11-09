@@ -73,5 +73,7 @@ deliberately against a candidate build.
 - The Jepsen suite runs a single-node deployment: it verifies commit
   atomicity, durability and strict serializability under process kill/pause,
   not replication properties.
+- A `[:r k []]` op completing after a `[:append k v]`'s ack is not by itself an anomaly: op `:time` records completion, and the read may have been invoked before the append committed — it then linearizes before it legally. Before filing a staleness or durability finding on a `[]`-after-ack read, compare the read's invoke time against the append's completion; only an invoke strictly after the ack is a violation. On the histories we analysed, zero such airtight violations existed (see `JEPSEN-REPORT.md` and the `read-vals` docstring in `jepsen/src/jepsen/terminusdb.clj`).
+- The unconditional `create=true` upsert behaviour (empty/absent `TerminusDB-Data-Version` commits without CAS) is deliberate client responsibility — the server honours it by design. Do not treat lost-update anomalies produced by it as server bugs; they are the documented contract.
 - The pinned ALICE revision is recorded in `alice/Dockerfile`
   (`ARG ALICE_REV`). Bump it deliberately.

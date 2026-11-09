@@ -176,7 +176,19 @@
 (defn read-vals
   "Current ordered list for key k, as longs. A missing document (404)
   reads as []; anything that isn't a clean read must not be recorded
-  as one — it fails the op instead."
+  as one — it fails the op instead.
+
+  NOTE on []-after-ack reads: a [:r k []] op that completes after a
+  sibling [:append k v] is not automatically a bug. Jepsen op :time
+  stamps completion, not invocation — the read may have been invoked
+  before the append committed and can then be linearized before it.
+  Verified on real histories: 0 airtight violations (invoke-after-ack)
+  in runs where []-after-ack reads looked anomalous. Before treating
+  one as a staleness/durability finding, compare the read's invoke
+  time against the append's completion — only an invoke that strictly
+  postdates the ack is a violation. The semantics discussion lives at
+  https://github.com/orgs/terminusdb/discussions/2641 — read it before
+  concluding a []-after-ack pattern is a defect."
   [node k]
   (let [{:keys [status doc]} (get-doc node (doc-id k))]
     (cond
