@@ -26,6 +26,8 @@
     indexer_set_config/2,
     indexer_progress/3,
     indexer_abort_domain/1,
+    indexer_engine_read_only/0,
+    indexer_enqueue_delete/1,
     indexer_available/0,
     indexer_endpoint_available/0,
     indexer_tokenizer_available/1,
