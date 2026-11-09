@@ -2146,16 +2146,24 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
     database_prefixes(Transaction, InternalPrefixes),
     put_dict(schema_context, Config, SchemaContext, Config1),
     put_dict(internal_prefixes, Config1, InternalPrefixes, Config2),
-    put_dict(transaction, Config2, Transaction, ConfigWithCtx),
+    put_dict(transaction, Config2, Transaction, Config3),
+    % CGI headers are emitted lazily — at first body write or stream end —
+    % via this mutable flag cell shared with the stream write handlers,
+    % so lookup and conversion failures surface as real HTTP statuses
+    % instead of an embedded "Status:" block in a committed 200 body.
+    put_dict(stream_headers, Config3, headers(unsent), Config4),
+    put_dict(data_version, Config4, DataVersion, ConfigWithCtx),
 
-    Request = ConfigWithCtx.request,
     document_stream_start(Format, ConfigWithCtx, StreamState),
-
-    document_stream_headers(Format, Request, DataVersion),
 
     % Body preamble (e.g. turtle @prefix block, rdfxml prolog) must be
     % emitted after the CGI headers — writing it in document_stream_start
-    % would corrupt the response framing.
+    % would corrupt the response framing. Formats that define a preamble
+    % emit headers before it since a preamble is itself body output.
+    (   clause(document_stream_preamble(Format, _, _), true)
+    ->  ensure_document_stream_headers(Format, ConfigWithCtx)
+    ;   true
+    ),
     ignore(document_stream_preamble(Format, ConfigWithCtx, StreamState)),
 
     (   nonvar(Query)
@@ -2186,7 +2194,27 @@ format_read_documents(Format, Transaction, Graph_Type, Id, Ids, Type, Query, Con
                document_stream_write(Format, ConfigWithCtx, StreamState, Document))
     ),
 
+    % Empty streams still get their CGI headers.
+    ensure_document_stream_headers(Format, ConfigWithCtx),
     document_stream_end(Format, ConfigWithCtx).
+
+%% ensure_document_stream_headers(+Format, +Config) is det.
+%
+%  Emits the CGI headers the first time a stream handler produces body
+%  output. The headers flag is a mutable term carried in Config so all
+%  handlers of one request share it. Configs without the flag (e.g. the
+%  MCP document renderer capturing text via with_output_to/2) get no
+%  headers — they are not HTTP responses.
+ensure_document_stream_headers(Format, Config) :-
+    (   get_dict(stream_headers, Config, Headers)
+    ->  (   arg(1, Headers, sent)
+        ->  true
+        ;   nb_setarg(1, Headers, sent),
+            document_stream_headers(Format, Config.request,
+                                    Config.data_version)
+        )
+    ;   true
+    ).
 
 % Embedding helpers
 embedding_type_queries_from_transaction(Transaction, TypeQueries) :-
@@ -2283,7 +2311,7 @@ document_stream_start(embedding, Config, StreamState) :-
     ),
     StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap).
 
-document_stream_write(embedding, _Config, StreamState, Document) :-
+document_stream_write(embedding, Config, StreamState, Document) :-
     StreamState = state(System_DB, Transaction, EmbeddingContext, GraphSpec, TypeQueryMap),
     database_prefixes(Transaction, Prefixes),
     (   get_dict('@type', Document, Type)
@@ -2306,6 +2334,7 @@ document_stream_write(embedding, _Config, StreamState, Document) :-
     ->  true
     ;   EmbeddingString = ''
     ),
+    ensure_document_stream_headers(embedding, Config),
     format("~w~n", [EmbeddingString]).
 
 document_stream_end(embedding, _Config).
@@ -2323,9 +2352,10 @@ document_stream_headers(markdown, Request, DataVersion) :-
 document_stream_start(markdown, _Config, StreamState) :-
     StreamState = state.
 
-document_stream_write(markdown, _Config, state, Document) :-
+document_stream_write(markdown, Config, state, Document) :-
     strip_metadata_fields(Document, Cleaned),
     json2markdown:json_to_markdown(Cleaned, Markdown),
+    ensure_document_stream_headers(markdown, Config),
     format("~w~n", [Markdown]).
 
 document_stream_end(markdown, _Config).
