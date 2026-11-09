@@ -4,6 +4,7 @@
     indexer_set_config/2,
     indexer_progress/3,
     indexer_abort_domain/1,
+    indexer_engine_read_only/0,
     indexer_available/0,
     indexer_endpoint_available/0,
     indexer_tokenizer_available/1
@@ -105,6 +106,19 @@ indexer_progress(Path, BranchName, Progress) :-
     (   current_predicate('$appserver':indexer_progress/3)
     ->  '$appserver':indexer_progress(Path, BranchName, Progress)
     ;   throw(error(indexer_ffi_not_loaded(indexer_progress), _))
+    ).
+
+%% indexer_engine_read_only is semidet.
+%
+%  Succeeds when the installed engine is read-only — the vectorlink data
+%  dir is write-locked by another TerminusDB instance sharing it, so
+%  index requests are handed off to the lock holder through the task
+%  queue instead of executing locally. Fails when the engine is writable
+%  or the FFI is not loaded.
+indexer_engine_read_only :-
+    (   current_predicate('$appserver':indexer_engine_read_only/0)
+    ->  '$appserver':indexer_engine_read_only
+    ;   fail
     ).
 
 %% indexer_abort_domain(+Domain) is det.

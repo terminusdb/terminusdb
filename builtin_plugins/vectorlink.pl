@@ -2308,6 +2308,17 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         )
     ;   Store_Clustering = null
     ),
+    % Read-only engines hand index work to the write-lock holder via the
+    % task queue, so the response carries the local engine mode plus the
+    % queue state for this ref (pending/underway; null when no task file).
+    (   get_dict(read_only, Indexer_Progress, Read_Only)
+    ->  true
+    ;   Read_Only = false
+    ),
+    (   get_dict(handoff, Indexer_Progress, Handoff)
+    ->  true
+    ;   Handoff = null
+    ),
     Engine_Section = json{
         processed_documents:Processed_Docs,
         total_documents:Total_Docs,
@@ -2327,6 +2338,8 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
     Response = json{
         status:Status_Value,
         error:Error_Value,
+        read_only:Read_Only,
+        handoff:Handoff,
         branch:Branch_Name,
         last_indexed_commit:Last_Commit,
         branch_processing:Branch_Processing_Section,
@@ -2407,7 +2420,15 @@ index_handler(post, Path, Request, System_DB, Auth) :-
                 (   vectorlink:io_index_branch(System_DB, Auth, Path),
                     plugin_api:write_cors_headers(Request),
                     format("Content-Type: application/json~n~n"),
-                    json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
+                    (   plugin_api:indexer_engine_read_only
+                    ->  % This instance is read-only: the request was
+                        % written to the shared task queue for the
+                        % write-lock holder — no local task was spawned.
+                        json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
+                                'api:status':'api:success',
+                                'api:message':'Index request handed off to the instance holding the index write lock'}, [width(0)])
+                    ;   json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
+                    )
                 ),
                 Error,
                 (   (   Error = error(vectorlink_409_resolution_timeout, _)
@@ -4479,6 +4500,49 @@ test("error response includes error message",
         Indexer_Progress, "main", null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(error, Response, Error).
+
+test("read_only response surfaces handoff pending state",
+     [true((Status == not_found, RO == true, HO == "pending"))]) :-
+    Indexer_Progress = json{status:not_found, read_only:true, handoff:"pending"},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", null, Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(read_only, Response, RO),
+    get_dict(handoff, Response, HO).
+
+test("read_only response surfaces handoff underway state",
+     [true((RO == true, HO == "underway"))]) :-
+    Indexer_Progress = json{status:not_found, read_only:true, handoff:"underway"},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", null, Engine_Stats, Response),
+    get_dict(read_only, Response, RO),
+    get_dict(handoff, Response, HO).
+
+test("writable engine response defaults read_only false and handoff null",
+     [true((RO == false, HO == null))]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:5, chunks:10, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+    get_dict(read_only, Response, RO),
+    get_dict(handoff, Response, HO).
+
+test("read_only with indexed data still reports completed from last commit",
+     [true((Status == completed, RO == true))]) :-
+    % A read-only instance can still read last-indexed from the shared
+    % data dir — a valid commit overrides not_found as on any engine.
+    Indexer_Progress = json{status:not_found, read_only:true, handoff:null},
+    Engine_Stats = json{documents:5, chunks:10, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(read_only, Response, RO).
 
 test("engine section includes searchable_documents and text_segments_indexed from engine stats",
      [true((Searchable == 75, Segments == 200, Sent == 60))]) :-

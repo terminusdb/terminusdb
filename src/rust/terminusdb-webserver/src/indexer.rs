@@ -18,14 +18,15 @@ use std::os::fd::IntoRawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
-use swipl::prelude::*;
-use futures::future::BoxFuture;
-use futures::{FutureExt, StreamExt};
 use axum::body::Bytes;
 use axum::http::{HeaderMap, Method};
-use tokio::sync::mpsc;
+use futures::future::BoxFuture;
+use futures::{FutureExt, StreamExt};
+use crate::index_handoff::{self, IndexTaskKind, TaskFileState};
+use swipl::prelude::*;
 use tokio::io::AsyncReadExt;
 use tokio::net::unix::pipe::Receiver as PipeReceiver;
+use tokio::sync::mpsc;
 
 // ───────────────────────── Engine transport ─────────────────────────
 
@@ -97,6 +98,23 @@ pub trait EngineTransport: Send + Sync + 'static {
         &'a self,
         req: EngineRequest,
     ) -> BoxFuture<'a, Result<EngineResponse, String>>;
+
+    /// True when the engine behind this transport cannot accept index
+    /// writes locally — the vectorlink data dir is write-locked by
+    /// another process, so this instance answers reads only. Only the
+    /// embedded vectorlink transport can report this; remote transports
+    /// are read/write by definition.
+    fn is_read_only(&self) -> bool {
+        false
+    }
+
+    /// Directory shared with other TerminusDB instances for index-task
+    /// handoff files (`<data_dir>/index_tasks`). `Some` only for engines
+    /// on this filesystem — the embedded vectorlink transport. A remote
+    /// engine shares no directory and returns `None`.
+    fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 
     /// Downcast support for tests and diagnostics.
     fn as_any(&self) -> &dyn std::any::Any;
@@ -502,6 +520,18 @@ impl IndexerRegistry {
             drop(cache);
         }
 
+        // Read-only engine: this instance cannot write to the shared data
+        // dir — hand the request to the lock holder via the task queue.
+        if self.handoff_if_read_only(
+            &key.path,
+            &key.branch,
+            store_clustering,
+            IndexTaskKind::Index,
+            "auto:notify",
+        ) {
+            return Ok(());
+        }
+
         let mut tasks = self.tasks.lock().unwrap();
 
         if let Some(task) = tasks.get(&key) {
@@ -563,6 +593,19 @@ impl IndexerRegistry {
     /// and tags (so /last-indexed returns null), then creates a fresh task
     /// that will start from the oldest commit.
     fn reindex(&self, path: String, branch: String, store_clustering: bool) -> Result<(), String> {
+        // Read-only engine: hand the rebuild to the lock holder via the
+        // task queue instead of issuing doomed writes against the
+        // shared data dir.
+        if self.handoff_if_read_only(
+            &path,
+            &branch,
+            store_clustering,
+            IndexTaskKind::Reindex,
+            "api:index",
+        ) {
+            return Ok(());
+        }
+
         let key = BranchKey { path: path.clone(), branch: branch.clone() };
 
         // 0. Clear no_embedding cache — reindex implies embeddings exist.
@@ -673,6 +716,58 @@ impl IndexerRegistry {
         }
 
         Ok(())
+    }
+
+    /// If the installed engine is read-only, write an index-task file
+    /// into the shared handoff directory for the lock holder to execute,
+    /// and return true. Returns false when the engine is writable (the
+    /// caller proceeds with local indexing) or no transport is installed.
+    /// An engine that is read-only but exposes no task dir is a
+    /// configuration bug — logged loudly; the caller then falls through
+    /// to the local path which fails on its own terms.
+    fn handoff_if_read_only(
+        &self,
+        path: &str,
+        branch: &str,
+        store_clustering: bool,
+        kind: IndexTaskKind,
+        requester: &str,
+    ) -> bool {
+        let transport = match self.transport.lock().unwrap().clone() {
+            Some(t) => t,
+            None => return false,
+        };
+        if !transport.is_read_only() {
+            return false;
+        }
+        let Some(dir) = transport.index_task_dir() else {
+            crate::log::log_error(format!(
+                "[indexer] engine is read-only but exposes no index task dir — \
+                 index request for {} {} has nowhere to go",
+                path, branch
+            ));
+            return false;
+        };
+        let task = index_handoff::IndexTask::new(path, branch, store_clustering, kind, requester);
+        match index_handoff::enqueue(&dir, &task) {
+            Ok(index_handoff::EnqueueOutcome::Enqueued) => crate::log::log_info(format!(
+                "[indexer] read-only: handed off {} task for {} {}",
+                kind.as_str(), path, branch
+            )),
+            Ok(index_handoff::EnqueueOutcome::Pending) => crate::log::log_info(format!(
+                "[indexer] read-only: {} task for {} {} already queued",
+                kind.as_str(), path, branch
+            )),
+            Ok(index_handoff::EnqueueOutcome::Underway) => crate::log::log_info(format!(
+                "[indexer] read-only: {} task for {} {} already underway",
+                kind.as_str(), path, branch
+            )),
+            Err(e) => crate::log::log_error(format!(
+                "[indexer] read-only: failed to write {} handoff task for {} {}: {}",
+                kind.as_str(), path, branch, e
+            )),
+        }
+        true
     }
 
     /// Add a branch to the pending queue if not already queued.
@@ -1099,8 +1194,205 @@ static INDEXER_REGISTRY: std::sync::OnceLock<Arc<IndexerRegistry>> = std::sync::
 /// vectorlink backend initializes (`TERMINUSDB_INDEXER_BACKEND=vectorlink`).
 /// After this call, all indexer traffic (last-indexed, push, delete domain)
 /// flows through the given transport instead of a remote HTTP server.
+///
+/// When the transport exposes an index-task directory and this process is
+/// the write-lock holder, the handoff poller is started here — its first
+/// scan runs immediately, draining tasks that accumulated while the
+/// previous lock holder was down.
 pub fn set_engine_transport(transport: Arc<dyn EngineTransport>) {
-    indexer_registry().set_transport(transport);
+    indexer_registry().set_transport(transport.clone());
+    maybe_start_handoff_poller(&transport);
+}
+
+// ─────────────────────── Index-task handoff poller ───────────────────────
+
+/// Default poll interval for the index-task queue directory.
+/// Polling is used instead of filesystem notifications for portability.
+const HANDOFF_DEFAULT_POLL_SECS: u64 = 10;
+
+/// How long a claimed task may fail to appear in the registry before its
+/// file is deleted and the claim released. Covers the async gap between
+/// `reindex()` returning and its spawned task becoming visible.
+const HANDOFF_SPAWN_GRACE: Duration = Duration::from_secs(120);
+
+static HANDOFF_POLLER_STARTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// A task file this poller holds the exclusive flock on while its
+/// indexing work runs. The Flock is the lock guard — dropping it
+/// releases the claim.
+struct ClaimedIndexTask {
+    _file: nix::fcntl::Flock<std::fs::File>,
+    key: BranchKey,
+    claimed_at: Instant,
+}
+
+/// Start the handoff poller when this transport shares a task directory
+/// and this process is the write-lock holder. Idempotent — one poller
+/// per process regardless of how often the transport is reinstalled.
+fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
+    if transport.is_read_only() {
+        // This instance hands tasks off; it never executes them.
+        return;
+    }
+    let Some(dir) = transport.index_task_dir() else {
+        return;
+    };
+    if HANDOFF_POLLER_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(handle) = crate::dispatch::tokio_handle() else {
+        HANDOFF_POLLER_STARTED.store(false, Ordering::SeqCst);
+        crate::log::log_error(
+            "[indexer] index-task handoff unavailable: no tokio runtime".to_string(),
+        );
+        return;
+    };
+    crate::log::log_info(format!(
+        "[indexer] index-task handoff active: polling {}",
+        dir.display()
+    ));
+    let registry = indexer_registry().clone();
+    handle.spawn(handoff_poller_loop(dir, transport.clone(), registry));
+}
+
+/// Poll the handoff directory: reap finished claims, then claim and
+/// execute newly pending task files. The first interval tick fires
+/// immediately — that is the startup drain, so tasks enqueued while no
+/// lock holder was alive start without waiting one interval.
+async fn handoff_poller_loop(
+    dir: std::path::PathBuf,
+    _transport: Arc<dyn EngineTransport>,
+    registry: Arc<IndexerRegistry>,
+) {
+    let poll_secs = std::env::var("TERMINUSDB_INDEXER_HANDOFF_POLL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(HANDOFF_DEFAULT_POLL_SECS);
+    let mut interval = tokio::time::interval(Duration::from_secs(poll_secs));
+    let mut claims: HashMap<std::path::PathBuf, ClaimedIndexTask> = HashMap::new();
+    loop {
+        interval.tick().await;
+        reap_finished_claims(&registry, &mut claims);
+        let claimed_paths: HashSet<std::path::PathBuf> = claims.keys().cloned().collect();
+        let fresh = match index_handoff::claim_pending(
+            &dir,
+            &claimed_paths,
+            index_handoff::POISON_GRACE,
+        ) {
+            Ok(f) => f,
+            Err(e) => {
+                crate::log::log_error(format!(
+                    "[indexer] handoff: failed to scan {}: {}",
+                    dir.display(),
+                    e
+                ));
+                continue;
+            }
+        };
+        if fresh.is_empty() {
+            continue;
+        }
+        // A reindex covers every pending index task for the same ref —
+        // run reindexes first so the cheaper incremental task can be
+        // dropped instead of executed.
+        let mut sorted = fresh;
+        sorted.sort_by_key(|c| match c.task.kind {
+            IndexTaskKind::Reindex => 0,
+            IndexTaskKind::Index => 1,
+        });
+        let mut reindexed: HashSet<BranchKey> = HashSet::new();
+        for claimed in sorted {
+            let task = claimed.task;
+            let key = BranchKey {
+                path: task.path.clone(),
+                branch: task.branch.clone(),
+            };
+            if task.kind == IndexTaskKind::Index && reindexed.contains(&key) {
+                crate::log::log_info(format!(
+                    "[indexer] handoff: dropping {} task for {} {} — covered by reindex",
+                    task.kind.as_str(), key.path, key.branch
+                ));
+                if let Err(e) = std::fs::remove_file(&claimed.file_path) {
+                    crate::log::log_error(format!(
+                        "[indexer] handoff: failed to remove {}: {}",
+                        claimed.file_path.display(),
+                        e
+                    ));
+                }
+                continue;
+            }
+            crate::log::log_info(format!(
+                "[indexer] handoff: executing {} task for {} {} (requester {})",
+                task.kind.as_str(), key.path, key.branch, task.requester
+            ));
+            let result = match task.kind {
+                IndexTaskKind::Index => {
+                    registry.notify(task.path.clone(), task.branch.clone(), task.store_clustering, true)
+                }
+                IndexTaskKind::Reindex => {
+                    registry.reindex(task.path.clone(), task.branch.clone(), task.store_clustering)
+                }
+            };
+            match result {
+                Ok(()) => {
+                    if task.kind == IndexTaskKind::Reindex {
+                        reindexed.insert(key.clone());
+                    }
+                    claims.insert(
+                        claimed.file_path.clone(),
+                        ClaimedIndexTask {
+                            _file: claimed.file,
+                            key,
+                            claimed_at: Instant::now(),
+                        },
+                    );
+                }
+                Err(e) => {
+                    crate::log::log_error(format!(
+                        "[indexer] handoff: failed to start {} task for {} {}: {} — \
+                         will retry next poll",
+                        task.kind.as_str(), key.path, key.branch, e
+                    ));
+                    // claimed.file drops here, releasing the lock; the file
+                    // stays pending for the next poll.
+                }
+            }
+        }
+    }
+}
+
+/// Release claims whose registry task reached a terminal state, deleting
+/// their task files. A task still Indexing keeps its claim. A `None`
+/// progress during HANDOFF_SPAWN_GRACE is the spawn gap — `reindex`
+/// creates its task asynchronously after the domain delete — so the
+/// claim is held; past the grace the spawn is presumed dead and the file
+/// is deleted so the request resolves instead of locking forever.
+/// Reindex removes any previous task synchronously, so a terminal status
+/// observed after execution always belongs to this run — never a
+/// leftover from an earlier one.
+fn reap_finished_claims(
+    registry: &IndexerRegistry,
+    claims: &mut HashMap<std::path::PathBuf, ClaimedIndexTask>,
+) {
+    claims.retain(|file_path, claim| {
+        let done = match registry.progress(&claim.key.path, &claim.key.branch) {
+            Some((_, _, IndexStatus::Indexing, ..)) => false,
+            Some((_, _, IndexStatus::Completed, ..))
+            | Some((_, _, IndexStatus::Error(_), ..)) => true,
+            None => claim.claimed_at.elapsed() > HANDOFF_SPAWN_GRACE,
+        };
+        if done {
+            if let Err(e) = std::fs::remove_file(file_path) {
+                crate::log::log_error(format!(
+                    "[indexer] handoff: failed to remove {}: {}",
+                    file_path.display(),
+                    e
+                ));
+            }
+        }
+        !done
+    });
 }
 
 /// Get the global indexer registry, initializing it if needed.
@@ -1779,7 +2071,33 @@ predicates! {
             error: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             branch_processing: Option<BranchProcessing>,
+            /// True when this instance's engine is read-only — index
+            /// writes are handed off to the lock holder, so a local
+            /// not_found does not mean indexing was never requested.
+            read_only: bool,
+            /// Handoff queue state for this ref on a read-only instance:
+            /// "pending" (file queued, awaiting the lock holder) or
+            /// "underway" (claimed by the lock holder). Absent otherwise.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            handoff: Option<&'static str>,
         }
+        let transport = registry.get_transport().ok();
+        let read_only = transport
+            .as_ref()
+            .map(|t| t.is_read_only())
+            .unwrap_or(false);
+        let handoff = if read_only {
+            transport
+                .as_ref()
+                .and_then(|t| t.index_task_dir())
+                .and_then(|dir| match index_handoff::probe_task_file(&dir, &path) {
+                    TaskFileState::Pending => Some("pending"),
+                    TaskFileState::Underway => Some("underway"),
+                    TaskFileState::Absent => None,
+                })
+        } else {
+            None
+        };
         let progress = match registry.progress(&path, &branch) {
             Some((completed, total, status, current_commit, next_commit, processed_docs, total_docs, docs_sent)) => {
                 let (s, e) = match status {
@@ -1799,9 +2117,11 @@ predicates! {
                         total_documents: total_docs,
                         documents_sent: docs_sent,
                     }),
+                    read_only,
+                    handoff,
                 }
             }
-            None => Progress { status: "not_found", error: None, branch_processing: None },
+            None => Progress { status: "not_found", error: None, branch_processing: None, read_only, handoff },
         };
 
         // Serialize to a JSON string (respects skip_serializing_if),
@@ -1822,6 +2142,20 @@ predicates! {
         let domain: PrologText = domain_term.get_ex()?;
         indexer_registry().abort_domain(&domain.into_inner());
         Ok(())
+    }
+
+    /// Succeeds when the installed engine transport is read-only —
+    /// the vectorlink data dir is write-locked by another process and
+    /// index requests are handed off via the task queue instead of
+    /// executing locally. Fails when no transport is installed or the
+    /// engine is writable.
+    /// Signature: indexer_engine_read_only
+    #[module("$appserver")]
+    pub semidet fn indexer_engine_read_only(_context) {
+        match indexer_registry().get_transport() {
+            Ok(t) if t.is_read_only() => Ok(()),
+            _ => Err(PrologError::Failure),
+        }
     }
 
     /// Re-index a branch from scratch. Aborts any running task, wipes the
@@ -1845,6 +2179,7 @@ pub fn register() {
     register_indexer_notify();
     register_indexer_progress();
     register_indexer_abort_domain();
+    register_indexer_engine_read_only();
     register_indexer_reindex();
 }
 
@@ -2510,5 +2845,342 @@ mod tests {
         let _ = registry.reindex(path.clone(), "main".to_string(), false);
         assert!(!registry.no_embedding_cache.lock().unwrap().contains(&path),
             "no_embedding_cache should be cleared by reindex");
+    }
+
+    /// Engine transport that mimics the embedded vectorlink engine on a
+    /// shared data dir whose write lock is held elsewhere: it reports
+    /// read-only, exposes a task dir for handoffs, and records every
+    /// engine call — handoff paths must not issue any index writes.
+    struct ReadOnlyTransport {
+        task_dir: std::path::PathBuf,
+        calls: StdMutex<Vec<String>>,
+    }
+
+    impl ReadOnlyTransport {
+        fn new(task_dir: std::path::PathBuf) -> Self {
+            Self { task_dir, calls: StdMutex::new(Vec::new()) }
+        }
+    }
+
+    impl EngineTransport for ReadOnlyTransport {
+        fn execute<'a>(
+            &'a self,
+            req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("{} {}", req.method, req.path));
+            Box::pin(async move {
+                Err("read-only engine must not receive index writes".to_string())
+            })
+        }
+
+        fn is_read_only(&self) -> bool {
+            true
+        }
+
+        fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+            Some(self.task_dir.clone())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    /// Writable engine transport exposing a task dir — used to prove the
+    /// handoff only fires on read-only engines.
+    struct WritableTransport {
+        task_dir: std::path::PathBuf,
+    }
+
+    impl EngineTransport for WritableTransport {
+        fn execute<'a>(
+            &'a self,
+            _req: EngineRequest,
+        ) -> BoxFuture<'a, Result<EngineResponse, String>> {
+            Box::pin(async move { Err("no engine in unit test".to_string()) })
+        }
+
+        fn index_task_dir(&self) -> Option<std::path::PathBuf> {
+            Some(self.task_dir.clone())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn test_notify_on_read_only_engine_writes_index_task_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let transport = Arc::new(ReadOnlyTransport::new(dir.path().to_path_buf()));
+        registry.set_transport(transport.clone());
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .notify(path.clone(), "main".to_string(), false, true)
+            .unwrap();
+
+        assert_eq!(
+            index_handoff::probe_task_file(dir.path(), &path),
+            index_handoff::TaskFileState::Pending,
+            "notify on a read-only engine must enqueue a pending task file"
+        );
+        assert!(registry.tasks.lock().unwrap().is_empty(),
+            "no local branch task may be created on a read-only engine");
+        assert!(transport.calls.lock().unwrap().is_empty(),
+            "read-only engine must not receive engine calls for notify");
+    }
+
+    #[test]
+    fn test_reindex_on_read_only_engine_writes_reindex_task_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let transport = Arc::new(ReadOnlyTransport::new(dir.path().to_path_buf()));
+        registry.set_transport(transport.clone());
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .reindex(path.clone(), "main".to_string(), false)
+            .unwrap();
+
+        let file_path = dir.path().join(
+            "admin%2Fdb%2Flocal%2Fbranch%2Fmain.reindex.json",
+        );
+        assert!(file_path.exists(),
+            "reindex on a read-only engine must enqueue a reindex task file");
+        let body = std::fs::read_to_string(&file_path).unwrap();
+        let task: index_handoff::IndexTask = serde_json::from_str(&body).unwrap();
+        assert_eq!(task.kind, index_handoff::IndexTaskKind::Reindex);
+        assert_eq!(task.path, path);
+        assert_eq!(task.branch, "main");
+        assert_eq!(task.requester, "api:index");
+        assert!(transport.calls.lock().unwrap().is_empty(),
+            "read-only engine must not receive engine calls for reindex");
+        assert!(registry.tasks.lock().unwrap().is_empty(),
+            "no local branch task may be created on a read-only engine");
+    }
+
+    #[test]
+    fn test_duplicate_handoff_requests_collapse_to_one_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(ReadOnlyTransport::new(dir.path().to_path_buf())));
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry.notify(path.clone(), "main".to_string(), false, true).unwrap();
+        registry.notify(path.clone(), "main".to_string(), false, true).unwrap();
+        registry.reindex(path.clone(), "main".to_string(), false).unwrap();
+        registry.reindex(path.clone(), "main".to_string(), false).unwrap();
+
+        let files: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .collect();
+        assert_eq!(files.len(), 2,
+            "index and reindex requests must collapse onto one file each");
+    }
+
+    #[test]
+    fn test_notify_on_writable_engine_does_not_handoff() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(WritableTransport {
+            task_dir: dir.path().to_path_buf(),
+        }));
+        // Block try_spawn_next so no task actually runs.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+
+        let path = "admin/db/local/branch/main".to_string();
+        registry
+            .notify(path.clone(), "main".to_string(), false, true)
+            .unwrap();
+
+        assert_eq!(
+            index_handoff::probe_task_file(dir.path(), &path),
+            index_handoff::TaskFileState::Absent,
+            "a writable engine must not produce handoff task files"
+        );
+        assert!(registry.tasks.lock().unwrap().contains_key(&BranchKey {
+            path: path.clone(),
+            branch: "main".to_string(),
+        }), "a writable engine must schedule a local branch task");
+    }
+
+    #[test]
+    fn test_reap_finished_claims_deletes_completed_task_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let task = index_handoff::IndexTask::new(
+            "admin/db/local/branch/main",
+            "main",
+            false,
+            index_handoff::IndexTaskKind::Index,
+            "test",
+        );
+        index_handoff::enqueue(dir.path(), &task).unwrap();
+        let claimed = index_handoff::claim_pending(
+            dir.path(),
+            &std::collections::HashSet::new(),
+            index_handoff::POISON_GRACE,
+        )
+        .unwrap();
+        assert_eq!(claimed.len(), 1);
+        let claimed = claimed.into_iter().next().unwrap();
+
+        let key = BranchKey {
+            path: task.path.clone(),
+            branch: task.branch.clone(),
+        };
+        // Registry reports Completed for this key — the poller must
+        // delete the task file and release the claim.
+        let progress = BranchProgress::new();
+        progress.set_completed();
+        registry.tasks.lock().unwrap().insert(
+            key.clone(),
+            Arc::new(BranchTask {
+                progress,
+                notify_count: AtomicU64::new(1),
+                next_commit: StdMutex::new(None),
+                cancel: tokio_util::sync::CancellationToken::new(),
+                store_clustering: std::sync::atomic::AtomicBool::new(false),
+                reset_chain: std::sync::atomic::AtomicBool::new(false),
+            }),
+        );
+
+        let mut claims = HashMap::new();
+        claims.insert(
+            claimed.file_path.clone(),
+            ClaimedIndexTask {
+                _file: claimed.file,
+                key,
+                claimed_at: Instant::now(),
+            },
+        );
+        reap_finished_claims(&registry, &mut claims);
+
+        assert!(claims.is_empty(), "finished claim must be released");
+        assert!(!claimed.file_path.exists(),
+            "task file must be deleted once its work completed");
+    }
+
+    #[test]
+    fn test_reap_finished_claims_holds_running_task() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let task = index_handoff::IndexTask::new(
+            "admin/db/local/branch/main",
+            "main",
+            false,
+            index_handoff::IndexTaskKind::Index,
+            "test",
+        );
+        index_handoff::enqueue(dir.path(), &task).unwrap();
+        let claimed = index_handoff::claim_pending(
+            dir.path(),
+            &std::collections::HashSet::new(),
+            index_handoff::POISON_GRACE,
+        )
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+
+        let key = BranchKey {
+            path: task.path.clone(),
+            branch: task.branch.clone(),
+        };
+        // Task still indexing — the claim must be kept so no other
+        // process re-executes the work.
+        let progress = BranchProgress::new();
+        progress.set_total(3);
+        registry.tasks.lock().unwrap().insert(
+            key.clone(),
+            Arc::new(BranchTask {
+                progress,
+                notify_count: AtomicU64::new(1),
+                next_commit: StdMutex::new(None),
+                cancel: tokio_util::sync::CancellationToken::new(),
+                store_clustering: std::sync::atomic::AtomicBool::new(false),
+                reset_chain: std::sync::atomic::AtomicBool::new(false),
+            }),
+        );
+
+        let mut claims = HashMap::new();
+        claims.insert(
+            claimed.file_path.clone(),
+            ClaimedIndexTask {
+                _file: claimed.file,
+                key,
+                claimed_at: Instant::now(),
+            },
+        );
+        reap_finished_claims(&registry, &mut claims);
+
+        assert_eq!(claims.len(), 1, "a running task's claim must be held");
+        assert!(claimed.file_path.exists());
+    }
+
+    #[test]
+    fn test_reap_finished_claims_holds_spawn_gap_within_grace() {
+        // The reindex task only appears in the registry once its async
+        // domain-delete finishes — progress() returns None in between.
+        // Within the grace window the claim must be held; past it, the
+        // file is deleted so a dead spawn resolves instead of locking
+        // forever.
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let task = index_handoff::IndexTask::new(
+            "admin/db/local/branch/main",
+            "main",
+            false,
+            index_handoff::IndexTaskKind::Reindex,
+            "test",
+        );
+        index_handoff::enqueue(dir.path(), &task).unwrap();
+        let claimed = index_handoff::claim_pending(
+            dir.path(),
+            &std::collections::HashSet::new(),
+            index_handoff::POISON_GRACE,
+        )
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+
+        let key = BranchKey {
+            path: task.path.clone(),
+            branch: task.branch.clone(),
+        };
+        // No task in the registry — the spawn gap.
+        let mut claims = HashMap::new();
+        claims.insert(
+            claimed.file_path.clone(),
+            ClaimedIndexTask {
+                _file: claimed.file,
+                key: key.clone(),
+                claimed_at: Instant::now(),
+            },
+        );
+        reap_finished_claims(&registry, &mut claims);
+        assert_eq!(claims.len(), 1,
+            "claim within spawn grace must be held");
+        assert!(claimed.file_path.exists());
+
+        // Same claim, now past the grace window — released and removed.
+        claims
+            .get_mut(&claimed.file_path)
+            .unwrap()
+            .claimed_at = Instant::now() - HANDOFF_SPAWN_GRACE - Duration::from_secs(1);
+        reap_finished_claims(&registry, &mut claims);
+        assert!(claims.is_empty(),
+            "claim past spawn grace with no registry task must be released");
+        assert!(!claimed.file_path.exists());
     }
 }
