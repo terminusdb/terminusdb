@@ -73,7 +73,7 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
           swipl -g "ignore(catch(pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)]), _, fail))" \
-               -g "pack_attach('$GITHUB_WORKSPACE/tus', [])" \
+               -g "ignore(catch(pack_attach('$GITHUB_WORKSPACE/tus', []), _, fail))" \
                -g "(use_module(library(tus)) -> writeln(tus_ok) ; halt(1))" -g halt
 
       - name: Install Protobuf Compiler (Linux)
@@ -179,7 +179,7 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
           swipl -g "ignore(catch(pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)]), _, fail))" \
-               -g "pack_attach('$GITHUB_WORKSPACE/tus', [])" \
+               -g "ignore(catch(pack_attach('$GITHUB_WORKSPACE/tus', []), _, fail))" \
                -g "(use_module(library(tus)) -> writeln(tus_ok) ; halt(1))" -g halt
 
       - name: Download build artifact
@@ -250,7 +250,7 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
           swipl -g "ignore(catch(pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)]), _, fail))" \
-               -g "pack_attach('$GITHUB_WORKSPACE/tus', [])" \
+               -g "ignore(catch(pack_attach('$GITHUB_WORKSPACE/tus', []), _, fail))" \
                -g "(use_module(library(tus)) -> writeln(tus_ok) ; halt(1))" -g halt
 
       - name: Download build artifact
@@ -351,7 +351,7 @@ jobs:
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
         run: |
           swipl -g "ignore(catch(pack_install('file://$GITHUB_WORKSPACE/tus', [interactive(false)]), _, fail))" \
-               -g "pack_attach('$GITHUB_WORKSPACE/tus', [])" \
+               -g "ignore(catch(pack_attach('$GITHUB_WORKSPACE/tus', []), _, fail))" \
                -g "(use_module(library(tus)) -> writeln(tus_ok) ; halt(1))" -g halt
 
       - name: Download build artifact
