@@ -3882,8 +3882,32 @@ customise_exception(E) :-
  * Throw an API appropriate JSON-LD response message.
  *
  */
+%% startup_lookup_error(+Error) is semidet.
+%
+%  Errors a handler raises when a user database cannot resolve its
+%  descriptor or a document inside it. While the server has not finished
+%  startup these are transient — a database still coming up must never
+%  look like absent data — so api_error_http_reply renders the retryable
+%  api:NotReadyErrorResponse (503) instead of the usual not-found.
+startup_lookup_error(error(unresolvable_collection(_), _)).
+startup_lookup_error(error(unresolvable_absolute_descriptor(_), _)).
+startup_lookup_error(error(unresolvable_descriptor(_), _)).
+startup_lookup_error(error(unresolvable_commit_id(_), _)).
+startup_lookup_error(error(unresolvable_source_descriptor(_), _)).
+startup_lookup_error(error(unresolvable_target_descriptor(_), _)).
+startup_lookup_error(error(invalid_path(_), _)).
+startup_lookup_error(error(branch_does_not_exist(_), _)).
+startup_lookup_error(error(commit_does_not_exist(_), _)).
+startup_lookup_error(error(origin_branch_does_not_exist(_), _)).
+startup_lookup_error(error(origin_commit_does_not_exist(_), _)).
+startup_lookup_error(error(database_not_finalized(_, _), _)).
+startup_lookup_error(error(document_not_found(_), _)).
+
 api_error_http_reply(API, Error, Request) :-
-    api_error_jsonld(API,Error,JSON),
+    (   startup_lookup_error(Error),
+        \+ server_ready
+    ->  generic_exception_jsonld(server_not_ready, JSON)
+    ;   api_error_jsonld(API,Error,JSON)),
     
     % Add request ID if available (new top-level field, backward compatible)
     (   get_current_id_from_stream(Local_Id)
@@ -3900,7 +3924,10 @@ api_error_http_reply(API, Error, Request) :-
     cors_reply_json(Request,JSON_Final,[status(Status),serialize_unknown(true)]).
 
 api_error_http_reply(API, Error, Type, Request) :-
-    api_error_jsonld(API,Error,Type,JSON),
+    (   startup_lookup_error(Error),
+        \+ server_ready
+    ->  generic_exception_jsonld(server_not_ready, JSON)
+    ;   api_error_jsonld(API,Error,Type,JSON)),
     
     % Add request ID if available (new top-level field, backward compatible)
     (   get_current_id_from_stream(Local_Id)
@@ -4344,6 +4371,66 @@ test(fails_on_non_json_content_type) :-
     free_memory_file(MF).
 
 :- end_tests(http_read_json_semidet).
+
+:- begin_tests(startup_readiness).
+
+% While the server has not finished startup, descriptor-resolution errors
+% are transient: a database still coming up must never look like absent
+% data. They render as a retryable 503 instead of the usual not-found.
+
+test(unresolvable_collection_renders_503_while_not_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_pending(dbs))),
+      cleanup(readiness:reset_readiness)]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(unresolvable_collection(Descriptor), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+test(branch_missing_renders_503_while_not_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_pending(dbs))),
+      cleanup(readiness:reset_readiness)]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(branch_does_not_exist(Descriptor), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "503")),
+    assertion(sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+test(unresolvable_collection_keeps_404_once_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_ready(store),
+             readiness:readiness_ready(dbs),
+             readiness:mark_hooks_done)),
+      cleanup(readiness:reset_readiness)]) :-
+    resolve_absolute_string_descriptor("admin/testdb", Descriptor),
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(unresolvable_collection(Descriptor), _),
+                            []))),
+    assertion(sub_string(Text, _, _, _, "404")),
+    assertion(\+ sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+test(non_lookup_errors_keep_their_response_while_not_ready,
+     [setup((readiness:reset_readiness,
+             readiness:readiness_pending(dbs))),
+      cleanup(readiness:reset_readiness)]) :-
+    with_output_to(string(Text),
+                   once(api_error_http_reply(
+                            get_documents,
+                            error(missing_parameter(id), _),
+                            []))),
+    assertion(\+ sub_string(Text, _, _, _, "api:NotReadyErrorResponse")).
+
+:- end_tests(startup_readiness).
 
 content_encoded(Request, Encoding) :-
     memberchk(content_encoding(Encoding), Request),

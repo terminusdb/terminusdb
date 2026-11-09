@@ -38,6 +38,12 @@
 % mark-ready point covers both modes.
 plugins:readiness_component(store).
 
+% User databases resolve through the store but only become servable once
+% every finalized database's head demonstrably opens. `dbs` is marked
+% ready after user_databases_serve_ready/0 verifies that, so requests
+% can never see committed data as absent while a database comes up.
+plugins:readiness_component(dbs).
+
 % configuration predicates
 :- use_module(config(terminus_config),[jwt_enabled/0,
                                        jwt_jwks_endpoint/1,
@@ -151,6 +157,16 @@ terminus_server(Argv,Wait) :-
         ->  http_delete_handler(id(busy_loading))
         ;   true
         ),
+        % Verify that every finalized user database resolves its serving
+        % descriptor before requests may dispatch. user_databases_serve_ready/0
+        % always throws on failure, so the recovery runs iff the check did not
+        % pass: `dbs` is marked failed and await_all_components reports it like
+        % a `store` failure — the boot aborts rather than serve phantom
+        % 404/empty responses for committed data.
+        catch((   user_databases_serve_ready,
+                  readiness:readiness_ready(dbs)),
+              Dbs_Error,
+              readiness:readiness_failed(dbs, Dbs_Error)),
         readiness:await_all_components(Failed),
         (   Failed = [failed(_Component, Init_Error)|_]
         ->  throw(Init_Error)

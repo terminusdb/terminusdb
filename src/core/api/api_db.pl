@@ -3,8 +3,11 @@
               list_database/6,
               list_existing_databases/4,
               pretty_print_databases/1,
-              db_exists_api/4
+              db_exists_api/4,
+              user_databases_serve_ready/0
           ]).
+
+:- meta_predicate retry_startup(+, 0).
 
 :- use_module(core(transaction)).
 :- use_module(core(util)).
@@ -49,6 +52,61 @@ get_user_databases(System_DB, Auth, Organization, User_Databases) :-
 get_user_database(System_DB, Auth, Organization, Name, User_Database-Db_Uri) :-
     user_accessible_database_id(System_DB, Auth, Organization, Name, Db_Uri),
     format(string(User_Database),"~s/~s",[Organization,Name]).
+
+%% user_databases_serve_ready is det.
+%% user_databases_serve_ready(+Retries) is det.
+%
+%  Resolve the serving descriptor of every finalized user database
+%  recorded in the system database. Startup gates the `dbs` readiness
+%  component on this so HTTP requests can only dispatch once each
+%  committed database demonstrably opens — a database still coming up
+%  must never look like absent data.
+%
+%  Databases still in 'creating' state are skipped: they have no
+%  committed data to serve and a killed creation must not block startup.
+%  Each resolution retries to absorb startup transients (a store or
+%  commit graph still loading); exhaustion throws so the caller can mark
+%  the `dbs` component failed.
+user_databases_serve_ready :-
+    user_databases_serve_ready(120).
+
+user_databases_serve_ready(Retries) :-
+    do_or_die(
+        retry_startup(Retries,
+            (   create_context(system_descriptor{}, System_DB),
+                get_all_databases(System_DB, _Organization, Databases))),
+        error(system_database_not_serve_ready, _)),
+    forall(
+        member(Path-Db_Uri, Databases),
+        (   database_state_finalized(System_DB, Db_Uri)
+        ->  do_or_die(
+                retry_startup(Retries,
+                    (   resolve_absolute_string_descriptor(Path, Descriptor),
+                        open_descriptor(Descriptor, _Transaction))),
+                error(user_database_not_serve_ready(Path), _))
+        ;   true)).
+
+%% database_state_finalized(+System_DB, +Db_Uri) is semidet.
+%
+%  The system database records `DatabaseState/finalized` once database
+%  creation has committed every backing graph.
+database_state_finalized(System_DB, Db_Uri) :-
+    ask(System_DB, t(Db_Uri, state, '@schema':'DatabaseState/finalized')).
+
+%% retry_startup(+Retries, :Goal) is semidet.
+%
+%  Run Goal, retrying failure or exceptions every half-second while a
+%  startup transient may still resolve. Once Retries is exhausted the
+%  goal runs unprotected: its exception propagates and its failure
+%  fails, so the caller sees the real outcome.
+retry_startup(Retries, Goal) :-
+    (   Retries > 0
+    ->  (   catch(Goal, _Error, fail)
+        ->  true
+        ;   sleep(0.5),
+            Retries1 is Retries - 1,
+            retry_startup(Retries1, Goal))
+    ;   Goal).
 
 list_databases(System_DB, Auth, Database_Objects, Options) :-
     ignore(option(organization(Organization), Options)),
@@ -188,5 +246,51 @@ test(list_existing_no_branches,
 
     forall(member(Object, Database_Objects),
            member(Object, Expected_Objects)).
+
+% user_databases_serve_ready/1 — the `dbs` readiness check. Every finalized
+% user database must open its serving descriptor; databases still in
+% 'creating' state are skipped (they have no committed data to serve),
+% and a finalized database that cannot resolve must fail the check so
+% startup can mark `dbs` failed instead of serving phantom 404/empty
+% responses. Tests pass zero retries so a transient check resolves
+% immediately.
+
+test(serve_ready_empty_store,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
+    user_databases_serve_ready(0).
+
+test(serve_ready_finalized_databases,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin","foo"),
+             create_db_without_schema("admin","bar"))),
+      cleanup(teardown_temp_store(State))]) :-
+    user_databases_serve_ready(0).
+
+test(serve_ready_skips_unfinalized_databases,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State))]) :-
+    % A database record still in 'creating' state (e.g. a killed create)
+    % has no backing store label yet and must not block serve-readiness.
+    create_context(system_descriptor{}, System_Context),
+    with_transaction(System_Context,
+        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
+                                       "ghost label", "ghost comment", _Db_Uri),
+        _),
+    user_databases_serve_ready(0).
+
+test(serve_ready_fails_for_unresolvable_database,
+     [setup(setup_temp_store(State)),
+      cleanup(teardown_temp_store(State)),
+      error(user_database_not_serve_ready("admin/ghostdb"))]) :-
+    % A finalized record whose backing store cannot resolve must fail the
+    % check — passing here is how committed data later looks absent.
+    create_context(system_descriptor{}, System_Context),
+    with_transaction(System_Context,
+        system_entity:insert_db_object(System_Context, "admin", "ghostdb",
+                                       "ghost label", "ghost comment", Db_Uri),
+        _),
+    db_create:finalize_db(Db_Uri),
+    user_databases_serve_ready(0).
 
 :- end_tests(db).
