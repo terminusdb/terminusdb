@@ -266,7 +266,12 @@ impl PrefixContracter {
             Some((PrefixContraction::Base, rest)) => Cow::Owned(format!("@base:{}", rest)),
             Some((PrefixContraction::Schema, rest)) => Cow::Borrowed(rest),
             Some((PrefixContraction::Other(p), rest)) => Cow::Owned(format!("{}:{}", p, rest)),
-            Some((PrefixContraction::JSON, rest)) => Cow::Borrowed(rest),
+            // json: predicate local names are URI-segment-encoded at
+            // insert; decode so field names read back verbatim.
+            Some((PrefixContraction::JSON, rest)) => match urlencoding::decode(rest) {
+                Ok(decoded) => decoded,
+                Err(_) => Cow::Borrowed(rest),
+            },
         }
     }
 

@@ -713,7 +713,7 @@ describe('document', function () {
       it('passes insert, get JSONDocument', async function () {
         const r1 = await document.insert(agent, { instance: { a: [42, 23, 12] }, raw_json: true })
         const id = r1.body[0]
-        const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
+        const r2 = await document.get(agent, { query: { id, as_list: true, compress_ids: false, raw_id: true } })
         // Numbers are returned as JSON numbers per JSON_SERIALIZATION_RULES.md
         expect(r2.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
       })
@@ -726,7 +726,7 @@ describe('document', function () {
         // First insert
         await document.insert(agent, { instance, raw_json: true })
 
-        const r1 = await document.get(agent, { query: { id, as_list: true, compress_ids: false } })
+        const r1 = await document.get(agent, { query: { id, as_list: true, compress_ids: false, raw_id: true } })
         expect(r1.body).to.deep.equal([{ '@id': id, a: [42, 23, 12] }])
 
         // Second insert with same ID - with overwrite=false (default), this should now fail

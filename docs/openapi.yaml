@@ -999,6 +999,8 @@ paths:
             returns only documents of that type under the prefix. May be
             combined with `format=ids` and `counted=true` for fast
             enumeration. Currently supported for instance graphs only.
+            `sys:JSONDocument` (raw JSON) documents under the prefix
+            stream verbatim — see `raw_id` and `identifiers`.
             Example: `Person/` or `terminusdb:///data/Person/`
           schema:
             type: string
@@ -1071,6 +1073,20 @@ paths:
             type: string
             enum: ["1.0", "1.1"]
             default: "1.1"
+        - name: raw_id
+          in: query
+          required: false
+          description: |
+            Inject the internal document `@id` into `sys:JSONDocument`
+            (raw JSON) responses. Since 12.1 the default is `false`: raw
+            JSON documents stream back verbatim — semantically identical
+            to what was submitted, including any `@`-prefixed members,
+            which are document content rather than generated
+            annotations. Key order and whitespace are canonicalized.
+            Set `raw_id=true` to include the document's `@id`.
+          schema:
+            type: boolean
+            default: false
         - name: identifiers
           in: query
           required: false
@@ -1085,6 +1101,9 @@ paths:
             and the bare listing). The stripped form is not directly
             resubmittable — insertion still may still require `@type` to
             identify the class if it can't be resolved automatically.
+            `sys:JSONDocument` (raw JSON) documents are exempt: they
+            stream verbatim in their submitted lexical form regardless
+            of this flag, since their `@`-prefixed members are content.
           schema:
             type: boolean
             default: true

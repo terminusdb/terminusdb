@@ -300,15 +300,40 @@ api_generate_document_ids_by_query(schema, _Transaction, _Type, _Query, _Config,
 % Builds the Rust document-printer context, forwarding the request's XSD
 % canonicalization version.
 api_document_context(Transaction, Config, Context) :-
+    api_document_context_(Transaction, Config.get(raw_id, false), Context).
+
+api_document_context_(Transaction, Include_Id, Context) :-
     (   xsd_version('1.0')
     ->  Xsd_10 = true
     ;   Xsd_10 = false),
-    '$doc':get_document_context(Transaction, Config.get(raw_id, true), Xsd_10, Context).
+    '$doc':get_document_context(Transaction, Include_Id, Xsd_10, Context).
+
+%% api_emit_instance_document(+Transaction, +Id, +Config, +Raw_Context,
+%%                            +Stream_Started) is det.
+%
+%  Single-document emit under identifiers=false. A sys:JSONDocument
+%  streams verbatim through the Rust printer (Raw_Context is built with
+%  include_id=false): its content @id/@type keys are data, not generated
+%  annotations, and must round-trip. Other documents materialize via
+%  api_get_document where the recursive annotation strip applies.
+api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started) :-
+    database_prefixes(Transaction, Prefixes),
+    prefix_expand(Id, Prefixes, Id_Ex),
+    database_instance(Transaction, Instance),
+    global_prefix_expand(sys:'JSONDocument', JSON_Document_Class),
+    (   xrdf(Instance, Id_Ex, rdf:type, JSON_Document_Class)
+    ->  Stream_Started = started(Started),
+        do_or_die('$doc':print_document_json(current_output, Raw_Context, Id_Ex, (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized), Started),
+                  error(document_not_found(Id), _)),
+        nb_setarg(1, Stream_Started, true)
+    ;   api_get_document(instance, Transaction, Id, Config, Document),
+        json_stream_write_dict(Config, Stream_Started, Document)).
 
 api_print_documents_by_query(Transaction, Type, Query, Config, Stream_Started) :-
     (   strip_identifiers(Config)
-    ->  forall(api_get_documents_by_query(Transaction, instance, Type, Query, Config, Document),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
     ;   api_document_context(Transaction, Config, Context),
         forall(api_document:api_generate_document_ids_by_query(instance, Transaction, Type, Query, Config, Id),
                (   Stream_Started = started(Started),
@@ -418,11 +443,8 @@ api_print_document(Graph_Type, Transaction, Id, Config) :-
     api_print_document(Graph_Type, Transaction, Id, Config, started(true)).
 api_print_document(instance, Transaction, Id, Config, Stream_Started) :-
     (   strip_identifiers(Config)
-    ->  % materialize via api_get_document so the strip applies
-        database_prefixes(Transaction, Prefixes),
-        prefix_expand(Id, Prefixes, Id_Ex),
-        api_get_document(instance, Transaction, Id_Ex, Config, Document),
-        json_stream_write_dict(Config, Stream_Started, Document)
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started)
     ;   api_document_context(Transaction, Config, Context),
         Stream_Started = started(Started),
         database_prefixes(Transaction, Prefixes),
@@ -440,8 +462,9 @@ api_print_documents(schema, Transaction, Config, Stream_Started) :-
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents(instance, Transaction, Config, Stream_Started) :-
     (   strip_identifiers(Config)
-    ->  forall(api_get_documents(Transaction, instance, Config, Document),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids(instance, Transaction, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
     ;   api_document_context(Transaction, Config, Context),
         (   parallelize_enabled
         ->  '$doc':par_print_all_documents_json(current_output, Context, (Config.skip), (Config.count), (Config.as_list), (Config.compress), (Config.unfold), (Config.minimized))
@@ -452,8 +475,9 @@ api_print_documents_by_type(schema, Transaction, Config, Type, Stream_Started) :
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_type(instance, Transaction, Config, Type, Stream_Started) :-
     (   strip_identifiers(Config)
-    ->  forall(api_get_documents_by_type(Transaction, instance, Type, Config, Document),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids_by_type(instance, Transaction, Type, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
     ;   api_document_context(Transaction, Config, Context),
         database_and_default_prefixes(Transaction,Prefixes),
         % TODO errors on unknown prefix
@@ -469,9 +493,9 @@ api_print_documents_by_id(schema, Transaction, Config, Ids, Stream_Started) :-
            json_stream_write_dict(Config, Stream_Started, Document)).
 api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
     (   strip_identifiers(Config)
-    ->  forall((member(Id, Ids),
-                api_get_document(instance, Transaction, Id, Config, Document)),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(member(Id, Ids),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
     ;   api_document_context(Transaction, Config, Context),
         database_and_default_prefixes(Transaction, Prefixes),
         maplist({Prefixes}/[Id, Id_Ex]>>prefix_expand(Id, Prefixes, Id_Ex),
@@ -486,9 +510,9 @@ api_print_documents_by_id(instance, Transaction, Config, Ids, Stream_Started) :-
 % materializes each document inline — no Prolog-side id list.
 api_print_documents_by_id_prefix(instance, Transaction, Config, Id_Prefix, Type, Stream_Started) :-
     (   strip_identifiers(Config)
-    ->  forall((api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
-                api_get_document(instance, Transaction, Id, Config, Document)),
-               json_stream_write_dict(Config, Stream_Started, Document))
+    ->  api_document_context_(Transaction, false, Raw_Context),
+        forall(api_generate_document_ids_by_id_prefix(instance, Transaction, Type, Id_Prefix, Config, Id),
+               api_emit_instance_document(Transaction, Id, Config, Raw_Context, Stream_Started))
     ;   api_document_context(Transaction, Config, Context),
         database_and_default_prefixes(Transaction, Prefixes),
         prefix_expand(Id_Prefix, Prefixes, Id_Prefix_Ex),
@@ -588,7 +612,7 @@ strip_id_type_annotations(Dict, Stripped) :-
     dict_pairs(Stripped, Tag, Stripped_Pairs).
 
 api_get_document(instance, Transaction, Id, Config, Document) :-
-    Raw_Id = Config.get(raw_id, true),
+    Raw_Id = Config.get(raw_id, false),
     Options = options{compress_ids: Config.compress, unfold: Config.unfold, keep_json_type: false, raw_id: Raw_Id},
     do_or_die(get_document(Transaction, Id, Document0, Options),
               error(document_not_found(Id), _)),
@@ -2421,10 +2445,14 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
                             Descriptor),
     before_read(Descriptor, Requested_Data_Version, Actual_Data_Version,
                 Transaction),
+    % Embedding type detection and the write path both consume the
+    % document's @id, so fetch raw documents with it regardless of the
+    % request's raw_id default.
+    put_dict(_{system_db: System_DB, raw_id: true}, Config, ConfigWithSystem),
     embedding_type_queries_from_transaction(Transaction, TypeQueries),
     (   TypeQueries = []
     ->  (   ground(Id),
-            api_get_document(Graph_Type, Transaction, Id, Config, Document),
+            api_get_document(Graph_Type, Transaction, Id, ConfigWithSystem, Document),
             (   plugins:embedding_for_type(_, _, Document, _)
             ;   plugins:embedding_for_type(_, Document, _)
             )
@@ -2436,7 +2464,6 @@ api_read_document_selector(System_DB, Auth, Path, Graph_Type, Id, Ids, Type,
     embedding_document_types(Transaction, Graph_Type, Id, Ids, Type, Query,
                              DocTypes),
     list_to_set(DocTypes, _UniqueTypes),
-    put_dict(system_db, Config, System_DB, ConfigWithSystem),
     format_read_documents(embedding, Transaction, Graph_Type, Id, Ids, Type,
                         Query, ConfigWithSystem, Actual_Data_Version).
 
@@ -4666,11 +4693,12 @@ test(raw_id_false_omits_id_and_type,
     \+ get_dict('@type', Doc, _),
     "internal-mechanics-hidden" = Doc.name.
 
-test(raw_id_default_keeps_id,
+test(raw_id_default_omits_id,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "testdb"))),
       cleanup(teardown_temp_store(State))
      ]) :-
+    % 12.1 default: raw JSON documents read back verbatim, no injected @id.
     raw_id_test_db(System, Auth),
     raw_id_test_config(unbound, Config),
     with_output_to(
@@ -4679,7 +4707,8 @@ test(raw_id_default_keeps_id,
                                    _Id, _Ids, _Type, _Query, Config,
                                    no_data_version, _, [_]>>true)),
     atom_json_dict(Out, Doc, []),
-    get_dict('@id', Doc, _),
+    \+ get_dict('@id', Doc, _),
+    \+ get_dict('@type', Doc, _),
     "internal-mechanics-hidden" = Doc.name.
 
 test(raw_id_false_omits_id_in_list,
