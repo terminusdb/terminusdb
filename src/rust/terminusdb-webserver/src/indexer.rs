@@ -1206,8 +1206,10 @@ pub fn set_engine_transport(transport: Arc<dyn EngineTransport>) {
 
 // ─────────────────────── Index-task handoff poller ───────────────────────
 
-/// Default poll interval for the index-task queue directory.
-/// Polling is used instead of filesystem notifications for portability.
+/// Default interval for the index-task queue sweep. The directory is
+/// watched for events so tasks are normally claimed as they land; the
+/// interval remains as the fallback for platforms where the watcher
+/// drops or never delivers events.
 const HANDOFF_DEFAULT_POLL_SECS: u64 = 10;
 
 /// How long a claimed task may fail to appear in the registry before its
@@ -1270,9 +1272,48 @@ async fn handoff_poller_loop(
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(HANDOFF_DEFAULT_POLL_SECS);
     let mut interval = tokio::time::interval(Duration::from_secs(poll_secs));
+    // Any event in the task directory wakes the scan early; claim_pending
+    // tolerates partial or locked files, so no event filtering is needed.
+    // The channel also absorbs bursts — a flood of events collapses into
+    // one scan.
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(64);
+    // The closure gets a clone so event_tx outlives a failed watcher —
+    // a dropped sender would close the channel and spin the select loop.
+    let watcher_tx = event_tx.clone();
+    let _watcher = match notify::recommended_watcher(
+        move |res: notify::Result<notify::Event>| {
+            if res.is_ok() {
+                let _ = watcher_tx.try_send(());
+            }
+        },
+    ) {
+        Ok(mut w) => match notify::Watcher::watch(&mut w, &dir, notify::RecursiveMode::NonRecursive) {
+            Ok(()) => Some(w),
+            Err(e) => {
+                crate::log::log_error(format!(
+                    "[indexer] handoff: cannot watch {}: {} — sweep interval only",
+                    dir.display(),
+                    e
+                ));
+                None
+            }
+        },
+        Err(e) => {
+            crate::log::log_error(format!(
+                "[indexer] handoff: no filesystem watcher: {} — sweep interval only",
+                e
+            ));
+            None
+        }
+    };
     let mut claims: HashMap<std::path::PathBuf, ClaimedIndexTask> = HashMap::new();
     loop {
-        interval.tick().await;
+        tokio::select! {
+            _ = interval.tick() => {}
+            _ = event_rx.recv() => {
+                while event_rx.try_recv().is_ok() {}
+            }
+        }
         reap_finished_claims(&registry, &mut claims);
         let claimed_paths: HashSet<std::path::PathBuf> = claims.keys().cloned().collect();
         let fresh = match index_handoff::claim_pending(
