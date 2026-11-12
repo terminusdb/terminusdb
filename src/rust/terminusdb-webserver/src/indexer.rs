@@ -528,7 +528,7 @@ impl IndexerRegistry {
             store_clustering,
             IndexTaskKind::Index,
             "auto:notify",
-        ) {
+        )? {
             return Ok(());
         }
 
@@ -602,7 +602,7 @@ impl IndexerRegistry {
             store_clustering,
             IndexTaskKind::Reindex,
             "api:index",
-        ) {
+        )? {
             return Ok(());
         }
 
@@ -719,12 +719,14 @@ impl IndexerRegistry {
     }
 
     /// If the installed engine is read-only, write an index-task file
-    /// into the shared handoff directory for the lock holder to execute,
-    /// and return true. Returns false when the engine is writable (the
-    /// caller proceeds with local indexing) or no transport is installed.
-    /// An engine that is read-only but exposes no task dir is a
-    /// configuration bug — logged loudly; the caller then falls through
-    /// to the local path which fails on its own terms.
+    /// into the shared handoff directory for the lock holder to execute
+    /// and return `Ok(true)`. Returns `Ok(false)` when the engine is
+    /// writable (the caller proceeds with local indexing) or no
+    /// transport is installed. An engine that is read-only but exposes
+    /// no task dir is a configuration bug — logged loudly; the caller
+    /// then falls through to the local path which fails on its own
+    /// terms. A failed write returns `Err` — the requester must see the
+    /// failure, not a silent drop.
     fn handoff_if_read_only(
         &self,
         path: &str,
@@ -732,13 +734,13 @@ impl IndexerRegistry {
         store_clustering: bool,
         kind: IndexTaskKind,
         requester: &str,
-    ) -> bool {
+    ) -> Result<bool, String> {
         let transport = match self.transport.lock().unwrap().clone() {
             Some(t) => t,
-            None => return false,
+            None => return Ok(false),
         };
         if !transport.is_read_only() {
-            return false;
+            return Ok(false);
         }
         let Some(dir) = transport.index_task_dir() else {
             crate::log::log_error(format!(
@@ -746,7 +748,7 @@ impl IndexerRegistry {
                  index request for {} {} has nowhere to go",
                 path, branch
             ));
-            return false;
+            return Ok(false);
         };
         let task = index_handoff::IndexTask::new(path, branch, store_clustering, kind, requester);
         match index_handoff::enqueue(&dir, &task) {
@@ -762,12 +764,12 @@ impl IndexerRegistry {
                 "[indexer] read-only: {} task for {} {} already underway",
                 kind.as_str(), path, branch
             )),
-            Err(e) => crate::log::log_error(format!(
-                "[indexer] read-only: failed to write {} handoff task for {} {}: {}",
+            Err(e) => return Err(format!(
+                "read-only: failed to write {} handoff task for {} {}: {}",
                 kind.as_str(), path, branch, e
             )),
         }
-        true
+        Ok(true)
     }
 
     /// Add a branch to the pending queue if not already queued.
@@ -1253,16 +1255,17 @@ fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
         dir.display()
     ));
     let registry = indexer_registry().clone();
-    handle.spawn(handoff_poller_loop(dir, transport.clone(), registry));
+    handle.spawn(handoff_poller_loop(dir, registry));
 }
 
 /// Poll the handoff directory: reap finished claims, then claim and
 /// execute newly pending task files. The first interval tick fires
 /// immediately — that is the startup drain, so tasks enqueued while no
-/// lock holder was alive start without waiting one interval.
+/// lock holder was alive start without waiting one interval. The engine
+/// transport is fetched from the registry per task so a reinstalled
+/// engine never leaves deletes hitting a stale router.
 async fn handoff_poller_loop(
     dir: std::path::PathBuf,
-    transport: Arc<dyn EngineTransport>,
     registry: Arc<IndexerRegistry>,
 ) {
     let poll_secs = std::env::var("TERMINUSDB_INDEXER_HANDOFF_POLL_SECS")
@@ -1294,14 +1297,10 @@ async fn handoff_poller_loop(
             continue;
         }
         // A reindex covers every pending index task for the same ref —
-        // run reindexes first so the cheaper incremental task can be
-        // dropped instead of executed.
+        // once one starts, the cheaper incremental tasks can be dropped
+        // instead of executed.
         let mut sorted = fresh;
-        sorted.sort_by_key(|c| match c.task.kind {
-            IndexTaskKind::Delete => 0,
-            IndexTaskKind::Reindex => 1,
-            IndexTaskKind::Index => 2,
-        });
+        index_handoff::sort_for_execution(&mut sorted);
         let mut reindexed: HashSet<BranchKey> = HashSet::new();
         for claimed in sorted {
             let task = claimed.task;
@@ -1339,7 +1338,10 @@ async fn handoff_poller_loop(
                     // inline: it is a single local engine call, and the
                     // claim flock is held for its duration so requesters
                     // still see `underway`.
-                    execute_domain_delete(&transport, &task.path).await
+                    match registry.get_transport() {
+                        Ok(t) => execute_domain_delete(&t, &task.path).await,
+                        Err(e) => Err(e),
+                    }
                 }
             };
             match result {
@@ -3063,6 +3065,28 @@ mod tests {
             .collect();
         assert_eq!(files.len(), 2,
             "index and reindex requests must collapse onto one file each");
+    }
+
+    #[test]
+    fn test_notify_on_read_only_engine_propagates_enqueue_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        // A file where the task dir should be: create_dir_all inside
+        // enqueue must fail, and the failure must reach the caller —
+        // reporting success while dropping the request is not allowed.
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, b"not a dir").unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(ReadOnlyTransport::new(blocker)));
+
+        let err = registry.notify(
+            "admin/db/local/branch/main".to_string(),
+            "main".to_string(),
+            false,
+            true,
+        );
+        assert!(err.is_err(), "a failed handoff write must propagate");
+        assert!(registry.tasks.lock().unwrap().is_empty(),
+            "no local branch task may be created on a read-only engine");
     }
 
     #[test]
