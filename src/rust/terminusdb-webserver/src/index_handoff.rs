@@ -66,9 +66,7 @@ impl IndexTaskKind {
 pub struct IndexTask {
     pub path: String,
     pub branch: String,
-    /// Requested commit when the caller had one in mind; `null` means
-    /// "index to the branch head at execution time".
-    pub commit: Option<String>,
+    /// Tasks always index to the branch head at execution time.
     /// Where the request originated: `api:index` for an explicit
     /// POST /api/index, `auto:notify` for commit/search nudges.
     pub requester: String,
@@ -89,7 +87,6 @@ impl IndexTask {
         Self {
             path: path.to_string(),
             branch: branch.to_string(),
-            commit: None,
             requester: requester.to_string(),
             store_clustering,
             kind,
