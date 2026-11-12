@@ -787,6 +787,7 @@ pub struct PipeDispatchRequest {
     pub(crate) output_worker_write_fd: i32,
     pub(crate) binary: bool,
     pub(crate) request_id: String,
+    pub(crate) indexer_worker: bool,
 }
 
 /// Message sent to the single-engine dispatcher queue.
@@ -1067,8 +1068,13 @@ fn dispatch_pipe_to_prolog(
         .put(&Atom::new(&req.request_id))
         .map_err(|_| PrologError::Failure)?;
 
+    let functor_name = if req.indexer_worker {
+        "dispatch_indexer_request"
+    } else {
+        "dispatch_request"
+    };
     let callable = CallablePredicate::new(Predicate::new(
-        Functor::new(Atom::new("dispatch_request"), 7),
+        Functor::new(Atom::new(functor_name), 7),
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
@@ -2400,6 +2406,7 @@ async fn dispatch_request_via_pipe(
         output_worker_write_fd,
         binary,
         request_id: request_id.clone(),
+        indexer_worker: false,
     };
 
     let mut output_receiver = match Receiver::from_owned_fd(output_read) {

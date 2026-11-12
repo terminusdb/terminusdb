@@ -3,6 +3,7 @@
                   dispatch_request/5,
                   dispatch_request/6,
                   dispatch_request/7,
+                  dispatch_indexer_request/7,
                   worker_pool_stats/1,
                   worker_busy_stats/1,
                   cancel_pipe_request/1,
@@ -41,8 +42,10 @@
 %% observable via thread_property/2. A dead worker is a fatal condition
 %% that must crash the server, not silently degrade.
 
-:- dynamic worker_queue/1.
+:- dynamic round_robin_queue/1.
 :- dynamic worker/3.  % worker(Queue, ThreadId, Alias)
+
+:- dynamic indexer_queue/1.
 
 %% Watchdog state
 %%
@@ -78,7 +81,7 @@
 %%  Returns a dict with pool size, idle count, and busy count.
 %%  Intended for Prometheus metrics collection.
 worker_pool_stats(Stats) :-
-    findall(Alias, worker(_, _, Alias), AllAliases),
+    findall(Alias, (round_robin_queue(Q), worker(Q, _, Alias)), AllAliases),
     length(AllAliases, Total),
     findall(Alias, worker_busy(Alias, _), BusyAliases),
     length(BusyAliases, Busy),
@@ -145,14 +148,44 @@ init_request_worker_pool(Workers) :-
         message_queue_create(Queue),
         atom_concat(worker_, I, Alias),
         thread_create(worker_loop(Queue), ThreadId,
-                      [detached(false), alias(Alias),
-                       stack_limit(8_589_934_592)]),
-        assertz(worker_queue(Queue)),
+                      [detached(false), alias(Alias)]),
+        assertz(round_robin_queue(Queue)),
         assertz(worker(Queue, ThreadId, Alias)),
         fail
     ;   true
     ),
+    %% A large index can occupy a worker for minutes.
+    message_queue_create(IndexerQueue),
+    thread_create(worker_loop(IndexerQueue), IndexerThreadId,
+                  [detached(false), alias(indexer_worker_1)]),
+    assertz(indexer_queue(IndexerQueue)),
+    assertz(worker(IndexerQueue, IndexerThreadId, indexer_worker_1)),
     start_watchdog.
+
+%% stop_request_worker_pool is det.
+%%
+%%  Every step tolerates absence, so a partially started pool stops too.
+stop_request_worker_pool :-
+    forall(worker(Queue, _T1, _A1),
+           catch(thread_send_message(Queue, shutdown), _, true)),
+    forall(worker(Queue, ThreadId, _A2),
+           (   catch(thread_join(ThreadId, _), _, true),
+               catch(message_queue_destroy(Queue), _, true)
+           )),
+    (   watchdog_queue(WQ)
+    ->  catch(thread_send_message(WQ, stop), _, true),
+        catch(thread_join(worker_watchdog, _), _, true),
+        catch(message_queue_destroy(WQ), _, true)
+    ;   true
+    ),
+    retractall(worker(_, _, _)),
+    retractall(round_robin_queue(_)),
+    retractall(indexer_queue(_)),
+    retractall(worker_busy(_, _)),
+    retractall(watchdog_queue(_)),
+    retractall(watchdog_running),
+    retractall(active_pipe(_, _, _)),
+    retractall(active_pipe_request(_, _)).
 
 %% check_worker_alive(+Queue) is det.
 %%
@@ -187,8 +220,8 @@ check_worker_alive(Queue) :-
 %%    3. Capture the handler output, parse it into a response dict
 %%    4. Send the response to the Rust response stream and close it
 dispatch_request(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId) :-
-    (   retract(worker_queue(Q))
-    ->  assertz(worker_queue(Q)),
+    (   retract(round_robin_queue(Q))
+    ->  assertz(round_robin_queue(Q)),
         check_worker_alive(Q),
         mark_worker_busy(Q),
         thread_send_message(Q, work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)))
@@ -208,14 +241,33 @@ dispatch_request(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd
 %% dispatch_request(+RequestDict, +HandlerModule, +HandlerName,
 %%                  +InputReadFd, +OutputWriteFd, +Binary, +RequestId) is det.
 dispatch_request(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId) :-
-    (   retract(worker_queue(Q))
-    ->  assertz(worker_queue(Q)),
+    (   retract(round_robin_queue(Q))
+    ->  assertz(round_robin_queue(Q)),
         check_worker_alive(Q),
         mark_worker_busy(Q),
-        thread_send_message(Q, work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId)))
+        enqueue_pipe_work(Q, Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId)
     ;   json_log_error_formatted("dispatch_request: no worker queue available", []),
         throw(error(no_worker_available, _))
     ).
+
+%% dispatch_indexer_request(+RequestDict, +HandlerModule, +HandlerName,
+%%                          +InputReadFd, +OutputWriteFd, +Binary,
+%%                          +RequestId) is det.
+%%
+%%  The worker is not marked busy — an index run legitimately holds it
+%%  for minutes, so the busy-warning does not apply.
+dispatch_indexer_request(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId) :-
+    (   indexer_queue(Q)
+    ->  check_worker_alive(Q),
+        enqueue_pipe_work(Q, Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId)
+    ;   json_log_error_formatted("dispatch_indexer_request: no indexer worker available", []),
+        throw(error(no_indexer_worker_available, _))
+    ).
+
+%% enqueue_pipe_work(+Queue, +RequestDict, +HandlerModule, +HandlerName,
+%%                   +InputReadFd, +OutputWriteFd, +Binary, +RequestId) is det.
+enqueue_pipe_work(Queue, Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId) :-
+    thread_send_message(Queue, work(pipe(Request, HandlerModule, HandlerName, InputReadFd, OutputWriteFd, Binary, RequestId))).
 
 %% mark_worker_busy(+Queue) is det.
 %%
@@ -320,8 +372,7 @@ start_watchdog :-
         assertz(watchdog_queue(Q)),
         assertz(watchdog_running),
         thread_create(watchdog_loop(Q), _,
-                      [detached(false), alias(worker_watchdog),
-                       stack_limit(8_589_934_592)])
+                      [detached(false), alias(worker_watchdog)])
     ).
 
 %% signal_worker_ready(+Queue) is det.
@@ -348,13 +399,19 @@ signal_worker_ready(Queue) :-
 watchdog_loop(Queue) :-
     (   thread_get_message(Queue, Message, [timeout(5)])
     ->  (   Message = ready(Alias)
-        ->  mark_worker_ready(Alias)
-        ;   true
+        ->  mark_worker_ready(Alias),
+            Stop = false
+        ;   Message == stop
+        ->  Stop = true
+        ;   Stop = false
         )
-    ;   true  %% timeout — no messages, proceed to health check
+    ;   Stop = false
     ),
-    check_stuck_workers,
-    watchdog_loop(Queue).
+    (   Stop == true
+    ->  true
+    ;   check_stuck_workers,
+        watchdog_loop(Queue)
+    ).
 
 %% check_stuck_workers is det.
 %%
@@ -480,7 +537,9 @@ worker_loop(Queue) :-
 
 worker_loop_iteration(Queue) :-
     thread_get_message(Queue, Message),
-    (   Message = work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId))
+    (   Message == shutdown
+    ->  thread_exit(shutdown)
+    ;   Message = work(stream(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId))
     ->  log_worker_memory(before, HandlerModule, HandlerName),
         catch(
             (   handle_stream_work(Request, HandlerModule, HandlerName, InputStreamId, ResponseStreamId)
@@ -2282,6 +2341,73 @@ test(saved_request_cleanup_tolerates_unbound_id,
     assert(json_log:saved_request(req_a, 1.0, '/a', some(op_a), [])),
     retractall_saved_request_for_request(_Unbound),
     assertion(json_log:saved_request(req_a, _, _, _, _)).
+
+test(init_creates_indexer_worker_outside_round_robin) :-
+    stop_request_worker_pool,
+    init_request_worker_pool(2),
+    findall(Q, request_worker_pool:round_robin_queue(Q), Ordinary),
+    assertion(length(Ordinary, 2)),
+    indexer_queue(IndexerQ),
+    request_worker_pool:worker(IndexerQ, IndexerT, indexer_worker_1),
+    catch(thread_property(IndexerT, status(S)), _, S = not_found),
+    assertion(S == running),
+    assertion(\+ memberchk(IndexerQ, Ordinary)),
+    assertion(\+ request_worker_pool:round_robin_queue(IndexerQ)),
+    stop_request_worker_pool.
+
+test(enqueue_pipe_work_delivers_exact_term) :-
+    message_queue_create(Q),
+    enqueue_pipe_work(Q, _{method:"POST"}, mod, handler, 10, 11, true, req7),
+    thread_get_message(Q, work(pipe(R, M, H, I, O, B, Id))),
+    assertion(R =@= _{method:"POST"}),
+    assertion((M, H, I, O, B, Id) =@= (mod, handler, 10, 11, true, req7)),
+    message_queue_destroy(Q).
+
+test(dispatch_indexer_request_does_not_mark_busy) :-
+    stop_request_worker_pool,
+    init_request_worker_pool(1),
+    retractall(request_worker_pool:worker_busy(_, _)),
+    dispatch_indexer_request(_{method:"POST"}, mod, handler, 9998, 9999,
+                             false, idx_req1),
+    assertion(\+ request_worker_pool:worker_busy(indexer_worker_1, _)),
+    sleep(0.1),
+    assertion(\+ request_worker_pool:worker_busy(indexer_worker_1, _)),
+    stop_request_worker_pool.
+
+test(dispatch_request_marks_busy_on_ordinary_workers_only) :-
+    %% No watchdog in this hand-built pool, so the busy mark persists
+    %% instead of racing signal_worker_ready's drain.
+    stop_request_worker_pool,
+    retractall(request_worker_pool:worker_busy(_, _)),
+    message_queue_create(Q),
+    thread_create(worker_loop(Q), T,
+                  [detached(false), alias(test_rr_worker)]),
+    assertz(request_worker_pool:round_robin_queue(Q)),
+    assertz(request_worker_pool:worker(Q, T, test_rr_worker)),
+    message_queue_create(IQ),
+    thread_create(worker_loop(IQ), IT,
+                  [detached(false), alias(test_idx_alias)]),
+    assertz(request_worker_pool:indexer_queue(IQ)),
+    assertz(request_worker_pool:worker(IQ, IT, indexer_worker_1)),
+    dispatch_request(_{method:"GET"}, mod, handler, 9998, 9999, false),
+    assertion(request_worker_pool:worker_busy(test_rr_worker, _)),
+    assertion(\+ request_worker_pool:worker_busy(indexer_worker_1, _)),
+    stop_request_worker_pool.
+
+test(dispatch_indexer_request_fails_loud_without_pool,
+     [throws(error(no_indexer_worker_available, _))]) :-
+    stop_request_worker_pool,
+    dispatch_indexer_request(_{method:"POST"}, mod, handler, 1, 2, false, req).
+
+test(stop_request_worker_pool_is_idempotent) :-
+    stop_request_worker_pool,
+    init_request_worker_pool(1),
+    stop_request_worker_pool,
+    assertion(\+ request_worker_pool:round_robin_queue(_)),
+    assertion(\+ request_worker_pool:indexer_queue(_)),
+    assertion(\+ request_worker_pool:worker(_, _, _)),
+    assertion(\+ request_worker_pool:watchdog_running),
+    stop_request_worker_pool.
 
 :- end_tests(request_worker_pool).
 

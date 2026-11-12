@@ -1553,6 +1553,7 @@ async fn run_commit_task(
         output_worker_write_fd,
         binary: false,
         request_id: crate::dispatch::next_request_id("POST", &key.path),
+        indexer_worker: true,
     };
 
     // 4. Send to the dispatch queue (DispatchMessage::Pipe).
