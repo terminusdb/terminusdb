@@ -1,9 +1,7 @@
 use juniper::{
-    executor::{execute_validated_query, get_operation},
     http::{GraphQLRequest, GraphQLResponse},
     parser::{parse_document_source, Spanning},
-    DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, ExecutionError, GraphQLError,
-    InputValue, RootNode, Value,
+    DefaultScalarValue, Definition, EmptyMutation, EmptySubscription, InputValue, RootNode,
 };
 use serde::Deserialize;
 use terminusdb_store_prolog::terminus_store::Layer;
@@ -326,12 +324,12 @@ fn serialize_graphql_response(response: &GraphQLResponse) -> Result<String, serd
 mod filter;
 pub mod frame;
 mod main_graph;
-mod mutation;
+pub(crate) mod mutation;
 mod naming;
 pub mod query;
 mod sanitize;
 pub mod schema;
-mod subscription;
+pub(crate) mod subscription;
 mod system;
 mod top;
 
@@ -422,10 +420,6 @@ impl<'a> GraphQLExecutionContext<'a> {
         Ok(Self::new(type_collection, graphql_context))
     }
 
-    pub fn prolog_context(&self) -> &GenericQueryableContext<'a> {
-        &self.context.context
-    }
-
     pub fn execute_query<T, F: Fn(&GraphQLResponse) -> T>(
         &self,
         request: GraphQLRequest,
@@ -433,27 +427,6 @@ impl<'a> GraphQLExecutionContext<'a> {
     ) -> T {
         let response = request.execute_sync(&self.root_node, &self.context);
         response_handler(&response)
-    }
-
-    pub fn execute_query_document<'b>(
-        &self,
-        request_document: &[Definition<'b, DefaultScalarValue>],
-        variables: &HashMap<String, InputValue>,
-    ) -> Result<
-        (
-            Value<DefaultScalarValue>,
-            Vec<ExecutionError<DefaultScalarValue>>,
-        ),
-        GraphQLError<'b>,
-    > {
-        let operation = get_operation(request_document, None).unwrap();
-        execute_validated_query(
-            request_document,
-            operation,
-            &self.root_node,
-            variables,
-            &self.context,
-        )
     }
 }
 
