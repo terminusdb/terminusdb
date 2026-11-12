@@ -500,4 +500,26 @@ describe('document-get', function () {
       expect(r.body).to.have.length(instancesExpected.length)
     })
   })
+
+  describe('streaming formats surface real error status', function () {
+    // Streaming formats (markdown, embedding) committed 200 + chunked
+    // headers before resolving documents, so errors landed in the body
+    // as an embedded "Status: NNN" block instead of a real HTTP status.
+    for (const format of ['markdown', 'embedding']) {
+      it(`${format} returns 404 JSON for a missing document`, async function () {
+        const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+          .query({ graph_type: 'instance', id: 'Person/Missing', format })
+        expect(r.status).to.equal(404)
+        expect(r.body['api:status']).to.equal('api:not_found')
+      })
+    }
+
+    it('markdown still streams a matching document', async function () {
+      const r = await agent.get(`/api/document/${agent.orgName}/${agent.dbName}`)
+        .query({ graph_type: 'instance', id: personId(aristotleExpected), format: 'markdown' })
+      expect(r.status).to.equal(200)
+      expect(r.headers['content-type']).to.match(/^text\/markdown/)
+      expect(r.text).to.include('Aristotle')
+    })
+  })
 })

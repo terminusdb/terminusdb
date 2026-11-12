@@ -1329,6 +1329,29 @@ impl AllFrames {
             .unwrap_or_else(|| vec![class.clone()])
     }
 
+    /// Returns all transitive superclasses of `class` (including `class`
+    /// itself), walking every entry of `@inherits` (a class may inherit
+    /// from multiple parents). Used to declare which GraphQL interfaces
+    /// a class implements.
+    pub fn ancestors_of<'a>(&'a self, class: &GraphQLName<'a>) -> Vec<GraphQLName<'a>> {
+        let mut result = vec![class.clone()];
+        let mut cursor = 0;
+        while cursor < result.len() {
+            let current = result[cursor].clone();
+            cursor += 1;
+            if let Some(TypeDefinition::Class(cd)) = self.frames.get(&current) {
+                if let Some(inherits) = &cd.inherits {
+                    for parent in inherits {
+                        if !result.contains(parent) {
+                            result.push(parent.clone());
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
+
     /// Returns all superclasses of `class` (including `class` itself),
     /// walking the `@inherits` chain. Used by _ChangeSet to group
     /// subclass documents under their superclass fields.

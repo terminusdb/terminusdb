@@ -4,6 +4,10 @@ pub fn ordering_name(type_name: &GraphQLName) -> GraphQLName<'static> {
     GraphQLName(format!("{type_name}_Ordering").into())
 }
 
+pub fn interface_name(type_name: &GraphQLName) -> GraphQLName<'static> {
+    GraphQLName(format!("{type_name}_Possible").into())
+}
+
 pub fn restriction_name(type_name: &GraphQLName) -> GraphQLName<'static> {
     GraphQLName(format!("{type_name}_Restriction").into())
 }
