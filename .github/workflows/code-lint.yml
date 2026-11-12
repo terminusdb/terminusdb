@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install swi-prolog
-        run: ./.github/install-swi-prolog.sh stable
+        run: ./.github/install-swi-prolog.sh 10.0.2
 
       - name: Checkout tus
         uses: actions/checkout@v7
