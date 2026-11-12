@@ -126,7 +126,7 @@ async function poll (fn, timeoutMs, intervalMs = 500) {
     if (last) return last
     await new Promise(resolve => setTimeout(resolve, intervalMs)) // NOSONAR — polling is serialized by definition
   }
-  throw new Error('poll timed out')
+  throw new Error(`poll timed out; last=${JSON.stringify(last)}`)
 }
 
 async function waitForServer (port, timeoutMs = 30000) {
@@ -212,7 +212,7 @@ describe('Read-only index handoff', function () {
       VECTORLINK_DIM: String(EMBED_DIM),
       VECTORLINK_EMBED_CACHE_SIZE: '3000000',
       TERMINUSDB_INDEXER_HANDOFF_POLL_SECS: '1',
-      TERMINUSDB_WORKER_POOL_SIZE: '30',
+      TERMINUSDB_WORKER_POOL_SIZE: '4',
       TERMINUSDB_COMMIT_QUEUE_TIMEOUT: '5',
     }
   }
@@ -271,18 +271,6 @@ describe('Read-only index handoff', function () {
       { '@type': 'Animal', name: 'Socrates' },
     ])
     expect(res.status).to.equal(200)
-    res = await httpRequest(portA, 'POST', `/api/index/${ORG}/${DB}`, {})
-    expect(res.status).to.equal(200)
-
-    // Poll on status, not only searchable_documents: the engine stats reach
-    // the document count before the indexer registry marks the task
-    // completed, so polling on the count alone can observe 'indexing'.
-    const status = await poll(async () => {
-      const s = await tryIndexStatus(portA)
-      return (s?.status === 'completed' && s?.engine?.searchable_documents >= 2) ? s : false
-    }, 30000)
-    expect(status.status).to.equal('completed')
-    expect(status.read_only).to.equal(false)
 
     // Instance B opens the same directories read-only.
     procB = spawnInstance('handoff-b', portB)
@@ -324,12 +312,17 @@ describe('Read-only index handoff', function () {
   it('reports handoff progress and completion on the read-only instance', async function () {
     // While the file exists the requester sees pending or underway; once the
     // writer finishes, the file is deleted and the status returns to no
-    // handoff with the indexed commit recorded.
+    // handoff with the indexed commit recorded. The engine stats can reach
+    // the document count before the registry marks the task completed, so
+    // poll on status, not only on searchable_documents.
     await poll(async () => taskFiles().length === 0, 90000)
-    const status = await indexStatus(portB)
+    const status = await poll(async () => {
+      const s = await tryIndexStatus(portB)
+      if (s?.status === 'error') throw new Error(`indexing failed: ${s.error}`)
+      return (s?.status === 'completed' && s?.engine?.searchable_documents >= 2) ? s : false
+    }, 90000)
     expect(status.read_only).to.equal(true)
     expect(status.handoff).to.equal(null)
-    expect(status.status).to.equal('completed')
     expect(status.last_indexed_commit).to.be.a('string')
   })
 
