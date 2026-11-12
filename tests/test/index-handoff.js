@@ -288,7 +288,7 @@ describe('Read-only index handoff', function () {
     if (sharedBase) fs.rmSync(sharedBase, { recursive: true, force: true })
   })
 
-  it('hands off a reindex request from the read-only instance', async function () {
+  it('hands off an index catch-up request from the read-only instance', async function () {
     const res = await httpRequest(portB, 'POST', `/api/index/${ORG}/${DB}`, {})
     expect(res.status).to.equal(200)
     expect(res.body['api:message']).to.match(/handed off/i)
@@ -297,7 +297,7 @@ describe('Read-only index handoff', function () {
       return found.length > 0 ? found : false
     }, 10000, 200)
     expect(files).to.have.length(1)
-    expect(files[0]).to.match(/main\.reindex\.json$/)
+    expect(files[0]).to.match(/main\.index\.json$/)
   })
 
   it('collapses duplicate read-only requests into one task file', async function () {

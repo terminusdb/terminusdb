@@ -66,9 +66,7 @@ impl IndexTaskKind {
 pub struct IndexTask {
     pub path: String,
     pub branch: String,
-    /// Requested commit when the caller had one in mind; `null` means
-    /// "index to the branch head at execution time".
-    pub commit: Option<String>,
+    /// Tasks always index to the branch head at execution time.
     /// Where the request originated: `api:index` for an explicit
     /// POST /api/index, `auto:notify` for commit/search nudges.
     pub requester: String,
@@ -89,7 +87,6 @@ impl IndexTask {
         Self {
             path: path.to_string(),
             branch: branch.to_string(),
-            commit: None,
             requester: requester.to_string(),
             store_clustering,
             kind,
@@ -189,8 +186,9 @@ pub fn enqueue(dir: &Path, task: &IndexTask) -> io::Result<EnqueueOutcome> {
     Ok(EnqueueOutcome::Underway)
 }
 
-/// Probe the queue state for a branch path across both task kinds.
-/// `Underway` wins over `Pending` when both kinds have files.
+/// Probe the queue state for a branch path across the two branch-level
+/// task kinds — `Delete` files are domain-keyed and can never match a
+/// branch path. `Underway` wins over `Pending` when both have files.
 pub fn probe_task_file(dir: &Path, path: &str) -> TaskFileState {
     let mut saw_pending = false;
     for kind in [IndexTaskKind::Reindex, IndexTaskKind::Index] {
@@ -290,7 +288,7 @@ pub fn claim_pending(
 mod tests {
     use super::*;
 
-    fn test_task(kind: IndexTaskKind) -> IndexTask {
+    pub(super) fn test_task(kind: IndexTaskKind) -> IndexTask {
         IndexTask::new(
             "admin/db/local/branch/main",
             "main",
@@ -458,5 +456,74 @@ mod tests {
         let missing = dir.path().join("does-not-exist");
         let claimed = claim_pending(&missing, &HashSet::new(), POISON_GRACE).unwrap();
         assert!(claimed.is_empty());
+    }
+}
+
+fn kind_rank(kind: IndexTaskKind) -> u8 {
+    match kind {
+        IndexTaskKind::Delete => 0,
+        IndexTaskKind::Reindex => 1,
+        IndexTaskKind::Index => 2,
+    }
+}
+
+/// Execution order for a batch of claimed tasks: request order first —
+/// a delete issued after an index must land after it, not be undone by
+/// it. The kind rank only breaks same-second ties so a delete+index
+/// pair issued together still wipes before it rebuilds.
+pub fn sort_for_execution(claimed: &mut [ClaimedTaskFile]) {
+    claimed.sort_by_key(|c| (c.task.requested_at, kind_rank(c.task.kind)));
+}
+
+#[cfg(test)]
+mod execution_order_tests {
+    use super::tests::test_task;
+    use super::*;
+
+    fn claimed_batch(dir: &Path, tasks: &[IndexTask]) -> Vec<ClaimedTaskFile> {
+        for t in tasks {
+            enqueue(dir, t).unwrap();
+        }
+        claim_pending(dir, &HashSet::new(), POISON_GRACE).unwrap()
+    }
+
+    #[test]
+    fn sorts_by_request_order_across_kinds() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut index_first = test_task(IndexTaskKind::Index);
+        index_first.requested_at = 100;
+        let mut delete_later = test_task(IndexTaskKind::Delete);
+        delete_later.path = "admin/db".to_string();
+        delete_later.requested_at = 200;
+
+        let mut claimed = claimed_batch(dir.path(), &[index_first, delete_later]);
+        sort_for_execution(&mut claimed);
+
+        let kinds: Vec<_> = claimed.iter().map(|c| c.task.kind).collect();
+        assert_eq!(
+            kinds,
+            [IndexTaskKind::Index, IndexTaskKind::Delete],
+            "a delete issued after an index must run after it"
+        );
+    }
+
+    #[test]
+    fn same_second_ties_fall_back_to_kind_rank() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut index = test_task(IndexTaskKind::Index);
+        index.requested_at = 100;
+        let mut delete = test_task(IndexTaskKind::Delete);
+        delete.path = "admin/db".to_string();
+        delete.requested_at = 100;
+
+        let mut claimed = claimed_batch(dir.path(), &[index, delete]);
+        sort_for_execution(&mut claimed);
+
+        let kinds: Vec<_> = claimed.iter().map(|c| c.task.kind).collect();
+        assert_eq!(
+            kinds,
+            [IndexTaskKind::Delete, IndexTaskKind::Index],
+            "a same-second delete+index pair still wipes first"
+        );
     }
 }
