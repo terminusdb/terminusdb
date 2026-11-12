@@ -5859,7 +5859,7 @@ components:
 
     IndexStatus:
       type: object
-      required: [status, branch, last_indexed_commit, branch_processing, engine]
+      required: [status, branch, last_indexed_commit, read_only, handoff, branch_processing, engine]
       properties:
         status:
           type: string
@@ -5877,6 +5877,22 @@ components:
           type: string
           nullable: true
           description: Commit ID of the last successfully indexed commit.
+        read_only:
+          type: boolean
+          description: >-
+            True when this instance's vectorlink engine is read-only —
+            the data dir write lock is held by another process sharing it,
+            so index requests are handed off through the task queue
+            instead of executing locally.
+        handoff:
+          type: string
+          enum: [pending, underway]
+          nullable: true
+          description: >-
+            Handoff queue state for this ref on a read-only instance:
+            `pending` (task file queued for the write-lock holder) or
+            `underway` (claimed by the holder). Absent on writable
+            instances and when no task file exists.
         branch_processing:
           type: object
           properties:
