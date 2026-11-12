@@ -835,7 +835,7 @@ io_index_branch(System_DB, Auth, Path, Target_Commit) :-
         error(push_requires_branch_descriptor(Path), _)),
     (   branch_head_commit(Descriptor.repository_descriptor, Branch_Name, Head_Uri)
     ->  commit_id_uri(Descriptor.repository_descriptor, Target_Commit, Head_Uri)
-    ;   Target_Commit = ''
+    ;   Target_Commit = null
     ),
     vectorlink:branch_path_for_notify(Path, Branch_Name, Branch_Path),
     (   plugin_api:indexer_available
