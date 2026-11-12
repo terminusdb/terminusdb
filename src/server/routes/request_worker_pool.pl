@@ -155,11 +155,14 @@ init_request_worker_pool(Workers) :-
     ;   true
     ),
     %% A large index can occupy a worker for minutes.
-    message_queue_create(IndexerQueue),
-    thread_create(worker_loop(IndexerQueue), IndexerThreadId,
-                  [detached(false), alias(indexer_worker_1)]),
-    assertz(indexer_queue(IndexerQueue)),
-    assertz(worker(IndexerQueue, IndexerThreadId, indexer_worker_1)),
+    (   indexer_queue(_)
+    ->  true
+    ;   message_queue_create(IndexerQueue),
+        thread_create(worker_loop(IndexerQueue), IndexerThreadId,
+                      [detached(false), alias(indexer_worker_1)]),
+        assertz(indexer_queue(IndexerQueue)),
+        assertz(worker(IndexerQueue, IndexerThreadId, indexer_worker_1))
+    ),
     start_watchdog.
 
 %% stop_request_worker_pool is det.
