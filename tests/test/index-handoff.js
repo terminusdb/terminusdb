@@ -274,10 +274,13 @@ describe('Read-only index handoff', function () {
     res = await httpRequest(portA, 'POST', `/api/index/${ORG}/${DB}`, {})
     expect(res.status).to.equal(200)
 
+    // Poll on status, not only searchable_documents: the engine stats reach
+    // the document count before the indexer registry marks the task
+    // completed, so polling on the count alone can observe 'indexing'.
     const status = await poll(async () => {
       const s = await tryIndexStatus(portA)
-      return s?.engine?.searchable_documents >= 2 ? s : false
-    }, 60000)
+      return (s?.status === 'completed' && s?.engine?.searchable_documents >= 2) ? s : false
+    }, 30000)
     expect(status.status).to.equal('completed')
     expect(status.read_only).to.equal(false)
 
