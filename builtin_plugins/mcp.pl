@@ -630,7 +630,10 @@ admin_action(Auth, System_DB, "index_status", Args, Result) :-
 admin_action(Auth, System_DB, "reindex", Args, Result) :-
     !,
     required_arg(Args, resource, Path, admin),
-    vectorlink:io_index_branch(System_DB, Auth, Path),
+    % A rebuild is wipe + catch-up trigger — io_index_branch alone
+    % would leave the old index in place.
+    vectorlink:io_delete_branch_index(System_DB, Auth, Path),
+    vectorlink:io_index_branch(System_DB, Auth, Path, _Target_Commit),
     Result = _{'_text':"reindex started", resource:Path}.
 
 admin_action(Auth, System_DB, "export", Args, Result) :-

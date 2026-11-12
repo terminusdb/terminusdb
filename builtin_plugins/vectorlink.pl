@@ -2,6 +2,8 @@
     % Push driver
     io_push_delta/4,
     io_index_branch/3,
+    io_index_branch/4,
+    io_delete_branch_index/3,
     path_to_domain/2,
     validate_index_path/1,
     % Search fronting
@@ -808,6 +810,16 @@ io_push_delta(_System_DB, _Auth, Path, Branch_Name) :-
     ).
 
 io_index_branch(System_DB, Auth, Path) :-
+    io_index_branch(System_DB, Auth, Path, _Target_Commit).
+
+%% io_index_branch(+System_DB, +Auth, +Path, -Target_Commit) is det.
+%%
+%%  Catch-up trigger: asks the engine to index every commit from its
+%%  last-indexed one to HEAD — never blocks, never rebuilds (a rebuild
+%%  is io_delete_branch_index/3 + this). Has_Embeddings=true so manual
+%%  indexing covers schemas with embedding metadata but no
+%%  store_indices. Target_Commit is the branch head at trigger time.
+io_index_branch(System_DB, Auth, Path, Target_Commit) :-
     validate_index_path(Path),
     do_or_die(
         vectorlink_endpoint(_Endpoint),
@@ -821,14 +833,34 @@ io_index_branch(System_DB, Auth, Path) :-
         ->  branch_for_commit(Repo_Desc, Commit_Id, Branch_Name)
         ),
         error(push_requires_branch_descriptor(Path), _)),
+    (   branch_head_commit(Descriptor.repository_descriptor, Branch_Name, Head_Uri)
+    ->  commit_id_uri(Descriptor.repository_descriptor, Target_Commit, Head_Uri)
+    ;   Target_Commit = ''
+    ),
     vectorlink:branch_path_for_notify(Path, Branch_Name, Branch_Path),
     (   plugin_api:indexer_available
     ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
-            plugin_api:indexer_reindex(Branch_Path, Branch_Name, Store_Clustering)
+            plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)
         ->  true
-        ;   throw(error(indexer_reindex_failed(io_index_branch), _))
+        ;   throw(error(indexer_notify_failed(io_index_branch), _))
         )
     ;   throw(error(indexer_ffi_not_loaded(io_index_branch), _))
+    ).
+
+%% io_delete_branch_index(+System_DB, +Auth, +Path) is det.
+%%
+%%  Wipe the branch's domain index — the wipe half of an explicit
+%%  rebuild. On a read-only instance enqueues a delete handoff task.
+io_delete_branch_index(System_DB, Auth, Path) :-
+    plugin_api:resolve_descriptor_action_auth(
+        '@schema':'Action/reindex_write', System_DB, Auth, Path, Descriptor),
+    do_or_die(
+        vectorlink_endpoint(Endpoint),
+        error(vectorlink_endpoint_not_configured(io_delete_branch_index), _)),
+    descriptor_domain(Descriptor, Domain),
+    (   plugin_api:indexer_engine_read_only
+    ->  plugin_api:indexer_enqueue_delete(Domain)
+    ;   io_delete_domain(Endpoint, Domain)
     ).
 
 %% branch_for_commit(+Repo_Desc, +Commit_Id, -Branch_Name) is semidet.
@@ -2410,39 +2442,28 @@ index_handler(get, Path, Request, System_DB, Auth) :-
         )
     ).
 
+index_handler(put, Path, Request, System_DB, Auth) :-
+    index_handler(post, Path, Request, System_DB, Auth).
+
 index_handler(post, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
         (   plugin_api:resolve_descriptor_action_auth(
                 '@schema':'Action/reindex_write', System_DB, Auth, Path, _Descriptor),
-            catch(
-                (   vectorlink:io_index_branch(System_DB, Auth, Path),
-                    plugin_api:write_cors_headers(Request),
-                    format("Content-Type: application/json~n~n"),
-                    (   plugin_api:indexer_engine_read_only
-                    ->  % This instance is read-only: the request was
-                        % written to the shared task queue for the
-                        % write-lock holder — no local task was spawned.
-                        json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
-                                'api:status':'api:success',
-                                'api:message':'Index request handed off to the instance holding the index write lock'}, [width(0)])
-                    ;   json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success'}, [width(0)])
-                    )
-                ),
-                Error,
-                (   (   Error = error(vectorlink_409_resolution_timeout, _)
-                    ->  true
-                    ;   Error = error(socket_error(epipe, _), _)
-                    ->  true
-                    ;   throw(Error)
-                    ),
-                    plugin_api:write_cors_headers(Request),
-                    format("Content-Type: application/json~n~n"),
-                    json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
-                                'api:status':'api:success',
-                                'api:message':'Index already in progress for this branch'}, [width(0)])
-                )
+            vectorlink:io_index_branch(System_DB, Auth, Path, Target_Commit),
+            plugin_api:write_cors_headers(Request),
+            format("Content-Type: application/json~n~n"),
+            (   plugin_api:indexer_engine_read_only
+            ->  % This instance is read-only: the request was
+                % written to the shared task queue for the
+                % write-lock holder — no local task was spawned.
+                json:json_write_dict(current_output, json{'@type':'api:IndexResponse',
+                        'api:status':'api:success',
+                        'api:target_commit':Target_Commit,
+                        'api:message':'Index request handed off to the instance holding the index write lock'}, [width(0)])
+            ;   json:json_write_dict(current_output, json{'@type':'api:IndexResponse','api:status':'api:success',
+                        'api:target_commit':Target_Commit}, [width(0)])
             )
         )
     ).
@@ -2451,19 +2472,10 @@ index_handler(delete, Path, Request, System_DB, Auth) :-
     plugin_api:api_report_errors(
         index,
         Request,
-        (   plugin_api:resolve_descriptor_action_auth(
-                '@schema':'Action/reindex_write', System_DB, Auth, Path, Descriptor),
-            do_or_die(vectorlink:vectorlink_endpoint(Endpoint),
-                      error(vectorlink_endpoint_not_configured(index_handler), _)),
-            vectorlink:descriptor_domain(Descriptor, Domain),
+        (   vectorlink:io_delete_branch_index(System_DB, Auth, Path),
             (   plugin_api:indexer_engine_read_only
-            ->  % This instance is read-only: write a delete task for the
-                % write-lock holder instead of hitting the engine, which
-                % would refuse the write with a 500.
-                plugin_api:indexer_enqueue_delete(Domain),
-                Message = "Index delete handed off to the instance holding the index write lock"
-            ;   vectorlink:io_delete_domain(Endpoint, Domain),
-                format(string(Message), "Index for ~w deleted", [Path])
+            ->  Message = "Index delete handed off to the instance holding the index write lock"
+            ;   format(string(Message), "Index for ~w deleted", [Path])
             ),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
@@ -2845,7 +2857,7 @@ embeddings_extra_param(Params, count=Count) :-
 :- plugin_api:register_route(api(index/Path),
     plugin_api:cors_handler(Method, vectorlink:index_handler(Path)),
     [method(Method), prefix, time_limit(infinite),
-     methods([options,get,post,delete])]).
+     methods([options,get,post,put,delete])]).
 
 :- plugin_api:register_route(api(search/Path),
     plugin_api:cors_handler(Method, vectorlink:search_handler(Path)),
