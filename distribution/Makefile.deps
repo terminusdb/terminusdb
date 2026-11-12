@@ -2,8 +2,6 @@ TUS_VERSION := v0.0.17
 
 SWIPL = LANG=C.UTF-8 $(SWIPL_DIR)swipl
 
-PACK_INSTALL_OPTIONS := [interactive(false)]
-
 ################################################################################
 
 .PHONY: default
@@ -19,12 +17,12 @@ install-tus: install-pack
 .PHONY: install-pack
 install-pack:
 	mkdir -p .deps/$(PACK_NAME)
-	git clone --depth 1 --branch $(BRANCH) $(REPO_URL) .deps/$(PACK_NAME) 2> /dev/null || git -C .deps/$(PACK_NAME) pull --quiet
+	if [ -d .deps/$(PACK_NAME)/.git ]; then git -C .deps/$(PACK_NAME) pull --quiet; else git clone --depth 1 --branch $(BRANCH) $(REPO_URL) .deps/$(PACK_NAME); fi
 	$(SWIPL) \
 	  --on-error=halt \
-	  -g "ignore(catch(pack_remove($(PACK_NAME)), _, fail))" \
-	  -g "ignore(catch(pack_install('file://$(CURDIR)/.deps/$(PACK_NAME)', $(PACK_INSTALL_OPTIONS)), _, fail))" \
-	  -g "pack_attach('$(CURDIR)/.deps/$(PACK_NAME)', [])" \
+	  -g "ensure_loaded(library(filesex))" \
+	  -g "( absolute_file_name(pack('.'), PackHome, [file_type(directory), access(write), file_errors(fail)]) -> true ; absolute_file_name(user_app_data(pack), PackHome, [file_errors(fail)]), make_directory_path(PackHome) ), directory_file_path(PackHome, $(PACK_NAME), Target), ( read_link(Target, _, _) -> delete_file(Target) ; exists_directory(Target) -> delete_directory_and_contents(Target) ; true ), link_file('$(CURDIR)/.deps/$(PACK_NAME)', Target, symbolic), writeln(pack_linked($(PACK_NAME), Target))" \
+	  -g "attach_packs('$(CURDIR)/.deps', [duplicate(replace)])" \
 	  -g "(use_module(library($(PACK_NAME))) -> writeln(pack_ok($(PACK_NAME))) ; halt(1))" \
 	  -g halt
 
