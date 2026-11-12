@@ -26,7 +26,7 @@ use crate::value::{
 
 use super::filter::{FilterInputObject, FilterInputObjectTypeInfo};
 use super::frame::*;
-use super::naming::{ordering_name, path_field_to_class, path_to_class_name};
+use super::naming::{interface_name, ordering_name, path_field_to_class, path_to_class_name};
 use super::query::{run_count_query, run_filter_query};
 use super::subscription::{SubscriptionResolveContext, TerminusSubscriptionRoot};
 
@@ -453,7 +453,13 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
                         class: name.as_static(),
                         allframes: info.allframes.clone(),
                     };
-                    let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
+                    let field = TerminusType::<C>::register_link_field(
+                        registry,
+                        name.as_str(),
+                        name,
+                        FieldKind::Set,
+                        &info.allframes,
+                    );
 
                     Some(add_arguments(&newinfo, registry, field, c))
                 } else {
@@ -470,7 +476,13 @@ impl<C: TerminusResolveContext> GraphQLType for TerminusTypeCollection<C> {
                     class: restrictiondef.on.to_owned(),
                     allframes: info.allframes.clone(),
                 };
-                let field = registry.field::<Vec<TerminusType<C>>>(name.as_str(), &newinfo);
+                let field = TerminusType::<C>::register_link_field(
+                    registry,
+                    name.as_str(),
+                    &restrictiondef.on,
+                    FieldKind::Set,
+                    &info.allframes,
+                );
                 let class_def;
                 if let TypeDefinition::Class(c) = info
                     .allframes
@@ -704,20 +716,11 @@ impl<C: TerminusResolveContext> GraphQLValue for TerminusTypeCollection<C> {
                         type_name,
                         &info.allframes,
                         zero_iter,
-                    )
-                    .into_iter()
-                    .map(TerminusType::<C>::new)
-                    .collect(),
+                    ),
                     None => vec![],
                 };
 
-                executor.resolve(
-                    &TerminusTypeInfo {
-                        class: type_name.as_static(),
-                        allframes: info.allframes.clone(),
-                    },
-                    &objects,
-                )
+                resolve_documents(objects, type_name, &info.allframes, executor)
             }
         }
     }
@@ -762,6 +765,41 @@ impl<C: TerminusResolveContext> TerminusType<C> {
         }
     }
 
+    /// Register a document link field. When the range class has
+    /// subclasses the field is typed as the generated `Class_Possible`
+    /// interface so that `... on Subclass` fragments are valid;
+    /// otherwise it is typed as the concrete class object.
+    fn register_link_field<'r>(
+        registry: &mut Registry<'r, DefaultScalarValue>,
+        field_name: &str,
+        class: &GraphQLName,
+        kind: FieldKind,
+        allframes: &Arc<AllFrames>,
+    ) -> Field<'r, DefaultScalarValue> {
+        if allframes.subsumed(class).len() > 1 {
+            Self::register_field::<TerminusInterface<C>>(
+                registry,
+                field_name,
+                &TerminusInterfaceInfo {
+                    class: class.as_static(),
+                    interface_name: interface_name(class),
+                    allframes: allframes.clone(),
+                },
+                kind,
+            )
+        } else {
+            Self::register_field::<TerminusType<C>>(
+                registry,
+                field_name,
+                &TerminusTypeInfo {
+                    class: class.as_static(),
+                    allframes: allframes.clone(),
+                },
+                kind,
+            )
+        }
+    }
+
     fn generate_class_type<'r>(
         class_name: &GraphQLName,
         d: &ClassDefinition,
@@ -771,20 +809,47 @@ impl<C: TerminusResolveContext> TerminusType<C> {
     where
         DefaultScalarValue: 'r,
     {
+        let fields = Self::generate_class_fields(class_name, d, info, registry);
+        let interface_types: Vec<_> = info
+            .allframes
+            .ancestors_of(class_name)
+            .iter()
+            .filter(|ancestor| info.allframes.subsumed(ancestor).len() > 1)
+            .map(|ancestor| {
+                registry.get_type::<TerminusInterface<C>>(&TerminusInterfaceInfo {
+                    class: ancestor.as_static(),
+                    interface_name: interface_name(ancestor),
+                    allframes: info.allframes.clone(),
+                })
+            })
+            .collect();
+        registry
+            .build_object_type::<TerminusType<C>>(info, &fields)
+            .interfaces(&interface_types)
+            .into_meta()
+    }
+
+    fn generate_class_fields<'r>(
+        class_name: &GraphQLName,
+        d: &ClassDefinition,
+        info: &<Self as GraphQLValue>::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> Vec<Field<'r, DefaultScalarValue>>
+    where
+        DefaultScalarValue: 'r,
+    {
         let frames = &info.allframes;
         let mut fields: Vec<_> = d
             .fields()
             .iter()
             .map(|(field_name, field_definition)| {
                 if let Some(document_type) = field_definition.document_type(frames) {
-                    let field = Self::register_field::<TerminusType<C>>(
+                    let field = Self::register_link_field(
                         registry,
                         field_name.as_str(),
-                        &TerminusTypeInfo {
-                            class: document_type.as_static(),
-                            allframes: frames.clone(),
-                        },
+                        document_type,
                         field_definition.kind(),
+                        frames,
                     );
 
                     if field_definition.kind().is_collection() {
@@ -888,11 +953,12 @@ impl<C: TerminusResolveContext> TerminusType<C> {
                     class: class.as_static(),
                     allframes: frames.clone(),
                 };
-                let field = Self::register_field::<TerminusType<C>>(
+                let field = Self::register_link_field(
                     registry,
                     field_name.as_str(),
-                    &new_info,
+                    class,
                     FieldKind::Set,
+                    frames,
                 );
                 let field = add_arguments(&new_info, registry, field, class_definition);
 
@@ -912,11 +978,12 @@ impl<C: TerminusResolveContext> TerminusType<C> {
                 class: class.as_static(),
                 allframes: frames.clone(),
             };
-            let field = Self::register_field::<TerminusType<C>>(
+            let field = Self::register_link_field(
                 registry,
                 field_name.as_str(),
-                &new_info,
+                class,
                 FieldKind::Set,
+                frames,
             );
             let field = add_arguments(&new_info, registry, field, class_definition);
             let field = field.argument(registry.arg::<String>("path", &()));
@@ -948,9 +1015,7 @@ impl<C: TerminusResolveContext> TerminusType<C> {
 
         fields.extend(standard_type_operators::<C>(registry));
 
-        registry
-            .build_object_type::<TerminusType<C>>(info, &fields)
-            .into_meta()
+        fields
     }
 }
 
@@ -1453,13 +1518,24 @@ fn extract_fragment<C: TerminusResolveContext>(
     is_json: bool,
 ) -> Option<Result<juniper::Value, juniper::FieldError>> {
     if let Some(doc_type) = doc_type {
-        Some(executor.resolve(
-            &TerminusTypeInfo {
-                class: doc_type.as_static(),
-                allframes: info.allframes.clone(),
-            },
-            &TerminusType::<C>::new(object_id),
-        ))
+        if info.allframes.subsumed(doc_type).len() > 1 {
+            Some(executor.resolve(
+                &TerminusInterfaceInfo {
+                    class: doc_type.as_static(),
+                    interface_name: interface_name(doc_type),
+                    allframes: info.allframes.clone(),
+                },
+                &TerminusInterface::<C>::new(object_id),
+            ))
+        } else {
+            Some(executor.resolve(
+                &TerminusTypeInfo {
+                    class: doc_type.as_static(),
+                    allframes: info.allframes.clone(),
+                },
+                &TerminusType::<C>::new(object_id),
+            ))
+        }
     } else if let Some(enum_type) = enum_type {
         let value = extract_enum_fragment(info, instance, object_id, enum_type);
         Some(Ok(value))
@@ -1654,6 +1730,117 @@ impl GraphQLValue for TerminusEnum {
     }
 }
 
+/// TypeInfo for the generated `Class_Possible` interface. `class` is the
+/// declared base class used for field generation; `interface_name` is the
+/// name the interface is registered under.
+pub struct TerminusInterfaceInfo {
+    pub class: GraphQLName<'static>,
+    pub interface_name: GraphQLName<'static>,
+    pub allframes: Arc<AllFrames>,
+}
+
+/// A document id typed at a base class position whose range class has
+/// subclasses. Field and fragment resolution delegate to `TerminusType`
+/// with the document's concrete class so subclass fields resolve.
+pub struct TerminusInterface<C: TerminusResolveContext> {
+    id: u64,
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: TerminusResolveContext> TerminusInterface<C> {
+    fn new(id: u64) -> Self {
+        Self {
+            id,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// TerminusTypeInfo for the declared base class.
+    fn object_info(info: &TerminusInterfaceInfo) -> TerminusTypeInfo {
+        TerminusTypeInfo {
+            class: info.class.as_static(),
+            allframes: info.allframes.clone(),
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLType for TerminusInterface<C> {
+    fn name(info: &Self::TypeInfo) -> Option<&str> {
+        Some(info.interface_name.as_str())
+    }
+
+    fn meta<'r>(
+        info: &Self::TypeInfo,
+        registry: &mut juniper::Registry<'r, DefaultScalarValue>,
+    ) -> juniper::meta::MetaType<'r, DefaultScalarValue>
+    where
+        DefaultScalarValue: 'r,
+    {
+        let allframes = &info.allframes;
+        let frame = &allframes.frames[&info.class];
+        match frame {
+            TypeDefinition::Class(d) => {
+                let obj_info = Self::object_info(info);
+                let fields =
+                    TerminusType::<C>::generate_class_fields(&info.class, d, &obj_info, registry);
+                registry
+                    .build_interface_type::<TerminusInterface<C>>(info, &fields)
+                    .into_meta()
+            }
+            TypeDefinition::Enum(_) => panic!("no enum expected here"),
+        }
+    }
+}
+
+impl<C: TerminusResolveContext> GraphQLValue for TerminusInterface<C> {
+    type Context = C;
+
+    type TypeInfo = TerminusInterfaceInfo;
+
+    fn type_name<'i>(&self, info: &'i Self::TypeInfo) -> Option<&'i str> {
+        Some(info.interface_name.as_str())
+    }
+
+    fn concrete_type_name(&self, context: &Self::Context, info: &Self::TypeInfo) -> String {
+        TerminusType::<C>::new(self.id).concrete_type_name(context, &Self::object_info(info))
+    }
+
+    fn resolve_into_type(
+        &self,
+        info: &Self::TypeInfo,
+        type_name: &str,
+        selection_set: Option<&[juniper::Selection<DefaultScalarValue>]>,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult<DefaultScalarValue> {
+        // Juniper calls this only when `type_name` is the document's
+        // concrete class, so resolve the selection with that class's
+        // TypeInfo — its object meta carries the fragment's fields.
+        let concrete = TerminusTypeInfo {
+            class: GraphQLName(type_name.to_string().into()),
+            allframes: info.allframes.clone(),
+        };
+        TerminusType::<C>::new(self.id).resolve(&concrete, selection_set, executor)
+    }
+
+    fn resolve_field(
+        &self,
+        info: &Self::TypeInfo,
+        field_name: &str,
+        arguments: &juniper::Arguments,
+        executor: &juniper::Executor<Self::Context, DefaultScalarValue>,
+    ) -> juniper::ExecutionResult {
+        // Interface positions only expose base-class fields, all of
+        // which the base class definition carries, so resolve with the
+        // declared class info — no concrete rdf:type read needed here.
+        TerminusType::<C>::new(self.id).resolve_field(
+            &Self::object_info(info),
+            field_name,
+            arguments,
+            executor,
+        )
+    }
+}
+
 struct SimpleArrayIterator<'a, L: Layer>(ArrayIterator<'a, L>);
 
 impl<'a, L: Layer> Iterator for SimpleArrayIterator<'a, L> {
@@ -1677,6 +1864,43 @@ struct ListElementType<'a> {
     doc_type: Option<&'a GraphQLName<'a>>,
     enum_type: Option<&'a GraphQLName<'a>>,
     is_json: bool,
+}
+
+/// Resolve document ids against `class`. When the class has subclasses
+/// the values are `TerminusInterface` resolved against the `Class_Possible`
+/// interface; otherwise they are `TerminusType` objects.
+fn resolve_documents<C: TerminusResolveContext>(
+    object_ids: Vec<u64>,
+    class: &GraphQLName,
+    allframes: &Arc<AllFrames>,
+    executor: &juniper::Executor<C>,
+) -> juniper::ExecutionResult<DefaultScalarValue> {
+    if allframes.subsumed(class).len() > 1 {
+        let objects: Vec<_> = object_ids
+            .into_iter()
+            .map(TerminusInterface::<C>::new)
+            .collect();
+        executor.resolve(
+            &TerminusInterfaceInfo {
+                class: class.as_static(),
+                interface_name: interface_name(class),
+                allframes: allframes.clone(),
+            },
+            &objects,
+        )
+    } else {
+        let objects: Vec<_> = object_ids
+            .into_iter()
+            .map(TerminusType::<C>::new)
+            .collect();
+        executor.resolve(
+            &TerminusTypeInfo {
+                class: class.as_static(),
+                allframes: allframes.clone(),
+            },
+            &objects,
+        )
+    }
 }
 
 fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
@@ -1704,13 +1928,11 @@ fn collect_into_graphql_list<'a, C: TerminusResolveContext>(
             ),
             None => vec![],
         };
-        let subdocs: Vec<_> = object_ids.into_iter().map(TerminusType::<C>::new).collect();
-        Some(executor.resolve(
-            &TerminusTypeInfo {
-                class: doc_type.as_static(),
-                allframes: info.allframes.clone(),
-            },
-            &subdocs,
+        Some(resolve_documents(
+            object_ids,
+            doc_type,
+            &info.allframes,
+            executor,
         ))
     } else if let Some(enum_type) = enum_type {
         let vals: Vec<_> = object_ids
