@@ -1889,10 +1889,7 @@ fn resolve_documents<C: TerminusResolveContext>(
             &objects,
         )
     } else {
-        let objects: Vec<_> = object_ids
-            .into_iter()
-            .map(TerminusType::<C>::new)
-            .collect();
+        let objects: Vec<_> = object_ids.into_iter().map(TerminusType::<C>::new).collect();
         executor.resolve(
             &TerminusTypeInfo {
                 class: class.as_static(),

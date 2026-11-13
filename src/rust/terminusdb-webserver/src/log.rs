@@ -1,4 +1,4 @@
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use swipl::prelude::*;
@@ -98,7 +98,10 @@ pub fn drain_log_messages<CT: QueryableContextType>(
     }
 }
 
-fn log_to_context<CT: QueryableContextType>(context: &Context<CT>, entry: &LogEntry) -> PrologResult<()> {
+fn log_to_context<CT: QueryableContextType>(
+    context: &Context<CT>,
+    entry: &LogEntry,
+) -> PrologResult<()> {
     let f = context.open_frame();
     // Call json_log:json_log_rust/3 which accepts a pre-captured timestamp
     // (as a float of seconds since epoch) and formats it with the same
@@ -156,7 +159,10 @@ impl log::Log for PrologLogger {
             log::Level::Info => "INFO",
             log::Level::Debug | log::Level::Trace => "DEBUG",
         };
-        log(severity, &format!("[{}] {}", record.target(), record.args()));
+        log(
+            severity,
+            &format!("[{}] {}", record.target(), record.args()),
+        );
     }
 
     fn flush(&self) {}

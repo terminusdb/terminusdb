@@ -357,8 +357,8 @@ pub fn type_collection_from_term<'a, C: QueryableContextType>(
     context: &Context<'a, C>,
     frame_term: &Term,
 ) -> PrologResult<TerminusTypeCollectionInfo> {
-    let pre_frames: UncleanAllFrames = context
-        .try_or_die_generic(context.deserialize_from_term(frame_term))?;
+    let pre_frames: UncleanAllFrames =
+        context.try_or_die_generic(context.deserialize_from_term(frame_term))?;
     let frames: AllFrames = pre_frames.finalize();
 
     Ok(TerminusTypeCollectionInfo {
