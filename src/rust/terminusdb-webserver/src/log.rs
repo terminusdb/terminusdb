@@ -74,9 +74,27 @@ fn log(severity: &str, msg: &str) {
 
 /// Process pending log messages using the given Prolog context.
 /// Called from the dispatcher thread's engine loop.
-pub fn drain_log_messages<CT: QueryableContextType>(context: &Context<CT>, rx: &Receiver<LogEntry>) {
-    while let Ok(entry) = rx.try_recv() {
-        let _ = log_to_context(context, &entry);
+/// Drains pending log entries, stopping at `max` entries or `budget`
+/// elapsed, whichever comes first. Callers bound the pass so a sustained
+/// log flood cannot starve other work on this thread; entries keep
+/// channel order across passes.
+pub fn drain_log_messages<CT: QueryableContextType>(
+    context: &Context<CT>,
+    rx: &Receiver<LogEntry>,
+    max: usize,
+    budget: std::time::Duration,
+) {
+    let start = std::time::Instant::now();
+    for _ in 0..max {
+        match rx.try_recv() {
+            Ok(entry) => {
+                let _ = log_to_context(context, &entry);
+            }
+            Err(_) => break,
+        }
+        if start.elapsed() >= budget {
+            break;
+        }
     }
 }
 

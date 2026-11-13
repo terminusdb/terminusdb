@@ -42,7 +42,7 @@ export default [
   },
   {
     // Suites are intentionally gated on env vars (local binary required).
-    files: ['test/memory-mode.js', 'test/index-handoff.js'],
+    files: ['test/memory-mode.js', 'test/index-handoff.js', 'test/indexer-independence.js'],
     rules: {
       'mocha/no-conditional-tests': 'off',
     },
