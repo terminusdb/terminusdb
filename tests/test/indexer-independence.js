@@ -136,7 +136,7 @@ async function poll (fn, timeoutMs, intervalMs = 250) {
     if (last) return last
     await new Promise(resolve => setTimeout(resolve, intervalMs)) // NOSONAR — polling is serialized by definition
   }
-  throw new Error('poll timed out')
+  throw new Error(`poll timed out; last=${JSON.stringify(last)}`)
 }
 
 async function waitForServer (port, timeoutMs = 30000) {
@@ -201,6 +201,10 @@ describe('Indexer lane independence', function () {
       VECTORLINK_EMBED_CACHE_SIZE: '3000000',
       TERMINUSDB_WORKER_POOL_SIZE: '1',
       TERMINUSDB_COMMIT_QUEUE_TIMEOUT: '5',
+      // Loopback-only traffic — never let an inherited proxy env route
+      // the embed calls through a dead proxy.
+      NO_PROXY: '127.0.0.1,localhost',
+      no_proxy: '127.0.0.1,localhost',
     }
   }
 
@@ -264,7 +268,9 @@ describe('Indexer lane independence', function () {
 
     // The engine is now parked on the held embed call and the indexing
     // worker keeps writing into a backing-up pipe.
-    await poll(async () => embed.state.calls >= 1, 60000)
+    await poll(async () => embed.state.calls >= 1, 60000).catch(e => {
+      throw new Error(`embed endpoint never received a call (calls=${embed.state.calls}): ${e.message}`)
+    })
 
     // 5s is far below the remaining indexing time but generous for a
     // free worker — before the dedicated lane this queued behind the
