@@ -1,6 +1,4 @@
-use std::{
-    cell::RefCell, collections::HashMap, io::Write, num::NonZeroUsize, rc::Rc, sync::Arc,
-};
+use std::{cell::RefCell, collections::HashMap, io::Write, num::NonZeroUsize, rc::Rc, sync::Arc};
 
 use crate::{
     graphql::{
