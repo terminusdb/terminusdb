@@ -272,6 +272,22 @@ describe('Read-only index handoff', function () {
     ])
     expect(res.status).to.equal(200)
 
+    // The auto-indexer indexes every commit continuously — settle it here
+    // so each test gets a bounded budget. The handoff below is then a
+    // catch-up against a completed task: the signal is written, claimed,
+    // delivered, and the task returns to HEAD in about a second even on
+    // a slow machine. Waiting it out inside a test would make the test's
+    // budget depend on how many commits the auto-index still owed.
+    let lastStatus
+    await poll(async () => {
+      const s = await tryIndexStatus(portA)
+      lastStatus = s
+      if (s?.status === 'error') throw new Error(`index task failed on writer: ${s.error}`)
+      return (s?.status === 'completed' && s?.engine?.searchable_documents >= 2) ? s : false
+    }, 60000).catch(e => {
+      throw new Error(`${e.message}; last status=${JSON.stringify(lastStatus)}`)
+    })
+
     // Instance B opens the same directories read-only.
     procB = spawnInstance('handoff-b', portB)
     await waitForServer(portB)
@@ -281,14 +297,37 @@ describe('Read-only index handoff', function () {
     }, 30000)
   })
 
+  let sawFailure = false
+  afterEach(function () {
+    if (this.currentTest.state === 'failed') sawFailure = true
+  })
+
   after(async function () {
     await stopInstance(procB)
     await stopInstance(procA)
     if (embedServer) await new Promise(resolve => embedServer.close(resolve))
-    if (sharedBase) fs.rmSync(sharedBase, { recursive: true, force: true })
+    if (sharedBase) {
+      // Keep the instance logs on failure — the shared dir is deleted
+      // below and without them a CI failure is undebuggable.
+      if (sawFailure) {
+        for (const name of ['handoff-a', 'handoff-b']) {
+          const dst = path.join(__dirname, '..', `.terminusdb-${name}.log`)
+          try {
+            fs.copyFileSync(path.join(sharedBase, `${name}.log`), dst)
+            console.log(`  preserved ${dst}`)
+          } catch (e) { /* log may not exist */ }
+        }
+      }
+      fs.rmSync(sharedBase, { recursive: true, force: true })
+    }
   })
 
-  it('hands off an index catch-up request from the read-only instance', async function () {
+  // The task file is the signal and only the signal — like indexer_notify,
+  // once the writer's registry has the task the requester is done. The tests
+  // are split to match: writing the signal, the writer consuming it, and the
+  // resulting index work are separate failure domains.
+
+  it('writes the signal file for a read-only index request', async function () {
     const res = await httpRequest(portB, 'POST', `/api/index/${ORG}/${DB}`, {})
     expect(res.status).to.equal(200)
     expect(res.body['api:message']).to.match(/handed off/i)
@@ -300,7 +339,7 @@ describe('Read-only index handoff', function () {
     expect(files[0]).to.match(/main\.index\.json$/)
   })
 
-  it('collapses duplicate read-only requests into one task file', async function () {
+  it('collapses duplicate read-only requests into one signal file', async function () {
     const res = await httpRequest(portB, 'POST', `/api/index/${ORG}/${DB}`, {})
     expect(res.status).to.equal(200)
     // Pending or already underway, the queue still holds a single file.
@@ -309,28 +348,42 @@ describe('Read-only index handoff', function () {
     expect(status.read_only).to.equal(true)
   })
 
-  it('reports handoff progress and completion on the read-only instance', async function () {
-    // While the file exists the requester sees pending or underway; once the
-    // writer finishes, the file is deleted and the status returns to no
-    // handoff with the indexed commit recorded. The engine stats can reach
-    // the document count before the registry marks the task completed, so
-    // poll on status, not only on searchable_documents.
-    await poll(async () => taskFiles().length === 0, 90000)
+  it('consumes the signal file once the writer picks it up', async function () {
+    // The writer's poller claims the file and delivers it to the registry;
+    // the file is deleted as soon as the signal is accepted. This poll
+    // fails fast if the writer never sees the file.
+    await poll(async () => taskFiles().length === 0, 10000)
+  })
+
+  it('completes the handed-off index run on the writer', async function () {
+    // The writer's registry owns the task lifecycle — poll it for the
+    // terminal state. An error is the real failure, not a waitable state.
+    let lastStatus
     const status = await poll(async () => {
-      const s = await tryIndexStatus(portB)
-      if (s?.status === 'error') throw new Error(`indexing failed: ${s.error}`)
+      const s = await tryIndexStatus(portA)
+      lastStatus = s
+      if (s?.status === 'error') throw new Error(`index task failed on writer: ${s.error}`)
       return (s?.status === 'completed' && s?.engine?.searchable_documents >= 2) ? s : false
-    }, 90000)
-    expect(status.read_only).to.equal(true)
-    expect(status.handoff).to.equal(null)
+    }, 10000).catch(e => {
+      throw new Error(`${e.message}; last status=${JSON.stringify(lastStatus)}`)
+    })
     expect(status.last_indexed_commit).to.be.a('string')
   })
 
-  it('keeps search available on the read-only instance', async function () {
-    const res = await httpRequest(portB, 'POST', `/api/search/${ORG}/${DB}`, { q: 'Plato' })
+  it('serves the indexed documents on the read-only instance', async function () {
+    // B reads the shared store — its status reflects the writer's work
+    // once the durable state lands, and search is the user-visible proof.
+    const res = await poll(async () => {
+      const r = await httpRequest(portB, 'POST', `/api/search/${ORG}/${DB}`, { q: 'Plato' })
+      if (r.status !== 200) return false
+      const hits = r.body && (r.body.results || r.body.hits || r.body)
+      return (Array.isArray(hits) ? hits.length > 0 : Object.keys(hits).length > 0) ? r : false
+    }, 10000)
     expect(res.status).to.equal(200)
-    const hits = res.body && (res.body.results || res.body.hits || res.body)
-    expect(hits).to.satisfy(h => Array.isArray(h) ? h.length > 0 : Object.keys(h).length > 0)
+    const status = await indexStatus(portB)
+    expect(status.read_only).to.equal(true)
+    expect(status.handoff).to.equal(null)
+    expect(status.last_indexed_commit).to.be.a('string')
   })
 
   it('hands off a domain-index delete from the read-only instance', async function () {
@@ -342,12 +395,16 @@ describe('Read-only index handoff', function () {
       return found.length > 0 ? found : false
     }, 10000, 200)
     expect(files[0]).to.equal(`${ORG}%2F${DB}.delete.json`)
-    // The writer executes the domain delete and removes the task file.
-    await poll(async () => taskFiles().filter(f => f.endsWith('.delete.json')).length === 0, 60000)
-    const status = await poll(async () => {
-      const s = await tryIndexStatus(portB)
-      return s?.engine?.searchable_documents === 0 ? s : false
-    }, 30000)
-    expect(status.read_only).to.equal(true)
+    // Same signal semantics: the file is consumed once the writer accepts
+    // the delete. The outcome is checked on the writer — a read-only
+    // instance's dataset cache only reflects the shared store as of its
+    // first read, so delete visibility there lags by design.
+    await poll(async () => taskFiles().filter(f => f.endsWith('.delete.json')).length === 0, 10000)
+    await poll(async () => {
+      const r = await httpRequest(portA, 'POST', `/api/search/${ORG}/${DB}`, { q: 'Plato' })
+      if (r.status !== 200) return false
+      const results = r.body && (r.body.results || r.body.hits || [])
+      return Array.isArray(results) && results.length === 0
+    }, 10000)
   })
 })

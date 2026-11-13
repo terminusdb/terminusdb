@@ -37,6 +37,7 @@ tests/.terminusdb-test-7373.log
 tests/.terminusdb-test-7373.pid
 tests/.terminusdb-test-*.log
 tests/.terminusdb-test-*.pid
+tests/.terminusdb-handoff-*.log
 dashboard/src/assets/openapi.json
 
 assets/
@@ -52,3 +53,4 @@ tests/acid/jepsen/target/
 tests/acid/jepsen/.cpcache/
 tests/acid/**/__pycache__/
 tests/acid/jepsen/secret/
+docker/vectorsearch/.env
