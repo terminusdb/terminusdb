@@ -1927,6 +1927,8 @@ async fn post_push_stream(
     let mut ndjson_buf = String::new();
     let mut terminal_status: Option<String> = None;
     let mut terminal_error: Option<String> = None;
+    let mut terminal_indexed: u64 = 0;
+    let mut terminal_skipped: Option<(usize, String)> = None;
 
     while let Some(chunk_result) = resp_stream.next().await {
         match chunk_result {
@@ -1981,6 +1983,21 @@ async fn post_push_stream(
                                     // Ensure processed_documents reflects the
                                     // final count from vectorlink.
                                     progress.set_processed_documents(indexed_documents);
+                                    terminal_indexed = indexed_documents;
+                                    // SkippedDoc[] — count + first reason, for
+                                    // surfacing a total-skip push as an error.
+                                    terminal_skipped = json
+                                        .get("skipped")
+                                        .and_then(|v| v.as_array())
+                                        .filter(|arr| !arr.is_empty())
+                                        .map(|arr| {
+                                            let first = arr[0]
+                                                .get("message")
+                                                .and_then(|m| m.as_str())
+                                                .unwrap_or("unknown")
+                                                .to_owned();
+                                            (arr.len(), first)
+                                        });
                                     terminal_status = Some("complete".to_owned());
                                 }
                                 "error" => {
@@ -2024,7 +2041,23 @@ async fn post_push_stream(
     }
 
     match terminal_status.as_deref() {
-        Some("complete") => Ok(()),
+        Some("complete") => {
+            // The engine tags the commit even when every streamed doc was
+            // skipped (RISK-26: advance catch-up past empty commits). An
+            // all-skipped outcome with zero stored documents is not an
+            // empty commit — it is a systemic failure (dead endpoint,
+            // misconfigured provider) that would otherwise surface as a
+            // misleading status=completed with 0 searchable documents.
+            // Skips are failures only — delete ops do not land here.
+            match terminal_skipped {
+                Some((count, reason)) if terminal_indexed == 0 => Err(format!(
+                    "POST /push indexed no documents: all {} sent docs were skipped (first: {})",
+                    count.max(progress.documents_sent.load(Ordering::SeqCst) as usize),
+                    reason
+                )),
+                _ => Ok(()),
+            }
+        }
         Some("aborted") => Ok(()),
         Some("error") => Err(format!(
             "POST /push pipeline error: {}",
