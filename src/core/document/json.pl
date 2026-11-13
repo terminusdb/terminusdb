@@ -3365,8 +3365,8 @@ write_json_string_to_instance(Context, String) :-
     open_string(String, Stream),
     write_json_stream_to_instance(Context, Stream).
 
-json_to_database_type(D^^T, OC) :-
-    json_to_database_type(D^^T, [], OC).
+json_to_database_type(O, OC) :-
+    json_to_database_type(O, [], OC).
 
 json_to_database_type(D^^T, _, _) :-
     is_list(D),
@@ -3519,14 +3519,17 @@ nuke_schema_documents(Query_Context) :-
 
 check_existing_document_status(Transaction, Id, Variety, Status) :-
     database_instance(Transaction, Instance),
-    (   Variety = value_hash
-    ->  (   xrdf(Instance, Id, _, _)
-        ->  Status = equivalent
-        ;   Status = not_present)
-    ;   (   xrdf(Instance, Id, _, _)
-        ->  Status = present
-        ;   Status = not_present)
-    ).
+    existing_document_status_(Instance, Id, Variety, Status).
+
+existing_document_status_(Instance, Id, value_hash, Status) :-
+    !,
+    (   xrdf(Instance, Id, _, _)
+    ->  Status = equivalent
+    ;   Status = not_present).
+existing_document_status_(Instance, Id, _Variety, Status) :-
+    (   xrdf(Instance, Id, _, _)
+    ->  Status = present
+    ;   Status = not_present).
 
 %! check_id_pairs_not_present(+Transaction, +Elaborated, +Id_Pairs, +Merge) is det.
 %
@@ -3535,9 +3538,10 @@ check_existing_document_status(Transaction, Id, Variety, Status) :-
 %  submitted member is structurally identical to the stored document (an
 %  exact repeat); differing content at the same id remains an error.
 check_id_pairs_not_present(Transaction, Elaborated, Id_Pairs, Merge) :-
+    database_instance(Transaction, Instance),
     forall(
         member(Id-Variety, Id_Pairs),
-        (   check_existing_document_status(Transaction, Id, Variety, Status),
+        (   existing_document_status_(Instance, Id, Variety, Status),
             (   Status = present
             ->  (   Merge = true,
                     elaborated_member_equivalent(Transaction, Elaborated, Id)
@@ -3824,11 +3828,10 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     % insert
     forall(
         json_triple_(Elaborated, Cast_Prefixes, t(S,P,O)),
-        (   (   O = _^^OT
-            ->  context_hint_for_type(OT, Cast_Prefixes, O_Hint)
-            ;   O_Hint = []
+        (   (   O = _^^OT, context_prefix_datatype(OT)
+            ->  json_to_database_type(O, [prefixes(Cast_Prefixes)], OC)
+            ;   json_to_database_type(O, OC)
             ),
-            json_to_database_type(O, O_Hint, OC),
             insert(Instance, S, P, OC, _))
     ).
 
