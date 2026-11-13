@@ -573,7 +573,7 @@ open_descriptor_(Descriptor, _Commit_Info, Transaction_Object, Map,
     ;   db_currently_creating(Organization_Name, Database_Name),
         database_exists(system_descriptor{}, Organization_Name, Database_Name),
         \+ database_finalized(system_descriptor{}, Organization_Name, Database_Name)
-    ->  throw(error(database_not_finalized(Organization_Name, Database_Name), _))
+    ->  await_database_finalized(Organization_Name, Database_Name)
     ;   db_failed(Organization_Name, Database_Name, Failed_Since)
     ->  (   get_time(Now), Now - Failed_Since < 1800
         ->  throw(error(database_unservable(Organization_Name, Database_Name), _))
@@ -822,6 +822,25 @@ await_database_load(Organization_Name, Database_Name) :-
     (   db_failed(Organization_Name, Database_Name, _)
     ->  throw(error(database_unservable(Organization_Name, Database_Name), _))
     ;   true).
+
+%% await_database_finalized(+Organization_Name, +Database_Name) is det.
+%
+%  Wait out the remainder of a database creation: while its creating
+%  flag is asserted the request blocks for it, so an open that lands
+%  inside create_db's finalize window serves the finished database
+%  instead of database_not_finalized. Creation concluding without the
+%  flag still asserted past the wait answers database_not_finalized —
+%  the same error an instant answer gave before, just slower to give up.
+await_database_finalized(Organization_Name, Database_Name) :-
+    db_load_wait(Seconds),
+    Polls is max(1, ceil(Seconds * 2)),
+    await_database_finalized(Organization_Name, Database_Name, Polls).
+
+await_database_finalized(Organization_Name, Database_Name, Polls) :-
+    (   retry_startup(Polls, (\+ db_currently_creating(Organization_Name, Database_Name)))
+    ->  true
+    ;   throw(error(database_not_finalized(Organization_Name, Database_Name), _))
+    ).
 
 %% db_load_wait(-Seconds) is det.
 %
@@ -1613,6 +1632,28 @@ test(open_commit_descriptor_with_nonexistent, [
           true),
 
     E = commit_does_not_exist(_).
+
+test(await_database_finalized_returns_when_not_creating) :-
+    await_database_finalized("admin", "never-created").
+
+test(await_database_finalized_waits_out_creation, [
+         setup(assert(descriptor:db_currently_creating("admin", "creating-db"))),
+         cleanup(retractall(descriptor:db_currently_creating("admin", "creating-db")))
+     ])
+:-
+    thread_create(
+        (sleep(1), retractall(descriptor:db_currently_creating("admin", "creating-db"))),
+        _,
+        [detached(true)]),
+    await_database_finalized("admin", "creating-db").
+
+test(await_database_finalized_times_out_creation, [
+         setup(assert(descriptor:db_currently_creating("admin", "stuck-db"))),
+         cleanup(retractall(descriptor:db_currently_creating("admin", "stuck-db"))),
+         throws(error(database_not_finalized("admin", "stuck-db"), _))
+     ])
+:-
+    await_database_finalized("admin", "stuck-db", 2).
 
 
 :- end_tests(open_descriptor).

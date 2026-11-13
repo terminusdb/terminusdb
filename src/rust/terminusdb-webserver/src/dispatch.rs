@@ -787,6 +787,7 @@ pub struct PipeDispatchRequest {
     pub(crate) output_worker_write_fd: i32,
     pub(crate) binary: bool,
     pub(crate) request_id: String,
+    pub(crate) indexer_worker: bool,
 }
 
 /// Message sent to the single-engine dispatcher queue.
@@ -838,6 +839,13 @@ pub fn dispatcher_initialized() -> bool {
     DISPATCH_QUEUE.get().is_some()
 }
 
+/// Bounds on the log drain before each dispatch. Each entry costs a full
+/// `call_once` FFI round trip, so both an entry count and a time budget
+/// keep dispatch latency independent of log volume; the channel is
+/// unbounded so nothing drops.
+const LOG_DRAIN_PER_DISPATCH: usize = 64;
+const LOG_DRAIN_BUDGET: std::time::Duration = std::time::Duration::from_millis(10);
+
 /// Initialize the single-engine request dispatcher. Must be called once
 /// before the webserver starts accepting requests.
 pub fn init_dispatcher() {
@@ -878,11 +886,18 @@ pub fn init_dispatcher() {
         let context: Context<_> = activation.into();
 
         // Drain any log messages that were queued before the engine was ready.
-        crate::log::drain_log_messages(&context, &log_rx);
+        crate::log::drain_log_messages(&context, &log_rx, usize::MAX, std::time::Duration::MAX);
 
         while let Some(msg) = rx.blocking_recv() {
-            // Process pending log messages before each dispatch.
-            crate::log::drain_log_messages(&context, &log_rx);
+            // Process pending log messages before each dispatch — bounded
+            // so a sustained flood (an index run emits per-document lines)
+            // cannot starve queued dispatches; leftovers drain next pass.
+            crate::log::drain_log_messages(
+                &context,
+                &log_rx,
+                LOG_DRAIN_PER_DISPATCH,
+                LOG_DRAIN_BUDGET,
+            );
             match msg {
                 DispatchMessage::Shutdown => break,
                 DispatchMessage::Pipe(req) => {
@@ -1067,8 +1082,13 @@ fn dispatch_pipe_to_prolog(
         .put(&Atom::new(&req.request_id))
         .map_err(|_| PrologError::Failure)?;
 
+    let functor_name = if req.indexer_worker {
+        "dispatch_indexer_request"
+    } else {
+        "dispatch_request"
+    };
     let callable = CallablePredicate::new(Predicate::new(
-        Functor::new(Atom::new("dispatch_request"), 7),
+        Functor::new(Atom::new(functor_name), 7),
         Module::new(Atom::new("request_worker_pool")),
     ))
     .map_err(|_| PrologError::Failure)?;
@@ -2400,6 +2420,7 @@ async fn dispatch_request_via_pipe(
         output_worker_write_fd,
         binary,
         request_id: request_id.clone(),
+        indexer_worker: false,
     };
 
     let mut output_receiver = match Receiver::from_owned_fd(output_read) {

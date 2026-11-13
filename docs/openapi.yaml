@@ -4841,19 +4841,28 @@ paths:
     post:
       tags: [Search & Entity Resolution]
       operationId: triggerIndex
-      summary: Trigger an explicit reindex of a branch.
+      summary: Trigger an index catch-up of a branch.
       description: |
-        Kicks off an asynchronous index build for the addressed branch.
-        If an index is already in progress for this branch, the request
-        returns success with a message indicating the index is already
-        running (idempotent).
+        Starts an asynchronous catch-up for the addressed branch: the
+        indexer resumes from the engine's last-indexed commit and indexes
+        every commit up to the current branch head. The request never
+        blocks and never rebuilds — a rebuild is `DELETE` followed by
+        this trigger. Repeated calls fold into the run already in
+        progress, so the endpoint is safe to call on a schedule for
+        manual (non-automatic) indexing.
 
-        **Authorization:** requires read access to the addressed data product.
+        The response carries `api:target_commit`: the branch head at
+        trigger time — the commit the catch-up runs toward. Poll
+        `GET /index/{path}` until `status` is `completed` and
+        `last_indexed_commit` is at or past it.
+
+        **Authorization:** requires reindex-write access to the
+        addressed data product.
       parameters:
         - $ref: '#/components/parameters/search_path'
       responses:
         200:
-          description: Index triggered successfully.
+          description: Index catch-up triggered.
           content:
             application/json:
               schema:
@@ -4863,12 +4872,34 @@ paths:
                   value:
                     '@type': api:IndexResponse
                     api:status: api:success
-                alreadyRunning:
-                  summary: Index already in progress
-                  value:
-                    '@type': api:IndexResponse
-                    api:status: api:success
-                    api:message: Index already in progress for this branch
+                    api:target_commit: "b0a2f6c0d5e34d2f8a4a1b0d0ab2e5d6f7e8c9d0"
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        503:
+          description: Search backend unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+    put:
+      tags: [Search & Entity Resolution]
+      operationId: triggerIndexPut
+      summary: Trigger an index catch-up of a branch (PUT synonym).
+      description: |
+        Identical to `POST /index/{path}` — see that operation for the
+        contract, the `api:target_commit` response, and the poll
+        pattern.
+      parameters:
+        - $ref: '#/components/parameters/search_path'
+      responses:
+        200:
+          description: Index catch-up triggered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponse'
         401:
           $ref: '#/components/responses/IncorrectAuthenticationError'
         403:
@@ -5828,7 +5859,7 @@ components:
 
     IndexStatus:
       type: object
-      required: [status, branch, last_indexed_commit, branch_processing, engine]
+      required: [status, branch, last_indexed_commit, read_only, handoff, branch_processing, engine]
       properties:
         status:
           type: string
@@ -5846,6 +5877,22 @@ components:
           type: string
           nullable: true
           description: Commit ID of the last successfully indexed commit.
+        read_only:
+          type: boolean
+          description: >-
+            True when this instance's vectorlink engine is read-only —
+            the data dir write lock is held by another process sharing it,
+            so index requests are handed off through the task queue
+            instead of executing locally.
+        handoff:
+          type: string
+          enum: [pending, underway]
+          nullable: true
+          description: >-
+            Handoff queue state for this ref on a read-only instance:
+            `pending` (task file queued for the write-lock holder) or
+            `underway` (claimed by the holder). Absent on writable
+            instances and when no task file exists.
         branch_processing:
           type: object
           properties:
@@ -5892,7 +5939,10 @@ components:
           example: api:success
         api:message:
           type: string
-          description: Optional message (e.g. "Index already in progress for this branch").
+          description: Optional message (e.g. "Index request handed off to the instance holding the index write lock").
+        api:target_commit:
+          type: string
+          description: Branch head commit id at trigger time — the commit the catch-up runs toward. Empty when the branch has no commits.
 
     CandidatesRequestBody:
       type: object
