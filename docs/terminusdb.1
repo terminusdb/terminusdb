@@ -1,5 +1,5 @@
-.\" generated with Ronn-NG/v0.9.1
-.\" http://github.com/apjanke/ronn-ng/tree/0.9.1
+.\" generated with Ronn-NG/v0.10.1
+.\" http://github.com/apjanke/ronn-ng/tree/0.10.1
 .TH "TERMINUSDB" "1" "November 2026" ""
 .SH "NAME"
 \fBterminusdb\fR \- command line interface to the terminusdb Graph DBMS
@@ -42,11 +42,17 @@ Run server in interactive mode
 .TP
 \fB\-m\fR, \fB\-\-memory\fR=[value]
 Run server in\-memory, without a persistent store\. Takes a password as an optional argument\. The in\-memory store will be initialized with an admin account with the given password\. If absent, the admin account will have 'root' as a password\.
+.TP
+\fB\-p\fR, \fB\-\-port\fR=[value]
+Port to listen on\. Overrides TERMINUSDB_SERVER_PORT (default 6363)\.
+.TP
+\fB\-s\fR, \fB\-\-store\fR=[value]
+Storage root directory\. Overrides TERMINUSDB_STORE and TERMINUSDB_SERVER_DB_PATH (default ~~/\.terminusdb)\. The db lives at \fIroot\fR/db, vectorlink at \fIroot\fR/vectorlink\.
 .SS "mcp"
 \fBterminusdb mcp OPTIONS\fR
 .TS
 allbox;
-Run an MCP (Model Context Protocol) server on stdin/stdout against the local store\. No port is opened\. Connect a client such as Claude Code with \fBclaude mcp add terminusdb \-\- terminusdb mcp\fR\. Configuration is via environment variables: TERMINUSDB_SERVER_DB_PATH (store location, default ~/\.terminusdb), TERMINUSDB_INDEXER_BACKEND (semantic indexer \(em the embedded vectorlink backend is selected automatically at startup when an OpenAI\-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink	http_vectorlink	none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in\-memory without a persistent store, with the value as admin password \(em empty means 'root')\.
+Run an MCP (Model Context Protocol) server on stdin/stdout against the local store\. No port is opened\. Connect a client such as Claude Code with \fBclaude mcp add terminusdb \-\- terminusdb mcp\fR\. Configuration is via environment variables: TERMINUSDB_STORE (storage root \(em the db lives at \fIroot\fR/db, vectorlink at \fIroot\fR/vectorlink; default ~/\.terminusdb) or the legacy TERMINUSDB_SERVER_DB_PATH (db dir directly), TERMINUSDB_INDEXER_BACKEND (semantic indexer \(em the embedded vectorlink backend is selected automatically at startup when an OpenAI\-compatible endpoint such as Ollama answers on localhost:11434, VECTORLINK_EMBED_URL to point elsewhere; set vectorlink	http_vectorlink	none explicitly to override), TERMINUSDB_MEMORY_PASSWORD (run in\-memory without a persistent store, with the value as admin password \(em empty means 'root')\.
 .TE
 .TP
 \fB\-\-impersonate\fR=[value]
@@ -1076,9 +1082,9 @@ The most specific branch descriptor, allows you to address a branch other than m
 The descriptor which allows an individual commit to be addressed directly\.
 .P
 For commands that refer to a GRAPH_SPEC, it should be a DB_SPEC (specifying the precise branch if a database) followed by one of:
-.IP "\[ci]" 4
+.IP "\(bu" 4
 \fBDB_SPEC/instance\fR
-.IP "\[ci]" 4
+.IP "\(bu" 4
 \fBDB_SPEC/schema\fR
 .IP "" 0
 .P
