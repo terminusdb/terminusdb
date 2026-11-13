@@ -175,8 +175,7 @@ pub fn enqueue(dir: &Path, task: &IndexTask) -> io::Result<EnqueueOutcome> {
             }
             Err((_file, e)) => return Err(io::Error::from(e)),
         };
-        let body = serde_json::to_vec_pretty(task)
-            .map_err(|e| io::Error::other(e.to_string()))?;
+        let body = serde_json::to_vec_pretty(task).map_err(|e| io::Error::other(e.to_string()))?;
         lock.write_all(&body)?;
         lock.sync_all()?;
         // Dropping the lock releases the claim; the task is now pending.
@@ -228,10 +227,7 @@ pub struct ClaimedTaskFile {
 /// Scan the queue directory and claim every pending task file that is
 /// not locked. Unparseable files older than `poison_grace` are deleted;
 /// younger ones are left alone (a writer may still be producing them).
-pub fn claim_pending(
-    dir: &Path,
-    poison_grace: Duration,
-) -> io::Result<Vec<ClaimedTaskFile>> {
+pub fn claim_pending(dir: &Path, poison_grace: Duration) -> io::Result<Vec<ClaimedTaskFile>> {
     let mut claimed = Vec::new();
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
@@ -283,13 +279,7 @@ mod tests {
     use super::*;
 
     pub(super) fn test_task(kind: IndexTaskKind) -> IndexTask {
-        IndexTask::new(
-            "admin/db/local/branch/main",
-            "main",
-            false,
-            kind,
-            "test",
-        )
+        IndexTask::new("admin/db/local/branch/main", "main", false, kind, "test")
     }
 
     #[test]
@@ -348,7 +338,9 @@ mod tests {
         let file_path = dir
             .path()
             .join("admin%2Fdb%2Flocal%2Fbranch%2Fmain.index.json");
-        let _lock = try_lock(&file_path).unwrap().expect("file should be lockable");
+        let _lock = try_lock(&file_path)
+            .unwrap()
+            .expect("file should be lockable");
         let outcome = enqueue(dir.path(), &test_task(IndexTaskKind::Index)).unwrap();
         assert_eq!(outcome, EnqueueOutcome::Underway);
     }
@@ -369,7 +361,10 @@ mod tests {
             .path()
             .join("admin%2Fdb%2Flocal%2Fbranch%2Fmain.index.json");
         let first = try_lock(&file_path).unwrap().expect("first claim");
-        assert!(try_lock(&file_path).unwrap().is_none(), "held lock must block");
+        assert!(
+            try_lock(&file_path).unwrap().is_none(),
+            "held lock must block"
+        );
         drop(first);
         assert!(
             try_lock(&file_path).unwrap().is_some(),
@@ -417,7 +412,10 @@ mod tests {
         fs::write(&file_path, b"not json").unwrap();
         let claimed = claim_pending(dir.path(), POISON_GRACE).unwrap();
         assert!(claimed.is_empty());
-        assert!(file_path.exists(), "young garbage file may still be writing");
+        assert!(
+            file_path.exists(),
+            "young garbage file may still be writing"
+        );
     }
 
     #[test]
