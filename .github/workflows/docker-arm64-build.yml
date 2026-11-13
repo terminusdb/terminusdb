@@ -65,7 +65,7 @@ jobs:
         run: gzip terminusdb-server-snapshot-arm64.tar
 
       - name: Upload Docker image
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
             name: terminusdb-server-snapshot-arm64
             path: terminusdb-server-snapshot-arm64.tar.gz

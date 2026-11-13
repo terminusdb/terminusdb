@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload build artifact
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: terminusdb-build-${{ matrix.os }}
           retention-days: 1
@@ -184,7 +184,7 @@ jobs:
 
       - name: Download build artifact
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: terminusdb-build-${{ matrix.os }}
           path: .
@@ -255,7 +255,7 @@ jobs:
 
       - name: Download build artifact
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: terminusdb-build-${{ matrix.os }}
           path: .
@@ -356,7 +356,7 @@ jobs:
 
       - name: Download build artifact
         if: ${{ steps.check_changes.outputs.relevant_changed == 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: terminusdb-build-${{ matrix.os }}
           path: .
