@@ -547,13 +547,15 @@ impl IndexerRegistry {
                 // was updated to add store_indices).
                 task.progress.set_no_embedding(false);
             }
-            // If the task is already Completed, re-enqueue it for
-            // scheduling so the new commits get processed.
-            let is_completed = matches!(
+            // A task at rest — Completed or dead from an earlier Error —
+            // is re-enqueued for scheduling so the new commits get
+            // processed. Without the Error arm a failed task would stay
+            // dead no matter how many notifies arrive.
+            let at_rest = matches!(
                 *task.progress.status.lock().unwrap(),
-                IndexStatus::Completed
+                IndexStatus::Completed | IndexStatus::Error(_)
             );
-            if is_completed {
+            if at_rest {
                 task.progress.set_status_indexing();
                 *task.next_commit.lock().unwrap() = None;
                 drop(tasks);
@@ -1214,22 +1216,8 @@ pub fn set_engine_transport(transport: Arc<dyn EngineTransport>) {
 /// drops or never delivers events.
 const HANDOFF_DEFAULT_POLL_SECS: u64 = 10;
 
-/// How long a claimed task may fail to appear in the registry before its
-/// file is deleted and the claim released. Covers the async gap between
-/// `reindex()` returning and its spawned task becoming visible.
-const HANDOFF_SPAWN_GRACE: Duration = Duration::from_secs(120);
-
 static HANDOFF_POLLER_STARTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
-
-/// A task file this poller holds the exclusive flock on while its
-/// indexing work runs. The Flock is the lock guard — dropping it
-/// releases the claim.
-struct ClaimedIndexTask {
-    _file: nix::fcntl::Flock<std::fs::File>,
-    key: BranchKey,
-    claimed_at: Instant,
-}
 
 /// Start the handoff poller when this transport shares a task directory
 /// and this process is the write-lock holder. Idempotent — one poller
@@ -1260,12 +1248,17 @@ fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
     handle.spawn(handoff_poller_loop(dir, registry));
 }
 
-/// Poll the handoff directory: reap finished claims, then claim and
-/// execute newly pending task files. The first interval tick fires
-/// immediately — that is the startup drain, so tasks enqueued while no
-/// lock holder was alive start without waiting one interval. The engine
-/// transport is fetched from the registry per task so a reinstalled
-/// engine never leaves deletes hitting a stale router.
+/// Poll the handoff directory: claim pending task files and deliver each
+/// to the registry, deleting the file once the signal is accepted. The
+/// file is the signal and only the signal — like `indexer_notify`, once
+/// the registry has the task the requester is done, and the registry
+/// owns the task's lifecycle from there. A delivery error drops the
+/// claim so the file stays pending and is retried on the next scan. The
+/// first interval tick fires immediately — that is the startup drain, so
+/// tasks enqueued while no lock holder was alive start without waiting
+/// one interval. The engine transport is fetched from the registry per
+/// task so a reinstalled engine never leaves deletes hitting a stale
+/// router.
 async fn handoff_poller_loop(
     dir: std::path::PathBuf,
     registry: Arc<IndexerRegistry>,
@@ -1283,6 +1276,9 @@ async fn handoff_poller_loop(
     // The closure gets a clone so event_tx outlives a failed watcher —
     // a dropped sender would close the channel and spin the select loop.
     let watcher_tx = event_tx.clone();
+    // The task dir may not exist until the first enqueue — create it so
+    // the watcher always has a path instead of degrading to sweep-only.
+    let _ = std::fs::create_dir_all(&dir);
     let _watcher = match notify::recommended_watcher(
         move |res: notify::Result<notify::Event>| {
             if res.is_ok() {
@@ -1309,7 +1305,6 @@ async fn handoff_poller_loop(
             None
         }
     };
-    let mut claims: HashMap<std::path::PathBuf, ClaimedIndexTask> = HashMap::new();
     loop {
         tokio::select! {
             _ = interval.tick() => {}
@@ -1317,11 +1312,8 @@ async fn handoff_poller_loop(
                 while event_rx.try_recv().is_ok() {}
             }
         }
-        reap_finished_claims(&registry, &mut claims);
-        let claimed_paths: HashSet<std::path::PathBuf> = claims.keys().cloned().collect();
         let fresh = match index_handoff::claim_pending(
             &dir,
-            &claimed_paths,
             index_handoff::POISON_GRACE,
         ) {
             Ok(f) => f,
@@ -1376,7 +1368,7 @@ async fn handoff_poller_loop(
                 }
                 IndexTaskKind::Delete => {
                     // task.path carries the domain (org/db). The delete runs
-                    // inline: it is a single local engine call, and the
+                    // inline — it is a single local engine call, and the
                     // claim flock is held for its duration so requesters
                     // still see `underway`.
                     match registry.get_transport() {
@@ -1390,27 +1382,13 @@ async fn handoff_poller_loop(
                     if task.kind == IndexTaskKind::Reindex {
                         reindexed.insert(key.clone());
                     }
-                    if task.kind == IndexTaskKind::Delete {
-                        // No registry task exists for a delete — its
-                        // completion is the engine response above. Remove
-                        // the file now instead of waiting out the spawn
-                        // grace.
-                        if let Err(e) = std::fs::remove_file(&claimed.file_path) {
-                            crate::log::log_error(format!(
-                                "[indexer] handoff: failed to remove {}: {}",
-                                claimed.file_path.display(),
-                                e
-                            ));
-                        }
-                    } else {
-                        claims.insert(
-                            claimed.file_path.clone(),
-                            ClaimedIndexTask {
-                                _file: claimed.file,
-                                key,
-                                claimed_at: Instant::now(),
-                            },
-                        );
+                    // Signal consumed — the registry owns the work now.
+                    if let Err(e) = std::fs::remove_file(&claimed.file_path) {
+                        crate::log::log_error(format!(
+                            "[indexer] handoff: failed to remove {}: {}",
+                            claimed.file_path.display(),
+                            e
+                        ));
                     }
                 }
                 Err(e) => {
@@ -1449,39 +1427,6 @@ async fn execute_domain_delete(
         Ok(r) => Err(format!("DELETE {} returned {}", delete_path, r.status)),
         Err(e) => Err(format!("DELETE {} failed: {}", delete_path, e)),
     }
-}
-
-/// Release claims whose registry task reached a terminal state, deleting
-/// their task files. A task still Indexing keeps its claim. A `None`
-/// progress during HANDOFF_SPAWN_GRACE is the spawn gap — `reindex`
-/// creates its task asynchronously after the domain delete — so the
-/// claim is held; past the grace the spawn is presumed dead and the file
-/// is deleted so the request resolves instead of locking forever.
-/// Reindex removes any previous task synchronously, so a terminal status
-/// observed after execution always belongs to this run — never a
-/// leftover from an earlier one.
-fn reap_finished_claims(
-    registry: &IndexerRegistry,
-    claims: &mut HashMap<std::path::PathBuf, ClaimedIndexTask>,
-) {
-    claims.retain(|file_path, claim| {
-        let done = match registry.progress(&claim.key.path, &claim.key.branch) {
-            Some((_, _, IndexStatus::Indexing, ..)) => false,
-            Some((_, _, IndexStatus::Completed, ..))
-            | Some((_, _, IndexStatus::Error(_), ..)) => true,
-            None => claim.claimed_at.elapsed() > HANDOFF_SPAWN_GRACE,
-        };
-        if done {
-            if let Err(e) = std::fs::remove_file(file_path) {
-                crate::log::log_error(format!(
-                    "[indexer] handoff: failed to remove {}: {}",
-                    file_path.display(),
-                    e
-                ));
-            }
-        }
-        !done
-    });
 }
 
 /// Get the global indexer registry, initializing it if needed.
@@ -2954,6 +2899,53 @@ mod tests {
     }
 
     #[test]
+    fn test_notify_revives_errored_task() {
+        // A notify landing on a task dead from an earlier error must
+        // re-enqueue it — otherwise one transient failure kills indexing
+        // for the branch no matter how many commits follow.
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        registry.set_transport(Arc::new(WritableTransport {
+            task_dir: dir.path().to_path_buf(),
+        }));
+
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+        let progress = BranchProgress::new();
+        progress.set_error("earlier failure".to_string());
+        let task = Arc::new(BranchTask {
+            progress,
+            notify_count: AtomicU64::new(1),
+            next_commit: StdMutex::new(Some("stale".to_string())),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            store_clustering: std::sync::atomic::AtomicBool::new(false),
+            reset_chain: std::sync::atomic::AtomicBool::new(false),
+        });
+        registry.tasks.lock().unwrap().insert(key.clone(), task.clone());
+
+        // Keep try_spawn_next from dispatching — we only verify the task
+        // is re-armed and queued.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+
+        let (_, _, status, _, _, _, _) = task.progress.snapshot();
+        assert!(matches!(status, IndexStatus::Indexing),
+            "notify must re-arm an errored task, got {:?}", status);
+        assert!(task.next_commit.lock().unwrap().is_none(),
+            "a revived task must re-derive its position from /last-indexed");
+        assert!(registry.pending_queue.lock().unwrap().contains(&key),
+            "a revived task must be queued for scheduling");
+    }
+
+    #[test]
     fn test_reindex_clears_no_embedding_cache() {
         // reindex() should clear the no_embedding_cache for the domain
         // since reindex implies embeddings exist.
@@ -3157,177 +3149,6 @@ mod tests {
             path: path.clone(),
             branch: "main".to_string(),
         }), "a writable engine must schedule a local branch task");
-    }
-
-    #[test]
-    fn test_reap_finished_claims_deletes_completed_task_files() {
-        let dir = tempfile::tempdir().unwrap();
-        let registry = IndexerRegistry::new();
-        let task = index_handoff::IndexTask::new(
-            "admin/db/local/branch/main",
-            "main",
-            false,
-            index_handoff::IndexTaskKind::Index,
-            "test",
-        );
-        index_handoff::enqueue(dir.path(), &task).unwrap();
-        let claimed = index_handoff::claim_pending(
-            dir.path(),
-            &std::collections::HashSet::new(),
-            index_handoff::POISON_GRACE,
-        )
-        .unwrap();
-        assert_eq!(claimed.len(), 1);
-        let claimed = claimed.into_iter().next().unwrap();
-
-        let key = BranchKey {
-            path: task.path.clone(),
-            branch: task.branch.clone(),
-        };
-        // Registry reports Completed for this key — the poller must
-        // delete the task file and release the claim.
-        let progress = BranchProgress::new();
-        progress.set_completed();
-        registry.tasks.lock().unwrap().insert(
-            key.clone(),
-            Arc::new(BranchTask {
-                progress,
-                notify_count: AtomicU64::new(1),
-                next_commit: StdMutex::new(None),
-                cancel: tokio_util::sync::CancellationToken::new(),
-                store_clustering: std::sync::atomic::AtomicBool::new(false),
-                reset_chain: std::sync::atomic::AtomicBool::new(false),
-            }),
-        );
-
-        let mut claims = HashMap::new();
-        claims.insert(
-            claimed.file_path.clone(),
-            ClaimedIndexTask {
-                _file: claimed.file,
-                key,
-                claimed_at: Instant::now(),
-            },
-        );
-        reap_finished_claims(&registry, &mut claims);
-
-        assert!(claims.is_empty(), "finished claim must be released");
-        assert!(!claimed.file_path.exists(),
-            "task file must be deleted once its work completed");
-    }
-
-    #[test]
-    fn test_reap_finished_claims_holds_running_task() {
-        let dir = tempfile::tempdir().unwrap();
-        let registry = IndexerRegistry::new();
-        let task = index_handoff::IndexTask::new(
-            "admin/db/local/branch/main",
-            "main",
-            false,
-            index_handoff::IndexTaskKind::Index,
-            "test",
-        );
-        index_handoff::enqueue(dir.path(), &task).unwrap();
-        let claimed = index_handoff::claim_pending(
-            dir.path(),
-            &std::collections::HashSet::new(),
-            index_handoff::POISON_GRACE,
-        )
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap();
-
-        let key = BranchKey {
-            path: task.path.clone(),
-            branch: task.branch.clone(),
-        };
-        // Task still indexing — the claim must be kept so no other
-        // process re-executes the work.
-        let progress = BranchProgress::new();
-        progress.set_total(3);
-        registry.tasks.lock().unwrap().insert(
-            key.clone(),
-            Arc::new(BranchTask {
-                progress,
-                notify_count: AtomicU64::new(1),
-                next_commit: StdMutex::new(None),
-                cancel: tokio_util::sync::CancellationToken::new(),
-                store_clustering: std::sync::atomic::AtomicBool::new(false),
-                reset_chain: std::sync::atomic::AtomicBool::new(false),
-            }),
-        );
-
-        let mut claims = HashMap::new();
-        claims.insert(
-            claimed.file_path.clone(),
-            ClaimedIndexTask {
-                _file: claimed.file,
-                key,
-                claimed_at: Instant::now(),
-            },
-        );
-        reap_finished_claims(&registry, &mut claims);
-
-        assert_eq!(claims.len(), 1, "a running task's claim must be held");
-        assert!(claimed.file_path.exists());
-    }
-
-    #[test]
-    fn test_reap_finished_claims_holds_spawn_gap_within_grace() {
-        // The reindex task only appears in the registry once its async
-        // domain-delete finishes — progress() returns None in between.
-        // Within the grace window the claim must be held; past it, the
-        // file is deleted so a dead spawn resolves instead of locking
-        // forever.
-        let dir = tempfile::tempdir().unwrap();
-        let registry = IndexerRegistry::new();
-        let task = index_handoff::IndexTask::new(
-            "admin/db/local/branch/main",
-            "main",
-            false,
-            index_handoff::IndexTaskKind::Reindex,
-            "test",
-        );
-        index_handoff::enqueue(dir.path(), &task).unwrap();
-        let claimed = index_handoff::claim_pending(
-            dir.path(),
-            &std::collections::HashSet::new(),
-            index_handoff::POISON_GRACE,
-        )
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap();
-
-        let key = BranchKey {
-            path: task.path.clone(),
-            branch: task.branch.clone(),
-        };
-        // No task in the registry — the spawn gap.
-        let mut claims = HashMap::new();
-        claims.insert(
-            claimed.file_path.clone(),
-            ClaimedIndexTask {
-                _file: claimed.file,
-                key: key.clone(),
-                claimed_at: Instant::now(),
-            },
-        );
-        reap_finished_claims(&registry, &mut claims);
-        assert_eq!(claims.len(), 1,
-            "claim within spawn grace must be held");
-        assert!(claimed.file_path.exists());
-
-        // Same claim, now past the grace window — released and removed.
-        claims
-            .get_mut(&claimed.file_path)
-            .unwrap()
-            .claimed_at = Instant::now() - HANDOFF_SPAWN_GRACE - Duration::from_secs(1);
-        reap_finished_claims(&registry, &mut claims);
-        assert!(claims.is_empty(),
-            "claim past spawn grace with no registry task must be released");
-        assert!(!claimed.file_path.exists());
     }
 
     /// Engine transport returning a canned status for delete execution.
