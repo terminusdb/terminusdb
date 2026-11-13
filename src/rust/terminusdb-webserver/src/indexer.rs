@@ -429,6 +429,23 @@ pub struct IndexerRegistry {
     /// notify() is called with has_embeddings=true (e.g. from post_commit_hook
     /// which has already verified embedding metadata exists).
     no_embedding_cache: StdMutex<HashSet<String>>,
+    /// Notifies received while no engine transport is installed (embedded
+    /// engine still initializing, or indexer_set_config pending). A notify
+    /// is one-shot intent: dropping it here means the commit it carried is
+    /// never indexed, so entries are parked and replayed by set_transport
+    /// the moment an engine lands. Keyed by branch so repeated notifies
+    /// merge instead of queueing unboundedly.
+    pending_notifies: StdMutex<HashMap<BranchKey, PendingNotify>>,
+}
+
+/// A notify that arrived before the engine transport existed. Replayed
+/// verbatim through notify() on transport install so handoff, cache and
+/// scheduling semantics stay identical to a live notify.
+#[derive(Default)]
+struct PendingNotify {
+    notify_count: u64,
+    store_clustering: bool,
+    has_embeddings: bool,
 }
 
 impl IndexerRegistry {
@@ -439,6 +456,7 @@ impl IndexerRegistry {
             current_branch: StdMutex::new(None),
             transport: StdMutex::new(None),
             no_embedding_cache: StdMutex::new(HashSet::new()),
+            pending_notifies: StdMutex::new(HashMap::new()),
         }
     }
 
@@ -456,6 +474,7 @@ impl IndexerRegistry {
                 task.cancel.cancel();
             }
             self.pending_queue.lock().unwrap().clear();
+            self.pending_notifies.lock().unwrap().clear();
             *self.current_branch.lock().unwrap() = None;
             return;
         }
@@ -463,7 +482,7 @@ impl IndexerRegistry {
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .expect("failed to build reqwest client");
-        *self.transport.lock().unwrap() = Some(Arc::new(HttpTransport {
+        self.install_transport(Arc::new(HttpTransport {
             client,
             base_url: url.trim_end_matches('/').to_string(),
             auth_header: auth,
@@ -473,7 +492,38 @@ impl IndexerRegistry {
     /// Install an engine transport directly. Used by the embedded
     /// vectorlink backend (see the terminusdb-vectorlink crate).
     fn set_transport(&self, transport: Arc<dyn EngineTransport>) {
+        self.install_transport(transport);
+    }
+
+    /// Install the transport and replay every notify parked while no
+    /// engine existed. Each parked entry re-enters notify() so cache,
+    /// handoff and scheduling semantics match a live notify; the merged
+    /// repeat count is restored onto the spawned task afterwards.
+    fn install_transport(&self, transport: Arc<dyn EngineTransport>) {
         *self.transport.lock().unwrap() = Some(transport);
+        let parked: Vec<(BranchKey, PendingNotify)> =
+            self.pending_notifies.lock().unwrap().drain().collect();
+        for (key, pending) in parked {
+            crate::log::log_info(format!(
+                "[indexer] engine installed — replaying parked notify for {}",
+                key.path
+            ));
+            if self
+                .notify(
+                    key.path.clone(),
+                    key.branch.clone(),
+                    pending.store_clustering,
+                    pending.has_embeddings,
+                )
+                .is_ok()
+                && pending.notify_count > 1
+            {
+                if let Some(task) = self.tasks.lock().unwrap().get(&key) {
+                    task.notify_count
+                        .fetch_add(pending.notify_count - 1, Ordering::SeqCst);
+                }
+            }
+        }
     }
 
     fn get_transport(&self) -> Result<Arc<dyn EngineTransport>, String> {
@@ -493,15 +543,26 @@ impl IndexerRegistry {
     /// When has_embeddings=true, clears the no_embedding cache for this domain
     /// (embeddings were just added to the schema).
     fn notify(&self, path: String, branch: String, store_clustering: bool, has_embeddings: bool) -> Result<(), String> {
-        // No engine transport installed — indexing is unconfigured, so a
-        // commit notify is a cheap no-op rather than a spawn+fail cycle.
+        let key = BranchKey { path: path.clone(), branch };
+
+        // No engine transport installed — the embedded engine may still be
+        // initializing, so park the notify instead of dropping it: a notify
+        // is one-shot intent and a dropped one is indexing work that is
+        // silently never done. install_transport replays these the moment
+        // an engine lands.
         if self.transport.lock().unwrap().is_none() {
+            let mut pendings = self.pending_notifies.lock().unwrap();
+            let pending = pendings.entry(key.clone()).or_default();
+            pending.notify_count += 1;
+            if has_embeddings {
+                pending.has_embeddings = true;
+                pending.store_clustering = store_clustering;
+            }
             crate::log::log_debug(format!(
-                "[indexer] notify skipped for {} — engine transport not configured", path));
+                "[indexer] notify for {} parked — engine transport not installed yet",
+                key.path));
             return Ok(());
         }
-
-        let key = BranchKey { path: path.clone(), branch };
 
         // Fast path: if the caller doesn't know whether embeddings exist
         // (has_embeddings=false, e.g. from maybe_nudge_push), check the cache.
@@ -2976,6 +3037,74 @@ mod tests {
             "a revived task must re-derive its position from /last-indexed");
         assert!(registry.pending_queue.lock().unwrap().contains(&key),
             "a revived task must be queued for scheduling");
+    }
+
+    #[test]
+    fn test_notify_parked_while_no_transport() {
+        // Embedded engine still initializing: a notify must be parked for
+        // replay, not dropped — a dropped notify is indexing work that is
+        // silently never done.
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+
+        assert!(registry.tasks.lock().unwrap().is_empty(),
+            "no task can spawn before an engine exists");
+        let pendings = registry.pending_notifies.lock().unwrap();
+        let pending = pendings.get(&key).expect("notify must be parked");
+        assert_eq!(pending.notify_count, 1);
+        assert!(pending.has_embeddings);
+    }
+
+    #[test]
+    fn test_set_transport_replays_parked_notify() {
+        // The notify fired during engine init must produce a real task the
+        // moment the transport lands — replayed through notify() so cache
+        // and scheduling semantics match a live notify.
+        let dir = tempfile::tempdir().unwrap();
+        let registry = IndexerRegistry::new();
+        let key = BranchKey {
+            path: "admin/db/local/branch/main".to_string(),
+            branch: "main".to_string(),
+        };
+
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+        registry
+            .notify(key.path.clone(), key.branch.clone(), false, true)
+            .unwrap();
+        assert!(registry.tasks.lock().unwrap().is_empty());
+
+        // Keep try_spawn_next from dispatching — we verify the task was
+        // created and queued, not that it ran.
+        *registry.current_branch.lock().unwrap() = Some(BranchKey {
+            path: "dummy".to_string(),
+            branch: "dummy".to_string(),
+        });
+        registry.set_transport(Arc::new(WritableTransport {
+            task_dir: dir.path().to_path_buf(),
+        }));
+
+        assert!(registry.pending_notifies.lock().unwrap().is_empty(),
+            "parked notifies must drain on transport install");
+        let task = registry
+            .tasks
+            .lock()
+            .unwrap()
+            .get(&key)
+            .cloned()
+            .expect("replayed notify must spawn the task");
+        assert_eq!(task.notify_count.load(Ordering::SeqCst), 2,
+            "merged repeat count must be restored on the spawned task");
+        assert!(registry.pending_queue.lock().unwrap().contains(&key),
+            "replayed task must be queued for scheduling");
     }
 
     #[test]

@@ -838,6 +838,12 @@ io_index_branch(System_DB, Auth, Path, Target_Commit) :-
     ;   Target_Commit = null
     ),
     vectorlink:branch_path_for_notify(Path, Branch_Name, Branch_Path),
+    % Hold the trigger until the engine transport exists — without this a
+    % POST landing inside the detached init window would 200 while the
+    % notify can only be parked, so the caller gets no signal that indexing
+    % has not actually started. No-op when the component is undeclared
+    % (remote HTTP backend).
+    embedded_await_engine(post, Path),
     (   plugin_api:indexer_available
     ->  (   api_indexer:schema_store_clustering_for_path(Path, Store_Clustering),
             plugin_api:indexer_notify(Branch_Path, Branch_Name, Store_Clustering, true)

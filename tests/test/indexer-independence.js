@@ -256,7 +256,19 @@ describe('Indexer lane independence', function () {
     embed.release()
     await stopInstance(proc)
     if (embed) await new Promise(resolve => embed.server.close(resolve))
-    if (sharedBase) fs.rmSync(sharedBase, { recursive: true, force: true })
+    if (sharedBase) {
+      // On failure the spawned server's log is the only record of what
+      // the indexer worker did — echo it before the temp dir is deleted.
+      if (this.currentTest?.state === 'failed') {
+        try {
+          const log = fs.readFileSync(path.join(sharedBase, 'lane.log'), 'utf8')
+          process.stderr.write(`\n[lane.log]\n${log}\n[/lane.log]\n`)
+        } catch (e) {
+          process.stderr.write(`[lane] could not read lane.log: ${e.message}\n`)
+        }
+      }
+      fs.rmSync(sharedBase, { recursive: true, force: true })
+    }
   })
 
   it('serves ordinary requests while indexing occupies its own worker', async function () {
@@ -270,18 +282,20 @@ describe('Indexer lane independence', function () {
     // worker keeps writing into a backing-up pipe. If the embed endpoint
     // is unreachable the task errors instead — surface that reason
     // immediately rather than waiting out the full poll.
+    let lastStatus = null
     await poll(async () => {
       if (embed.state.calls >= 1) return true
       const res = await httpRequest(
         port, 'GET',
         `/api/index/${ORG}/${DB}?path=${BRANCH_PATH}&branch=main`,
       )
+      lastStatus = `${res.status} ${JSON.stringify(res.body ?? res.text)}`
       if (res.status === 200 && res.body?.status === 'error') {
         throw new Error(`index task failed before any embed call: ${res.body.error}`)
       }
       return false
     }, 60000).catch(e => {
-      throw new Error(`embed endpoint never received a call (calls=${embed.state.calls}): ${e.message}`)
+      throw new Error(`embed endpoint never received a call (calls=${embed.state.calls}, last status=${lastStatus}): ${e.message}`)
     })
 
     // 5s is far below the remaining indexing time but generous for a
