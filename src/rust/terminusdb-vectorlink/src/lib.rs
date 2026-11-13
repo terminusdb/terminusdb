@@ -21,11 +21,11 @@ use std::sync::{Arc, RwLock};
 
 use futures::StreamExt;
 use swipl::prelude::*;
+#[cfg(test)]
+use terminusdb_webserver::indexer::ByteStream;
 use terminusdb_webserver::indexer::{
     boxed_sync_stream, set_engine_transport, EngineRequest, EngineResponse, EngineTransport,
 };
-#[cfg(test)]
-use terminusdb_webserver::indexer::ByteStream;
 
 /// The embedded vectorlink engine: its axum router, built without the
 /// auth layer — in-process requests are already authorized by the host.
@@ -165,10 +165,9 @@ fn init_engine(data_dir: String, tokenizer_path: String) -> Result<(), String> {
         config.tokenizer_path = tokenizer_path;
     }
 
-    let tokenizer = vectorlink::chunk::io_load_tokenizer(std::path::Path::new(
-        &config.tokenizer_path,
-    ))
-    .map_err(|e| format!("failed to load tokenizer {}: {}", config.tokenizer_path, e))?;
+    let tokenizer =
+        vectorlink::chunk::io_load_tokenizer(std::path::Path::new(&config.tokenizer_path))
+            .map_err(|e| format!("failed to load tokenizer {}: {}", config.tokenizer_path, e))?;
 
     let data_path = std::path::Path::new(&config.data_dir);
     std::fs::create_dir_all(data_path)
@@ -511,9 +510,7 @@ mod tests {
             )
             .route(
                 "/status",
-                get(|| async {
-                    (axum::http::StatusCode::SERVICE_UNAVAILABLE, "retry later")
-                }),
+                get(|| async { (axum::http::StatusCode::SERVICE_UNAVAILABLE, "retry later") }),
             )
             .route(
                 "/chunks",
@@ -601,12 +598,10 @@ mod tests {
             vectorlink::config::Config::new("admin".to_string(), "root".to_string(), 0);
         config.data_dir = dir.to_string_lossy().into_owned();
         let dim = config.embed_provider.expected_dim();
-        let tokenizer = vectorlink::chunk::io_load_tokenizer(std::path::Path::new(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../../builtin_plugins/assets/tokenizer.json.bz2"
-            ),
-        ))
+        let tokenizer = vectorlink::chunk::io_load_tokenizer(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../builtin_plugins/assets/tokenizer.json.bz2"
+        )))
         .unwrap();
         let store = Arc::new(vectorlink::store::lance::LanceStore::new(
             &dir,

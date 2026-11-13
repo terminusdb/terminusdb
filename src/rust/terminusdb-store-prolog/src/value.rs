@@ -1,17 +1,16 @@
 use base64;
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
-use std::convert::TryFrom;
 use rug::ops::Pow;
 use rug::Integer;
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::io::Read;
 use swipl::prelude::*;
 use swipl::term::Term;
 use tdb_succinct::tfc::lexical_interval::{
-    decode_lexical_entry, duration_parts_to_period, extend_component,
-    legacy_interval_to_lexical, lexical_interval_entry, lexical_interval_from_parts,
-    parse_lexical_interval, render_lexical_interval, FLAG_DURATION_END, FLAG_EXPLICIT,
-    FLAG_POINT, FLAG_START_DURATION,
+    decode_lexical_entry, duration_parts_to_period, extend_component, legacy_interval_to_lexical,
+    lexical_interval_entry, lexical_interval_from_parts, parse_lexical_interval,
+    render_lexical_interval, FLAG_DURATION_END, FLAG_EXPLICIT, FLAG_POINT, FLAG_START_DURATION,
 };
 use tdb_succinct::*;
 
@@ -31,9 +30,7 @@ fn raise_domain<C: QueryableContextType>(
     context: &Context<C>,
     culprit: &Term,
 ) -> PrologResult<TypedDictEntry> {
-    context.raise_exception(
-        &term! {context: error(domain_error(value(), #culprit), _)}?,
-    )
+    context.raise_exception(&term! {context: error(domain_error(value(), #culprit), _)}?)
 }
 
 /// A `duration/8` term as the bounded legacy `Duration`. Seconds arrive as
@@ -50,8 +47,7 @@ fn duration_from_term<C: QueryableContextType>(
     let term_string: String = context
         .string_from_term(inner_term)
         .map_err(|_| "duration term not serialisable".to_string())?;
-    let (sign, week, year, month, day, hour, minute, digits) =
-        parse_duration_parts(&term_string)?;
+    let (sign, week, year, month, day, hour, minute, digits) = parse_duration_parts(&term_string)?;
     if week != 0 {
         return Err("week durations need the lexical duration format".to_string());
     }
@@ -833,11 +829,9 @@ pub fn unify_entry<C: QueryableContextType>(
                 }
                 _ => match decode_lexical_entry(&bytes) {
                     Ok(iv) => iv,
-                    Err(_) => {
-                        return context.raise_exception(
-                            &term! {context: error(domain_error(xdd_interval_value, #object_term), _)}?,
-                        )
-                    }
+                    Err(_) => return context.raise_exception(
+                        &term! {context: error(domain_error(xdd_interval_value, #object_term), _)}?,
+                    ),
                 },
             };
             // The read value is the canonical lexical string — the same
@@ -1058,7 +1052,9 @@ fn expand_decimal_spelling(s: &str) -> Result<String, String> {
     } else {
         format!("{}.{}", &all[..point as usize], &all[point as usize..])
     };
-    let (i, f) = out.split_once('.').map_or((out.as_str(), ""), |(i, f)| (i, f));
+    let (i, f) = out
+        .split_once('.')
+        .map_or((out.as_str(), ""), |(i, f)| (i, f));
     let i = i.trim_start_matches('0');
     let i = if i.is_empty() { "0" } else { i };
     let f = f.trim_end_matches('0');
@@ -1089,7 +1085,6 @@ fn parse_interval_tz(s: &str) -> Result<i16, String> {
     }
     i16::try_from(-secs / 60).map_err(|_| format!("tz offset out of range: {secs}"))
 }
-
 
 fn parse_interval_term(s: &str) -> Result<TypedDictEntry, String> {
     let inner = s
@@ -1170,7 +1165,8 @@ mod tests {
             INTERVAL_ENCODED_WIDTH,
             "fixed-width encoding is upgraded away at layer load and can never match"
         );
-        decode_lexical_entry(&entry.to_bytes()).expect("entry must be a decodable lexical interval");
+        decode_lexical_entry(&entry.to_bytes())
+            .expect("entry must be a decodable lexical interval");
     }
 
     /// Delete-by-lookup decodes a stored entry to a value, then re-marshals
@@ -1196,10 +1192,7 @@ mod tests {
             .unwrap();
         let dec = decode_lexical_entry(&point.to_bytes()).unwrap();
         assert_eq!(dec.flag, FLAG_POINT);
-        assert_eq!(
-            render_lexical_interval(&dec),
-            "2025-03-15T00:00:00+02:00"
-        );
+        assert_eq!(render_lexical_interval(&dec), "2025-03-15T00:00:00+02:00");
         let pair = parse_interval_term("date_time_interval(date_time(2025,3,14,22,0,0,0),date_time(2025,3,14,22,0,0,0),duration(1,0,0,0,0,0,0,0),explicit,tz(-7200),tz(-7200))")
             .unwrap();
         let dec = decode_lexical_entry(&pair.to_bytes()).unwrap();
@@ -1219,9 +1212,7 @@ mod tests {
         let entry = parse_interval_term(term).unwrap();
         let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
         assert_eq!(render_lexical_interval(&decoded), "2026-10-01");
-        let reparsed = lexical_interval_entry(
-            &parse_lexical_interval("2026-10-01").unwrap(),
-        );
+        let reparsed = lexical_interval_entry(&parse_lexical_interval("2026-10-01").unwrap());
         assert_eq!(entry.to_bytes(), reparsed.to_bytes());
     }
 
@@ -1233,9 +1224,8 @@ mod tests {
     fn interval_term_date_pair_marshals_date_kind() {
         let term = "date_time_interval(date(2025,1,1,0),date(2025,4,1,0),duration(1,0,0,0,90,0,0,0.0),explicit,none,none)";
         let entry = parse_interval_term(term).unwrap();
-        let expected = lexical_interval_entry(
-            &parse_lexical_interval("2025-01-01/2025-03-31").unwrap(),
-        );
+        let expected =
+            lexical_interval_entry(&parse_lexical_interval("2025-01-01/2025-03-31").unwrap());
         assert_eq!(entry.to_bytes(), expected.to_bytes());
         let decoded = decode_lexical_entry(&entry.to_bytes()).unwrap();
         assert_eq!(render_lexical_interval(&decoded), "2025-01-01/2025-03-31");
