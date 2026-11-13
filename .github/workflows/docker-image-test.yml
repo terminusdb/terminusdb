@@ -55,6 +55,10 @@ jobs:
         # server store and per-suite test stores in RAM (no fsync cost).
         # TERMINUSDB_ENABLE_OPTIMIZER=false: the probabilistic post-commit
         # optimize/GC breaks tests that assert on deterministic data versions.
+        # There is no Ollama (or any other embedding provider) in this
+        # environment: suites that exercise vector indexing must spin up a
+        # suite-local fake OpenAI-compatible endpoint on 127.0.0.1 and point
+        # VECTORLINK_EMBED_URL at it, and must not require a real provider.
         run: |
           docker load < ${{ inputs.image_artifact }}.tar.gz
           docker build --platform ${{ inputs.image_platform }} \

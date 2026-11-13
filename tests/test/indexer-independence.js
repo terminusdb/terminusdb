@@ -267,8 +267,20 @@ describe('Indexer lane independence', function () {
     expect(trigger.body['api:target_commit']).to.be.a('string').that.is.not.empty
 
     // The engine is now parked on the held embed call and the indexing
-    // worker keeps writing into a backing-up pipe.
-    await poll(async () => embed.state.calls >= 1, 60000).catch(e => {
+    // worker keeps writing into a backing-up pipe. If the embed endpoint
+    // is unreachable the task errors instead — surface that reason
+    // immediately rather than waiting out the full poll.
+    await poll(async () => {
+      if (embed.state.calls >= 1) return true
+      const res = await httpRequest(
+        port, 'GET',
+        `/api/index/${ORG}/${DB}?path=${BRANCH_PATH}&branch=main`,
+      )
+      if (res.status === 200 && res.body?.status === 'error') {
+        throw new Error(`index task failed before any embed call: ${res.body.error}`)
+      }
+      return false
+    }, 60000).catch(e => {
       throw new Error(`embed endpoint never received a call (calls=${embed.state.calls}): ${e.message}`)
     })
 
