@@ -5,9 +5,11 @@
               basetype_subsumption_of/2,
 
               % casting.pl
+              typecast/3,
               typecast/4,
               typecast_switch/5,
               context_hint_for_type/3,
+              context_prefix_datatype/1,
               default_type_expand/2,
               xsd_version/1,
               xsd_version_param/2,

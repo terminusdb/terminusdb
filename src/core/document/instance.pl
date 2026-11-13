@@ -284,7 +284,7 @@ internal_simple_json(X, X) :-
     atom(X),
     !.
 internal_simple_json(D^^T, X) :-
-    typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], X).
+    typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', X).
 
 range_term_list(Validation_Object, S, P, L) :-
     database_instance(Validation_Object, Instance),
