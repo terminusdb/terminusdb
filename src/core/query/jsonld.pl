@@ -376,6 +376,9 @@ compress_pairs_uri(URI, Pairs, Folded_URI) :-
     ).
 
 compress_dict_uri(URI, Dict, Folded_URI) :-
+    '$doc':rust_compress_uri(Dict, URI, Folded_URI),
+    !.
+compress_dict_uri(URI, Dict, Folded_URI) :-
     dict_pairs(Dict, _, Pairs),
     exclude([_-B]>>is_dict(B), Pairs, Filtered),
     compress_pairs_uri(URI, Filtered, Folded_URI).
@@ -500,7 +503,116 @@ test(compress_longest_prefix_wins_reversed_order, [])
 
     json{'xbrla:balance':"debit", 'xbrl:unit':"iso4217:USD"} :< Compressed.
 
+test(compress_passthrough_unbound_uri, [])
+:-
+    Context = json{ eg : "http://example.org/ns#" },
+    compress_dict_uri('http://unbound.example/thing', Context, 'http://unbound.example/thing').
+
+test(compress_at_vocab_key_skipped, [])
+:-
+    Context = json{ '@vocab' : "http://example.org/voc/" },
+    compress_dict_uri('http://example.org/voc/x', Context, 'http://example.org/voc/x').
+
+test(compress_at_schema_key_compresses, [])
+:-
+    Context = json{ '@schema' : "http://example.com/schema#" },
+    compress_dict_uri('http://example.com/schema#name', Context, '@schema:name').
+
+test(compress_dict_valued_entry_skipped, [])
+:-
+    Context = json{ typed : json{ '@id' : "http://example.org/" },
+                    eg : "http://e/" },
+    compress_dict_uri('http://e/x', Context, 'eg:x'),
+    compress_dict_uri('http://example.org/x', Context, 'http://example.org/x').
+
+% An expansion may match anywhere in the URI, not only at the start.
+% The first occurrence decides the cut point: the compressed local name
+% is the slice between len(expansion) and len(URI)-B where B is the
+% match position — for 'xxabcZZabc'/'abc' that is URI[3..8].
+test(compress_interior_match, [])
+:-
+    compress_dict_uri('xxabcZZabc', _{eg:'abc'}, 'eg:bcZZa').
+
+% Folded results are atoms even when the input URI is a string, matching
+% atomic_list_concat/sub_atom output types.
+test(compress_string_input_compresses_to_atom, [])
+:-
+    Context = json{ eg : "http://e/" },
+    compress_dict_uri("http://e/x", Context, Compressed),
+    Compressed = 'eg:x',
+    atom(Compressed).
+
+test(compress_string_passthrough_preserves_type, [])
+:-
+    Context = json{ eg : "http://e/" },
+    compress_dict_uri("http://unbound.example/x", Context, Compressed),
+    Compressed = "http://unbound.example/x",
+    string(Compressed).
+
+% '@base' and '@schema' share the expansion here, so the tie resolves in
+% dict_pairs order and '@base' strips to the bare local name.  The dict's
+% internal argument order places @-keys last — iterating it directly would
+% flip the tie to '@schema'.
+test(compress_base_schema_tie_resolves_to_base, [])
+:-
+    compress_dict_uri('http://s#X', _{'@schema':'http://s#','@base':'http://s#'}, 'X').
+
+% Numbers are not URIs: `sub_atom` coerces them to text for matching,
+% finds nothing, and the input passes through verbatim — the FFI fast
+% path must not turn them into "".
+test(compress_numeric_uri_passthrough, [])
+:-
+    compress_dict_uri(2, _{eg:'http://e/'}, 2),
+    compress_dict_uri(2.5, _{eg:'http://e/'}, 2.5).
+
+test(compress_compound_uri_type_error,
+     [throws(error(type_error(_,foo(bar)),_))])
+:-
+    compress_dict_uri(foo(bar), _{eg:'http://e/'}, _).
+
+test(compress_ffi_dict_path, [])
+:-
+    Context = json{ '@base' : "http://example.com/data/",
+                    '@schema' : "http://example.com/schema#",
+                    eg : "http://e/" },
+    '$doc':rust_compress_uri(Context, 'http://example.com/data/Person/abc', 'Person/abc'),
+    '$doc':rust_compress_uri(Context, 'http://example.com/schema#name', '@schema:name'),
+    '$doc':rust_compress_uri(Context, 'http://unbound.example/x', 'http://unbound.example/x').
+
+test(compress_layer_uri, [])
+:-
+    make_compress_test_layer(Layer),
+    '$doc':rust_compress_uri_layer(Layer, 'http://example.com/data/Person/abc', 'Person/abc'),
+    '$doc':rust_compress_uri_layer(Layer, 'http://example.com/schema#name', '@schema:name'),
+    '$doc':rust_compress_uri_layer(Layer, 'http://www.w3.org/2001/XMLSchema#string', 'xsd:string'),
+    '$doc':rust_compress_uri_layer(Layer, 'http://unbound.example/x', 'http://unbound.example/x').
+
 :- end_tests(jsonld_compress).
+
+% Builds a one-layer memory store holding the same context triples that
+% database prefixes resolve to: '@base', '@schema' and prefix pairs.
+make_compress_test_layer(Layer) :-
+    terminus_store:open_memory_store(Store),
+    terminus_store:open_write(Store, Builder),
+    Context = 'terminusdb://context',
+    SysBase = 'http://terminusdb.com/schema/sys#base',
+    SysSchema = 'http://terminusdb.com/schema/sys#schema',
+    SysPrefixPair = 'http://terminusdb.com/schema/sys#prefix_pair',
+    SysPrefix = 'http://terminusdb.com/schema/sys#prefix',
+    SysUrl = 'http://terminusdb.com/schema/sys#url',
+    XSDString = 'http://www.w3.org/2001/XMLSchema#string',
+    terminus_store:nb_add_triple(Builder, Context, SysBase, value('http://example.com/data/', XSDString)),
+    terminus_store:nb_add_triple(Builder, Context, SysSchema, value('http://example.com/schema#', XSDString)),
+    compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, 'eg', 'http://example.org/ns#'),
+    compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, 'xbrl', 'https://xbrl.org/2021'),
+    compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, 'xbrla', 'https://xbrl.org/2021/accounting'),
+    terminus_store:nb_commit(Builder, Layer).
+
+compress_test_prefix_pair(Builder, Context, SysPrefixPair, SysPrefix, SysUrl, XSDString, Name, Url) :-
+    atom_concat('pp_', Name, PairNode),
+    terminus_store:nb_add_triple(Builder, Context, SysPrefixPair, node(PairNode)),
+    terminus_store:nb_add_triple(Builder, PairNode, SysPrefix, value(Name, XSDString)),
+    terminus_store:nb_add_triple(Builder, PairNode, SysUrl, value(Url, XSDString)).
 
 :- begin_tests(has_at).
 

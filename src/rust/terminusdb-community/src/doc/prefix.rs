@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::terminus_store::layer::*;
 use crate::terminus_store::storage::name_to_string;
 use lazy_static::lazy_static;
+use swipl::fli::{self, FliSuccess};
 use swipl::prelude::*;
 use terminusdb_store_prolog::layer::WrappedLayer;
 use terminusdb_store_prolog::terminus_store::store::sync::SyncStoreLayer;
@@ -627,11 +628,208 @@ pub fn expand_prefixed_name_data<L: Layer + Clone>(
     }
 }
 
+/// Compress a URI against a prefix map, mirroring Prolog
+/// `compress_uri/4` + `compress_pairs_uri/3`.  Every pair whose expansion
+/// occurs anywhere in `uri` is a candidate; the longest expansion wins and
+/// ties go to the earlier pair in context order.  `@base` strips to the
+/// bare rest, `@schema` folds as a normal key, and all other `@`-keys are
+/// ineligible.
+///
+/// The Prolog `sub_atom` semantics that matter: the "rest" is the slice of
+/// `uri` between `len(expansion)` and `len(uri)-B`, where `B` is the char
+/// position of the *first* occurrence of `expansion`.  A mid-string match
+/// therefore produces a mid-string slice, not a suffix — positions count
+/// in characters, matching `sub_atom`, not bytes.
+///
+/// Returns `None` when nothing matches; the caller then unifies the input
+/// verbatim (the Prolog `Candidates = []` branch).
+fn compress_uri_raw(prefixes: &PrefixMap, uri: &str) -> Option<String> {
+    let uri_chars = uri.chars().count();
+    let mut best: Option<(usize, String)> = None;
+    for (key, expansion) in prefixes {
+        if key.starts_with('@') && key != "@base" && key != "@schema" {
+            continue;
+        }
+        let Some(b) = uri.find(expansion.as_str()) else {
+            continue;
+        };
+        let b_chars = uri[..b].chars().count();
+        let exp_chars = expansion.chars().count();
+        let rest: String = uri
+            .chars()
+            .skip(exp_chars)
+            .take(uri_chars.saturating_sub(b_chars + exp_chars))
+            .collect();
+        let folded = if key == "@base" {
+            rest
+        } else {
+            let mut f = String::with_capacity(key.len() + 1 + rest.len());
+            f.push_str(key);
+            f.push(':');
+            f.push_str(&rest);
+            f
+        };
+        if best
+            .as_ref()
+            .is_none_or(|(best_len, _)| expansion.len() > *best_len)
+        {
+            best = Some((expansion.len(), folded));
+        }
+    }
+    best.map(|(_, folded)| folded)
+}
+
+lazy_static! {
+    /// Compression map cache keyed by a content hash of the context dict.
+    /// `TERM_PTR_CACHE` keys on the term pointer because its fingerprint is
+    /// expensive; this hash is read straight off the dict compound args, so
+    /// it is cheap enough to key on directly and identical dicts share an
+    /// entry regardless of term address.  Kept separate because the
+    /// compression map skips dict-valued entries and rejects non-atom keys
+    /// where the expansion map stringifies or fails.
+    static ref COMPRESS_HASH_CACHE: Mutex<HashMap<u64, Arc<PrefixMap>>> =
+        Mutex::new(HashMap::with_capacity(TERM_PTR_CACHE_CAPACITY));
+}
+
+/// Hash a context dict's content straight off the dict compound.
+/// `PL_get_arg` copies argument words directly — a few FLI calls per pair
+/// instead of the `PL_unify` round that `dict_entries` performs on each
+/// entry.  Dict args are stored sorted by key, so `==/2`-equal dicts hash
+/// identically.
+fn dict_fingerprint(dict_term: &Term, val_term: &Term, key_term: &Term) -> PrologResult<u64> {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let functor: Functor = dict_term.get()?;
+    let entries = (functor.arity() - 1) / 2;
+    let mut fp = FNV_OFFSET;
+    unsafe {
+        for i in 0..entries {
+            // dict compound layout: arg 1 is the tag, then (value, key) pairs
+            if !fli::PL_get_arg(
+                (2 * i + 2) as i32,
+                dict_term.term_ptr(),
+                val_term.term_ptr(),
+            )
+            .is_success()
+                || !fli::PL_get_arg(
+                    (2 * i + 3) as i32,
+                    dict_term.term_ptr(),
+                    key_term.term_ptr(),
+                )
+                .is_success()
+            {
+                return Err(PrologError::Failure);
+            }
+            let mut atom: fli::atom_t = 0;
+            let mut int_key: std::os::raw::c_int = 0;
+            let key_hash = if fli::PL_get_atom(key_term.term_ptr(), &mut atom).is_success() {
+                atom as u64
+            } else if fli::PL_get_integer(key_term.term_ptr(), &mut int_key).is_success() {
+                int_key as u64
+            } else {
+                FNV_OFFSET
+            };
+            atom = 0;
+            let val_hash = if fli::PL_get_atom(val_term.term_ptr(), &mut atom).is_success() {
+                atom as u64
+            } else {
+                hash_term(val_term)
+            };
+            for b in key_hash.to_le_bytes() {
+                fp ^= b as u64;
+                fp = fp.wrapping_mul(FNV_PRIME);
+            }
+            for b in val_hash.to_le_bytes() {
+                fp ^= b as u64;
+                fp = fp.wrapping_mul(FNV_PRIME);
+            }
+        }
+    }
+    Ok(fp)
+}
+
+/// Parse a Prolog context dictionary into a compression pair list.  Differs
+/// from `parse_prefix_context` in two ways that mirror the Prolog side:
+/// dict-valued entries are skipped (the `exclude` clause in
+/// `compress_dict_uri`), and non-atom keys or non-atomic values fail the
+/// call so the Prolog fallback reproduces the original error.
+fn parse_compress_context<'a, C: QueryableContextType>(
+    context: &'a Context<'a, C>,
+    dict_term: &Term<'a>,
+) -> PrologResult<Arc<PrefixMap>> {
+    if !dict_term.is_dict() {
+        return Err(PrologError::Failure);
+    }
+    let [val_term, key_term] = context.new_term_refs();
+    let fp = dict_fingerprint(dict_term, &val_term, &key_term)?;
+    {
+        let cache = COMPRESS_HASH_CACHE.lock().unwrap();
+        if let Some(map) = cache.get(&fp) {
+            return Ok(map.clone());
+        }
+    }
+
+    let mut map: PrefixMap = Vec::new();
+    for (key, entry_term) in context.dict_entries(dict_term) {
+        let key_str = match key {
+            Key::Atom(ref a) => a.to_string(),
+            Key::Int(_) => return Err(PrologError::Failure),
+        };
+        if entry_term.is_dict() {
+            continue;
+        }
+        map.push((key_str, term_to_string(&entry_term)?));
+    }
+    // Prolog compress iterates `dict_pairs` order (keys sorted) for
+    // tie-breaks, but `dict_entries` yields the dict's internal argument
+    // order which places @-keys last.  Sort so equal-length candidates keep
+    // the same winner as the Prolog implementation.
+    map.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let map = Arc::new(map);
+
+    let mut cache = COMPRESS_HASH_CACHE.lock().unwrap();
+    if cache.len() >= TERM_PTR_CACHE_CAPACITY {
+        cache.clear();
+    }
+    cache.insert(fp, map.clone());
+    Ok(map)
+}
+
+/// Compress a URI term.  Folded results are always atoms, matching
+/// `atomic_list_concat`/`sub_atom` output types; a URI with no matching
+/// expansion unifies verbatim so a string input stays a string.  Fails for
+/// any non-text input so the Prolog fallback reproduces the original
+/// `sub_atom` behavior — numbers pass through verbatim, compounds raise a
+/// type error.
+fn compress_with_uri(
+    uri_term: &Term,
+    compressed_term: &Term,
+    compress: impl Fn(&str) -> Option<String>,
+) -> PrologResult<()> {
+    let input_is_atom = uri_term.is_atom();
+    if !input_is_atom && !uri_term.is_string() {
+        return Err(PrologError::Failure);
+    }
+    let uri = if input_is_atom {
+        uri_term.get_atom_name(|opt| opt.unwrap_or("").to_string())?
+    } else {
+        uri_term.get_str(|opt| opt.unwrap_or("").to_string())?
+    };
+    match compress(&uri) {
+        Some(folded) => compressed_term.unify(Atom::new(&folded)),
+        None if input_is_atom => compressed_term.unify(Atom::new(&uri)),
+        None => compressed_term.unify(uri.as_str()),
+    }
+}
+
 pub fn register() {
     register_rust_expand_prefix();
     register_rust_expand_prefix_schema();
     register_rust_expand_prefix_layer();
     register_rust_expand_prefix_schema_layer();
+    register_rust_compress_uri();
+    register_rust_compress_uri_layer();
 }
 
 predicates! {
@@ -667,5 +865,123 @@ predicates! {
         expand_with_name(context, name_term, expanded_term, |name, input_is_atom| {
             prefix_expand_schema_raw(map.as_ref(), name, input_is_atom)
         })
+    }
+
+    #[module("$doc")]
+    pub semidet fn rust_compress_uri(context, context_term, uri_term, compressed_term) {
+        let map = parse_compress_context(context, context_term)?;
+        compress_with_uri(uri_term, compressed_term, |uri| {
+            compress_uri_raw(map.as_ref(), uri)
+        })
+    }
+
+    #[module("$doc")]
+    pub semidet fn rust_compress_uri_layer(_context, layer_term, uri_term, compressed_term) {
+        let layer: WrappedLayer = layer_term.get_ex()?;
+        // The layer map comes from a HashMap, so its pair order is
+        // arbitrary; sort a copy to match `dict_pairs` tie-break order.
+        let mut map = get_layer_prefix_map(&layer).as_ref().clone();
+        map.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        compress_with_uri(uri_term, compressed_term, |uri| {
+            compress_uri_raw(&map, uri)
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pairs() -> PrefixMap {
+        vec![
+            ("@base".to_string(), "http://example.com/data/".to_string()),
+            (
+                "@schema".to_string(),
+                "http://example.com/schema#".to_string(),
+            ),
+            ("@vocab".to_string(), "http://voc.example/".to_string()),
+            ("eg".to_string(), "http://e/".to_string()),
+            ("xbrl".to_string(), "https://xbrl.org/2021".to_string()),
+            (
+                "xbrla".to_string(),
+                "https://xbrl.org/2021/accounting".to_string(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn compress_base_strips_to_bare_rest() {
+        assert_eq!(
+            Some("Person/abc".to_string()),
+            compress_uri_raw(&pairs(), "http://example.com/data/Person/abc")
+        );
+    }
+
+    #[test]
+    fn compress_schema_key_folds_with_key() {
+        assert_eq!(
+            Some("@schema:name".to_string()),
+            compress_uri_raw(&pairs(), "http://example.com/schema#name")
+        );
+    }
+
+    #[test]
+    fn compress_at_vocab_skipped() {
+        assert_eq!(None, compress_uri_raw(&pairs(), "http://voc.example/x"));
+    }
+
+    #[test]
+    fn compress_longest_expansion_wins() {
+        assert_eq!(
+            Some("xbrla:balance".to_string()),
+            compress_uri_raw(&pairs(), "https://xbrl.org/2021/accountingbalance")
+        );
+    }
+
+    #[test]
+    fn compress_tie_keeps_earlier_pair() {
+        let dup = vec![
+            ("aa".to_string(), "http://e/".to_string()),
+            ("zz".to_string(), "http://e/".to_string()),
+        ];
+        assert_eq!(
+            Some("aa:x".to_string()),
+            compress_uri_raw(&dup, "http://e/x")
+        );
+    }
+
+    #[test]
+    fn compress_interior_match_first_occurrence() {
+        // 'abc' occurs at char positions 2 and 7; the earliest wins, so the
+        // rest is URI[3..8] — 'bcZZa', not a suffix.
+        let eg = vec![("eg".to_string(), "abc".to_string())];
+        assert_eq!(
+            Some("eg:bcZZa".to_string()),
+            compress_uri_raw(&eg, "xxabcZZabc")
+        );
+    }
+
+    #[test]
+    fn compress_no_match_is_none() {
+        assert_eq!(
+            None,
+            compress_uri_raw(&pairs(), "http://unbound.example/thing")
+        );
+    }
+
+    #[test]
+    fn compress_empty_expansion_folds_whole_uri() {
+        let empty = vec![("eg".to_string(), "".to_string())];
+        assert_eq!(
+            Some("eg:http://x/y".to_string()),
+            compress_uri_raw(&empty, "http://x/y")
+        );
+    }
+
+    #[test]
+    fn compress_utf8_positions_count_in_chars() {
+        // 'éa' occurs at char position 1; the rest is chars [2..4] = "ab".
+        let pairs = vec![("k".to_string(), "éa".to_string())];
+        assert_eq!(Some("k:ab".to_string()), compress_uri_raw(&pairs, "xéabc"));
     }
 }

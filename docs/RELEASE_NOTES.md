@@ -1,24 +1,64 @@
 # TerminusDB Server 12.1.0 Release Candidate 3
 
+The third release candidate of TerminusDB 12.1 hardens the indexing and commit pipeline, finalises the storage layout and embedded vectorlink startup, and makes raw JSON documents read back exactly as they were written. The small delta of insights from formal ACID testing with ALICE and Jepsen tools were incorporated.
+
+Headline changes:
+
+* Atomic commit application guarded by compare-and-swap (CAS), requests held until startup components are ready, and a formal ACID test suite guarding the invariants
+* Multi-process indexer handoff so embedding indexing no longer starves ordinary requests, and the global atom-GC stall that followed large index runs is gone
+* Verbatim `sys:JSONDocument` (vanilla JSON) reads by default across every instance selector — **breaking, intentional:** clients relying on the injected `@id` must pass `raw_id=true` (see Behavior changes)
+* `TERMINUSDB_STORE` storage root, a new `~/.terminusdb` default layout, opt-in embedded vectorlink, and serve startup failures that exit non-zero
+* Real HTTP statuses for streaming document formats instead of a blanket 200
+* GraphQL subclass interfaces (example: `... on MyClass { field }`)
+* Type inference ladder: a specificity staircase for ambiguous candidates (precise and fast type resolution)
+* Idempotent `merge_repeats` resubmission and unbound-prefix errors that name the fix
+* `xdd:dateTimeInterval` single instants and full-day dates, and `xsd:duration` beyond 255 days
+
 Storage layout and vectorlink configuration changes:
 
 * **`TERMINUSDB_STORE` is the new official storage variable.** It names the storage root; the database lives at `<root>/db` and the embedded vectorlink index at `<root>/vectorlink`. The `terminusdb serve --store` flag now sets `TERMINUSDB_STORE`. `TERMINUSDB_SERVER_DB_PATH` remains valid as a legacy override naming the db dir directly — when both are set, `DB_PATH` wins for the database and `STORE` still informs vectorlink.
-* **New default storage layout.** Without configuration, the store resolves to `~/.terminusdb/db` instead of the cwd-relative `./storage/db`. **Migration:** move an existing default store into the new layout (`~/.terminusdb/` contents → `~/.terminusdb/db/`, keeping `../vectorlink/` as a db sibling), or keep `TERMINUSDB_SERVER_DB_PATH` pointing at the old location. Default Docker users are unaffected — the image now exports `TERMINUSDB_STORE`, so databases remain in their existing location.
+* **New default storage layout.** Without configuration, the store resolves to `~/.terminusdb/db` instead of the cwd-relative `./storage/db`. **Migration:** move an existing default local store into the new layout (`~/.terminusdb/` contents → `~/.terminusdb/db/`, keeping `../vectorlink/` as a db sibling), or keep `TERMINUSDB_SERVER_DB_PATH` pointing at the old location. Default Docker users are unaffected — the image now exports `TERMINUSDB_STORE`, so databases remain in their existing location.
 * **Embedded vectorlink is opt-in.** The engine starts only when `TERMINUSDB_STORE` (or `serve --store`) or `VECTORLINK_DATA_DIR` is set; otherwise it logs a notice and stays disabled. A `TERMINUSDB_SERVER_DB_PATH`-only install that wants vectorlink must set `TERMINUSDB_STORE` or `VECTORLINK_DATA_DIR`.
 * **Concurrent vectorlink instances degrade to read-only.** When the embed-cache lock is held by another process, the second instance disables the cache, skips startup cleanup, refuses all index writes, and serves search queries only — reported on the console.
-* **Startup failures exit non-zero.** A port already in use (or any other serve startup failure) now reports the real error and exits 1 instead of printing command help and exiting 0.
-* `xdd:dateTimeInterval` keeps a single instant a single instant: a bare dateTime literal reads back as the supplied timestamp (with `Z`, an offset, or zoneless) instead of a zero-length `T/T` pair — a new `point` flag in the lexical entry distinguishes the bare form from an explicit pair, which still renders `T/T`. A bare ISO date now denotes the whole day `[D, D+1)` (duration `P1D`), the same interval as `D/D`, consistent with XBRL CSV and XBRL 2.1. Date pairs keep their supplied spelling both ways: `2025-01-01/2025-03-31` reads back as `2025-01-01/2025-03-31` — dates are inclusive of their named day and a zoneless datetime renders as local time rather than acquiring `Z` — and filter equality treats every spelling of the same period as the same interval. Values stored before this change are unaffected [#2626](https://github.com/terminusdb/terminusdb/issues/2626)
+* **Startup failures exit non-zero.** A port already in use (or any other serve startup failure) now reports the real error and exits 1 instead of printing command help and exiting 0. Also cleaned up boot messages.
+
+## New functionality
+
+* Atomic commit CAS, startup readiness, and a formal ACID suite [#2639](https://github.com/terminusdb/terminusdb/pull/2639)
+* Multi process indexer handoff [#2644](https://github.com/terminusdb/terminusdb/pull/2644) [#2651](https://github.com/terminusdb/terminusdb/pull/2651)
+* `xdd:dateTimeInterval`: single instants and full-day dates [#2629](https://github.com/terminusdb/terminusdb/pull/2629)
+* CLI startup: `TERMINUSDB_STORE` storage root, embedded vectorlink resolution, loud serve failures [#2630](https://github.com/terminusdb/terminusdb/pull/2630)
+* Type inference ladder: specificity staircase for ambiguous candidates [#2638](https://github.com/terminusdb/terminusdb/pull/2638)
+* GraphQL subclass interfaces [#2647](https://github.com/terminusdb/terminusdb/pull/2647)
 
 ## Behavior changes
 
-* **`sys:JSONDocument` reads are verbatim by default.** `raw_id` on the document API now defaults to `false`, so raw JSON documents read back semantically identical to the submission — including `@`-prefixed members like `"@type"` or nested `"@id"`, which are document content, not generated annotations (key order and whitespace canonicalize). Pass `raw_id=true` to inject the document `@id` as before. The change applies uniformly across every instance selector: direct `id` reads, `ids`, `type`, `id_prefix` listings, `query`, and the bare listing, in both single-document and `as_list` output. **Migration:** clients that rely on the injected `@id` on raw reads must now pass `raw_id=true` explicitly; no data migration is needed since storage and the insert path are unchanged. `identifiers=false` no longer strips `@`-members inside raw JSON documents: they stream through the same verbatim path instead of the annotation-stripping path, which now applies only to schema'd documents. Field names that needed URI-escaping at insert (spaces, unicode, reserved characters) now decode correctly on read through the Rust printer.
+* **`sys:JSONDocument` reads are verbatim by default.** `raw_id` on the document API now defaults to `false`: raw JSON documents read back as submitted, `@`-prefixed members like `"@type"` and nested `"@id"` included — they are document content, not annotations (key order and whitespace canonicalize). Applies across every instance selector (`id`, `ids`, `type`, `id_prefix`, `query`, bare listing) in single-document and `as_list` output. `identifiers=false` no longer strips `@`-members from raw documents, and field names URI-escaped at insert now decode correctly on read. **Migration:** pass `raw_id=true` to keep the injected `@id`; no data migration is needed.
+* `xdd:dateTimeInterval` keeps a single instant a single instant: a bare dateTime literal reads back as supplied — with `Z`, an offset, or zoneless — instead of a zero-length `T/T` pair, distinguished by a new `point` flag in the lexical entry (an explicit pair still renders `T/T`). A bare ISO date denotes the whole day `[D, D+1)` (`P1D`), the same interval as `D/D`. Date pairs round-trip verbatim: `2025-01-01/2025-03-31` reads back unchanged, dates inclusive, and zoneless datetimes render as local time rather than acquiring `Z`. Filter equality treats every spelling of the same period as equal, the supported range is increased, and values stored before this change are unaffected [#2626](https://github.com/terminusdb/terminusdb/issues/2626)
 * `xsd:duration` now supports > 255 days (i64 instead of u8 representation)
 * `xsd:duration` canonical zero length duration is now generally aligned to PT0S
-* `xdd:dateTimeInterval` now handles single instants and date-only intervals and increased range
 
 ## Bugfixes
 
 * GraphQL and the VectorLink embedding indexer no longer panic on schemas that carry a field-level `@unfold` annotation — the GraphQL frame parser accepts (and ignores for GraphQL typing) `@unfold` on any field definition, and a frame that still fails to parse now surfaces a catchable `rust_error` exception instead of a panic [#2628](https://github.com/terminusdb/terminusdb/issues/2628)
+* `merge_repeats` idempotent resubmission and actionable unbound-prefix errors [#2631](https://github.com/terminusdb/terminusdb/pull/2631)
+* QName id alignment [#2633](https://github.com/terminusdb/terminusdb/pull/2633)
+* Return real HTTP statuses for streaming document formats [#2645](https://github.com/terminusdb/terminusdb/pull/2645)
+* Fix the global atom-GC stall after large index runs [#2652](https://github.com/terminusdb/terminusdb/pull/2652)
+* Bound the log drain before each dispatch [#2653](https://github.com/terminusdb/terminusdb/pull/2653)
+* Gate context prefix maps to the datatypes that read them [#2654](https://github.com/terminusdb/terminusdb/pull/2654)
+
+## Maintenance
+
+* Include the latest versions of tdb-data and tdb-admin dashboards [#2624](https://github.com/terminusdb/terminusdb/pull/2624)
+* Decimal canonical form tests [#2634](https://github.com/terminusdb/terminusdb/pull/2634) [#2635](https://github.com/terminusdb/terminusdb/pull/2635)
+* Link the pinned tus checkout into the pack dir instead of pack_install [#2646](https://github.com/terminusdb/terminusdb/pull/2646)
+* Pin SWI-Prolog 10.0.2 in docs and lint workflows [#2649](https://github.com/terminusdb/terminusdb/pull/2649)
+* Bump js-yaml from 4.3.0 to 4.3.2 in /dashboard by @dependabot [#2622](https://github.com/terminusdb/terminusdb/pull/2622)
+* Update the generated man page [#2621](https://github.com/terminusdb/terminusdb/pull/2621) [#2655](https://github.com/terminusdb/terminusdb/pull/2655)
+* Bump version to 12.1.0-rc3 [#2650](https://github.com/terminusdb/terminusdb/pull/2650)
+
+**Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.1.0-rc2...v12.1.0-rc3
 
 # TerminusDB Server 12.1.0 Release Candidate 2
 
