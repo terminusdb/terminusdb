@@ -20,10 +20,9 @@
 //!   leftover (crashed writer — the OS releases its locks) is re-claimed
 //!   by the next poll: self-healing with no error path.
 //!
-//! Directory polling is used instead of filesystem notifications so the
-//! mechanism stays portable (inotify is Linux-only, FSEvents macOS-only).
+//! The lock holder watches the directory for new files and sweeps it on
+//! an interval as fallback, so pickup works on every filesystem.
 
-use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -227,12 +226,10 @@ pub struct ClaimedTaskFile {
 }
 
 /// Scan the queue directory and claim every pending task file that is
-/// not already claimed and not locked. Unparseable files older than
-/// `poison_grace` are deleted; younger ones are left alone (a writer may
-/// still be producing them).
+/// not locked. Unparseable files older than `poison_grace` are deleted;
+/// younger ones are left alone (a writer may still be producing them).
 pub fn claim_pending(
     dir: &Path,
-    already_claimed: &HashSet<PathBuf>,
     poison_grace: Duration,
 ) -> io::Result<Vec<ClaimedTaskFile>> {
     let mut claimed = Vec::new();
@@ -244,9 +241,6 @@ pub fn claim_pending(
     for entry in entries.flatten() {
         let file_path = entry.path();
         if file_path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        if already_claimed.contains(&file_path) {
             continue;
         }
         let Some(file) = try_lock(&file_path)? else {
@@ -411,22 +405,9 @@ mod tests {
             .join(task_file_name(&other.path, IndexTaskKind::Index));
         let _lock = try_lock(&locked_path).unwrap().unwrap();
 
-        let claimed = claim_pending(dir.path(), &HashSet::new(), POISON_GRACE).unwrap();
+        let claimed = claim_pending(dir.path(), POISON_GRACE).unwrap();
         assert_eq!(claimed.len(), 1);
         assert_eq!(claimed[0].task.path, "admin/db/local/branch/main");
-    }
-
-    #[test]
-    fn claim_pending_respects_already_claimed_set() {
-        let dir = tempfile::tempdir().unwrap();
-        enqueue(dir.path(), &test_task(IndexTaskKind::Index)).unwrap();
-        let file_path = dir
-            .path()
-            .join(task_file_name("admin/db/local/branch/main", IndexTaskKind::Index));
-        let mut already = HashSet::new();
-        already.insert(file_path);
-        let claimed = claim_pending(dir.path(), &already, POISON_GRACE).unwrap();
-        assert!(claimed.is_empty());
     }
 
     #[test]
@@ -434,7 +415,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file_path = dir.path().join("garbage.index.json");
         fs::write(&file_path, b"not json").unwrap();
-        let claimed = claim_pending(dir.path(), &HashSet::new(), POISON_GRACE).unwrap();
+        let claimed = claim_pending(dir.path(), POISON_GRACE).unwrap();
         assert!(claimed.is_empty());
         assert!(file_path.exists(), "young garbage file may still be writing");
     }
@@ -445,7 +426,7 @@ mod tests {
         let file_path = dir.path().join("garbage.index.json");
         fs::write(&file_path, b"not json").unwrap();
         // Zero grace: any unparseable file is immediately poison.
-        let claimed = claim_pending(dir.path(), &HashSet::new(), Duration::ZERO).unwrap();
+        let claimed = claim_pending(dir.path(), Duration::ZERO).unwrap();
         assert!(claimed.is_empty());
         assert!(!file_path.exists(), "stale garbage file must be removed");
     }
@@ -454,7 +435,7 @@ mod tests {
     fn claim_pending_empty_when_dir_missing() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("does-not-exist");
-        let claimed = claim_pending(&missing, &HashSet::new(), POISON_GRACE).unwrap();
+        let claimed = claim_pending(&missing, POISON_GRACE).unwrap();
         assert!(claimed.is_empty());
     }
 }
@@ -484,7 +465,7 @@ mod execution_order_tests {
         for t in tasks {
             enqueue(dir, t).unwrap();
         }
-        claim_pending(dir, &HashSet::new(), POISON_GRACE).unwrap()
+        claim_pending(dir, POISON_GRACE).unwrap()
     }
 
     #[test]
