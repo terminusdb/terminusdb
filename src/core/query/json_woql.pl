@@ -76,8 +76,9 @@ json_value_cast_type(V,Type,WOQL) :-
     json_value_cast_type(V,Type,[],WOQL).
 
 json_value_cast_type(V,Type,Hint,WOQL) :-
-    default_prefixes(Default_Prefixes),
-    prefix_expand(Type, Default_Prefixes, TE),
+    % Type names expand against the global defaults — the same bindings the
+    % old dict round-trip produced, without a per-call FFI.
+    default_type_expand(Type, TE),
     (   nonvar(V), V = _^^_
     ->  % Pre-typed value (e.g. 1^^xsd:decimal from the wire) - cast
         % from its declared type; recasts freely to other targets.

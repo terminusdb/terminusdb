@@ -1047,8 +1047,9 @@ check_value_type_(Schema,_Prefixes,Value,Type,Annotated,Captures) =>
     ).
 
 check_value_type_cast_(Schema,Prefixes,Value,Type,Annotated) :-
+    context_hint_for_type(Type, Prefixes, Hint),
     catch(
-        (   json_value_cast_type(Value,Type,[prefixes(Prefixes)],_),
+        (   json_value_cast_type(Value,Type,Hint,_),
             cast_specificity(Value, Type, Level),
             inference_level_note(Level),
             % Pre-typed wire values (e.g. 1^^xsd:decimal) carry the type only
