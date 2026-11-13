@@ -1,6 +1,8 @@
 :- module(casting,[
               typecast/4,
               typecast_switch/5,
+              context_hint_for_type/3,
+              default_type_expand/2,
               string_decimal_to_rational/2,
               rational_to_decimal_string/3,
               decimal_precision/1,
@@ -93,7 +95,7 @@ xsd_version_param(Version, _) :-
 :- use_module(library(apply_macros)).
 :- use_module(library(url), [is_absolute_url/1]).
 :- use_module(library(uri), [uri_components/2]).
-:- use_module(core(query/global_prefixes), [default_prefixes/1]).
+:- use_module(core(query/global_prefixes), [default_prefixes/1, global_prefixes/2]).
 :- use_module(library(json), [atom_json_dict/3]).
 
 /*
@@ -217,6 +219,71 @@ format_and_trim_decimal(FracDigits, MaxLen, FracStr) :-
 trim_trailing_zeros([0'0|Rest], Trimmed) :- !, trim_trailing_zeros(Rest, Trimmed).
 trim_trailing_zeros(Codes, Codes).
 
+/* context_prefix_datatype(+Type) is semidet.
+ *
+ * The datatype targets whose typecast_switch arms read the `prefixes(Dict)`
+ * hint: the expanded names (xsd:QName, xbrl:SQName) whose lexicals bind
+ * `prefix:local` through the map, and the IRI targets (owl:Thing, sys:Top)
+ * that expand their value with it. Spelled `p:local` forms count too — the
+ * database map may bind their prefix where the global defaults cannot.
+ */
+context_prefix_datatype(_:Local) :-
+    memberchk(Local, ['QName', 'SQName', 'Thing', 'Top']),
+    !.
+context_prefix_datatype(Type) :-
+    nonvar(Type),
+    (   atom(Type)
+    ->  Type_Atom = Type
+    ;   atom_string(Type_Atom, Type)
+    ),
+    (   memberchk(Type_Atom, ['http://www.w3.org/2001/XMLSchema#QName',
+                              'https://xbrl.org/2021SQName',
+                              'http://www.w3.org/2002/07/owl#Thing',
+                              'http://terminusdb.com/schema/sys#Top'])
+    ->  true
+    ;   \+ uri_has_protocol(Type_Atom),
+        uri_has_prefix_unsafe(Type_Atom, Match),
+        memberchk(Match.suffix, ["QName", "SQName", "Thing", "Top"])
+    ).
+
+/* context_hint_for_type(+Type, +Context, -Hint) is det.
+ *
+ * [prefixes(Context)] for the datatypes that can read the map, [] for the
+ * rest — callers pass the result straight to typecast/4 so a per-field
+ * prefix-map lookup is only paid where the cast can use it.
+ */
+context_hint_for_type(Type, Context, Hint) :-
+    (   context_prefix_datatype(Type)
+    ->  Hint = [prefixes(Context)]
+    ;   Hint = []
+    ).
+
+/* default_type_expand(+Type, -Expanded) is det.
+ *
+ * Resolve a datatype name against the global prefixes only — pure Prolog,
+ * no FFI. `P:S` compounds, atom and string `p:s` spellings expand through
+ * global_prefixes/2; everything else passes through and the caller's own
+ * validation reports it.
+ */
+default_type_expand(Type, Expanded) :-
+    (   Type = (Prefix : Local),
+        atom(Prefix),
+        atomic(Local)
+    ->  (   global_prefixes(Prefix, Base)
+        ->  atomic_list_concat([Base, Local], Expanded)
+        ;   Expanded = Type )
+    ;   (   atom(Type)
+        ->  Type_Atom = Type
+        ;   string(Type)
+        ->  atom_string(Type_Atom, Type)
+        ),
+        uri_has_prefix(Type_Atom, Match),
+        atom_string(Prefix_Atom, Match.prefix),
+        global_prefixes(Prefix_Atom, Base)
+    ->  atomic_list_concat([Base, Match.suffix], Expanded)
+    ;   Expanded = Type
+    ).
+
 /*
  * Presumably this should record into prov on failure.
  */
@@ -224,10 +291,13 @@ typecast(Val, Type, Hint, Cast) :-
     (   var(Val)
     ->  format(atom(M), 'Variable unbound in typecast to ~q', [Type]),
         throw(error(M))
-    ;   % Expand prefixes if provided (e.g., xsd:decimal → full URI)
-        (   option(prefixes(Prefixes), Hint)
+    ;   % The context map only matters for the datatype arms that read it on
+        % the value side; every other target expands against the global
+        % defaults — the FFI walks the whole context dict on each call.
+        (   option(prefixes(Prefixes), Hint),
+            context_prefix_datatype(Type)
         ->  prefix_expand(Type, Prefixes, Expanded_Type)
-        ;   Expanded_Type = Type
+        ;   default_type_expand(Type, Expanded_Type)
         ),
         (   \+ (   base_type(Expanded_Type)
                ;   Expanded_Type = 'http://www.w3.org/2002/07/owl#Thing'
@@ -2503,6 +2573,73 @@ test(sqname_to_string_lexical_round_trip, []) :-
              'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
              Lex^^'http://www.w3.org/2001/XMLSchema#string'),
     Lex = "xbrl:a:b}c".
+
+% --- Context-prefix gating: only expanded-name/IRI types consult the map ---
+
+test(typecast_nonmember_iri_ignores_prefix_map, []) :-
+    % xsd rebound to a bogus namespace: a non-member type must not consult
+    % the map at all — if it did, expansion lands outside xsd and fails.
+    P = _{xsd: 'http://bogus.example/'},
+    typecast("abc"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#string', [prefixes(P)],
+             "abc"^^'http://www.w3.org/2001/XMLSchema#string').
+
+test(typecast_nonmember_spelled_uses_defaults_not_map, []) :-
+    % A spelled non-member type resolves through the global defaults, never
+    % the context map — a poisoned binding cannot corrupt it.
+    P = _{xsd: 'http://bogus.example/'},
+    typecast("abc"^^'http://www.w3.org/2001/XMLSchema#string',
+             'xsd:string', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#string'),
+    Cast = "abc".
+
+test(typecast_nonmember_compound_spelling_never_consults_map, []) :-
+    % `xsd:string` as a `P:S` term: resolves via defaults, context untouched.
+    typecast("x"^^'http://www.w3.org/2001/XMLSchema#string',
+             xsd:string, [prefixes(_)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#string'),
+    Cast = "x".
+
+test(typecast_member_still_consults_prefix_map, []) :-
+    % The gate must not starve expanded names: a database alias for the xsd
+    % namespace names the QName type only through the context map.
+    P = _{x: 'http://www.w3.org/2001/XMLSchema#', eg: 'http://example.org/ns#'},
+    typecast("eg:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'x:QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns#}foo'.
+
+test(typecast_member_full_iri_keeps_value_resolution, []) :-
+    % Full-IRI member: the map still binds the lexical's prefix.
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#QName', [prefixes(P)],
+             Cast^^'http://www.w3.org/2001/XMLSchema#QName'),
+    Cast = '{http://example.org/ns#}foo'.
+
+test(typecast_anyuri_target_never_expands_lexical, []) :-
+    % anyURI accepts relative references: a `prefix:local` lexical stores
+    % verbatim — the target arm does not read the map.
+    P = _{eg: 'http://example.org/ns#'},
+    typecast("eg:foo"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#anyURI', [prefixes(P)],
+             "eg:foo"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(context_hint_for_type_membership, []) :-
+    context_hint_for_type('http://www.w3.org/2001/XMLSchema#QName', ctx,
+                          [prefixes(ctx)]),
+    context_hint_for_type('https://xbrl.org/2021SQName', ctx,
+                          [prefixes(ctx)]),
+    context_hint_for_type('http://www.w3.org/2002/07/owl#Thing', ctx,
+                          [prefixes(ctx)]),
+    context_hint_for_type('http://terminusdb.com/schema/sys#Top', ctx,
+                          [prefixes(ctx)]),
+    context_hint_for_type('xsd:QName', ctx, [prefixes(ctx)]),
+    context_hint_for_type('xbrl:SQName', ctx, [prefixes(ctx)]),
+    context_hint_for_type('http://www.w3.org/2001/XMLSchema#string', ctx, []),
+    context_hint_for_type('http://www.w3.org/2001/XMLSchema#decimal', ctx, []),
+    context_hint_for_type('xsd:string', ctx, []),
+    context_hint_for_type('http://www.w3.org/2001/XMLSchema#anyURI', ctx, []).
 
 % --- xsd:anyURI => QNames: prefix-map decomposition ---
 
