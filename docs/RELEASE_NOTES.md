@@ -13,6 +13,7 @@ Headline changes:
 * Type inference ladder: a specificity staircase for ambiguous candidates (precise and fast type resolution)
 * Idempotent `merge_repeats` resubmission and unbound-prefix errors that name the fix
 * `xdd:dateTimeInterval` single instants and full-day dates, and `xsd:duration` beyond 255 days
+* Document inserts even faster after a commit-path profiling pass — ~7% on serial inserts, up to ~10% on wide documents
 
 Storage layout and vectorlink configuration changes:
 
@@ -47,6 +48,7 @@ Storage layout and vectorlink configuration changes:
 * Fix the global atom-GC stall after large index runs [#2652](https://github.com/terminusdb/terminusdb/pull/2652)
 * Bound the log drain before each dispatch [#2653](https://github.com/terminusdb/terminusdb/pull/2653)
 * Gate context prefix maps to the datatypes that read them [#2654](https://github.com/terminusdb/terminusdb/pull/2654)
+* Type-inference specificity ranking now actually ranks: the `inference_level` accumulator kept its counter in a `thread_local` clause that returned a fresh copy on every call, so each `nb_setarg` was discarded and every candidate read level 0 — specificity never differentiated and ambiguous documents always took the tie path. The counter moved to `flag/3` and resets at `infer_type` entry
 
 ## Maintenance
 
@@ -57,6 +59,7 @@ Storage layout and vectorlink configuration changes:
 * Bump js-yaml from 4.3.0 to 4.3.2 in /dashboard by @dependabot [#2622](https://github.com/terminusdb/terminusdb/pull/2622)
 * Update the generated man page [#2621](https://github.com/terminusdb/terminusdb/pull/2621) [#2655](https://github.com/terminusdb/terminusdb/pull/2655)
 * Bump version to 12.1.0-rc3 [#2650](https://github.com/terminusdb/terminusdb/pull/2650)
+* Commit-path profiling pass on document inserts: removed the per-field `cast_level_memo_` clause layer (asserted once per checked field on keys that never repeat), made `typecast/3` the no-hint default, tabled the pure type classifiers, resolved `database_instance` once per document in the generated-ID uniqueness check, and gated per-triple prefix hints to context-family datatypes
 
 **Full Changelog**: https://github.com/terminusdb/terminusdb/compare/v12.1.0-rc2...v12.1.0-rc3
 
