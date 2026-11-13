@@ -344,14 +344,41 @@ assert_options_data_version_guards(Options) :-
     ).
 
 /*
+ * retract_unconsumed_label_versions(+Options) is det.
+ *
+ * expected_label_version/4 records are one-shot CAS preconditions: installed
+ * by assert_options_data_version_guards/1 and consumed by the label's head
+ * update in commit_validation_object/2. A record that survives the locked
+ * section — a guard that passed but whose commit then threw, or a label no
+ * validation writes — arms a later foreign commit's CAS with a version that
+ * commit never requested, surfacing as a phantom data_version_mismatch on an
+ * unversioned write. Retraction is scoped to this run's guarded labels: a
+ * concurrent commit's pending precondition on another label is untouched.
+ */
+retract_unconsumed_label_versions(Options) :-
+    forall(
+        data_version_guard_label(Options, Label),
+        retractall(data_version:expected_label_version(Label, _, _, _))
+    ).
+
+data_version_guard_label(Options, Label) :-
+    (   is_dict(Options)
+    ->  get_dict(data_version_guard, Options, Descriptor-_)
+    ;   option(data_version_guard(Descriptor-_), Options)
+    ),
+    root_label_name(Descriptor, Label).
+
+/*
  * assert_data_version_at_commit(+Descriptor, +Requested_Data_Version) is det.
  *
- * The authoritative data-version check. head/3 is captured FIRST and recorded
- * as the expected label version for the nb_force_set_head/3 CAS at commit;
- * a fresh descriptor read is verified SECOND. Capture-first keeps the
- * expected version <= the verified state: a foreign commit landing between
- * the two either fails the fresh read (data_version_mismatch, thrown, no
- * retry) or loses the CAS (fail -> retry -> re-assert).
+ * The authoritative data-version check. head/3 is captured FIRST as the
+ * expected label version for the nb_force_set_head/3 CAS at commit; a fresh
+ * descriptor read is verified SECOND; the expectation is recorded only once
+ * the compare passes, so a rejected guard never leaves a stale CAS
+ * precondition behind. Capture-first keeps the expected version <= the
+ * verified state: a foreign commit landing between the two either fails the
+ * fresh read (data_version_mismatch, thrown, no retry) or loses the CAS
+ * (fail -> retry -> re-assert).
  */
 assert_data_version_at_commit(Descriptor, Requested) :-
     Requested \= no_data_version,
@@ -360,10 +387,10 @@ assert_data_version_at_commit(Descriptor, Requested) :-
     storage(Store),
     safe_open_named_graph(Store, Composite, Graph),
     head(Graph, _Layer, Expected_Version),
-    record_expected_label_version(Composite, Expected_Version, Descriptor, Requested),
     open_descriptor(Descriptor, Fresh_Transaction),
     transaction_data_version(Fresh_Transaction, Actual),
-    compare_data_versions(Requested, Actual).
+    compare_data_versions(Requested, Actual),
+    record_expected_label_version(Composite, Expected_Version, Descriptor, Requested).
 assert_data_version_at_commit(_, _).
 
 /**
@@ -437,8 +464,11 @@ run_transactions(Transactions, All_Witnesses, Meta_Data, Options) :-
     % optimizer) do not deadlock trying to acquire the same lock.
     with_meta_commit_locks(
         Sorted_Keys,
-        (   assert_options_data_version_guards(Options),
-            commit_validation_objects(Validations0, Committed)
+        call_cleanup(
+            (   assert_options_data_version_guards(Options),
+                commit_validation_objects(Validations0, Committed)
+            ),
+            retract_unconsumed_label_versions(Options)
         )
     ),
     % Use the original validations before any potential schema migration
@@ -661,5 +691,76 @@ test(commit_guard_accept_then_reject_after_head_move, [
     catch(assert_data_version_at_commit(Desc, Req),
           error(data_version_mismatch(Req,_),_),
           true).
+
+test(commit_guard_rejection_leaves_no_cas_precondition, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,testdb4))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor(admin,testdb4,Desc),
+    seed_commit(Desc),
+    % A versioned write with a stale precondition is rejected at the guard.
+    create_context(Desc, Pre_VCtx),
+    VCtx = Pre_VCtx.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(VCtx, insert(x,y,z)),
+    query_context_transaction_objects(VCtx, VTObjs),
+    catch(run_transactions(VTObjs, true, _,
+                           [data_version_guard(Desc-data_version(branch, bogus_stale_commit_id))]),
+          error(data_version_mismatch(_, _), _),
+          true),
+    % The expected-version record must not outlive the rejected guard.
+    \+ data_version:expected_label_version(_, _, _, _),
+    % An unversioned commit must not inherit the stale CAS precondition.
+    create_context(Desc, Pre_Ctx2),
+    Ctx2 = Pre_Ctx2.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(Ctx2, insert(p,q,r)),
+    query_context_transaction_objects(Ctx2, TObjs2),
+    run_transactions(TObjs2, true, _).
+
+test(commit_guard_foreign_bump_then_unversioned_commit, [
+         setup((setup_temp_store(State),
+                create_db_without_schema(admin,testdb5))),
+         cleanup(teardown_temp_store(State))
+     ])
+:-
+    make_branch_descriptor(admin,testdb5,Desc),
+    seed_commit(Desc),
+    % A versioned write with a stale precondition is rejected at the guard.
+    create_context(Desc, Pre_VCtx),
+    VCtx = Pre_VCtx.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(VCtx, insert(x,y,z)),
+    query_context_transaction_objects(VCtx, VTObjs),
+    catch(run_transactions(VTObjs, true, _,
+                           [data_version_guard(Desc-data_version(branch, bogus_stale_commit_id))]),
+          error(data_version_mismatch(_, _), _),
+          true),
+    % A head writer that does not consult expected_label_version/4 moves the
+    % label anyway — named_graph_optimize/1 bumps _meta labels like this.
+    root_label_name(Desc, Composite),
+    storage(Store),
+    safe_open_named_graph(Store, Composite, Graph),
+    head(Graph, Head_Layer, Expected_Version),
+    squash(Head_Layer, New_Layer),
+    nb_force_set_head(Graph, New_Layer, Expected_Version),
+    % The unversioned commit must still succeed: it carries no precondition
+    % of its own and must not arm a CAS against a version nobody requested.
+    create_context(Desc, Pre_Ctx2),
+    Ctx2 = Pre_Ctx2.put(_{commit_info : commit_info{ author : test,
+                                                     message : test}}),
+    ask(Ctx2, insert(p,q,r)),
+    query_context_transaction_objects(Ctx2, TObjs2),
+    run_transactions(TObjs2, true, _).
+
+seed_commit(Descriptor) :-
+    create_context(Descriptor, Pre_Ctx),
+    Ctx = Pre_Ctx.put(_{commit_info : commit_info{ author : test,
+                                                   message : test}}),
+    ask(Ctx, insert(a,b,c)),
+    query_context_transaction_objects(Ctx, TObjs),
+    run_transactions(TObjs, true, _).
 
 :- end_tests(database_transactions).
