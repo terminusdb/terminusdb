@@ -338,7 +338,11 @@ value_json(X,X) :-
 % Context-aware variant: (S)QName typed literals resolve their `prefix:local`
 % lexical against this context's prefix map; other forms ignore it.
 value_json(V^^T,json{ '@value' : JV, '@type' : JT},Context) :-
-    value_type_json_type(V,T,JV,JT,[prefixes(Context)]),
+    (   ground(T)
+    ->  context_hint_for_type(T, Context, Hint)
+    ;   context_hint_for_type(JT, Context, Hint)
+    ),
+    value_type_json_type(V,T,JV,JT,Hint),
     !.
 value_json(X,O,_) :-
     value_json(X,O).
@@ -2712,9 +2716,10 @@ type_id_predicate_iri_value_(base_class(C),_,_,Elt,_Schema,Instance,Prefixes,_Op
         ;   V = V0
         )
     ;   Elt = X^^T
-    ->  (   C = T
-        ->  value_type_json_type(X,T,V,_,[prefixes(Prefixes)])
-        ;   value_type_json_type(X,T,D,T2,[prefixes(Prefixes)]),
+    ->  context_hint_for_type(T, Prefixes, Hint),
+        (   C = T
+        ->  value_type_json_type(X,T,V,_,Hint)
+        ;   value_type_json_type(X,T,D,T2,Hint),
             compress_dict_uri(T2,Prefixes,T2C),
             V = json{ '@type' : T2C, '@value' : D}
         )
@@ -3819,7 +3824,11 @@ insert_document_expanded(Transaction, Elaborated, ID) :-
     % insert
     forall(
         json_triple_(Elaborated, Cast_Prefixes, t(S,P,O)),
-        (   json_to_database_type(O, [prefixes(Cast_Prefixes)], OC),
+        (   (   O = _^^OT
+            ->  context_hint_for_type(OT, Cast_Prefixes, O_Hint)
+            ;   O_Hint = []
+            ),
+            json_to_database_type(O, O_Hint, OC),
             insert(Instance, S, P, OC, _))
     ).
 
@@ -4643,6 +4652,38 @@ test(write_json_stream_to_builder, [
 :- begin_tests(json,[concurrent(true)]).
 
 :- use_module(core(util/test_utils)).
+
+test(value_json_nonmember_never_consults_context, []) :-
+    % Poisoned context: xsd bound to a bogus namespace. A spelled non-member
+    % @type resolves through the global defaults — the map is not consulted,
+    % so the poisoned binding cannot corrupt the cast. The @type comes back
+    % spelled, as value_json/3 does not normalize it.
+    value_json(Lit, json{'@value': "abc", '@type': "xsd:string"},
+               _{xsd: 'http://bogus.example/'}),
+    Lit = "abc"^^"xsd:string".
+
+test(value_json_member_consults_context, []) :-
+    % Expanded names still resolve their lexical through the context map —
+    % the gate must not starve them of it.
+    value_json(Lit, json{'@value': "eg:foo", '@type': "xsd:QName"},
+               _{xsd: 'http://www.w3.org/2001/XMLSchema#',
+                 eg: 'http://example.org/ns#'}),
+    Lit = '{http://example.org/ns#}foo'^^"xsd:QName".
+
+test(json_to_database_type_nonmember_never_consults_context, []) :-
+    % The storage cast must not read the map for non-member types — a
+    % poisoned xsd binding proves it is never reached.
+    json_to_database_type("abc"^^'xsd:string',
+                          [prefixes(_{xsd: 'http://bogus.example/'})],
+                          Out),
+    Out = "abc"^^'http://www.w3.org/2001/XMLSchema#string'.
+
+test(json_to_database_type_member_consults_context, []) :-
+    json_to_database_type("eg:foo"^^'xsd:QName',
+                          [prefixes(_{xsd: 'http://www.w3.org/2001/XMLSchema#',
+                                      eg: 'http://example.org/ns#'})],
+                          Out),
+    Out = '{http://example.org/ns#}foo'^^'http://www.w3.org/2001/XMLSchema#QName'.
 
 test(expand_context_with_documentation, []) :-
 
