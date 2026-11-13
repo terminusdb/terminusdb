@@ -613,6 +613,17 @@ indexer_next_commit(Path, BranchNameRaw, CommitIdRaw, NextCommit) :-
                                      History_Oldest_First),
     (   append(_, [CommitId, NextCommitId|_], History_Oldest_First)
     ->  text_to_string(NextCommitId, NextCommit)
+    ;   memberchk(CommitId, History_Oldest_First)
+    ->  % In history with no successor — genuinely at HEAD.
+        NextCommit = 'None'
+    ;   History_Oldest_First = [ReanchorId|_]
+    ->  % The anchor commit dropped out of history entirely — routine
+        % history rewrites do this (InitialCommit replacement, squash,
+        % rebase, reset), and the operation itself is already logged.
+        % Reporting 'None' here would declare the task at HEAD and skip
+        % every real commit, so re-anchor at the first commit instead —
+        % pushes are dedup-guarded engine-side.
+        text_to_string(ReanchorId, NextCommit)
     ;   NextCommit = 'None'
     ).
 
@@ -1010,15 +1021,44 @@ test(process_commit_writes_ndjson_to_stream,
     close(WriteStream),
     delete_file(TmpFile).
 
-test(next_commit_returns_none_for_nonexistent_commit,
+test(next_commit_reanchors_for_commit_not_in_history,
      [setup((setup_temp_store(State),
              create_db_without_schema("admin", "foo"))),
       cleanup(teardown_temp_store(State))
      ]) :-
-    %% A commit ID not in the branch history yields 'None'.
+    %% A commit ID outside the branch history (a stale anchor, e.g. a
+    %% replaced InitialCommit) re-anchors at the first commit — 'None'
+    %% would declare the chain at HEAD and skip every real commit.
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
     indexer_next_commit("admin/foo/local/branch/main", "main",
                         "nonexistent_commit_id_xyz", Next),
-    assertion(Next == 'None').
+    text_to_string(Head_Commit_Id, Head_Str),
+    assertion(Next == Head_Str).
+
+test(next_commit_reanchors_replaced_initial_commit,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "foo"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    %% The second commit on a fresh db replaces the InitialCommit object
+    %% in the parent chain: the initial commit id then resolves as "not
+    %% in history". Catch-up anchored at it must re-anchor at the first
+    %% real commit instead of reporting at-HEAD.
+    resolve_absolute_string_descriptor("admin/foo/local/branch/main", Desc),
+    get_dict(repository_descriptor, Desc, Repo_Desc),
+    branch_head_commit(Repo_Desc, "main", Initial_Uri),
+    commit_id_uri(Repo_Desc, Initial_Commit_Id, Initial_Uri),
+    create_context(Desc, commit_info{author:"test",message:"first"}, Ctx),
+    with_transaction(Ctx, ask(Ctx, insert(a,b,c)), _),
+    branch_head_commit(Repo_Desc, "main", Head_Uri),
+    commit_id_uri(Repo_Desc, Head_Commit_Id, Head_Uri),
+    indexer_next_commit("admin/foo/local/branch/main", "main",
+                        Initial_Commit_Id, Next),
+    text_to_string(Head_Commit_Id, Head_Str),
+    assertion(Next == Head_Str).
 
 test(count_indexable_documents_returns_zero_for_no_embedding_schema,
      [setup((setup_temp_store(State),
