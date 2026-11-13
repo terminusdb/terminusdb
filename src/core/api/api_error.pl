@@ -3430,6 +3430,13 @@ generic_exception_jsonld(vectorlink_endpoint_not_configured(Context), JSON) :-
              'api:message' : Msg,
              'api:error' : _{'@type' : 'api:VectorlinkEndpointNotConfigured',
                              'api:context' : Context}}.
+generic_exception_jsonld(vectorlink_delete_domain_failed(Status, _Body, _URL), JSON) :-
+    format(string(Msg), "search engine refused index delete with status ~w", [Status]),
+    JSON = _{'@type' : 'api:EngineUnavailable',
+             'api:status' : 'api:failure',
+             'api:message' : Msg,
+             'api:error' : _{'@type' : 'api:VectorlinkDeleteDomainFailed',
+                             'api:http_status' : Status}}.
 generic_exception_jsonld(semantic_indexer_endpoint_not_configured(Context), JSON) :-
     format(string(Msg), "semantic indexer endpoint is not configured (called from ~w)", [Context]),
     JSON = _{'@type' : 'api:EndpointNotConfigured',

@@ -64,9 +64,13 @@ jobs:
           mkdir -p test-logs
           # terminus_config.pl is read by lib/info.js for version checks;
           # TERMINUSDB_GIT_HASH replaces `git rev-parse` (no .git inside).
+          # builtin_plugins is mounted because tests that spawn sibling
+          # servers resolve TERMINUSDB_BUILTIN_PLUGINS_PATH against
+          # /app/terminusdb; the image ships them at /builtin_plugins.
           docker run --platform ${{ inputs.image_platform }} \
             --volume "${PWD}/tests:/app/terminusdb/tests" \
             --volume "${PWD}/src/config/terminus_config.pl:/app/terminusdb/src/config/terminus_config.pl:ro" \
+            --volume "${PWD}/builtin_plugins:/app/terminusdb/builtin_plugins:ro" \
             --volume "${PWD}/test-logs:/logs" \
             --tmpfs /tmp:rw,exec \
             --tmpfs /app/terminusdb/storage \
