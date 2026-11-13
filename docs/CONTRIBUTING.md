@@ -908,3 +908,7 @@ make lint && make lint-mocha && make test && make test-int
 ### Veterans of the Tabs / Spaces War
 
 No tabs please! 4 spaces for indentation. This is non-negotiable.
+
+### Rust formatting
+
+The canonical style is stable rustfmt, pinned by `src/rust/rustfmt.toml`. `make lint-fmt` (part of `make pr-light`) fails on unformatted code — run `cargo fmt --all` in `src/rust` before committing Rust changes. Keep the config minimal; overrides are a second style to maintain.

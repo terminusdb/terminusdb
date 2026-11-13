@@ -158,6 +158,12 @@ else
 	cargo clippy --message-format=json --all-features --manifest-path=src/rust/Cargo.toml
 endif
 
+# Format gate for the Rust workspace: committed code must match
+# src/rust/rustfmt.toml under the stable toolchain.
+.PHONY: lint-fmt
+lint-fmt:
+	cargo fmt --all --check --manifest-path=src/rust/Cargo.toml
+
 .PHONY: lint-mocha
 lint-mocha:
 	sh -c "cd tests; npx npm run check"
@@ -351,7 +357,7 @@ test-e2e:
 	./tests/run-e2e.sh $(ARGS)
 
 .PHONY: pr-light
-pr-light: lint lint-mocha lint-openapi clippy dev restart test test-int
+pr-light: lint lint-mocha lint-openapi lint-fmt clippy dev restart test test-int
 
 .PHONY: pr
 pr: dashboard lint lint-mocha lint-openapi clippy dev restart test test-int

@@ -9,10 +9,6 @@ use crate::config::root_redirect_target;
 pub async fn root_redirect() -> impl IntoResponse {
     let target = root_redirect_target();
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::LOCATION,
-        target.parse().unwrap(),
-    );
+    headers.insert(header::LOCATION, target.parse().unwrap());
     (StatusCode::TEMPORARY_REDIRECT, headers, "")
 }
-

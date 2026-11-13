@@ -528,9 +528,11 @@ fn ladder_level(form: &Form, class: Class) -> Option<u64> {
         // 'A/B' is a true interval (4); a bare instant lexical only
         // satisfies the type as a degenerate [t,t] range, ranked below an
         // exact instant-type match (5). Mirrors cast_specificity.
-        (Form::Str(s), Class::Interval) => parse_lexical_interval(s)
-            .is_ok()
-            .then(|| if s.contains('/') { 4 } else { 5 }),
+        (Form::Str(s), Class::Interval) => {
+            parse_lexical_interval(s)
+                .is_ok()
+                .then(|| if s.contains('/') { 4 } else { 5 })
+        }
         (_, Class::Unhandled) => None,
         // NumericOther only appears inside Typed (handled above);
         // Typed itself is matched before ladder_level is reached.

@@ -1,7 +1,5 @@
 use std::os::raw::c_char;
-use swipl::fli::{
-    IOENC_ENC_OCTET, IOENC_ENC_UTF8, PL_unify_stream, Sclose, Sfdopen, Ssetenc,
-};
+use swipl::fli::{PL_unify_stream, Sclose, Sfdopen, Ssetenc, IOENC_ENC_OCTET, IOENC_ENC_UTF8};
 use swipl::prelude::*;
 use swipl::term::Nil;
 
