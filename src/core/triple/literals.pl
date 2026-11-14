@@ -48,7 +48,7 @@
 :- use_module(library(sort)).
 :- use_module(core(util)).
 :- use_module(core(util/xsd_parser), [ncname//0]).
-:- use_module(core(triple/casting), [typecast/4, decimal_precision/1, rational_to_decimal_string/3]).
+:- use_module(core(triple/casting), [typecast/3, decimal_precision/1, rational_to_decimal_string/3]).
 :- use_module(core(triple/base_type), [basetype_subsumption_of/2]).
 
 /*
@@ -477,7 +477,7 @@ literal_to_string(X^^'http://www.w3.org/2001/XMLSchema#string', X) :-
 literal_to_turtle(String@Lang,literal(lang(Lang,S))) :-
     atom_string(S,String).
 literal_to_turtle(Elt^^Type,literal(type(Type,S))) :-
-    typecast(Elt^^Type, 'http://www.w3.org/2001/XMLSchema#string', [], Val^^_),
+    typecast(Elt^^Type, 'http://www.w3.org/2001/XMLSchema#string', Val^^_),
     atom_string(S,Val).
 
 /*
@@ -492,7 +492,7 @@ turtle_to_literal(literal(lang(Lang,S)),String@Lang) :-
     !.
 turtle_to_literal(literal(type(Type,A)),Val^^Type) :-
     atom_string(A,S),
-    typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, [], Val^^_),
+    typecast(S^^'http://www.w3.org/2001/XMLSchema#string', Type, Val^^_),
     !.
 turtle_to_literal(literal(L),String^^'http://www.w3.org/2001/XMLSchema#string') :-
     (   atom(L)
@@ -697,7 +697,7 @@ storage_literal(X1^^T1,X3^^T2) :-
     ;   T2 = 'http://www.w3.org/2001/XMLSchema#anyURI'
     ->  X2 = X3
     ;   typecast(X2^^'http://www.w3.org/2001/XMLSchema#string',T2,
-                 [], X3^^_)
+                 X3^^_)
     ).
 storage_literal(X1@L1,X2@L2) :-
     storage_atom(L1,L2),

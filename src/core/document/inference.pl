@@ -222,50 +222,36 @@ no_captures(captures(C,T-T,S-S,C)).
  * fold their own level in, and nested inference propagates its resolved
  * level back into the enclosing candidate.
  */
-:- thread_local(cast_level_memo_/4).
+/* cast_level/4 is pure in (Value,Type) and cheap (a staircase lookup, not
+ * a search): callers run it directly.  An earlier draft memoized it per
+ * (Value,Type) — profiling on unique-valued inserts showed the asserta
+ * costing ~50x the computation it replayed. */
 
-/* cast_level/4 is pure in (Value,Type): sibling candidates that declare a
- * field with the same type re-evaluate the same pair, so each pair is
- * computed once and replayed.  Entries are cleared at every top-level
- * infer_type call. */
-cast_level_memoized(Value, Type, Level, Wit) :-
-    (   nonvar(Value), cast_level_memo_(Value, Type, Level, Wit)
+/* The level accumulator is a thread-local nb_setval cell.  flag/3 is
+ * process-global and races concurrent infer_type calls (concurrent
+ * plunit tests, parallel request workers) into scrambled levels;
+ * nb_setval is per-thread and equally cheap.  A thread that only runs
+ * the exported check_type path has no binding, which reads as 0. */
+inference_level(Current) :-
+    (   nb_current(inference_level, Current)
     ->  true
-    ;   '$inference':cast_level(Value, Type, Level, Wit),
-        asserta(cast_level_memo_(Value, Type, Level, Wit))
-    ).
-
-/* The level accumulator is a single mutable cell asserted once per
- * thread — profiling shows clause ops dominate infer (asserta/retractall
- * per field ~= 50%); nb_setarg is non-backtracking like the clause ops it
- * replaces and costs ~0.1 us instead of ~3 us per update. */
-:- thread_local(inference_level_cell_/1).
-
-inference_level_cell(Cell) :-
-    (   inference_level_cell_(Cell)
-    ->  true
-    ;   Cell = cell(0),
-        asserta(inference_level_cell_(Cell))
+    ;   Current = 0
     ).
 
 inference_level_save(Saved) :-
-    inference_level_cell(Cell),
-    arg(1, Cell, Saved),
-    nb_setarg(1, Cell, 0).
+    inference_level(Saved),
+    nb_setval(inference_level, 0).
 
 inference_level_set(Level) :-
-    inference_level_cell(Cell),
-    nb_setarg(1, Cell, Level).
+    nb_setval(inference_level, Level).
 
 inference_level_note(Level) :-
-    inference_level_cell(Cell),
-    arg(1, Cell, Current),
+    inference_level(Current),
     New is Current + Level,
-    nb_setarg(1, Cell, New).
+    nb_setval(inference_level, New).
 
 inference_level_read(Level) :-
-    inference_level_cell(Cell),
-    arg(1, Cell, Level).
+    inference_level(Level).
 
 integer_family_type(Type) :-
     basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#integer'),
@@ -1006,7 +992,7 @@ Type = 'http://terminusdb.com/schema/sys#JSON',
 check_value_type_(Schema,Prefixes,Value,Type,Annotated,Captures),
 is_base_type(Type) =>
     no_captures(Captures),
-    cast_level_memoized(Value, Type, Level, Wit),
+    '$inference':cast_level(Value, Type, Level, Wit),
     (   integer(Level)
     ->  inference_level_note(Level),
         % Pre-typed wire values (e.g. 1^^xsd:decimal) carry the tag only as
@@ -1047,9 +1033,11 @@ check_value_type_(Schema,_Prefixes,Value,Type,Annotated,Captures) =>
     ).
 
 check_value_type_cast_(Schema,Prefixes,Value,Type,Annotated) :-
-    context_hint_for_type(Type, Prefixes, Hint),
     catch(
-        (   json_value_cast_type(Value,Type,Hint,_),
+        (   (   context_prefix_datatype(Type)
+            ->  json_value_cast_type(Value,Type,[prefixes(Prefixes)],_)
+            ;   json_value_cast_type(Value,Type,_)
+            ),
             cast_specificity(Value, Type, Level),
             inference_level_note(Level),
             % Pre-typed wire values (e.g. 1^^xsd:decimal) carry the type only
@@ -1143,7 +1131,7 @@ infer_type(Database, Prefixes, Dictionary, Type, Annotated, Captures) :-
     database_schema(Database, Schema),
     default_prefixes(Default_Prefixes),
     put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
-    retractall(cast_level_memo_(_,_,_,_)),
+    inference_level_set(0),
     infer_type_(Schema, Merged_Prefixes, 'http://terminusdb.com/schema/sys#Top', Dictionary,
                 Type, Annotated, Captures).
 
@@ -1151,7 +1139,7 @@ infer_type(Database, Prefixes, Super, Dictionary, Type, Annotated, Captures) :-
     database_schema(Database, Schema),
     default_prefixes(Default_Prefixes),
     put_dict(Prefixes, Default_Prefixes, Merged_Prefixes),
-    retractall(cast_level_memo_(_,_,_,_)),
+    inference_level_set(0),
     infer_type_(Schema, Merged_Prefixes, Super, Dictionary, Type, Annotated, Captures).
 
 infer_type_(Schema, Prefixes, Super, Dictionary, Type, Annotated, captures(In,DepH-DepT,SubH-SubT,Out)) :-
@@ -1919,5 +1907,34 @@ test(interval_instant_specificity) :-
     % The expanded URI behaves identically to the prefixed form.
     cast_specificity('2026-01-01T00:00:00',
                      'http://terminusdb.com/schema/xdd#dateTimeInterval',5).
+
+test(inference_level_accumulator) :-
+    inference_level_set(0),
+    inference_level_note(3),
+    inference_level_note(4),
+    inference_level_read(Level),
+    Level == 7,
+    inference_level_save(Saved),
+    Saved == 7,
+    inference_level_read(Zeroed),
+    Zeroed == 0,
+    inference_level_set(Saved),
+    inference_level_read(Restored),
+    Restored == 7,
+    inference_level_set(0).
+
+test(inference_level_thread_isolation) :-
+    inference_level_set(0),
+    thread_create((   inference_level_set(100),
+                      inference_level_note(5),
+                      inference_level_read(Worker),
+                      thread_exit(Worker)
+                  ),
+                  Id, []),
+    thread_join(Id, exited(Worker_Level)),
+    assertion(Worker_Level == 105),
+    inference_level_read(Mine),
+    assertion(Mine == 0),
+    inference_level_set(0).
 
 :- end_tests(infer).

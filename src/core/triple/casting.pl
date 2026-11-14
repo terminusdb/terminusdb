@@ -1,7 +1,9 @@
 :- module(casting,[
+              typecast/3,
               typecast/4,
               typecast_switch/5,
               context_hint_for_type/3,
+              context_prefix_datatype/1,
               default_type_expand/2,
               string_decimal_to_rational/2,
               rational_to_decimal_string/3,
@@ -227,6 +229,7 @@ trim_trailing_zeros(Codes, Codes).
  * that expand their value with it. Spelled `p:local` forms count too — the
  * database map may bind their prefix where the global defaults cannot.
  */
+:- table context_prefix_datatype/1 as private.
 context_prefix_datatype(_:Local) :-
     memberchk(Local, ['QName', 'SQName', 'Thing', 'Top']),
     !.
@@ -265,6 +268,7 @@ context_hint_for_type(Type, Context, Hint) :-
  * global_prefixes/2; everything else passes through and the caller's own
  * validation reports it.
  */
+:- table default_type_expand/2 as private.
 default_type_expand(Type, Expanded) :-
     (   Type = (Prefix : Local),
         atom(Prefix),
@@ -287,6 +291,9 @@ default_type_expand(Type, Expanded) :-
 /*
  * Presumably this should record into prov on failure.
  */
+typecast(Val, Type, Cast) :-
+    typecast(Val, Type, [], Cast).
+
 typecast(Val, Type, Hint, Cast) :-
     (   var(Val)
     ->  format(atom(M), 'Variable unbound in typecast to ~q', [Type]),
@@ -2624,6 +2631,15 @@ test(typecast_anyuri_target_never_expands_lexical, []) :-
     typecast("eg:foo"^^'http://www.w3.org/2001/XMLSchema#string',
              'http://www.w3.org/2001/XMLSchema#anyURI', [prefixes(P)],
              "eg:foo"^^'http://www.w3.org/2001/XMLSchema#anyURI').
+
+test(typecast_3_matches_empty_hint_4, []) :-
+    % The hint slot only exists for context-map readers; a caller with no
+    % map calls the 3-ary form and gets the empty-hint behaviour verbatim.
+    typecast("12"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#long', Cast3),
+    typecast("12"^^'http://www.w3.org/2001/XMLSchema#string',
+             'http://www.w3.org/2001/XMLSchema#long', [], Cast4),
+    assertion(Cast3 == Cast4).
 
 test(context_hint_for_type_membership, []) :-
     context_hint_for_type('http://www.w3.org/2001/XMLSchema#QName', ctx,

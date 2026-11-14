@@ -720,10 +720,10 @@ value_jsonld(D^^T,json{'@type' : T, '@value' : V}) :-
         )
     ;   expanded_name_datatype(T)
     ->  % Expanded names render as prefix:local via the active map
-        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', V^^_)
     ;   compound(D)
     ->  % Other compound types: convert to string
-        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', V^^_)
     ;   % Simple values: use as-is
         D=V
     ),
@@ -837,7 +837,7 @@ term_jsonld(D^^T,Prefixes,json{'@type' : TC, '@value' : V}) :-
         typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [prefixes(Prefixes)], V^^_)
     ;   compound(D)
     ->  % Other compound types: convert to string
-        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', [], V^^_)
+        typecast(D^^T, 'http://www.w3.org/2001/XMLSchema#string', V^^_)
     ;   % Simple values: use as-is
         D=V
     ),
