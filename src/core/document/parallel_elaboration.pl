@@ -982,22 +982,31 @@ test(rust_vs_prolog_elaboration_performance, [
         helper_docs(DocCount, Docs),
         open_descriptor(Desc, DB),
         '$doc':get_document_context(DB, true, false, Context),
-        % Warm-up to avoid cold-start effects.
-        '$doc':rust_elaborate_simple_documents(Context, [json{'@type':'Person', name:'Warm', age:1}], none, none, _),
+        % Warm both paths on the full workload so neither timed sample pays
+        % first-touch costs the other has already amortized.
         forall(member(D, Docs), json_elaborate(DB, D, _)),
-        % Prolog path timing.
-        statistics(walltime, [PrologT0, _]),
-        forall(member(D, Docs), json_elaborate(DB, D, _)),
-        statistics(walltime, [PrologT1, _]),
-        PrologMs is PrologT1 - PrologT0,
-        PrologDocsPerS is (DocCount * 1000) / max(PrologMs, 1),
-        % Rust path timing.
-        statistics(walltime, [RustT0, _]),
         '$doc':rust_elaborate_simple_documents(Context, Docs, none, none, _),
-        statistics(walltime, [RustT1, _]),
-        RustMs is RustT1 - RustT0,
-        RustDocsPerS is (DocCount * 1000) / max(RustMs, 1),
-        assertion(RustDocsPerS > PrologDocsPerS)
+        % CI runners steal CPU in bursts, which only ever adds walltime, so
+        % the minimum of repeated samples is the steal-resistant estimate.
+        findall(Ms,
+                (   between(1, 3, _),
+                    statistics(walltime, [T0, _]),
+                    forall(member(D, Docs), json_elaborate(DB, D, _)),
+                    statistics(walltime, [T1, _]),
+                    Ms is T1 - T0
+                ),
+                PrologSamples),
+        min_list(PrologSamples, PrologMs),
+        findall(Ms,
+                (   between(1, 3, _),
+                    statistics(walltime, [T0, _]),
+                    '$doc':rust_elaborate_simple_documents(Context, Docs, none, none, _),
+                    statistics(walltime, [T1, _]),
+                    Ms is T1 - T0
+                ),
+                RustSamples),
+        min_list(RustSamples, RustMs),
+        assertion(RustMs < PrologMs)
     ;   true
     ),
     !.
