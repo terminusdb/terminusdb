@@ -227,23 +227,31 @@ no_captures(captures(C,T-T,S-S,C)).
  * (Value,Type) — profiling on unique-valued inserts showed the asserta
  * costing ~50x the computation it replayed. */
 
-/* The level accumulator is a per-thread flag — flag/3 does the
- * read-modify-write in one builtin where the previous dynamic-predicate
- * cell needed a clause lookup plus arg/is/nb_setarg on every checked
- * field (~12k calls per 3000-doc insert). The clause copies also
- * discarded every nb_setarg, so the accumulator never accumulated and
- * every candidate read Cand_Level = 0. */
+/* The level accumulator is a thread-local nb_setval cell.  flag/3 is
+ * process-global and races concurrent infer_type calls (concurrent
+ * plunit tests, parallel request workers) into scrambled levels;
+ * nb_setval is per-thread and equally cheap.  A thread that only runs
+ * the exported check_type path has no binding, which reads as 0. */
+inference_level(Current) :-
+    (   nb_current(inference_level, Current)
+    ->  true
+    ;   Current = 0
+    ).
+
 inference_level_save(Saved) :-
-    flag(inference_level, Saved, 0).
+    inference_level(Saved),
+    nb_setval(inference_level, 0).
 
 inference_level_set(Level) :-
-    flag(inference_level, _, Level).
+    nb_setval(inference_level, Level).
 
 inference_level_note(Level) :-
-    flag(inference_level, Old, Old + Level).
+    inference_level(Current),
+    New is Current + Level,
+    nb_setval(inference_level, New).
 
 inference_level_read(Level) :-
-    flag(inference_level, Level, Level).
+    inference_level(Level).
 
 integer_family_type(Type) :-
     basetype_subsumption_of(Type, 'http://www.w3.org/2001/XMLSchema#integer'),
@@ -1913,6 +1921,20 @@ test(inference_level_accumulator) :-
     inference_level_set(Saved),
     inference_level_read(Restored),
     Restored == 7,
+    inference_level_set(0).
+
+test(inference_level_thread_isolation) :-
+    inference_level_set(0),
+    thread_create((   inference_level_set(100),
+                      inference_level_note(5),
+                      inference_level_read(Worker),
+                      thread_exit(Worker)
+                  ),
+                  Id, []),
+    thread_join(Id, exited(Worker_Level)),
+    assertion(Worker_Level == 105),
+    inference_level_read(Mine),
+    assertion(Mine == 0),
     inference_level_set(0).
 
 :- end_tests(infer).
