@@ -3455,6 +3455,229 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         404:
           description: Database not found
+  /events/{path}:
+    get:
+      operationId: getScopedEvents
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Subscribe to a scoped event stream"
+      description: |
+        Opens a long-lived `application/x-ndjson` stream of events, one
+        envelope object per line. There is no instance-wide stream:
+        `{path}` names the channel scope and must be a graph spec — a
+        database (`org/db`) or a branch
+        (`org/db/repository/branch/name`). A bare organization, `_meta`,
+        `_commits`, and commit or graph slices are not scopes and are
+        rejected.
+
+        **Channels.** A scope carries zero or more named channels,
+        addressed with the `channel` query parameter (repeatable or
+        comma-separated). Channel names are MQTT-style topic names:
+        `/`-separated levels of `[A-Za-z0-9._~-]`, at most 256
+        characters; the wildcard levels `+` and `#` are reserved and
+        rejected. Keys starting with `@` form the reserved special-key
+        namespace (the MQTT `$SYS` convention); `@commit` is the only
+        reserved key today. When `channel` is omitted the subscription
+        joins `@commit`, which carries commit-driven events.
+
+        **Events.** `kind` selects which payload kinds to receive:
+        `id` (commit events — only on `@commit`), `doc` (schema-bound
+        messages), `json` (raw messages — the default on named
+        channels), or `any` (every kind the channel can carry).
+        `since` selects the anchor; only `now` (the default) is
+        implemented — live events only. Other values are rejected
+        with 400.
+
+        Each commit builds its event once and fans it out on
+        `events:<branch>:@commit` and `events:<org>/<db>:@commit`, so a
+        database-scope subscriber receives commits from every branch of
+        that database; the envelope's `channel` field names the branch
+        the commit occurred on. Published `message` events (see POST)
+        are delivered on `events:<scope>:<name>/<kind>` and are
+        ephemeral — fanned out to current subscribers only, never
+        stored.
+
+        **Upgrade.** Sending `Upgrade: tdb-events` with `Connection:
+        upgrade` answers `101 Switching Protocols` and continues the
+        same NDJSON envelope stream on the raw socket — the server's
+        per-connection HTTP state is released, which is the low-memory
+        path at scale. Responses may not be re-requested on an
+        upgraded connection. Clients without the header receive the
+        ordinary chunked response.
+
+        **Authorization.** Subscribing requires `meta_read_access` on
+        the system descriptor, plus a capability on the scope's
+        descriptor per channel: `commit_read_access` for the reserved
+        `@commit` channel, `message_recv` for named channels.
+
+        **Example:**
+        ```bash
+        # Commit events for one database, live
+        curl -u admin:root "http://localhost:6363/api/events/admin/mydb"
+
+        # Commits plus user messages on named channels
+        curl -u admin:root "http://localhost:6363/api/events/admin/mydb?channel=@commit&channel=alerts/build"
+        ```
+      tags:
+        - Events
+      parameters:
+        - $ref: '#/components/parameters/resource_path'
+        - $ref: '#/components/parameters/event_channel'
+        - $ref: '#/components/parameters/event_kind'
+        - $ref: '#/components/parameters/event_since'
+        - $ref: '#/components/parameters/event_timeout'
+      responses:
+        200:
+          description: "Open event stream; one envelope per line until the client disconnects or `timeout` elapses"
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/EventEnvelope'
+              examples:
+                id:
+                  value:
+                    event: id
+                    channel: admin/mydb/local/branch/main
+                    data:
+                      commit:
+                        identifier: hpl18q42dbnab4vzq8me4bg1xn8p2a0
+                        author: admin
+                        message: Add a person
+                        timestamp: 1660919664.9129035
+                        user: "terminusdb:///system/data/User/admin"
+                      changes:
+                        added: ["Person/alice"]
+                        changed: []
+                        deleted: []
+                      branch: admin/mydb/local/branch/main
+                message:
+                  value:
+                    event: message
+                    channel: admin/mydb
+                    data:
+                      topic: alerts/build
+                      kind: doc
+                      message:
+                        "@type": Alert
+                        severity: high
+        400:
+          description: >-
+            Invalid parameters: a `kind` or `since` value other than
+            the implemented default, an invalid channel name, or a
+            path that is not a graph spec (api:bad_request).
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: >-
+            The path is not an event scope (missing path, bare
+            organization) or names a database that does not exist
+            (api:not_found).
+    post:
+      operationId: publishScopedEvent
+      x-python-client: not_implemented
+      x-js-client: not_implemented
+      summary: "Publish a message event to a scoped channel"
+      description: |
+        Publishes a `message` event to a named channel on the scope
+        without performing a commit. Exactly one `channel` parameter is
+        required and it must not be the reserved `commit` channel.
+
+        `kind` selects the body's semantics. `json` (the default)
+        verifies only that the body parses as JSON — any JSON value is
+        accepted — for payloads that are not TerminusDB documents.
+        `kind=doc` opts into a schema-bound document validated with
+        the same elaboration the document insert path runs: `@type`
+        must resolve against the schema at the scope and the instance
+        must satisfy the class definition; a database scope validates
+        against `local/branch/main`; violations are rejected with a
+        schema-check failure. Other `kind` values are rejected with
+        400. Either way the body is broadcast verbatim (never
+        re-serialized, so numeric precision is preserved); the
+        document is not committed — the broadcast is the only effect.
+
+        The message is fanned out once over the broadcast registry to
+        every current subscriber of `events:<scope>:<channel>`.
+        Delivery is ephemeral: nothing is stored and subscribers who
+        connect later never see it.
+
+        Publishing requires `message_send` on the scope's descriptor.
+        (`Action/message_send` and `Action/message_recv` are
+        capabilities in the system Action enum.)
+
+        **Example:**
+        ```bash
+        curl -u admin:root -X POST "http://localhost:6363/api/events/admin/mydb?channel=alerts" \
+             -H "Content-Type: application/json" \
+             -d '{"@type": "Alert", "severity": "high"}'
+        ```
+      tags:
+        - Events
+      parameters:
+        - $ref: '#/components/parameters/resource_path'
+        - name: channel
+          in: query
+          required: true
+          description: >-
+            The channel to publish to: one MQTT-style channel name —
+            `/`-separated levels of `[A-Za-z0-9._~-]`, at most 256
+            characters. `@`-prefixed keys are reserved and cannot be
+            published to.
+          schema:
+            type: string
+        - name: kind
+          in: query
+          required: false
+          description: >-
+            The body's semantics and the kind subscribers must have
+            subscribed to. `json` (the default): raw JSON — verified
+            only to parse, any JSON value accepted. `doc`: a
+            schema-bound document, validated against the scope's
+            schema. A `doc` subscriber never receives `json`
+            messages and vice versa; `any` subscribers receive both.
+            Other values are rejected with 400.
+          schema:
+            type: string
+            enum:
+              - doc
+              - json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: >-
+                The message payload; a schema-bound document carrying
+                `@type`, or any JSON value when `kind=json`.
+      responses:
+        200:
+          description: "Message accepted for broadcast"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  "api:status":
+                    type: string
+                    example: api:success
+        400:
+          description: >-
+            Missing, repeated, or reserved `commit` channel parameter;
+            a `kind` value other than `json`; malformed JSON body or —
+            without `kind=json` — a body that is not a JSON object or
+            fails the schema check at the scope (api:bad_request /
+            schema-check witnesses).
+        401:
+          $ref: '#/components/responses/IncorrectAuthenticationError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: >-
+            The path is not an event scope or names a database that
+            does not exist (api:not_found).
+        413:
+          description: Request body exceeds the 1MB message limit
   /roles:
     post:
       operationId: createRole
@@ -5216,6 +5439,63 @@ components:
       schema:
         type: string
         example: admin/sandbox/local/branch/main
+    event_channel:
+      name: channel
+      in: query
+      required: false
+      description: >-
+        Channel names to subscribe to; repeatable and comma-separated,
+        so a subscription may join several channels of the scope at
+        once. Channel names are MQTT-style topic names: `/`-separated
+        levels of `[A-Za-z0-9._~-]`, at most 256 characters; the
+        wildcard levels `+` and `#` are reserved and rejected. Keys
+        starting with `@` are the reserved special-key namespace —
+        only `@commit` exists today, and it is also the default when
+        `channel` is omitted.
+      schema:
+        type: string
+        example: commit,alerts/build
+    event_kind:
+      name: kind
+      in: query
+      required: false
+      description: >-
+        The payload kinds to receive: `id` (commit events — valid only
+        on the reserved `commit` channel), `doc` (schema-bound
+        messages), `json` (raw messages — the default on named
+        channels), or `any` (every kind a channel can carry). A
+        single value is accepted; a kind the channel can never carry
+        is rejected with 400, as are other values.
+      schema:
+        type: string
+        enum:
+          - id
+          - doc
+          - json
+          - any
+        example: any
+    event_since:
+      name: since
+      in: query
+      required: false
+      description: >-
+        The subscription anchor. Only `now` is implemented — the
+        default — delivering events occurring after the subscription
+        is live. Catch-up anchors (commit id or timestamp) may be
+        added; other values are rejected with 400.
+      schema:
+        type: string
+        example: now
+    event_timeout:
+      name: timeout
+      in: query
+      required: false
+      description: >-
+        Seconds before the stream closes when no event has been
+        delivered, or `false` to keep it open indefinitely.
+      schema:
+        type: string
+        default: "30"
       examples:
         main:
           value: admin/sandbox
@@ -5419,6 +5699,43 @@ components:
         "message":
           type: string
           example: Created something in the data product
+    EventEnvelope:
+      type: object
+      description: >-
+        One line of an event stream. `event` discriminates the payload
+        kind and selects the shape of `data`; `channel` names the
+        graph spec the event was produced at — for `id` events the
+        branch the commit occurred on, for `message` events the scope
+        the message was published to.
+      required:
+        - event
+        - channel
+        - data
+      properties:
+        event:
+          type: string
+          description: Payload kind; selects the shape of `data`.
+          enum:
+            - id
+            - message
+        channel:
+          type: string
+          description: >-
+            Producing graph spec. For `id` events the branch path the
+            commit occurred on; for `message` events the scope the
+            message was published to.
+          example: admin/mydb/local/branch/main
+        data:
+          type: object
+          description: >-
+            Kind-specific payload. For `event: id`, an object with
+            `commit` (identifier, author, message, timestamp, user),
+            `changes` (added, changed and deleted document id sets) and
+            `branch` (the branch path). For `event: message`, an object
+            with `topic` (the channel name the message was published
+            to), `kind` (`doc` or `json` — the payload form the
+            publisher used) and `message` (the published document or
+            raw value).
     Database:
       type: object
       properties:

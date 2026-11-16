@@ -94,6 +94,7 @@ download-lint: $(SWIPL_LINT_PATH)
 .PHONY: lint
 lint: $(SWIPL_LINT_PATH)
 	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -g "use_module(library(plunit))" -s $(SWIPL_LINT_PATH) -g lint_files -t halt
+	$(SWIPL) -s src/load_paths.pl -s src/core/query/expansions.pl -g "use_module(library(plunit))" -s src/lint/banned_calls.pl -g banned_calls -t halt
 
 .PHONY: clean
 clean:

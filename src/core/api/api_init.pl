@@ -284,7 +284,7 @@ update_system_schema_graph(Changed) :-
     (   get_schema_document(Transaction_Object, 'Action', Action_Enum),
         get_dict('@value', Action_Enum, Values),
         member(V, Values),
-        sub_atom(V, _, _, 0, woql_logic_exec)
+        sub_atom(V, _, _, 0, message_recv)
     ->  Changed = false
     ;   json_log_notice_formatted("Upgrading ~s",[System_Label]),
         %  system_schema/1 is compiled into the binary — never read
@@ -371,14 +371,52 @@ builtin_role_update('Role/admin', "Admin Role", [
     "woql_main_exec", "woql_logic_exec", "woql_logic_read",
     "woql_logic_write", "woql_other_exec", "woql_search",
     "woql_instance_read", "woql_instance_write",
-    "woql_schema_read", "woql_schema_write"]).
+    "woql_schema_read", "woql_schema_write",
+    "message_send", "message_recv"]).
+%  Second generation: stores already migrated to the woql-era action
+%  set gain the message actions too.
+builtin_role_update('Role/admin', "Admin Role", [
+    "create_database", "delete_database", "class_frame", "clone",
+    "fetch", "push", "branch", "rebase",
+    "instance_read_access", "instance_write_access",
+    "schema_read_access", "schema_write_access",
+    "meta_read_access", "meta_write_access",
+    "commit_read_access", "commit_write_access",
+    "manage_capabilities",
+    "search", "search_snippets", "reindex_write",
+    "woql_main_exec", "woql_logic_exec", "woql_logic_read",
+    "woql_logic_write", "woql_other_exec", "woql_search",
+    "woql_instance_read", "woql_instance_write",
+    "woql_schema_read", "woql_schema_write"], [
+    "create_database", "delete_database", "class_frame", "clone",
+    "fetch", "push", "branch", "rebase",
+    "instance_read_access", "instance_write_access",
+    "schema_read_access", "schema_write_access",
+    "meta_read_access", "meta_write_access",
+    "commit_read_access", "commit_write_access",
+    "manage_capabilities",
+    "search", "search_snippets", "reindex_write",
+    "woql_main_exec", "woql_logic_exec", "woql_logic_read",
+    "woql_logic_write", "woql_other_exec", "woql_search",
+    "woql_instance_read", "woql_instance_write",
+    "woql_schema_read", "woql_schema_write",
+    "message_send", "message_recv"]).
 builtin_role_update('Role/consumer', "Consumer Role", [
     "class_frame", "clone", "fetch", "meta_read_access",
     "commit_read_access", "instance_read_access",
     "schema_read_access"], [
     "class_frame", "clone", "fetch", "meta_read_access",
     "commit_read_access", "instance_read_access",
-    "schema_read_access", "search", "search_snippets"]).
+    "schema_read_access", "search", "search_snippets",
+    "message_recv"]).
+builtin_role_update('Role/consumer', "Consumer Role", [
+    "class_frame", "clone", "fetch", "meta_read_access",
+    "commit_read_access", "instance_read_access",
+    "schema_read_access", "search", "search_snippets"], [
+    "class_frame", "clone", "fetch", "meta_read_access",
+    "commit_read_access", "instance_read_access",
+    "schema_read_access", "search", "search_snippets",
+    "message_recv"]).
 builtin_role_update('Role/executor', "Executor Role", _, [
     "search", "woql_logic_exec"]).
 

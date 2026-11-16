@@ -35,7 +35,9 @@
                "woql_instance_read",
                "woql_instance_write",
                "woql_schema_read",
-               "woql_schema_write"
+               "woql_schema_write",
+               "message_send",
+               "message_recv"
              ]}
 
 { "@id" : "Capability/server_access",
@@ -59,7 +61,8 @@
                "instance_read_access",
                "schema_read_access",
                "search",
-               "search_snippets"
+               "search_snippets",
+               "message_recv"
              ]}
 
 { "@id" : "Role/executor",

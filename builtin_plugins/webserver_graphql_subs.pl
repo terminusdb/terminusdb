@@ -150,7 +150,7 @@ broadcast_graphql_events(Validation_Objects, Meta_Data) :-
                 member(Descriptor-data_version(_, CommitIdAtom), DataVersions)
             ),
             Triples),
-    webserver_commits:dedup_triples(Triples, UniqueTriples),
+    webserver_events:dedup_triples(Triples, UniqueTriples),
     forall(
         member(Descriptor-Validation_Object-CommitIdAtom, UniqueTriples),
         send_graphql_events(Validation_Object, Descriptor, CommitIdAtom)
@@ -335,7 +335,7 @@ send_sse_or_ndjson(ndjson, JsonStr, RawChannel) :-
 
 %% broadcast_raw_or_log(+RawChannel, +Payload) is det.
 broadcast_raw_or_log(RawChannel, Payload) :-
-    (   '$appserver':appserver_broadcast_send_raw(RawChannel, Payload)
+    (   plugin_api:broadcast_send_raw(RawChannel, Payload)
     ->  true
     ;   json_log:json_log_error_formatted(
             "[graphql-sse] broadcast_send_raw FAILED for channel ~w", [RawChannel])
@@ -806,7 +806,7 @@ sse_post_response(StreamId, _CohortKey, RawChannel, Timeout, Mode) :-
     ->  TimeoutSecs = 0
     ;   Timeout = TimeoutSecs
     ),
-    catch('$appserver':appserver_broadcast_subscribe(RawChannel, StreamId, TimeoutSecs), _, true),
+    catch(plugin_api:broadcast_subscribe(RawChannel, StreamId, TimeoutSecs), _, true),
     send_connected_event(Mode, RawChannel).
 
 %% send_connected_event(+Mode, +RawChannel) is det.
@@ -1242,7 +1242,7 @@ graphql_escape_string(Raw, Escaped) :-
 %% sweep_stale_sse_streams is det.
 %%
 %% Retract graphql_sse_subscription/4 entries whose Rust stream no longer
-%% exists. Mirrors webserver_commits:sweep_stale_streams/0. Called at
+%% exists. Mirrors webserver_events:sweep_stale_streams/0. Called at
 %% the start of do_broadcast_graphql_events.
 sweep_stale_sse_streams :-
     (   \+ graphql_sse_subscription(_, _, _, _)
@@ -1266,7 +1266,7 @@ cleanup_sse_stream(StreamId) :-
     ->  cohort_mode(CohortKey, Mode),
         send_complete_event(Mode, RawChannel),
         unregister_subscription(CohortKey, StreamId),
-        catch('$appserver':appserver_broadcast_unsubscribe(RawChannel, StreamId), _, true),
+        catch(plugin_api:broadcast_unsubscribe(RawChannel, StreamId), _, true),
         catch('$appserver':appserver_release_subscription(Auth), _, true)
     ;   true
     ).

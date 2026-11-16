@@ -145,6 +145,54 @@ plugin_error_response(error(server_not_ready, _), Response) :- !,
         body: Body,
         headers: _{'Content-Type': 'application/json'}
     }.
+plugin_error_response(error(unknown_database(Org, Db), _), Response) :- !,
+    format(string(Msg), "Unknown database: ~s/~s", [Org, Db]),
+    Response = _{
+        status: 404,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:not_found',
+            'api:message': Msg
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
+plugin_error_response(error(syntax_error(json(_)), _), Response) :- !,
+    Response = _{
+        status: 400,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:bad_request',
+            'api:message': 'Malformed JSON in request body'
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
+plugin_error_response(error(invalid_message_body, _), Response) :- !,
+    Response = _{
+        status: 400,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:bad_request',
+            'api:message': 'Request body must be a JSON object'
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
+plugin_error_response(error(body_too_large, _), Response) :- !,
+    Response = _{
+        status: 413,
+        body: _{
+            '@type': 'api:ErrorResponse',
+            'api:status': 'api:bad_request',
+            'api:message': 'Request body exceeds the 1MB message limit'
+        },
+        headers: _{'Content-Type': 'application/json'}
+    }.
+plugin_error_response(error(schema_check_failure(Witnesses), _), Response) :- !,
+    once(api_error:generic_exception_jsonld(schema_check_failure(Witnesses), Body)),
+    Response = _{
+        status: 400,
+        body: Body,
+        headers: _{'Content-Type': 'application/json'}
+    }.
 plugin_error_response(_, Response) :-
     Response = _{
         status: 500,

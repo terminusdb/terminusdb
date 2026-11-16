@@ -39,6 +39,7 @@
 :- use_module(core(plugin_api/encode)).
 :- use_module(core(plugin_api/delta)).
 :- use_module(core(plugin_api/stream)).
+:- use_module(core(plugin_api/broadcast)).
 :- use_module(core(plugin_api/config)).
 :- use_module(core(plugin_api/indexer)).
 :- use_module(core(plugin_api/document)).

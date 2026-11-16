@@ -90,3 +90,21 @@ ignore_file("./x").
 :- if(\+ getenv("TERMINUSDB_ENTERPRISE", true)).
 ignore_file("./terminusdb-enterprise").
 :- endif.
+
+% --- banned_predicate/2 ---
+% JSON read predicates provided by library(json) and library(http/json).
+% Reads must go through json_preserve (serde-backed) so numeric
+% precision is preserved; writes stay on json_write_dict where the
+% json:json_write_hook clauses emit exact decimals.
+banned_predicate("json_read_dict/2", "use json_preserve").
+banned_predicate("json_read_dict/3", "use json_preserve").
+banned_predicate("json_read_dict_stream/3", "use json_preserve").
+banned_predicate("json_read/2", "use json_preserve").
+banned_predicate("json_read/3", "use json_preserve").
+
+% --- banned_grandfathered/1 ---
+% Files with pre-existing banned calls. The list only shrinks: migrate
+% the call to json_preserve and remove the entry.
+banned_grandfathered("./src/core/util/utils.pl").
+banned_grandfathered("./src/core/query/json_woql.pl").
+banned_grandfathered("./src/core/query/woql_compile.pl").
