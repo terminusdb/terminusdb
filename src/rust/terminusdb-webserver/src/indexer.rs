@@ -417,6 +417,28 @@ struct BranchTask {
 }
 
 /// The global indexer registry.
+/// Dead man's switch decision: is a task stalled past the deadline?
+/// Pure so the rule is unit-testable — the abort itself stays in
+/// check_dead_mans_switch.
+///
+/// A task is stalled only when it is mid-push (`has_current_commit`,
+/// armed by set_current_commit), it has not finished its expected
+/// documents (a task waiting for the terminal line is not stuck), and
+/// the engine has reported no batch progress or heartbeat within the
+/// deadline. `progress_age` is None between a pending commit and the
+/// push start — that is not a stall.
+fn dead_man_violation(
+    has_current_commit: bool,
+    processed_docs: u64,
+    total_docs: u64,
+    progress_age: Option<Duration>,
+    deadline: Duration,
+) -> bool {
+    has_current_commit
+        && !(total_docs > 0 && processed_docs >= total_docs)
+        && matches!(progress_age, Some(age) if age > deadline)
+}
+
 pub struct IndexerRegistry {
     tasks: StdMutex<HashMap<BranchKey, Arc<BranchTask>>>,
     pending_queue: StdMutex<VecDeque<BranchKey>>,
@@ -1261,42 +1283,55 @@ impl IndexerRegistry {
             // and have started the push — last_progress_at is set by
             // set_current_commit, not set_pending_commit).
             if let Some(ref commit) = current_commit {
-                // Skip if all documents have been processed — the task is
-                // waiting for the vectorlink response, not stuck.
-                if total_docs > 0 && processed_docs >= total_docs {
-                    continue;
-                }
-                if let Some(age) = task.progress.progress_age() {
-                    if age > deadline {
-                        // Dead man's switch violation! Crash the server.
-                        let msg = format!(
-                            "[FATAL] Indexer dead man's switch violation: \
-                             branch {} {} commit {} \
-                             no document progress for {:?} (deadline {:?}) \
-                             processed_documents={} total_documents={} \
-                             commits_processed={} total_commits={} \
-                             — a single document should take < 5s, \
-                             this indicates a stuck task that must be investigated",
-                            key.path,
-                            key.branch,
-                            commit,
-                            age,
-                            deadline,
-                            processed_docs,
-                            total_docs,
-                            completed,
-                            total
-                        );
-                        eprintln!("{}", msg);
+                let age = task.progress.progress_age();
+                if dead_man_violation(
+                    current_commit.is_some(),
+                    processed_docs,
+                    total_docs,
+                    age,
+                    deadline,
+                ) {
+                    // Dead man's switch violation! Crash the server.
+                    let age = age.unwrap_or_default();
+                    let msg = format!(
+                        "[FATAL] Indexer dead man's switch violation: \
+                         branch {} {} commit {} \
+                         no batch progress for {:?} (deadline {:?}) \
+                         processed_documents={} total_documents={} \
+                         commits_processed={} total_commits={} \
+                         — the engine reports batch progress or heartbeats \
+                         while work is in flight; silence indicates a stuck \
+                         task that must be investigated",
+                        key.path,
+                        key.branch,
+                        commit,
+                        age,
+                        deadline,
+                        processed_docs,
+                        total_docs,
+                        completed,
+                        total
+                    );
+                    eprintln!("{}", msg);
 
-                        // Print all thread stack traces for debugging.
-                        // On macOS, we use backtrace_symbols via signal.
-                        // The simplest cross-platform approach: send SIGABRT
-                        // which triggers the Prolog signal handler to print
-                        // all thread stacks before crashing.
-                        eprintln!("[FATAL] Aborting server for stack trace analysis...");
-                        std::process::abort();
+                    // Dump every task's state, then the watchdog thread's
+                    // backtrace. Other threads' stacks need the signal
+                    // handler that runs after abort — stderr keeps what we
+                    // have if the handler prints nothing.
+                    for (other_key, other_task) in tasks.iter() {
+                        eprintln!(
+                            "[FATAL] task {} {}: {:?}",
+                            other_key.path,
+                            other_key.branch,
+                            other_task.progress.snapshot()
+                        );
                     }
+                    eprintln!(
+                        "[FATAL] watchdog thread backtrace:\n{}",
+                        std::backtrace::Backtrace::force_capture()
+                    );
+                    eprintln!("[FATAL] Aborting server for stack trace analysis...");
+                    std::process::abort();
                 }
             }
         }
@@ -2432,6 +2467,78 @@ mod tests {
             registry.get_transport().is_err(),
             "transport should be unset"
         );
+    }
+
+    #[test]
+    fn test_dead_man_violation_idle_task_is_safe() {
+        // No current commit — the task is idle, the switch stays quiet.
+        assert!(!dead_man_violation(
+            false,
+            0,
+            0,
+            Some(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_pending_commit_is_safe() {
+        // current_commit set via set_pending_commit leaves last_progress_at
+        // unset — age None means the push has not started, not a stall.
+        assert!(!dead_man_violation(
+            true,
+            0,
+            0,
+            None,
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_fresh_progress_is_safe() {
+        assert!(!dead_man_violation(
+            true,
+            10,
+            100,
+            Some(Duration::from_secs(30)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_stalled_task_trips() {
+        assert!(dead_man_violation(
+            true,
+            1120,
+            23_000,
+            Some(Duration::from_secs(61)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_fully_processed_is_safe() {
+        // All documents embedded — the task waits for the terminal line,
+        // which is not a stall even past the deadline.
+        assert!(!dead_man_violation(
+            true,
+            100,
+            100,
+            Some(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        ));
+    }
+
+    #[test]
+    fn test_dead_man_violation_zero_total_still_trips() {
+        // No expected count yet: a silent push past the deadline is a stall.
+        assert!(dead_man_violation(
+            true,
+            0,
+            0,
+            Some(Duration::from_secs(61)),
+            Duration::from_secs(60)
+        ));
     }
 
     #[test]
