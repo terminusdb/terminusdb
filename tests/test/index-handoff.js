@@ -82,7 +82,9 @@ function startEmbedServer () {
         return { embedding, index, object: 'embedding' }
       })
       const out = JSON.stringify({ object: 'list', data, model: body.model || 'fake-embed' })
-      res.writeHead(200, { 'Content-Type': 'application/json' }).end(out)
+      // delayMs is captured at request receipt so a request already in
+      // flight keeps its delay when the knob is turned back down.
+      setTimeout(() => res.writeHead(200, { 'Content-Type': 'application/json' }).end(out), server.delayMs || 0)
     })
   })
   return new Promise((resolve, reject) => {
@@ -413,6 +415,56 @@ describe('Read-only index handoff', function () {
     expect(status.read_only).to.equal(true)
     expect(status.handoff).to.equal(null)
     expect(status.last_indexed_commit).to.be.a('string')
+  })
+
+  it('reports behind after the writer dies mid-push, and recovers on reindex', async function () {
+    // The dead man's switch abort drops a delivered task from the
+    // in-memory registry — a restart leaves nothing to drain, so the
+    // status must not claim completed while last-indexed lags the head.
+    // The delayed embed keeps the push in flight so the writer can be
+    // stopped deterministically mid-push.
+    embedServer.delayMs = 30000
+    const res = await httpRequest(portA, 'POST', `/api/document/${ORG}/${DB}?author=test&message=behind-docs`, [
+      { '@type': 'Animal', name: 'Aristotle' },
+    ])
+    expect(res.status).to.equal(200)
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await stopInstance(procA)
+    embedServer.delayMs = 0
+
+    // The read-only peer resolves the branch head live but serves the
+    // engine snapshot frozen at open — its searchable index lags the
+    // head it can see, which is what 'behind' reports. Its
+    // last_indexed_commit is that frozen view and so legitimately
+    // differs from the writer's live value.
+    const statusB = await indexStatus(portB)
+    expect(statusB.status).to.equal('behind')
+    expect(statusB.branch_head_commit).to.be.a('string')
+    expect(statusB.last_indexed_commit).to.be.a('string')
+    expect(statusB.last_indexed_commit).to.not.equal(statusB.branch_head_commit)
+
+    // Same view on the writer after restart: the registry is empty and
+    // the gap is reported, not hidden as completed.
+    procA = spawnInstance('handoff-a', portA)
+    await waitForServer(portA)
+    const statusA = await indexStatus(portA)
+    expect(statusA.status).to.equal('behind')
+    expect(statusA.branch_head_commit).to.equal(statusB.branch_head_commit)
+    expect(statusA.last_indexed_commit).to.not.equal(statusA.branch_head_commit)
+
+    // Reindex closes the gap: completed with head equal to last-indexed.
+    const trigger = await httpRequest(portA, 'POST', `/api/index/${ORG}/${DB}`, {})
+    expect(trigger.status).to.equal(200)
+    let lastStatus
+    const settled = await poll(async () => {
+      const s = await tryIndexStatus(portA)
+      lastStatus = s
+      if (s?.status === 'error') throw new Error(`index task failed on writer: ${s.error}`)
+      return (s?.status === 'completed') ? s : false
+    }, 30000).catch(e => {
+      throw new Error(`${e.message}; last status=${JSON.stringify(lastStatus)}`)
+    })
+    expect(settled.last_indexed_commit).to.equal(settled.branch_head_commit)
   })
 
   it('hands off a domain-index delete from the read-only instance', async function () {
