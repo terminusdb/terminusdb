@@ -1477,6 +1477,25 @@ fn maybe_start_handoff_poller(transport: &Arc<dyn EngineTransport>) {
     handle.spawn(handoff_poller_loop(dir, registry));
 }
 
+/// A task file signals by appearing, changing or disappearing: create,
+/// remove, and data or rename events wake the scan. Everything else must
+/// not — the poller's own claim_pending opens the watched directory on
+/// every scan, which inotify reports as Access(Open), and strictatime
+/// mounts can add atime Modify(Metadata) from the same reads. Waking on
+/// an event the scan itself emits loops forever.
+fn handoff_event_wakes(event: &notify::Event) -> bool {
+    match event.kind {
+        notify::EventKind::Create(_) | notify::EventKind::Remove(_) => true,
+        notify::EventKind::Modify(kind) => matches!(
+            kind,
+            notify::event::ModifyKind::Any
+                | notify::event::ModifyKind::Data(_)
+                | notify::event::ModifyKind::Name(_)
+        ),
+        _ => false,
+    }
+}
+
 /// Poll the handoff directory: claim pending task files and deliver each
 /// to the registry, deleting the file once the signal is accepted. The
 /// file is the signal and only the signal — like `indexer_notify`, once
@@ -1494,9 +1513,9 @@ async fn handoff_poller_loop(dir: std::path::PathBuf, registry: Arc<IndexerRegis
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(HANDOFF_DEFAULT_POLL_SECS);
     let mut interval = tokio::time::interval(Duration::from_secs(poll_secs));
-    // Any event in the task directory wakes the scan early; claim_pending
-    // tolerates partial or locked files, so no event filtering is needed.
-    // The channel also absorbs bursts — a flood of events collapses into
+    // Only task-file mutations wake the scan early — handoff_event_wakes
+    // drops the access and metadata events the scan emits itself. The
+    // channel also absorbs bursts — a flood of events collapses into
     // one scan.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(64);
     // The closure gets a clone so event_tx outlives a failed watcher —
@@ -1506,8 +1525,10 @@ async fn handoff_poller_loop(dir: std::path::PathBuf, registry: Arc<IndexerRegis
     // the watcher always has a path instead of degrading to sweep-only.
     let _ = std::fs::create_dir_all(&dir);
     let _watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if res.is_ok() {
-            let _ = watcher_tx.try_send(());
+        if let Ok(event) = res {
+            if handoff_event_wakes(&event) {
+                let _ = watcher_tx.try_send(());
+            }
         }
     }) {
         Ok(mut w) => {
@@ -3885,6 +3906,56 @@ mod tests {
             }),
             "a writable engine must schedule a local branch task"
         );
+    }
+
+    #[test]
+    fn test_handoff_events_from_own_scans_do_not_wake_poller() {
+        use notify::event::{AccessKind, AccessMode, EventKind, MetadataKind, ModifyKind};
+        // The poller's claim_pending opens and reads the watched directory
+        // on every scan — inotify reports that as Access(Open), and
+        // strictatime mounts add atime Modify(Metadata). Waking on either
+        // loops forever; the scan must never wake on events it emits itself.
+        for kind in [
+            EventKind::Access(AccessKind::Open(AccessMode::Any)),
+            EventKind::Access(AccessKind::Read),
+            EventKind::Access(AccessKind::Close(AccessMode::Write)),
+            EventKind::Access(AccessKind::Other),
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any)),
+            EventKind::Modify(ModifyKind::Other),
+            EventKind::Any,
+            EventKind::Other,
+        ] {
+            let event = notify::Event::new(kind);
+            assert!(
+                !handoff_event_wakes(&event),
+                "{:?} must not wake the poller",
+                kind
+            );
+        }
+    }
+
+    #[test]
+    fn test_handoff_task_file_mutations_wake_poller() {
+        use notify::event::{
+            CreateKind, DataChange, EventKind, ModifyKind, RemoveKind, RenameMode,
+        };
+        for kind in [
+            EventKind::Create(CreateKind::File),
+            EventKind::Create(CreateKind::Any),
+            EventKind::Remove(RemoveKind::File),
+            EventKind::Remove(RemoveKind::Any),
+            EventKind::Modify(ModifyKind::Data(DataChange::Any)),
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)),
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+            EventKind::Modify(ModifyKind::Any),
+        ] {
+            let event = notify::Event::new(kind);
+            assert!(
+                handoff_event_wakes(&event),
+                "{:?} must wake the poller",
+                kind
+            );
+        }
     }
 
     /// Engine transport returning a canned status for delete execution.

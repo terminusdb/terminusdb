@@ -152,6 +152,7 @@ async function waitForServer (port, timeoutMs = 30000) {
 function stopInstance (proc) {
   return new Promise((resolve) => {
     if (proc?.exitCode !== null || proc?.signalCode !== null) return resolve()
+    proc.expectedStop = true
     proc.once('exit', () => resolve())
     proc.kill('SIGTERM')
     setTimeout(() => { try { proc.kill('SIGKILL') } catch (e) {} resolve() }, 10000).unref()
@@ -234,8 +235,11 @@ describe('Read-only index handoff', function () {
       stdio: ['ignore', logFd, logFd],
     })
     fs.closeSync(logFd)
+    proc.expectedStop = false
     proc.on('error', err => process.stderr.write(`[${name}] spawn error: ${err}\n`))
-    proc.on('exit', (code, signal) => process.stderr.write(`[${name}] exited code=${code} signal=${signal}\n`))
+    proc.on('exit', (code, signal) => {
+      if (!proc.expectedStop) process.stderr.write(`[${name}] exited unexpectedly code=${code} signal=${signal}\n`)
+    })
     return proc
   }
 
