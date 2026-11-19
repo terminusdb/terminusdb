@@ -211,6 +211,7 @@ initialize_database_with_store(Key, Store, Force) :-
 
 current_woql_version("v1.0.3").
 current_repository_version("v1.0.1").
+:- dynamic current_ref_version/1.
 current_ref_version("v1.0.3").
 
 has_no_store :-
@@ -228,6 +229,36 @@ current_schema_version(ref_schema, Version) :-
 current_schema_version(woql_schema, Version) :-
     current_woql_version(Version).
 
+/**
+ * schema_version_at_least(+Stored, +Bundled) is semidet.
+ *
+ * True when the stored schema version is at or above the bundled
+ * version. Components compare numerically so v1.0.10 sorts after
+ * v1.0.9; a stored version that does not parse counts as stale.
+ */
+schema_version_at_least(Stored, Bundled) :-
+    catch((schema_version_components(Stored, Stored_Components),
+           schema_version_components(Bundled, Bundled_Components)),
+          _, fail),
+    schema_components_lte(Bundled_Components, Stored_Components).
+
+schema_version_components(Version, Components) :-
+    atom_string(Atom, Version),
+    (   atom_concat('v', Rest, Atom)
+    ->  true
+    ;   Rest = Atom
+    ),
+    atomic_list_concat(Parts, '.', Rest),
+    maplist(atom_number, Parts, Components).
+
+schema_components_lte([], _) :- !.
+schema_components_lte([B|Bs], [S|Ss]) :-
+    (   S > B
+    ->  true
+    ;   S =:= B
+    ->  schema_components_lte(Bs, Ss)
+    ).
+
 update_system_graph(Label, Path, Predicate, Initialization) :-
     update_system_graph(Label, Path, Predicate, Initialization, _).
 
@@ -243,9 +274,10 @@ update_system_graph(Label, Path, Predicate, Initialization, Changed) :-
 
     (   database_context_object(Context, Obj),
         get_dict('@metadata', Obj, Metadata),
-        get_dict('schema_version', Metadata, Version),
-        current_schema_version(Predicate, Version)
-    % already current
+        get_dict('schema_version', Metadata, Stored_Version),
+        current_schema_version(Predicate, Bundled_Version),
+        schema_version_at_least(Stored_Version, Bundled_Version)
+    % already current (or newer — never downgrade a newer schema)
     ->  Changed = false
     % needs an upgrade
     ;   json_log_notice_formatted("Upgrading ~s",[Label]),
@@ -599,6 +631,27 @@ test(update_system_schema_graph_detects_current_schema, [
          cleanup(teardown_temp_store(State))
      ]) :-
     update_system_schema_graph(Changed),
+    assertion(Changed == false).
+
+test(schema_version_compare_numeric_components, []) :-
+    assertion(schema_version_at_least("v1.0.3", "v1.0.2")),
+    assertion(schema_version_at_least("v1.0.10", "v1.0.9")),
+    assertion(schema_version_at_least("v1.0.3", "v1.0.3")),
+    assertion(\+ schema_version_at_least("v1.0.2", "v1.0.3")),
+    assertion(\+ schema_version_at_least("v1.0", "v1.0.1")).
+
+% A binary older than the stored schema must leave it alone — a
+% version gate that only checks equality would silently downgrade it.
+test(update_system_graph_keeps_a_newer_stored_schema, [
+         setup((setup_temp_store(State),
+                asserta(api_init:current_ref_version("v0.0.1")))),
+          cleanup((retractall(api_init:current_ref_version("v0.0.1")),
+                   teardown_temp_store(State)))
+     ]) :-
+    ref_ontology(Label),
+    ref_schema_json(Path),
+    update_system_graph(Label, Path, ref_schema,
+                        api_init:initialize_ref_schema, Changed),
     assertion(Changed == false).
 
 test(update_system_roles_restores_builtin_roles, [
