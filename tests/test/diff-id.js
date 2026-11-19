@@ -872,6 +872,116 @@ describe('diff-id', function () {
       expect(r6.body['api:status']).to.equal('api:not_found')
     })
 
+    it('apply squash commit reports a delete-edit conflict', async function () {
+      const docId = 'item/' + util.randomString()
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 1 },
+          raw_json: true,
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const branchDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      // theirs: the branch deletes the document
+      await document
+        .delete(agent, {
+          path: branchDocPath,
+          query: { id: docId },
+        })
+
+      // ours: main edits the document after the fork
+      await document
+        .replace(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 2 },
+          raw_json: true,
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'squash',
+        })
+
+      expect(r4.status).to.equal(409)
+      expect(r4.body['api:witnesses']).to.have.length(1)
+      const witness = r4.body['api:witnesses'][0]
+      expect(witness['@op']).to.equal('DeleteEditConflict')
+      expect(witness['@id']).to.equal(docId)
+      expect(witness['@deleted_by']).to.equal('theirs')
+
+      // the apply wrote nothing: ours' edit survives
+      const r5 = await document.get(agent, { query: { id: docId } })
+      expect(r5.body.n).to.equal(2)
+    })
+
+    it('apply squash commit resolves a delete-edit conflict with the recipe', async function () {
+      const docId = 'item/' + util.randomString()
+      const r1 = await document
+        .insert(agent, {
+          instance: { '@id': docId, name: 'Socrates', n: 1 },
+          raw_json: true,
+        })
+      const dv1 = r1.header['terminusdb-data-version']
+
+      const branchName = util.randomString()
+      const origin = api.path.branchOrigin(agent)
+      await branch.create(agent, branchName, { origin })
+      const branchDocPath = api.path.document(agent) + '/local/branch/' + branchName
+
+      // theirs: the branch edits the document
+      await document
+        .replace(agent, {
+          path: branchDocPath,
+          instance: { '@id': docId, name: 'Socrates', n: 3 },
+          raw_json: true,
+        })
+
+      // ours: main deletes the document after the fork
+      await document
+        .delete(agent, {
+          query: { id: docId },
+        })
+
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: dv1,
+          after_commit: branchName,
+          commit_info: { author: 'gavin', message: 'something' },
+          conflict_resolution: { default: 'ours', documents: { [docId]: 'theirs' } },
+        })
+
+      expect(r4.status).to.equal(200)
+
+      // theirs wins for this document: it is resurrected at n=3
+      const r5 = await document.get(agent, { query: { id: docId } })
+      expect(r5.body.n).to.equal(3)
+    })
+
+    it('apply squash commit rejects an unknown type', async function () {
+      const path = api.path.apply(agent)
+
+      const r4 = await agent.post(path)
+        .send({
+          before_commit: 'main',
+          after_commit: 'main',
+          commit_info: { author: 'gavin', message: 'something' },
+          type: 'rebase',
+        })
+
+      expect(r4.status).to.equal(400)
+      expect(r4.body['api:error']['@type']).to.equal('api:BadApplyType')
+    })
+
     it('gets an error on apply', async function () {
       const id = util.randomString()
       agent.db = id

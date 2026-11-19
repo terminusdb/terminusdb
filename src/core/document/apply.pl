@@ -39,17 +39,31 @@ apply_diff(Context, Diff, Conflict, Options) :-
     ->  Delete_Candidate = Delete_ID
     ;   throw(error(missing_field('@id', Delete_Candidate), _))
     ),
-    catch(
-        (   delete_document(Context, Delete_ID),
-            Conflict = null
-        ),
-        error(document_not_found(ID), _),
-        (   option(match_final_state(true), Options)
-        ->  Conflict = null
-        ;   Conflict = json{ '@op' : 'DeleteConflict',
-                             '@id_does_not_exists' : ID
-                           }
+    (   is_dict(Delete_Candidate)
+    ->  (   get_document(Context, Delete_ID, Current)
+        ->  query_context_transaction_objects(Context, [Transaction]),
+            normalize_document(Transaction, Delete_Candidate, Normalized_Delete),
+            (   Current = Normalized_Delete
+            ->  delete_document(Context, Delete_ID),
+                Conflict = null
+            % The document at target differs from the base embedded in
+            % the diff, so the other side edited it since the merge
+            % base: delete-versus-edit conflict.
+            ;   compressed_document_id(Context, Delete_ID, ID_String),
+                Conflict = json{ '@op' : 'DeleteEditConflict',
+                                 '@id' : ID_String,
+                                 '@deleted_by' : "theirs",
+                                 '@expected' : Normalized_Delete,
+                                 '@found' : Current }
+            )
+        ;   missing_delete_conflict(Delete_ID, Options, Conflict)
         )
+    ;   catch(
+            (   delete_document(Context, Delete_ID),
+                Conflict = null
+            ),
+            error(document_not_found(ID), _),
+            missing_delete_conflict(ID, Options, Conflict))
     ).
 apply_diff(Context, Diff, Conflict, Options) :-
     get_dict('@insert', Diff, Insert),
@@ -74,14 +88,38 @@ apply_diff(Context, Diff, Conflict, Options) :-
         get_dict('@id', Diff, ID),
         error(missing_field('@id', Diff), _)
     ),
-    get_document(Context, ID, JSON_In,
-                 options{compress_ids: true, unfold: true, keep_json_type: true}),
-    simple_patch(Diff,JSON_In,Result,Options),
-    (   Result = success(JSON_Out)
-    ->  apply_replace_document(Context, JSON_In, JSON_Out, _),
-        Conflict = null
-    ;   Result = conflict(Conflict_Prototype),
-        put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+    (   get_document(Context, ID, JSON_In,
+                     options{compress_ids: true, unfold: true, keep_json_type: true})
+    ->  simple_patch(Diff,JSON_In,Result,Options),
+        (   Result = success(JSON_Out)
+        ->  apply_replace_document(Context, JSON_In, JSON_Out, _),
+            Conflict = null
+        ;   Result = conflict(Conflict_Prototype),
+            put_dict(_{ '@id' : ID }, Conflict_Prototype, Conflict)
+        )
+    % The document is absent at target but edited in the diff: the
+    % target side deleted it — edit-versus-delete conflict.
+    ;   compressed_document_id(Context, ID, ID_String),
+        Conflict = json{ '@op' : 'DeleteEditConflict',
+                         '@id' : ID_String,
+                         '@deleted_by' : "ours" }
+    ).
+
+% The diff carries expanded document IRIs; witnesses report the
+% compressed @base form, matching the id convention documents use.
+compressed_document_id(Context, Id, Id_Str) :-
+    get_dict(prefixes, Context, Prefixes),
+    compress_dict_uri(Id, Prefixes, Compressed, [compress_ids(true)]),
+    (   atom(Compressed)
+    ->  atom_string(Compressed, Id_Str)
+    ;   Id_Str = Compressed ).
+
+missing_delete_conflict(ID, Options, Conflict) :-
+    (   option(match_final_state(true), Options)
+    ->  Conflict = null
+    ;   Conflict = json{ '@op' : 'DeleteConflict',
+                         '@id_does_not_exists' : ID
+                       }
     ).
 
 %% apply_replace_document(+Context, +JSON_In, +JSON_Out, -Id) is det.

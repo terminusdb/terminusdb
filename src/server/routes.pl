@@ -3111,8 +3111,17 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
     ),
 
     (   _{ type: Type } :< Document
-    ->  atom_string(Type_Atom, Type)
+    ->  (   (string(Type) ; atom(Type))
+        ->  atom_string(Type_Atom, Type)
+        % Non-text types are passed through so the API layer can reject
+        % them with bad_apply_type instead of failing the handler.
+        ;   Type_Atom = Type)
     ;   Type_Atom = squash
+    ),
+
+    (   _{ conflict_resolution: Conflict_Resolution } :< Document
+    ->  Resolution_Options = [conflict_resolution(Conflict_Resolution)]
+    ;   Resolution_Options = []
     ),
 
     api_report_errors(
@@ -3123,7 +3132,8 @@ apply_handler(post, Path, Request, System_DB, Auth) :-
                                         Before_Commit, After_Commit,
                                         [type(Type_Atom),
                                          match_final_state(Match_Final_State),
-                                         keep(Keep)]),
+                                         keep(Keep)
+                                         | Resolution_Options]),
                 cors_reply_json(Request,
                                 json{'@type' : "api:ApplyResponse",
                                      'api:status' : "api:success"})),
