@@ -143,7 +143,8 @@ commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed
                                 _Shared_Commit_Id, Commit1_Path, Commit2_Path),
 
     distinct(Changed,
-             (   union(Commit1_Path, Commit2_Path, All_Commits),
+             (   % The paths are disjoint segments: each runs from the common base to one head.
+                 append(Commit1_Path, Commit2_Path, All_Commits),
                  member(Commit_Id, All_Commits),
                  resolve_relative_descriptor(Branch_Descriptor,
                                              ["commit", Commit_Id],
