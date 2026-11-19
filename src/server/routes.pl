@@ -649,7 +649,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, overwrite, boolean, false, Overwrite),
             param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
-            param_value_search_optional(Search, check, boolean, false, Check),
+            param_value_search_optional(Search, dry_run, boolean, false, Dry_Run),
 
             read_data_version_header(Request, Requested_Data_Version),
 
@@ -667,7 +667,7 @@ document_handler(post, Path, Request, System_DB, Auth) :-
                           input_format: InputFormat,
                           document_id: Id
                       },
-            (   Check = true
+            (   Dry_Run = true
             ->  check_document_write(System_DB, Auth, Path, Request,
                                      insert, Options, Stream, Graph_Type,
                                      Author, Message, Requested_Data_Version)
@@ -699,7 +699,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, type, non_empty_atom, _, Type),
             param_value_search_optional(Search, require_migration, boolean, false, Require_Migration),
             param_value_search_optional(Search, allow_destructive_migration, boolean, false, Allow_Destructive_Migration),
-            param_value_search_optional(Search, check, boolean, false, Check),
+            param_value_search_optional(Search, dry_run, boolean, false, Dry_Run),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -710,7 +710,7 @@ document_handler(delete, Path, Request, System_DB, Auth) :-
                           allow_destructive_migration: Allow_Destructive_Migration
                       },
 
-            (   Check = true
+            (   Dry_Run = true
             ->  check_document_delete(System_DB, Auth, Path, Request,
                                       Options, Graph_Type,
                                       Author, Message, Requested_Data_Version,
@@ -754,7 +754,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             param_value_search_optional(Search, merge_repeats, boolean, false, Merge_Repeats),
             param_value_search_optional(Search, compress_ids, boolean, true, Compress_Ids),
             param_value_search_optional(Search, id, non_empty_atom, _, Id),
-            param_value_search_optional(Search, check, boolean, false, Check),
+            param_value_search_optional(Search, dry_run, boolean, false, Dry_Run),
 
             read_data_version_header(Request, Requested_Data_Version),
             Options = options{
@@ -770,7 +770,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
                 input_format: InputFormat,
                 document_id: Id
             },
-            (   Check = true
+            (   Dry_Run = true
             ->  check_document_write(System_DB, Auth, Path, Request,
                                      replace, Options, Stream, Graph_Type,
                                      Author, Message, Requested_Data_Version)
@@ -785,7 +785,7 @@ document_handler(put, Path, Request, System_DB, Auth) :-
             )
         )).
 
-/* check_document_write — ?check=true dry-run for POST/PUT /api/document.
+/* check_document_write — ?dry_run=true dry-run for POST/PUT /api/document.
  *
  *  Runs the same document core the commit path uses inside a discarded
  *  transaction, then the same schema + pre-commit validations. Nothing
@@ -803,7 +803,7 @@ check_document_write(System_DB, Auth, Path, Request, Op, Options, Stream,
     write_cors_headers(Request),
     reply_json(Result, [width(0), status(200)]).
 
-/* check_document_delete — ?check=true dry-run for DELETE /api/document. */
+/* check_document_delete — ?dry_run=true dry-run for DELETE /api/document. */
 check_document_delete(System_DB, Auth, Path, Request, Options, Graph_Type,
                       Author, Message, Requested_Data_Version,
                       Nuke, Id, Type) :-

@@ -1215,7 +1215,7 @@ paths:
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
-        - $ref: '#/components/parameters/check'
+        - $ref: '#/components/parameters/dry_run'
         - name: full_replace
           in: query
           required: false
@@ -1306,7 +1306,7 @@ paths:
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
-        - $ref: '#/components/parameters/check'
+        - $ref: '#/components/parameters/dry_run'
         - name: nuke
           in: query
           description: Remove all data from the graph
@@ -1343,7 +1343,7 @@ paths:
         - $ref: '#/components/parameters/author'
         - $ref: '#/components/parameters/message'
         - $ref: '#/components/parameters/graph_type'
-        - $ref: '#/components/parameters/check'
+        - $ref: '#/components/parameters/dry_run'
         - name: create
           in: query
           description: Create a document if it does not exist
@@ -5218,8 +5218,8 @@ components:
       schema:
         type: string
         example: Fixed bad name for document
-    check:
-      name: check
+    dry_run:
+      name: dry_run
       in: query
       description: |
         Dry-run the write without committing. The response reports the
