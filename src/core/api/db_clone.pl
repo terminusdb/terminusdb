@@ -65,6 +65,18 @@ do_clone_(Auth,Account,DB,Remote,Source, Fetch_Predicate,Meta_Data) :-
     % Fast forward commits from master in remote to master in local
     fast_forward_branch(To_Branch_Descriptor, From_Branch_Descriptor, Applied_Commits),
 
+    % The local branch was created empty before the fetched commits
+    % arrived — its origin is the source head it was created to follow.
+    To_Repo_Descriptor = (To_Branch_Descriptor.repository_descriptor),
+    create_context(To_Repo_Descriptor, To_Repo_Context),
+    with_transaction(To_Repo_Context,
+                     (   branch_head_commit(To_Repo_Context, "main", Head_Uri),
+                         branch_name_uri(To_Repo_Context, "main", To_Branch_Uri)
+                     ->  ask(To_Repo_Context,
+                             insert(To_Branch_Uri, created_from, Head_Uri))
+                     ;   true),
+                     _),
+
     Meta_Data = _{ applied_commits : Applied_Commits }.
 
 
@@ -115,6 +127,7 @@ clone_(System_DB,Auth,Account,DB,Label,Comment,Public,Remote,Source,Fetch_Predic
 :- use_module(core(transaction)).
 :- use_module(core(triple)).
 :- use_module(core(query)).
+:- use_module(core(document)).
 :- use_module(core(plugins)).
 :- use_module(library(yall)).
 
@@ -161,6 +174,34 @@ test("clone fires post_fast_forward_hook for the cloned branch",
     assertion(Commit_Ids == Applied_Commits),
     resolve_absolute_string_descriptor(Path, Descriptor),
     assertion(Path == 'admin/ffdest/local/branch/main').
+
+test("clone records the source head as created_from",
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "ffsrc"))),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    resolve_absolute_string_descriptor("admin/ffsrc", Src_Branch),
+    create_context(Src_Branch,
+                   commit_info{author:"test", message:"test"},
+                   Src_Context),
+    with_transaction(Src_Context,
+                     ask(Src_Context, insert(a,b,c)),
+                     _),
+
+    open_descriptor(system_descriptor{}, System),
+    super_user_authority(Auth),
+    clone(System, Auth, "admin", "ffdest", "label", "comment", false,
+          "origin", "admin/ffsrc", [_U,_H,_P]>>fail, _Meta_Data),
+
+    % The cloned branch existed empty before the fetched commits arrived —
+    % its origin is the source head it was created to follow.
+    resolve_absolute_string_descriptor("admin/ffdest/local/branch/main", Dest_Branch),
+    Repo_Descriptor = (Dest_Branch.repository_descriptor),
+    branch_head_commit(Repo_Descriptor, "main", Head_Uri),
+    branch_name_uri(Repo_Descriptor, "main", Branch_Uri),
+    create_context(Repo_Descriptor, Repo_Ctx),
+    get_document(Repo_Ctx, Branch_Uri, Branch_Doc),
+    get_dict(created_from, Branch_Doc, Head_Uri).
 
 :- end_tests(clone_indexer_hook).
 
