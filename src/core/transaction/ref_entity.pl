@@ -14,6 +14,7 @@
               descriptor_commit_id_uri/4,
               layer_uri_for_commit/4,
               insert_branch_object/3,
+              insert_branch_object/4,
               delete_branch_object/2,
               insert_base_commit_object/5,
               insert_base_commit_object/6,
@@ -155,10 +156,15 @@ commit_uri_to_user(Askable, Commit_Uri, User) :-
     !.
 
 maybe_inject_auth_user(Auth, Commit_Info0, Commit_Info) :-
+    % Merge provenance is engine-stamped by merge operations; a request
+    % dict may not carry it.
+    (   del_dict(merge_source, Commit_Info0, _, Commit_Info1)
+    ->  true
+    ;   Commit_Info1 = Commit_Info0),
     (   nonvar(Auth)
     ->  atom_string(Auth, User_String),
-        put_dict(user, Commit_Info0, User_String, Commit_Info)
-    ;   Commit_Info = Commit_Info0
+        put_dict(user, Commit_Info1, User_String, Commit_Info)
+    ;   Commit_Info = Commit_Info1
     ).
 
 commit_uri_to_timestamp(Askable, Commit_Uri, Timestamp) :-
@@ -179,11 +185,16 @@ layer_uri_for_commit(Askable, Commit_Uri, Type, Layer_Uri) :-
         t(Commit_Uri, Type, Layer_Uri)).
 
 insert_branch_object(Context, Branch_Name, Branch_Uri) :-
-    insert_document(
-        Context,
-        _{ '@type' : 'Branch',
-           'name' : Branch_Name },
-        Branch_Uri).
+    insert_branch_object(Context, Branch_Name, none, Branch_Uri).
+
+insert_branch_object(Context, Branch_Name, Created_From, Branch_Uri) :-
+    Branch_Document = _{ '@type' : 'Branch',
+                         'name' : Branch_Name },
+    (   Created_From = none
+    ->  insert_document(Context, Branch_Document, Branch_Uri)
+    ;   insert_document(Context,
+                        Branch_Document.put(created_from, Created_From),
+                        Branch_Uri)).
 
 delete_branch_object(Context, Branch_Uri) :-
     delete_document(Context, Branch_Uri).
@@ -245,6 +256,10 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
         put_dict(metadata, Commit_Document3, Metadata, Commit_Document4)
     ;   Commit_Document4 = Commit_Document3),
 
+    (   get_dict(merge_source, Commit_Info, Merge_Source)
+    ->  put_dict(merge_source, Commit_Document4, Merge_Source, Commit_Document5)
+    ;   Commit_Document5 = Commit_Document4),
+
     foldl({Commit_Info}/[Key, DocIn, DocOut]>>(
               (   get_dict(Key, Commit_Info, Val),
                   Val \= []
@@ -252,7 +267,7 @@ insert_base_commit_object(Context, Schema_Layer, Instance_Layer, Commit_Info, Ti
               ;   DocOut = DocIn)),
           [instance_added, instance_updated, instance_removed,
            schema_added, schema_updated, schema_removed],
-          Commit_Document4, Commit_Document),
+          Commit_Document5, Commit_Document),
 
     insert_document(
         Context,
@@ -522,6 +537,56 @@ test(commit_on_branch_insert,
 
     % ensure it does have a parent
     commit_id_to_parent_uri(Descriptor2, Commit2_Id, _).
+
+test(base_commit_insert_records_merge_source,
+     [setup((setup_temp_store(State),
+             ensure_label(testlabel))),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    ref_schema_context_from_label_descriptor("testlabel", Descriptor, Context),
+
+    with_transaction(
+        Context,
+        (
+            insert_layer_object(Context,
+                                "a3a29522ec767aa1a1cf321122f833726c102749",
+                                Schema_Layer_Uri),
+            insert_base_commit_object(Context,
+                                      Schema_Layer_Uri,
+                                      _,
+                                      commit_info{author:"author",
+                                                  message:"message",
+                                                  merge_source:
+                                                  _{operation: apply,
+                                                    commits:
+                                                    ["http://example.com/commit/one",
+                                                     "http://example.com/commit/two"]}},
+                                      1234.567,
+                                      _Commit_Id,
+                                      Commit_Uri)
+        ),
+        _),
+
+    create_context(Descriptor, Read_Context),
+    get_document(Read_Context, Commit_Uri, Commit_Doc),
+    get_dict(merge_source, Commit_Doc, Merge_Source),
+    get_dict(operation, Merge_Source, apply),
+    get_dict(commits, Merge_Source, ["http://example.com/commit/one",
+                                     "http://example.com/commit/two"]).
+
+test(maybe_inject_auth_user_strips_request_merge_source, []) :-
+    Commit_Info0 = commit_info{author:"author",
+                               message:"message",
+                               merge_source: _{operation: apply,
+                                               commits: ["http://example.com/x"]}},
+    maybe_inject_auth_user('User/test', Commit_Info0, Commit_Info),
+    \+ get_dict(merge_source, Commit_Info, _),
+    get_dict(user, Commit_Info, "User/test"),
+
+    maybe_inject_auth_user(_, commit_info{author:"a",message:"m"}, Info2),
+    \+ get_dict(merge_source, Info2, _).
 
 :- end_tests(commit_objects).
 
@@ -847,7 +912,9 @@ apply_commit_on_commit(Us_Repo_Context, Them_Repo_Askable, Us_Commit_Uri, Them_C
     % create new commit info
     commit_id_uri(Them_Repo_Askable, Them_Commit_Id, Them_Commit_Uri),
     commit_id_to_metadata(Them_Repo_Askable, Them_Commit_Id, _Them_Author, Message, _Them_Timestamp),
-    Commit_Info = commit_info{author: Author, message: Message},
+    Commit_Info = commit_info{author: Author, message: Message,
+                              merge_source: _{operation: rebase,
+                                              commits: [Them_Commit_Uri]}},
 
     % A commit that touched only the schema graph has no instance
     % layer to apply — carry ours forward unchanged instead of

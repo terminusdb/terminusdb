@@ -47,7 +47,7 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
     %print_all_triples(Repository_Descriptor),
     %lookup_old_commit_uri_here....
     descriptor_commit_id_uri(Repository_Descriptor, Descriptor,
-                             Old_Commit_Id, _Old_Commit_Uri),
+                             Old_Commit_Id, Old_Commit_Uri),
 
     with_transaction(
         Context,
@@ -58,7 +58,11 @@ api_squash(System_DB, Auth, Path, Commit_Info, Commit_Path, Old_Commit_Path) :-
             ignore((squash_commit_layer(Transaction, Organization_Name, Database_Name, Repository_Name, Branch_Name, instance, Instance_Layer_Id),
                     insert_layer_object(Context, Instance_Layer_Id, Instance_Layer_Uri))),
 
-            insert_base_commit_object(Context, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info, Commit_Id, _Commit_Uri)
+            % A squashed commit records the chain head it replaces.
+            put_dict(merge_source, Commit_Info,
+                     _{operation: squash, commits: [Old_Commit_Uri]},
+                     Commit_Info_Provenance),
+            insert_base_commit_object(Context, Schema_Layer_Uri, Instance_Layer_Uri, Commit_Info_Provenance, Commit_Id, _Commit_Uri)
         ),
         _
     ),
@@ -94,6 +98,7 @@ squash_commit_layer(Transaction, Organization_Name, Database_Name, Repository_Na
 :- use_module(core(query)).
 :- use_module(core(triple)).
 :- use_module(core(transaction)).
+:- use_module(core(document)).
 
 :- use_module(library(ordsets)).
 
@@ -152,6 +157,48 @@ test(squash_branch,
     [RWO] = (Transaction.instance_objects),
     Layer = (RWO.read),
     \+ parent(Layer,_).
+
+test(squash_records_merge_source,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))
+     ]
+    ) :-
+
+    Path = "admin/testdb",
+
+    resolve_absolute_string_descriptor(Path,Descriptor),
+    super_user_authority(Auth),
+
+    askable_context(Descriptor, system_descriptor{}, Auth,
+                    commit_info{ author : "me",
+                                 message : "commit 1" },
+                    Context),
+
+    with_transaction(
+        Context,
+        ask(Context,
+            insert(a,b,c)),
+        _),
+
+    Repo_Descriptor = (Descriptor.repository_descriptor),
+    branch_head_commit(Repo_Descriptor, "main", Old_Head_Uri),
+
+    Commit_Info = commit_info{ author : "me",
+                               message : "squash" },
+
+    api_squash(system_descriptor{}, Auth, Path, Commit_Info, Commit_Path, _Old_Commit_Path),
+
+    resolve_absolute_string_descriptor(Commit_Path, Commit_Descriptor),
+    get_dict(commit_id, Commit_Descriptor, New_Commit_Id),
+    create_context(Repo_Descriptor, Repo_Ctx),
+    commit_id_uri(Repo_Ctx, New_Commit_Id, New_Commit_Uri),
+    get_document(Repo_Ctx, New_Commit_Uri, New_Doc),
+    get_dict(merge_source, New_Doc, Merge_Source),
+    get_dict(operation, Merge_Source, squash),
+    atom_string(Old_Head_Uri, Old_Head_String),
+    get_dict(commits, Merge_Source, [Old_Head_String]).
 
 
 :- end_tests(squash).
