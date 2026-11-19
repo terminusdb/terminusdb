@@ -28,6 +28,7 @@
               ]).
 :- use_module(library(solution_sequences)).
 :- use_module(library(lists)).
+:- use_module(library(ordsets)).
 :- use_module(library(plunit)).
 :- use_module(library(option)).
 :- use_module(library(error), [must_be/2]).
@@ -128,7 +129,7 @@ api_diff(System_DB, Auth, Before, After, Diff, Options) :-
                ground(After)),
               error(unground_patch, _)),
     do_or_die(simple_diff(Before,After,Diff,Options),
-              error(unable_to_diff_documents(Before, After), _)).
+              error(unable_to_diff_documents, _)).
 
 coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
     do_or_die(
@@ -640,16 +641,10 @@ edit_doc_body(SystemDB, Auth, Path, Head, Options) :-
 diff_id_in(Diffs, Compressed_Id, Diff) :-
     member(Diff, Diffs),
     (   get_dict('@insert', Diff, Doc)
-    ->  true
+    ->  get_dict('@id', Doc, Raw_Id)
     ;   get_dict('@delete', Diff, Doc)
-    ),
-    get_dict('@id', Doc, Raw_Id),
-    atom_string(Id_Atom, Raw_Id),
-    atomic_list_concat(['http://somewhere.for.now/document/',
-                        Compressed_Id], Id_Atom).
-diff_id_in(Diffs, Compressed_Id, Diff) :-
-    member(Diff, Diffs),
-    get_dict('@id', Diff, Raw_Id),
+    ->  get_dict('@id', Doc, Raw_Id)
+    ;   get_dict('@id', Diff, Raw_Id)),
     atom_string(Id_Atom, Raw_Id),
     atomic_list_concat(['http://somewhere.for.now/document/',
                         Compressed_Id], Id_Atom).
@@ -1272,18 +1267,16 @@ test(commits_changed_id_enumerates_touched_documents,
     sort(Changed, Sorted_Changed),
 
     % Positive set: everything the range touched is enumerated.
+    % revert/a may or may not be enumerated (the revert may not even
+    % produce a store change) — membership is the contract, so compare
+    % on the guaranteed positive set and the guaranteed negative set.
     maplist([Compressed, Expanded]>>(
                 atomic_list_concat(
                     ['http://somewhere.for.now/document/', Compressed],
                     Expanded)),
             ["created/a", "flash/a", "gone/a", "keep/a"],
             Expected_Changed),
-    sort(Expected_Changed, Expected_Sorted),
-    % revert/a may or may not be enumerated (the revert may not even
-    % produce a store change) — membership is the contract, so compare
-    % on the guaranteed positive set and the guaranteed negative set.
-    forall(member(E, Expected_Sorted),
-           member(E, Sorted_Changed)),
+    ord_subset(Expected_Changed, Sorted_Changed),
     % Negative set: untouched/a is never enumerated.
     \+ member('http://somewhere.for.now/document/untouched/a', Sorted_Changed),
 
