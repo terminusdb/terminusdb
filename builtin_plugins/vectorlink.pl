@@ -2254,15 +2254,17 @@ reply_embeddings_stream_headers(Request, Served_Commit, Store_Clustering, Total_
 % ==========================================================================
 
 %% assemble_index_status_response(+Indexer_Progress, +Branch_Name,
-%%                                 +Last_Commit, +Engine_Stats, -Response) is det.
+%%                                 +Last_Commit, +Branch_Head,
+%%                                 +Engine_Stats, -Response) is det.
 %
 %  Constructs the index status API response dict from the Rust FFI
-%  progress dict, the last indexed commit from vectorlink, and the
-%  engine statistics. Handles missing keys defensively — Indexer_Progress
-%  may be a minimal dict like json{status:not_found} with no
-%  branch_processing key.
+%  progress dict, the last indexed commit from vectorlink, the branch
+%  head commit, and the engine statistics. Handles missing keys
+%  defensively — Indexer_Progress may be a minimal dict like
+%  json{status:not_found} with no branch_processing key.
 assemble_index_status_response(Indexer_Progress, Branch_Name,
-                               Last_Commit, Engine_Stats, Response) :-
+                               Last_Commit, Branch_Head,
+                               Engine_Stats, Response) :-
     get_dict(status, Indexer_Progress, Status_Raw),
     % atom_json_dict/3 parses JSON string values as Prolog strings,
     % not atoms. Normalise to atom for reliable == comparison.
@@ -2282,6 +2284,22 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         Last_Commit \= null
     ->  Status_Value = completed
     ;   Status_Value = Status_Raw
+    ),
+    % A lagging index must not report completed: when no task is working
+    % (not_found, indexer_unavailable, or a finished task kept as
+    % completed) and the engine's last-indexed commit is not the branch
+    % head, the status is "behind" with both commits exposed so the gap
+    % is visible. Indexing and error states own their status — the gap
+    % they report is already honest. A null Last_Commit means no index
+    % exists (not_found is the honest answer); a null Branch_Head means
+    % the head could not be resolved (commit descriptors, empty branch)
+    % and no comparison is possible.
+    (   memberchk(Status_Value, [completed, not_found, indexer_unavailable]),
+        Last_Commit \= null,
+        Branch_Head \= null,
+        Last_Commit \= Branch_Head
+    ->  Status_Final = behind
+    ;   Status_Final = Status_Value
     ),
     (   get_dict(error, Indexer_Progress, Error_Value)
     ->  true
@@ -2374,12 +2392,13 @@ assemble_index_status_response(Indexer_Progress, Branch_Name,
         upcoming_commit:Upcoming_Commit
     },
     Response = json{
-        status:Status_Value,
+        status:Status_Final,
         error:Error_Value,
         read_only:Read_Only,
         handoff:Handoff,
         branch:Branch_Name,
         last_indexed_commit:Last_Commit,
+        branch_head_commit:Branch_Head,
         branch_processing:Branch_Processing_Section,
         engine:Engine_Section
     }.
@@ -2427,9 +2446,19 @@ index_handler(get, Path, Request, System_DB, Auth) :-
                 _,
                 Last_Commit = null
             ),
-            % 2b. (not_found → completed override is handled in
-            %     assemble_index_status_response, where it's unit-tested.)
-            
+            % 2b. Resolve the branch head so the status can distinguish a
+            %     lagging index (behind) from a caught-up one (completed).
+            %     Commit descriptors name no branch — head stays null and
+            %     assembly skips the comparison.
+            (   branch_descriptor{repository_descriptor: Repo_Desc} :< Descriptor,
+                branch_head_commit(Repo_Desc, Branch_Name, Head_Uri)
+            ->  commit_id_uri(Repo_Desc, Branch_Head, Head_Uri)
+            ;   Branch_Head = null
+            ),
+            % 2c. (not_found → completed and lagging → behind overrides are
+            %     handled in assemble_index_status_response, where they're
+            %     unit-tested.)
+
             % 3. Query vectorlink /statistics?domain=... for engine-side counts.
             catch(
                 vectorlink:io_statistics_for_domain(Endpoint, Domain, Engine_Stats),
@@ -2440,8 +2469,8 @@ index_handler(get, Path, Request, System_DB, Auth) :-
             ),
             % 4. Assemble the response using the extracted predicate.
             vectorlink:assemble_index_status_response(
-                Indexer_Progress, Branch_Name, Last_Commit, Engine_Stats,
-                Response0),
+                Indexer_Progress, Branch_Name, Last_Commit, Branch_Head,
+                Engine_Stats, Response0),
             plugin_api:write_cors_headers(Request),
             format("Content-Type: application/json~n~n"),
             json:json_write_dict(current_output, Response0, [width(0)])
@@ -4438,7 +4467,7 @@ test("not_found response has status not_found and empty branch_processing",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(branch_processing, Response, BP).
 
@@ -4459,7 +4488,7 @@ test("indexing response includes document progress in engine section",
     Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(engine, Response, Engine),
     get_dict(processed_documents, Engine, Processed),
@@ -4481,7 +4510,7 @@ test("indexing response does not include document counters in branch_processing"
     Engine_Stats = json{documents:50, chunks:120, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(branch_processing, Response, BP).
 
 test("completed response has status completed and engine shows totals",
@@ -4499,7 +4528,7 @@ test("completed response has status completed and engine shows totals",
     Engine_Stats = json{documents:150, chunks:300, indexed_commits:3,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "head123", Engine_Stats, Response),
+        Indexer_Progress, "main", "head123", "head123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(branch_processing, Response, BP),
     get_dict(commits_processed, BP, Commits_Processed),
@@ -4522,7 +4551,7 @@ test("error response includes error message",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(error, Response, Error).
 
@@ -4532,7 +4561,7 @@ test("read_only response surfaces handoff pending state",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(read_only, Response, RO),
     get_dict(handoff, Response, HO).
@@ -4543,7 +4572,7 @@ test("read_only response surfaces handoff underway state",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(read_only, Response, RO),
     get_dict(handoff, Response, HO).
 
@@ -4553,7 +4582,7 @@ test("writable engine response defaults read_only false and handoff null",
     Engine_Stats = json{documents:5, chunks:10, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(read_only, Response, RO),
     get_dict(handoff, Response, HO).
 
@@ -4565,7 +4594,7 @@ test("read_only with indexed data still reports completed from last commit",
     Engine_Stats = json{documents:5, chunks:10, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status),
     get_dict(read_only, Response, RO).
 
@@ -4577,7 +4606,7 @@ test("engine section includes searchable_documents and text_segments_indexed fro
     Engine_Stats = json{documents:75, chunks:200, indexed_commits:1,
                         pending_index_fragments:2},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(searchable_documents, Engine, Searchable),
     get_dict(text_segments_indexed, Engine, Segments),
@@ -4981,7 +5010,7 @@ test("index status response includes store_clustering true from engine stats",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0, store_clustering:true},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
@@ -4991,7 +5020,7 @@ test("index status response includes store_clustering false from engine stats",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0, store_clustering:false},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
@@ -5001,7 +5030,7 @@ test("index status response defaults store_clustering to null when absent",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "c1", Engine_Stats, Response),
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
     get_dict(engine, Response, Engine),
     get_dict(store_clustering, Engine, Store_Clustering).
 
@@ -5019,7 +5048,7 @@ test("not_found with valid last_indexed commit should be overridden to completed
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 test("not_found with null last_indexed commit stays not_found",
@@ -5028,7 +5057,7 @@ test("not_found with null last_indexed commit stays not_found",
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 test("indexer_unavailable with valid last_indexed commit becomes completed",
@@ -5037,7 +5066,7 @@ test("indexer_unavailable with valid last_indexed commit becomes completed",
     Engine_Stats = json{documents:10, chunks:20, indexed_commits:1,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", "abc123", Engine_Stats, Response),
+        Indexer_Progress, "main", "abc123", "abc123", Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 test("indexer_unavailable with null last_indexed commit stays indexer_unavailable",
@@ -5046,10 +5075,97 @@ test("indexer_unavailable with null last_indexed commit stays indexer_unavailabl
     Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
                         pending_index_fragments:0},
     vectorlink:assemble_index_status_response(
-        Indexer_Progress, "main", null, Engine_Stats, Response),
+        Indexer_Progress, "main", null, null, Engine_Stats, Response),
     get_dict(status, Response, Status).
 
 :- end_tests(vectorlink_not_found_override).
+
+:- begin_tests(vectorlink_behind_status).
+
+test("completed becomes behind when the branch head moved past last indexed",
+     [true(Status == behind)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:100, chunks:200, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("completed stays completed when last indexed is the branch head",
+     [true(Status == completed)]) :-
+    Indexer_Progress = json{status:completed},
+    Engine_Stats = json{documents:100, chunks:200, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c1", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("not_found becomes behind when a delivered task was lost mid-push",
+     [true(Status == behind)]) :-
+    % The dead man's switch abort scenario: the in-memory registry dropped
+    % the task (not_found) while the engine's last-indexed commit lags the
+    % branch head — reporting completed here is the lie this suite guards.
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("behind response carries both commits for the caller to compare",
+     [true((Status == behind, Last == "c1", Head == "c2"))]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status),
+    get_dict(last_indexed_commit, Response, Last),
+    get_dict(branch_head_commit, Response, Head).
+
+test("indexing is not overridden by a moved head",
+     [true(Status == indexing)]) :-
+    % A task in flight owns the status — the gap it is closing is not a
+    % lie and behind would double-report it.
+    Indexer_Progress = json{status:indexing,
+        branch_processing:json{commits_processed:1, total_commits:2,
+            current_commit:"c2", processed_documents:10, total_documents:100}},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("error is preserved over behind",
+     [true(Status == error)]) :-
+    Indexer_Progress = json{status:error, error:"embed failed"},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("null branch head keeps the completed override — behind needs a head to compare",
+     [true(Status == completed)]) :-
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:500, chunks:1000, indexed_commits:1,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", "c1", null, Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+test("never-indexed stays not_found even with a branch head",
+     [true(Status == not_found)]) :-
+    % No last-indexed commit: the index does not exist, so not_found is
+    % more honest than behind.
+    Indexer_Progress = json{status:not_found},
+    Engine_Stats = json{documents:0, chunks:0, indexed_commits:0,
+                        pending_index_fragments:0},
+    vectorlink:assemble_index_status_response(
+        Indexer_Progress, "main", null, "c2", Engine_Stats, Response),
+    get_dict(status, Response, Status).
+
+:- end_tests(vectorlink_behind_status).
 
 :- begin_tests(vectorlink_embedded_paths).
 

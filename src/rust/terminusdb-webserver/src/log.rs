@@ -56,7 +56,12 @@ fn log(severity: &str, msg: &str) {
     };
     if let Some(tx) = LOG_CHANNEL.get() {
         // Send to the dispatcher thread's engine for proper Prolog logging.
-        let _ = tx.send(entry);
+        if tx.send(entry).is_ok() {
+            // Wake the dispatcher — without the nudge, entries emitted
+            // during request-idle background work (indexer, watchdog)
+            // buffer until the next dispatch arrives.
+            crate::dispatch::nudge_log_drain();
+        }
     } else if Engine::some_engine_active() {
         // No dispatcher yet, but a Prolog engine is active on this thread.
         // Log directly through json_log instead of writing to stderr.
