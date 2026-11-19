@@ -1239,6 +1239,67 @@ test(common_ancestor_after_branch_and_some_commits,
     commit_id_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),
     commit_id_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
 
+test(common_ancestor_asymmetric_depth,
+     [setup((setup_temp_store(State),
+             create_db_without_schema("admin", "testdb")
+            )),
+      cleanup(teardown_temp_store(State))
+     ]) :-
+    % main: a -> b -> c -> d -> e   (three commits past the fork)
+    % second forked at b: f         (one commit)
+    Origin_Path = "admin/testdb",
+    resolve_absolute_string_descriptor(Origin_Path, Descriptor),
+    forall(member(Message-Triple,
+                  ["commit a"-insert(a,b,c), "commit b"-insert(d,e,f)]),
+           (   create_context(Descriptor,
+                              commit_info{author:"test",message:Message},
+                              Ctx),
+               with_transaction(Ctx, ask(Ctx, Triple), _))),
+
+    super_user_authority(Auth),
+    Destination_Path = "admin/testdb/local/branch/second",
+    branch_create(system_descriptor{}, Auth, Destination_Path,
+                  branch(Origin_Path), _),
+
+    forall(member(Message-Triple,
+                  ["commit c"-insert(g,h,i), "commit d"-insert(k,l,m),
+                   "commit e"-insert(u,v,w)]),
+           (   create_context(Descriptor,
+                              commit_info{author:"test",message:Message},
+                              Ctx),
+               with_transaction(Ctx, ask(Ctx, Triple), _))),
+
+    resolve_absolute_string_descriptor(Destination_Path, Second_Descriptor),
+    create_context(Second_Descriptor,
+                   commit_info{author:"test",message:"commit f"},
+                   Commit_F_Context),
+    with_transaction(Commit_F_Context,
+                     ask(Commit_F_Context, insert(n,o,p)), _),
+
+    Repo_Descriptor = Descriptor.repository_descriptor,
+    create_context(Repo_Descriptor, Repo_Context),
+
+    branch_head_commit(Repo_Context, "main", Head1_Commit_Uri),
+    commit_id_uri(Repo_Context, Head1_Commit_Id, Head1_Commit_Uri),
+    branch_head_commit(Repo_Context, "second", Head2_Commit_Uri),
+    commit_id_uri(Repo_Context, Head2_Commit_Id, Head2_Commit_Uri),
+
+    most_recent_common_ancestor(Repo_Context, Repo_Context,
+                                Head1_Commit_Id, Head2_Commit_Id,
+                                Common_Commit_Id_Option,
+                                Branch1_Path, Branch2_Path),
+    Common_Commit_Id_Option = some(Common_Commit_Id),
+    commit_id_to_metadata(Repo_Descriptor, Common_Commit_Id, _,
+                          "commit b", _),
+
+    % Paths run oldest-to-newest away from the base on both sides.
+    Branch1_Path = [CommitC_Id, CommitD_Id, CommitE_Id],
+    Branch2_Path = [CommitF_Id],
+    commit_id_to_metadata(Repo_Descriptor, CommitC_Id, _, "commit c", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitD_Id, _, "commit d", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitE_Id, _, "commit e", _),
+    commit_id_to_metadata(Repo_Descriptor, CommitF_Id, _, "commit f", _).
+
 :- end_tests(common_ancestor).
 
 commit_uri_is_valid(Context, Commit_Uri) :-

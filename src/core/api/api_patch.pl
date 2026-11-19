@@ -127,7 +127,8 @@ api_diff(System_DB, Auth, Before, After, Diff, Options) :-
     do_or_die((ground(Before),
                ground(After)),
               error(unground_patch, _)),
-    simple_diff(Before,After,Diff,Options).
+    do_or_die(simple_diff(Before,After,Diff,Options),
+              error(unable_to_diff_documents(Before, After), _)).
 
 coerce_to_commit(Branch_Descriptor, Commit_Or_Version, Commit_Id) :-
     do_or_die(
@@ -186,12 +187,13 @@ api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, 
 
     (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
     ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
-        ->  simple_diff(Before,After,Diff,Options)
-        ;   Diff = json{ '@op' : 'Delete',
+        ->  do_or_die(simple_diff(Before,After,Diff,Options),
+                      error(unable_to_diff_document(Doc_Id), _))
+        ;   Diff = json{ '@op' : "Delete",
                          '@delete' : Before }
         )
     ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
-        ->  Diff = json{ '@op' : 'Insert',
+        ->  Diff = json{ '@op' : "Insert",
                          '@insert' : After }
         ;   fail)
     ).
@@ -203,7 +205,8 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
     document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, Transaction, [], _, Options),
 
     normalize_document(Transaction, After_Document, Normal_Document),
-    simple_diff(Before,Normal_Document,Diff,Options).
+    do_or_die(simple_diff(Before,Normal_Document,Diff,Options),
+              error(unable_to_diff_document(Doc_Id), _)).
 
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
     commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, options{}).
@@ -218,12 +221,14 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
                 (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
                 ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
-                    ->  simple_diff(Before,After,Diff,Options)
-                    ;   Diff = json{ '@op' : 'Delete',
+                    ->  do_or_die(simple_diff(Before,After,Diff,Options),
+                                  error(unable_to_diff_document(Doc_Id),
+                                        _))
+                    ;   Diff = json{ '@op' : "Delete",
                                      '@delete' : Before }
                     )
                 ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
-                    ->  Diff = json{ '@op' : 'Insert',
+                    ->  Diff = json{ '@op' : "Insert",
                                      '@insert' : After }
                     ;   fail)
                 ),
@@ -628,6 +633,26 @@ edit_doc_body(SystemDB, Auth, Path, Head, Options) :-
     api_replace_documents(SystemDB, Auth, Path, S, no_data_version,
                           data_version(branch,Head), _, _,
                           [create(false)|Options]).
+
+% Finds the diff in Diffs whose document id — '@id' on field diffs,
+% '@insert'.'@id' on inserts, '@delete'.'@id' on deletes — expands to
+% the compressed form under the test @base.
+diff_id_in(Diffs, Compressed_Id, Diff) :-
+    member(Diff, Diffs),
+    (   get_dict('@insert', Diff, Doc)
+    ->  true
+    ;   get_dict('@delete', Diff, Doc)
+    ),
+    get_dict('@id', Doc, Raw_Id),
+    atom_string(Id_Atom, Raw_Id),
+    atomic_list_concat(['http://somewhere.for.now/document/',
+                        Compressed_Id], Id_Atom).
+diff_id_in(Diffs, Compressed_Id, Diff) :-
+    member(Diff, Diffs),
+    get_dict('@id', Diff, Raw_Id),
+    atom_string(Id_Atom, Raw_Id),
+    atomic_list_concat(['http://somewhere.for.now/document/',
+                        Compressed_Id], Id_Atom).
 
 test(apply_delete_edit_conflict_diff_deletes,
      [setup((setup_temp_store(State),
@@ -1194,6 +1219,116 @@ test(apply_dry_run_resolution_reports_verdict,
     open_descriptor(Main_Desc, Main_T),
     get_document(Main_T, 'item/a', Doc_A),
     get_dict(n, Doc_A, 2).
+
+test(commits_changed_id_enumerates_touched_documents,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+
+    % Commit1: base with the docs each case exercises
+    open_string('[{"@id":"keep/a"},{"@id":"gone/a"},{"@id":"revert/a"},{"@id":"untouched/a"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+    % Commit2: create created/a (positive -> insert diff)
+    open_string('[{"@id":"created/a"}]', S2),
+    api_insert_documents(SystemDB, Auth, Path, S2, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    % Commit3: modify keep/a (positive -> field diff)
+    open_string('{"@id":"keep/a","name":"edited"}', S3),
+    api_replace_documents(SystemDB, Auth, Path, S3, no_data_version,
+                          data_version(branch,_), _, _, [create(false)|Options]),
+    % Commit4: delete gone/a (positive -> delete diff)
+    open_string('["gone/a"]', S4),
+    api_delete_documents(SystemDB, Auth, Path, S4, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    % Commit5a/5b: insert then delete flash/a — touched inside the range
+    % but absent at both ends: enumerated here, no diff produced.
+    open_string('[{"@id":"flash/a"}]', S5),
+    api_insert_documents(SystemDB, Auth, Path, S5, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    open_string('["flash/a"]', S5b),
+    api_delete_documents(SystemDB, Auth, Path, S5b, no_data_version,
+                         data_version(branch,_), _, _, Options),
+    % Commit6a/6b: modify revert/a then put it back — touched inside the
+    % range, identical at both ends: zero-cost diff is filtered.
+    open_string('{"@id":"revert/a","name":"changed"}', S6),
+    api_replace_documents(SystemDB, Auth, Path, S6, no_data_version,
+                          data_version(branch,_), _, _, [create(false)|Options]),
+    open_string('{"@id":"revert/a"}', S6b),
+    api_replace_documents(SystemDB, Auth, Path, S6b, no_data_version,
+                          data_version(branch,Head), _, _, [create(false)|Options]),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    Enum_Options = options{start:0, count:inf,
+                           keep:json{'@id':true, '@type':true}},
+    findall(C, commits_changed_id(Desc, Commit1, Head, C,
+                                  Enum_Options),
+            Changed),
+    sort(Changed, Sorted_Changed),
+
+    % Positive set: everything the range touched is enumerated.
+    maplist([Compressed, Expanded]>>(
+                atomic_list_concat(
+                    ['http://somewhere.for.now/document/', Compressed],
+                    Expanded)),
+            ["created/a", "flash/a", "gone/a", "keep/a"],
+            Expected_Changed),
+    sort(Expected_Changed, Expected_Sorted),
+    % revert/a may or may not be enumerated (the revert may not even
+    % produce a store change) — membership is the contract, so compare
+    % on the guaranteed positive set and the guaranteed negative set.
+    forall(member(E, Expected_Sorted),
+           member(E, Sorted_Changed)),
+    % Negative set: untouched/a is never enumerated.
+    \+ member('http://somewhere.for.now/document/untouched/a', Sorted_Changed),
+
+    % Diff-level contract — this is what the apply semantics need.
+    % JSONDocument ids stay expanded (anyURI), so compare by expansion.
+    findall(D, document_diffs_from_commits(Desc, Commit1, Head, D,
+                                           Enum_Options), Diffs),
+    once(diff_id_in(Diffs, 'created/a', Insert_Diff)),
+    get_dict('@op', Insert_Diff, "Insert"),
+    once(diff_id_in(Diffs, 'keep/a', Keep_Diff)),
+    get_dict(name, Keep_Diff, Name_Diff),
+    get_dict('@op', Name_Diff, "SwapValue"),
+    once(diff_id_in(Diffs, 'gone/a', Gone_Diff)),
+    get_dict('@op', Gone_Diff, "Delete"),
+    % Negative set at diff level: nothing for flash, revert, untouched.
+    \+ diff_id_in(Diffs, 'flash/a', _),
+    \+ diff_id_in(Diffs, 'revert/a', _),
+    \+ diff_id_in(Diffs, 'untouched/a', _).
+
+test(document_diffs_throw_when_a_document_cannot_be_diffed,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_without_schema("admin", X))),
+      cleanup(teardown_temp_store(State)),
+      throws(error(missing_diff_option(keep), _))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [author("gavin"), message("test."), raw_json(true)],
+
+    open_string('[{"@id":"keep/a"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+    open_string('{"@id":"keep/a","name":"edited"}', S2),
+    api_replace_documents(SystemDB, Auth, Path, S2, no_data_version,
+                          data_version(branch,Head), _, _,
+                          [create(false)|Options]),
+
+    resolve_absolute_string_descriptor(Path, Desc),
+    % No `keep` option: simple_diff cannot produce a diff for the
+    % modified document. Enumeration must surface that as an error —
+    % a document that cannot be diffed may not silently drop out.
+    findall(D, document_diffs_from_commits(Desc, Commit1, Head, D,
+                                           options{start:0, count:inf}),
+            _Diffs).
 
 :- end_tests(apply).
 
