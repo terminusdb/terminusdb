@@ -25,6 +25,8 @@
               idlists_duplicates_toplevel/3,
               nonground_captures/2,
               compress_doc_ids/4,
+              check_validation_witnesses/3,
+              compress_witness_json/3,
 
               api_insert_documents_core_string/8,
               api_insert_documents_core_string_with_compress/9,

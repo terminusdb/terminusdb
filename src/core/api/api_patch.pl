@@ -17,7 +17,9 @@
 :- use_module(core(api/api_document), [
                   idlists_duplicates_toplevel/3,
                   nonground_captures/2,
-                  compress_doc_ids/4
+                  compress_doc_ids/4,
+                  check_validation_witnesses/3,
+                  compress_witness_json/3
               ]).
 :- use_module(core(document/apply), [apply_diff_ids_captures/7]).
 :- use_module(core(transaction/database),
@@ -171,14 +173,7 @@ document_from_commit(Branch_Descriptor, Commit_Id, Doc_Id, Document, Transaction
         open_descriptor(Commit_Descriptor, commit_info{}, Transaction, Map_In, Map_Out),
         error(unresolvable_collection(Commit_Descriptor),_)),
 
-    option(unfold(Unfold), Options, true),
-    must_be(boolean, Unfold),
-
-    Get_Document_Options = options{
-                  compress_ids : true,
-                  unfold: Unfold,
-                  keep_json_type: true
-              },
+    commit_doc_options(Options, Get_Document_Options),
     get_document(Transaction, Doc_Id, Document, Get_Document_Options).
 
 api_diff_id(System_DB, Auth, Path, Before_Version, After_Version, Doc_Id, Diff, Options) :-
@@ -212,7 +207,44 @@ api_diff_id_document(System_DB, Auth, Path, Before_Version, After_Document, Doc_
 commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed) :-
     commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Changed, options{}).
 
+%% commit_doc_options(+Options, -Doc_Options) is det.
+%
+%  The fixed option set get_document sees when reading a document at a
+%  commit — shared by enumeration and theirs-resolution.
+commit_doc_options(Options, Doc_Options) :-
+    option(unfold(Unfold), Options, true),
+    must_be(boolean, Unfold),
+    Doc_Options = options{compress_ids:true,
+                          unfold:Unfold,
+                          keep_json_type:true}.
+
+%% open_commit_transaction(+Branch_Descriptor, +Commit_Id, -Transaction)
+%
+%  Opens the commit's read transaction once — callers reuse it across
+%  every changed document instead of reopening the descriptor per doc.
+open_commit_transaction(Branch_Descriptor, Commit_Id, Transaction) :-
+    resolve_relative_descriptor(Branch_Descriptor,
+                                ["commit", Commit_Id],
+                                Commit_Descriptor),
+    do_or_die(
+        open_descriptor(Commit_Descriptor, Transaction),
+        error(unresolvable_collection(Commit_Descriptor),_)).
+
 document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Diff, Options) :-
+    commit_doc_options(Options, Doc_Options),
+    once(open_commit_transaction(Branch_Descriptor, Before_Commit_Id,
+                                 Before_Transaction)),
+    once(open_commit_transaction(Branch_Descriptor, After_Commit_Id,
+                                 After_Transaction)),
+    document_diffs_from_transactions(Branch_Descriptor, Before_Commit_Id,
+                                     After_Commit_Id, Before_Transaction,
+                                     After_Transaction, Doc_Options, Diff,
+                                     Options).
+
+document_diffs_from_transactions(Branch_Descriptor, Before_Commit_Id,
+                                 After_Commit_Id, Before_Transaction,
+                                 After_Transaction, Doc_Options, Diff,
+                                 Options) :-
     option(start(Start), Options),
     option(count(Count), Options),
     limit(
@@ -220,15 +252,15 @@ document_diffs_from_commits(Branch_Descriptor, Before_Commit_Id, After_Commit_Id
         offset(
             Start,
             (   commits_changed_id(Branch_Descriptor, Before_Commit_Id, After_Commit_Id, Doc_Id),
-                (   document_from_commit(Branch_Descriptor, Before_Commit_Id, Doc_Id, Before, _, [], Map, Options)
-                ->  (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, Map, _, Options)
+                (   get_document(Before_Transaction, Doc_Id, Before, Doc_Options)
+                ->  (   get_document(After_Transaction, Doc_Id, After, Doc_Options)
                     ->  do_or_die(simple_diff(Before,After,Diff,Options),
                                   error(unable_to_diff_document(Doc_Id),
                                         _))
                     ;   Diff = json{ '@op' : "Delete",
                                      '@delete' : Before }
                     )
-                ;   (   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id, After, _, [], _, Options)
+                ;   (   get_document(After_Transaction, Doc_Id, After, Doc_Options)
                     ->  Diff = json{ '@op' : "Insert",
                                      '@insert' : After }
                     ;   fail)
@@ -281,14 +313,30 @@ api_check_apply_squash_commit(System_DB, Auth, Path, Commit_Info, Before_Version
                        After_Version, Options, Context, Branch_Descriptor,
                        Before_Commit_Id, After_Commit_Id, Resolution,
                        Merged_Options),
+    once(query_context_transaction_objects(Context, [Transaction])),
+    database_prefixes(Transaction, Prefixes),
     setup_call_cleanup(
         pre_transaction_tabling,
-        squash_merge_witnesses(Context, Branch_Descriptor,
-                               Before_Commit_Id, After_Commit_Id,
-                               Resolution,
-                               Merged_Options.put(_{dry_run:true}),
-                               Witnesses),
-        post_transaction_tabling),
+        once(catch(
+            (   squash_merge_witnesses(Context, Branch_Descriptor,
+                                       Before_Commit_Id, After_Commit_Id,
+                                       Resolution,
+                                       Merged_Options.put(_{dry_run:true}),
+                                       Merge_Witnesses),
+                check_validation_witnesses(Context, Options,
+                                           Validation_Witnesses0),
+                maplist(compress_witness_json(Prefixes),
+                        Validation_Witnesses0, Validation_Witnesses),
+                append(Merge_Witnesses, Validation_Witnesses, Witnesses),
+                check_apply_result(Witnesses, Result)
+            ),
+            error(schema_check_failure(Witnesses0), _),
+            (   maplist(compress_witness_json(Prefixes),
+                        Witnesses0, Witnesses),
+                check_apply_result(Witnesses, Result)))),
+        post_transaction_tabling).
+
+check_apply_result(Witnesses, Result) :-
     (   Witnesses = []
     ->  Result = json{'@type':'api:CheckResponse',
                       'api:valid':true,
@@ -317,15 +365,22 @@ squash_apply_setup(System_DB, Auth, Path, Commit_Info, Before_Version,
 squash_merge_witnesses(Context, Branch_Descriptor, Before_Commit_Id,
                        After_Commit_Id, Resolution, Merged_Options,
                        Witnesses) :-
+    commit_doc_options(Merged_Options, Doc_Options),
+    once(open_commit_transaction(Branch_Descriptor, Before_Commit_Id,
+                                 Before_Transaction)),
+    once(open_commit_transaction(Branch_Descriptor, After_Commit_Id,
+                                 After_Transaction)),
     findall(Witness,
-            (   document_diffs_from_commits(Branch_Descriptor,
-                                            Before_Commit_Id,
-                                            After_Commit_Id,
-                                            Diff,
-                                            Merged_Options),
+            (   document_diffs_from_transactions(Branch_Descriptor,
+                                                 Before_Commit_Id,
+                                                 After_Commit_Id,
+                                                 Before_Transaction,
+                                                 After_Transaction,
+                                                 Doc_Options, Diff,
+                                                 Merged_Options),
                 apply_diff(Context,Diff,Witness0,Merged_Options),
-                resolve_squash_conflict(Context, Branch_Descriptor,
-                                        After_Commit_Id, Diff,
+                resolve_squash_conflict(Context, After_Transaction,
+                                        Doc_Options, Diff,
                                         Witness0, Resolution, Witness),
                 \+ Witness = null
             ),
@@ -406,16 +461,16 @@ resolution_winner(resolution{default:Default, documents:Documents}, Doc_Id, Winn
     ;   Winner = Default
     ).
 
-%% resolve_squash_conflict(+Context, +Branch_Descriptor, +After_Commit_Id,
+%% resolve_squash_conflict(+Context, +After_Transaction, +Doc_Options,
 %%                         +Diff, +Witness0, +Resolution, -Witness) is det.
 %
 % Decides the outcome of a conflict witness under the resolution recipe:
 % `error` keeps the witness (the apply will fail with it), `ours` keeps
 % the target state, and `theirs` applies the incoming side — a delete for
-% delete diffs, otherwise the document as committed at After_Commit_Id.
-resolve_squash_conflict(_Context, _Branch_Descriptor, _After_Commit_Id, _Diff, null, _Resolution, null) :-
+% delete diffs, otherwise the document read through After_Transaction.
+resolve_squash_conflict(_Context, _After_Transaction, _Doc_Options, _Diff, null, _Resolution, null) :-
     !.
-resolve_squash_conflict(Context, Branch_Descriptor, After_Commit_Id, Diff, Witness0, Resolution, Witness) :-
+resolve_squash_conflict(Context, After_Transaction, Doc_Options, Diff, Witness0, Resolution, Witness) :-
     % Documents map keys are expanded at normalize time, so the expanded
     % IRI carried by the diff is the lookup key directly.
     patch_id(Diff, Doc_Id),
@@ -425,21 +480,20 @@ resolve_squash_conflict(Context, Branch_Descriptor, After_Commit_Id, Diff, Witne
     ;   Winner = ours
     ->  Witness = null
     ;   Winner = theirs
-    ->  squash_apply_theirs(Context, Branch_Descriptor, After_Commit_Id, Diff, Doc_Id),
+    ->  squash_apply_theirs(Context, After_Transaction, Doc_Options, Diff, Doc_Id),
         Witness = null
     ).
 
-squash_apply_theirs(Context, _Branch_Descriptor, _After_Commit_Id, Diff, Doc_Id) :-
+squash_apply_theirs(Context, _After_Transaction, _Doc_Options, Diff, Doc_Id) :-
     get_dict('@delete', Diff, _),
     !,
     catch(delete_document(Context, Doc_Id),
           error(document_not_found(_), _),
           true).
-squash_apply_theirs(Context, Branch_Descriptor, After_Commit_Id, Diff, Doc_Id) :-
+squash_apply_theirs(Context, After_Transaction, Doc_Options, Diff, Doc_Id) :-
     (   get_dict('@insert', Diff, Doc)
     ->  true
-    ;   document_from_commit(Branch_Descriptor, After_Commit_Id, Doc_Id,
-                             Doc, _Transaction, [], _, options{})
+    ;   get_document(After_Transaction, Doc_Id, Doc, Doc_Options)
     ),
     squash_force_document(Context, Doc, _Id).
 
@@ -1214,6 +1268,51 @@ test(apply_dry_run_resolution_reports_verdict,
     open_descriptor(Main_Desc, Main_T),
     get_document(Main_T, 'item/a', Doc_A),
     get_dict(n, Doc_A, 2).
+
+/* A dry run must run the same validation the commit would: a merge that
+ * produces a schema-invalid document reports api:valid:false, not a
+ * clean preview that fails at commit time. */
+test(apply_dry_run_reports_schema_invalid_merge,
+     [setup((setup_temp_store(State),
+             random_string(X),
+             string_concat("admin/",X, Path),
+             create_db_with_test_schema("admin", X))),
+      cleanup(teardown_temp_store(State))]) :-
+    open_descriptor(system_descriptor{}, SystemDB),
+    super_user_authority(Auth),
+    Options = [graph_type(instance), author("gavin"), message("test."),
+               full_replace(false), json(false)],
+
+    % Commit1: a valid City on main
+    open_string('[{"@id":"City/a","@type":"City","name":"Warsaw"}]', S1),
+    api_insert_documents(SystemDB, Auth, Path, S1, no_data_version,
+                         data_version(branch,Commit1), _, _, Options),
+
+    % Fork dev at Commit1.
+    atomic_list_concat([Path, "/local/branch/dev"], Dev_Path),
+    branch_create(system_descriptor{}, Auth, Dev_Path, branch(Path), _),
+
+    % main tightens the Person schema after the fork — no Person exists
+    % on main yet, so the update itself validates.
+    open_string('{"@id":"Person","@type":"Class","@inherits":"Named","occupation":"xsd:string","address":"xsd:string","parent":{"@type":"Optional","@class":"Person"},"birthday":{"@type":"Optional","@class":"xsd:dateTime"}}', SS),
+    api_replace_documents(SystemDB, Auth, Path, SS, no_data_version,
+                          data_version(branch,_), _, _,
+                          [create(false), graph_type(schema)|Options]),
+
+    % dev inserts a Person under the loose base schema — invalid under
+    % main's tightened schema when merged.
+    open_string('[{"@id":"Person/p","@type":"Person","name":"Jo","address":"here"}]', SP),
+    api_insert_documents(SystemDB, Auth, Dev_Path, SP, no_data_version,
+                         data_version(branch,Dev_Head), _, _, Options),
+
+    Commit_Info = commit_info{author:"gavin", message:"preview"},
+    api_check_apply_squash_commit(SystemDB, Auth, Path, Commit_Info,
+                                  Commit1, Dev_Head, [], Result),
+    % The merged Person lacks occupation — invalid under the new schema.
+    json{'@type':'api:CheckResponse',
+         'api:valid':false} :< Result,
+    get_dict('api:witnesses', Result, Witnesses),
+    Witnesses = [_|_].
 
 test(commits_changed_id_enumerates_touched_documents,
      [setup((setup_temp_store(State),
